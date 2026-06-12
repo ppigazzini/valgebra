@@ -44,6 +44,8 @@ dev = [
 # points. They are never runtime dependencies of valgebra.
 bench = [
     "pytest-benchmark>=5",
+    "pydantic>=2",
+    "jsonschema>=4",
 ]
 
 [tool.maturin]
