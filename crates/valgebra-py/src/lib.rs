@@ -55,6 +55,12 @@ impl CompiledValidator {
         self.validate(obj)?;
         Ok(obj.clone())
     }
+
+    /// Render the compiled schema back as the annotation expression that
+    /// produces it.
+    fn __repr__(&self, py: Python<'_>) -> String {
+        render(py, &self.schema, &self.literals)
+    }
 }
 
 /// Compile `schema` into an immutable [`CompiledValidator`].
@@ -265,7 +271,10 @@ fn build_parametrized(
         )?)));
     }
     if origin.is(py.get_type::<PySet>()) {
-        return Ok(Schema::Set(Box::new(build_schema(&single_arg(args)?, lits)?)));
+        return Ok(Schema::Set(Box::new(build_schema(
+            &single_arg(args)?,
+            lits,
+        )?)));
     }
     if origin.is(py.get_type::<PyFrozenSet>()) {
         return Ok(Schema::FrozenSet(Box::new(build_schema(
@@ -1057,6 +1066,81 @@ fn into_pyerr(py: Python<'_>, violation: &Violation) -> PyErr {
     let _ = instance.setattr("message", violation.to_string());
     let _ = instance.setattr("path", &path);
     err
+}
+
+// ---------------------------------------------------------------------------
+// Render: a compiled schema back to a readable annotation expression.
+// ---------------------------------------------------------------------------
+
+/// Render a schema back to the annotation/combinator expression that produces
+/// it.
+fn render(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>]) -> String {
+    let r = |s: &Schema| render(py, s, pool);
+    let kids = |members: &[Schema]| members.iter().map(&r).collect::<Vec<_>>().join(", ");
+    match schema {
+        Schema::Anything => "anything".to_owned(),
+        Schema::Any => "Any".to_owned(),
+        Schema::Nothing => "nothing".to_owned(),
+        Schema::NoneType => "None".to_owned(),
+        Schema::Bool => "bool".to_owned(),
+        Schema::Int => "int".to_owned(),
+        Schema::Float => "float".to_owned(),
+        Schema::Str => "str".to_owned(),
+        Schema::Bytes => "bytes".to_owned(),
+        Schema::Literal(i) => format!("Literal[{}]", pool_repr(py, pool, *i)),
+        Schema::Sequence(e) => format!("list[{}]", r(e)),
+        Schema::Tuple(es) => format!("tuple[{}]", kids(es)),
+        Schema::VariadicTuple(e) => format!("tuple[{}, ...]", r(e)),
+        Schema::Set(e) => format!("set[{}]", r(e)),
+        Schema::FrozenSet(e) => format!("frozenset[{}]", r(e)),
+        Schema::Mapping { key, value } => format!("dict[{}, {}]", r(key), r(value)),
+        Schema::Record { fields } => render_record(py, fields, pool),
+        Schema::Union(members) => members.iter().map(&r).collect::<Vec<_>>().join(" | "),
+        Schema::Instance(i) | Schema::Object { class_index: i, .. } => {
+            pool_class_name(py, pool, *i)
+        }
+        Schema::Refine { base, constraints } => {
+            let mut parts = vec![r(base)];
+            parts.extend(constraints.iter().map(|c| render_constraint(py, c, pool)));
+            format!("Annotated[{}]", parts.join(", "))
+        }
+    }
+}
+
+fn render_record(py: Python<'_>, fields: &[Field], pool: &[Py<PyAny>]) -> String {
+    let entries: Vec<String> = fields
+        .iter()
+        .map(|field| {
+            let suffix = if field.required { "" } else { "?" };
+            format!(
+                "'{}{}': {}",
+                field.name,
+                suffix,
+                render(py, &field.schema, pool)
+            )
+        })
+        .collect();
+    format!("{{{}}}", entries.join(", "))
+}
+
+fn render_constraint(py: Python<'_>, constraint: &Constraint, pool: &[Py<PyAny>]) -> String {
+    match constraint {
+        Constraint::Ge(i) => format!("Ge({})", pool_repr(py, pool, *i)),
+        Constraint::Gt(i) => format!("Gt({})", pool_repr(py, pool, *i)),
+        Constraint::Le(i) => format!("Le({})", pool_repr(py, pool, *i)),
+        Constraint::Lt(i) => format!("Lt({})", pool_repr(py, pool, *i)),
+        Constraint::MinLen(n) => format!("MinLen({n})"),
+        Constraint::MaxLen(n) => format!("MaxLen({n})"),
+        Constraint::Predicate(_) => "Predicate(...)".to_owned(),
+    }
+}
+
+fn pool_repr(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> String {
+    summarize(pool[index].bind(py))
+}
+
+fn pool_class_name(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> String {
+    class_label(pool[index].bind(py))
 }
 
 fn build_path<'py>(py: Python<'py>, path: &[PathSegment]) -> PyResult<Bound<'py, PyTuple>> {
