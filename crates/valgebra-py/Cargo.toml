@@ -19,6 +19,10 @@ crate-type = ["cdylib", "rlib"]
 # libpython normally.
 pyo3 = { workspace = true }
 valgebra-core = { workspace = true }
+# JSON ingestion on the Rust path: jiter parses straight into Python objects,
+# faster than the stdlib json module, and the parsed value runs the same
+# validation walk as a native object so the two paths agree by construction.
+jiter = { version = "0.15", features = ["python"] }
 
 [lints]
 workspace = true

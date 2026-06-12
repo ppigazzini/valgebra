@@ -33,6 +33,22 @@ pub(crate) fn truncate(text: &str, max_chars: usize) -> String {
     }
 }
 
+/// Build a [`ValidationError`] for input that is not valid JSON.
+///
+/// Malformed JSON never reaches the validation walk, so it is reported through
+/// the same structured model as a membership failure — a single `errors` item
+/// coded `json_invalid` whose message is jiter's parse diagnostic — rather than
+/// a bare `ValueError`. The path is the root and there is no value to summarize.
+pub(crate) fn json_invalid_error(py: Python<'_>, description: &str) -> PyErr {
+    let violation = Violation {
+        code: "json_invalid",
+        path: Vec::new(),
+        expected: "valid JSON".to_owned(),
+        value_summary: truncate(description, 80),
+    };
+    into_pyerr(py, &[violation])
+}
+
 /// Build the Python [`ValidationError`] for one or more violations.
 ///
 /// The raised instance carries the structured, machine-readable error model:

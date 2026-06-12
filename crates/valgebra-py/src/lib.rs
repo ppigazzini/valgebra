@@ -14,15 +14,16 @@ mod render;
 use std::cell::RefCell;
 use std::collections::HashSet;
 
+use jiter::PythonParse;
 use pyo3::create_exception;
-use pyo3::exceptions::{PyException, PyValueError};
+use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyTuple;
+use pyo3::types::{PyBytes, PyString, PyTuple};
 use valgebra_core::{Schema, fresh_self_token};
 
 use crate::build::{build_schema, combine};
 use crate::check::{Ctx, check, matches};
-use crate::errors::into_pyerr;
+use crate::errors::{into_pyerr, json_invalid_error};
 use crate::render::render;
 
 create_exception!(
@@ -100,6 +101,30 @@ impl CompiledValidator {
         Ok(obj.clone())
     }
 
+    /// Parse `data` (a JSON `str` or `bytes`) on the Rust path and validate the
+    /// result, raising [`ValidationError`] if the JSON is malformed or the parsed
+    /// value is not a member of the schema's set; return `None` otherwise.
+    ///
+    /// Parsing runs in Rust (faster than the standard library's parser) and the
+    /// parsed value runs the *same* validation walk as a native object, so the
+    /// JSON path and the object path reach identical decisions and identical
+    /// errors. Aggregation and `fail_fast` behave as for [`Self::validate`].
+    #[pyo3(signature = (data, *, fail_fast = false))]
+    fn validate_json(&self, data: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
+        let parsed = parse_json(data)?;
+        self.validate(&parsed, fail_fast)
+    }
+
+    /// Whether `data` (a JSON `str` or `bytes`) parses and its value belongs to
+    /// the schema's set. Check-only and never raises: malformed JSON is not a
+    /// member, so it returns `False` like any other non-member.
+    fn is_valid_json(&self, data: &Bound<'_, PyAny>) -> bool {
+        match parse_json(data) {
+            Ok(parsed) => self.is_valid(&parsed),
+            Err(_) => false,
+        }
+    }
+
     /// Render the compiled schema back as the annotation expression that
     /// produces it.
     fn __repr__(&self, py: Python<'_>) -> String {
@@ -122,6 +147,33 @@ impl CompiledValidator {
     /// this shares the pool like `__copy__`; the memo is unused.
     fn __deepcopy__(&self, py: Python<'_>, _memo: &Bound<'_, PyAny>) -> CompiledValidator {
         self.__copy__(py)
+    }
+}
+
+/// Parse a JSON `str` or `bytes` into a Python value with jiter.
+///
+/// jiter's defaults match the standard JSON model: standard `float`s, no
+/// `Infinity`/`NaN`, and complete (non-partial) input — so the parsed value is
+/// what the object path would receive from `json.loads`. A parse failure is
+/// surfaced as a structured `json_invalid` [`ValidationError`]; a non-string,
+/// non-bytes argument is a `TypeError`.
+fn parse_json<'py>(data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py = data.py();
+    let parse = PythonParse::default();
+    if let Ok(text) = data.cast::<PyString>() {
+        let bytes = text.to_str()?;
+        parse
+            .python_parse(py, bytes.as_bytes())
+            .map_err(|err| json_invalid_error(py, &err.description(bytes.as_bytes())))
+    } else if let Ok(raw) = data.cast::<PyBytes>() {
+        let bytes = raw.as_bytes();
+        parse
+            .python_parse(py, bytes)
+            .map_err(|err| json_invalid_error(py, &err.description(bytes)))
+    } else {
+        Err(PyTypeError::new_err(
+            "JSON input must be a str or bytes object",
+        ))
     }
 }
 
