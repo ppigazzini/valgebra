@@ -80,6 +80,35 @@ jobs:
       # Run the workspace tests under nextest and report the coverage summary.
       - run: cargo llvm-cov nextest --workspace --summary-only
 
+  binding-coverage:
+    name: binding coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2.81.10
+        with:
+          tool: cargo-llvm-cov
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+      # The bindings have no Rust tests by design (the PyO3 boundary needs a live
+      # interpreter), so their coverage is measured by instrumenting the
+      # extension and driving it with the Python suite. The whole flow runs in
+      # one shell so the coverage environment survives across the build and run.
+      - name: Measure binding coverage via the Python suite
+        run: |
+          cargo llvm-cov clean --workspace
+          source <(cargo llvm-cov show-env --export-prefix)
+          uv sync --no-install-project
+          uv run maturin develop --uv
+          uv run pytest --deselect tests/test_concurrency.py
+          cargo llvm-cov report --summary-only --fail-under-lines 75
+
   python:
     name: python ${{ matrix.python-version }}
     # 3.15 (prerelease) and 3.14t (free-threaded) are early-warning lanes: they
@@ -199,6 +228,7 @@ jobs:
         rust-test,
         rust-msrv,
         rust-coverage,
+        binding-coverage,
         python,
         doc-examples,
         bench,
