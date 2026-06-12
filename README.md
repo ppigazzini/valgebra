@@ -8,26 +8,55 @@ coercion. Schemas compile once into a Rust validator tree and the hot path
 crosses into Rust exactly once per call.
 
 > [!WARNING]
-> **Pre-alpha.** valgebra is under active development. The walking skeleton
-> compiles a single schema (`int`) through the Rust core; the schema IR, the
+> **Pre-alpha.** valgebra is under active development. The validator engine
+> compiles the structural schema language through the Rust core; the
 > typing-annotation frontend, the Boolean algebra, recursive schemas, the JSON
 > input path, and the performance program are planned. There is no PyPI release.
 
 ## Status
 
-`validator(schema)` builds an immutable validator. `is_valid` returns a bool
-membership test against the compiled Rust tree:
+`validator(schema)` builds an immutable validator with `validate` (raises),
+`is_valid` (returns a bool), and `cast` (validates, returns the object). A
+failure raises `ValidationError` carrying a machine-readable `code`, the `path`
+to the offending value, the `expected` label, and a `value` summary.
+
+Schemas are written as compact native forms — the scalar types, `None`, and
+`object` for the top; `[T]` for a list, `(A, B)` for a fixed tuple, `{T}` for a
+set, `{KeyType: ValueType}` for a mapping; an all-string-key dict for a closed
+record (a trailing `"?"` marks an optional key); and any constant for an
+exact-value literal:
 
 ```python
-from valgebra import validator
+from valgebra import ValidationError, validator
 
-validator(int).is_valid(7)   # True
+validator(int).is_valid(42)                       # scalars
+validator([int]).is_valid([1, 2, 3])              # list
+validator((int, str)).is_valid((1, "a"))          # fixed tuple
+validator({int}).is_valid({1, 2, 3})              # set
+validator({str: int}).is_valid({"a": 1})          # mapping
+validator("red").is_valid("red")                  # literal
+
+user = validator({"name": str, "age?": int})      # record, strict by default
+assert user.is_valid({"name": "Ada"})
+assert not user.is_valid({"name": "Ada", "x": 1})  # closed: no extra keys
+
+# errors carry a stable code and a path to the offending value
+try:
+    validator({"user": {"name": str}}).validate({"user": {"name": 5}})
+except ValidationError as err:
+    assert err.code == "string_type"
+    assert err.path == ("user", "name")
 ```
 
-**Planned:** the full schema IR (scalars, literals, sequences, tuples, sets,
-mappings, records), the typing-annotation frontend, the combinator algebra
-(`union`, `intersect`, `complement`), recursive schemas, structured error
-reporting, the JSON path, and the performance program.
+Semantics follow the real value sets: `bool` is a subtype of `int` (so
+`True`/`False` are valid `int`s), while `float` is disjoint from `int`; literals
+are typed singletons, so `Literal[1]`, `Literal[True]`, and `Literal[1.0]` stay
+distinct.
+
+**Planned:** the typing-annotation frontend (`list[T]`, `X | Y`, `Literal`,
+`TypedDict`, `Annotated` refinements), the combinator algebra (`union`,
+`intersect`, `complement`), recursive schemas, aggregated error reporting, the
+JSON path, and the performance program.
 
 ## Install
 

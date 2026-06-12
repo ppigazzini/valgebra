@@ -1,4 +1,17 @@
+class ValidationError(Exception):
+    # The offending value's machine-readable failure: a stable `code`, the
+    # `path` to the value, the `expected` label, a `value` summary, and the
+    # rendered `message`.
+    code: str
+    path: tuple[str | int, ...]
+    message: str
+    expected: str
+    value: str
+    def __init__(self, message: str) -> None: ...
+
 class CompiledValidator:
+    def validate(self, obj: object) -> None: ...
     def is_valid(self, obj: object) -> bool: ...
+    def cast(self, obj: object) -> object: ...
 
 def validator(schema: object) -> CompiledValidator: ...
