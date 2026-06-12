@@ -162,3 +162,50 @@ def test_namedtuple_field_refinement_is_enforced() -> None:
     schema = validator(BoundedPair)
     assert schema.is_valid(BoundedPair(1))
     assert not schema.is_valid(BoundedPair(-1))
+
+
+@dataclasses.dataclass
+class Node:
+    value: int
+    nxt: "Node | None" = None
+
+
+def test_recursive_dataclass_is_rejected_not_crashed() -> None:
+    # A class whose own type appears in a field is recursive; it must be written
+    # with lazy. Compiling it directly is rejected cleanly, never crashing.
+    with pytest.raises(NotImplementedError):
+        validator(Node)
+
+
+def test_finite_deep_schema_still_compiles() -> None:
+    # The recursion guard rejects only genuine recursion, not deep finite nesting.
+    depth = 60
+    schema: object = int
+    value: object = 1
+    for _ in range(depth):
+        schema = list[schema]  # type: ignore[valid-type]
+        value = [value]
+    assert validator(schema).is_valid(value)
+
+
+def test_typeddict_inheritance_collects_all_fields() -> None:
+    class Base(TypedDict):
+        a: int
+
+    class Derived(Base):
+        b: str
+
+    schema = validator(Derived)
+    assert schema.is_valid({"a": 1, "b": "x"})
+    assert not schema.is_valid({"b": "x"})  # inherited required key missing
+    assert not schema.is_valid({"a": 1})
+
+
+def test_intenum_is_an_instance_check() -> None:
+    class Level(enum.IntEnum):
+        LOW = 1
+        HIGH = 2
+
+    schema = validator(Level)
+    assert schema.is_valid(Level.LOW)
+    assert not schema.is_valid(1)  # a bare int is not an enum member

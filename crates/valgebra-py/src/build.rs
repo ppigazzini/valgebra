@@ -1,6 +1,8 @@
 //! The schema frontend: build the IR from Python types, typing annotations,
 //! native container forms, and already-compiled validators.
 
+use std::cell::Cell;
+
 use pyo3::exceptions::PyNotImplementedError;
 use pyo3::prelude::*;
 use pyo3::types::{
@@ -10,6 +12,47 @@ use valgebra_core::{Constraint, Field, Schema};
 
 use crate::CompiledValidator;
 use crate::errors::summarize;
+
+thread_local! {
+    /// Depth of the current `build_schema` recursion, bounding it so a
+    /// self-referential class (whose field type names the class) fails cleanly
+    /// instead of recursing until the native stack overflows.
+    static BUILD_DEPTH: Cell<usize> = const { Cell::new(0) };
+}
+
+/// The most levels of schema nesting allowed while compiling. A real schema is
+/// nowhere near this deep; the bound exists so a recursive class — which must be
+/// expressed with `lazy` — is rejected with a message instead of a crash.
+const MAX_BUILD_DEPTH: usize = 100;
+
+/// RAII guard that bounds `build_schema` recursion. Entering past the bound is an
+/// error; leaving (including on an early `?`) restores the depth.
+struct BuildGuard;
+
+impl BuildGuard {
+    fn enter() -> PyResult<Self> {
+        let depth = BUILD_DEPTH.with(|cell| {
+            let depth = cell.get() + 1;
+            cell.set(depth);
+            depth
+        });
+        if depth > MAX_BUILD_DEPTH {
+            BUILD_DEPTH.with(|cell| cell.set(cell.get() - 1));
+            return Err(not_implemented(
+                "schema nesting is too deep to compile; a class whose own type \
+                 appears in its fields is recursive and must be written with \
+                 lazy(...), which ties the fixpoint explicitly",
+            ));
+        }
+        Ok(BuildGuard)
+    }
+}
+
+impl Drop for BuildGuard {
+    fn drop(&mut self) {
+        BUILD_DEPTH.with(|cell| cell.set(cell.get() - 1));
+    }
+}
 
 /// Build the IR from a native Python schema description.
 ///
@@ -23,6 +66,7 @@ pub(crate) fn build_schema(
     lits: &mut Vec<Py<PyAny>>,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
+    let _guard = BuildGuard::enter()?;
     let py = obj.py();
     if obj.is_none() {
         return Ok(Schema::NoneType);
