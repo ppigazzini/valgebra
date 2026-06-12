@@ -8,11 +8,11 @@ coercion. Schemas compile once into a Rust validator tree and the hot path
 crosses into Rust exactly once per call.
 
 > [!WARNING]
-> **Pre-alpha.** valgebra is under active development. The validator engine and
-> the typing-annotation frontend work today; the Boolean algebra (`union`,
-> `intersect`, `complement`), recursive schemas, the JSON input path, and the
-> performance program are planned, so the speed claim is unproven. There is no
-> PyPI release.
+> **Pre-alpha.** valgebra is under active development. The validator engine, the
+> typing-annotation frontend, and the Boolean algebra (`union`, `intersect`,
+> `complement`) with its law-justified simplifier work today; recursive schemas,
+> the JSON input path, and the performance program are planned, so the speed
+> claim is unproven. There is no PyPI release.
 
 ## Why valgebra
 
@@ -86,13 +86,61 @@ Semantics follow the real value sets: `bool` is a subtype of `int` (so
 `int` is not a `float`); literals are typed singletons, so `Literal[1]`,
 `Literal[True]`, and `Literal[1.0]` stay distinct.
 
-```python
-# PLANNED: the Boolean algebra of combinators is not implemented yet.
-from valgebra import anything, complement, intersect, nothing, union, validator
+## The Boolean algebra
 
-union(int, str).is_valid("x")                  # a value in either set
-intersect(int, complement(bool)).is_valid(5)   # ints that are not bools
-complement(nothing).is_valid(anything)         # the complement of bottom is top
+Union, intersection, and complement compose any schema — annotations, native
+forms, or other compiled validators — into a complete, lawful Boolean lattice.
+`anything` is the top (every value) and `nothing` is the bottom (no value):
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import (
+    anything,
+    complement,
+    cond,
+    ifthen,
+    intersect,
+    nothing,
+    union,
+)
+
+assert union(int, str).is_valid("x")              # a value in either set
+assert intersect(int, complement(bool)).is_valid(5)  # ints that are not bools
+assert not intersect(int, complement(bool)).is_valid(True)
+assert complement(nothing).is_valid(5)            # the complement of bottom is top
+
+# conditional shapes derived from the algebra: "if it is an int, it must be >= 0"
+assert not ifthen(int, Annotated[int, at.Ge(0)]).is_valid(-1)
+assert ifthen(int, Annotated[int, at.Ge(0)]).is_valid("x")  # not an int: admitted
+assert cond(
+    (str, Annotated[str, at.MinLen(1)]),
+    (int, Annotated[int, at.Ge(0)]),
+    default=nothing,
+).is_valid("ok")
+```
+
+The refinement "an int that is not a bool" is `intersect(int, complement(bool))`
+— expressed with the algebra, never baked into the primitives.
+
+### `Any` versus `anything`
+
+`Any` is the gradual dynamic type; `anything` is the top of the lattice. At
+runtime both admit every value, but they are different: `anything` obeys the
+lattice laws (`complement(anything)` is `nothing`, `intersect(anything, s)` is
+`s`), while `Any` is an atom the simplifier never rewrites, preserving
+"deliberately unchecked" as distinct from "checked: all values admitted".
+
+`simplify(validator)` reduces a schema by the lattice laws while admitting
+exactly the same values:
+
+```python
+from valgebra import complement, simplify, union
+
+assert repr(simplify(complement(complement(int)))) == "int"
+assert repr(simplify(union(int, int))) == "int"
 ```
 
 ```python
@@ -126,7 +174,9 @@ Requirements: stable Rust (edition 2024, MSRV 1.88), Python >= 3.10, and
 - **One boundary crossing.** The validator tree runs entirely in Rust; Python
   predicates are a documented slow path, never a silent fallback. *(In place.)*
 - **A lawful algebra.** Union, intersection, and complement form a Boolean
-  lattice whose laws are property-tested in both Rust and Python. *(Planned.)*
+  lattice whose laws are property-tested in both Rust and Python, and a
+  law-justified `simplify` reduces a schema without changing its value set.
+  *(In place.)*
 
 ## Contributing
 
