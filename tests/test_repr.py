@@ -1,9 +1,19 @@
+import dataclasses
+import enum
 from typing import Annotated, Any, Literal
 
 import annotated_types as at
 import pytest
 
-from valgebra import anything, complement, intersect, nothing, union, validator
+from valgebra import (
+    anything,
+    complement,
+    intersect,
+    lazy,
+    nothing,
+    union,
+    validator,
+)
 
 
 @pytest.mark.parametrize(
@@ -11,6 +21,9 @@ from valgebra import anything, complement, intersect, nothing, union, validator
     [
         (int, "int"),
         (str, "str"),
+        (bool, "bool"),
+        (float, "float"),
+        (bytes, "bytes"),
         (None, "None"),
         (object, "anything"),
         (Any, "Any"),
@@ -68,7 +81,11 @@ _ROUNDTRIP_NS = {
 # which reconstructs the original schema.
 ROUNDTRIP_SCHEMAS = [
     int,
+    bool,
+    float,
+    bytes,
     None,
+    nothing,
     object,
     Any,
     list[int],
@@ -88,6 +105,21 @@ ROUNDTRIP_SCHEMAS = [
     intersect(int, complement(bool)),
     complement(int),
 ]
+
+
+def test_repr_of_class_and_recursive_forms() -> None:
+    # The lossy forms still render readably: a class renders as its name, a
+    # recursive reference unfolds once and shows the back edge as `...`.
+    class Color(enum.Enum):
+        RED = 1
+
+    @dataclasses.dataclass
+    class Point:
+        x: int
+
+    assert repr(validator(Color)) == "Color"
+    assert repr(validator(Point)) == "Point"
+    assert repr(lazy(lambda s: {"v": int, "n?": s})) == "{'v': int, 'n?': ...}"
 
 
 @pytest.mark.parametrize("schema", ROUNDTRIP_SCHEMAS)
