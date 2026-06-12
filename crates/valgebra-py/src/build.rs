@@ -30,9 +30,19 @@ pub(crate) fn build_schema(
 
     let typing = py.import("typing")?;
 
-    // `typing.Any` is a singleton special form: the gradual dynamic type.
+    // `typing.Any` is a singleton special form: the gradual dynamic type. It is
+    // checked before the type-object dispatch below because on 3.11+ `Any` is
+    // itself a class and would otherwise be taken for an ordinary type.
     if obj.is(&typing.getattr("Any")?) {
         return Ok(Schema::Any);
+    }
+
+    // A plain type or class (a scalar, `object`, TypedDict, dataclass, enum,
+    // protocol, ...) is dispatched here, before the typing introspection below.
+    // A type never has a typing origin, so taking this path first skips a
+    // `get_origin` call per scalar and class node on the common compile path.
+    if let Ok(ty) = obj.cast::<PyType>() {
+        return build_type_object(ty, lits, defs);
     }
 
     // Annotated[T, m1, ...]: the base type T with refinement metadata.
@@ -64,9 +74,6 @@ pub(crate) fn build_schema(
         return build_schema(&obj.getattr("__supertype__")?, lits, defs);
     }
 
-    if let Ok(ty) = obj.cast::<PyType>() {
-        return build_type_object(ty, lits, defs);
-    }
     if let Ok(list) = obj.cast::<PyList>() {
         return build_sequence(list, lits, defs);
     }
