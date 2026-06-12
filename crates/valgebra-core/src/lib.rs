@@ -267,4 +267,79 @@ mod tests {
             assert_eq!(schema.error_code(), code, "code for {schema:?}");
         }
     }
+
+    #[test]
+    fn location_renders_keys_indices_and_their_mix() {
+        let key_only = Violation {
+            code: "x",
+            path: vec![
+                PathSegment::Key("a".to_owned()),
+                PathSegment::Key("b".to_owned()),
+            ],
+            expected: String::new(),
+            value_summary: String::new(),
+        };
+        assert_eq!(key_only.location(), "a.b");
+
+        let index_only = Violation {
+            code: "x",
+            path: vec![PathSegment::Index(0), PathSegment::Index(3)],
+            expected: String::new(),
+            value_summary: String::new(),
+        };
+        assert_eq!(index_only.location(), "[0][3]");
+
+        let mixed = Violation {
+            code: "x",
+            path: vec![
+                PathSegment::Key("items".to_owned()),
+                PathSegment::Index(2),
+                PathSegment::Key("id".to_owned()),
+            ],
+            expected: "int".to_owned(),
+            value_summary: "'x'".to_owned(),
+        };
+        assert_eq!(mixed.location(), "items[2].id");
+        assert_eq!(
+            mixed.to_string(),
+            "at items[2].id: expected int, got 'x' [x]"
+        );
+    }
+
+    #[test]
+    fn mapping_and_record_share_the_dict_label() {
+        let mapping = Schema::Mapping {
+            key: Box::new(Schema::Str),
+            value: Box::new(Schema::Int),
+        };
+        let record = Schema::Record { fields: Vec::new() };
+        assert_eq!(mapping.expected(), record.expected());
+        assert_eq!(mapping.error_code(), record.error_code());
+    }
+
+    #[test]
+    fn schema_equality_is_structural() {
+        assert_eq!(
+            Schema::Sequence(Box::new(Schema::Int)),
+            Schema::Sequence(Box::new(Schema::Int))
+        );
+        assert_ne!(
+            Schema::Sequence(Box::new(Schema::Int)),
+            Schema::Sequence(Box::new(Schema::Str))
+        );
+        assert_ne!(Schema::Literal(0), Schema::Literal(1));
+    }
+
+    #[test]
+    fn field_is_cloneable_and_carries_its_flag() {
+        let field = Field {
+            name: "n".to_owned(),
+            schema: Schema::Int,
+            required: false,
+        };
+        let copy = field.clone();
+        assert_eq!(copy.name, "n");
+        assert!(!copy.required);
+        assert_eq!(copy.schema, Schema::Int);
+    }
 }
