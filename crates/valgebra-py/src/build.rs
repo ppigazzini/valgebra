@@ -189,14 +189,26 @@ fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Resolve a class's type hints with `Annotated` metadata preserved.
+///
+/// `include_extras=True` keeps `Annotated[...]` field types intact so a field's
+/// refinement markers reach [`build_refine`]; without it `get_type_hints` strips
+/// the metadata and the field's constraints are silently lost.
+fn resolve_type_hints<'py>(ty: &Bound<'py, PyType>) -> PyResult<Bound<'py, PyAny>> {
+    let py = ty.py();
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("include_extras", true)?;
+    py.import("typing")?
+        .call_method("get_type_hints", (ty,), Some(&kwargs))
+}
+
 /// Build a closed record from a `TypedDict`, reading its required keys.
 fn build_typed_dict(
     ty: &Bound<'_, PyType>,
     lits: &mut Vec<Py<PyAny>>,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
-    let py = ty.py();
-    let hints = py.import("typing")?.call_method1("get_type_hints", (ty,))?;
+    let hints = resolve_type_hints(ty)?;
     let hints = hints.cast::<PyDict>()?;
     let required = ty.getattr("__required_keys__")?;
     let mut fields = Vec::with_capacity(hints.len());
@@ -220,8 +232,7 @@ fn build_object(
     lits: &mut Vec<Py<PyAny>>,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
-    let py = ty.py();
-    let hints = py.import("typing")?.call_method1("get_type_hints", (ty,))?;
+    let hints = resolve_type_hints(ty)?;
     let hints = hints.cast::<PyDict>()?;
     let class_index = intern(lits, ty.as_any());
     let mut fields = Vec::with_capacity(hints.len());
@@ -299,6 +310,13 @@ fn build_parametrized(
         }
         return Ok(Schema::Tuple(elements));
     }
+    if is_required_marker(origin)? {
+        // Required[T]/NotRequired[T] only annotate a TypedDict field's
+        // requiredness, which is already read from __required_keys__; validate
+        // the wrapped type. These wrappers survive hint resolution because field
+        // metadata is kept (include_extras), so the frontend must unwrap them.
+        return build_schema(&single_arg(args)?, lits, defs);
+    }
     if is_union_origin(origin)? {
         let mut members = Vec::with_capacity(args.len());
         for arg in args.iter() {
@@ -338,6 +356,21 @@ fn is_union_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// True if `origin` is `typing.Literal`.
 fn is_literal_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
     Ok(origin.is(&origin.py().import("typing")?.getattr("Literal")?))
+}
+
+/// True if `origin` is `typing.Required` or `typing.NotRequired`, the
+/// `TypedDict` field-requiredness markers (kept in field hints by
+/// `include_extras`).
+fn is_required_marker(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let typing = origin.py().import("typing")?;
+    for name in ["Required", "NotRequired"] {
+        if let Ok(marker) = typing.getattr(name)
+            && origin.is(&marker)
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn single_arg<'py>(args: &Bound<'py, PyTuple>) -> PyResult<Bound<'py, PyAny>> {

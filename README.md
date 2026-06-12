@@ -54,6 +54,7 @@ class User(TypedDict):
 
 
 assert validator(User).is_valid({"name": "Ada", "age": 36})
+assert not validator(User).is_valid({"name": "Ada", "age": -1})  # field bound holds
 ```
 
 `validator(schema)` builds an immutable validator with `validate` (raises),

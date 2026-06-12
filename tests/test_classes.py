@@ -2,8 +2,16 @@ import dataclasses
 import enum
 import sys
 import typing
-from typing import NamedTuple, NewType, Protocol, TypedDict, runtime_checkable
+from typing import (
+    Annotated,
+    NamedTuple,
+    NewType,
+    Protocol,
+    TypedDict,
+    runtime_checkable,
+)
 
+import annotated_types as at
 import pytest
 
 from valgebra import ValidationError, validator
@@ -119,3 +127,38 @@ def test_pep695_type_alias_delegates_to_value() -> None:
     int_list = typing.TypeAliasType("int_list", list[int])
     assert validator(int_list).is_valid([1, 2, 3])
     assert not validator(int_list).is_valid([1, "x"])
+
+
+class BoundedUser(TypedDict):
+    name: str
+    age: Annotated[int, at.Ge(0)]
+
+
+def test_typeddict_field_refinement_is_enforced() -> None:
+    # A refinement on a field must constrain the field, not be dropped: the
+    # Annotated metadata has to survive hint resolution.
+    schema = validator(BoundedUser)
+    assert schema.is_valid({"name": "Ada", "age": 36})
+    assert not schema.is_valid({"name": "Ada", "age": -5})
+    assert "Ge(0)" in repr(schema)
+
+
+@dataclasses.dataclass
+class BoundedPoint:
+    x: Annotated[int, at.Ge(0)]
+
+
+def test_dataclass_field_refinement_is_enforced() -> None:
+    schema = validator(BoundedPoint)
+    assert schema.is_valid(BoundedPoint(1))
+    assert not schema.is_valid(BoundedPoint(-1))
+
+
+class BoundedPair(NamedTuple):
+    n: Annotated[int, at.Ge(0)]
+
+
+def test_namedtuple_field_refinement_is_enforced() -> None:
+    schema = validator(BoundedPair)
+    assert schema.is_valid(BoundedPair(1))
+    assert not schema.is_valid(BoundedPair(-1))
