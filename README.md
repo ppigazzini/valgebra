@@ -11,8 +11,9 @@ crosses into Rust exactly once per call.
 > **Pre-alpha.** valgebra is under active development. The validator engine, the
 > typing-annotation frontend, the Boolean algebra (`union`, `intersect`,
 > `complement`) with its law-justified simplifier, recursive schemas (`lazy`),
-> and the benchmarked [performance program](docs/performance.md) work today; the
-> JSON input path is planned. There is no PyPI release.
+> [JSON input](docs/json.md), and the benchmarked
+> [performance program](docs/performance.md) work today. There is no PyPI
+> release.
 
 ## Why valgebra
 
@@ -170,6 +171,24 @@ assert validator([json_value]).is_valid([1, {"k": [None, 2]}])
 A value that contains itself is rejected (`recursion_loop`) rather than looped
 on, and recursion past a fixed depth fails cleanly (`recursion_limit`) instead
 of exhausting the stack.
+
+## JSON input
+
+`validate_json` and `is_valid_json` validate JSON source directly, parsing on
+the Rust path. The parsed document runs the same walk as a native object, so a
+JSON document is judged exactly as `json.loads` of it would be — same decision,
+same errors — and parsing in Rust is faster than parse-then-validate:
+
+```python
+from valgebra import validator
+
+users = validator({"name": str, "age?": int})
+users.validate_json('{"name": "Ada", "age": 36}')        # passes
+assert validator(list[int]).is_valid_json(b"[1, 2, 3]")  # str or bytes
+```
+
+The JSON-to-Python value mapping, the object-path consistency contract, and the
+malformed-input behavior are on the [JSON page](docs/json.md).
 
 ## Performance
 

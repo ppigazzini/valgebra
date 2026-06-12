@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DOCS = [
     ROOT / "README.md",
     ROOT / "docs" / "error-model.md",
+    ROOT / "docs" / "json.md",
 ]
 BLOCK = re.compile(r"```python\n(.*?)```", re.DOTALL)
 
