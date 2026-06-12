@@ -10,9 +10,9 @@ crosses into Rust exactly once per call.
 > [!WARNING]
 > **Pre-alpha.** valgebra is under active development. The validator engine, the
 > typing-annotation frontend, the Boolean algebra (`union`, `intersect`,
-> `complement`) with its law-justified simplifier, and recursive schemas (`lazy`)
-> work today; the JSON input path and the performance program are planned, so the
-> speed claim is unproven. There is no PyPI release.
+> `complement`) with its law-justified simplifier, recursive schemas (`lazy`),
+> and the benchmarked [performance program](docs/performance.md) work today; the
+> JSON input path is planned. There is no PyPI release.
 
 ## Why valgebra
 
@@ -170,6 +170,22 @@ assert validator([json_value]).is_valid([1, {"k": [None, 2]}])
 A value that contains itself is rejected (`recursion_loop`) rather than looped
 on, and recursion past a fixed depth fails cleanly (`recursion_limit`) instead
 of exhausting the stack.
+
+## Performance
+
+Schemas compile once; the hot path crosses into Rust a single time per call and
+checks membership with no copy or coercion. On a synthetic benchmark over a
+2012-era desktop CPU (release build), validating a passing value is faster than
+a strict pydantic `TypeAdapter` on a large `list[int]` (~2.4x), a deeply nested
+list (~9.5x), and a 50-field record (~1.1x, comparable), and far faster than
+pure-Python jsonschema throughout. The comparison is not apples-to-apples —
+pydantic also constructs output, jsonschema is pure Python — and the numbers are
+a single machine class.
+
+The full methodology, the recorded matrix with versions and machine class, the
+honest limits, and the deterministic instruction-count CI regression gate are in
+the [performance page](docs/performance.md). Reproduce with `cargo bench` and
+`uv run --group bench pytest benches/`.
 
 ## Install
 
