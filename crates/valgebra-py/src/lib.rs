@@ -86,9 +86,22 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
 /// all-string-key dict as a closed record (a trailing `"?"` marks an optional
 /// key); any other value as an exact-value literal.
 fn build_schema(obj: &Bound<'_, PyAny>, lits: &mut Vec<Py<PyAny>>) -> PyResult<Schema> {
+    let py = obj.py();
     if obj.is_none() {
         return Ok(Schema::NoneType);
     }
+
+    // Typing constructs (list[int], dict[K, V], tuple[...], ...) are read
+    // through the typing spec's own introspection, so the builtin and legacy
+    // aliases share one path. A non-typing object has origin None and falls
+    // through to the native handling below.
+    let typing = py.import("typing")?;
+    let origin = typing.call_method1("get_origin", (obj,))?;
+    if !origin.is_none() {
+        let args = typing.call_method1("get_args", (obj,))?;
+        return build_parametrized(&origin, args.cast::<PyTuple>()?, lits);
+    }
+
     if let Ok(ty) = obj.cast::<PyType>() {
         return build_type_object(ty);
     }
@@ -139,6 +152,59 @@ fn build_type_object(ty: &Bound<'_, PyType>) -> PyResult<Schema> {
         "unsupported type schema: {}",
         summarize(ty.as_any())
     )))
+}
+
+/// Build the IR for a parametrized typing generic given its origin and args.
+fn build_parametrized(
+    origin: &Bound<'_, PyAny>,
+    args: &Bound<'_, PyTuple>,
+    lits: &mut Vec<Py<PyAny>>,
+) -> PyResult<Schema> {
+    let py = origin.py();
+    if origin.is(py.get_type::<PyList>()) {
+        return Ok(Schema::Sequence(Box::new(build_schema(
+            &single_arg(args)?,
+            lits,
+        )?)));
+    }
+    if origin.is(py.get_type::<PySet>()) {
+        return Ok(Schema::Set(Box::new(build_schema(&single_arg(args)?, lits)?)));
+    }
+    if origin.is(py.get_type::<PyDict>()) {
+        if args.len() != 2 {
+            return Err(not_implemented(
+                "dict[...] needs a key type and a value type",
+            ));
+        }
+        return Ok(Schema::Mapping {
+            key: Box::new(build_schema(&args.get_item(0)?, lits)?),
+            value: Box::new(build_schema(&args.get_item(1)?, lits)?),
+        });
+    }
+    if origin.is(py.get_type::<PyTuple>()) {
+        let mut elements = Vec::with_capacity(args.len());
+        for arg in args.iter() {
+            if is_ellipsis(&arg) {
+                return Err(not_implemented(
+                    "tuple[T, ...] is not supported yet; use a fixed tuple shape",
+                ));
+            }
+            elements.push(build_schema(&arg, lits)?);
+        }
+        return Ok(Schema::Tuple(elements));
+    }
+    Err(not_implemented(&format!(
+        "unsupported typing form with origin {}; supported: list, set, dict, tuple",
+        summarize(origin)
+    )))
+}
+
+fn single_arg<'py>(args: &Bound<'py, PyTuple>) -> PyResult<Bound<'py, PyAny>> {
+    if args.len() == 1 {
+        args.get_item(0)
+    } else {
+        Err(not_implemented("expected exactly one type argument"))
+    }
 }
 
 fn build_sequence(list: &Bound<'_, PyList>, lits: &mut Vec<Py<PyAny>>) -> PyResult<Schema> {
