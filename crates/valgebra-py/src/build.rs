@@ -1,0 +1,523 @@
+//! The schema frontend: build the IR from Python types, typing annotations,
+//! native container forms, and already-compiled validators.
+
+use pyo3::exceptions::PyNotImplementedError;
+use pyo3::prelude::*;
+use pyo3::types::{
+    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
+};
+use valgebra_core::{Constraint, Field, Schema};
+
+use crate::CompiledValidator;
+use crate::errors::summarize;
+
+/// Build the IR from a native Python schema description.
+///
+/// Recognized forms: the scalar types and `None`/`type(None)`; `object` as the
+/// top schema; `[T]`/`[T, ...]` as a list; `(A, B, ...)` as a fixed tuple;
+/// `{T}` as a set; a single `{KeyType: ValueType}` entry as a mapping; an
+/// all-string-key dict as a closed record (a trailing `"?"` marks an optional
+/// key); any other value as an exact-value literal.
+pub(crate) fn build_schema(
+    obj: &Bound<'_, PyAny>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let py = obj.py();
+    if obj.is_none() {
+        return Ok(Schema::NoneType);
+    }
+
+    let typing = py.import("typing")?;
+
+    // `typing.Any` is a singleton special form: the gradual dynamic type.
+    if obj.is(&typing.getattr("Any")?) {
+        return Ok(Schema::Any);
+    }
+
+    // Annotated[T, m1, ...]: the base type T with refinement metadata.
+    if obj.hasattr("__metadata__")? {
+        let base = obj.getattr("__origin__")?;
+        let metadata = obj.getattr("__metadata__")?;
+        return build_refine(&base, metadata.cast::<PyTuple>()?, lits, defs);
+    }
+
+    // Typing constructs (list[int], dict[K, V], tuple[...], X | Y, Literal,
+    // ...) are read through the typing spec's own introspection, so the builtin
+    // and legacy aliases share one path. A non-typing object has origin None and
+    // falls through to the native handling below.
+    let origin = typing.call_method1("get_origin", (obj,))?;
+    if !origin.is_none() {
+        let args = typing.call_method1("get_args", (obj,))?;
+        return build_parametrized(&origin, args.cast::<PyTuple>()?, lits, defs);
+    }
+
+    // PEP 695 `type X = ...` alias (3.12+): validate the aliased type.
+    if let Ok(alias_type) = typing.getattr("TypeAliasType")
+        && obj.is_instance(&alias_type)?
+    {
+        return build_schema(&obj.getattr("__value__")?, lits, defs);
+    }
+
+    // NewType: validate the supertype it wraps.
+    if obj.hasattr("__supertype__")? {
+        return build_schema(&obj.getattr("__supertype__")?, lits, defs);
+    }
+
+    if let Ok(ty) = obj.cast::<PyType>() {
+        return build_type_object(ty, lits, defs);
+    }
+    if let Ok(list) = obj.cast::<PyList>() {
+        return build_sequence(list, lits, defs);
+    }
+    if let Ok(tuple) = obj.cast::<PyTuple>() {
+        let mut elements = Vec::with_capacity(tuple.len());
+        for item in tuple.iter() {
+            elements.push(build_schema(&item, lits, defs)?);
+        }
+        return Ok(Schema::Tuple(elements));
+    }
+    if let Ok(set) = obj.cast::<PySet>() {
+        return build_set(set, lits, defs);
+    }
+    if let Ok(dict) = obj.cast::<PyDict>() {
+        return build_dict(dict, lits, defs);
+    }
+
+    // An already-compiled validator composes in: append its pool and
+    // definitions and shift its schema's indices past what is already there.
+    if let Ok(compiled) = obj.cast::<CompiledValidator>() {
+        let inner = compiled.get();
+        let pool_offset = lits.len();
+        let def_offset = defs.len();
+        lits.extend(inner.literals.iter().map(|o| o.clone_ref(py)));
+        defs.extend(
+            inner
+                .definitions
+                .iter()
+                .map(|d| d.shifted(pool_offset, def_offset)),
+        );
+        return Ok(inner.schema.shifted(pool_offset, def_offset));
+    }
+
+    Ok(Schema::Literal(intern(lits, obj)))
+}
+
+/// Compile arguments into one shared pool and combine them with `make`.
+pub(crate) fn combine(
+    args: &Bound<'_, PyTuple>,
+    make: impl FnOnce(Vec<Schema>) -> Schema,
+) -> PyResult<CompiledValidator> {
+    let mut literals = Vec::new();
+    let mut definitions = Vec::new();
+    let mut members = Vec::with_capacity(args.len());
+    for arg in args.iter() {
+        members.push(build_schema(&arg, &mut literals, &mut definitions)?);
+    }
+    Ok(CompiledValidator {
+        schema: make(members),
+        literals,
+        definitions,
+    })
+}
+
+/// Build the schema for a Python type object (a builtin, `TypedDict`, `Enum`,
+/// dataclass, `NamedTuple`, runtime-checkable `Protocol`, or `object`).
+fn build_type_object(
+    ty: &Bound<'_, PyType>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let py = ty.py();
+    if ty.is(py.get_type::<PyBool>()) {
+        return Ok(Schema::Bool);
+    }
+    if ty.is(py.get_type::<PyInt>()) {
+        return Ok(Schema::Int);
+    }
+    if ty.is(py.get_type::<PyFloat>()) {
+        return Ok(Schema::Float);
+    }
+    if ty.is(py.get_type::<PyString>()) {
+        return Ok(Schema::Str);
+    }
+    if ty.is(py.get_type::<PyBytes>()) {
+        return Ok(Schema::Bytes);
+    }
+    if ty.is(py.None().bind(py).get_type()) {
+        return Ok(Schema::NoneType);
+    }
+    if ty.is(&py.import("builtins")?.getattr("object")?) {
+        return Ok(Schema::Anything);
+    }
+    // TypedDict: a closed record whose required keys come from the class.
+    if ty.hasattr("__required_keys__")? {
+        return build_typed_dict(ty, lits, defs);
+    }
+    // Enum: an instance of the enumeration class (any of its members).
+    if ty.is_subclass(&py.import("enum")?.getattr("Enum")?)? {
+        return Ok(Schema::Instance(intern(lits, ty.as_any())));
+    }
+    // dataclass / NamedTuple: isinstance plus a deep check of each field.
+    let is_dataclass = py
+        .import("dataclasses")?
+        .call_method1("is_dataclass", (ty,))?
+        .is_truthy()?;
+    if is_dataclass || (ty.is_subclass_of::<PyTuple>()? && ty.hasattr("_fields")?) {
+        return build_object(ty, lits, defs);
+    }
+    // Protocol: a runtime-checkable protocol validates by isinstance.
+    if is_truthy_attr(ty, "_is_protocol") {
+        if is_truthy_attr(ty, "_is_runtime_protocol") {
+            return Ok(Schema::Instance(intern(lits, ty.as_any())));
+        }
+        return Err(not_implemented(
+            "a Protocol must be @runtime_checkable to be used as a schema",
+        ));
+    }
+    Err(not_implemented(&format!(
+        "unsupported type schema: {}",
+        summarize(ty.as_any())
+    )))
+}
+
+/// True if `obj.<name>` exists and is truthy; false on absence or error.
+fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &str) -> bool {
+    obj.getattr(name)
+        .ok()
+        .and_then(|value| value.is_truthy().ok())
+        .unwrap_or(false)
+}
+
+/// Build a closed record from a `TypedDict`, reading its required keys.
+fn build_typed_dict(
+    ty: &Bound<'_, PyType>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let py = ty.py();
+    let hints = py.import("typing")?.call_method1("get_type_hints", (ty,))?;
+    let hints = hints.cast::<PyDict>()?;
+    let required = ty.getattr("__required_keys__")?;
+    let mut fields = Vec::with_capacity(hints.len());
+    for (name, hint) in hints.iter() {
+        fields.push(Field {
+            name: name.str()?.to_string(),
+            schema: build_schema(&hint, lits, defs)?,
+            required: required.contains(&name)?,
+        });
+    }
+    Ok(Schema::Record { fields })
+}
+
+/// Build an Object node (isinstance plus per-attribute checks) for a class
+/// whose fields come from its resolved type hints; all fields are required.
+fn build_object(
+    ty: &Bound<'_, PyType>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let py = ty.py();
+    let hints = py.import("typing")?.call_method1("get_type_hints", (ty,))?;
+    let hints = hints.cast::<PyDict>()?;
+    let class_index = intern(lits, ty.as_any());
+    let mut fields = Vec::with_capacity(hints.len());
+    for (name, hint) in hints.iter() {
+        fields.push(Field {
+            name: name.str()?.to_string(),
+            schema: build_schema(&hint, lits, defs)?,
+            required: true,
+        });
+    }
+    Ok(Schema::Object {
+        class_index,
+        fields,
+    })
+}
+
+/// Build the IR for a parametrized typing generic given its origin and args.
+fn build_parametrized(
+    origin: &Bound<'_, PyAny>,
+    args: &Bound<'_, PyTuple>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let py = origin.py();
+    if origin.is(py.get_type::<PyList>()) {
+        return Ok(Schema::Sequence(Box::new(build_schema(
+            &single_arg(args)?,
+            lits,
+            defs,
+        )?)));
+    }
+    if origin.is(py.get_type::<PySet>()) {
+        return Ok(Schema::Set(Box::new(build_schema(
+            &single_arg(args)?,
+            lits,
+            defs,
+        )?)));
+    }
+    if origin.is(py.get_type::<PyFrozenSet>()) {
+        return Ok(Schema::FrozenSet(Box::new(build_schema(
+            &single_arg(args)?,
+            lits,
+            defs,
+        )?)));
+    }
+    if origin.is(py.get_type::<PyDict>()) {
+        if args.len() != 2 {
+            return Err(not_implemented(
+                "dict[...] needs a key type and a value type",
+            ));
+        }
+        return Ok(Schema::Mapping {
+            key: Box::new(build_schema(&args.get_item(0)?, lits, defs)?),
+            value: Box::new(build_schema(&args.get_item(1)?, lits, defs)?),
+        });
+    }
+    if origin.is(py.get_type::<PyTuple>()) {
+        // tuple[T, ...] is the homogeneous variadic form.
+        if args.len() == 2 && is_ellipsis(&args.get_item(1)?) {
+            return Ok(Schema::VariadicTuple(Box::new(build_schema(
+                &args.get_item(0)?,
+                lits,
+                defs,
+            )?)));
+        }
+        let mut elements = Vec::with_capacity(args.len());
+        for arg in args.iter() {
+            if is_ellipsis(&arg) {
+                return Err(not_implemented(
+                    "tuple[...] supports a fixed shape or the homogeneous \
+                     tuple[T, ...]; other uses of ... are not supported",
+                ));
+            }
+            elements.push(build_schema(&arg, lits, defs)?);
+        }
+        return Ok(Schema::Tuple(elements));
+    }
+    if is_union_origin(origin)? {
+        let mut members = Vec::with_capacity(args.len());
+        for arg in args.iter() {
+            members.push(build_schema(&arg, lits, defs)?);
+        }
+        return Ok(Schema::Union(members));
+    }
+    if is_literal_origin(origin)? {
+        // Literal args are constant values; each becomes a literal, unioned when
+        // there is more than one.
+        let mut members = Vec::with_capacity(args.len());
+        for arg in args.iter() {
+            members.push(build_schema(&arg, lits, defs)?);
+        }
+        return Ok(if members.len() == 1 {
+            members.into_iter().next().expect("one member")
+        } else {
+            Schema::Union(members)
+        });
+    }
+    Err(not_implemented(&format!(
+        "unsupported typing form with origin {}; supported: list, set, dict, \
+         tuple, Union, Optional, Literal",
+        summarize(origin)
+    )))
+}
+
+/// True if `origin` is `typing.Union` (from Union/Optional) or
+/// `types.UnionType` (from `X | Y`).
+fn is_union_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = origin.py();
+    let typing_union = py.import("typing")?.getattr("Union")?;
+    let pep604_union = py.import("types")?.getattr("UnionType")?;
+    Ok(origin.is(&typing_union) || origin.is(&pep604_union))
+}
+
+/// True if `origin` is `typing.Literal`.
+fn is_literal_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
+    Ok(origin.is(&origin.py().import("typing")?.getattr("Literal")?))
+}
+
+fn single_arg<'py>(args: &Bound<'py, PyTuple>) -> PyResult<Bound<'py, PyAny>> {
+    if args.len() == 1 {
+        args.get_item(0)
+    } else {
+        Err(not_implemented("expected exactly one type argument"))
+    }
+}
+
+fn build_sequence(
+    list: &Bound<'_, PyList>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    match list.len() {
+        1 => Ok(Schema::Sequence(Box::new(build_schema(
+            &list.get_item(0)?,
+            lits,
+            defs,
+        )?))),
+        2 if is_ellipsis(&list.get_item(1)?) => Ok(Schema::Sequence(Box::new(build_schema(
+            &list.get_item(0)?,
+            lits,
+            defs,
+        )?))),
+        _ => Err(not_implemented(
+            "a list schema must be [T] or [T, ...]; other list shapes are not supported",
+        )),
+    }
+}
+
+fn build_set(
+    set: &Bound<'_, PySet>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    if set.len() == 1
+        && let Some(element) = set.iter().next()
+    {
+        return Ok(Schema::Set(Box::new(build_schema(&element, lits, defs)?)));
+    }
+    Err(not_implemented(
+        "a set schema must have exactly one element, as in {T}",
+    ))
+}
+
+fn build_dict(
+    dict: &Bound<'_, PyDict>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    // An empty dict is the empty closed record: it matches only {}.
+    if dict.is_empty() {
+        return Ok(Schema::Record { fields: Vec::new() });
+    }
+    // All-string keys: a record. A single type-keyed entry: a mapping.
+    if dict.iter().all(|(key, _)| key.is_instance_of::<PyString>()) {
+        return build_record(dict, lits, defs);
+    }
+    if dict.len() == 1
+        && let Some((key, value)) = dict.iter().next()
+        && key.cast::<PyType>().is_ok()
+    {
+        return Ok(Schema::Mapping {
+            key: Box::new(build_schema(&key, lits, defs)?),
+            value: Box::new(build_schema(&value, lits, defs)?),
+        });
+    }
+    Err(not_implemented(
+        "a dict schema must use all string keys (a record) or a single \
+         {KeyType: ValueType} entry (a mapping)",
+    ))
+}
+
+fn build_record(
+    dict: &Bound<'_, PyDict>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let mut fields = Vec::with_capacity(dict.len());
+    for (key, value) in dict.iter() {
+        let raw = key.str()?.to_string();
+        let (name, required) = match raw.strip_suffix('?') {
+            Some(stripped) => (stripped.to_owned(), false),
+            None => (raw, true),
+        };
+        fields.push(Field {
+            name,
+            schema: build_schema(&value, lits, defs)?,
+            required,
+        });
+    }
+    Ok(Schema::Record { fields })
+}
+
+/// Build a Refine node from an `Annotated` base and its metadata markers.
+///
+/// Markers are read structurally (annotated-types style): an object exposing
+/// `ge`/`gt`/`le`/`lt` contributes a comparison bound, `min_length`/
+/// `max_length` contribute length bounds, and `func` (or a bare callable)
+/// contributes a predicate. Unrecognized metadata is ignored, per the typing
+/// spec. With no recognized constraint the base schema is returned as-is.
+fn build_refine(
+    base: &Bound<'_, PyAny>,
+    metadata: &Bound<'_, PyTuple>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let base_schema = build_schema(base, lits, defs)?;
+    let mut constraints = Vec::new();
+    for marker in metadata.iter() {
+        parse_constraint(&marker, &mut constraints, lits);
+    }
+    if constraints.is_empty() {
+        Ok(base_schema)
+    } else {
+        Ok(Schema::Refine {
+            base: Box::new(base_schema),
+            constraints,
+        })
+    }
+}
+
+fn parse_constraint(
+    marker: &Bound<'_, PyAny>,
+    out: &mut Vec<Constraint>,
+    lits: &mut Vec<Py<PyAny>>,
+) {
+    // Comparison bounds. One marker may carry several (e.g. an interval).
+    for (attr, make) in [
+        ("ge", Constraint::Ge as fn(usize) -> Constraint),
+        ("gt", Constraint::Gt),
+        ("le", Constraint::Le),
+        ("lt", Constraint::Lt),
+    ] {
+        if let Ok(bound) = marker.getattr(attr)
+            && !bound.is_none()
+        {
+            out.push(make(intern(lits, &bound)));
+        }
+    }
+    // Length bounds.
+    if let Ok(min) = marker.getattr("min_length")
+        && let Ok(n) = min.extract::<usize>()
+    {
+        out.push(Constraint::MinLen(n));
+    }
+    if let Ok(max) = marker.getattr("max_length")
+        && !max.is_none()
+        && let Ok(n) = max.extract::<usize>()
+    {
+        out.push(Constraint::MaxLen(n));
+    }
+    // Predicate escape hatch: annotated_types.Predicate(.func) or a bare
+    // callable used directly as metadata.
+    if let Ok(func) = marker.getattr("func")
+        && func.is_callable()
+    {
+        out.push(Constraint::Predicate(intern(lits, &func)));
+    } else if marker.is_callable() {
+        out.push(Constraint::Predicate(intern(lits, marker)));
+    }
+}
+
+/// Pool `obj` and return its index, deduplicating by object identity.
+fn intern(pool: &mut Vec<Py<PyAny>>, obj: &Bound<'_, PyAny>) -> usize {
+    let ptr = obj.as_ptr();
+    if let Some(index) = pool.iter().position(|existing| existing.as_ptr() == ptr) {
+        return index;
+    }
+    let index = pool.len();
+    pool.push(obj.clone().unbind());
+    index
+}
+
+fn is_ellipsis(obj: &Bound<'_, PyAny>) -> bool {
+    obj.py()
+        .import("builtins")
+        .and_then(|builtins| builtins.getattr("Ellipsis"))
+        .is_ok_and(|ellipsis| obj.is(&ellipsis))
+}
+
+pub(crate) fn not_implemented(message: &str) -> PyErr {
+    PyNotImplementedError::new_err(message.to_owned())
+}

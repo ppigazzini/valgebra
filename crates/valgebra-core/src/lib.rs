@@ -34,6 +34,17 @@ pub enum PathSegment {
 /// The schema intermediate representation.
 ///
 /// Each variant documents its denotation: the set of Python values it accepts.
+/// `Ord`/`Eq` are structural; the simplifier uses them to canonicalize the
+/// order of union and intersection members and to deduplicate.
+///
+/// Adding a variant means handling it in every walk over the IR. The compiler
+/// forces the exhaustive `match`es, but two of them (`check` and `matches` in
+/// the bindings) must stay *membership-equivalent* by hand. Checklist:
+/// - core: [`Schema::expected`], [`Schema::error_code`], [`Schema::shifted`],
+///   [`Schema::resolve_self`], [`Schema::occurs_unguarded`],
+///   [`Schema::simplify`];
+/// - bindings (`valgebra-py`): `check` (the explain walk) AND `matches` (the
+///   bool fast path) — keep them equivalent — plus `render`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Schema {
     /// Top. Denotes every Python value; membership always holds.
