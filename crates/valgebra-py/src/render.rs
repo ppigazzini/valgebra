@@ -99,6 +99,7 @@ fn render_constraint(py: Python<'_>, constraint: &Constraint, pool: &[Py<PyAny>]
         Constraint::Lt(i) => format!("Lt({})", pool_repr(py, pool, *i)),
         Constraint::MinLen(n) => format!("MinLen({n})"),
         Constraint::MaxLen(n) => format!("MaxLen({n})"),
+        Constraint::MultipleOf(i) => format!("MultipleOf({})", pool_repr(py, pool, *i)),
         Constraint::Predicate(_) => "Predicate(...)".to_owned(),
     }
 }

@@ -544,6 +544,14 @@ fn check_constraint(
             "too_long",
             format!("length <= {n}"),
         ),
+        Constraint::MultipleOf(i) => {
+            let operand = ctx.pool[*i].bind(py);
+            (
+                is_multiple_of(value, operand),
+                "not_multiple_of",
+                format!("a multiple of {}", summarize(operand)),
+            )
+        }
         Constraint::Predicate(i) => {
             // Slow path: the user's Python callable runs at the boundary. A
             // raising predicate is surfaced as a distinct `predicate_error`
@@ -579,8 +587,19 @@ fn constraint_holds(constraint: &Constraint, value: &Bound<'_, PyAny>, ctx: Ctx<
         Constraint::Lt(i) => cmp(value.lt(ctx.pool[*i].bind(py))),
         Constraint::MinLen(n) => value.len().is_ok_and(|len| len >= *n),
         Constraint::MaxLen(n) => value.len().is_ok_and(|len| len <= *n),
+        Constraint::MultipleOf(i) => is_multiple_of(value, ctx.pool[*i].bind(py)),
         Constraint::Predicate(i) => predicate_passes(ctx.pool[*i].bind(py), value).unwrap_or(false),
     }
+}
+
+/// Whether `value % operand == 0`. A non-numeric value (whose modulo errors or
+/// is not defined) is not a multiple. The remainder is zero iff it is falsy.
+fn is_multiple_of(value: &Bound<'_, PyAny>, operand: &Bound<'_, PyAny>) -> bool {
+    value
+        .call_method1("__mod__", (operand,))
+        .ok()
+        .and_then(|remainder| remainder.is_truthy().ok())
+        .is_some_and(|nonzero| !nonzero)
 }
 
 /// Run a user predicate and report whether it returned a truthy result.

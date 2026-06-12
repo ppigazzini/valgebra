@@ -184,6 +184,8 @@ pub enum Constraint {
     MinLen(usize),
     /// `len(value) <= n`.
     MaxLen(usize),
+    /// `value % pool[i] == 0`: a numeric multiple of the operand.
+    MultipleOf(usize),
     /// `pool[i](value)` is truthy. The documented Python-callback slow path.
     Predicate(usize),
 }
@@ -598,6 +600,7 @@ impl Constraint {
             Constraint::Lt(i) => Constraint::Lt(i + pool),
             Constraint::MinLen(n) => Constraint::MinLen(*n),
             Constraint::MaxLen(n) => Constraint::MaxLen(*n),
+            Constraint::MultipleOf(i) => Constraint::MultipleOf(i + pool),
             Constraint::Predicate(i) => Constraint::Predicate(i + pool),
         }
     }

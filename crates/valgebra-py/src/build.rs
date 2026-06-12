@@ -538,6 +538,12 @@ fn parse_constraint(
     {
         out.push(Constraint::MaxLen(n));
     }
+    // Numeric multiple-of bound.
+    if let Ok(multiple) = marker.getattr("multiple_of")
+        && !multiple.is_none()
+    {
+        out.push(Constraint::MultipleOf(intern(lits, &multiple)));
+    }
     // Predicate escape hatch: annotated_types.Predicate(.func) or a bare
     // callable used directly as metadata.
     if let Ok(func) = marker.getattr("func")
