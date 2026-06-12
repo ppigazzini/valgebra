@@ -40,6 +40,11 @@ dev = [
     "syrupy>=5.3.2",
     "ty>=0.0.48",
 ]
+# Benchmark-only tools: the wall-clock harness and the external comparison
+# points. They are never runtime dependencies of valgebra.
+bench = [
+    "pytest-benchmark>=5",
+]
 
 [tool.maturin]
 python-source = "python"
@@ -93,6 +98,9 @@ ignore = [
     "TRY003",
     "ERA001",
 ]
+# Benchmarks assert results, use magic sizes, are not a package, and print
+# their own recorded numbers when run as scripts.
+"benches/**" = ["S101", "PLR2004", "INP001", "T201"]
 # Maintenance scripts run subprocesses and print progress.
 "scripts/**" = ["INP001", "S603", "T201"]
 
@@ -101,3 +109,9 @@ known-first-party = ["valgebra"]
 
 [tool.ty.environment]
 python-version = "3.14"
+
+[tool.ty.src]
+# Benchmarks are a separate measurement harness, not the typed public surface;
+# they import the optional bench dependency group, which is absent in the
+# type-check lane.
+exclude = ["benches"]
