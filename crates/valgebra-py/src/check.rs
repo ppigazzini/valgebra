@@ -8,9 +8,11 @@
 //! the speculative combinators. `check` (whether any violation is produced) and
 //! `matches` must stay membership-equivalent.
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
+use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple,
@@ -18,6 +20,7 @@ use pyo3::types::{
 use valgebra_core::{Constraint, Field, PathSegment, Schema, Violation};
 
 use crate::errors::{class_label, summarize, truncate};
+use crate::input::Value;
 
 /// The read-only context threaded through a validation walk: the constants
 /// pool, the recursion definitions, the active recursion guard, and the
@@ -93,92 +96,213 @@ pub(crate) fn check(
 
 /// Decide membership without building a violation or tracking a path.
 ///
-/// The fast path: `is_valid` uses it, and the speculative combinators use it so
-/// a discarded branch never pays for a `Violation` or a `repr`. It must stay
+/// The fast path: `is_valid`/`is_valid_json` use it, and the speculative
+/// combinators use it so a discarded branch never pays for a `Violation` or a
+/// `repr`. It walks a [`Value`], dispatching per node on the input source, so
+/// the object path and the in-place JSON path share one traversal. It must stay
 /// membership-equivalent to [`check`].
-pub(crate) fn matches(schema: &Schema, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> bool {
-    let py = value.py();
+pub(crate) fn matches(schema: &Schema, value: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
     match schema {
         Schema::Anything | Schema::Any => true,
         // Bottom admits nothing; an unresolved self-reference is never a member.
         Schema::Nothing | Schema::SelfRef(_) => false,
         Schema::NoneType => value.is_none(),
-        Schema::Bool => value.is_instance_of::<PyBool>(),
-        Schema::Int => value.is_instance_of::<PyInt>(),
-        Schema::Float => value.is_instance_of::<PyFloat>(),
-        Schema::Str => value.is_instance_of::<PyString>(),
-        Schema::Bytes => value.is_instance_of::<PyBytes>(),
-        Schema::Literal(i) => literal_matches(value, ctx.pool[*i].bind(py)),
-        Schema::Sequence(e) => value
-            .cast::<PyList>()
-            .is_ok_and(|list| list.iter().all(|item| matches(e, &item, ctx))),
-        Schema::FixedSequence(es) => value.cast::<PyList>().is_ok_and(|list| {
-            list.len() == es.len()
-                && es
-                    .iter()
-                    .zip(list.iter())
-                    .all(|(s, item)| matches(s, &item, ctx))
-        }),
-        Schema::Tuple(es) => value.cast::<PyTuple>().is_ok_and(|tuple| {
-            tuple.len() == es.len()
-                && es
-                    .iter()
-                    .zip(tuple.iter())
-                    .all(|(s, item)| matches(s, &item, ctx))
-        }),
-        Schema::VariadicTuple(e) => value
-            .cast::<PyTuple>()
-            .is_ok_and(|tuple| tuple.iter().all(|item| matches(e, &item, ctx))),
-        Schema::Set(e) => value
-            .cast::<PySet>()
-            .is_ok_and(|set| set.iter().all(|item| matches(e, &item, ctx))),
-        Schema::FrozenSet(e) => value
-            .cast::<PyFrozenSet>()
-            .is_ok_and(|set| set.iter().all(|item| matches(e, &item, ctx))),
-        Schema::Mapping { key, value: val } => value.cast::<PyDict>().is_ok_and(|dict| {
-            dict.iter()
-                .all(|(k, v)| matches(key, &k, ctx) && matches(val, &v, ctx))
-        }),
+        Schema::Bool => value.is_bool(),
+        Schema::Int => value.is_int(),
+        Schema::Float => value.is_float(),
+        Schema::Str => value.is_str(),
+        Schema::Bytes => value.is_bytes(),
+        Schema::Literal(i) => value
+            .to_python()
+            .is_ok_and(|obj| literal_matches(&obj, ctx.pool[*i].bind(value.py()))),
+        Schema::Sequence(e) => seq_all(e, value, ctx),
+        Schema::FixedSequence(es) => seq_positional(es, value, ctx),
+        Schema::Tuple(es) => tuple_positional(es, value, ctx),
+        Schema::VariadicTuple(e) => tuple_all(e, value, ctx),
+        Schema::Set(e) => set_all(e, value, ctx),
+        Schema::FrozenSet(e) => frozenset_all(e, value, ctx),
+        Schema::Mapping { key, value: val } => mapping_all(key, val, value, ctx),
         Schema::Record { fields, open } => matches_record(fields, *open, value, ctx),
         Schema::Union(members) => members.iter().any(|m| matches(m, value, ctx)),
         Schema::Intersection(members) => members.iter().all(|m| matches(m, value, ctx)),
         Schema::Complement(inner) => !matches(inner, value, ctx),
-        Schema::Instance(i) => value.is_instance(ctx.pool[*i].bind(py)).unwrap_or(false),
+        Schema::Instance(i) => value.to_python().is_ok_and(|obj| {
+            obj.is_instance(ctx.pool[*i].bind(value.py()))
+                .unwrap_or(false)
+        }),
         Schema::Object {
             class_index,
             fields,
-        } => {
-            value
-                .is_instance(ctx.pool[*class_index].bind(py))
-                .unwrap_or(false)
-                && fields.iter().all(|f| {
-                    value
-                        .getattr(f.name.as_str())
-                        .is_ok_and(|attr| matches(&f.schema, &attr, ctx))
-                })
-        }
+        } => matches_object(*class_index, fields, value, ctx),
         Schema::Refine { base, constraints } => {
-            matches(base, value, ctx) && constraints.iter().all(|c| constraint_holds(c, value, ctx))
+            matches(base, value, ctx)
+                && value
+                    .to_python()
+                    .is_ok_and(|obj| constraints.iter().all(|c| constraint_holds(c, &obj, ctx)))
         }
         Schema::Ref(id) => matches_ref(*id, value, ctx),
     }
 }
 
-/// Membership for a record on the fast path: declared fields match and required
-/// keys are present, and no undeclared key is admitted unless the record is
-/// open.
+/// A list whose every element matches `element`. JSON arrays are lists, like the
+/// value `json.loads` produces.
+fn seq_all(element: &Schema, value: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
+    match value {
+        Value::Py(v) => v.cast::<PyList>().is_ok_and(|list| {
+            list.iter()
+                .all(|item| matches(element, &Value::Py(&item), ctx))
+        }),
+        Value::Json(py, JsonValue::Array(items)) => items
+            .iter()
+            .all(|item| matches(element, &Value::Json(*py, item), ctx)),
+        Value::Json(..) => false,
+    }
+}
+
+/// A list matched positionally at exactly the schemas' length.
+fn seq_positional(elements: &[Schema], value: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
+    match value {
+        Value::Py(v) => v.cast::<PyList>().is_ok_and(|list| {
+            list.len() == elements.len()
+                && elements
+                    .iter()
+                    .zip(list.iter())
+                    .all(|(s, item)| matches(s, &Value::Py(&item), ctx))
+        }),
+        Value::Json(py, JsonValue::Array(items)) => {
+            items.len() == elements.len()
+                && elements
+                    .iter()
+                    .zip(items.iter())
+                    .all(|(s, item)| matches(s, &Value::Json(*py, item), ctx))
+        }
+        Value::Json(..) => false,
+    }
+}
+
+/// A tuple matched positionally. JSON has no tuples, so a JSON value is never a
+/// member.
+fn tuple_positional(elements: &[Schema], value: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
+    match value {
+        Value::Py(v) => v.cast::<PyTuple>().is_ok_and(|tuple| {
+            tuple.len() == elements.len()
+                && elements
+                    .iter()
+                    .zip(tuple.iter())
+                    .all(|(s, item)| matches(s, &Value::Py(&item), ctx))
+        }),
+        Value::Json(..) => false,
+    }
+}
+
+/// A tuple of any length whose every element matches `element`.
+fn tuple_all(element: &Schema, value: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
+    match value {
+        Value::Py(v) => v.cast::<PyTuple>().is_ok_and(|tuple| {
+            tuple
+                .iter()
+                .all(|item| matches(element, &Value::Py(&item), ctx))
+        }),
+        Value::Json(..) => false,
+    }
+}
+
+/// A set whose every element matches `element`. JSON has no sets.
+fn set_all(element: &Schema, value: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
+    match value {
+        Value::Py(v) => v.cast::<PySet>().is_ok_and(|set| {
+            set.iter()
+                .all(|item| matches(element, &Value::Py(&item), ctx))
+        }),
+        Value::Json(..) => false,
+    }
+}
+
+/// A frozenset whose every element matches `element`. JSON has no frozensets.
+fn frozenset_all(element: &Schema, value: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
+    match value {
+        Value::Py(v) => v.cast::<PyFrozenSet>().is_ok_and(|set| {
+            set.iter()
+                .all(|item| matches(element, &Value::Py(&item), ctx))
+        }),
+        Value::Json(..) => false,
+    }
+}
+
+/// A dict whose keys all match `key_schema` and values all match `value_schema`.
+/// A JSON object's keys are strings; a duplicate key keeps its last value, as
+/// `json.loads` does.
+fn mapping_all(
+    key_schema: &Schema,
+    value_schema: &Schema,
+    value: &Value<'_, '_>,
+    ctx: Ctx<'_>,
+) -> bool {
+    match value {
+        Value::Py(v) => v.cast::<PyDict>().is_ok_and(|dict| {
+            dict.iter().all(|(k, val)| {
+                matches(key_schema, &Value::Py(&k), ctx)
+                    && matches(value_schema, &Value::Py(&val), ctx)
+            })
+        }),
+        Value::Json(py, JsonValue::Object(entries)) => {
+            entries.iter().enumerate().all(|(i, (key, val))| {
+                // A duplicate key keeps its last value, so skip an entry whose
+                // key recurs later (json.loads semantics). No allocation.
+                if entries[i + 1..].iter().any(|(later, _)| later == key) {
+                    return true;
+                }
+                let key_value = JsonValue::Str(Cow::Borrowed(key.as_ref()));
+                matches(key_schema, &Value::Json(*py, &key_value), ctx)
+                    && matches(value_schema, &Value::Json(*py, val), ctx)
+            })
+        }
+        Value::Json(..) => false,
+    }
+}
+
+/// Membership for an object node (isinstance plus per-attribute checks). The
+/// value is materialized once; a JSON value materializes to a builtin, which is
+/// never an instance of a user class, so a JSON value never matches here.
+fn matches_object(
+    class_index: usize,
+    fields: &[Field],
+    value: &Value<'_, '_>,
+    ctx: Ctx<'_>,
+) -> bool {
+    let Ok(obj) = value.to_python() else {
+        return false;
+    };
+    obj.is_instance(ctx.pool[class_index].bind(value.py()))
+        .unwrap_or(false)
+        && fields.iter().all(|f| {
+            obj.getattr(f.name.as_str())
+                .is_ok_and(|attr| matches(&f.schema, &Value::Py(&attr), ctx))
+        })
+}
+
+/// Membership for a record: declared fields match and required keys are present,
+/// and no undeclared key is admitted unless the record is open.
+fn matches_record(fields: &[Field], open: bool, value: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
+    match value {
+        Value::Py(v) => matches_record_py(fields, open, v, ctx),
+        Value::Json(py, JsonValue::Object(entries)) => {
+            matches_record_json(fields, open, *py, entries, ctx)
+        }
+        Value::Json(..) => false,
+    }
+}
+
+/// The record fast path over a Python dict.
 ///
 /// The walk is inverted: it visits each dict entry once and matches the key
 /// against the declared fields, rather than looking up every declared field
 /// (which builds a temporary Python string per field) and then scanning the
 /// dict a second time for undeclared keys. The key's UTF-8 is borrowed without
-/// allocating. This stays membership-equivalent to [`check_record`]: every key
-/// is checked against the declared set, declared values are validated, and a
-/// required field is satisfied only by an actual string key (so a non-string
-/// key whose `str()` names a field never fills it, exactly as a string-key
-/// lookup would miss it).
-fn matches_record(fields: &[Field], open: bool, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> bool {
-    let Ok(dict) = value.cast::<PyDict>() else {
+/// allocating. A non-string key whose `str()` names a field never fills it,
+/// exactly as a string-key lookup would miss it.
+fn matches_record_py(fields: &[Field], open: bool, dict: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> bool {
+    let Ok(dict) = dict.cast::<PyDict>() else {
         return false;
     };
     let declared: HashMap<&str, &Field> = fields.iter().map(|f| (f.name.as_str(), f)).collect();
@@ -187,7 +311,7 @@ fn matches_record(fields: &[Field], open: bool, value: &Bound<'_, PyAny>, ctx: C
         match key.cast::<PyString>().ok().and_then(|s| s.to_str().ok()) {
             Some(name) => match declared.get(name) {
                 Some(field) => {
-                    if !matches(&field.schema, &val, ctx) {
+                    if !matches(&field.schema, &Value::Py(&val), ctx) {
                         return false;
                     }
                     if field.required {
@@ -197,10 +321,6 @@ fn matches_record(fields: &[Field], open: bool, value: &Bound<'_, PyAny>, ctx: C
                 None if open => {}
                 None => return false,
             },
-            // A non-string or surrogate key cannot name a declared field via a
-            // string-key lookup. When closed it is undeclared unless its string
-            // form names a field (which leaves any required field unmet); when
-            // open it is ignored.
             None => {
                 if !open && !stringifies_to_declared(&key, &declared) {
                     return false;
@@ -209,6 +329,41 @@ fn matches_record(fields: &[Field], open: bool, value: &Bound<'_, PyAny>, ctx: C
         }
     }
     required_remaining == 0
+}
+
+/// The record fast path over a JSON object. Keys are strings, so the
+/// non-string-key subtlety does not arise; a duplicate key keeps its last value,
+/// as `json.loads` does. No allocation: records are small, so a linear scan with
+/// a reverse find (the last occurrence wins) beats building a per-object map.
+fn matches_record_json(
+    fields: &[Field],
+    open: bool,
+    py: Python<'_>,
+    entries: &[(Cow<'_, str>, JsonValue<'_>)],
+    ctx: Ctx<'_>,
+) -> bool {
+    for field in fields {
+        match entries
+            .iter()
+            .rev()
+            .find(|(key, _)| field.name == key.as_ref())
+        {
+            Some((_, val)) => {
+                if !matches(&field.schema, &Value::Json(py, val), ctx) {
+                    return false;
+                }
+            }
+            None if field.required => return false,
+            None => {}
+        }
+    }
+    if open {
+        return true;
+    }
+    // Closed: every object key must name a declared field.
+    entries
+        .iter()
+        .all(|(key, _)| fields.iter().any(|f| f.name == key.as_ref()))
 }
 
 /// Whether the `str()` of a non-string key names a declared field, mirroring the
@@ -262,8 +417,8 @@ fn check_ref(
 
 /// Membership for a recursion reference, with the same cycle and depth guards
 /// as [`check_ref`] but reporting only yes/no.
-fn matches_ref(id: usize, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> bool {
-    let key = (value.as_ptr() as usize, id);
+fn matches_ref(id: usize, value: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
+    let key = (value.id(), id);
     let depth = {
         let mut guard = ctx.guard.borrow_mut();
         if !guard.insert(key) {
@@ -305,7 +460,7 @@ fn check_complement(
 ) {
     // The inner result is discarded either way, so decide membership on the
     // fast path; a value that matches the inner schema fails the complement.
-    if matches(inner, value, ctx) {
+    if matches(inner, &Value::Py(value), ctx) {
         out.push(Violation {
             code: "unexpected_match",
             path: path.to_vec(),
@@ -505,7 +660,10 @@ fn check_union(
 ) {
     // A value is a member iff it matches at least one branch; decide that on the
     // fast path.
-    if members.iter().any(|member| matches(member, value, ctx)) {
+    if members
+        .iter()
+        .any(|member| matches(member, &Value::Py(value), ctx))
+    {
         return;
     }
     // No branch matches. Explain the *closest* branch — the one that descended

@@ -95,19 +95,26 @@ A non-`str`, non-`bytes` argument is a `TypeError`, not a validation failure.
 
 ## Performance
 
-`validate_json` parses with jiter and validates in one boundary crossing, faster
-than parsing with the standard library and then validating. On the benchmark
-machine (Intel i7-3770K, WSL2, CPython 3.14.5, jiter 0.15, valgebra release
-build), per-call median on a passing document:
+`is_valid_json` parses with jiter and validates the parsed JSON value **in
+place**: no intermediate Python objects are built for the structure it walks, so
+membership of a large array or a deep document is decided entirely in Rust. The
+same walk runs over either input source — a Python object or a JSON value — so
+the two paths stay equivalent. On the benchmark machine (Intel i7-3770K, WSL2,
+CPython 3.14.5, jiter 0.15, valgebra release build), per-call median on a passing
+document:
 
-| Shape | `validate_json` | `json.loads` + `is_valid` | speedup |
+| Shape | `is_valid_json` | `json.loads` + `is_valid` | speedup |
 | --- | --- | --- | --- |
-| Record, 50 int fields | 8.2 us | 16.5 us | ~2.0x |
-| List of 200 small records | 59 us | 77 us | ~1.3x |
-| `list[int]`, 10,000 elements | 515 us | 1,030 us | ~2.0x |
+| Record, 50 int fields | 8.2 us | 16.8 us | ~2.0x |
+| List of 200 small records | 45 us | 78 us | ~1.7x |
+| `list[int]`, 10,000 elements | 230 us | 1,024 us | ~4.5x |
 
-The speedup comes from jiter being the faster parser; the validation step is the
-same walk either way. The path currently materializes the parsed document into
-Python objects before validating. Validating jiter values in place, without
-materializing — which is what lets pydantic-core edge ahead on some shapes — is
-a recorded future optimization, not yet implemented.
+Avoiding materialization helps most where the document is large or scalar-heavy:
+the 10,000-element array is over four times faster than parse-then-validate and
+faster than a strict pydantic adapter on the same input.
+
+Nodes that compare against a Python object — literals, refinements, instance and
+object checks, and predicates — materialize just the value at that node, since
+the comparison runs in Python. The `validate_json` explain path still
+materializes the whole document (it reports Python-level value summaries in its
+errors); only the `is_valid_json` fast path is fully in place.

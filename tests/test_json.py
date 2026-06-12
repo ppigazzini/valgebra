@@ -9,11 +9,15 @@ equivalence, plus the str/bytes input handling and the malformed-JSON contract.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from types import GenericAlias
+from typing import TYPE_CHECKING, Annotated
 
+import annotated_types as at
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
-from valgebra import ValidationError, validator
+from valgebra import ValidationError, union, validator
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -125,3 +129,48 @@ def test_fail_fast_stops_at_first_failure_on_the_json_path() -> None:
     with pytest.raises(ValidationError) as info:
         v.validate_json(doc, fail_fast=True)
     assert len(info.value.errors) == 1
+
+
+def _json_schemas() -> st.SearchStrategy[object]:
+    leaf = st.one_of(
+        st.sampled_from([int, float, bool, str, None, object]),
+        st.sampled_from([0, 1, "a", "", True, 1.5]),
+        st.integers(min_value=-3, max_value=3).map(lambda k: Annotated[int, at.Ge(k)]),
+    )
+    return st.recursive(
+        leaf,
+        lambda child: st.one_of(
+            child.map(lambda x: GenericAlias(list, (x,))),
+            child.map(lambda x: GenericAlias(dict, (str, x))),
+            st.tuples(child, child).map(lambda ab: {"a": ab[0], "b?": ab[1]}),
+            st.tuples(child, child).map(lambda ab: union(ab[0], ab[1])),
+        ),
+        max_leaves=8,
+    )
+
+
+def _json_values() -> st.SearchStrategy[object]:
+    leaf = st.one_of(
+        st.none(),
+        st.booleans(),
+        st.integers(),
+        st.floats(allow_nan=False, allow_infinity=False),
+        st.text(max_size=5),
+    )
+    return st.recursive(
+        leaf,
+        lambda child: st.one_of(
+            st.lists(child, max_size=4),
+            st.dictionaries(st.text(max_size=3), child, max_size=4),
+        ),
+        max_leaves=10,
+    )
+
+
+@given(spec=_json_schemas(), value=_json_values())
+def test_json_path_fuzz_agrees_with_object_path(spec: object, value: object) -> None:
+    # The in-place JSON walk must reach the same verdict as validating the
+    # json.loads of the same document on the object path.
+    v = validator(spec)
+    doc = json.dumps(value)
+    assert v.is_valid_json(doc) == v.is_valid(json.loads(doc))

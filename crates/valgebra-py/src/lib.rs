@@ -9,12 +9,13 @@
 mod build;
 mod check;
 mod errors;
+mod input;
 mod render;
 
 use std::cell::RefCell;
 use std::collections::HashSet;
 
-use jiter::PythonParse;
+use jiter::{JsonValue, PythonParse};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -24,6 +25,7 @@ use valgebra_core::{Schema, fresh_self_token};
 use crate::build::{build_schema, combine};
 use crate::check::{Ctx, check, matches};
 use crate::errors::{into_pyerr, json_invalid_error};
+use crate::input::Value;
 use crate::render::render;
 
 create_exception!(
@@ -59,6 +61,21 @@ impl CompiledValidator {
             fail_fast,
         }
     }
+
+    /// Whether the JSON in `bytes` parses and belongs to the schema's set,
+    /// validated in place against the parsed JSON value with no intermediate
+    /// Python objects. `bytes` outlives the parsed value and the walk.
+    fn matches_json(&self, py: Python<'_>, bytes: &[u8]) -> bool {
+        let Ok(json) = JsonValue::parse(bytes, false) else {
+            return false;
+        };
+        let guard = RefCell::new(HashSet::new());
+        matches(
+            &self.schema,
+            &Value::Json(py, &json),
+            self.context(&guard, true),
+        )
+    }
 }
 
 #[pymethods]
@@ -91,7 +108,7 @@ impl CompiledValidator {
     /// the membership fast path.
     fn is_valid(&self, obj: &Bound<'_, PyAny>) -> bool {
         let guard = RefCell::new(HashSet::new());
-        matches(&self.schema, obj, self.context(&guard, true))
+        matches(&self.schema, &Value::Py(obj), self.context(&guard, true))
     }
 
     /// Validate `obj` and return it unchanged. The explicit conversion mode:
@@ -118,10 +135,18 @@ impl CompiledValidator {
     /// Whether `data` (a JSON `str` or `bytes`) parses and its value belongs to
     /// the schema's set. Check-only and never raises: malformed JSON is not a
     /// member, so it returns `False` like any other non-member.
+    ///
+    /// The JSON is validated in place against the parsed value, with no
+    /// intermediate Python objects for the structure it walks.
     fn is_valid_json(&self, data: &Bound<'_, PyAny>) -> bool {
-        match parse_json(data) {
-            Ok(parsed) => self.is_valid(&parsed),
-            Err(_) => false,
+        let py = data.py();
+        if let Ok(text) = data.cast::<PyString>() {
+            text.to_str()
+                .is_ok_and(|json| self.matches_json(py, json.as_bytes()))
+        } else if let Ok(raw) = data.cast::<PyBytes>() {
+            self.matches_json(py, raw.as_bytes())
+        } else {
+            false
         }
     }
 
