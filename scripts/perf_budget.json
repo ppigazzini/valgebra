@@ -1,0 +1,5 @@
+{
+  "_comment": "Instruction-count budget for the core schema-operation workload, measured with cachegrind. Deterministic for a given build; re-record with scripts/perf_gate.py --update after an intentional change to the workload or a large compiler codegen shift. The tolerance absorbs cross-environment startup and compiler-codegen drift while still catching algorithmic regressions, which are far larger than the tolerance.",
+  "core_workload_irefs": 183414439,
+  "tolerance": 0.15
+}

@@ -134,6 +134,35 @@ jobs:
       # Execute every runnable example in the docs; fail on a stale snippet.
       - run: uv run python scripts/run_doc_examples.py
 
+  bench:
+    name: bench
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: Install valgrind
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --group bench
+      - run: uv run --group bench maturin develop --uv
+      # Deterministic instruction-count regression gate: cachegrind over the
+      # fixed core workload, compared against the committed budget. Independent
+      # of runner noise, so it blocks merges; a wall-clock budget could not.
+      - name: Instruction-count regression gate
+        run: uv run python scripts/perf_gate.py
+      # Smoke-run the wall-clock benches once (timing disabled) so the suites
+      # keep working; their numbers are recorded by hand in the performance
+      # page. The files are named bench_*, so override the collection pattern.
+      - name: Smoke-run the benchmarks
+        run: >
+          uv run --group bench pytest benches/
+          -o python_files="bench_*.py" --benchmark-disable -q
+
   wheel:
     name: wheel (linux)
     runs-on: ubuntu-latest
@@ -163,7 +192,16 @@ jobs:
     name: ci
     if: always()
     needs:
-      [rust-lint, rust-test, rust-msrv, rust-coverage, python, doc-examples, wheel]
+      [
+        rust-lint,
+        rust-test,
+        rust-msrv,
+        rust-coverage,
+        python,
+        doc-examples,
+        bench,
+        wheel,
+      ]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any required job did not succeed

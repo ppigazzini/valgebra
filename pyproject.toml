@@ -103,8 +103,9 @@ ignore = [
 # Benchmarks assert results, use magic sizes, are not a package, and print
 # their own recorded numbers when run as scripts.
 "benches/**" = ["S101", "PLR2004", "INP001", "T201"]
-# Maintenance scripts run subprocesses and print progress.
-"scripts/**" = ["INP001", "S603", "T201"]
+# Maintenance scripts run subprocesses (tools resolved from PATH) and print
+# progress.
+"scripts/**" = ["INP001", "S603", "S607", "T201"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["valgebra"]

@@ -98,3 +98,27 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
   for what valgebra is and is not for.
 - These figures predate the JSON input path. Validating parsed JSON directly on
   the Rust side is a separate, later effort and is not reflected here.
+
+## Regression gate
+
+The wall-clock numbers above are for humans reading results; they are too noisy
+on shared CI runners to gate a merge. The merge gate is instead a deterministic
+instruction count: a fixed workload exercises the core schema operations
+(`crates/valgebra-core/examples/perf_workload.rs`), runs under cachegrind, and
+its executed-instruction count is compared against a committed budget
+(`scripts/perf_budget.json`) by `scripts/perf_gate.py`. The count is identical
+across runs of a given build, so a regression past the budget ceiling fails the
+build without flaking. The tolerance absorbs cross-environment startup and
+compiler-codegen drift while still catching algorithmic regressions, which are
+far larger than the tolerance.
+
+The gate covers the pure-Rust schema engine, which is portable enough for a
+committed budget. The end-to-end wall-clock suites run on the same CI lane with
+timing disabled, as a smoke test that they keep working; their numbers are
+re-recorded by hand in the matrix above rather than gated.
+
+Re-record the budget after an intentional workload change with:
+
+```bash
+python scripts/perf_gate.py --update
+```
