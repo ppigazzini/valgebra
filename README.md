@@ -221,6 +221,19 @@ uv run python -c "from valgebra import validator; print(validator(int).is_valid(
 Requirements: stable Rust (edition 2024, MSRV 1.88), Python >= 3.10, and
 [`uv`](https://docs.astral.sh/uv/).
 
+## Versioning and releases
+
+valgebra follows [Semantic Versioning](https://semver.org/). While the version
+is below `1.0` the public API may change between minor versions; every change is
+recorded in [CHANGELOG.md](CHANGELOG.md), and where practical a deprecated form
+keeps working for at least one minor release with a documented replacement.
+
+Releases are tag-driven: pushing a `vX.Y.Z` tag builds the wheel matrix (Linux
+manylinux and musllinux, macOS, and Windows) and the sdist and publishes them to
+PyPI through trusted publishing with PEP 740 attestations. The package version
+is read from the workspace manifest, so a release bumps `Cargo.toml` and tags
+the matching version.
+
 ## Design at a glance
 
 - **Schemas denote sets; validation is membership.** Subtyping is set
