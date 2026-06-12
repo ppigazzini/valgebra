@@ -1,3 +1,4 @@
+from ._derived import cond, ifthen
 from ._valgebra import (
     CompiledValidator,
     ValidationError,
@@ -15,6 +16,8 @@ __all__ = [
     "ValidationError",
     "anything",
     "complement",
+    "cond",
+    "ifthen",
     "intersect",
     "nothing",
     "simplify",
