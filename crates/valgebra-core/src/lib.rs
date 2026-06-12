@@ -98,6 +98,20 @@ pub enum Schema {
     /// Denotes the union of the member sets: a value is a member iff it belongs
     /// to at least one member schema.
     Union(Vec<Schema>),
+    /// Denotes instances of a class, by `isinstance`. The class is held in the
+    /// validator's object pool; the payload is its index.
+    Instance(usize),
+    /// Denotes instances of a class whose attributes satisfy the given fields.
+    ///
+    /// `isinstance` against the pooled class at `class_index` must hold, and
+    /// every field's attribute must be present and match. This is the deep
+    /// check for dataclasses and named tuples.
+    Object {
+        /// Index of the class in the validator's object pool.
+        class_index: usize,
+        /// Per-attribute field schemas; all required.
+        fields: Vec<Field>,
+    },
 }
 
 /// A named field of a [`Schema::Record`].
@@ -133,6 +147,9 @@ impl Schema {
             Schema::FrozenSet(_) => "frozenset",
             Schema::Mapping { .. } | Schema::Record { .. } => "dict",
             Schema::Union(_) => "union",
+            // The py layer renders the concrete class name; these are fallbacks.
+            Schema::Instance(_) => "instance",
+            Schema::Object { .. } => "object",
         }
     }
 
@@ -157,6 +174,7 @@ impl Schema {
             Schema::FrozenSet(_) => "frozenset_type",
             Schema::Mapping { .. } | Schema::Record { .. } => "dict_type",
             Schema::Union(_) => "union_error",
+            Schema::Instance(_) | Schema::Object { .. } => "instance_type",
         }
     }
 }

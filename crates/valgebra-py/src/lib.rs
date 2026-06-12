@@ -108,8 +108,20 @@ fn build_schema(obj: &Bound<'_, PyAny>, lits: &mut Vec<Py<PyAny>>) -> PyResult<S
         return build_parametrized(&origin, args.cast::<PyTuple>()?, lits);
     }
 
+    // PEP 695 `type X = ...` alias (3.12+): validate the aliased type.
+    if let Ok(alias_type) = typing.getattr("TypeAliasType")
+        && obj.is_instance(&alias_type)?
+    {
+        return build_schema(&obj.getattr("__value__")?, lits);
+    }
+
+    // NewType: validate the supertype it wraps.
+    if obj.hasattr("__supertype__")? {
+        return build_schema(&obj.getattr("__supertype__")?, lits);
+    }
+
     if let Ok(ty) = obj.cast::<PyType>() {
-        return build_type_object(ty);
+        return build_type_object(ty, lits);
     }
     if let Ok(list) = obj.cast::<PyList>() {
         return build_sequence(list, lits);
@@ -130,8 +142,9 @@ fn build_schema(obj: &Bound<'_, PyAny>, lits: &mut Vec<Py<PyAny>>) -> PyResult<S
     Ok(Schema::Literal(intern(lits, obj)))
 }
 
-/// Build the schema for a builtin type object or `object`.
-fn build_type_object(ty: &Bound<'_, PyType>) -> PyResult<Schema> {
+/// Build the schema for a Python type object (a builtin, `TypedDict`, `Enum`,
+/// dataclass, `NamedTuple`, runtime-checkable `Protocol`, or `object`).
+fn build_type_object(ty: &Bound<'_, PyType>, lits: &mut Vec<Py<PyAny>>) -> PyResult<Schema> {
     let py = ty.py();
     if ty.is(py.get_type::<PyBool>()) {
         return Ok(Schema::Bool);
@@ -154,10 +167,81 @@ fn build_type_object(ty: &Bound<'_, PyType>) -> PyResult<Schema> {
     if ty.is(&py.import("builtins")?.getattr("object")?) {
         return Ok(Schema::Anything);
     }
+    // TypedDict: a closed record whose required keys come from the class.
+    if ty.hasattr("__required_keys__")? {
+        return build_typed_dict(ty, lits);
+    }
+    // Enum: an instance of the enumeration class (any of its members).
+    if ty.is_subclass(&py.import("enum")?.getattr("Enum")?)? {
+        return Ok(Schema::Instance(intern(lits, ty.as_any())));
+    }
+    // dataclass / NamedTuple: isinstance plus a deep check of each field.
+    let is_dataclass = py
+        .import("dataclasses")?
+        .call_method1("is_dataclass", (ty,))?
+        .is_truthy()?;
+    if is_dataclass || (ty.is_subclass_of::<PyTuple>()? && ty.hasattr("_fields")?) {
+        return build_object(ty, lits);
+    }
+    // Protocol: a runtime-checkable protocol validates by isinstance.
+    if is_truthy_attr(ty, "_is_protocol") {
+        if is_truthy_attr(ty, "_is_runtime_protocol") {
+            return Ok(Schema::Instance(intern(lits, ty.as_any())));
+        }
+        return Err(not_implemented(
+            "a Protocol must be @runtime_checkable to be used as a schema",
+        ));
+    }
     Err(not_implemented(&format!(
         "unsupported type schema: {}",
         summarize(ty.as_any())
     )))
+}
+
+/// True if `obj.<name>` exists and is truthy; false on absence or error.
+fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &str) -> bool {
+    obj.getattr(name)
+        .ok()
+        .and_then(|value| value.is_truthy().ok())
+        .unwrap_or(false)
+}
+
+/// Build a closed record from a `TypedDict`, reading its required keys.
+fn build_typed_dict(ty: &Bound<'_, PyType>, lits: &mut Vec<Py<PyAny>>) -> PyResult<Schema> {
+    let py = ty.py();
+    let hints = py.import("typing")?.call_method1("get_type_hints", (ty,))?;
+    let hints = hints.cast::<PyDict>()?;
+    let required = ty.getattr("__required_keys__")?;
+    let mut fields = Vec::with_capacity(hints.len());
+    for (name, hint) in hints.iter() {
+        fields.push(Field {
+            name: name.str()?.to_string(),
+            schema: build_schema(&hint, lits)?,
+            required: required.contains(&name)?,
+        });
+    }
+    Ok(Schema::Record { fields })
+}
+
+/// Build an Object node (isinstance plus per-attribute checks) for a class
+/// whose fields come from its resolved type hints; all fields are required.
+fn build_object(ty: &Bound<'_, PyType>, lits: &mut Vec<Py<PyAny>>) -> PyResult<Schema> {
+    let py = ty.py();
+    let hints = py.import("typing")?.call_method1("get_type_hints", (ty,))?;
+    let hints = hints.cast::<PyDict>()?;
+    let class_index = intern(lits, ty.as_any());
+    let mut fields = Vec::with_capacity(hints.len());
+    for (name, hint) in hints.iter() {
+        fields.push(Field {
+            name: name.str()?.to_string(),
+            schema: build_schema(&hint, lits)?,
+            required: true,
+        });
+    }
+    Ok(Schema::Object {
+        class_index,
+        fields,
+    })
 }
 
 /// Build the IR for a parametrized typing generic given its origin and args.
@@ -384,7 +468,72 @@ fn check(
         Schema::Mapping { key, value: val } => check_mapping(key, val, value, path, pool),
         Schema::Record { fields } => check_record(fields, value, path, pool),
         Schema::Union(members) => check_union(members, value, path, pool),
+        Schema::Instance(index) => check_instance(*index, value, path, pool),
+        Schema::Object {
+            class_index,
+            fields,
+        } => check_object(*class_index, fields, value, path, pool),
     }
+}
+
+fn check_instance(
+    index: usize,
+    value: &Bound<'_, PyAny>,
+    path: &[PathSegment],
+    pool: &[Py<PyAny>],
+) -> Option<Violation> {
+    let class = pool[index].bind(value.py());
+    if value.is_instance(class).unwrap_or(false) {
+        None
+    } else {
+        Some(type_mismatch(
+            "instance_type",
+            &class_label(class),
+            value,
+            path,
+        ))
+    }
+}
+
+fn check_object(
+    class_index: usize,
+    fields: &[Field],
+    value: &Bound<'_, PyAny>,
+    path: &mut Vec<PathSegment>,
+    pool: &[Py<PyAny>],
+) -> Option<Violation> {
+    let class = pool[class_index].bind(value.py());
+    if !value.is_instance(class).unwrap_or(false) {
+        // Not an instance: the attribute checks below cannot be trusted.
+        return Some(type_mismatch(
+            "instance_type",
+            &class_label(class),
+            value,
+            path,
+        ));
+    }
+    for field in fields {
+        match value.getattr(field.name.as_str()) {
+            Ok(attr) => {
+                path.push(PathSegment::Key(field.name.clone()));
+                let result = check(&field.schema, &attr, path, pool);
+                path.pop();
+                if result.is_some() {
+                    return result;
+                }
+            }
+            Err(_) => {
+                return Some(located(
+                    path,
+                    field.name.clone(),
+                    "missing_attribute",
+                    format!("attribute {:?}", field.name),
+                    "missing".to_owned(),
+                ));
+            }
+        }
+    }
+    None
 }
 
 /// Whether `value` is a member of `schema`: the walk produces no violation.
@@ -683,6 +832,15 @@ fn key_label(key: &Bound<'_, PyAny>) -> String {
 // ---------------------------------------------------------------------------
 // Error construction.
 // ---------------------------------------------------------------------------
+
+/// The class name for an error label, falling back to its repr.
+fn class_label(class: &Bound<'_, PyAny>) -> String {
+    class
+        .getattr("__name__")
+        .ok()
+        .and_then(|name| name.extract::<String>().ok())
+        .unwrap_or_else(|| summarize(class))
+}
 
 /// A short repr-style summary of a value for error messages.
 fn summarize(value: &Bound<'_, PyAny>) -> String {
