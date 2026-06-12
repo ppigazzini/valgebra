@@ -1,0 +1,24 @@
+[package]
+name = "valgebra-py"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+name = "_valgebra"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The pyo3 `extension-module` feature is intentionally not set here. maturin
+# (>= 1.9.4) injects it at wheel-build time via PYO3_BUILD_EXTENSION_MODULE.
+# Setting it unconditionally leaves libpython symbols undefined, which links on
+# Linux but breaks `cargo test`/`cargo build` on macOS and Windows, whose
+# linkers reject undefined symbols. Omitting it lets non-maturin builds link
+# libpython normally.
+pyo3 = { workspace = true }
+valgebra-core = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,44 @@
+# Maintainer notes — not part of the tracked project
+__DEV/
+
+# Rust build output
+/target/
+
+# Python packaging and build artefacts
+*.egg-info/
+dist/
+build/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.dylib
+*.dll
+
+# Virtual environment
+/.venv/
+
+# maturin / wheel intermediates
+/wheels/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.ty_cache/
+.mypy_cache/
+.hypothesis/
+
+# Coverage and profiling
+.coverage
+.coverage.*
+htmlcov/
+*.profraw
+*.profdata
+
+# Editor and OS
+.vscode/settings.json
+.idea/
+*.swp
+*~
+.DS_Store

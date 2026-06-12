@@ -1,0 +1,100 @@
+[build-system]
+# >= 1.9.4 injects the pyo3 extension-module behavior at build time, so it is
+# not hard-coded as a Cargo feature (see crates/valgebra-py/Cargo.toml).
+requires = ["maturin>=1.9.4,<2"]
+build-backend = "maturin"
+
+[project]
+name = "valgebra"
+requires-python = ">=3.10"
+dynamic = ["version"]
+description = "Fast runtime validation via a complete Boolean algebra of schemas on a compiled Rust core."
+readme = "README.md"
+# PEP 639 SPDX expression; the standard Rust-ecosystem dual license.
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+keywords = ["validation", "schema", "typing", "rust"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Quality Assurance",
+    "Typing :: Typed",
+]
+
+[dependency-groups]
+dev = [
+    "maturin>=1.9.4,<2",
+    "pre-commit>=4.6.0",
+    "pytest>=8",
+    "ruff>=0.15.16",
+    "ty>=0.0.48",
+]
+
+[tool.maturin]
+python-source = "python"
+module-name = "valgebra._valgebra"
+manifest-path = "crates/valgebra-py/Cargo.toml"
+# Build the abi3-incompatible per-version module; strip the binary in release.
+strip = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+xfail_strict = true
+
+[tool.ruff]
+target-version = "py310"
+src = ["python", "tests"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    # Formatter conflicts, per the ruff docs.
+    "COM812",
+    "ISC001",
+    # Missing docstrings — added incrementally as the public surface stabilises.
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D104",
+    "D105",
+    "D107",
+    # Docstring style pairs that contradict each other; keep the ruff defaults.
+    "D203",
+    "D213",
+    # Public-surface annotations live in the .pyi stub, not the runtime module.
+    "ANN",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert freely, use magic values, take unused fixture args, are not a
+# package, pass bools positionally, raise ad-hoc exceptions with inline
+# messages, and carry descriptive (not commented-out) comments in data tables.
+"tests/**" = [
+    "S101",
+    "PLR2004",
+    "ARG001",
+    "INP001",
+    "FBT003",
+    "EM101",
+    "TRY003",
+    "ERA001",
+]
+# Maintenance scripts run subprocesses and print progress.
+"scripts/**" = ["INP001", "S603", "T201"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["valgebra"]
+
+[tool.ty.environment]
+python-version = "3.14"
