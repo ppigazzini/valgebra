@@ -91,11 +91,17 @@ fn build_schema(obj: &Bound<'_, PyAny>, lits: &mut Vec<Py<PyAny>>) -> PyResult<S
         return Ok(Schema::NoneType);
     }
 
-    // Typing constructs (list[int], dict[K, V], tuple[...], ...) are read
-    // through the typing spec's own introspection, so the builtin and legacy
-    // aliases share one path. A non-typing object has origin None and falls
-    // through to the native handling below.
     let typing = py.import("typing")?;
+
+    // `typing.Any` is a singleton special form: the gradual dynamic type.
+    if obj.is(&typing.getattr("Any")?) {
+        return Ok(Schema::Any);
+    }
+
+    // Typing constructs (list[int], dict[K, V], tuple[...], X | Y, Literal,
+    // ...) are read through the typing spec's own introspection, so the builtin
+    // and legacy aliases share one path. A non-typing object has origin None and
+    // falls through to the native handling below.
     let origin = typing.call_method1("get_origin", (obj,))?;
     if !origin.is_none() {
         let args = typing.call_method1("get_args", (obj,))?;
@@ -193,10 +199,45 @@ fn build_parametrized(
         }
         return Ok(Schema::Tuple(elements));
     }
+    if is_union_origin(origin)? {
+        let mut members = Vec::with_capacity(args.len());
+        for arg in args.iter() {
+            members.push(build_schema(&arg, lits)?);
+        }
+        return Ok(Schema::Union(members));
+    }
+    if is_literal_origin(origin)? {
+        // Literal args are constant values; each becomes a literal, unioned when
+        // there is more than one.
+        let mut members = Vec::with_capacity(args.len());
+        for arg in args.iter() {
+            members.push(build_schema(&arg, lits)?);
+        }
+        return Ok(if members.len() == 1 {
+            members.into_iter().next().expect("one member")
+        } else {
+            Schema::Union(members)
+        });
+    }
     Err(not_implemented(&format!(
-        "unsupported typing form with origin {}; supported: list, set, dict, tuple",
+        "unsupported typing form with origin {}; supported: list, set, dict, \
+         tuple, Union, Optional, Literal",
         summarize(origin)
     )))
+}
+
+/// True if `origin` is `typing.Union` (from Union/Optional) or
+/// `types.UnionType` (from `X | Y`).
+fn is_union_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = origin.py();
+    let typing_union = py.import("typing")?.getattr("Union")?;
+    let pep604_union = py.import("types")?.getattr("UnionType")?;
+    Ok(origin.is(&typing_union) || origin.is(&pep604_union))
+}
+
+/// True if `origin` is `typing.Literal`.
+fn is_literal_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
+    Ok(origin.is(&origin.py().import("typing")?.getattr("Literal")?))
 }
 
 fn single_arg<'py>(args: &Bound<'py, PyTuple>) -> PyResult<Bound<'py, PyAny>> {
@@ -311,7 +352,7 @@ fn check(
     pool: &[Py<PyAny>],
 ) -> Option<Violation> {
     match schema {
-        Schema::Anything => None,
+        Schema::Anything | Schema::Any => None,
         Schema::Nothing => Some(mismatch(schema, value, path)),
         Schema::NoneType => admit(value.is_none(), schema, value, path),
         Schema::Bool => admit(value.is_instance_of::<PyBool>(), schema, value, path),
@@ -326,7 +367,33 @@ fn check(
         Schema::Set(element) => check_set(element, value, path, pool),
         Schema::Mapping { key, value: val } => check_mapping(key, val, value, path, pool),
         Schema::Record { fields } => check_record(fields, value, path, pool),
+        Schema::Union(members) => check_union(members, value, path, pool),
     }
+}
+
+/// Whether `value` is a member of `schema`: the walk produces no violation.
+fn is_member(schema: &Schema, value: &Bound<'_, PyAny>, pool: &[Py<PyAny>]) -> bool {
+    let mut path = Vec::new();
+    check(schema, value, &mut path, pool).is_none()
+}
+
+fn check_union(
+    members: &[Schema],
+    value: &Bound<'_, PyAny>,
+    path: &[PathSegment],
+    pool: &[Py<PyAny>],
+) -> Option<Violation> {
+    // A value is a member iff it matches at least one branch.
+    if members.iter().any(|member| is_member(member, value, pool)) {
+        return None;
+    }
+    let labels: Vec<&str> = members.iter().map(Schema::expected).collect();
+    Some(Violation {
+        code: "union_error",
+        path: path.to_vec(),
+        expected: format!("one of: {}", labels.join(", ")),
+        value_summary: summarize(value),
+    })
 }
 
 fn admit(

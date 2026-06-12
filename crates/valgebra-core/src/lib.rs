@@ -27,6 +27,10 @@ pub enum PathSegment {
 pub enum Schema {
     /// Top. Denotes every Python value; membership always holds.
     Anything,
+    /// The gradual dynamic type. At runtime it admits every value like the top,
+    /// but it is a distinct atom: the simplifier must not rewrite it by the
+    /// lattice laws, so `Any` and [`Schema::Anything`] are kept separate.
+    Any,
     /// Bottom. Denotes the empty set; membership never holds.
     Nothing,
     /// Denotes the singleton set `{None}`.
@@ -86,6 +90,9 @@ pub enum Schema {
         /// The declared fields, in order.
         fields: Vec<Field>,
     },
+    /// Denotes the union of the member sets: a value is a member iff it belongs
+    /// to at least one member schema.
+    Union(Vec<Schema>),
 }
 
 /// A named field of a [`Schema::Record`].
@@ -105,6 +112,7 @@ impl Schema {
     pub fn expected(&self) -> &'static str {
         match self {
             Schema::Anything => "anything",
+            Schema::Any => "any",
             Schema::Nothing => "nothing",
             Schema::NoneType => "None",
             Schema::Bool => "bool",
@@ -118,6 +126,7 @@ impl Schema {
             Schema::Tuple(_) => "tuple",
             Schema::Set(_) => "set",
             Schema::Mapping { .. } | Schema::Record { .. } => "dict",
+            Schema::Union(_) => "union",
         }
     }
 
@@ -125,8 +134,9 @@ impl Schema {
     #[must_use]
     pub fn error_code(&self) -> &'static str {
         match self {
-            // Anything never fails; the code is for completeness.
+            // Anything and Any never fail; the codes are for completeness.
             Schema::Anything => "anything",
+            Schema::Any => "any",
             Schema::Nothing => "no_match",
             Schema::NoneType => "none_type",
             Schema::Bool => "bool_type",
@@ -139,6 +149,7 @@ impl Schema {
             Schema::Tuple(_) => "tuple_type",
             Schema::Set(_) => "set_type",
             Schema::Mapping { .. } | Schema::Record { .. } => "dict_type",
+            Schema::Union(_) => "union_error",
         }
     }
 }
