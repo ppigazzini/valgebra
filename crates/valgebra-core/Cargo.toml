@@ -7,8 +7,13 @@ license.workspace = true
 publish = false
 
 [dev-dependencies]
+criterion = "0.8.2"
 insta = "1.48.0"
 proptest = "1"
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "core"
+harness = false
