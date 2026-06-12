@@ -44,13 +44,18 @@ pub struct CompiledValidator {
 }
 
 impl CompiledValidator {
-    /// The read-only walk context: the pool, the definitions, and a fresh
-    /// recursion guard.
-    fn context<'a>(&'a self, guard: &'a RefCell<HashSet<(usize, usize)>>) -> Ctx<'a> {
+    /// The read-only walk context: the pool, the definitions, a fresh recursion
+    /// guard, and the fail-fast flag.
+    fn context<'a>(
+        &'a self,
+        guard: &'a RefCell<HashSet<(usize, usize)>>,
+        fail_fast: bool,
+    ) -> Ctx<'a> {
         Ctx {
             pool: &self.literals,
             defs: &self.definitions,
             guard,
+            fail_fast,
         }
     }
 }
@@ -59,12 +64,25 @@ impl CompiledValidator {
 impl CompiledValidator {
     /// Raise [`ValidationError`] if `obj` is not a member of the schema's set;
     /// return `None` otherwise. Check-only: the object is not copied or coerced.
-    fn validate(&self, obj: &Bound<'_, PyAny>) -> PyResult<()> {
+    ///
+    /// By default every independent failure is aggregated into the raised
+    /// error's `errors`; `fail_fast=True` stops at the first failure.
+    #[pyo3(signature = (obj, *, fail_fast = false))]
+    fn validate(&self, obj: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
         let guard = RefCell::new(HashSet::new());
         let mut path = Vec::new();
-        match check(&self.schema, obj, &mut path, self.context(&guard)) {
-            Some(violation) => Err(into_pyerr(obj.py(), &[violation])),
-            None => Ok(()),
+        let mut violations = Vec::new();
+        check(
+            &self.schema,
+            obj,
+            &mut path,
+            self.context(&guard, fail_fast),
+            &mut violations,
+        );
+        if violations.is_empty() {
+            Ok(())
+        } else {
+            Err(into_pyerr(obj.py(), &violations))
         }
     }
 
@@ -72,13 +90,13 @@ impl CompiledValidator {
     /// the membership fast path.
     fn is_valid(&self, obj: &Bound<'_, PyAny>) -> bool {
         let guard = RefCell::new(HashSet::new());
-        matches(&self.schema, obj, self.context(&guard))
+        matches(&self.schema, obj, self.context(&guard, true))
     }
 
     /// Validate `obj` and return it unchanged. The explicit conversion mode:
     /// validation is a membership check, so the returned object is the input.
     fn cast<'py>(&self, obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        self.validate(obj)?;
+        self.validate(obj, false)?;
         Ok(obj.clone())
     }
 

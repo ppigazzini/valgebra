@@ -1,11 +1,12 @@
 //! The validation walk: membership testing of a Python value against the IR.
 //!
-//! [`check`] is the explain path: it walks the schema and returns the first
-//! [`Violation`], threading a path so a nested failure reports its location.
-//! [`matches`] is the membership fast path: a bool with no allocation, used by
-//! `is_valid` and by the speculative combinators (`union` members, `complement`
-//! inner) so a discarded branch never builds a `Violation`. `check` (whether it
-//! produces a violation) and `matches` must stay membership-equivalent.
+//! [`check`] is the explain path: it walks the schema and *aggregates* every
+//! independent failure into a `Vec<Violation>` (each record field, each
+//! sequence element, each mapping entry), rather than stopping at the first.
+//! With `ctx.fail_fast` it stops at the first failure instead. [`matches`] is
+//! the membership fast path (a bool, no allocation) used by `is_valid` and by
+//! the speculative combinators. `check` (whether any violation is produced) and
+//! `matches` must stay membership-equivalent.
 
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -19,57 +20,69 @@ use valgebra_core::{Constraint, Field, PathSegment, Schema, Violation};
 use crate::errors::{class_label, summarize, truncate};
 
 /// The read-only context threaded through a validation walk: the constants
-/// pool, the recursion definitions, and the active recursion guard. The guard
-/// records `(object id, definition index)` pairs currently on the path so a
-/// value that contains itself fails with `recursion_loop` instead of looping.
+/// pool, the recursion definitions, the active recursion guard, and the
+/// fail-fast flag. The guard records `(object id, definition index)` pairs
+/// currently on the path so a value that contains itself fails with
+/// `recursion_loop` instead of looping.
 #[derive(Clone, Copy)]
 pub(crate) struct Ctx<'a> {
     pub(crate) pool: &'a [Py<PyAny>],
     pub(crate) defs: &'a [Schema],
     pub(crate) guard: &'a RefCell<HashSet<(usize, usize)>>,
+    /// Stop at the first failure instead of aggregating siblings.
+    pub(crate) fail_fast: bool,
 }
 
-/// Walk the schema against `value`, returning the first [`Violation`] or `None`
-/// if the value is a member. `path` accumulates the location of the current
-/// value.
+/// Whether the walk should stop: fail-fast is on and a failure is already
+/// recorded. In the default (aggregating) mode this is always false, so the
+/// walk visits every independent position.
+fn aborted(ctx: Ctx<'_>, out: &[Violation]) -> bool {
+    ctx.fail_fast && !out.is_empty()
+}
+
+/// Walk the schema against `value` in Rust, pushing a [`Violation`] for each
+/// failure into `out`. `path` accumulates the location of the current value.
 pub(crate) fn check(
     schema: &Schema,
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     match schema {
-        Schema::Anything | Schema::Any => None,
-        Schema::Nothing => Some(mismatch(schema, value, path)),
-        Schema::NoneType => admit(value.is_none(), schema, value, path),
-        Schema::Bool => admit(value.is_instance_of::<PyBool>(), schema, value, path),
+        Schema::Anything | Schema::Any => {}
+        Schema::Nothing => out.push(mismatch(schema, value, path)),
+        Schema::NoneType => admit(value.is_none(), schema, value, path, out),
+        Schema::Bool => admit(value.is_instance_of::<PyBool>(), schema, value, path, out),
         // bool subclasses int, so True/False are ints: Bool is a subset of Int.
-        Schema::Int => admit(value.is_instance_of::<PyInt>(), schema, value, path),
-        Schema::Float => admit(value.is_instance_of::<PyFloat>(), schema, value, path),
-        Schema::Str => admit(value.is_instance_of::<PyString>(), schema, value, path),
-        Schema::Bytes => admit(value.is_instance_of::<PyBytes>(), schema, value, path),
-        Schema::Literal(index) => check_literal(*index, value, path, ctx),
-        Schema::Sequence(element) => check_sequence(element, value, path, ctx),
-        Schema::FixedSequence(elements) => check_fixed_sequence(elements, value, path, ctx),
-        Schema::Tuple(elements) => check_tuple(elements, value, path, ctx),
-        Schema::VariadicTuple(element) => check_variadic_tuple(element, value, path, ctx),
-        Schema::Set(element) => check_set(element, value, path, ctx),
-        Schema::FrozenSet(element) => check_frozenset(element, value, path, ctx),
-        Schema::Mapping { key, value: val } => check_mapping(key, val, value, path, ctx),
-        Schema::Record { fields, open } => check_record(fields, *open, value, path, ctx),
-        Schema::Union(members) => check_union(members, value, path, ctx),
-        Schema::Intersection(members) => check_intersection(members, value, path, ctx),
-        Schema::Complement(inner) => check_complement(inner, value, path, ctx),
-        Schema::Instance(index) => check_instance(*index, value, path, ctx),
+        Schema::Int => admit(value.is_instance_of::<PyInt>(), schema, value, path, out),
+        Schema::Float => admit(value.is_instance_of::<PyFloat>(), schema, value, path, out),
+        Schema::Str => admit(value.is_instance_of::<PyString>(), schema, value, path, out),
+        Schema::Bytes => admit(value.is_instance_of::<PyBytes>(), schema, value, path, out),
+        Schema::Literal(index) => check_literal(*index, value, path, ctx, out),
+        Schema::Sequence(element) => check_sequence(element, value, path, ctx, out),
+        Schema::FixedSequence(elements) => check_fixed_sequence(elements, value, path, ctx, out),
+        Schema::Tuple(elements) => check_tuple(elements, value, path, ctx, out),
+        Schema::VariadicTuple(element) => check_variadic_tuple(element, value, path, ctx, out),
+        Schema::Set(element) => check_set(element, value, path, ctx, out),
+        Schema::FrozenSet(element) => check_frozenset(element, value, path, ctx, out),
+        Schema::Mapping { key, value: val } => check_mapping(key, val, value, path, ctx, out),
+        Schema::Record { fields, open } => check_record(fields, *open, value, path, ctx, out),
+        Schema::Union(members) => check_union(members, value, path, ctx, out),
+        Schema::Intersection(members) => check_intersection(members, value, path, ctx, out),
+        Schema::Complement(inner) => check_complement(inner, value, path, ctx, out),
+        Schema::Instance(index) => check_instance(*index, value, path, ctx, out),
         Schema::Object {
             class_index,
             fields,
-        } => check_object(*class_index, fields, value, path, ctx),
-        Schema::Refine { base, constraints } => check_refine(base, constraints, value, path, ctx),
-        Schema::Ref(id) => check_ref(*id, value, path, ctx),
+        } => check_object(*class_index, fields, value, path, ctx, out),
+        Schema::Refine { base, constraints } => {
+            check_refine(base, constraints, value, path, ctx, out);
+        }
+        Schema::Ref(id) => check_ref(*id, value, path, ctx, out),
         // A SelfRef should have been resolved into a Ref at build time; reaching
         // one means an unresolved recursion marker leaked into a validator.
-        Schema::SelfRef(_) => Some(Violation {
+        Schema::SelfRef(_) => out.push(Violation {
             code: "unresolved_recursion",
             path: path.clone(),
             expected: "a resolved recursive value".to_owned(),
@@ -152,7 +165,8 @@ pub(crate) fn matches(schema: &Schema, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -
 }
 
 /// Membership for a record on the fast path: declared fields match and required
-/// keys are present, and no undeclared key is admitted (the record is closed).
+/// keys are present, and no undeclared key is admitted unless the record is
+/// open.
 fn matches_record(fields: &[Field], open: bool, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> bool {
     let Ok(dict) = value.cast::<PyDict>() else {
         return false;
@@ -184,41 +198,39 @@ fn matches_record(fields: &[Field], open: bool, value: &Bound<'_, PyAny>, ctx: C
 /// value fails with `recursion_limit` instead of overflowing the native stack.
 const MAX_RECURSION_DEPTH: usize = 128;
 
-/// Validate `value` against the definition `defs[id]`, guarding against value
-/// cycles and unbounded depth. The guard holds `(object id, definition index)`
-/// for every reference currently on the path: revisiting the same pair means
-/// the value contains itself, and the number of entries is the current depth.
 fn check_ref(
     id: usize,
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     let key = (value.as_ptr() as usize, id);
     let depth = {
         let mut guard = ctx.guard.borrow_mut();
         if !guard.insert(key) {
-            return Some(Violation {
+            out.push(Violation {
                 code: "recursion_loop",
                 path: path.clone(),
                 expected: "a finite (non-cyclic) value".to_owned(),
                 value_summary: summarize(value),
             });
+            return;
         }
         guard.len()
     };
     if depth > MAX_RECURSION_DEPTH {
         ctx.guard.borrow_mut().remove(&key);
-        return Some(Violation {
+        out.push(Violation {
             code: "recursion_limit",
             path: path.clone(),
             expected: format!("at most {MAX_RECURSION_DEPTH} levels of recursion"),
             value_summary: summarize(value),
         });
+        return;
     }
-    let result = check(&ctx.defs[id], value, path, ctx);
+    check(&ctx.defs[id], value, path, ctx, out);
     ctx.guard.borrow_mut().remove(&key);
-    result
 }
 
 /// Membership for a recursion reference, with the same cycle and depth guards
@@ -241,24 +253,62 @@ fn matches_ref(id: usize, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> bool {
     result
 }
 
+fn check_intersection(
+    members: &[Schema],
+    value: &Bound<'_, PyAny>,
+    path: &mut Vec<PathSegment>,
+    ctx: Ctx<'_>,
+    out: &mut Vec<Violation>,
+) {
+    // Every member must hold; collect each member's failure.
+    for member in members {
+        check(member, value, path, ctx, out);
+        if aborted(ctx, out) {
+            return;
+        }
+    }
+}
+
+fn check_complement(
+    inner: &Schema,
+    value: &Bound<'_, PyAny>,
+    path: &[PathSegment],
+    ctx: Ctx<'_>,
+    out: &mut Vec<Violation>,
+) {
+    // The inner result is discarded either way, so decide membership on the
+    // fast path; a value that matches the inner schema fails the complement.
+    if matches(inner, value, ctx) {
+        out.push(Violation {
+            code: "unexpected_match",
+            path: path.to_vec(),
+            expected: format!("not {}", inner.expected()),
+            value_summary: summarize(value),
+        });
+    }
+}
+
 fn check_refine(
     base: &Schema,
     constraints: &[Constraint],
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     // Constraints narrow the base set, so they are meaningful only on a base
     // member: if the base fails, report that and do not run the constraints.
-    if let Some(violation) = check(base, value, path, ctx) {
-        return Some(violation);
+    let before = out.len();
+    check(base, value, path, ctx, out);
+    if out.len() != before {
+        return;
     }
     for constraint in constraints {
-        if let Some(violation) = check_constraint(constraint, value, path, ctx) {
-            return Some(violation);
+        check_constraint(constraint, value, path, ctx, out);
+        if aborted(ctx, out) {
+            return;
         }
     }
-    None
 }
 
 fn check_constraint(
@@ -266,7 +316,8 @@ fn check_constraint(
     value: &Bound<'_, PyAny>,
     path: &[PathSegment],
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     let py = value.py();
     let (ok, code, expected) = match constraint {
         Constraint::Ge(i) => {
@@ -326,22 +377,17 @@ fn check_constraint(
             }
         }
     };
-    if ok {
-        None
-    } else {
-        Some(Violation {
+    if !ok {
+        out.push(Violation {
             code,
             path: path.to_vec(),
             expected,
             value_summary: summarize(value),
-        })
+        });
     }
 }
 
 /// Whether `value` satisfies `constraint`, for the membership fast path.
-///
-/// A raising predicate is treated as not satisfied; the explain path
-/// ([`check_constraint`]) is what distinguishes it as `predicate_error`.
 fn constraint_holds(constraint: &Constraint, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> bool {
     let py = value.py();
     match constraint {
@@ -356,8 +402,6 @@ fn constraint_holds(constraint: &Constraint, value: &Bound<'_, PyAny>, ctx: Ctx<
 }
 
 /// Run a user predicate and report whether it returned a truthy result.
-/// Returns `Err` if the predicate itself raised, so callers can distinguish a
-/// false result from a broken predicate.
 fn predicate_passes(predicate: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<bool> {
     predicate.call1((value,))?.is_truthy()
 }
@@ -372,17 +416,16 @@ fn check_instance(
     value: &Bound<'_, PyAny>,
     path: &[PathSegment],
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     let class = ctx.pool[index].bind(value.py());
-    if value.is_instance(class).unwrap_or(false) {
-        None
-    } else {
-        Some(type_mismatch(
+    if !value.is_instance(class).unwrap_or(false) {
+        out.push(type_mismatch(
             "instance_type",
             &class_label(class),
             value,
             path,
-        ))
+        ));
     }
 }
 
@@ -392,39 +435,38 @@ fn check_object(
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     let class = ctx.pool[class_index].bind(value.py());
     if !value.is_instance(class).unwrap_or(false) {
         // Not an instance: the attribute checks below cannot be trusted.
-        return Some(type_mismatch(
+        out.push(type_mismatch(
             "instance_type",
             &class_label(class),
             value,
             path,
         ));
+        return;
     }
     for field in fields {
         match value.getattr(field.name.as_str()) {
             Ok(attr) => {
                 path.push(PathSegment::Key(field.name.clone()));
-                let result = check(&field.schema, &attr, path, ctx);
+                check(&field.schema, &attr, path, ctx, out);
                 path.pop();
-                if result.is_some() {
-                    return result;
-                }
             }
-            Err(_) => {
-                return Some(located(
-                    path,
-                    field.name.clone(),
-                    "missing_attribute",
-                    format!("attribute {:?}", field.name),
-                    "missing".to_owned(),
-                ));
-            }
+            Err(_) => out.push(located(
+                path,
+                field.name.clone(),
+                "missing_attribute",
+                format!("attribute {:?}", field.name),
+                "missing".to_owned(),
+            )),
+        }
+        if aborted(ctx, out) {
+            return;
         }
     }
-    None
 }
 
 fn check_union(
@@ -432,54 +474,20 @@ fn check_union(
     value: &Bound<'_, PyAny>,
     path: &[PathSegment],
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     // A value is a member iff it matches at least one branch; decide that on the
     // fast path so a non-matching branch never builds a violation.
     if members.iter().any(|member| matches(member, value, ctx)) {
-        return None;
+        return;
     }
     let labels: Vec<&str> = members.iter().map(Schema::expected).collect();
-    Some(Violation {
+    out.push(Violation {
         code: "union_error",
         path: path.to_vec(),
         expected: format!("one of: {}", labels.join(", ")),
         value_summary: summarize(value),
-    })
-}
-
-fn check_intersection(
-    members: &[Schema],
-    value: &Bound<'_, PyAny>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-) -> Option<Violation> {
-    // Every member must hold; report the first that fails.
-    for member in members {
-        if let Some(violation) = check(member, value, path, ctx) {
-            return Some(violation);
-        }
-    }
-    None
-}
-
-fn check_complement(
-    inner: &Schema,
-    value: &Bound<'_, PyAny>,
-    path: &[PathSegment],
-    ctx: Ctx<'_>,
-) -> Option<Violation> {
-    // The inner result is discarded, so decide membership on the fast path; a
-    // value that matches the inner schema fails the complement.
-    if matches(inner, value, ctx) {
-        Some(Violation {
-            code: "unexpected_match",
-            path: path.to_vec(),
-            expected: format!("not {}", inner.expected()),
-            value_summary: summarize(value),
-        })
-    } else {
-        None
-    }
+    });
 }
 
 fn admit(
@@ -487,11 +495,10 @@ fn admit(
     schema: &Schema,
     value: &Bound<'_, PyAny>,
     path: &[PathSegment],
-) -> Option<Violation> {
-    if ok {
-        None
-    } else {
-        Some(mismatch(schema, value, path))
+    out: &mut Vec<Violation>,
+) {
+    if !ok {
+        out.push(mismatch(schema, value, path));
     }
 }
 
@@ -530,17 +537,16 @@ fn check_literal(
     value: &Bound<'_, PyAny>,
     path: &[PathSegment],
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     let literal = ctx.pool[index].bind(value.py());
-    if literal_matches(value, literal) {
-        None
-    } else {
-        Some(Violation {
+    if !literal_matches(value, literal) {
+        out.push(Violation {
             code: "literal_value",
             path: path.to_vec(),
             expected: format!("the literal {}", summarize(literal)),
             value_summary: summarize(value),
-        })
+        });
     }
 }
 
@@ -549,19 +555,20 @@ fn check_sequence(
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     let Ok(list) = value.cast::<PyList>() else {
-        return Some(type_mismatch("list_type", "list", value, path));
+        out.push(type_mismatch("list_type", "list", value, path));
+        return;
     };
     for (index, item) in list.iter().enumerate() {
         path.push(PathSegment::Index(index));
-        let result = check(element, &item, path, ctx);
+        check(element, &item, path, ctx, out);
         path.pop();
-        if result.is_some() {
-            return result;
+        if aborted(ctx, out) {
+            return;
         }
     }
-    None
 }
 
 fn check_fixed_sequence(
@@ -569,27 +576,31 @@ fn check_fixed_sequence(
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     let Ok(list) = value.cast::<PyList>() else {
-        return Some(type_mismatch("list_type", "list", value, path));
+        out.push(type_mismatch("list_type", "list", value, path));
+        return;
     };
     if list.len() != elements.len() {
-        return Some(Violation {
+        // Length governs the positional match; without it the per-index checks
+        // are meaningless, so this is terminal.
+        out.push(Violation {
             code: "list_length",
             path: path.clone(),
             expected: format!("list of length {}", elements.len()),
             value_summary: summarize(value),
         });
+        return;
     }
     for (index, (schema, item)) in elements.iter().zip(list.iter()).enumerate() {
         path.push(PathSegment::Index(index));
-        let result = check(schema, &item, path, ctx);
+        check(schema, &item, path, ctx, out);
         path.pop();
-        if result.is_some() {
-            return result;
+        if aborted(ctx, out) {
+            return;
         }
     }
-    None
 }
 
 fn check_tuple(
@@ -597,27 +608,29 @@ fn check_tuple(
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     let Ok(tuple) = value.cast::<PyTuple>() else {
-        return Some(type_mismatch("tuple_type", "tuple", value, path));
+        out.push(type_mismatch("tuple_type", "tuple", value, path));
+        return;
     };
     if tuple.len() != elements.len() {
-        return Some(Violation {
+        out.push(Violation {
             code: "tuple_length",
             path: path.clone(),
             expected: format!("tuple of length {}", elements.len()),
             value_summary: summarize(value),
         });
+        return;
     }
     for (index, (schema, item)) in elements.iter().zip(tuple.iter()).enumerate() {
         path.push(PathSegment::Index(index));
-        let result = check(schema, &item, path, ctx);
+        check(schema, &item, path, ctx, out);
         path.pop();
-        if result.is_some() {
-            return result;
+        if aborted(ctx, out) {
+            return;
         }
     }
-    None
 }
 
 fn check_variadic_tuple(
@@ -625,19 +638,20 @@ fn check_variadic_tuple(
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     let Ok(tuple) = value.cast::<PyTuple>() else {
-        return Some(type_mismatch("tuple_type", "tuple", value, path));
+        out.push(type_mismatch("tuple_type", "tuple", value, path));
+        return;
     };
     for (index, item) in tuple.iter().enumerate() {
         path.push(PathSegment::Index(index));
-        let result = check(element, &item, path, ctx);
+        check(element, &item, path, ctx, out);
         path.pop();
-        if result.is_some() {
-            return result;
+        if aborted(ctx, out) {
+            return;
         }
     }
-    None
 }
 
 fn check_set(
@@ -645,18 +659,19 @@ fn check_set(
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     let Ok(set) = value.cast::<PySet>() else {
-        return Some(type_mismatch("set_type", "set", value, path));
+        out.push(type_mismatch("set_type", "set", value, path));
+        return;
     };
     // Set order is not meaningful, so element failures carry no index segment.
     for item in set.iter() {
-        let result = check(element, &item, path, ctx);
-        if result.is_some() {
-            return result;
+        check(element, &item, path, ctx, out);
+        if aborted(ctx, out) {
+            return;
         }
     }
-    None
 }
 
 fn check_frozenset(
@@ -664,17 +679,18 @@ fn check_frozenset(
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     let Ok(set) = value.cast::<PyFrozenSet>() else {
-        return Some(type_mismatch("frozenset_type", "frozenset", value, path));
+        out.push(type_mismatch("frozenset_type", "frozenset", value, path));
+        return;
     };
     for item in set.iter() {
-        let result = check(element, &item, path, ctx);
-        if result.is_some() {
-            return result;
+        check(element, &item, path, ctx, out);
+        if aborted(ctx, out) {
+            return;
         }
     }
-    None
 }
 
 fn check_mapping(
@@ -683,20 +699,21 @@ fn check_mapping(
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     let Ok(dict) = value.cast::<PyDict>() else {
-        return Some(type_mismatch("dict_type", "dict", value, path));
+        out.push(type_mismatch("dict_type", "dict", value, path));
+        return;
     };
     for (key, val) in dict.iter() {
         path.push(PathSegment::Key(key_label(&key)));
-        let result =
-            check(key_schema, &key, path, ctx).or_else(|| check(value_schema, &val, path, ctx));
+        check(key_schema, &key, path, ctx, out);
+        check(value_schema, &val, path, ctx, out);
         path.pop();
-        if result.is_some() {
-            return result;
+        if aborted(ctx, out) {
+            return;
         }
     }
-    None
 }
 
 fn check_record(
@@ -705,38 +722,40 @@ fn check_record(
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
-) -> Option<Violation> {
+    out: &mut Vec<Violation>,
+) {
     let Ok(dict) = value.cast::<PyDict>() else {
-        return Some(type_mismatch("dict_type", "dict", value, path));
+        out.push(type_mismatch("dict_type", "dict", value, path));
+        return;
     };
+
     // Declared fields, in declared order: present values are checked, absent
-    // required keys fail.
+    // required keys fail. Each field's failure is collected independently.
     for field in fields {
         match dict.get_item(field.name.as_str()) {
             Ok(Some(item)) => {
                 path.push(PathSegment::Key(field.name.clone()));
-                let result = check(&field.schema, &item, path, ctx);
+                check(&field.schema, &item, path, ctx, out);
                 path.pop();
-                if result.is_some() {
-                    return result;
-                }
             }
-            Ok(None) if field.required => {
-                return Some(located(
-                    path,
-                    field.name.clone(),
-                    "missing_key",
-                    format!("required key {:?}", field.name),
-                    "missing".to_owned(),
-                ));
-            }
+            Ok(None) if field.required => out.push(located(
+                path,
+                field.name.clone(),
+                "missing_key",
+                format!("required key {:?}", field.name),
+                "missing".to_owned(),
+            )),
             Ok(None) => {}
-            Err(_) => return Some(type_mismatch("dict_type", "dict", value, path)),
+            Err(_) => out.push(type_mismatch("dict_type", "dict", value, path)),
+        }
+        if aborted(ctx, out) {
+            return;
         }
     }
-    // An open (lax) record admits undeclared keys; a closed one rejects them.
+
+    // An open (lax) record admits undeclared keys; a closed one collects each.
     if open {
-        return None;
+        return;
     }
     let declared: HashSet<&str> = fields.iter().map(|field| field.name.as_str()).collect();
     for (key, _) in dict.iter() {
@@ -744,16 +763,18 @@ fn check_record(
             .str()
             .map_or_else(|_| String::new(), |text| text.to_string());
         if !declared.contains(key_text.as_str()) {
-            return Some(located(
+            out.push(located(
                 path,
                 key_text.clone(),
                 "extra_key",
                 "no unexpected key".to_owned(),
                 format!("{key_text:?}"),
             ));
+            if aborted(ctx, out) {
+                return;
+            }
         }
     }
-    None
 }
 
 /// Build a violation whose path is `path` extended by one key segment.
