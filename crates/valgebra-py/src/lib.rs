@@ -11,7 +11,7 @@ use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyNotImplementedError};
 use pyo3::prelude::*;
 use pyo3::types::{
-    PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySet, PyString, PyTuple, PyType,
+    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
 };
 use valgebra_core::{Field, PathSegment, Schema, Violation};
 
@@ -176,6 +176,12 @@ fn build_parametrized(
     if origin.is(py.get_type::<PySet>()) {
         return Ok(Schema::Set(Box::new(build_schema(&single_arg(args)?, lits)?)));
     }
+    if origin.is(py.get_type::<PyFrozenSet>()) {
+        return Ok(Schema::FrozenSet(Box::new(build_schema(
+            &single_arg(args)?,
+            lits,
+        )?)));
+    }
     if origin.is(py.get_type::<PyDict>()) {
         if args.len() != 2 {
             return Err(not_implemented(
@@ -188,11 +194,19 @@ fn build_parametrized(
         });
     }
     if origin.is(py.get_type::<PyTuple>()) {
+        // tuple[T, ...] is the homogeneous variadic form.
+        if args.len() == 2 && is_ellipsis(&args.get_item(1)?) {
+            return Ok(Schema::VariadicTuple(Box::new(build_schema(
+                &args.get_item(0)?,
+                lits,
+            )?)));
+        }
         let mut elements = Vec::with_capacity(args.len());
         for arg in args.iter() {
             if is_ellipsis(&arg) {
                 return Err(not_implemented(
-                    "tuple[T, ...] is not supported yet; use a fixed tuple shape",
+                    "tuple[...] supports a fixed shape or the homogeneous \
+                     tuple[T, ...]; other uses of ... are not supported",
                 ));
             }
             elements.push(build_schema(&arg, lits)?);
@@ -364,7 +378,9 @@ fn check(
         Schema::Literal(index) => check_literal(*index, value, path, pool),
         Schema::Sequence(element) => check_sequence(element, value, path, pool),
         Schema::Tuple(elements) => check_tuple(elements, value, path, pool),
+        Schema::VariadicTuple(element) => check_variadic_tuple(element, value, path, pool),
         Schema::Set(element) => check_set(element, value, path, pool),
+        Schema::FrozenSet(element) => check_frozenset(element, value, path, pool),
         Schema::Mapping { key, value: val } => check_mapping(key, val, value, path, pool),
         Schema::Record { fields } => check_record(fields, value, path, pool),
         Schema::Union(members) => check_union(members, value, path, pool),
@@ -506,6 +522,26 @@ fn check_tuple(
     None
 }
 
+fn check_variadic_tuple(
+    element: &Schema,
+    value: &Bound<'_, PyAny>,
+    path: &mut Vec<PathSegment>,
+    pool: &[Py<PyAny>],
+) -> Option<Violation> {
+    let Ok(tuple) = value.cast::<PyTuple>() else {
+        return Some(type_mismatch("tuple_type", "tuple", value, path));
+    };
+    for (index, item) in tuple.iter().enumerate() {
+        path.push(PathSegment::Index(index));
+        let result = check(element, &item, path, pool);
+        path.pop();
+        if result.is_some() {
+            return result;
+        }
+    }
+    None
+}
+
 fn check_set(
     element: &Schema,
     value: &Bound<'_, PyAny>,
@@ -516,6 +552,24 @@ fn check_set(
         return Some(type_mismatch("set_type", "set", value, path));
     };
     // Set order is not meaningful, so element failures carry no index segment.
+    for item in set.iter() {
+        let result = check(element, &item, path, pool);
+        if result.is_some() {
+            return result;
+        }
+    }
+    None
+}
+
+fn check_frozenset(
+    element: &Schema,
+    value: &Bound<'_, PyAny>,
+    path: &mut Vec<PathSegment>,
+    pool: &[Py<PyAny>],
+) -> Option<Violation> {
+    let Ok(set) = value.cast::<PyFrozenSet>() else {
+        return Some(type_mismatch("frozenset_type", "frozenset", value, path));
+    };
     for item in set.iter() {
         let result = check(element, &item, path, pool);
         if result.is_some() {

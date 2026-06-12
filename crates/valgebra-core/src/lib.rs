@@ -73,8 +73,13 @@ pub enum Schema {
     Sequence(Box<Schema>),
     /// Denotes tuples matched positionally at exactly this length.
     Tuple(Vec<Schema>),
+    /// Denotes tuples of any length whose every element belongs to the inner
+    /// schema (the homogeneous `tuple[T, ...]` form).
+    VariadicTuple(Box<Schema>),
     /// Denotes sets whose every element belongs to the inner schema.
     Set(Box<Schema>),
+    /// Denotes frozensets whose every element belongs to the inner schema.
+    FrozenSet(Box<Schema>),
     /// Denotes dicts whose keys all match `key` and values all match `value`.
     Mapping {
         /// Schema every key must satisfy.
@@ -123,8 +128,9 @@ impl Schema {
             // The py layer renders the concrete constant; this is a fallback.
             Schema::Literal(_) => "literal",
             Schema::Sequence(_) => "list",
-            Schema::Tuple(_) => "tuple",
+            Schema::Tuple(_) | Schema::VariadicTuple(_) => "tuple",
             Schema::Set(_) => "set",
+            Schema::FrozenSet(_) => "frozenset",
             Schema::Mapping { .. } | Schema::Record { .. } => "dict",
             Schema::Union(_) => "union",
         }
@@ -146,8 +152,9 @@ impl Schema {
             Schema::Bytes => "bytes_type",
             Schema::Literal(_) => "literal_value",
             Schema::Sequence(_) => "list_type",
-            Schema::Tuple(_) => "tuple_type",
+            Schema::Tuple(_) | Schema::VariadicTuple(_) => "tuple_type",
             Schema::Set(_) => "set_type",
+            Schema::FrozenSet(_) => "frozenset_type",
             Schema::Mapping { .. } | Schema::Record { .. } => "dict_type",
             Schema::Union(_) => "union_error",
         }
