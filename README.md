@@ -9,10 +9,10 @@ crosses into Rust exactly once per call.
 
 > [!WARNING]
 > **Pre-alpha.** valgebra is under active development. The validator engine, the
-> typing-annotation frontend, and the Boolean algebra (`union`, `intersect`,
-> `complement`) with its law-justified simplifier work today; recursive schemas,
-> the JSON input path, and the performance program are planned, so the speed
-> claim is unproven. There is no PyPI release.
+> typing-annotation frontend, the Boolean algebra (`union`, `intersect`,
+> `complement`) with its law-justified simplifier, and recursive schemas (`lazy`)
+> work today; the JSON input path and the performance program are planned, so the
+> speed claim is unproven. There is no PyPI release.
 
 ## Why valgebra
 
@@ -143,13 +143,33 @@ assert repr(simplify(complement(complement(int)))) == "int"
 assert repr(simplify(union(int, int))) == "int"
 ```
 
+## Recursive schemas
+
+`lazy` ties a fixpoint: the builder receives a placeholder standing for the
+schema being defined and returns its body. The recursive reference must occur
+under a structural constructor (a list, tuple, set, dict, record, or object) so
+membership stays decidable; a non-contractive body is rejected when the
+validator is built.
+
 ```python
-# PLANNED: recursive schemas via the lazy fixpoint are not implemented yet.
 from valgebra import lazy, union, validator
 
-json_value = lazy(lambda j: union(None, bool, int, float, str, [j], {str: j}))
-assert json_value.is_valid({"a": [1, "x", {"b": None}]})
+# the recursive JSON value: a fixpoint over the structural constructors
+json_value = lazy(
+    lambda j: union(None, bool, int, float, str, [j], {str: j}),
+)
+assert json_value.is_valid({"a": [1, "x", {"b": None}], "c": [True, 3.5]})
+assert not json_value.is_valid({"a": object()})
+
+# a binary tree, then composed into a larger schema
+tree = lazy(lambda t: {"value": int, "left?": t, "right?": t})
+assert tree.is_valid({"value": 1, "left": {"value": 2}})
+assert validator([json_value]).is_valid([1, {"k": [None, 2]}])
 ```
+
+A value that contains itself is rejected (`recursion_loop`) rather than looped
+on, and recursion past a fixed depth fails cleanly (`recursion_limit`) instead
+of exhausting the stack.
 
 ## Install
 

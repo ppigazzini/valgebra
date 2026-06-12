@@ -7,6 +7,17 @@
 //! crate; this crate is the stable, language-agnostic core.
 
 use std::fmt::Write as _;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Fresh, process-unique tokens for the transient [`Schema::SelfRef`] marker, so
+/// nested `lazy` definitions never resolve each other's self-references.
+static NEXT_SELF_TOKEN: AtomicU64 = AtomicU64::new(0);
+
+/// Allocate a fresh self-reference token for a `lazy` definition.
+#[must_use]
+pub fn fresh_self_token() -> u64 {
+    NEXT_SELF_TOKEN.fetch_add(1, Ordering::Relaxed)
+}
 
 /// A single step in the location of a value inside a composite structure.
 ///
@@ -126,6 +137,14 @@ pub enum Schema {
         /// Constraints that further narrow the base set, checked in order.
         constraints: Vec<Constraint>,
     },
+    /// A reference to a recursive definition: denotes the same set as the
+    /// definition at this index in the validator's definitions table. The back
+    /// edge of a fixpoint, produced by `lazy`.
+    Ref(usize),
+    /// A transient self-reference marker used only while a `lazy` definition is
+    /// being built; it is resolved to a [`Schema::Ref`] before the validator is
+    /// returned and never appears in a finished schema.
+    SelfRef(u64),
 }
 
 /// A constraint narrowing a [`Schema::Refine`] base set.
@@ -190,6 +209,9 @@ impl Schema {
             Schema::Object { .. } => "object",
             // A refinement's type is its base; constraints report their own.
             Schema::Refine { base, .. } => base.expected(),
+            // A reference reports through its definition at validation time.
+            Schema::Ref(_) => "value",
+            Schema::SelfRef(_) => "recursive value",
         }
     }
 
@@ -218,16 +240,20 @@ impl Schema {
             Schema::Complement(_) => "unexpected_match",
             Schema::Instance(_) | Schema::Object { .. } => "instance_type",
             Schema::Refine { base, .. } => base.error_code(),
+            Schema::Ref(_) => "recursion",
+            Schema::SelfRef(_) => "unresolved_recursion",
         }
     }
 
-    /// Return a copy with every pool index shifted by `pool`.
+    /// Return a copy with pool indices shifted by `pool` and definition
+    /// references shifted by `defs`.
     ///
-    /// Used when composing two compiled validators: their constants pools are
-    /// concatenated, so the second schema's `Literal`/`Instance`/`Object`/
-    /// `Refine` indices move past the first pool's length.
+    /// Used when composing two compiled validators: their constants pools and
+    /// definitions tables are concatenated, so the second schema's
+    /// `Literal`/`Instance`/`Object`/`Refine` indices move past the first
+    /// pool's length and its `Ref` indices past the first definitions' length.
     #[must_use]
-    pub fn shifted(&self, pool: usize) -> Schema {
+    pub fn shifted(&self, pool: usize, defs: usize) -> Schema {
         match self {
             Schema::Anything
             | Schema::Any
@@ -237,37 +263,121 @@ impl Schema {
             | Schema::Int
             | Schema::Float
             | Schema::Str
-            | Schema::Bytes => self.clone(),
+            | Schema::Bytes
+            | Schema::SelfRef(_) => self.clone(),
             Schema::Literal(i) => Schema::Literal(i + pool),
             Schema::Instance(i) => Schema::Instance(i + pool),
-            Schema::Sequence(e) => Schema::Sequence(Box::new(e.shifted(pool))),
-            Schema::VariadicTuple(e) => Schema::VariadicTuple(Box::new(e.shifted(pool))),
-            Schema::Set(e) => Schema::Set(Box::new(e.shifted(pool))),
-            Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.shifted(pool))),
-            Schema::Complement(e) => Schema::Complement(Box::new(e.shifted(pool))),
-            Schema::Tuple(es) => Schema::Tuple(es.iter().map(|s| s.shifted(pool)).collect()),
-            Schema::Union(es) => Schema::Union(es.iter().map(|s| s.shifted(pool)).collect()),
+            Schema::Ref(i) => Schema::Ref(i + defs),
+            Schema::Sequence(e) => Schema::Sequence(Box::new(e.shifted(pool, defs))),
+            Schema::VariadicTuple(e) => Schema::VariadicTuple(Box::new(e.shifted(pool, defs))),
+            Schema::Set(e) => Schema::Set(Box::new(e.shifted(pool, defs))),
+            Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.shifted(pool, defs))),
+            Schema::Complement(e) => Schema::Complement(Box::new(e.shifted(pool, defs))),
+            Schema::Tuple(es) => Schema::Tuple(es.iter().map(|s| s.shifted(pool, defs)).collect()),
+            Schema::Union(es) => Schema::Union(es.iter().map(|s| s.shifted(pool, defs)).collect()),
             Schema::Intersection(es) => {
-                Schema::Intersection(es.iter().map(|s| s.shifted(pool)).collect())
+                Schema::Intersection(es.iter().map(|s| s.shifted(pool, defs)).collect())
             }
             Schema::Mapping { key, value } => Schema::Mapping {
-                key: Box::new(key.shifted(pool)),
-                value: Box::new(value.shifted(pool)),
+                key: Box::new(key.shifted(pool, defs)),
+                value: Box::new(value.shifted(pool, defs)),
             },
             Schema::Record { fields } => Schema::Record {
-                fields: fields.iter().map(|f| f.shifted(pool)).collect(),
+                fields: fields.iter().map(|f| f.shifted(pool, defs)).collect(),
             },
             Schema::Object {
                 class_index,
                 fields,
             } => Schema::Object {
                 class_index: class_index + pool,
-                fields: fields.iter().map(|f| f.shifted(pool)).collect(),
+                fields: fields.iter().map(|f| f.shifted(pool, defs)).collect(),
             },
             Schema::Refine { base, constraints } => Schema::Refine {
-                base: Box::new(base.shifted(pool)),
+                base: Box::new(base.shifted(pool, defs)),
                 constraints: constraints.iter().map(|c| c.shifted(pool)).collect(),
             },
+        }
+    }
+
+    /// Replace each `SelfRef(token)` with `Ref(ref_id)`, leaving other tokens
+    /// (from enclosing `lazy` definitions) untouched.
+    #[must_use]
+    pub fn resolve_self(&self, token: u64, ref_id: usize) -> Schema {
+        let recur = |s: &Schema| s.resolve_self(token, ref_id);
+        match self {
+            Schema::SelfRef(t) if *t == token => Schema::Ref(ref_id),
+            Schema::Sequence(e) => Schema::Sequence(Box::new(recur(e))),
+            Schema::VariadicTuple(e) => Schema::VariadicTuple(Box::new(recur(e))),
+            Schema::Set(e) => Schema::Set(Box::new(recur(e))),
+            Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(recur(e))),
+            Schema::Complement(e) => Schema::Complement(Box::new(recur(e))),
+            Schema::Tuple(es) => Schema::Tuple(es.iter().map(recur).collect()),
+            Schema::Union(es) => Schema::Union(es.iter().map(recur).collect()),
+            Schema::Intersection(es) => Schema::Intersection(es.iter().map(recur).collect()),
+            Schema::Mapping { key, value } => Schema::Mapping {
+                key: Box::new(recur(key)),
+                value: Box::new(recur(value)),
+            },
+            Schema::Record { fields } => Schema::Record {
+                fields: fields
+                    .iter()
+                    .map(|f| Field {
+                        name: f.name.clone(),
+                        schema: recur(&f.schema),
+                        required: f.required,
+                    })
+                    .collect(),
+            },
+            Schema::Object {
+                class_index,
+                fields,
+            } => Schema::Object {
+                class_index: *class_index,
+                fields: fields
+                    .iter()
+                    .map(|f| Field {
+                        name: f.name.clone(),
+                        schema: recur(&f.schema),
+                        required: f.required,
+                    })
+                    .collect(),
+            },
+            Schema::Refine { base, constraints } => Schema::Refine {
+                base: Box::new(recur(base)),
+                constraints: constraints.clone(),
+            },
+            other => other.clone(),
+        }
+    }
+
+    /// Whether `Ref(target)` occurs without a structural guard above it.
+    ///
+    /// A `lazy` definition is contractive (productive) only when every
+    /// occurrence of its self-reference sits under a structural constructor;
+    /// `guarded` records whether such a constructor has been crossed.
+    #[must_use]
+    pub fn occurs_unguarded(&self, target: usize, guarded: bool) -> bool {
+        match self {
+            Schema::Ref(id) => *id == target && !guarded,
+            // Structural constructors guard their children.
+            Schema::Sequence(e)
+            | Schema::VariadicTuple(e)
+            | Schema::Set(e)
+            | Schema::FrozenSet(e) => e.occurs_unguarded(target, true),
+            Schema::Tuple(es) => es.iter().any(|s| s.occurs_unguarded(target, true)),
+            Schema::Mapping { key, value } => {
+                key.occurs_unguarded(target, true) || value.occurs_unguarded(target, true)
+            }
+            Schema::Record { fields } | Schema::Object { fields, .. } => fields
+                .iter()
+                .any(|f| f.schema.occurs_unguarded(target, true)),
+            // Algebraic combinators do not guard: they pass `guarded` through.
+            Schema::Union(es) | Schema::Intersection(es) => {
+                es.iter().any(|s| s.occurs_unguarded(target, guarded))
+            }
+            Schema::Complement(e) => e.occurs_unguarded(target, guarded),
+            Schema::Refine { base, .. } => base.occurs_unguarded(target, guarded),
+            _ => false,
         }
     }
 
@@ -389,10 +499,10 @@ fn complement_each(members: Vec<Schema>) -> Vec<Schema> {
 }
 
 impl Field {
-    fn shifted(&self, pool: usize) -> Field {
+    fn shifted(&self, pool: usize, defs: usize) -> Field {
         Field {
             name: self.name.clone(),
-            schema: self.schema.shifted(pool),
+            schema: self.schema.shifted(pool, defs),
             required: self.required,
         }
     }
@@ -597,6 +707,41 @@ mod tests {
             Schema::Sequence(Box::new(Schema::Str))
         );
         assert_ne!(Schema::Literal(0), Schema::Literal(1));
+    }
+
+    #[test]
+    fn resolve_self_replaces_only_the_matching_token() {
+        let body = Schema::Sequence(Box::new(Schema::SelfRef(1)));
+        assert!(matches!(body.resolve_self(1, 3),
+            Schema::Sequence(inner) if matches!(*inner, Schema::Ref(3))));
+        assert!(matches!(
+            Schema::SelfRef(2).resolve_self(1, 3),
+            Schema::SelfRef(2)
+        ));
+    }
+
+    #[test]
+    fn contractivity_requires_a_structural_guard() {
+        assert!(!Schema::Sequence(Box::new(Schema::Ref(0))).occurs_unguarded(0, false));
+        assert!(Schema::Ref(0).occurs_unguarded(0, false));
+        assert!(Schema::Union(vec![Schema::Int, Schema::Ref(0)]).occurs_unguarded(0, false));
+        assert!(
+            !Schema::Sequence(Box::new(Schema::Union(vec![Schema::Int, Schema::Ref(0)])))
+                .occurs_unguarded(0, false)
+        );
+    }
+
+    #[test]
+    fn shifted_remaps_ref_by_the_definition_offset() {
+        let Schema::Sequence(inner) = Schema::Sequence(Box::new(Schema::Ref(0))).shifted(7, 4)
+        else {
+            panic!("shape preserved")
+        };
+        assert!(matches!(*inner, Schema::Ref(4)));
+        assert!(matches!(
+            Schema::SelfRef(9).shifted(1, 1),
+            Schema::SelfRef(9)
+        ));
     }
 
     #[test]

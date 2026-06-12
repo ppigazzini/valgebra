@@ -5,15 +5,16 @@
 //! walk ([`check`]) tests membership of a concrete value, reporting the first
 //! failure as a structured [`ValidationError`].
 
+use std::cell::RefCell;
 use std::collections::HashSet;
 
 use pyo3::create_exception;
-use pyo3::exceptions::{PyException, PyNotImplementedError};
+use pyo3::exceptions::{PyException, PyNotImplementedError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
 };
-use valgebra_core::{Constraint, Field, PathSegment, Schema, Violation};
+use valgebra_core::{Constraint, Field, PathSegment, Schema, Violation, fresh_self_token};
 
 create_exception!(
     _valgebra,
@@ -22,13 +23,27 @@ create_exception!(
     "Raised when a value is not a member of a schema's set."
 );
 
-/// An immutable compiled validator: a schema IR plus the constants pool its
-/// literals index into. Building one compiles the schema; the validator itself
-/// never mutates.
+/// An immutable compiled validator: a schema IR, the constants pool its
+/// literals index into, and the recursive definitions its `Ref`s resolve
+/// against. Building one compiles the schema; the validator itself never
+/// mutates.
 #[pyclass(frozen, module = "valgebra._valgebra")]
 pub struct CompiledValidator {
     schema: Schema,
     literals: Vec<Py<PyAny>>,
+    definitions: Vec<Schema>,
+}
+
+impl CompiledValidator {
+    /// The read-only walk context: the pool, the definitions, and a fresh
+    /// recursion guard.
+    fn context<'a>(&'a self, guard: &'a RefCell<HashSet<(usize, usize)>>) -> Ctx<'a> {
+        Ctx {
+            pool: &self.literals,
+            defs: &self.definitions,
+            guard,
+        }
+    }
 }
 
 #[pymethods]
@@ -36,8 +51,9 @@ impl CompiledValidator {
     /// Raise [`ValidationError`] if `obj` is not a member of the schema's set;
     /// return `None` otherwise. Check-only: the object is not copied or coerced.
     fn validate(&self, obj: &Bound<'_, PyAny>) -> PyResult<()> {
+        let guard = RefCell::new(HashSet::new());
         let mut path = Vec::new();
-        match check(&self.schema, obj, &mut path, &self.literals) {
+        match check(&self.schema, obj, &mut path, self.context(&guard)) {
             Some(violation) => Err(into_pyerr(obj.py(), &violation)),
             None => Ok(()),
         }
@@ -45,8 +61,9 @@ impl CompiledValidator {
 
     /// Whether `obj` belongs to the schema's set. Check-only, returns a bool.
     fn is_valid(&self, obj: &Bound<'_, PyAny>) -> bool {
+        let guard = RefCell::new(HashSet::new());
         let mut path = Vec::new();
-        check(&self.schema, obj, &mut path, &self.literals).is_none()
+        check(&self.schema, obj, &mut path, self.context(&guard)).is_none()
     }
 
     /// Validate `obj` and return it unchanged. The explicit conversion mode:
@@ -59,16 +76,73 @@ impl CompiledValidator {
     /// Render the compiled schema back as the annotation expression that
     /// produces it.
     fn __repr__(&self, py: Python<'_>) -> String {
-        render(py, &self.schema, &self.literals)
+        let active = RefCell::new(HashSet::new());
+        render(py, &self.schema, &self.literals, &self.definitions, &active)
     }
+}
+
+/// The read-only context threaded through a validation walk: the constants
+/// pool, the recursion definitions, and the active recursion guard. The guard
+/// records `(object id, definition index)` pairs currently on the path so a
+/// value that contains itself fails with `recursion_loop` instead of looping.
+#[derive(Clone, Copy)]
+struct Ctx<'a> {
+    pool: &'a [Py<PyAny>],
+    defs: &'a [Schema],
+    guard: &'a RefCell<HashSet<(usize, usize)>>,
 }
 
 /// Compile `schema` into an immutable [`CompiledValidator`].
 #[pyfunction]
 fn validator(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
     let mut literals = Vec::new();
-    let schema = build_schema(schema, &mut literals)?;
-    Ok(CompiledValidator { schema, literals })
+    let mut definitions = Vec::new();
+    let schema = build_schema(schema, &mut literals, &mut definitions)?;
+    Ok(CompiledValidator {
+        schema,
+        literals,
+        definitions,
+    })
+}
+
+/// Build a recursive schema as a checked fixpoint.
+///
+/// `builder` receives a placeholder validator standing for the schema being
+/// defined and returns its body. The placeholder's self-reference is resolved
+/// to a back edge, and a non-contractive body — one whose recursive reference
+/// is not under a structural constructor — is rejected.
+#[pyfunction]
+fn lazy(builder: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
+    let py = builder.py();
+    let token = fresh_self_token();
+    let placeholder = Py::new(
+        py,
+        CompiledValidator {
+            schema: Schema::SelfRef(token),
+            literals: Vec::new(),
+            definitions: Vec::new(),
+        },
+    )?;
+    let body_obj = builder.call1((placeholder,))?;
+    let mut literals = Vec::new();
+    let mut definitions = Vec::new();
+    let body = build_schema(&body_obj, &mut literals, &mut definitions)?;
+    // The body becomes a definition; the self-reference resolves to it.
+    let ref_id = definitions.len();
+    let resolved = body.resolve_self(token, ref_id);
+    if resolved.occurs_unguarded(ref_id, false) {
+        return Err(PyValueError::new_err(
+            "lazy schema is not contractive: the recursive reference must occur \
+             under a structural constructor (a list, tuple, set, dict, record, \
+             or object)",
+        ));
+    }
+    definitions.push(resolved);
+    Ok(CompiledValidator {
+        schema: Schema::Ref(ref_id),
+        literals,
+        definitions,
+    })
 }
 
 /// The union of the given schemas: a value in at least one of their sets.
@@ -89,21 +163,24 @@ fn intersect(schemas: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
 #[pyfunction]
 fn complement(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
     let mut literals = Vec::new();
-    let inner = build_schema(schema, &mut literals)?;
+    let mut definitions = Vec::new();
+    let inner = build_schema(schema, &mut literals, &mut definitions)?;
     Ok(CompiledValidator {
         schema: Schema::Complement(Box::new(inner)),
         literals,
+        definitions,
     })
 }
 
 /// An equivalent validator reduced by the lattice laws: it admits exactly the
-/// same values, in a simpler form. The constants pool is shared unchanged, as
-/// simplification only rewrites the schema's structure.
+/// same values, in a simpler form. The pool and definitions are shared
+/// unchanged, as simplification only rewrites the schema's structure.
 #[pyfunction]
 fn simplify(validator: &CompiledValidator, py: Python<'_>) -> CompiledValidator {
     CompiledValidator {
         schema: validator.schema.simplify(),
         literals: validator.literals.iter().map(|o| o.clone_ref(py)).collect(),
+        definitions: validator.definitions.clone(),
     }
 }
 
@@ -115,6 +192,7 @@ fn atom(py: Python<'_>, schema: Schema) -> PyResult<Py<CompiledValidator>> {
         CompiledValidator {
             schema,
             literals: Vec::new(),
+            definitions: Vec::new(),
         },
     )
 }
@@ -130,6 +208,7 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(intersect, module)?)?;
     module.add_function(wrap_pyfunction!(complement, module)?)?;
     module.add_function(wrap_pyfunction!(simplify, module)?)?;
+    module.add_function(wrap_pyfunction!(lazy, module)?)?;
     // The lattice bounds: top admits every value, bottom admits none.
     module.add("anything", atom(py, Schema::Anything)?)?;
     module.add("nothing", atom(py, Schema::Nothing)?)?;
@@ -147,7 +226,11 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
 /// `{T}` as a set; a single `{KeyType: ValueType}` entry as a mapping; an
 /// all-string-key dict as a closed record (a trailing `"?"` marks an optional
 /// key); any other value as an exact-value literal.
-fn build_schema(obj: &Bound<'_, PyAny>, lits: &mut Vec<Py<PyAny>>) -> PyResult<Schema> {
+fn build_schema(
+    obj: &Bound<'_, PyAny>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
     let py = obj.py();
     if obj.is_none() {
         return Ok(Schema::NoneType);
@@ -164,7 +247,7 @@ fn build_schema(obj: &Bound<'_, PyAny>, lits: &mut Vec<Py<PyAny>>) -> PyResult<S
     if obj.hasattr("__metadata__")? {
         let base = obj.getattr("__origin__")?;
         let metadata = obj.getattr("__metadata__")?;
-        return build_refine(&base, metadata.cast::<PyTuple>()?, lits);
+        return build_refine(&base, metadata.cast::<PyTuple>()?, lits, defs);
     }
 
     // Typing constructs (list[int], dict[K, V], tuple[...], X | Y, Literal,
@@ -174,48 +257,55 @@ fn build_schema(obj: &Bound<'_, PyAny>, lits: &mut Vec<Py<PyAny>>) -> PyResult<S
     let origin = typing.call_method1("get_origin", (obj,))?;
     if !origin.is_none() {
         let args = typing.call_method1("get_args", (obj,))?;
-        return build_parametrized(&origin, args.cast::<PyTuple>()?, lits);
+        return build_parametrized(&origin, args.cast::<PyTuple>()?, lits, defs);
     }
 
     // PEP 695 `type X = ...` alias (3.12+): validate the aliased type.
     if let Ok(alias_type) = typing.getattr("TypeAliasType")
         && obj.is_instance(&alias_type)?
     {
-        return build_schema(&obj.getattr("__value__")?, lits);
+        return build_schema(&obj.getattr("__value__")?, lits, defs);
     }
 
     // NewType: validate the supertype it wraps.
     if obj.hasattr("__supertype__")? {
-        return build_schema(&obj.getattr("__supertype__")?, lits);
+        return build_schema(&obj.getattr("__supertype__")?, lits, defs);
     }
 
     if let Ok(ty) = obj.cast::<PyType>() {
-        return build_type_object(ty, lits);
+        return build_type_object(ty, lits, defs);
     }
     if let Ok(list) = obj.cast::<PyList>() {
-        return build_sequence(list, lits);
+        return build_sequence(list, lits, defs);
     }
     if let Ok(tuple) = obj.cast::<PyTuple>() {
         let mut elements = Vec::with_capacity(tuple.len());
         for item in tuple.iter() {
-            elements.push(build_schema(&item, lits)?);
+            elements.push(build_schema(&item, lits, defs)?);
         }
         return Ok(Schema::Tuple(elements));
     }
     if let Ok(set) = obj.cast::<PySet>() {
-        return build_set(set, lits);
+        return build_set(set, lits, defs);
     }
     if let Ok(dict) = obj.cast::<PyDict>() {
-        return build_dict(dict, lits);
+        return build_dict(dict, lits, defs);
     }
 
-    // An already-compiled validator composes in: append its pool and shift its
-    // schema's indices past what is already there.
+    // An already-compiled validator composes in: append its pool and
+    // definitions and shift its schema's indices past what is already there.
     if let Ok(compiled) = obj.cast::<CompiledValidator>() {
         let inner = compiled.get();
         let pool_offset = lits.len();
+        let def_offset = defs.len();
         lits.extend(inner.literals.iter().map(|o| o.clone_ref(py)));
-        return Ok(inner.schema.shifted(pool_offset));
+        defs.extend(
+            inner
+                .definitions
+                .iter()
+                .map(|d| d.shifted(pool_offset, def_offset)),
+        );
+        return Ok(inner.schema.shifted(pool_offset, def_offset));
     }
 
     Ok(Schema::Literal(intern(lits, obj)))
@@ -227,19 +317,25 @@ fn combine(
     make: impl FnOnce(Vec<Schema>) -> Schema,
 ) -> PyResult<CompiledValidator> {
     let mut literals = Vec::new();
+    let mut definitions = Vec::new();
     let mut members = Vec::with_capacity(args.len());
     for arg in args.iter() {
-        members.push(build_schema(&arg, &mut literals)?);
+        members.push(build_schema(&arg, &mut literals, &mut definitions)?);
     }
     Ok(CompiledValidator {
         schema: make(members),
         literals,
+        definitions,
     })
 }
 
 /// Build the schema for a Python type object (a builtin, `TypedDict`, `Enum`,
 /// dataclass, `NamedTuple`, runtime-checkable `Protocol`, or `object`).
-fn build_type_object(ty: &Bound<'_, PyType>, lits: &mut Vec<Py<PyAny>>) -> PyResult<Schema> {
+fn build_type_object(
+    ty: &Bound<'_, PyType>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
     let py = ty.py();
     if ty.is(py.get_type::<PyBool>()) {
         return Ok(Schema::Bool);
@@ -264,7 +360,7 @@ fn build_type_object(ty: &Bound<'_, PyType>, lits: &mut Vec<Py<PyAny>>) -> PyRes
     }
     // TypedDict: a closed record whose required keys come from the class.
     if ty.hasattr("__required_keys__")? {
-        return build_typed_dict(ty, lits);
+        return build_typed_dict(ty, lits, defs);
     }
     // Enum: an instance of the enumeration class (any of its members).
     if ty.is_subclass(&py.import("enum")?.getattr("Enum")?)? {
@@ -276,7 +372,7 @@ fn build_type_object(ty: &Bound<'_, PyType>, lits: &mut Vec<Py<PyAny>>) -> PyRes
         .call_method1("is_dataclass", (ty,))?
         .is_truthy()?;
     if is_dataclass || (ty.is_subclass_of::<PyTuple>()? && ty.hasattr("_fields")?) {
-        return build_object(ty, lits);
+        return build_object(ty, lits, defs);
     }
     // Protocol: a runtime-checkable protocol validates by isinstance.
     if is_truthy_attr(ty, "_is_protocol") {
@@ -302,7 +398,11 @@ fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &str) -> bool {
 }
 
 /// Build a closed record from a `TypedDict`, reading its required keys.
-fn build_typed_dict(ty: &Bound<'_, PyType>, lits: &mut Vec<Py<PyAny>>) -> PyResult<Schema> {
+fn build_typed_dict(
+    ty: &Bound<'_, PyType>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
     let py = ty.py();
     let hints = py.import("typing")?.call_method1("get_type_hints", (ty,))?;
     let hints = hints.cast::<PyDict>()?;
@@ -311,7 +411,7 @@ fn build_typed_dict(ty: &Bound<'_, PyType>, lits: &mut Vec<Py<PyAny>>) -> PyResu
     for (name, hint) in hints.iter() {
         fields.push(Field {
             name: name.str()?.to_string(),
-            schema: build_schema(&hint, lits)?,
+            schema: build_schema(&hint, lits, defs)?,
             required: required.contains(&name)?,
         });
     }
@@ -320,7 +420,11 @@ fn build_typed_dict(ty: &Bound<'_, PyType>, lits: &mut Vec<Py<PyAny>>) -> PyResu
 
 /// Build an Object node (isinstance plus per-attribute checks) for a class
 /// whose fields come from its resolved type hints; all fields are required.
-fn build_object(ty: &Bound<'_, PyType>, lits: &mut Vec<Py<PyAny>>) -> PyResult<Schema> {
+fn build_object(
+    ty: &Bound<'_, PyType>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
     let py = ty.py();
     let hints = py.import("typing")?.call_method1("get_type_hints", (ty,))?;
     let hints = hints.cast::<PyDict>()?;
@@ -329,7 +433,7 @@ fn build_object(ty: &Bound<'_, PyType>, lits: &mut Vec<Py<PyAny>>) -> PyResult<S
     for (name, hint) in hints.iter() {
         fields.push(Field {
             name: name.str()?.to_string(),
-            schema: build_schema(&hint, lits)?,
+            schema: build_schema(&hint, lits, defs)?,
             required: true,
         });
     }
@@ -344,24 +448,28 @@ fn build_parametrized(
     origin: &Bound<'_, PyAny>,
     args: &Bound<'_, PyTuple>,
     lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
     let py = origin.py();
     if origin.is(py.get_type::<PyList>()) {
         return Ok(Schema::Sequence(Box::new(build_schema(
             &single_arg(args)?,
             lits,
+            defs,
         )?)));
     }
     if origin.is(py.get_type::<PySet>()) {
         return Ok(Schema::Set(Box::new(build_schema(
             &single_arg(args)?,
             lits,
+            defs,
         )?)));
     }
     if origin.is(py.get_type::<PyFrozenSet>()) {
         return Ok(Schema::FrozenSet(Box::new(build_schema(
             &single_arg(args)?,
             lits,
+            defs,
         )?)));
     }
     if origin.is(py.get_type::<PyDict>()) {
@@ -371,8 +479,8 @@ fn build_parametrized(
             ));
         }
         return Ok(Schema::Mapping {
-            key: Box::new(build_schema(&args.get_item(0)?, lits)?),
-            value: Box::new(build_schema(&args.get_item(1)?, lits)?),
+            key: Box::new(build_schema(&args.get_item(0)?, lits, defs)?),
+            value: Box::new(build_schema(&args.get_item(1)?, lits, defs)?),
         });
     }
     if origin.is(py.get_type::<PyTuple>()) {
@@ -381,6 +489,7 @@ fn build_parametrized(
             return Ok(Schema::VariadicTuple(Box::new(build_schema(
                 &args.get_item(0)?,
                 lits,
+                defs,
             )?)));
         }
         let mut elements = Vec::with_capacity(args.len());
@@ -391,14 +500,14 @@ fn build_parametrized(
                      tuple[T, ...]; other uses of ... are not supported",
                 ));
             }
-            elements.push(build_schema(&arg, lits)?);
+            elements.push(build_schema(&arg, lits, defs)?);
         }
         return Ok(Schema::Tuple(elements));
     }
     if is_union_origin(origin)? {
         let mut members = Vec::with_capacity(args.len());
         for arg in args.iter() {
-            members.push(build_schema(&arg, lits)?);
+            members.push(build_schema(&arg, lits, defs)?);
         }
         return Ok(Schema::Union(members));
     }
@@ -407,7 +516,7 @@ fn build_parametrized(
         // there is more than one.
         let mut members = Vec::with_capacity(args.len());
         for arg in args.iter() {
-            members.push(build_schema(&arg, lits)?);
+            members.push(build_schema(&arg, lits, defs)?);
         }
         return Ok(if members.len() == 1 {
             members.into_iter().next().expect("one member")
@@ -444,15 +553,21 @@ fn single_arg<'py>(args: &Bound<'py, PyTuple>) -> PyResult<Bound<'py, PyAny>> {
     }
 }
 
-fn build_sequence(list: &Bound<'_, PyList>, lits: &mut Vec<Py<PyAny>>) -> PyResult<Schema> {
+fn build_sequence(
+    list: &Bound<'_, PyList>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
     match list.len() {
         1 => Ok(Schema::Sequence(Box::new(build_schema(
             &list.get_item(0)?,
             lits,
+            defs,
         )?))),
         2 if is_ellipsis(&list.get_item(1)?) => Ok(Schema::Sequence(Box::new(build_schema(
             &list.get_item(0)?,
             lits,
+            defs,
         )?))),
         _ => Err(not_implemented(
             "a list schema must be [T] or [T, ...]; other list shapes are not supported",
@@ -460,33 +575,41 @@ fn build_sequence(list: &Bound<'_, PyList>, lits: &mut Vec<Py<PyAny>>) -> PyResu
     }
 }
 
-fn build_set(set: &Bound<'_, PySet>, lits: &mut Vec<Py<PyAny>>) -> PyResult<Schema> {
+fn build_set(
+    set: &Bound<'_, PySet>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
     if set.len() == 1
         && let Some(element) = set.iter().next()
     {
-        return Ok(Schema::Set(Box::new(build_schema(&element, lits)?)));
+        return Ok(Schema::Set(Box::new(build_schema(&element, lits, defs)?)));
     }
     Err(not_implemented(
         "a set schema must have exactly one element, as in {T}",
     ))
 }
 
-fn build_dict(dict: &Bound<'_, PyDict>, lits: &mut Vec<Py<PyAny>>) -> PyResult<Schema> {
+fn build_dict(
+    dict: &Bound<'_, PyDict>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
     // An empty dict is the empty closed record: it matches only {}.
     if dict.is_empty() {
         return Ok(Schema::Record { fields: Vec::new() });
     }
     // All-string keys: a record. A single type-keyed entry: a mapping.
     if dict.iter().all(|(key, _)| key.is_instance_of::<PyString>()) {
-        return build_record(dict, lits);
+        return build_record(dict, lits, defs);
     }
     if dict.len() == 1
         && let Some((key, value)) = dict.iter().next()
         && key.cast::<PyType>().is_ok()
     {
         return Ok(Schema::Mapping {
-            key: Box::new(build_schema(&key, lits)?),
-            value: Box::new(build_schema(&value, lits)?),
+            key: Box::new(build_schema(&key, lits, defs)?),
+            value: Box::new(build_schema(&value, lits, defs)?),
         });
     }
     Err(not_implemented(
@@ -495,7 +618,11 @@ fn build_dict(dict: &Bound<'_, PyDict>, lits: &mut Vec<Py<PyAny>>) -> PyResult<S
     ))
 }
 
-fn build_record(dict: &Bound<'_, PyDict>, lits: &mut Vec<Py<PyAny>>) -> PyResult<Schema> {
+fn build_record(
+    dict: &Bound<'_, PyDict>,
+    lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
     let mut fields = Vec::with_capacity(dict.len());
     for (key, value) in dict.iter() {
         let raw = key.str()?.to_string();
@@ -505,7 +632,7 @@ fn build_record(dict: &Bound<'_, PyDict>, lits: &mut Vec<Py<PyAny>>) -> PyResult
         };
         fields.push(Field {
             name,
-            schema: build_schema(&value, lits)?,
+            schema: build_schema(&value, lits, defs)?,
             required,
         });
     }
@@ -523,8 +650,9 @@ fn build_refine(
     base: &Bound<'_, PyAny>,
     metadata: &Bound<'_, PyTuple>,
     lits: &mut Vec<Py<PyAny>>,
+    defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
-    let base_schema = build_schema(base, lits)?;
+    let base_schema = build_schema(base, lits, defs)?;
     let mut constraints = Vec::new();
     for marker in metadata.iter() {
         parse_constraint(&marker, &mut constraints, lits);
@@ -613,7 +741,7 @@ fn check(
     schema: &Schema,
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
     match schema {
         Schema::Anything | Schema::Any => None,
@@ -625,24 +753,75 @@ fn check(
         Schema::Float => admit(value.is_instance_of::<PyFloat>(), schema, value, path),
         Schema::Str => admit(value.is_instance_of::<PyString>(), schema, value, path),
         Schema::Bytes => admit(value.is_instance_of::<PyBytes>(), schema, value, path),
-        Schema::Literal(index) => check_literal(*index, value, path, pool),
-        Schema::Sequence(element) => check_sequence(element, value, path, pool),
-        Schema::Tuple(elements) => check_tuple(elements, value, path, pool),
-        Schema::VariadicTuple(element) => check_variadic_tuple(element, value, path, pool),
-        Schema::Set(element) => check_set(element, value, path, pool),
-        Schema::FrozenSet(element) => check_frozenset(element, value, path, pool),
-        Schema::Mapping { key, value: val } => check_mapping(key, val, value, path, pool),
-        Schema::Record { fields } => check_record(fields, value, path, pool),
-        Schema::Union(members) => check_union(members, value, path, pool),
-        Schema::Intersection(members) => check_intersection(members, value, path, pool),
-        Schema::Complement(inner) => check_complement(inner, value, path, pool),
-        Schema::Instance(index) => check_instance(*index, value, path, pool),
+        Schema::Literal(index) => check_literal(*index, value, path, ctx),
+        Schema::Sequence(element) => check_sequence(element, value, path, ctx),
+        Schema::Tuple(elements) => check_tuple(elements, value, path, ctx),
+        Schema::VariadicTuple(element) => check_variadic_tuple(element, value, path, ctx),
+        Schema::Set(element) => check_set(element, value, path, ctx),
+        Schema::FrozenSet(element) => check_frozenset(element, value, path, ctx),
+        Schema::Mapping { key, value: val } => check_mapping(key, val, value, path, ctx),
+        Schema::Record { fields } => check_record(fields, value, path, ctx),
+        Schema::Union(members) => check_union(members, value, path, ctx),
+        Schema::Intersection(members) => check_intersection(members, value, path, ctx),
+        Schema::Complement(inner) => check_complement(inner, value, path, ctx),
+        Schema::Instance(index) => check_instance(*index, value, path, ctx),
         Schema::Object {
             class_index,
             fields,
-        } => check_object(*class_index, fields, value, path, pool),
-        Schema::Refine { base, constraints } => check_refine(base, constraints, value, path, pool),
+        } => check_object(*class_index, fields, value, path, ctx),
+        Schema::Refine { base, constraints } => check_refine(base, constraints, value, path, ctx),
+        Schema::Ref(id) => check_ref(*id, value, path, ctx),
+        // A SelfRef should have been resolved into a Ref at build time; reaching
+        // one means an unresolved recursion marker leaked into a validator.
+        Schema::SelfRef(_) => Some(Violation {
+            code: "unresolved_recursion",
+            path: path.clone(),
+            expected: "a resolved recursive value".to_owned(),
+            value_summary: summarize(value),
+        }),
     }
+}
+
+/// The most levels of recursive descent allowed before a value is rejected. A
+/// finite value never reaches this; the bound exists so a pathologically deep
+/// value fails with `recursion_limit` instead of overflowing the native stack.
+const MAX_RECURSION_DEPTH: usize = 128;
+
+/// Validate `value` against the definition `defs[id]`, guarding against value
+/// cycles and unbounded depth. The guard holds `(object id, definition index)`
+/// for every reference currently on the path: revisiting the same pair means
+/// the value contains itself, and the number of entries is the current depth.
+fn check_ref(
+    id: usize,
+    value: &Bound<'_, PyAny>,
+    path: &mut Vec<PathSegment>,
+    ctx: Ctx<'_>,
+) -> Option<Violation> {
+    let key = (value.as_ptr() as usize, id);
+    let depth = {
+        let mut guard = ctx.guard.borrow_mut();
+        if !guard.insert(key) {
+            return Some(Violation {
+                code: "recursion_loop",
+                path: path.clone(),
+                expected: "a finite (non-cyclic) value".to_owned(),
+                value_summary: summarize(value),
+            });
+        }
+        guard.len()
+    };
+    if depth > MAX_RECURSION_DEPTH {
+        ctx.guard.borrow_mut().remove(&key);
+        return Some(Violation {
+            code: "recursion_limit",
+            path: path.clone(),
+            expected: format!("at most {MAX_RECURSION_DEPTH} levels of recursion"),
+            value_summary: summarize(value),
+        });
+    }
+    let result = check(&ctx.defs[id], value, path, ctx);
+    ctx.guard.borrow_mut().remove(&key);
+    result
 }
 
 fn check_refine(
@@ -650,15 +829,15 @@ fn check_refine(
     constraints: &[Constraint],
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
     // Constraints narrow the base set, so they are meaningful only on a base
     // member: if the base fails, report that and do not run the constraints.
-    if let Some(violation) = check(base, value, path, pool) {
+    if let Some(violation) = check(base, value, path, ctx) {
         return Some(violation);
     }
     for constraint in constraints {
-        if let Some(violation) = check_constraint(constraint, value, path, pool) {
+        if let Some(violation) = check_constraint(constraint, value, path, ctx) {
             return Some(violation);
         }
     }
@@ -669,12 +848,12 @@ fn check_constraint(
     constraint: &Constraint,
     value: &Bound<'_, PyAny>,
     path: &[PathSegment],
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
     let py = value.py();
     let (ok, code, expected) = match constraint {
         Constraint::Ge(i) => {
-            let bound = pool[*i].bind(py);
+            let bound = ctx.pool[*i].bind(py);
             (
                 cmp(value.ge(bound)),
                 "greater_than_equal",
@@ -682,7 +861,7 @@ fn check_constraint(
             )
         }
         Constraint::Gt(i) => {
-            let bound = pool[*i].bind(py);
+            let bound = ctx.pool[*i].bind(py);
             (
                 cmp(value.gt(bound)),
                 "greater_than",
@@ -690,7 +869,7 @@ fn check_constraint(
             )
         }
         Constraint::Le(i) => {
-            let bound = pool[*i].bind(py);
+            let bound = ctx.pool[*i].bind(py);
             (
                 cmp(value.le(bound)),
                 "less_than_equal",
@@ -698,7 +877,7 @@ fn check_constraint(
             )
         }
         Constraint::Lt(i) => {
-            let bound = pool[*i].bind(py);
+            let bound = ctx.pool[*i].bind(py);
             (
                 cmp(value.lt(bound)),
                 "less_than",
@@ -719,7 +898,7 @@ fn check_constraint(
             // Slow path: the user's Python callable runs at the boundary. A
             // raising predicate is surfaced as a distinct `predicate_error`
             // rather than masked as an ordinary failed match.
-            let predicate = pool[*i].bind(py);
+            let predicate = ctx.pool[*i].bind(py);
             match predicate_passes(predicate, value) {
                 Ok(passed) => (passed, "predicate_failed", "a passing predicate".to_owned()),
                 Err(err) => (
@@ -758,9 +937,9 @@ fn check_instance(
     index: usize,
     value: &Bound<'_, PyAny>,
     path: &[PathSegment],
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
-    let class = pool[index].bind(value.py());
+    let class = ctx.pool[index].bind(value.py());
     if value.is_instance(class).unwrap_or(false) {
         None
     } else {
@@ -778,9 +957,9 @@ fn check_object(
     fields: &[Field],
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
-    let class = pool[class_index].bind(value.py());
+    let class = ctx.pool[class_index].bind(value.py());
     if !value.is_instance(class).unwrap_or(false) {
         // Not an instance: the attribute checks below cannot be trusted.
         return Some(type_mismatch(
@@ -794,7 +973,7 @@ fn check_object(
         match value.getattr(field.name.as_str()) {
             Ok(attr) => {
                 path.push(PathSegment::Key(field.name.clone()));
-                let result = check(&field.schema, &attr, path, pool);
+                let result = check(&field.schema, &attr, path, ctx);
                 path.pop();
                 if result.is_some() {
                     return result;
@@ -815,19 +994,19 @@ fn check_object(
 }
 
 /// Whether `value` is a member of `schema`: the walk produces no violation.
-fn is_member(schema: &Schema, value: &Bound<'_, PyAny>, pool: &[Py<PyAny>]) -> bool {
+fn is_member(schema: &Schema, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> bool {
     let mut path = Vec::new();
-    check(schema, value, &mut path, pool).is_none()
+    check(schema, value, &mut path, ctx).is_none()
 }
 
 fn check_union(
     members: &[Schema],
     value: &Bound<'_, PyAny>,
     path: &[PathSegment],
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
     // A value is a member iff it matches at least one branch.
-    if members.iter().any(|member| is_member(member, value, pool)) {
+    if members.iter().any(|member| is_member(member, value, ctx)) {
         return None;
     }
     let labels: Vec<&str> = members.iter().map(Schema::expected).collect();
@@ -843,11 +1022,11 @@ fn check_intersection(
     members: &[Schema],
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
     // Every member must hold; report the first that fails.
     for member in members {
-        if let Some(violation) = check(member, value, path, pool) {
+        if let Some(violation) = check(member, value, path, ctx) {
             return Some(violation);
         }
     }
@@ -858,10 +1037,10 @@ fn check_complement(
     inner: &Schema,
     value: &Bound<'_, PyAny>,
     path: &[PathSegment],
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
     // A value that matches the inner schema fails the complement.
-    if is_member(inner, value, pool) {
+    if is_member(inner, value, ctx) {
         Some(Violation {
             code: "unexpected_match",
             path: path.to_vec(),
@@ -920,9 +1099,9 @@ fn check_literal(
     index: usize,
     value: &Bound<'_, PyAny>,
     path: &[PathSegment],
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
-    let literal = pool[index].bind(value.py());
+    let literal = ctx.pool[index].bind(value.py());
     if literal_matches(value, literal) {
         None
     } else {
@@ -939,14 +1118,14 @@ fn check_sequence(
     element: &Schema,
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
     let Ok(list) = value.cast::<PyList>() else {
         return Some(type_mismatch("list_type", "list", value, path));
     };
     for (index, item) in list.iter().enumerate() {
         path.push(PathSegment::Index(index));
-        let result = check(element, &item, path, pool);
+        let result = check(element, &item, path, ctx);
         path.pop();
         if result.is_some() {
             return result;
@@ -959,7 +1138,7 @@ fn check_tuple(
     elements: &[Schema],
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
     let Ok(tuple) = value.cast::<PyTuple>() else {
         return Some(type_mismatch("tuple_type", "tuple", value, path));
@@ -974,7 +1153,7 @@ fn check_tuple(
     }
     for (index, (schema, item)) in elements.iter().zip(tuple.iter()).enumerate() {
         path.push(PathSegment::Index(index));
-        let result = check(schema, &item, path, pool);
+        let result = check(schema, &item, path, ctx);
         path.pop();
         if result.is_some() {
             return result;
@@ -987,14 +1166,14 @@ fn check_variadic_tuple(
     element: &Schema,
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
     let Ok(tuple) = value.cast::<PyTuple>() else {
         return Some(type_mismatch("tuple_type", "tuple", value, path));
     };
     for (index, item) in tuple.iter().enumerate() {
         path.push(PathSegment::Index(index));
-        let result = check(element, &item, path, pool);
+        let result = check(element, &item, path, ctx);
         path.pop();
         if result.is_some() {
             return result;
@@ -1007,14 +1186,14 @@ fn check_set(
     element: &Schema,
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
     let Ok(set) = value.cast::<PySet>() else {
         return Some(type_mismatch("set_type", "set", value, path));
     };
     // Set order is not meaningful, so element failures carry no index segment.
     for item in set.iter() {
-        let result = check(element, &item, path, pool);
+        let result = check(element, &item, path, ctx);
         if result.is_some() {
             return result;
         }
@@ -1026,13 +1205,13 @@ fn check_frozenset(
     element: &Schema,
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
     let Ok(set) = value.cast::<PyFrozenSet>() else {
         return Some(type_mismatch("frozenset_type", "frozenset", value, path));
     };
     for item in set.iter() {
-        let result = check(element, &item, path, pool);
+        let result = check(element, &item, path, ctx);
         if result.is_some() {
             return result;
         }
@@ -1045,7 +1224,7 @@ fn check_mapping(
     value_schema: &Schema,
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
     let Ok(dict) = value.cast::<PyDict>() else {
         return Some(type_mismatch("dict_type", "dict", value, path));
@@ -1053,7 +1232,7 @@ fn check_mapping(
     for (key, val) in dict.iter() {
         path.push(PathSegment::Key(key_label(&key)));
         let result =
-            check(key_schema, &key, path, pool).or_else(|| check(value_schema, &val, path, pool));
+            check(key_schema, &key, path, ctx).or_else(|| check(value_schema, &val, path, ctx));
         path.pop();
         if result.is_some() {
             return result;
@@ -1066,7 +1245,7 @@ fn check_record(
     fields: &[Field],
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
-    pool: &[Py<PyAny>],
+    ctx: Ctx<'_>,
 ) -> Option<Violation> {
     let Ok(dict) = value.cast::<PyDict>() else {
         return Some(type_mismatch("dict_type", "dict", value, path));
@@ -1077,7 +1256,7 @@ fn check_record(
         match dict.get_item(field.name.as_str()) {
             Ok(Some(item)) => {
                 path.push(PathSegment::Key(field.name.clone()));
-                let result = check(&field.schema, &item, path, pool);
+                let result = check(&field.schema, &item, path, ctx);
                 path.pop();
                 if result.is_some() {
                     return result;
@@ -1192,8 +1371,14 @@ fn into_pyerr(py: Python<'_>, violation: &Violation) -> PyErr {
 
 /// Render a schema back to the annotation/combinator expression that produces
 /// it.
-fn render(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>]) -> String {
-    let r = |s: &Schema| render(py, s, pool);
+fn render(
+    py: Python<'_>,
+    schema: &Schema,
+    pool: &[Py<PyAny>],
+    defs: &[Schema],
+    active: &RefCell<HashSet<usize>>,
+) -> String {
+    let r = |s: &Schema| render(py, s, pool, defs, active);
     let kids = |members: &[Schema]| members.iter().map(&r).collect::<Vec<_>>().join(", ");
     match schema {
         Schema::Anything => "anything".to_owned(),
@@ -1212,7 +1397,7 @@ fn render(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>]) -> String {
         Schema::Set(e) => format!("set[{}]", r(e)),
         Schema::FrozenSet(e) => format!("frozenset[{}]", r(e)),
         Schema::Mapping { key, value } => format!("dict[{}, {}]", r(key), r(value)),
-        Schema::Record { fields } => render_record(py, fields, pool),
+        Schema::Record { fields } => render_record(py, fields, pool, defs, active),
         Schema::Union(members) => members.iter().map(&r).collect::<Vec<_>>().join(" | "),
         Schema::Intersection(members) => format!("intersect({})", kids(members)),
         Schema::Complement(inner) => format!("complement({})", r(inner)),
@@ -1224,10 +1409,27 @@ fn render(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>]) -> String {
             parts.extend(constraints.iter().map(|c| render_constraint(py, c, pool)));
             format!("Annotated[{}]", parts.join(", "))
         }
+        Schema::Ref(id) => {
+            // Unfold the definition once; a back-edge to a reference already
+            // being rendered shows as `...`, so the form stays finite.
+            if !active.borrow_mut().insert(*id) {
+                return "...".to_owned();
+            }
+            let body = defs.get(*id).map_or_else(|| "...".to_owned(), &r);
+            active.borrow_mut().remove(id);
+            body
+        }
+        Schema::SelfRef(_) => "...".to_owned(),
     }
 }
 
-fn render_record(py: Python<'_>, fields: &[Field], pool: &[Py<PyAny>]) -> String {
+fn render_record(
+    py: Python<'_>,
+    fields: &[Field],
+    pool: &[Py<PyAny>],
+    defs: &[Schema],
+    active: &RefCell<HashSet<usize>>,
+) -> String {
     let entries: Vec<String> = fields
         .iter()
         .map(|field| {
@@ -1236,7 +1438,7 @@ fn render_record(py: Python<'_>, fields: &[Field], pool: &[Py<PyAny>]) -> String
                 "'{}{}': {}",
                 field.name,
                 suffix,
-                render(py, &field.schema, pool)
+                render(py, &field.schema, pool, defs, active)
             )
         })
         .collect();
