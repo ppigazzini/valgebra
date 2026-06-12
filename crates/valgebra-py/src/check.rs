@@ -9,7 +9,7 @@
 //! `matches` must stay membership-equivalent.
 
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use pyo3::prelude::*;
 use pyo3::types::{
@@ -167,30 +167,57 @@ pub(crate) fn matches(schema: &Schema, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -
 /// Membership for a record on the fast path: declared fields match and required
 /// keys are present, and no undeclared key is admitted unless the record is
 /// open.
+///
+/// The walk is inverted: it visits each dict entry once and matches the key
+/// against the declared fields, rather than looking up every declared field
+/// (which builds a temporary Python string per field) and then scanning the
+/// dict a second time for undeclared keys. The key's UTF-8 is borrowed without
+/// allocating. This stays membership-equivalent to [`check_record`]: every key
+/// is checked against the declared set, declared values are validated, and a
+/// required field is satisfied only by an actual string key (so a non-string
+/// key whose `str()` names a field never fills it, exactly as a string-key
+/// lookup would miss it).
 fn matches_record(fields: &[Field], open: bool, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> bool {
     let Ok(dict) = value.cast::<PyDict>() else {
         return false;
     };
-    for field in fields {
-        match dict.get_item(field.name.as_str()) {
-            Ok(Some(item)) => {
-                if !matches(&field.schema, &item, ctx) {
+    let declared: HashMap<&str, &Field> = fields.iter().map(|f| (f.name.as_str(), f)).collect();
+    let mut required_remaining = fields.iter().filter(|f| f.required).count();
+    for (key, val) in dict.iter() {
+        match key.cast::<PyString>().ok().and_then(|s| s.to_str().ok()) {
+            Some(name) => match declared.get(name) {
+                Some(field) => {
+                    if !matches(&field.schema, &val, ctx) {
+                        return false;
+                    }
+                    if field.required {
+                        required_remaining -= 1;
+                    }
+                }
+                None if open => {}
+                None => return false,
+            },
+            // A non-string or surrogate key cannot name a declared field via a
+            // string-key lookup. When closed it is undeclared unless its string
+            // form names a field (which leaves any required field unmet); when
+            // open it is ignored.
+            None => {
+                if !open && !stringifies_to_declared(&key, &declared) {
                     return false;
                 }
             }
-            Ok(None) if field.required => return false,
-            Ok(None) => {}
-            Err(_) => return false,
         }
     }
-    if open {
-        return true;
-    }
-    let declared: HashSet<&str> = fields.iter().map(|f| f.name.as_str()).collect();
-    dict.iter().all(|(key, _)| {
-        key.str()
-            .is_ok_and(|text| declared.contains(text.to_string().as_str()))
-    })
+    required_remaining == 0
+}
+
+/// Whether the `str()` of a non-string key names a declared field, mirroring the
+/// stringified extra-key check on the explain path.
+fn stringifies_to_declared(key: &Bound<'_, PyAny>, declared: &HashMap<&str, &Field>) -> bool {
+    key.str()
+        .ok()
+        .and_then(|text| text.to_str().ok().map(|name| declared.contains_key(name)))
+        .unwrap_or(false)
 }
 
 /// The most levels of recursive descent allowed before a value is rejected. A

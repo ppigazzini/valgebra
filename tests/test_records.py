@@ -50,3 +50,42 @@ def test_nested_record_failure_reports_the_path() -> None:
         schema.validate({"user": {"name": 5}})
     assert info.value.code == "string_type"
     assert info.value.path == ("user", "name")
+
+
+def test_is_valid_rejects_an_extra_key_in_a_closed_record() -> None:
+    user = validator({"name": str})
+    assert user.is_valid({"name": "Ada"})
+    assert not user.is_valid({"name": "Ada", "extra": 1})
+
+
+def test_is_valid_rejects_a_non_string_key_in_a_closed_record() -> None:
+    # A closed string-keyed record admits only its declared string keys; a
+    # non-string key is undeclared.
+    user = validator({"name": str})
+    assert not user.is_valid({"name": "Ada", 0: 1})
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"name": "Ada", "age": 36},  # valid
+        {"name": "Ada"},  # required present, optional absent
+        {"name": "Ada", "age": 36, "x": 1},  # extra string key
+        {"name": "Ada", "age": "old"},  # declared value of wrong type
+        {"age": 36},  # missing required key
+        {"name": "Ada", 0: 1},  # non-string extra key
+        {0: 1},  # only a non-string key
+        ["name", "Ada"],  # not a dict at all
+    ],
+)
+def test_is_valid_agrees_with_validate_on_records(value: object) -> None:
+    # The bool fast path and the aggregating explain walk must reach the same
+    # membership verdict on every shape.
+    user = validator({"name": str, "age?": int})
+    fast = user.is_valid(value)
+    try:
+        user.validate(value)
+        slow = True
+    except ValidationError:
+        slow = False
+    assert fast is slow

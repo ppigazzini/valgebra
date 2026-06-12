@@ -57,23 +57,26 @@ three check the same set of named fields.
 ## Baseline matrix
 
 Machine class: Intel Core i7-3770K (Ivy Bridge, 4c/8t, 3.5 GHz, a 2012-era
-desktop part) under WSL2 on Linux 6.18. Toolchain: rustc 1.96.0 (release profile
-with fat LTO), CPython 3.14.5, pydantic 2.13.4, jsonschema 4.26.0, criterion
-0.8.2, pytest-benchmark 5.2.3. Figures are the per-call median; re-run on your
-own hardware for absolute numbers.
+desktop part) under WSL2 on Linux 6.18. Toolchain: rustc 1.96.0, CPython 3.14.5,
+pydantic 2.13.4, jsonschema 4.26.0, criterion 0.8.2, pytest-benchmark 5.2.3. The
+extension is the release build (`maturin develop --release`, fat LTO — the same
+profile as the shipped wheel); a debug build is not representative. Figures are
+the per-call median; re-run on your own hardware for absolute numbers.
 
 End-to-end validation of a value that passes (median time per call, lower is
 better):
 
 | Shape | valgebra | pydantic (strict) | jsonschema |
 | --- | --- | --- | --- |
-| `list[int]`, 10,000 elements | 60 us | 142 us | 98,500 us |
-| Closed record, 50 int fields | 9.2 us | 3.8 us | 494 us |
-| Nested `list[...]`, depth 25 | 0.39 us | 3.9 us | 290 us |
+| `list[int]`, 10,000 elements | 60 us | 143 us | 99,800 us |
+| Closed record, 50 int fields | 3.4 us | 3.9 us | 533 us |
+| Nested `list[...]`, depth 25 | 0.39 us | 3.7 us | 303 us |
 
 valgebra relative to pydantic on this machine: ~2.4x faster on the large flat
-array, ~10x faster on deep nesting, and ~2.4x **slower** on the wide record. It
-is consistently far ahead of pure-Python jsonschema.
+array, ~9.5x faster on deep nesting, and slightly faster (~1.1x) on the wide
+record. It is consistently far ahead of pure-Python jsonschema. The wide-record
+margin is slim and pydantic does more work (it constructs output), so read that
+shape as "comparable," not a decisive win.
 
 Core micro-benchmarks (criterion, release+LTO, indicative single run):
 
@@ -88,16 +91,28 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
 - The numbers are a single machine class. They establish relative behavior, not
   a universal ranking. Shared CI runners are too noisy for a tight wall-clock
   budget, so the merge gate measures a deterministic instruction count instead.
-- valgebra is **not** uniformly faster than pydantic. The wide-record path is
-  the current weak point: pydantic-core's model validator is highly tuned for
-  exactly that shape. This is a tracked optimization target, recorded here so
-  the claim stays honest rather than cherry-picked.
+- The wide-record margin over pydantic is slim, and the two tools do different
+  work (pydantic constructs output). Read that shape as comparable, not a
+  decisive win; a small machine-to-machine swing could put either ahead.
 - The comparison measures different operations (check vs check-and-construct vs
   pure-Python check). It answers "how fast is the validation step for each
   tool," not "are these tools interchangeable" — they are not. See the README
   for what valgebra is and is not for.
 - These figures predate the JSON input path. Validating parsed JSON directly on
   the Rust side is a separate, later effort and is not reflected here.
+
+## How the record fast path is tuned
+
+The closed-record membership check visits each dict entry once and matches the
+key against the declared fields, rather than looking up every declared field in
+turn (which builds a temporary Python string per field) and then scanning the
+dict a second time for undeclared keys. The key's UTF-8 is borrowed without
+allocating. On the 50-field record above this cut the per-call median from
+~9.2 us to ~3.4 us (release build, same machine), profiled with cachegrind:
+the dominant cost was temporary-string creation, hashing, and allocation churn
+from the per-field lookups, all removed by the single pass. The bool fast path
+and the aggregating explain walk stay membership-equivalent, locked by tests
+that assert both reach the same verdict across record shapes.
 
 ## Regression gate
 
