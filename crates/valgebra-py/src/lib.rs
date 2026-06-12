@@ -88,6 +88,23 @@ impl CompiledValidator {
         let active = RefCell::new(HashSet::new());
         render(py, &self.schema, &self.literals, &self.definitions, &active)
     }
+
+    /// Return an equivalent validator. The validator is immutable, so the copy
+    /// shares the pooled constants, classes, and predicates rather than
+    /// duplicating them.
+    fn __copy__(&self, py: Python<'_>) -> CompiledValidator {
+        CompiledValidator {
+            schema: self.schema.clone(),
+            literals: self.literals.iter().map(|o| o.clone_ref(py)).collect(),
+            definitions: self.definitions.clone(),
+        }
+    }
+
+    /// Deep-copy to an equivalent validator. Since the validator is immutable,
+    /// this shares the pool like `__copy__`; the memo is unused.
+    fn __deepcopy__(&self, py: Python<'_>, _memo: &Bound<'_, PyAny>) -> CompiledValidator {
+        self.__copy__(py)
+    }
 }
 
 /// Compile `schema` into an immutable [`CompiledValidator`].
