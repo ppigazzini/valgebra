@@ -472,22 +472,58 @@ fn check_object(
 fn check_union(
     members: &[Schema],
     value: &Bound<'_, PyAny>,
-    path: &[PathSegment],
+    path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) {
     // A value is a member iff it matches at least one branch; decide that on the
-    // fast path so a non-matching branch never builds a violation.
+    // fast path.
     if members.iter().any(|member| matches(member, value, ctx)) {
         return;
     }
-    let labels: Vec<&str> = members.iter().map(Schema::expected).collect();
-    out.push(Violation {
-        code: "union_error",
-        path: path.to_vec(),
-        expected: format!("one of: {}", labels.join(", ")),
-        value_summary: summarize(value),
-    });
+    // No branch matches. Explain the *closest* branch — the one that descended
+    // furthest into the value before failing — by reporting its aggregated
+    // failures, rather than dumping every branch's noise. "Furthest" is the
+    // greatest path depth past the union's own location. When no branch makes
+    // any progress (every branch is a flat type mismatch, e.g. `int | str`
+    // against a float), fall back to a single union error. Sub-checks aggregate
+    // regardless of `fail_fast` so both the deepest progress and the full branch
+    // detail are visible; this runs only on the error path, never on a match.
+    let base_depth = path.len();
+    let probe = Ctx {
+        fail_fast: false,
+        ..ctx
+    };
+    let mut best: Option<(usize, Vec<Violation>)> = None;
+    for member in members {
+        let mut branch = Vec::new();
+        check(member, value, path, probe, &mut branch);
+        let progress = branch
+            .iter()
+            .map(|v| v.path.len())
+            .max()
+            .unwrap_or(base_depth)
+            .saturating_sub(base_depth);
+        // Strictly greater keeps the earliest branch on a tie.
+        let replace = best
+            .as_ref()
+            .is_none_or(|(best_progress, _)| progress > *best_progress);
+        if replace {
+            best = Some((progress, branch));
+        }
+    }
+    match best {
+        Some((progress, branch)) if progress > 0 => out.extend(branch),
+        _ => {
+            let labels: Vec<&str> = members.iter().map(Schema::expected).collect();
+            out.push(Violation {
+                code: "union_error",
+                path: path.clone(),
+                expected: format!("one of: {}", labels.join(", ")),
+                value_summary: summarize(value),
+            });
+        }
+    }
 }
 
 fn admit(
