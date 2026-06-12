@@ -5,6 +5,7 @@ from ._valgebra import (
     complement,
     intersect,
     nothing,
+    simplify,
     union,
     validator,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "complement",
     "intersect",
     "nothing",
+    "simplify",
     "union",
     "validator",
 ]

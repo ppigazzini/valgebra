@@ -16,6 +16,7 @@ from valgebra import (
     complement,
     intersect,
     nothing,
+    simplify,
     union,
     validator,
 )
@@ -104,3 +105,16 @@ def test_distributivity(a: object, b: object, c: object) -> None:
         intersect(a, union(b, c)),
         union(intersect(a, b), intersect(a, c)),
     )
+
+
+@given(a=schemas, b=schemas, c=schemas)
+def test_simplify_preserves_acceptance(a: object, b: object, c: object) -> None:
+    original = complement(union(a, intersect(b, complement(c))))
+    assert equivalent(original, simplify(original))
+
+
+@given(a=schemas, b=schemas)
+def test_simplify_is_idempotent_on_acceptance(a: object, b: object) -> None:
+    once = simplify(intersect(a, complement(b)))
+    twice = simplify(once)
+    assert equivalent(once, twice)

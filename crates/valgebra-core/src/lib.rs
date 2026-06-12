@@ -23,7 +23,7 @@ pub enum PathSegment {
 /// The schema intermediate representation.
 ///
 /// Each variant documents its denotation: the set of Python values it accepts.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Schema {
     /// Top. Denotes every Python value; membership always holds.
     Anything,
@@ -132,7 +132,7 @@ pub enum Schema {
 ///
 /// Comparison and predicate operands live in the validator's object pool; the
 /// payload is an index. Length bounds carry the length directly.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Constraint {
     /// `value >= pool[i]`.
     Ge(usize),
@@ -151,7 +151,7 @@ pub enum Constraint {
 }
 
 /// A named field of a [`Schema::Record`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Field {
     /// The key name.
     pub name: String,
@@ -270,6 +270,122 @@ impl Schema {
             },
         }
     }
+
+    /// Return a membership-equivalent schema reduced by the lattice laws.
+    ///
+    /// Every rewrite preserves the set of admitted values: nested unions and
+    /// intersections are flattened, members sorted and deduplicated
+    /// (associativity, commutativity, idempotence), the top and bottom
+    /// identities are applied, complements are pushed inward to negation-normal
+    /// form (De Morgan) and double negations cancelled. `Any` (gradual) is left
+    /// untouched: it is never treated as the top. Conservative by design — it
+    /// never claims an equivalence it cannot justify structurally.
+    #[must_use]
+    pub fn simplify(&self) -> Schema {
+        match self {
+            Schema::Sequence(e) => Schema::Sequence(Box::new(e.simplify())),
+            Schema::VariadicTuple(e) => Schema::VariadicTuple(Box::new(e.simplify())),
+            Schema::Set(e) => Schema::Set(Box::new(e.simplify())),
+            Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.simplify())),
+            Schema::Tuple(es) => Schema::Tuple(es.iter().map(Schema::simplify).collect()),
+            Schema::Mapping { key, value } => Schema::Mapping {
+                key: Box::new(key.simplify()),
+                value: Box::new(value.simplify()),
+            },
+            Schema::Record { fields } => Schema::Record {
+                fields: fields
+                    .iter()
+                    .map(|f| Field {
+                        name: f.name.clone(),
+                        schema: f.schema.simplify(),
+                        required: f.required,
+                    })
+                    .collect(),
+            },
+            Schema::Object {
+                class_index,
+                fields,
+            } => Schema::Object {
+                class_index: *class_index,
+                fields: fields
+                    .iter()
+                    .map(|f| Field {
+                        name: f.name.clone(),
+                        schema: f.schema.simplify(),
+                        required: f.required,
+                    })
+                    .collect(),
+            },
+            Schema::Refine { base, constraints } => Schema::Refine {
+                base: Box::new(base.simplify()),
+                constraints: constraints.clone(),
+            },
+            Schema::Union(members) => simplify_union(members),
+            Schema::Intersection(members) => simplify_intersection(members),
+            Schema::Complement(inner) => simplify_complement(inner),
+            // Atoms (including Any and Literal/Instance) reduce to themselves.
+            other => other.clone(),
+        }
+    }
+}
+
+/// Flatten, absorb the top, drop the bottom, dedup, and collapse a union.
+fn simplify_union(members: &[Schema]) -> Schema {
+    let mut flat = Vec::new();
+    for member in members {
+        match member.simplify() {
+            Schema::Anything => return Schema::Anything,
+            Schema::Nothing => {}
+            Schema::Union(inner) => flat.extend(inner),
+            other => flat.push(other),
+        }
+    }
+    flat.sort();
+    flat.dedup();
+    match flat.len() {
+        0 => Schema::Nothing,
+        1 => flat.swap_remove(0),
+        _ => Schema::Union(flat),
+    }
+}
+
+/// Flatten, absorb the bottom, drop the top, dedup, and collapse an intersection.
+fn simplify_intersection(members: &[Schema]) -> Schema {
+    let mut flat = Vec::new();
+    for member in members {
+        match member.simplify() {
+            Schema::Nothing => return Schema::Nothing,
+            Schema::Anything => {}
+            Schema::Intersection(inner) => flat.extend(inner),
+            other => flat.push(other),
+        }
+    }
+    flat.sort();
+    flat.dedup();
+    match flat.len() {
+        0 => Schema::Anything,
+        1 => flat.swap_remove(0),
+        _ => Schema::Intersection(flat),
+    }
+}
+
+/// Push a complement to negation-normal form and cancel double negation.
+fn simplify_complement(inner: &Schema) -> Schema {
+    match inner.simplify() {
+        Schema::Complement(x) => *x,
+        Schema::Anything => Schema::Nothing,
+        Schema::Nothing => Schema::Anything,
+        Schema::Union(members) => simplify_intersection(&complement_each(members)),
+        Schema::Intersection(members) => simplify_union(&complement_each(members)),
+        other => Schema::Complement(Box::new(other)),
+    }
+}
+
+fn complement_each(members: Vec<Schema>) -> Vec<Schema> {
+    members
+        .into_iter()
+        .map(|m| Schema::Complement(Box::new(m)))
+        .collect()
 }
 
 impl Field {
@@ -504,5 +620,96 @@ mod tests {
         assert_eq!(copy.name, "n");
         assert!(!copy.required);
         assert_eq!(copy.schema, Schema::Int);
+    }
+}
+
+#[cfg(test)]
+mod laws {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// A small schema generator: atoms combined by union, intersection, and
+    /// complement. Pool indices are arbitrary but consistent across a value.
+    fn schema() -> impl Strategy<Value = Schema> {
+        let atom = prop_oneof![
+            Just(Schema::Anything),
+            Just(Schema::Nothing),
+            Just(Schema::Any),
+            Just(Schema::Int),
+            Just(Schema::Str),
+            Just(Schema::Bool),
+            Just(Schema::Literal(0)),
+            Just(Schema::Instance(1)),
+        ];
+        atom.prop_recursive(4, 24, 3, |inner| {
+            prop_oneof![
+                proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::Union),
+                proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::Intersection),
+                inner.prop_map(|s| Schema::Complement(Box::new(s))),
+            ]
+        })
+    }
+
+    fn union(a: Schema, b: Schema) -> Schema {
+        Schema::Union(vec![a, b])
+    }
+    fn intersection(a: Schema, b: Schema) -> Schema {
+        Schema::Intersection(vec![a, b])
+    }
+    fn not(a: Schema) -> Schema {
+        Schema::Complement(Box::new(a))
+    }
+
+    proptest! {
+        #[test]
+        fn simplify_is_idempotent(a in schema()) {
+            let once = a.simplify();
+            prop_assert_eq!(once.clone(), once.simplify());
+        }
+
+        #[test]
+        fn union_and_intersection_commute(a in schema(), b in schema()) {
+            prop_assert_eq!(union(a.clone(), b.clone()).simplify(), union(b.clone(), a.clone()).simplify());
+            prop_assert_eq!(intersection(a.clone(), b.clone()).simplify(), intersection(b, a).simplify());
+        }
+
+        #[test]
+        fn union_and_intersection_associate(a in schema(), b in schema(), c in schema()) {
+            prop_assert_eq!(
+                union(a.clone(), union(b.clone(), c.clone())).simplify(),
+                union(union(a.clone(), b.clone()), c.clone()).simplify()
+            );
+            prop_assert_eq!(
+                intersection(a.clone(), intersection(b.clone(), c.clone())).simplify(),
+                intersection(intersection(a, b), c).simplify()
+            );
+        }
+
+        #[test]
+        fn idempotence(a in schema()) {
+            prop_assert_eq!(union(a.clone(), a.clone()).simplify(), a.clone().simplify());
+            prop_assert_eq!(intersection(a.clone(), a.clone()).simplify(), a.simplify());
+        }
+
+        #[test]
+        fn identities(a in schema()) {
+            prop_assert_eq!(union(a.clone(), Schema::Nothing).simplify(), a.clone().simplify());
+            prop_assert_eq!(intersection(a.clone(), Schema::Anything).simplify(), a.clone().simplify());
+            prop_assert_eq!(union(a.clone(), Schema::Anything).simplify(), Schema::Anything);
+            prop_assert_eq!(intersection(a, Schema::Nothing).simplify(), Schema::Nothing);
+        }
+
+        #[test]
+        fn double_negation(a in schema()) {
+            prop_assert_eq!(not(not(a.clone())).simplify(), a.simplify());
+        }
+
+        #[test]
+        fn de_morgan(a in schema(), b in schema()) {
+            prop_assert_eq!(
+                not(union(a.clone(), b.clone())).simplify(),
+                intersection(not(a.clone()), not(b)).simplify()
+            );
+        }
     }
 }

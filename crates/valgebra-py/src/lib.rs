@@ -96,6 +96,17 @@ fn complement(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
     })
 }
 
+/// An equivalent validator reduced by the lattice laws: it admits exactly the
+/// same values, in a simpler form. The constants pool is shared unchanged, as
+/// simplification only rewrites the schema's structure.
+#[pyfunction]
+fn simplify(validator: &CompiledValidator, py: Python<'_>) -> CompiledValidator {
+    CompiledValidator {
+        schema: validator.schema.simplify(),
+        literals: validator.literals.iter().map(|o| o.clone_ref(py)).collect(),
+    }
+}
+
 /// A pool-free validator wrapping a single atom (the `anything`/`nothing`
 /// lattice bounds).
 fn atom(py: Python<'_>, schema: Schema) -> PyResult<Py<CompiledValidator>> {
@@ -118,6 +129,7 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(union, module)?)?;
     module.add_function(wrap_pyfunction!(intersect, module)?)?;
     module.add_function(wrap_pyfunction!(complement, module)?)?;
+    module.add_function(wrap_pyfunction!(simplify, module)?)?;
     // The lattice bounds: top admits every value, bottom admits none.
     module.add("anything", atom(py, Schema::Anything)?)?;
     module.add("nothing", atom(py, Schema::Nothing)?)?;
