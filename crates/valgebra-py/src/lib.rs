@@ -63,7 +63,7 @@ impl CompiledValidator {
         let guard = RefCell::new(HashSet::new());
         let mut path = Vec::new();
         match check(&self.schema, obj, &mut path, self.context(&guard)) {
-            Some(violation) => Err(into_pyerr(obj.py(), &violation)),
+            Some(violation) => Err(into_pyerr(obj.py(), &[violation])),
             None => Ok(()),
         }
     }

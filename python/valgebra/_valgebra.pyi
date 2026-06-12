@@ -1,14 +1,16 @@
 from collections.abc import Callable
 
 class ValidationError(Exception):
-    # The offending value's machine-readable failure: a stable `code`, the
-    # `path` to the value, the `expected` label, a `value` summary, and the
-    # rendered `message`.
+    # The structured, machine-readable error model. `errors` is a tuple of
+    # per-failure items, each a JSON-serializable dict with the keys
+    # `code`/`path`/`message`/`expected`/`value`; `json.dumps(err.errors)` is the
+    # JSON output. The scalar attributes mirror the first item.
     code: str
     path: tuple[str | int, ...]
     message: str
     expected: str
     value: str
+    errors: tuple[dict[str, object], ...]
     def __init__(self, message: str) -> None: ...
 
 class CompiledValidator:

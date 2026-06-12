@@ -2,7 +2,7 @@
 //! `ValidationError` raised from a [`valgebra_core::Violation`].
 
 use pyo3::prelude::*;
-use pyo3::types::PyTuple;
+use pyo3::types::{PyDict, PyTuple};
 use valgebra_core::{PathSegment, Violation};
 
 use crate::ValidationError;
@@ -33,19 +33,57 @@ pub(crate) fn truncate(text: &str, max_chars: usize) -> String {
     }
 }
 
-/// Build the Python [`ValidationError`] for a violation, carrying its
-/// machine-readable `code`, `path`, `expected` label, `value` summary, and the
-/// rendered `message`.
-pub(crate) fn into_pyerr(py: Python<'_>, violation: &Violation) -> PyErr {
-    let err = ValidationError::new_err(violation.to_string());
+/// Build the Python [`ValidationError`] for one or more violations.
+///
+/// The raised instance carries the structured, machine-readable error model:
+/// `errors` is a tuple of per-failure items, each a JSON-serializable dict with
+/// `code`/`path`/`message`/`expected`/`value`, so `json.dumps(err.errors)` is
+/// the JSON output mode. The scalar `message`/`code`/`path`/`expected`/`value`
+/// mirror the first item; `str(exc)` is a summary of every failure.
+pub(crate) fn into_pyerr(py: Python<'_>, violations: &[Violation]) -> PyErr {
+    debug_assert!(!violations.is_empty(), "into_pyerr needs a failure");
+    let err = ValidationError::new_err(summary_message(violations));
     let instance = err.value(py);
-    let path = build_path(py, &violation.path).unwrap_or_else(|_| PyTuple::empty(py));
-    let _ = instance.setattr("code", violation.code);
-    let _ = instance.setattr("expected", violation.expected.as_str());
-    let _ = instance.setattr("value", violation.value_summary.as_str());
-    let _ = instance.setattr("message", violation.to_string());
-    let _ = instance.setattr("path", &path);
+    let first = &violations[0];
+    let first_path = build_path(py, &first.path).unwrap_or_else(|_| PyTuple::empty(py));
+    let _ = instance.setattr("code", first.code);
+    let _ = instance.setattr("expected", first.expected.as_str());
+    let _ = instance.setattr("value", first.value_summary.as_str());
+    let _ = instance.setattr("message", first.to_string());
+    let _ = instance.setattr("path", &first_path);
+    let errors = error_items(py, violations).unwrap_or_else(|_| PyTuple::empty(py));
+    let _ = instance.setattr("errors", errors);
     err
+}
+
+/// The exception's `str()`: the single message for one failure, or a counted,
+/// newline-joined summary for several.
+fn summary_message(violations: &[Violation]) -> String {
+    if violations.len() == 1 {
+        return violations[0].to_string();
+    }
+    let mut summary = format!("{} validation errors:", violations.len());
+    for violation in violations {
+        summary.push('\n');
+        summary.push_str(&violation.to_string());
+    }
+    summary
+}
+
+/// Build the `errors` tuple: one JSON-serializable item per failure, in walk
+/// order.
+fn error_items<'py>(py: Python<'py>, violations: &[Violation]) -> PyResult<Bound<'py, PyTuple>> {
+    let mut items = Vec::with_capacity(violations.len());
+    for violation in violations {
+        let item = PyDict::new(py);
+        item.set_item("code", violation.code)?;
+        item.set_item("path", build_path(py, &violation.path)?)?;
+        item.set_item("message", violation.to_string())?;
+        item.set_item("expected", violation.expected.as_str())?;
+        item.set_item("value", violation.value_summary.as_str())?;
+        items.push(item);
+    }
+    PyTuple::new(py, items)
 }
 
 fn build_path<'py>(py: Python<'py>, path: &[PathSegment]) -> PyResult<Bound<'py, PyTuple>> {
