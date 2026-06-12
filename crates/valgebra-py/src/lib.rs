@@ -13,7 +13,7 @@ use pyo3::prelude::*;
 use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
 };
-use valgebra_core::{Field, PathSegment, Schema, Violation};
+use valgebra_core::{Constraint, Field, PathSegment, Schema, Violation};
 
 create_exception!(
     _valgebra,
@@ -96,6 +96,13 @@ fn build_schema(obj: &Bound<'_, PyAny>, lits: &mut Vec<Py<PyAny>>) -> PyResult<S
     // `typing.Any` is a singleton special form: the gradual dynamic type.
     if obj.is(&typing.getattr("Any")?) {
         return Ok(Schema::Any);
+    }
+
+    // Annotated[T, m1, ...]: the base type T with refinement metadata.
+    if obj.hasattr("__metadata__")? {
+        let base = obj.getattr("__origin__")?;
+        let metadata = obj.getattr("__metadata__")?;
+        return build_refine(&base, metadata.cast::<PyTuple>()?, lits);
     }
 
     // Typing constructs (list[int], dict[K, V], tuple[...], X | Y, Literal,
@@ -414,6 +421,74 @@ fn build_record(dict: &Bound<'_, PyDict>, lits: &mut Vec<Py<PyAny>>) -> PyResult
     Ok(Schema::Record { fields })
 }
 
+/// Build a Refine node from an `Annotated` base and its metadata markers.
+///
+/// Markers are read structurally (annotated-types style): an object exposing
+/// `ge`/`gt`/`le`/`lt` contributes a comparison bound, `min_length`/
+/// `max_length` contribute length bounds, and `func` (or a bare callable)
+/// contributes a predicate. Unrecognized metadata is ignored, per the typing
+/// spec. With no recognized constraint the base schema is returned as-is.
+fn build_refine(
+    base: &Bound<'_, PyAny>,
+    metadata: &Bound<'_, PyTuple>,
+    lits: &mut Vec<Py<PyAny>>,
+) -> PyResult<Schema> {
+    let base_schema = build_schema(base, lits)?;
+    let mut constraints = Vec::new();
+    for marker in metadata.iter() {
+        parse_constraint(&marker, &mut constraints, lits);
+    }
+    if constraints.is_empty() {
+        Ok(base_schema)
+    } else {
+        Ok(Schema::Refine {
+            base: Box::new(base_schema),
+            constraints,
+        })
+    }
+}
+
+fn parse_constraint(
+    marker: &Bound<'_, PyAny>,
+    out: &mut Vec<Constraint>,
+    lits: &mut Vec<Py<PyAny>>,
+) {
+    // Comparison bounds. One marker may carry several (e.g. an interval).
+    for (attr, make) in [
+        ("ge", Constraint::Ge as fn(usize) -> Constraint),
+        ("gt", Constraint::Gt),
+        ("le", Constraint::Le),
+        ("lt", Constraint::Lt),
+    ] {
+        if let Ok(bound) = marker.getattr(attr)
+            && !bound.is_none()
+        {
+            out.push(make(intern(lits, &bound)));
+        }
+    }
+    // Length bounds.
+    if let Ok(min) = marker.getattr("min_length")
+        && let Ok(n) = min.extract::<usize>()
+    {
+        out.push(Constraint::MinLen(n));
+    }
+    if let Ok(max) = marker.getattr("max_length")
+        && !max.is_none()
+        && let Ok(n) = max.extract::<usize>()
+    {
+        out.push(Constraint::MaxLen(n));
+    }
+    // Predicate escape hatch: annotated_types.Predicate(.func) or a bare
+    // callable used directly as metadata.
+    if let Ok(func) = marker.getattr("func")
+        && func.is_callable()
+    {
+        out.push(Constraint::Predicate(intern(lits, &func)));
+    } else if marker.is_callable() {
+        out.push(Constraint::Predicate(intern(lits, marker)));
+    }
+}
+
 /// Pool `obj` and return its index, deduplicating by object identity.
 fn intern(pool: &mut Vec<Py<PyAny>>, obj: &Bound<'_, PyAny>) -> usize {
     let ptr = obj.as_ptr();
@@ -473,7 +548,117 @@ fn check(
             class_index,
             fields,
         } => check_object(*class_index, fields, value, path, pool),
+        Schema::Refine { base, constraints } => check_refine(base, constraints, value, path, pool),
     }
+}
+
+fn check_refine(
+    base: &Schema,
+    constraints: &[Constraint],
+    value: &Bound<'_, PyAny>,
+    path: &mut Vec<PathSegment>,
+    pool: &[Py<PyAny>],
+) -> Option<Violation> {
+    // Constraints narrow the base set, so they are meaningful only on a base
+    // member: if the base fails, report that and do not run the constraints.
+    if let Some(violation) = check(base, value, path, pool) {
+        return Some(violation);
+    }
+    for constraint in constraints {
+        if let Some(violation) = check_constraint(constraint, value, path, pool) {
+            return Some(violation);
+        }
+    }
+    None
+}
+
+fn check_constraint(
+    constraint: &Constraint,
+    value: &Bound<'_, PyAny>,
+    path: &[PathSegment],
+    pool: &[Py<PyAny>],
+) -> Option<Violation> {
+    let py = value.py();
+    let (ok, code, expected) = match constraint {
+        Constraint::Ge(i) => {
+            let bound = pool[*i].bind(py);
+            (
+                cmp(value.ge(bound)),
+                "greater_than_equal",
+                format!(">= {}", summarize(bound)),
+            )
+        }
+        Constraint::Gt(i) => {
+            let bound = pool[*i].bind(py);
+            (
+                cmp(value.gt(bound)),
+                "greater_than",
+                format!("> {}", summarize(bound)),
+            )
+        }
+        Constraint::Le(i) => {
+            let bound = pool[*i].bind(py);
+            (
+                cmp(value.le(bound)),
+                "less_than_equal",
+                format!("<= {}", summarize(bound)),
+            )
+        }
+        Constraint::Lt(i) => {
+            let bound = pool[*i].bind(py);
+            (
+                cmp(value.lt(bound)),
+                "less_than",
+                format!("< {}", summarize(bound)),
+            )
+        }
+        Constraint::MinLen(n) => (
+            value.len().is_ok_and(|len| len >= *n),
+            "too_short",
+            format!("length >= {n}"),
+        ),
+        Constraint::MaxLen(n) => (
+            value.len().is_ok_and(|len| len <= *n),
+            "too_long",
+            format!("length <= {n}"),
+        ),
+        Constraint::Predicate(i) => {
+            // Slow path: the user's Python callable runs at the boundary. A
+            // raising predicate is surfaced as a distinct `predicate_error`
+            // rather than masked as an ordinary failed match.
+            let predicate = pool[*i].bind(py);
+            match predicate_passes(predicate, value) {
+                Ok(passed) => (passed, "predicate_failed", "a passing predicate".to_owned()),
+                Err(err) => (
+                    false,
+                    "predicate_error",
+                    format!("a predicate that does not raise (raised {err})"),
+                ),
+            }
+        }
+    };
+    if ok {
+        None
+    } else {
+        Some(Violation {
+            code,
+            path: path.to_vec(),
+            expected,
+            value_summary: summarize(value),
+        })
+    }
+}
+
+/// Run a user predicate and report whether it returned a truthy result.
+/// Returns `Err` if the predicate itself raised, so callers can distinguish a
+/// false result from a broken predicate.
+fn predicate_passes(predicate: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<bool> {
+    predicate.call1((value,))?.is_truthy()
+}
+
+/// Interpret a rich-comparison result, treating an error as "did not hold".
+fn cmp(result: PyResult<bool>) -> bool {
+    result.unwrap_or(false)
 }
 
 fn check_instance(

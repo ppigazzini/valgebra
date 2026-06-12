@@ -112,6 +112,36 @@ pub enum Schema {
         /// Per-attribute field schemas; all required.
         fields: Vec<Field>,
     },
+    /// Denotes the subset of the base set satisfying every constraint
+    /// (`{ x in [[base]] | all constraints hold }`). The base is checked first.
+    Refine {
+        /// The base schema; a value must belong to it before constraints apply.
+        base: Box<Schema>,
+        /// Constraints that further narrow the base set, checked in order.
+        constraints: Vec<Constraint>,
+    },
+}
+
+/// A constraint narrowing a [`Schema::Refine`] base set.
+///
+/// Comparison and predicate operands live in the validator's object pool; the
+/// payload is an index. Length bounds carry the length directly.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Constraint {
+    /// `value >= pool[i]`.
+    Ge(usize),
+    /// `value > pool[i]`.
+    Gt(usize),
+    /// `value <= pool[i]`.
+    Le(usize),
+    /// `value < pool[i]`.
+    Lt(usize),
+    /// `len(value) >= n`.
+    MinLen(usize),
+    /// `len(value) <= n`.
+    MaxLen(usize),
+    /// `pool[i](value)` is truthy. The documented Python-callback slow path.
+    Predicate(usize),
 }
 
 /// A named field of a [`Schema::Record`].
@@ -150,6 +180,8 @@ impl Schema {
             // The py layer renders the concrete class name; these are fallbacks.
             Schema::Instance(_) => "instance",
             Schema::Object { .. } => "object",
+            // A refinement's type is its base; constraints report their own.
+            Schema::Refine { base, .. } => base.expected(),
         }
     }
 
@@ -175,6 +207,7 @@ impl Schema {
             Schema::Mapping { .. } | Schema::Record { .. } => "dict_type",
             Schema::Union(_) => "union_error",
             Schema::Instance(_) | Schema::Object { .. } => "instance_type",
+            Schema::Refine { base, .. } => base.error_code(),
         }
     }
 }
@@ -364,6 +397,16 @@ mod tests {
             Schema::Sequence(Box::new(Schema::Str))
         );
         assert_ne!(Schema::Literal(0), Schema::Literal(1));
+    }
+
+    #[test]
+    fn refine_delegates_label_and_code_to_its_base() {
+        let refined = Schema::Refine {
+            base: Box::new(Schema::Str),
+            constraints: vec![Constraint::MinLen(1)],
+        };
+        assert_eq!(refined.expected(), "str");
+        assert_eq!(refined.error_code(), "string_type");
     }
 
     #[test]
