@@ -1,0 +1,35 @@
+name: Docs
+
+# Build the documentation site and publish it to GitHub Pages. The site tracks
+# the main branch; a manual run can republish on demand. Enable Pages for the
+# repository (serving from the gh-pages branch) before the first run.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: build and deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --group docs
+      # mkdocstrings imports the package to read its docstrings.
+      - run: uv run --group docs maturin develop --uv
+      # Build with --strict, then push the result to the gh-pages branch.
+      - run: uv run --group docs mkdocs gh-deploy --force --strict

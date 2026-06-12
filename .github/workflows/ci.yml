@@ -162,8 +162,27 @@ jobs:
           enable-cache: true
       - run: uv sync
       - run: uv run maturin develop --uv
-      # Execute every runnable example in the docs; fail on a stale snippet.
+      # Execute every runnable example in the README and the docs site; fail on
+      # a stale snippet.
       - run: uv run python scripts/run_doc_examples.py
+
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --group docs
+      # mkdocstrings imports the package to read its docstrings.
+      - run: uv run --group docs maturin develop --uv
+      # --strict fails the build on a broken link or an unresolved reference.
+      - run: uv run --group docs mkdocs build --strict
 
   bench:
     name: bench
@@ -231,6 +250,7 @@ jobs:
         binding-coverage,
         python,
         doc-examples,
+        docs,
         bench,
         wheel,
       ]

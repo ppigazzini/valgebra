@@ -16,11 +16,9 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DOCS = [
-    ROOT / "README.md",
-    ROOT / "docs" / "error-model.md",
-    ROOT / "docs" / "json.md",
-]
+# The README plus every page of the documentation site. Each runnable python
+# block is executed, so no published example can go stale.
+DOCS = [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md"))]
 BLOCK = re.compile(r"```python\n(.*?)```", re.DOTALL)
 
 
