@@ -233,6 +233,9 @@ Requirements: stable Rust (edition 2024, MSRV 1.88), Python >= 3.10, and
   lattice whose laws are property-tested in both Rust and Python, and a
   law-justified `simplify` reduces a schema without changing its value set.
   *(In place.)*
+- **Immutable and thread-safe.** A compiled validator never mutates after it is
+  built, so one validator can be shared and used from many threads at once,
+  including on free-threaded (no-GIL) CPython. *(In place.)*
 
 ## Contributing
 

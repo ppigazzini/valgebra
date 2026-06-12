@@ -82,12 +82,14 @@ jobs:
 
   python:
     name: python ${{ matrix.python-version }}
-    # 3.15 is a prerelease early-warning lane: it runs but never blocks merges.
-    continue-on-error: ${{ matrix.python-version == '3.15' }}
+    # 3.15 (prerelease) and 3.14t (free-threaded) are early-warning lanes: they
+    # run but never block merges. Free-threaded CPython is a monitoring target
+    # until the references audit calls PyO3 free-threading support stable.
+    continue-on-error: ${{ matrix.python-version == '3.15' || matrix.python-version == '3.14t' }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t", "3.15"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
