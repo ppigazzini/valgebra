@@ -71,12 +71,56 @@ fn validator(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
     Ok(CompiledValidator { schema, literals })
 }
 
+/// The union of the given schemas: a value in at least one of their sets.
+#[pyfunction]
+#[pyo3(signature = (*schemas))]
+fn union(schemas: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
+    combine(schemas, Schema::Union)
+}
+
+/// The intersection of the given schemas: a value in every one of their sets.
+#[pyfunction]
+#[pyo3(signature = (*schemas))]
+fn intersect(schemas: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
+    combine(schemas, Schema::Intersection)
+}
+
+/// The complement of a schema: every value not in its set.
+#[pyfunction]
+fn complement(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
+    let mut literals = Vec::new();
+    let inner = build_schema(schema, &mut literals)?;
+    Ok(CompiledValidator {
+        schema: Schema::Complement(Box::new(inner)),
+        literals,
+    })
+}
+
+/// A pool-free validator wrapping a single atom (the `anything`/`nothing`
+/// lattice bounds).
+fn atom(py: Python<'_>, schema: Schema) -> PyResult<Py<CompiledValidator>> {
+    Py::new(
+        py,
+        CompiledValidator {
+            schema,
+            literals: Vec::new(),
+        },
+    )
+}
+
 /// The `valgebra._valgebra` extension module.
 #[pymodule]
 fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add("ValidationError", module.py().get_type::<ValidationError>())?;
+    let py = module.py();
+    module.add("ValidationError", py.get_type::<ValidationError>())?;
     module.add_class::<CompiledValidator>()?;
     module.add_function(wrap_pyfunction!(validator, module)?)?;
+    module.add_function(wrap_pyfunction!(union, module)?)?;
+    module.add_function(wrap_pyfunction!(intersect, module)?)?;
+    module.add_function(wrap_pyfunction!(complement, module)?)?;
+    // The lattice bounds: top admits every value, bottom admits none.
+    module.add("anything", atom(py, Schema::Anything)?)?;
+    module.add("nothing", atom(py, Schema::Nothing)?)?;
     Ok(())
 }
 
@@ -152,7 +196,33 @@ fn build_schema(obj: &Bound<'_, PyAny>, lits: &mut Vec<Py<PyAny>>) -> PyResult<S
     if let Ok(dict) = obj.cast::<PyDict>() {
         return build_dict(dict, lits);
     }
+
+    // An already-compiled validator composes in: append its pool and shift its
+    // schema's indices past what is already there.
+    if let Ok(compiled) = obj.cast::<CompiledValidator>() {
+        let inner = compiled.get();
+        let pool_offset = lits.len();
+        lits.extend(inner.literals.iter().map(|o| o.clone_ref(py)));
+        return Ok(inner.schema.shifted(pool_offset));
+    }
+
     Ok(Schema::Literal(intern(lits, obj)))
+}
+
+/// Compile arguments into one shared pool and combine them with `make`.
+fn combine(
+    args: &Bound<'_, PyTuple>,
+    make: impl FnOnce(Vec<Schema>) -> Schema,
+) -> PyResult<CompiledValidator> {
+    let mut literals = Vec::new();
+    let mut members = Vec::with_capacity(args.len());
+    for arg in args.iter() {
+        members.push(build_schema(&arg, &mut literals)?);
+    }
+    Ok(CompiledValidator {
+        schema: make(members),
+        literals,
+    })
 }
 
 /// Build the schema for a Python type object (a builtin, `TypedDict`, `Enum`,
@@ -552,6 +622,8 @@ fn check(
         Schema::Mapping { key, value: val } => check_mapping(key, val, value, path, pool),
         Schema::Record { fields } => check_record(fields, value, path, pool),
         Schema::Union(members) => check_union(members, value, path, pool),
+        Schema::Intersection(members) => check_intersection(members, value, path, pool),
+        Schema::Complement(inner) => check_complement(inner, value, path, pool),
         Schema::Instance(index) => check_instance(*index, value, path, pool),
         Schema::Object {
             class_index,
@@ -753,6 +825,40 @@ fn check_union(
         expected: format!("one of: {}", labels.join(", ")),
         value_summary: summarize(value),
     })
+}
+
+fn check_intersection(
+    members: &[Schema],
+    value: &Bound<'_, PyAny>,
+    path: &mut Vec<PathSegment>,
+    pool: &[Py<PyAny>],
+) -> Option<Violation> {
+    // Every member must hold; report the first that fails.
+    for member in members {
+        if let Some(violation) = check(member, value, path, pool) {
+            return Some(violation);
+        }
+    }
+    None
+}
+
+fn check_complement(
+    inner: &Schema,
+    value: &Bound<'_, PyAny>,
+    path: &[PathSegment],
+    pool: &[Py<PyAny>],
+) -> Option<Violation> {
+    // A value that matches the inner schema fails the complement.
+    if is_member(inner, value, pool) {
+        Some(Violation {
+            code: "unexpected_match",
+            path: path.to_vec(),
+            expected: format!("not {}", inner.expected()),
+            value_summary: summarize(value),
+        })
+    } else {
+        None
+    }
 }
 
 fn admit(
@@ -1096,6 +1202,8 @@ fn render(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>]) -> String {
         Schema::Mapping { key, value } => format!("dict[{}, {}]", r(key), r(value)),
         Schema::Record { fields } => render_record(py, fields, pool),
         Schema::Union(members) => members.iter().map(&r).collect::<Vec<_>>().join(" | "),
+        Schema::Intersection(members) => format!("intersect({})", kids(members)),
+        Schema::Complement(inner) => format!("complement({})", r(inner)),
         Schema::Instance(i) | Schema::Object { class_index: i, .. } => {
             pool_class_name(py, pool, *i)
         }

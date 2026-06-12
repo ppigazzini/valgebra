@@ -98,6 +98,12 @@ pub enum Schema {
     /// Denotes the union of the member sets: a value is a member iff it belongs
     /// to at least one member schema.
     Union(Vec<Schema>),
+    /// Denotes the intersection of the member sets: a value is a member iff it
+    /// belongs to every member schema.
+    Intersection(Vec<Schema>),
+    /// Denotes the complement of the inner set: a value is a member iff it is
+    /// not a member of the inner schema.
+    Complement(Box<Schema>),
     /// Denotes instances of a class, by `isinstance`. The class is held in the
     /// validator's object pool; the payload is its index.
     Instance(usize),
@@ -177,6 +183,8 @@ impl Schema {
             Schema::FrozenSet(_) => "frozenset",
             Schema::Mapping { .. } | Schema::Record { .. } => "dict",
             Schema::Union(_) => "union",
+            Schema::Intersection(_) => "intersection",
+            Schema::Complement(_) => "complement",
             // The py layer renders the concrete class name; these are fallbacks.
             Schema::Instance(_) => "instance",
             Schema::Object { .. } => "object",
@@ -206,8 +214,84 @@ impl Schema {
             Schema::FrozenSet(_) => "frozenset_type",
             Schema::Mapping { .. } | Schema::Record { .. } => "dict_type",
             Schema::Union(_) => "union_error",
+            Schema::Intersection(_) => "intersection_error",
+            Schema::Complement(_) => "unexpected_match",
             Schema::Instance(_) | Schema::Object { .. } => "instance_type",
             Schema::Refine { base, .. } => base.error_code(),
+        }
+    }
+
+    /// Return a copy with every pool index shifted by `pool`.
+    ///
+    /// Used when composing two compiled validators: their constants pools are
+    /// concatenated, so the second schema's `Literal`/`Instance`/`Object`/
+    /// `Refine` indices move past the first pool's length.
+    #[must_use]
+    pub fn shifted(&self, pool: usize) -> Schema {
+        match self {
+            Schema::Anything
+            | Schema::Any
+            | Schema::Nothing
+            | Schema::NoneType
+            | Schema::Bool
+            | Schema::Int
+            | Schema::Float
+            | Schema::Str
+            | Schema::Bytes => self.clone(),
+            Schema::Literal(i) => Schema::Literal(i + pool),
+            Schema::Instance(i) => Schema::Instance(i + pool),
+            Schema::Sequence(e) => Schema::Sequence(Box::new(e.shifted(pool))),
+            Schema::VariadicTuple(e) => Schema::VariadicTuple(Box::new(e.shifted(pool))),
+            Schema::Set(e) => Schema::Set(Box::new(e.shifted(pool))),
+            Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.shifted(pool))),
+            Schema::Complement(e) => Schema::Complement(Box::new(e.shifted(pool))),
+            Schema::Tuple(es) => Schema::Tuple(es.iter().map(|s| s.shifted(pool)).collect()),
+            Schema::Union(es) => Schema::Union(es.iter().map(|s| s.shifted(pool)).collect()),
+            Schema::Intersection(es) => {
+                Schema::Intersection(es.iter().map(|s| s.shifted(pool)).collect())
+            }
+            Schema::Mapping { key, value } => Schema::Mapping {
+                key: Box::new(key.shifted(pool)),
+                value: Box::new(value.shifted(pool)),
+            },
+            Schema::Record { fields } => Schema::Record {
+                fields: fields.iter().map(|f| f.shifted(pool)).collect(),
+            },
+            Schema::Object {
+                class_index,
+                fields,
+            } => Schema::Object {
+                class_index: class_index + pool,
+                fields: fields.iter().map(|f| f.shifted(pool)).collect(),
+            },
+            Schema::Refine { base, constraints } => Schema::Refine {
+                base: Box::new(base.shifted(pool)),
+                constraints: constraints.iter().map(|c| c.shifted(pool)).collect(),
+            },
+        }
+    }
+}
+
+impl Field {
+    fn shifted(&self, pool: usize) -> Field {
+        Field {
+            name: self.name.clone(),
+            schema: self.schema.shifted(pool),
+            required: self.required,
+        }
+    }
+}
+
+impl Constraint {
+    fn shifted(&self, pool: usize) -> Constraint {
+        match self {
+            Constraint::Ge(i) => Constraint::Ge(i + pool),
+            Constraint::Gt(i) => Constraint::Gt(i + pool),
+            Constraint::Le(i) => Constraint::Le(i + pool),
+            Constraint::Lt(i) => Constraint::Lt(i + pool),
+            Constraint::MinLen(n) => Constraint::MinLen(*n),
+            Constraint::MaxLen(n) => Constraint::MaxLen(*n),
+            Constraint::Predicate(i) => Constraint::Predicate(i + pool),
         }
     }
 }
