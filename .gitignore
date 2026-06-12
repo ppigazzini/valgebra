@@ -22,6 +22,9 @@ __pycache__/
 # maturin / wheel intermediates
 /wheels/
 
+# Built documentation site
+/site/
+
 # Tool caches
 .pytest_cache/
 .ruff_cache/

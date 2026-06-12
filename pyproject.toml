@@ -47,6 +47,13 @@ bench = [
     "pydantic>=2",
     "jsonschema>=4",
 ]
+# Documentation-site tools: the MkDocs Material site and the mkdocstrings API
+# reference generator. Never runtime dependencies.
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+]
 
 [tool.maturin]
 python-source = "python"

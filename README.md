@@ -2,6 +2,8 @@
 
 **Fast runtime validation through a complete Boolean algebra of schemas.**
 
+📖 **Documentation: <https://ppigazzini.github.io/valgebra/>**
+
 A schema denotes a *set of Python values*. Validation is membership: `validate`
 checks whether the object you already hold belongs to the set — no copy, no
 coercion. Schemas compile once into a Rust validator tree and the hot path
