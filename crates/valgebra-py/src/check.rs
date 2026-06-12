@@ -50,6 +50,7 @@ pub(crate) fn check(
         Schema::Bytes => admit(value.is_instance_of::<PyBytes>(), schema, value, path),
         Schema::Literal(index) => check_literal(*index, value, path, ctx),
         Schema::Sequence(element) => check_sequence(element, value, path, ctx),
+        Schema::FixedSequence(elements) => check_fixed_sequence(elements, value, path, ctx),
         Schema::Tuple(elements) => check_tuple(elements, value, path, ctx),
         Schema::VariadicTuple(element) => check_variadic_tuple(element, value, path, ctx),
         Schema::Set(element) => check_set(element, value, path, ctx),
@@ -98,6 +99,13 @@ pub(crate) fn matches(schema: &Schema, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -
         Schema::Sequence(e) => value
             .cast::<PyList>()
             .is_ok_and(|list| list.iter().all(|item| matches(e, &item, ctx))),
+        Schema::FixedSequence(es) => value.cast::<PyList>().is_ok_and(|list| {
+            list.len() == es.len()
+                && es
+                    .iter()
+                    .zip(list.iter())
+                    .all(|(s, item)| matches(s, &item, ctx))
+        }),
         Schema::Tuple(es) => value.cast::<PyTuple>().is_ok_and(|tuple| {
             tuple.len() == es.len()
                 && es
@@ -545,6 +553,34 @@ fn check_sequence(
     for (index, item) in list.iter().enumerate() {
         path.push(PathSegment::Index(index));
         let result = check(element, &item, path, ctx);
+        path.pop();
+        if result.is_some() {
+            return result;
+        }
+    }
+    None
+}
+
+fn check_fixed_sequence(
+    elements: &[Schema],
+    value: &Bound<'_, PyAny>,
+    path: &mut Vec<PathSegment>,
+    ctx: Ctx<'_>,
+) -> Option<Violation> {
+    let Ok(list) = value.cast::<PyList>() else {
+        return Some(type_mismatch("list_type", "list", value, path));
+    };
+    if list.len() != elements.len() {
+        return Some(Violation {
+            code: "list_length",
+            path: path.clone(),
+            expected: format!("list of length {}", elements.len()),
+            value_summary: summarize(value),
+        });
+    }
+    for (index, (schema, item)) in elements.iter().zip(list.iter()).enumerate() {
+        path.push(PathSegment::Index(index));
+        let result = check(schema, &item, path, ctx);
         path.pop();
         if result.is_some() {
             return result;

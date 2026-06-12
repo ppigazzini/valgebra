@@ -157,6 +157,14 @@ fn intersect(schemas: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
     combine(schemas, Schema::Intersection)
 }
 
+/// A fixed-length list matched positionally: element `i` must satisfy the `i`th
+/// member schema, and the list length must equal the number of members.
+#[pyfunction]
+#[pyo3(signature = (*members))]
+fn fixed_sequence(members: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
+    combine(members, Schema::FixedSequence)
+}
+
 /// The complement of a schema: every value not in its set.
 #[pyfunction]
 fn complement(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
@@ -205,6 +213,7 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(union, module)?)?;
     module.add_function(wrap_pyfunction!(intersect, module)?)?;
     module.add_function(wrap_pyfunction!(complement, module)?)?;
+    module.add_function(wrap_pyfunction!(fixed_sequence, module)?)?;
     module.add_function(wrap_pyfunction!(simplify, module)?)?;
     module.add_function(wrap_pyfunction!(lazy, module)?)?;
     // The lattice bounds: top admits every value, bottom admits none.

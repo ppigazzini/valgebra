@@ -32,6 +32,7 @@ pub(crate) fn render(
         Schema::Bytes => "bytes".to_owned(),
         Schema::Literal(i) => format!("Literal[{}]", pool_repr(py, pool, *i)),
         Schema::Sequence(e) => format!("list[{}]", r(e)),
+        Schema::FixedSequence(es) => format!("[{}]", kids(es)),
         Schema::Tuple(es) => format!("tuple[{}]", kids(es)),
         Schema::VariadicTuple(e) => format!("tuple[{}, ...]", r(e)),
         Schema::Set(e) => format!("set[{}]", r(e)),

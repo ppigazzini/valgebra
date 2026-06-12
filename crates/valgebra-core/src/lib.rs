@@ -93,6 +93,9 @@ pub enum Schema {
     Literal(usize),
     /// Denotes lists whose every element belongs to the inner schema.
     Sequence(Box<Schema>),
+    /// Denotes lists matched positionally at exactly this length (the list
+    /// analogue of [`Schema::Tuple`]): element `i` must belong to member `i`.
+    FixedSequence(Vec<Schema>),
     /// Denotes tuples matched positionally at exactly this length.
     Tuple(Vec<Schema>),
     /// Denotes tuples of any length whose every element belongs to the inner
@@ -207,7 +210,7 @@ impl Schema {
             Schema::Bytes => "bytes",
             // The py layer renders the concrete constant; this is a fallback.
             Schema::Literal(_) => "literal",
-            Schema::Sequence(_) => "list",
+            Schema::Sequence(_) | Schema::FixedSequence(_) => "list",
             Schema::Tuple(_) | Schema::VariadicTuple(_) => "tuple",
             Schema::Set(_) => "set",
             Schema::FrozenSet(_) => "frozenset",
@@ -241,7 +244,7 @@ impl Schema {
             Schema::Str => "string_type",
             Schema::Bytes => "bytes_type",
             Schema::Literal(_) => "literal_value",
-            Schema::Sequence(_) => "list_type",
+            Schema::Sequence(_) | Schema::FixedSequence(_) => "list_type",
             Schema::Tuple(_) | Schema::VariadicTuple(_) => "tuple_type",
             Schema::Set(_) => "set_type",
             Schema::FrozenSet(_) => "frozenset_type",
@@ -284,6 +287,9 @@ impl Schema {
             Schema::Set(e) => Schema::Set(Box::new(e.shifted(pool, defs))),
             Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.shifted(pool, defs))),
             Schema::Complement(e) => Schema::Complement(Box::new(e.shifted(pool, defs))),
+            Schema::FixedSequence(es) => {
+                Schema::FixedSequence(es.iter().map(|s| s.shifted(pool, defs)).collect())
+            }
             Schema::Tuple(es) => Schema::Tuple(es.iter().map(|s| s.shifted(pool, defs)).collect()),
             Schema::Union(es) => Schema::Union(es.iter().map(|s| s.shifted(pool, defs)).collect()),
             Schema::Intersection(es) => {
@@ -322,6 +328,7 @@ impl Schema {
             Schema::Set(e) => Schema::Set(Box::new(recur(e))),
             Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(recur(e))),
             Schema::Complement(e) => Schema::Complement(Box::new(recur(e))),
+            Schema::FixedSequence(es) => Schema::FixedSequence(es.iter().map(recur).collect()),
             Schema::Tuple(es) => Schema::Tuple(es.iter().map(recur).collect()),
             Schema::Union(es) => Schema::Union(es.iter().map(recur).collect()),
             Schema::Intersection(es) => Schema::Intersection(es.iter().map(recur).collect()),
@@ -375,7 +382,9 @@ impl Schema {
             | Schema::VariadicTuple(e)
             | Schema::Set(e)
             | Schema::FrozenSet(e) => e.occurs_unguarded(target, true),
-            Schema::Tuple(es) => es.iter().any(|s| s.occurs_unguarded(target, true)),
+            Schema::FixedSequence(es) | Schema::Tuple(es) => {
+                es.iter().any(|s| s.occurs_unguarded(target, true))
+            }
             Schema::Mapping { key, value } => {
                 key.occurs_unguarded(target, true) || value.occurs_unguarded(target, true)
             }
@@ -408,6 +417,9 @@ impl Schema {
             Schema::VariadicTuple(e) => Schema::VariadicTuple(Box::new(e.simplify())),
             Schema::Set(e) => Schema::Set(Box::new(e.simplify())),
             Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.simplify())),
+            Schema::FixedSequence(es) => {
+                Schema::FixedSequence(es.iter().map(Schema::simplify).collect())
+            }
             Schema::Tuple(es) => Schema::Tuple(es.iter().map(Schema::simplify).collect()),
             Schema::Mapping { key, value } => Schema::Mapping {
                 key: Box::new(key.simplify()),
