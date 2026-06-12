@@ -1,0 +1,130 @@
+# serializer version: 1
+# name: test_structured_error_corpus
+  dict({
+    'aggregated_fields': list([
+      dict({
+        'code': 'int_type',
+        'expected': 'int',
+        'message': "at a: expected int, got 'x' [int_type]",
+        'path': tuple(
+          'a',
+        ),
+        'value': "'x'",
+      }),
+      dict({
+        'code': 'string_type',
+        'expected': 'str',
+        'message': 'at b: expected str, got 1 [string_type]',
+        'path': tuple(
+          'b',
+        ),
+        'value': '1',
+      }),
+      dict({
+        'code': 'int_type',
+        'expected': 'int',
+        'message': "at c: expected int, got 'y' [int_type]",
+        'path': tuple(
+          'c',
+        ),
+        'value': "'y'",
+      }),
+    ]),
+    'closest_branch': list([
+      dict({
+        'code': 'int_type',
+        'expected': 'int',
+        'message': "at a: expected int, got 'x' [int_type]",
+        'path': tuple(
+          'a',
+        ),
+        'value': "'x'",
+      }),
+    ]),
+    'extra_key': list([
+      dict({
+        'code': 'extra_key',
+        'expected': 'no unexpected key',
+        'message': 'at b: expected no unexpected key, got "b" [extra_key]',
+        'path': tuple(
+          'b',
+        ),
+        'value': '"b"',
+      }),
+    ]),
+    'generic_union': list([
+      dict({
+        'code': 'union_error',
+        'expected': 'one of: int, str',
+        'message': 'expected one of: int, str, got 1.5 [union_error]',
+        'path': tuple(
+        ),
+        'value': '1.5',
+      }),
+    ]),
+    'literal_typed_singleton': list([
+      dict({
+        'code': 'literal_value',
+        'expected': 'the literal 1',
+        'message': 'expected the literal 1, got True [literal_value]',
+        'path': tuple(
+        ),
+        'value': 'True',
+      }),
+    ]),
+    'missing_required_key': list([
+      dict({
+        'code': 'missing_key',
+        'expected': 'required key "a"',
+        'message': 'at a: expected required key "a", got missing [missing_key]',
+        'path': tuple(
+          'a',
+        ),
+        'value': 'missing',
+      }),
+    ]),
+    'nested_list': list([
+      dict({
+        'code': 'int_type',
+        'expected': 'int',
+        'message': "at items[1]: expected int, got 'x' [int_type]",
+        'path': tuple(
+          'items',
+          1,
+        ),
+        'value': "'x'",
+      }),
+      dict({
+        'code': 'int_type',
+        'expected': 'int',
+        'message': "at items[2]: expected int, got 'y' [int_type]",
+        'path': tuple(
+          'items',
+          2,
+        ),
+        'value': "'y'",
+      }),
+    ]),
+    'nested_record': list([
+      dict({
+        'code': 'int_type',
+        'expected': 'int',
+        'message': "at age: expected int, got 'old' [int_type]",
+        'path': tuple(
+          'age',
+        ),
+        'value': "'old'",
+      }),
+    ]),
+    'scalar': list([
+      dict({
+        'code': 'int_type',
+        'expected': 'int',
+        'message': "expected int, got 'x' [int_type]",
+        'path': tuple(
+        ),
+        'value': "'x'",
+      }),
+    ]),
+  })
+# ---
