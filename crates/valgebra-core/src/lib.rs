@@ -112,13 +112,18 @@ pub enum Schema {
         /// Schema every value must satisfy.
         value: Box<Schema>,
     },
-    /// Denotes dicts with named fields, closed (strict): a required field's key
-    /// must be present with a matching value; an optional field's value is
-    /// checked only when its key is present; no key outside the declared field
-    /// names is admitted. The empty record denotes only the empty dict.
+    /// Denotes dicts with named fields, closed (strict) by default.
+    ///
+    /// A required field's key must be present with a matching value; an optional
+    /// field's value is checked only when its key is present. When `open` is
+    /// false (the default) no key outside the declared field names is admitted;
+    /// when `open` is true undeclared keys are allowed (the lax variant). The
+    /// empty closed record denotes only the empty dict.
     Record {
         /// The declared fields, in order.
         fields: Vec<Field>,
+        /// Whether keys outside the declared fields are admitted.
+        open: bool,
     },
     /// Denotes the union of the member sets: a value is a member iff it belongs
     /// to at least one member schema.
@@ -299,8 +304,9 @@ impl Schema {
                 key: Box::new(key.shifted(pool, defs)),
                 value: Box::new(value.shifted(pool, defs)),
             },
-            Schema::Record { fields } => Schema::Record {
+            Schema::Record { fields, open } => Schema::Record {
                 fields: fields.iter().map(|f| f.shifted(pool, defs)).collect(),
+                open: *open,
             },
             Schema::Object {
                 class_index,
@@ -336,7 +342,7 @@ impl Schema {
                 key: Box::new(recur(key)),
                 value: Box::new(recur(value)),
             },
-            Schema::Record { fields } => Schema::Record {
+            Schema::Record { fields, open } => Schema::Record {
                 fields: fields
                     .iter()
                     .map(|f| Field {
@@ -345,6 +351,7 @@ impl Schema {
                         required: f.required,
                     })
                     .collect(),
+                open: *open,
             },
             Schema::Object {
                 class_index,
@@ -388,7 +395,7 @@ impl Schema {
             Schema::Mapping { key, value } => {
                 key.occurs_unguarded(target, true) || value.occurs_unguarded(target, true)
             }
-            Schema::Record { fields } | Schema::Object { fields, .. } => fields
+            Schema::Record { fields, .. } | Schema::Object { fields, .. } => fields
                 .iter()
                 .any(|f| f.schema.occurs_unguarded(target, true)),
             // Algebraic combinators do not guard: they pass `guarded` through.
@@ -425,7 +432,7 @@ impl Schema {
                 key: Box::new(key.simplify()),
                 value: Box::new(value.simplify()),
             },
-            Schema::Record { fields } => Schema::Record {
+            Schema::Record { fields, open } => Schema::Record {
                 fields: fields
                     .iter()
                     .map(|f| Field {
@@ -434,6 +441,7 @@ impl Schema {
                         required: f.required,
                     })
                     .collect(),
+                open: *open,
             },
             Schema::Object {
                 class_index,
@@ -457,6 +465,56 @@ impl Schema {
             Schema::Intersection(members) => simplify_intersection(members),
             Schema::Complement(inner) => simplify_complement(inner),
             // Atoms (including Any and Literal/Instance) reduce to themselves.
+            other => other.clone(),
+        }
+    }
+
+    /// Return a copy with every [`Schema::Record`] in the tree set to `open`.
+    ///
+    /// This backs the `lax`/`strict` wrappers: `lax` opens every record in a
+    /// subtree (undeclared keys allowed), `strict` closes them.
+    #[must_use]
+    pub fn with_records_open(&self, open: bool) -> Schema {
+        let recur = |s: &Schema| s.with_records_open(open);
+        let fields_open = |fields: &[Field]| -> Vec<Field> {
+            fields
+                .iter()
+                .map(|f| Field {
+                    name: f.name.clone(),
+                    schema: recur(&f.schema),
+                    required: f.required,
+                })
+                .collect()
+        };
+        match self {
+            Schema::Record { fields, .. } => Schema::Record {
+                fields: fields_open(fields),
+                open,
+            },
+            Schema::Object {
+                class_index,
+                fields,
+            } => Schema::Object {
+                class_index: *class_index,
+                fields: fields_open(fields),
+            },
+            Schema::Sequence(e) => Schema::Sequence(Box::new(recur(e))),
+            Schema::FixedSequence(es) => Schema::FixedSequence(es.iter().map(recur).collect()),
+            Schema::VariadicTuple(e) => Schema::VariadicTuple(Box::new(recur(e))),
+            Schema::Set(e) => Schema::Set(Box::new(recur(e))),
+            Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(recur(e))),
+            Schema::Complement(e) => Schema::Complement(Box::new(recur(e))),
+            Schema::Tuple(es) => Schema::Tuple(es.iter().map(recur).collect()),
+            Schema::Union(es) => Schema::Union(es.iter().map(recur).collect()),
+            Schema::Intersection(es) => Schema::Intersection(es.iter().map(recur).collect()),
+            Schema::Mapping { key, value } => Schema::Mapping {
+                key: Box::new(recur(key)),
+                value: Box::new(recur(value)),
+            },
+            Schema::Refine { base, constraints } => Schema::Refine {
+                base: Box::new(recur(base)),
+                constraints: constraints.clone(),
+            },
             other => other.clone(),
         }
     }
@@ -659,6 +717,7 @@ mod tests {
                         schema: Schema::Int,
                         required: true,
                     }],
+                    open: false,
                 },
                 "dict",
                 "dict_type",
@@ -714,9 +773,34 @@ mod tests {
             key: Box::new(Schema::Str),
             value: Box::new(Schema::Int),
         };
-        let record = Schema::Record { fields: Vec::new() };
+        let record = Schema::Record {
+            fields: Vec::new(),
+            open: false,
+        };
         assert_eq!(mapping.expected(), record.expected());
         assert_eq!(mapping.error_code(), record.error_code());
+    }
+
+    #[test]
+    fn with_records_open_flips_every_record_in_the_tree() {
+        let schema = Schema::Sequence(Box::new(Schema::Record {
+            fields: vec![Field {
+                name: "k".to_owned(),
+                schema: Schema::Int,
+                required: true,
+            }],
+            open: false,
+        }));
+        let Schema::Sequence(inner) = schema.with_records_open(true) else {
+            panic!("shape preserved")
+        };
+        assert!(matches!(*inner, Schema::Record { open: true, .. }));
+        // strict flips it back.
+        let Schema::Sequence(inner) = schema.with_records_open(true).with_records_open(false)
+        else {
+            panic!("shape preserved")
+        };
+        assert!(matches!(*inner, Schema::Record { open: false, .. }));
     }
 
     #[test]

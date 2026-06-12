@@ -6,9 +6,11 @@ from ._valgebra import (
     complement,
     fixed_sequence,
     intersect,
+    lax,
     lazy,
     nothing,
     simplify,
+    strict,
     union,
     validator,
 )
@@ -22,9 +24,11 @@ __all__ = [
     "fixed_sequence",
     "ifthen",
     "intersect",
+    "lax",
     "lazy",
     "nothing",
     "simplify",
+    "strict",
     "union",
     "validator",
 ]

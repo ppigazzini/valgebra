@@ -178,6 +178,32 @@ fn complement(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
     })
 }
 
+/// Open every record in the schema (the lax variant): undeclared keys are
+/// admitted throughout. The pool and definitions are shared unchanged.
+#[pyfunction]
+fn lax(validator: &CompiledValidator, py: Python<'_>) -> CompiledValidator {
+    with_records_open(validator, true, py)
+}
+
+/// Close every record in the schema (the strict variant): only declared keys
+/// are admitted throughout. The pool and definitions are shared unchanged.
+#[pyfunction]
+fn strict(validator: &CompiledValidator, py: Python<'_>) -> CompiledValidator {
+    with_records_open(validator, false, py)
+}
+
+fn with_records_open(
+    validator: &CompiledValidator,
+    open: bool,
+    py: Python<'_>,
+) -> CompiledValidator {
+    CompiledValidator {
+        schema: validator.schema.with_records_open(open),
+        literals: validator.literals.iter().map(|o| o.clone_ref(py)).collect(),
+        definitions: validator.definitions.clone(),
+    }
+}
+
 /// An equivalent validator reduced by the lattice laws: it admits exactly the
 /// same values, in a simpler form. The pool and definitions are shared
 /// unchanged, as simplification only rewrites the schema's structure.
@@ -215,6 +241,8 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(complement, module)?)?;
     module.add_function(wrap_pyfunction!(fixed_sequence, module)?)?;
     module.add_function(wrap_pyfunction!(simplify, module)?)?;
+    module.add_function(wrap_pyfunction!(lax, module)?)?;
+    module.add_function(wrap_pyfunction!(strict, module)?)?;
     module.add_function(wrap_pyfunction!(lazy, module)?)?;
     // The lattice bounds: top admits every value, bottom admits none.
     module.add("anything", atom(py, Schema::Anything)?)?;

@@ -38,7 +38,7 @@ pub(crate) fn render(
         Schema::Set(e) => format!("set[{}]", r(e)),
         Schema::FrozenSet(e) => format!("frozenset[{}]", r(e)),
         Schema::Mapping { key, value } => format!("dict[{}, {}]", r(key), r(value)),
-        Schema::Record { fields } => render_record(py, fields, pool, defs, active),
+        Schema::Record { fields, open } => render_record(py, fields, *open, pool, defs, active),
         Schema::Union(members) => members.iter().map(&r).collect::<Vec<_>>().join(" | "),
         Schema::Intersection(members) => format!("intersect({})", kids(members)),
         Schema::Complement(inner) => format!("complement({})", r(inner)),
@@ -67,11 +67,12 @@ pub(crate) fn render(
 fn render_record(
     py: Python<'_>,
     fields: &[Field],
+    open: bool,
     pool: &[Py<PyAny>],
     defs: &[Schema],
     active: &RefCell<HashSet<usize>>,
 ) -> String {
-    let entries: Vec<String> = fields
+    let mut entries: Vec<String> = fields
         .iter()
         .map(|field| {
             let suffix = if field.required { "" } else { "?" };
@@ -83,6 +84,10 @@ fn render_record(
             )
         })
         .collect();
+    // An open (lax) record admits more keys; show that with a trailing marker.
+    if open {
+        entries.push("...".to_owned());
+    }
     format!("{{{}}}", entries.join(", "))
 }
 

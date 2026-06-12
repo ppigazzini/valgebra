@@ -56,7 +56,7 @@ pub(crate) fn check(
         Schema::Set(element) => check_set(element, value, path, ctx),
         Schema::FrozenSet(element) => check_frozenset(element, value, path, ctx),
         Schema::Mapping { key, value: val } => check_mapping(key, val, value, path, ctx),
-        Schema::Record { fields } => check_record(fields, value, path, ctx),
+        Schema::Record { fields, open } => check_record(fields, *open, value, path, ctx),
         Schema::Union(members) => check_union(members, value, path, ctx),
         Schema::Intersection(members) => check_intersection(members, value, path, ctx),
         Schema::Complement(inner) => check_complement(inner, value, path, ctx),
@@ -126,7 +126,7 @@ pub(crate) fn matches(schema: &Schema, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -
             dict.iter()
                 .all(|(k, v)| matches(key, &k, ctx) && matches(val, &v, ctx))
         }),
-        Schema::Record { fields } => matches_record(fields, value, ctx),
+        Schema::Record { fields, open } => matches_record(fields, *open, value, ctx),
         Schema::Union(members) => members.iter().any(|m| matches(m, value, ctx)),
         Schema::Intersection(members) => members.iter().all(|m| matches(m, value, ctx)),
         Schema::Complement(inner) => !matches(inner, value, ctx),
@@ -153,7 +153,7 @@ pub(crate) fn matches(schema: &Schema, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -
 
 /// Membership for a record on the fast path: declared fields match and required
 /// keys are present, and no undeclared key is admitted (the record is closed).
-fn matches_record(fields: &[Field], value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> bool {
+fn matches_record(fields: &[Field], open: bool, value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> bool {
     let Ok(dict) = value.cast::<PyDict>() else {
         return false;
     };
@@ -168,6 +168,9 @@ fn matches_record(fields: &[Field], value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> b
             Ok(None) => {}
             Err(_) => return false,
         }
+    }
+    if open {
+        return true;
     }
     let declared: HashSet<&str> = fields.iter().map(|f| f.name.as_str()).collect();
     dict.iter().all(|(key, _)| {
@@ -698,6 +701,7 @@ fn check_mapping(
 
 fn check_record(
     fields: &[Field],
+    open: bool,
     value: &Bound<'_, PyAny>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
@@ -730,7 +734,10 @@ fn check_record(
             Err(_) => return Some(type_mismatch("dict_type", "dict", value, path)),
         }
     }
-    // Closed record: an undeclared key is a failure.
+    // An open (lax) record admits undeclared keys; a closed one rejects them.
+    if open {
+        return None;
+    }
     let declared: HashSet<&str> = fields.iter().map(|field| field.name.as_str()).collect();
     for (key, _) in dict.iter() {
         let key_text = key
