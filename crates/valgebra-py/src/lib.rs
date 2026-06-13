@@ -23,7 +23,7 @@ use pyo3::types::{PyBytes, PyString, PyTuple};
 use valgebra_core::{Schema, fresh_self_token};
 
 use crate::build::{build_schema, combine};
-use crate::check::{Ctx, check, matches};
+use crate::check::{Ctx, member};
 use crate::errors::{into_pyerr, json_invalid_error};
 use crate::input::Value;
 use crate::render::render;
@@ -54,16 +54,18 @@ pub struct CompiledValidator {
 
 impl CompiledValidator {
     /// The read-only walk context: the pool, the definitions, a fresh recursion
-    /// guard, and the fail-fast flag.
+    /// guard, the explain flag, and the fail-fast flag.
     fn context<'a>(
         &'a self,
         guard: &'a RefCell<HashSet<(usize, usize)>>,
+        explain: bool,
         fail_fast: bool,
     ) -> Ctx<'a> {
         Ctx {
             pool: &self.literals,
             defs: &self.definitions,
             guard,
+            explain,
             fail_fast,
         }
     }
@@ -76,10 +78,12 @@ impl CompiledValidator {
             return false;
         };
         let guard = RefCell::new(HashSet::new());
-        matches(
+        member(
             &self.schema,
             &Value::Json(py, &json),
-            self.context(&guard, true),
+            &mut Vec::new(),
+            self.context(&guard, false, true),
+            &mut Vec::new(),
         )
     }
 }
@@ -111,14 +115,14 @@ impl CompiledValidator {
         let guard = RefCell::new(HashSet::new());
         let mut path = Vec::new();
         let mut violations = Vec::new();
-        check(
+        let ok = member(
             &self.schema,
-            obj,
+            &Value::Py(obj),
             &mut path,
-            self.context(&guard, fail_fast),
+            self.context(&guard, true, fail_fast),
             &mut violations,
         );
-        if violations.is_empty() {
+        if ok {
             Ok(())
         } else {
             Err(into_pyerr(obj.py(), &violations))
@@ -137,7 +141,13 @@ impl CompiledValidator {
     ///     `True` if `obj` is a member of the schema's set, else `False`.
     fn is_valid(&self, obj: &Bound<'_, PyAny>) -> bool {
         let guard = RefCell::new(HashSet::new());
-        matches(&self.schema, &Value::Py(obj), self.context(&guard, true))
+        member(
+            &self.schema,
+            &Value::Py(obj),
+            &mut Vec::new(),
+            self.context(&guard, false, true),
+            &mut Vec::new(),
+        )
     }
 
     /// Validate `obj` and return it unchanged.
