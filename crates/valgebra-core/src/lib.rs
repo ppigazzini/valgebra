@@ -925,6 +925,17 @@ impl Schema {
                     regex: rb,
                 },
             ) if ka == kb => ra.regex_subtype(rb),
+            // Record and mapping inclusion.
+            (
+                Schema::KeyedMap {
+                    fields: fa,
+                    defaults: da,
+                },
+                Schema::KeyedMap {
+                    fields: fb,
+                    defaults: db,
+                },
+            ) => keyed_map_subtype(fa, da, fb, db),
             _ => false,
         }
     }
@@ -933,6 +944,37 @@ impl Schema {
     #[must_use]
     pub fn equivalent(&self, other: &Schema) -> bool {
         self.is_subtype(other) && other.is_subtype(self)
+    }
+}
+
+/// Whether keyed-map `a` (fields `fa`, default clauses `da`) is a subtype of
+/// keyed-map `b`. Decided for two shapes, conservative otherwise:
+/// - **Closed records** (no defaults): width and depth — every field of `a` is a
+///   field of `b` with a subtype schema — and required — every field `b` requires
+///   is required in `a`, so a required key is always present.
+/// - **Pure mappings** (no fields, one default clause each): the key and value
+///   schemas covary.
+fn keyed_map_subtype(
+    fa: &[Field],
+    da: &[(Schema, Schema)],
+    fb: &[Field],
+    db: &[(Schema, Schema)],
+) -> bool {
+    if da.is_empty() && db.is_empty() {
+        let width_and_depth = fa.iter().all(|a| {
+            fb.iter()
+                .find(|b| b.name == a.name)
+                .is_some_and(|b| a.schema.is_subtype(&b.schema))
+        });
+        let required = fb
+            .iter()
+            .filter(|b| b.required)
+            .all(|b| fa.iter().any(|a| a.name == b.name && a.required));
+        width_and_depth && required
+    } else if fa.is_empty() && fb.is_empty() && da.len() == 1 && db.len() == 1 {
+        da[0].0.is_subtype(&db[0].0) && da[0].1.is_subtype(&db[0].1)
+    } else {
+        false
     }
 }
 
@@ -1816,6 +1858,50 @@ mod laws {
         );
         // Equivalence between structurally different container schemas.
         assert!(set(Schema::Union(vec![Schema::Bool, Schema::Int])).equivalent(&set(Schema::Int)));
+    }
+
+    #[test]
+    fn decides_record_and_mapping_subtyping() {
+        let field = |name: &str, schema, required| Field {
+            name: name.to_owned(),
+            schema,
+            required,
+        };
+        let record = |fields| Schema::KeyedMap {
+            fields,
+            defaults: Vec::new(),
+        };
+        let mapping = |k, v| Schema::KeyedMap {
+            fields: Vec::new(),
+            defaults: vec![(k, v)],
+        };
+
+        // Width: a closed record with fewer keys is a subtype of one with more.
+        let narrow = record(vec![field("x", Schema::Int, true)]);
+        let wide = record(vec![
+            field("x", Schema::Int, true),
+            field("y", Schema::Str, false),
+        ]);
+        assert!(narrow.is_subtype(&wide));
+        assert!(!wide.is_subtype(&narrow)); // wide admits key y; narrow (closed) forbids it
+        // Depth: shared field schemas covary (bool ⊆ int).
+        assert!(
+            record(vec![field("x", Schema::Bool, true)]).is_subtype(&record(vec![field(
+                "x",
+                Schema::Int,
+                true
+            )]))
+        );
+        // Required: a field the supertype requires must be required in the subtype.
+        let required = record(vec![field("x", Schema::Int, true)]);
+        let optional = record(vec![field("x", Schema::Int, false)]);
+        assert!(required.is_subtype(&optional));
+        assert!(!optional.is_subtype(&required));
+        // Mappings covary in key and value.
+        assert!(mapping(Schema::Str, Schema::Bool).is_subtype(&mapping(Schema::Str, Schema::Int)));
+        assert!(!mapping(Schema::Str, Schema::Int).is_subtype(&mapping(Schema::Str, Schema::Bool)));
+        // A record and a mapping are not compared — conservative.
+        assert!(!narrow.is_subtype(&mapping(Schema::Str, Schema::Int)));
     }
 
     /// A sample value for the subtyping oracle: a scalar, or a set whose element

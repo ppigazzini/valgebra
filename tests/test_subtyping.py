@@ -8,12 +8,21 @@ conservative (it may answer ``False`` for a true relation it cannot prove), so
 completeness is not asserted.
 """
 
+from typing import TypedDict
+
 from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import complement, intersect, union, validator
 
-# Schema specs valgebra compiles, spanning scalars and the structural containers.
+
+class _Point(TypedDict):
+    x: int
+    y: int
+
+
+# Schema specs valgebra compiles, spanning scalars, structural containers, and
+# records and mappings (closed dict-literal records, TypedDicts, and dict[K, V]).
 SPECS = [
     int,
     str,
@@ -29,6 +38,12 @@ SPECS = [
     tuple[int, str],
     tuple[bool, str],
     dict[str, int],
+    dict[str, bool],
+    _Point,
+    {"x": int},
+    {"x": int, "y?": str},
+    {"x?": int},
+    {"x": bool},
 ]
 
 # A value corpus exercising the scalar and container boundaries.
@@ -53,6 +68,11 @@ VALUES = [
     (True, "a"),
     (1, 2),
     {"a": 1},
+    {"x": 1},
+    {"x": 1, "y": 2},
+    {"x": 1, "y": "a"},
+    {"x": True},
+    {},
     object(),
 ]
 
