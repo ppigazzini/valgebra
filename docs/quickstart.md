@@ -119,5 +119,3 @@ users = validator({"name": str, "age?": int})
 users.validate_json('{"name": "Ada", "age": 36}')
 assert validator(list[int]).is_valid_json(b"[1, 2, 3]")
 ```
-
-Next: the [schema language](schema-language.md) covers every form in detail.

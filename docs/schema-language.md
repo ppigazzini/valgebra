@@ -85,8 +85,8 @@ assert validator({str: int}).is_valid({"a": 1})    # dict[str, int]
 assert validator("active").is_valid("active")      # the literal "active"
 ```
 
-A **fixed-length list** matched positionally is built with
-[`fixed_sequence`][valgebra.fixed_sequence]:
+A **fixed-length list** matched positionally is built with `fixed_sequence`
+(see the [API reference](api.md)):
 
 ```python
 from valgebra import fixed_sequence

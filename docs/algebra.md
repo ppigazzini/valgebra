@@ -80,8 +80,8 @@ assert not shape.is_valid(1.5)  # matches no case, falls to the default
 
 ## The simplifier
 
-[`simplify`][valgebra.simplify] reduces a schema by the lattice laws while
-admitting **exactly the same values**. It flattens nested unions and
+`simplify` reduces a schema by the lattice laws while admitting **exactly the
+same values**. It flattens nested unions and
 intersections, drops duplicates and identities, and pushes complements to
 negation-normal form:
 

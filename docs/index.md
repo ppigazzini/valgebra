@@ -50,7 +50,7 @@ schemas (union, intersection, complement, refinement, fixpoints) with
   equivalence is mutual inclusion. The whole model is one idea.
 - **A real Boolean algebra.** `union`, `intersect`, and `complement` compose any
   schema into a lattice whose laws are property-tested, with a law-justified
-  [`simplify`][valgebra.simplify] that never changes a schema's value set.
+  [simplifier](algebra.md) that never changes a schema's value set.
 - **Typing-first.** Standard annotations are the primary notation, read through
   the typing spec's own introspection.
 - **Check, don't parse.** `validate` and `is_valid` never copy or coerce; `cast`

@@ -35,10 +35,16 @@ create_exception!(
     "Raised when a value is not a member of a schema's set."
 );
 
-/// An immutable compiled validator: a schema IR, the constants pool its
-/// literals index into, and the recursive definitions its `Ref`s resolve
-/// against. Building one compiles the schema; the validator itself never
-/// mutates.
+/// A compiled, immutable schema validator.
+///
+/// Build one with `validator`, or with a combinator such as `union`,
+/// `intersect`, or `lazy`. Then check values with `validate`, `is_valid`, or
+/// `cast`, and JSON documents with `validate_json` or `is_valid_json`.
+///
+/// Validation is a membership test against the set the schema denotes: the value
+/// is never copied or coerced. A validator never changes after it is built and
+/// is safe to share across threads. Its `repr` is the annotation that produces
+/// it, and it can be copied with `copy.copy`/`copy.deepcopy`.
 #[pyclass(frozen, module = "valgebra._valgebra")]
 pub struct CompiledValidator {
     pub(crate) schema: Schema,
@@ -78,13 +84,28 @@ impl CompiledValidator {
     }
 }
 
+// These doc comments are the Python API reference (rendered by mkdocstrings),
+// written in Google docstring style: the `Args:`/`Returns:`/`Raises:` sections
+// must name parameters and exceptions as bare identifiers for the reference to
+// parse them, which is exactly what clippy's doc_markdown wants backticked.
+// Python documentation conventions win here over the Rust-doc lint.
+#[allow(clippy::doc_markdown)]
 #[pymethods]
 impl CompiledValidator {
-    /// Raise [`ValidationError`] if `obj` is not a member of the schema's set;
-    /// return `None` otherwise. Check-only: the object is not copied or coerced.
+    /// Validate `obj`, raising `ValidationError` if it is not a member of the
+    /// schema's set. Check-only: `obj` is never copied or coerced.
     ///
-    /// By default every independent failure is aggregated into the raised
-    /// error's `errors`; `fail_fast=True` stops at the first failure.
+    /// Args:
+    ///     obj: The object to check.
+    ///     fail_fast: Stop at the first failure instead of aggregating every
+    ///         independent failure into the error.
+    ///
+    /// Returns:
+    ///     `None` if `obj` is a member of the schema's set.
+    ///
+    /// Raises:
+    ///     ValidationError: If `obj` is not a member; its `errors` lists each
+    ///         failure with a code and a path.
     #[pyo3(signature = (obj, *, fail_fast = false))]
     fn validate(&self, obj: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
         let guard = RefCell::new(HashSet::new());
@@ -104,40 +125,77 @@ impl CompiledValidator {
         }
     }
 
-    /// Whether `obj` belongs to the schema's set. Check-only, returns a bool via
-    /// the membership fast path.
+    /// Whether `obj` is a member of the schema's set.
+    ///
+    /// Check-only and never raises. This is the fast path: it returns as soon as
+    /// membership is decided, without building an error.
+    ///
+    /// Args:
+    ///     obj: The object to check.
+    ///
+    /// Returns:
+    ///     `True` if `obj` is a member of the schema's set, else `False`.
     fn is_valid(&self, obj: &Bound<'_, PyAny>) -> bool {
         let guard = RefCell::new(HashSet::new());
         matches(&self.schema, &Value::Py(obj), self.context(&guard, true))
     }
 
-    /// Validate `obj` and return it unchanged. The explicit conversion mode:
-    /// validation is a membership check, so the returned object is the input.
+    /// Validate `obj` and return it unchanged.
+    ///
+    /// The explicit conversion entry point. Because validation is a membership
+    /// check rather than a coercion, the returned object is exactly the input;
+    /// `cast` exists so converting code reads distinctly from checking code.
+    ///
+    /// Args:
+    ///     obj: The object to check.
+    ///
+    /// Returns:
+    ///     `obj` unchanged.
+    ///
+    /// Raises:
+    ///     ValidationError: If `obj` is not a member of the schema's set.
     fn cast<'py>(&self, obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         self.validate(obj, false)?;
         Ok(obj.clone())
     }
 
-    /// Parse `data` (a JSON `str` or `bytes`) on the Rust path and validate the
-    /// result, raising [`ValidationError`] if the JSON is malformed or the parsed
-    /// value is not a member of the schema's set; return `None` otherwise.
+    /// Validate a JSON document, parsing it on the Rust path.
     ///
-    /// Parsing runs in Rust (faster than the standard library's parser) and the
-    /// parsed value runs the *same* validation walk as a native object, so the
-    /// JSON path and the object path reach identical decisions and identical
-    /// errors. Aggregation and `fail_fast` behave as for [`Self::validate`].
+    /// Parsing runs in Rust, faster than the standard library, and the parsed
+    /// value runs the same validation walk as a native object, so this reaches
+    /// the same decision and the same errors as `validate` on the parsed object.
+    /// `fail_fast` behaves as it does for `validate`.
+    ///
+    /// Args:
+    ///     data: The JSON document, as `str` or `bytes`.
+    ///     fail_fast: Stop at the first failure instead of aggregating.
+    ///
+    /// Returns:
+    ///     `None` if the document parses and is a member of the schema's set.
+    ///
+    /// Raises:
+    ///     ValidationError: If the document is malformed JSON (code
+    ///         `json_invalid`) or is not a member of the schema's set.
+    ///     TypeError: If `data` is not `str` or `bytes`.
     #[pyo3(signature = (data, *, fail_fast = false))]
     fn validate_json(&self, data: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
         let parsed = parse_json(data)?;
         self.validate(&parsed, fail_fast)
     }
 
-    /// Whether `data` (a JSON `str` or `bytes`) parses and its value belongs to
-    /// the schema's set. Check-only and never raises: malformed JSON is not a
-    /// member, so it returns `False` like any other non-member.
+    /// Whether a JSON document parses and is a member of the schema's set.
     ///
-    /// The JSON is validated in place against the parsed value, with no
+    /// Check-only and never raises: malformed JSON, or input that is neither
+    /// `str` nor `bytes`, is simply not a member and returns `False`. The
+    /// document is validated in place against the parsed value, with no
     /// intermediate Python objects for the structure it walks.
+    ///
+    /// Args:
+    ///     data: The JSON document, as `str` or `bytes`.
+    ///
+    /// Returns:
+    ///     `True` if `data` parses and is a member of the schema's set, else
+    ///     `False`.
     fn is_valid_json(&self, data: &Bound<'_, PyAny>) -> bool {
         let py = data.py();
         if let Ok(text) = data.cast::<PyString>() {
@@ -180,7 +238,7 @@ impl CompiledValidator {
 /// jiter's defaults match the standard JSON model: standard `float`s, no
 /// `Infinity`/`NaN`, and complete (non-partial) input — so the parsed value is
 /// what the object path would receive from `json.loads`. A parse failure is
-/// surfaced as a structured `json_invalid` [`ValidationError`]; a non-string,
+/// surfaced as a structured `json_invalid` `ValidationError`; a non-string,
 /// non-bytes argument is a `TypeError`.
 fn parse_json<'py>(data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py = data.py();
@@ -202,7 +260,26 @@ fn parse_json<'py>(data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     }
 }
 
-/// Compile `schema` into an immutable [`CompiledValidator`].
+/// Compile a schema into a reusable validator.
+///
+/// The schema is any supported form: a type or typing annotation (`int`,
+/// `list[str]`, `int | None`, `Literal[...]`, a `TypedDict`, a dataclass, an
+/// `Annotated` refinement, ...), a native form (a `[T]` list, a `{T}` set, a
+/// `{K: V}` mapping, an all-string-key dict record, or any constant as a
+/// literal), or another compiled validator.
+///
+/// Args:
+///     schema: The schema to compile.
+///
+/// Returns:
+///     An immutable `CompiledValidator` for the schema.
+///
+/// Raises:
+///     NotImplementedError: If the schema uses an unsupported form (for
+///         example a recursive class, which must be written with `lazy`).
+// Google-style docstring for the Python API reference; see the note on the
+// CompiledValidator impl above.
+#[allow(clippy::doc_markdown)]
 #[pyfunction]
 fn validator(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
     let mut literals = Vec::new();
@@ -290,15 +367,17 @@ fn complement(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
     })
 }
 
-/// Open every record in the schema (the lax variant): undeclared keys are
-/// admitted throughout. The pool and definitions are shared unchanged.
+/// Open every record in a schema: undeclared keys are admitted throughout.
+///
+/// Returns a new validator; the original is unchanged.
 #[pyfunction]
 fn lax(validator: &CompiledValidator, py: Python<'_>) -> CompiledValidator {
     with_records_open(validator, true, py)
 }
 
-/// Close every record in the schema (the strict variant): only declared keys
-/// are admitted throughout. The pool and definitions are shared unchanged.
+/// Close every record in a schema: only declared keys are admitted throughout.
+///
+/// The inverse of `lax`. Returns a new validator; the original is unchanged.
 #[pyfunction]
 fn strict(validator: &CompiledValidator, py: Python<'_>) -> CompiledValidator {
     with_records_open(validator, false, py)
@@ -316,9 +395,11 @@ fn with_records_open(
     }
 }
 
-/// An equivalent validator reduced by the lattice laws: it admits exactly the
-/// same values, in a simpler form. The pool and definitions are shared
-/// unchanged, as simplification only rewrites the schema's structure.
+/// An equivalent validator reduced by the lattice laws.
+///
+/// The result admits exactly the same values in a simpler form (flattened and
+/// deduplicated unions and intersections, identities applied, complements in
+/// negation-normal form). Returns a new validator; the original is unchanged.
 #[pyfunction]
 fn simplify(validator: &CompiledValidator, py: Python<'_>) -> CompiledValidator {
     CompiledValidator {
