@@ -723,6 +723,114 @@ impl Schema {
             other => other.clone(),
         }
     }
+
+    /// Whether this schema and `other` are *provably* disjoint: no value belongs
+    /// to both. Sound, not complete — it returns true only when the concrete
+    /// types cannot overlap (distinct builtin scalars, distinct container kinds,
+    /// a refinement's base versus another), and false (conservatively) for the
+    /// cases it cannot decide in the core: `Literal` and `Instance` (a class may
+    /// subclass a builtin), `Any`, references, and combinators.
+    #[must_use]
+    pub fn disjoint(&self, other: &Schema) -> bool {
+        if matches!(self, Schema::Nothing) || matches!(other, Schema::Nothing) {
+            return true;
+        }
+        match (self.type_tag(), other.type_tag()) {
+            // Distinct concrete types are disjoint, except bool ⊆ int.
+            (Some(a), Some(b)) => {
+                a != b
+                    && !matches!(
+                        (a, b),
+                        (TypeTag::Bool, TypeTag::Int) | (TypeTag::Int, TypeTag::Bool)
+                    )
+            }
+            _ => false,
+        }
+    }
+
+    /// A concrete type tag for nodes whose disjointness the core can decide
+    /// soundly. `None` for nodes it cannot (`Literal`/`Instance`/`Any`/...).
+    fn type_tag(&self) -> Option<TypeTag> {
+        Some(match self {
+            Schema::NoneType => TypeTag::NoneType,
+            Schema::Bool => TypeTag::Bool,
+            Schema::Int => TypeTag::Int,
+            Schema::Float => TypeTag::Float,
+            Schema::Str => TypeTag::Str,
+            Schema::Bytes => TypeTag::Bytes,
+            Schema::Seq {
+                container: SeqKind::List,
+                ..
+            } => TypeTag::List,
+            Schema::Seq {
+                container: SeqKind::Tuple,
+                ..
+            } => TypeTag::Tuple,
+            Schema::Set(_) => TypeTag::Set,
+            Schema::FrozenSet(_) => TypeTag::FrozenSet,
+            Schema::KeyedMap { .. } => TypeTag::Dict,
+            // A refinement is a subset of its base, so its base's disjointness
+            // is sound for it.
+            Schema::Refine { base, .. } => return base.type_tag(),
+            _ => return None,
+        })
+    }
+}
+
+/// A concrete runtime type, for the sound fragment of disjointness.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TypeTag {
+    NoneType,
+    Bool,
+    Int,
+    Float,
+    Str,
+    Bytes,
+    List,
+    Tuple,
+    Set,
+    FrozenSet,
+    Dict,
+}
+
+/// Whether the members contain a schema and its complement — `X` and `¬X` — so
+/// the intersection is empty (`X ∩ ¬X = ⊥`) or the union is everything
+/// (`X ∪ ¬X = ⊤`). The gradual `Any` is excluded: `Any ∩ ¬Any` must not
+/// collapse, preserving "deliberately unchecked".
+fn has_complementary_pair(members: &[Schema]) -> bool {
+    members.iter().any(|member| {
+        if let Schema::Complement(inner) = member {
+            !matches!(**inner, Schema::Any) && members.iter().any(|other| other == &**inner)
+        } else {
+            false
+        }
+    })
+}
+
+/// Whether two members are provably disjoint, so their intersection is empty.
+fn has_disjoint_pair(members: &[Schema]) -> bool {
+    members
+        .iter()
+        .enumerate()
+        .any(|(i, a)| members[i + 1..].iter().any(|b| a.disjoint(b)))
+}
+
+/// Whether two members are the complements of disjoint schemas, so the union is
+/// everything: `¬A ∪ ¬B = ¬(A ∩ B) = ⊤` when `A` and `B` are disjoint. This is
+/// the De Morgan dual of [`has_disjoint_pair`], so the two simplifiers stay
+/// consistent under negation.
+fn has_disjoint_complement_pair(members: &[Schema]) -> bool {
+    let inners: Vec<&Schema> = members
+        .iter()
+        .filter_map(|m| match m {
+            Schema::Complement(inner) => Some(inner.as_ref()),
+            _ => None,
+        })
+        .collect();
+    inners
+        .iter()
+        .enumerate()
+        .any(|(i, a)| inners[i + 1..].iter().any(|b| a.disjoint(b)))
 }
 
 /// Flatten, absorb the top, drop the bottom, dedup, and collapse a union.
@@ -738,6 +846,10 @@ fn simplify_union(members: &[Schema]) -> Schema {
     }
     flat.sort();
     flat.dedup();
+    // X ∪ ¬X is everything, as is ¬A ∪ ¬B for disjoint A and B.
+    if has_complementary_pair(&flat) || has_disjoint_complement_pair(&flat) {
+        return Schema::Anything;
+    }
     match flat.len() {
         0 => Schema::Nothing,
         1 => flat.swap_remove(0),
@@ -758,6 +870,10 @@ fn simplify_intersection(members: &[Schema]) -> Schema {
     }
     flat.sort();
     flat.dedup();
+    // X ∩ ¬X is empty, as is an intersection of two provably disjoint members.
+    if has_complementary_pair(&flat) || has_disjoint_pair(&flat) {
+        return Schema::Nothing;
+    }
     match flat.len() {
         0 => Schema::Anything,
         1 => flat.swap_remove(0),
@@ -1210,6 +1326,73 @@ mod tests {
             panic!("shape preserved")
         };
         assert!(matches!(defaults[0].1, Schema::Ref(3)));
+    }
+
+    fn not(s: Schema) -> Schema {
+        Schema::Complement(Box::new(s))
+    }
+
+    #[test]
+    fn simplify_decides_the_complement_laws() {
+        // X ∩ ¬X = ⊥ and X ∪ ¬X = ⊤.
+        assert_eq!(
+            Schema::Intersection(vec![Schema::Int, not(Schema::Int)]).simplify(),
+            Schema::Nothing
+        );
+        assert_eq!(
+            Schema::Union(vec![Schema::Int, not(Schema::Int)]).simplify(),
+            Schema::Anything
+        );
+        // Disjoint basics and disjoint container kinds give an empty intersection.
+        assert_eq!(
+            Schema::Intersection(vec![Schema::Int, Schema::Str]).simplify(),
+            Schema::Nothing
+        );
+        assert_eq!(
+            Schema::Intersection(vec![
+                Schema::list(SeqRegex::homogeneous(Schema::Int)),
+                Schema::Set(Box::new(Schema::Int)),
+            ])
+            .simplify(),
+            Schema::Nothing
+        );
+        // bool ⊆ int, so their intersection is not empty.
+        assert_ne!(
+            Schema::Intersection(vec![Schema::Bool, Schema::Int]).simplify(),
+            Schema::Nothing
+        );
+    }
+
+    #[test]
+    fn simplify_preserves_gradual_any_under_complement() {
+        // The gradual `Any` must not be rewritten by the complement laws.
+        assert_ne!(
+            Schema::Intersection(vec![Schema::Any, not(Schema::Any)]).simplify(),
+            Schema::Nothing
+        );
+        assert_ne!(
+            Schema::Union(vec![Schema::Any, not(Schema::Any)]).simplify(),
+            Schema::Anything
+        );
+    }
+
+    #[test]
+    fn disjoint_is_sound_for_the_decidable_fragment() {
+        assert!(Schema::Int.disjoint(&Schema::Str));
+        assert!(Schema::Int.disjoint(&Schema::Float));
+        assert!(!Schema::Bool.disjoint(&Schema::Int)); // bool is a subtype of int
+        assert!(!Schema::Int.disjoint(&Schema::Int));
+        // Conservative where the core cannot decide soundly.
+        assert!(!Schema::Literal(0).disjoint(&Schema::Int));
+        assert!(!Schema::Instance(0).disjoint(&Schema::Int));
+        assert!(!Schema::Any.disjoint(&Schema::Int));
+        // A refinement is disjoint exactly when its base is.
+        let refined = Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints: vec![Constraint::Ge(0)],
+        };
+        assert!(refined.disjoint(&Schema::Str));
+        assert!(!refined.disjoint(&Schema::Int));
     }
 }
 
