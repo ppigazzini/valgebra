@@ -97,6 +97,31 @@ assert not pair.is_valid([1, 2])
 assert not pair.is_valid([1])  # wrong length
 ```
 
+### Prefix and repeated tail
+
+A list schema is, in general, a **regular expression over element types**: a
+fixed positional prefix followed by an optional repeated tail. A trailing `...`
+repeats the element just before it, so `[T, ...]` (any number of `T`) is the
+prefix-free case.
+
+| Native form | Denotes |
+| --- | --- |
+| `[A, B, ...]` | an `A`, then zero or more `B` |
+| `[T, T, ...]` | a non-empty list of `T` (at least one) |
+
+```python
+from valgebra import validator
+
+prefixed = validator([str, int, ...])  # a str, then zero or more ints
+assert prefixed.is_valid(["x"])
+assert prefixed.is_valid(["x", 1, 2])
+assert not prefixed.is_valid([1])  # the prefix must be a str
+
+non_empty = validator([int, int, ...])  # at least one int
+assert non_empty.is_valid([1])
+assert not non_empty.is_valid([])
+```
+
 ## Literals
 
 `Literal[...]` denotes a typed singleton: a value is a member iff it has the
