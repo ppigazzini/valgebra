@@ -1380,6 +1380,21 @@ mod tests {
     fn disjoint_is_sound_for_the_decidable_fragment() {
         assert!(Schema::Int.disjoint(&Schema::Str));
         assert!(Schema::Int.disjoint(&Schema::Float));
+        // Every concrete tag is disjoint from a distinct one.
+        assert!(Schema::NoneType.disjoint(&Schema::Int));
+        assert!(Schema::Bytes.disjoint(&Schema::Str));
+        let list_int = Schema::list(SeqRegex::homogeneous(Schema::Int));
+        let tuple_empty = Schema::tuple(SeqRegex::fixed([]));
+        assert!(tuple_empty.disjoint(&list_int)); // tuple vs list
+        assert!(
+            Schema::FrozenSet(Box::new(Schema::Int)).disjoint(&Schema::Set(Box::new(Schema::Int)))
+        );
+        assert!(Schema::mapping(Schema::Str, Schema::Int).disjoint(&Schema::Int)); // dict vs int
+        // Nothing is disjoint from everything.
+        assert!(Schema::Nothing.disjoint(&Schema::Int));
+        assert!(Schema::Int.disjoint(&Schema::Nothing));
+        // Same tag is not disjoint: two list types share the empty list.
+        assert!(!list_int.disjoint(&Schema::list(SeqRegex::homogeneous(Schema::Str))));
         assert!(!Schema::Bool.disjoint(&Schema::Int)); // bool is a subtype of int
         assert!(!Schema::Int.disjoint(&Schema::Int));
         // Conservative where the core cannot decide soundly.
