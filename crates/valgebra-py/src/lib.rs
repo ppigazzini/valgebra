@@ -223,14 +223,15 @@ impl CompiledValidator {
     ///
     /// Decided soundly: `True` only when no value can belong to the schema — an
     /// unsatisfiable intersection, a fixed sequence with an impossible position,
-    /// a record with an impossible required field. It never reports a
-    /// satisfiable schema as empty; for forms it cannot decide it returns
-    /// `False`.
+    /// a record with an impossible required field, or a recursive schema with no
+    /// base case (a mandatory self-reference that can never bottom out). It never
+    /// reports a satisfiable schema as empty; for forms it cannot decide it
+    /// returns `False`.
     ///
     /// Returns:
     ///     `True` if the schema denotes the empty set, else `False`.
     fn is_empty(&self) -> bool {
-        self.schema.is_empty()
+        self.schema.is_empty_under(&self.definitions)
     }
 
     /// Whether every value of this schema is also a value of `other` — set

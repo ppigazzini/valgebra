@@ -231,12 +231,12 @@ impl SeqRegex {
     /// empty; a single element is empty when its schema is; a concatenation is
     /// empty when any part is (every part must be matchable); an alternation is
     /// empty only when every alternative is.
-    fn language_is_empty(&self) -> bool {
+    fn language_is_empty(&self, defs: &[Schema], visiting: &mut Vec<usize>) -> bool {
         match self {
             SeqRegex::Empty | SeqRegex::Star(_) => false,
-            SeqRegex::Elem(schema) => schema.is_empty(),
-            SeqRegex::Cat(parts) => parts.iter().any(SeqRegex::language_is_empty),
-            SeqRegex::Or(parts) => parts.iter().all(SeqRegex::language_is_empty),
+            SeqRegex::Elem(schema) => schema.is_empty_rec(defs, visiting),
+            SeqRegex::Cat(parts) => parts.iter().any(|p| p.language_is_empty(defs, visiting)),
+            SeqRegex::Or(parts) => parts.iter().all(|p| p.language_is_empty(defs, visiting)),
         }
     }
 
@@ -858,17 +858,49 @@ impl Schema {
     /// empties — and sound everywhere else: it never reports a non-empty schema
     /// as empty. A set or frozenset is never empty (the empty collection is
     /// always a member). The gradual `Any`, instances, literals, refinements,
-    /// and recursive references are not decided, so a combination containing one
-    /// is never reported empty.
+    /// and unresolved recursive references are not decided, so a combination
+    /// containing one is never reported empty. To resolve recursive references,
+    /// use [`is_empty_under`](Self::is_empty_under).
     #[must_use]
     pub fn is_empty(&self) -> bool {
+        self.is_empty_under(&[])
+    }
+
+    /// Like [`is_empty`](Self::is_empty), but resolving recursive references
+    /// through `defs`, so an uninhabited recursive schema — a mandatory
+    /// self-reference with no base case — is detected. A reference `defs` does
+    /// not resolve stays conservative (never reported empty).
+    #[must_use]
+    pub fn is_empty_under(&self, defs: &[Schema]) -> bool {
+        self.is_empty_rec(defs, &mut Vec::new())
+    }
+
+    fn is_empty_rec(&self, defs: &[Schema], visiting: &mut Vec<usize>) -> bool {
         match self {
-            Schema::Seq { regex, .. } => regex.language_is_empty(),
-            Schema::Set(_) | Schema::FrozenSet(_) => false,
-            Schema::KeyedMap { fields, .. } => {
-                fields.iter().any(|f| f.required && f.schema.is_empty())
+            Schema::Ref(id) => {
+                // A reference reached again while resolving it is a cycle: this
+                // occurrence demands an infinite unfolding, so on its own it has
+                // no finite inhabitant. A union base case or an optional or
+                // starred position escapes before reaching here.
+                if visiting.contains(id) {
+                    return true;
+                }
+                match defs.get(*id) {
+                    Some(def) => {
+                        visiting.push(*id);
+                        let empty = def.is_empty_rec(defs, visiting);
+                        visiting.pop();
+                        empty
+                    }
+                    None => false,
+                }
             }
-            Schema::Union(members) => members.iter().all(Schema::is_empty),
+            Schema::Seq { regex, .. } => regex.language_is_empty(defs, visiting),
+            Schema::Set(_) | Schema::FrozenSet(_) => false,
+            Schema::KeyedMap { fields, .. } => fields
+                .iter()
+                .any(|field| field.required && field.schema.is_empty_rec(defs, visiting)),
+            Schema::Union(members) => members.iter().all(|m| m.is_empty_rec(defs, visiting)),
             // Scalars and their Boolean combinations decide via the region set;
             // a combination with an opaque leaf yields `None`, hence not empty.
             _ => matches!(self.region_set(), Some(0)),
@@ -1962,6 +1994,47 @@ mod laws {
             !Schema::list(SeqRegex::homogeneous(Schema::Int))
                 .is_subtype(&alternation(Schema::Bool, Schema::Str))
         );
+    }
+
+    #[test]
+    fn detects_uninhabited_recursive_schemas() {
+        let field = |name: &str, schema, required| Field {
+            name: name.to_owned(),
+            schema,
+            required,
+        };
+        // t = {value: int, next: t} — a mandatory self-reference, no base case:
+        // no finite value satisfies it.
+        let uninhabited = [Schema::KeyedMap {
+            fields: vec![
+                field("value", Schema::Int, true),
+                field("next", Schema::Ref(0), true),
+            ],
+            defaults: Vec::new(),
+        }];
+        assert!(Schema::Ref(0).is_empty_under(&uninhabited));
+        // t = None | {next: t} — a base case makes it inhabited.
+        let inhabited = [Schema::Union(vec![
+            Schema::NoneType,
+            Schema::KeyedMap {
+                fields: vec![field("next", Schema::Ref(0), true)],
+                defaults: Vec::new(),
+            },
+        ])];
+        assert!(!Schema::Ref(0).is_empty_under(&inhabited));
+        // t = {next?: t} — an optional self-reference is inhabited by the empty map.
+        let optional = [Schema::KeyedMap {
+            fields: vec![field("next", Schema::Ref(0), false)],
+            defaults: Vec::new(),
+        }];
+        assert!(!Schema::Ref(0).is_empty_under(&optional));
+        // t = [t] — a list of itself is inhabited by the empty list.
+        let list_of_self = [Schema::list(SeqRegex::homogeneous(Schema::Ref(0)))];
+        assert!(!Schema::Ref(0).is_empty_under(&list_of_self));
+        // An unresolved reference stays conservative.
+        assert!(!Schema::Ref(9).is_empty_under(&uninhabited));
+        // Without the definitions, recursion is not resolved (no-arg is_empty).
+        assert!(!Schema::Ref(0).is_empty());
     }
 
     /// A sample value for the subtyping oracle: a scalar, or a set whose element

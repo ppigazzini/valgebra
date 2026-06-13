@@ -13,7 +13,7 @@ from typing import TypedDict
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import complement, intersect, union, validator
+from valgebra import complement, intersect, lazy, union, validator
 
 
 class _Point(TypedDict):
@@ -130,3 +130,13 @@ def test_known_relations() -> None:
     assert union(bool, int).equivalent(int)  # bool | int is just int
     assert intersect(int, complement(int)).is_empty()
     assert not validator(int).is_empty()
+
+
+def test_is_empty_detects_uninhabited_recursion() -> None:
+    # A mandatory self-reference with no base case has no finite inhabitant.
+    assert lazy(lambda t: {"value": int, "next": t}).is_empty()
+    # A base case (or an optional self-reference) makes it inhabited.
+    assert not lazy(lambda t: union(None, {"value": int, "next": t})).is_empty()
+    assert not lazy(lambda t: {"value": int, "next?": t}).is_empty()
+    # A list of itself is inhabited by the empty list.
+    assert not lazy(lambda t: [t]).is_empty()
