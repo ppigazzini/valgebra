@@ -8,7 +8,7 @@ frontend rejecting an unbuildable inner schema.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from types import GenericAlias
 
@@ -102,6 +102,26 @@ def test_bare_class_is_an_isinstance_check() -> None:
     assert validator(complex).is_valid(1 + 2j)
     assert not validator(complex).is_valid(1)
     assert validator(bytearray).is_valid(bytearray(b"x"))
+
+
+def test_callable_checks_only_callability() -> None:
+    # A parametrized Callable ignores the signature, testing only callability.
+    schema = validator(Callable[[int], str])
+    assert schema.is_valid(lambda x: x)
+    assert schema.is_valid(int)  # a class is callable
+    assert not schema.is_valid(5)
+
+
+def test_isinstance_check_tolerates_a_raising_instancecheck() -> None:
+    class Meta(type):
+        def __instancecheck__(cls, instance: object) -> bool:
+            raise RuntimeError("no isinstance")
+
+    class Weird(metaclass=Meta):
+        pass
+
+    # A raising isinstance is treated as "not a member", never propagated.
+    assert validator(Weird).is_valid(5) is False
 
 
 def test_too_many_set_arguments_is_rejected() -> None:

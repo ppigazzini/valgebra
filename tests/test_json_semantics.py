@@ -207,6 +207,12 @@ def _json_schemas() -> st.SearchStrategy[object]:
             st.lists(leaf, min_size=2, max_size=3, unique=True).map(
                 lambda ts: reduce(lambda a, b: a | b, ts)
             ),  # a union of scalars
+            st.lists(child, min_size=1, max_size=2).map(
+                lambda cs: {f"f{i}": c for i, c in enumerate(cs)}
+            ),  # a closed record
+            st.tuples(child, child).map(
+                lambda ab: {str: ab[0], int: ab[1]}
+            ),  # a heterogeneous map (over JSON only the str clause can match)
         ),
         max_leaves=4,
     )

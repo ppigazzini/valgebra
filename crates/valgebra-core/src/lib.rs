@@ -1187,6 +1187,30 @@ mod tests {
         };
         assert!(matches!(**tail, Schema::Ref(3)));
     }
+
+    #[test]
+    fn keyed_map_transforms_recurse_through_fields_and_defaults() {
+        let schema = Schema::KeyedMap {
+            fields: vec![Field {
+                name: "f".to_owned(),
+                schema: Schema::Ref(0),
+                required: true,
+            }],
+            defaults: vec![(Schema::Str, Schema::SelfRef(7))],
+        };
+        // Both the field's Ref and the default's SelfRef sit under the map guard.
+        assert!(!schema.occurs_unguarded(0, false));
+        // shifted moves the field's Ref by the definitions offset.
+        let Schema::KeyedMap { fields, .. } = schema.shifted(0, 5) else {
+            panic!("shape preserved")
+        };
+        assert!(matches!(fields[0].schema, Schema::Ref(5)));
+        // resolve_self rewrites the default clause's SelfRef into a Ref.
+        let Schema::KeyedMap { defaults, .. } = schema.resolve_self(7, 3) else {
+            panic!("shape preserved")
+        };
+        assert!(matches!(defaults[0].1, Schema::Ref(3)));
+    }
 }
 
 #[cfg(test)]
