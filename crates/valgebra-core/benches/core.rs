@@ -9,7 +9,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use valgebra_core::{Field, Schema};
+use valgebra_core::{Field, Schema, SeqRegex};
 
 /// A redundant Boolean expression that exercises every simplifier rewrite:
 /// nested unions and intersections, duplicate members, top/bottom identities,
@@ -62,7 +62,7 @@ fn nested_records(depth: usize) -> Schema {
             fields: vec![
                 Field {
                     name: "child".to_owned(),
-                    schema: Schema::Sequence(Box::new(inner)),
+                    schema: Schema::list(SeqRegex::homogeneous(inner)),
                     required: true,
                 },
                 Field {

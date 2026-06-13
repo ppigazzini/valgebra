@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 
 use pyo3::prelude::*;
-use valgebra_core::{Constraint, Field, Schema};
+use valgebra_core::{Constraint, Field, Schema, SeqKind};
 
 use crate::errors::{class_label, summarize};
 
@@ -31,10 +31,39 @@ pub(crate) fn render(
         Schema::Str => "str".to_owned(),
         Schema::Bytes => "bytes".to_owned(),
         Schema::Literal(i) => format!("Literal[{}]", pool_repr(py, pool, *i)),
-        Schema::Sequence(e) => format!("list[{}]", r(e)),
-        Schema::FixedSequence(es) => format!("[{}]", kids(es)),
-        Schema::Tuple(es) => format!("tuple[{}]", kids(es)),
-        Schema::VariadicTuple(e) => format!("tuple[{}, ...]", r(e)),
+        Schema::Seq { container, regex } => {
+            let list = matches!(container, SeqKind::List);
+            let Some((prefix, tail)) = regex.linear() else {
+                // Alternation/nesting exist only inside the decision procedure.
+                return "<sequence>".to_owned();
+            };
+            match (prefix.as_slice(), tail) {
+                // Homogeneous: list[T] / tuple[T, ...].
+                ([], Some(t)) if list => format!("list[{}]", r(t)),
+                ([], Some(t)) => format!("tuple[{}, ...]", r(t)),
+                // Fixed positional: [A, B] / tuple[A, B].
+                (ps, None) => {
+                    let body = ps.iter().map(|s| r(s)).collect::<Vec<_>>().join(", ");
+                    if list {
+                        format!("[{body}]")
+                    } else {
+                        format!("tuple[{body}]")
+                    }
+                }
+                // Fixed prefix then a repeated tail.
+                (ps, Some(t)) => {
+                    let mut parts: Vec<String> = ps.iter().map(|s| r(s)).collect();
+                    parts.push(r(t));
+                    parts.push("...".to_owned());
+                    let body = parts.join(", ");
+                    if list {
+                        format!("[{body}]")
+                    } else {
+                        format!("tuple[{body}]")
+                    }
+                }
+            }
+        }
         Schema::Set(e) => format!("set[{}]", r(e)),
         Schema::FrozenSet(e) => format!("frozenset[{}]", r(e)),
         Schema::Mapping { key, value } => format!("dict[{}, {}]", r(key), r(value)),

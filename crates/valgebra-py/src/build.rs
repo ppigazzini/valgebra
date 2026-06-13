@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
 };
-use valgebra_core::{Constraint, Field, Schema};
+use valgebra_core::{Constraint, Field, Schema, SeqRegex};
 
 use crate::CompiledValidator;
 use crate::errors::summarize;
@@ -126,7 +126,7 @@ pub(crate) fn build_schema(
         for item in tuple.iter() {
             elements.push(build_schema(&item, lits, defs)?);
         }
-        return Ok(Schema::Tuple(elements));
+        return Ok(Schema::tuple(SeqRegex::fixed(elements)));
     }
     if let Ok(set) = obj.cast::<PySet>() {
         return build_set(set, lits, defs);
@@ -309,7 +309,7 @@ fn build_parametrized(
 ) -> PyResult<Schema> {
     let py = origin.py();
     if origin.is(py.get_type::<PyList>()) {
-        return Ok(Schema::Sequence(Box::new(build_schema(
+        return Ok(Schema::list(SeqRegex::homogeneous(build_schema(
             &single_arg(args)?,
             lits,
             defs,
@@ -343,7 +343,7 @@ fn build_parametrized(
     if origin.is(py.get_type::<PyTuple>()) {
         // tuple[T, ...] is the homogeneous variadic form.
         if args.len() == 2 && is_ellipsis(&args.get_item(1)?) {
-            return Ok(Schema::VariadicTuple(Box::new(build_schema(
+            return Ok(Schema::tuple(SeqRegex::homogeneous(build_schema(
                 &args.get_item(0)?,
                 lits,
                 defs,
@@ -359,7 +359,7 @@ fn build_parametrized(
             }
             elements.push(build_schema(&arg, lits, defs)?);
         }
-        return Ok(Schema::Tuple(elements));
+        return Ok(Schema::tuple(SeqRegex::fixed(elements)));
     }
     if is_required_marker(origin)? {
         // Required[T]/NotRequired[T] only annotate a TypedDict field's
@@ -438,16 +438,14 @@ fn build_sequence(
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
     match list.len() {
-        1 => Ok(Schema::Sequence(Box::new(build_schema(
+        1 => Ok(Schema::list(SeqRegex::homogeneous(build_schema(
             &list.get_item(0)?,
             lits,
             defs,
         )?))),
-        2 if is_ellipsis(&list.get_item(1)?) => Ok(Schema::Sequence(Box::new(build_schema(
-            &list.get_item(0)?,
-            lits,
-            defs,
-        )?))),
+        2 if is_ellipsis(&list.get_item(1)?) => Ok(Schema::list(SeqRegex::homogeneous(
+            build_schema(&list.get_item(0)?, lits, defs)?,
+        ))),
         _ => Err(not_implemented(
             "a list schema must be [T] or [T, ...]; other list shapes are not supported",
         )),

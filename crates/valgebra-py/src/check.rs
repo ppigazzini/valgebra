@@ -22,7 +22,7 @@ use std::collections::{HashMap, HashSet};
 use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
-use valgebra_core::{Constraint, Field, PathSegment, Schema, Violation};
+use valgebra_core::{Constraint, Field, PathSegment, Schema, SeqKind, SeqRegex, Violation};
 
 use crate::errors::{class_label, summarize, truncate};
 use crate::input::Value;
@@ -86,10 +86,7 @@ pub(crate) fn member(
         Schema::Str => admit(value.is_str(), schema, value, path, ctx, out),
         Schema::Bytes => admit(value.is_bytes(), schema, value, path, ctx, out),
         Schema::Literal(index) => check_literal(*index, value, path, ctx, out),
-        Schema::Sequence(element) => check_sequence(element, value, path, ctx, out),
-        Schema::FixedSequence(elements) => check_fixed_sequence(elements, value, path, ctx, out),
-        Schema::Tuple(elements) => check_tuple(elements, value, path, ctx, out),
-        Schema::VariadicTuple(element) => check_variadic_tuple(element, value, path, ctx, out),
+        Schema::Seq { container, regex } => check_seq(*container, regex, value, path, ctx, out),
         Schema::Set(element) => check_set(element, value, path, ctx, out),
         Schema::FrozenSet(element) => check_frozenset(element, value, path, ctx, out),
         Schema::Mapping { key, value: val } => check_mapping(key, val, value, path, ctx, out),
@@ -155,198 +152,141 @@ fn check_literal(
     ok
 }
 
-/// A list whose every element matches `element`. A JSON array is a list, like the
-/// value `json.loads` produces.
-fn check_sequence(
-    element: &Schema,
+/// Membership for a sequence node: the value is a list or tuple whose element
+/// sequence matches the regex. The frontend emits only *linear* regexes — a
+/// fixed positional prefix then an optional repeated tail — so the elements are
+/// walked lazily with no automaton and no collection, identical in cost to a
+/// direct positional or homogeneous check. JSON arrays are lists.
+fn check_seq(
+    container: SeqKind,
+    regex: &SeqRegex,
     value: &Value<'_, '_>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    match value {
-        Value::Py(v) => match v.cast::<PyList>() {
-            Ok(list) => {
-                let mut ok = true;
-                for (index, item) in list.iter().enumerate() {
-                    if ctx.explain {
-                        path.push(PathSegment::Index(index));
-                    }
-                    ok &= member(element, &Value::Py(&item), path, ctx, out);
-                    if ctx.explain {
-                        path.pop();
-                    }
-                    if !ok && stop(ctx) {
-                        return false;
-                    }
-                }
-                ok
+    let (kind_word, type_code, len_code) = match container {
+        SeqKind::List => ("list", "list_type", "list_length"),
+        SeqKind::Tuple => ("tuple", "tuple_type", "tuple_length"),
+    };
+    let Some((prefix, tail)) = regex.linear() else {
+        // Alternation and nesting are built only inside the decision procedure;
+        // such a regex never reaches value membership.
+        return false;
+    };
+    match (container, value) {
+        (SeqKind::List, Value::Py(v)) => {
+            let Ok(list) = v.cast::<PyList>() else {
+                return type_fail(type_code, kind_word, value, path, ctx, out);
+            };
+            if !seq_len_ok(list.len(), prefix.len(), tail.is_some()) {
+                return seq_length_fail(len_code, kind_word, &prefix, tail, value, path, ctx, out);
             }
-            Err(_) => type_fail("list_type", "list", value, path, ctx, out),
-        },
-        Value::Json(py, JsonValue::Array(items)) => {
             let mut ok = true;
-            for (index, item) in items.iter().enumerate() {
-                if ctx.explain {
-                    path.push(PathSegment::Index(index));
-                }
-                ok &= member(element, &Value::Json(*py, item), path, ctx, out);
-                if ctx.explain {
-                    path.pop();
-                }
+            for (i, item) in list.iter().enumerate() {
+                ok &= seq_element(&prefix, tail, i, &Value::Py(&item), path, ctx, out);
                 if !ok && stop(ctx) {
                     return false;
                 }
             }
             ok
         }
-        Value::Json(..) => type_fail("list_type", "list", value, path, ctx, out),
-    }
-}
-
-fn check_fixed_sequence(
-    elements: &[Schema],
-    value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
-    match value {
-        Value::Py(v) => match v.cast::<PyList>() {
-            Ok(list) => {
-                if list.len() != elements.len() {
-                    return fixed_length_fail(elements.len(), value, path, ctx, out);
-                }
-                let mut ok = true;
-                for (index, (schema, item)) in elements.iter().zip(list.iter()).enumerate() {
-                    if ctx.explain {
-                        path.push(PathSegment::Index(index));
-                    }
-                    ok &= member(schema, &Value::Py(&item), path, ctx, out);
-                    if ctx.explain {
-                        path.pop();
-                    }
-                    if !ok && stop(ctx) {
-                        return false;
-                    }
-                }
-                ok
-            }
-            Err(_) => type_fail("list_type", "list", value, path, ctx, out),
-        },
-        Value::Json(py, JsonValue::Array(items)) => {
-            if items.len() != elements.len() {
-                return fixed_length_fail(elements.len(), value, path, ctx, out);
+        (SeqKind::List, Value::Json(py, JsonValue::Array(items))) => {
+            if !seq_len_ok(items.len(), prefix.len(), tail.is_some()) {
+                return seq_length_fail(len_code, kind_word, &prefix, tail, value, path, ctx, out);
             }
             let mut ok = true;
-            for (index, (schema, item)) in elements.iter().zip(items.iter()).enumerate() {
-                if ctx.explain {
-                    path.push(PathSegment::Index(index));
-                }
-                ok &= member(schema, &Value::Json(*py, item), path, ctx, out);
-                if ctx.explain {
-                    path.pop();
-                }
+            for (i, item) in items.iter().enumerate() {
+                ok &= seq_element(&prefix, tail, i, &Value::Json(*py, item), path, ctx, out);
                 if !ok && stop(ctx) {
                     return false;
                 }
             }
             ok
         }
-        Value::Json(..) => type_fail("list_type", "list", value, path, ctx, out),
+        (SeqKind::Tuple, Value::Py(v)) => {
+            let Ok(tuple) = v.cast::<PyTuple>() else {
+                return type_fail(type_code, kind_word, value, path, ctx, out);
+            };
+            if !seq_len_ok(tuple.len(), prefix.len(), tail.is_some()) {
+                return seq_length_fail(len_code, kind_word, &prefix, tail, value, path, ctx, out);
+            }
+            let mut ok = true;
+            for (i, item) in tuple.iter().enumerate() {
+                ok &= seq_element(&prefix, tail, i, &Value::Py(&item), path, ctx, out);
+                if !ok && stop(ctx) {
+                    return false;
+                }
+            }
+            ok
+        }
+        // A tuple is never a JSON value; a list needs a JSON array.
+        _ => type_fail(type_code, kind_word, value, path, ctx, out),
     }
 }
 
-/// A fixed-length list whose length governs the positional match: a length
-/// mismatch is terminal, since the per-index checks are then meaningless.
-fn fixed_length_fail(
-    expected_len: usize,
+/// Whether the element count fits the regex: exactly the prefix length with no
+/// tail, or at least the prefix length when a repeated tail follows.
+fn seq_len_ok(len: usize, prefix_len: usize, has_tail: bool) -> bool {
+    if has_tail {
+        len >= prefix_len
+    } else {
+        len == prefix_len
+    }
+}
+
+/// Match one element at position `i`: the prefix schema at `i`, or the repeated
+/// tail past the prefix. The index segment is pushed only in explain mode.
+fn seq_element(
+    prefix: &[&Schema],
+    tail: Option<&Schema>,
+    i: usize,
+    item: &Value<'_, '_>,
+    path: &mut Vec<PathSegment>,
+    ctx: Ctx<'_>,
+    out: &mut Vec<Violation>,
+) -> bool {
+    let schema = prefix
+        .get(i)
+        .copied()
+        .unwrap_or_else(|| tail.expect("length already checked"));
+    if ctx.explain {
+        path.push(PathSegment::Index(i));
+    }
+    let ok = member(schema, item, path, ctx, out);
+    if ctx.explain {
+        path.pop();
+    }
+    ok
+}
+
+/// A sequence-length mismatch: terminal, since the positional match is then
+/// meaningless. A tailless regex wants an exact length; a tailed one a minimum.
+#[allow(clippy::too_many_arguments)]
+fn seq_length_fail(
+    len_code: &'static str,
+    kind_word: &str,
+    prefix: &[&Schema],
+    tail: Option<&Schema>,
     value: &Value<'_, '_>,
     path: &[PathSegment],
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
     if ctx.explain {
+        let expected = if tail.is_some() {
+            format!("{kind_word} of length at least {}", prefix.len())
+        } else {
+            format!("{kind_word} of length {}", prefix.len())
+        };
         out.push(Violation {
-            code: "list_length",
+            code: len_code,
             path: path.to_vec(),
-            expected: format!("list of length {expected_len}"),
+            expected,
             value_summary: summarize_value(value),
         });
     }
     false
-}
-
-/// A tuple matched positionally. JSON has no tuples, so a JSON value is never a
-/// member.
-fn check_tuple(
-    elements: &[Schema],
-    value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
-    let Value::Py(v) = value else {
-        return type_fail("tuple_type", "tuple", value, path, ctx, out);
-    };
-    let Ok(tuple) = v.cast::<PyTuple>() else {
-        return type_fail("tuple_type", "tuple", value, path, ctx, out);
-    };
-    if tuple.len() != elements.len() {
-        if ctx.explain {
-            out.push(Violation {
-                code: "tuple_length",
-                path: path.clone(),
-                expected: format!("tuple of length {}", elements.len()),
-                value_summary: summarize_value(value),
-            });
-        }
-        return false;
-    }
-    let mut ok = true;
-    for (index, (schema, item)) in elements.iter().zip(tuple.iter()).enumerate() {
-        if ctx.explain {
-            path.push(PathSegment::Index(index));
-        }
-        ok &= member(schema, &Value::Py(&item), path, ctx, out);
-        if ctx.explain {
-            path.pop();
-        }
-        if !ok && stop(ctx) {
-            return false;
-        }
-    }
-    ok
-}
-
-/// A tuple of any length whose every element matches `element`.
-fn check_variadic_tuple(
-    element: &Schema,
-    value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
-    let Value::Py(v) = value else {
-        return type_fail("tuple_type", "tuple", value, path, ctx, out);
-    };
-    let Ok(tuple) = v.cast::<PyTuple>() else {
-        return type_fail("tuple_type", "tuple", value, path, ctx, out);
-    };
-    let mut ok = true;
-    for (index, item) in tuple.iter().enumerate() {
-        if ctx.explain {
-            path.push(PathSegment::Index(index));
-        }
-        ok &= member(element, &Value::Py(&item), path, ctx, out);
-        if ctx.explain {
-            path.pop();
-        }
-        if !ok && stop(ctx) {
-            return false;
-        }
-    }
-    ok
 }
 
 /// A set whose every element matches `element`. Set order is not meaningful, so

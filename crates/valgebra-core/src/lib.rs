@@ -91,16 +91,20 @@ pub enum Schema {
     /// compiled validator. The same-type test is applied in the bindings, where
     /// the Python value is in hand.
     Literal(usize),
-    /// Denotes lists whose every element belongs to the inner schema.
-    Sequence(Box<Schema>),
-    /// Denotes lists matched positionally at exactly this length (the list
-    /// analogue of [`Schema::Tuple`]): element `i` must belong to member `i`.
-    FixedSequence(Vec<Schema>),
-    /// Denotes tuples matched positionally at exactly this length.
-    Tuple(Vec<Schema>),
-    /// Denotes tuples of any length whose every element belongs to the inner
-    /// schema (the homogeneous `tuple[T, ...]` form).
-    VariadicTuple(Box<Schema>),
+    /// Denotes lists or tuples whose element sequence matches a regular
+    /// expression over element schemas.
+    ///
+    /// One node subsumes the homogeneous `list[T]`/`tuple[T, ...]`, the fixed
+    /// `[A, B]`/`tuple[A, B]`, and the prefix-plus-tail forms. Regular languages
+    /// are closed under union, intersection, and complement, so a sequence type
+    /// is a first-class member of the Boolean algebra rather than four ad-hoc,
+    /// non-composable nodes.
+    Seq {
+        /// Whether the value is a list or a tuple.
+        container: SeqKind,
+        /// The regular expression over element schemas the sequence must match.
+        regex: SeqRegex,
+    },
     /// Denotes sets whose every element belongs to the inner schema.
     Set(Box<Schema>),
     /// Denotes frozensets whose every element belongs to the inner schema.
@@ -166,6 +170,157 @@ pub enum Schema {
     SelfRef(u64),
 }
 
+/// Whether a [`Schema::Seq`] denotes lists or tuples.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SeqKind {
+    /// `list` values.
+    List,
+    /// `tuple` values.
+    Tuple,
+}
+
+/// A regular expression over element schemas, the body of a [`Schema::Seq`].
+///
+/// A value's element sequence is a member iff it is in the regular language this
+/// expression denotes, where a single element symbol "matches" `Elem(s)` when the
+/// element belongs to `s`. The homogeneous form is `Star(Elem(t))`, the fixed
+/// form is `Cat([Elem(a), Elem(b), ...])`, and the prefix-plus-tail form appends a
+/// trailing `Star`. `Or` and nesting are produced only by the decision procedure
+/// (closure under the Boolean operations); the frontend emits linear shapes only,
+/// which [`SeqRegex::linear`] recognizes for the membership walk.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SeqRegex {
+    /// The empty sequence.
+    Empty,
+    /// A single element belonging to the schema.
+    Elem(Box<Schema>),
+    /// Concatenation: each part in order.
+    Cat(Vec<SeqRegex>),
+    /// Alternation: any one branch.
+    Or(Vec<SeqRegex>),
+    /// Zero or more repetitions.
+    Star(Box<SeqRegex>),
+}
+
+impl SeqRegex {
+    /// Map every element schema through `f`, preserving the regex structure.
+    fn map_elems(&self, f: &impl Fn(&Schema) -> Schema) -> SeqRegex {
+        match self {
+            SeqRegex::Empty => SeqRegex::Empty,
+            SeqRegex::Elem(s) => SeqRegex::Elem(Box::new(f(s))),
+            SeqRegex::Cat(parts) => SeqRegex::Cat(parts.iter().map(|p| p.map_elems(f)).collect()),
+            SeqRegex::Or(parts) => SeqRegex::Or(parts.iter().map(|p| p.map_elems(f)).collect()),
+            SeqRegex::Star(inner) => SeqRegex::Star(Box::new(inner.map_elems(f))),
+        }
+    }
+
+    /// Whether any element schema satisfies `pred`.
+    fn any_elem(&self, pred: &impl Fn(&Schema) -> bool) -> bool {
+        match self {
+            SeqRegex::Empty => false,
+            SeqRegex::Elem(s) => pred(s),
+            SeqRegex::Cat(parts) | SeqRegex::Or(parts) => parts.iter().any(|p| p.any_elem(pred)),
+            SeqRegex::Star(inner) => inner.any_elem(pred),
+        }
+    }
+
+    fn shifted(&self, pool: usize, defs: usize) -> SeqRegex {
+        self.map_elems(&|s| s.shifted(pool, defs))
+    }
+
+    fn resolve_self(&self, token: u64, ref_id: usize) -> SeqRegex {
+        self.map_elems(&|s| s.resolve_self(token, ref_id))
+    }
+
+    fn with_records_open(&self, open: bool) -> SeqRegex {
+        self.map_elems(&|s| s.with_records_open(open))
+    }
+
+    fn simplify(&self) -> SeqRegex {
+        self.map_elems(&Schema::simplify)
+    }
+
+    /// A `Seq` guards its element schemas, so a recursive reference inside one is
+    /// guarded; report whether `target` occurs (necessarily guarded here).
+    fn occurs_guarded(&self, target: usize) -> bool {
+        self.any_elem(&|s| s.occurs_unguarded(target, true))
+    }
+
+    /// If this regex is a *linear* sequence — a fixed prefix of element schemas
+    /// followed by an optional repeated tail element — return `(prefix, tail)`.
+    ///
+    /// The frontend's forms are all linear: homogeneous (`Star(Elem)`), fixed
+    /// (`Cat` of `Elem`s), and prefix-plus-tail (`Cat` of `Elem`s ending in
+    /// `Star(Elem)`). `Or` and nested forms, built only inside the decision
+    /// procedure, are not linear and never reach value membership.
+    #[must_use]
+    pub fn linear(&self) -> Option<(Vec<&Schema>, Option<&Schema>)> {
+        match self {
+            SeqRegex::Empty => Some((Vec::new(), None)),
+            SeqRegex::Elem(s) => Some((vec![s.as_ref()], None)),
+            SeqRegex::Star(inner) => match inner.as_ref() {
+                SeqRegex::Elem(s) => Some((Vec::new(), Some(s.as_ref()))),
+                _ => None,
+            },
+            SeqRegex::Cat(parts) => {
+                let mut prefix = Vec::new();
+                let mut tail = None;
+                for (i, part) in parts.iter().enumerate() {
+                    match part {
+                        SeqRegex::Elem(s) => prefix.push(s.as_ref()),
+                        SeqRegex::Star(inner) if i + 1 == parts.len() => match inner.as_ref() {
+                            SeqRegex::Elem(s) => tail = Some(s.as_ref()),
+                            _ => return None,
+                        },
+                        _ => return None,
+                    }
+                }
+                Some((prefix, tail))
+            }
+            SeqRegex::Or(_) => None,
+        }
+    }
+}
+
+impl Schema {
+    /// A list whose element sequence matches `regex`.
+    #[must_use]
+    pub fn list(regex: SeqRegex) -> Schema {
+        Schema::Seq {
+            container: SeqKind::List,
+            regex,
+        }
+    }
+
+    /// A tuple whose element sequence matches `regex`.
+    #[must_use]
+    pub fn tuple(regex: SeqRegex) -> Schema {
+        Schema::Seq {
+            container: SeqKind::Tuple,
+            regex,
+        }
+    }
+}
+
+impl SeqRegex {
+    /// The homogeneous form `Star(Elem(element))`: any number of `element`s.
+    #[must_use]
+    pub fn homogeneous(element: Schema) -> SeqRegex {
+        SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(element))))
+    }
+
+    /// The fixed form `Cat([Elem(e0), Elem(e1), ...])`: each element positionally.
+    #[must_use]
+    pub fn fixed(elements: impl IntoIterator<Item = Schema>) -> SeqRegex {
+        SeqRegex::Cat(
+            elements
+                .into_iter()
+                .map(|s| SeqRegex::Elem(Box::new(s)))
+                .collect(),
+        )
+    }
+}
+
 /// A constraint narrowing a [`Schema::Refine`] base set.
 ///
 /// Comparison and predicate operands live in the validator's object pool; the
@@ -217,8 +372,14 @@ impl Schema {
             Schema::Bytes => "bytes",
             // The py layer renders the concrete constant; this is a fallback.
             Schema::Literal(_) => "literal",
-            Schema::Sequence(_) | Schema::FixedSequence(_) => "list",
-            Schema::Tuple(_) | Schema::VariadicTuple(_) => "tuple",
+            Schema::Seq {
+                container: SeqKind::List,
+                ..
+            } => "list",
+            Schema::Seq {
+                container: SeqKind::Tuple,
+                ..
+            } => "tuple",
             Schema::Set(_) => "set",
             Schema::FrozenSet(_) => "frozenset",
             Schema::Mapping { .. } | Schema::Record { .. } => "dict",
@@ -251,8 +412,14 @@ impl Schema {
             Schema::Str => "string_type",
             Schema::Bytes => "bytes_type",
             Schema::Literal(_) => "literal_value",
-            Schema::Sequence(_) | Schema::FixedSequence(_) => "list_type",
-            Schema::Tuple(_) | Schema::VariadicTuple(_) => "tuple_type",
+            Schema::Seq {
+                container: SeqKind::List,
+                ..
+            } => "list_type",
+            Schema::Seq {
+                container: SeqKind::Tuple,
+                ..
+            } => "tuple_type",
             Schema::Set(_) => "set_type",
             Schema::FrozenSet(_) => "frozenset_type",
             Schema::Mapping { .. } | Schema::Record { .. } => "dict_type",
@@ -289,15 +456,13 @@ impl Schema {
             Schema::Literal(i) => Schema::Literal(i + pool),
             Schema::Instance(i) => Schema::Instance(i + pool),
             Schema::Ref(i) => Schema::Ref(i + defs),
-            Schema::Sequence(e) => Schema::Sequence(Box::new(e.shifted(pool, defs))),
-            Schema::VariadicTuple(e) => Schema::VariadicTuple(Box::new(e.shifted(pool, defs))),
+            Schema::Seq { container, regex } => Schema::Seq {
+                container: *container,
+                regex: regex.shifted(pool, defs),
+            },
             Schema::Set(e) => Schema::Set(Box::new(e.shifted(pool, defs))),
             Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.shifted(pool, defs))),
             Schema::Complement(e) => Schema::Complement(Box::new(e.shifted(pool, defs))),
-            Schema::FixedSequence(es) => {
-                Schema::FixedSequence(es.iter().map(|s| s.shifted(pool, defs)).collect())
-            }
-            Schema::Tuple(es) => Schema::Tuple(es.iter().map(|s| s.shifted(pool, defs)).collect()),
             Schema::Union(es) => Schema::Union(es.iter().map(|s| s.shifted(pool, defs)).collect()),
             Schema::Intersection(es) => {
                 Schema::Intersection(es.iter().map(|s| s.shifted(pool, defs)).collect())
@@ -331,13 +496,13 @@ impl Schema {
         let recur = |s: &Schema| s.resolve_self(token, ref_id);
         match self {
             Schema::SelfRef(t) if *t == token => Schema::Ref(ref_id),
-            Schema::Sequence(e) => Schema::Sequence(Box::new(recur(e))),
-            Schema::VariadicTuple(e) => Schema::VariadicTuple(Box::new(recur(e))),
+            Schema::Seq { container, regex } => Schema::Seq {
+                container: *container,
+                regex: regex.resolve_self(token, ref_id),
+            },
             Schema::Set(e) => Schema::Set(Box::new(recur(e))),
             Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(recur(e))),
             Schema::Complement(e) => Schema::Complement(Box::new(recur(e))),
-            Schema::FixedSequence(es) => Schema::FixedSequence(es.iter().map(recur).collect()),
-            Schema::Tuple(es) => Schema::Tuple(es.iter().map(recur).collect()),
             Schema::Union(es) => Schema::Union(es.iter().map(recur).collect()),
             Schema::Intersection(es) => Schema::Intersection(es.iter().map(recur).collect()),
             Schema::Mapping { key, value } => Schema::Mapping {
@@ -387,13 +552,8 @@ impl Schema {
         match self {
             Schema::Ref(id) => *id == target && !guarded,
             // Structural constructors guard their children.
-            Schema::Sequence(e)
-            | Schema::VariadicTuple(e)
-            | Schema::Set(e)
-            | Schema::FrozenSet(e) => e.occurs_unguarded(target, true),
-            Schema::FixedSequence(es) | Schema::Tuple(es) => {
-                es.iter().any(|s| s.occurs_unguarded(target, true))
-            }
+            Schema::Seq { regex, .. } => regex.occurs_guarded(target),
+            Schema::Set(e) | Schema::FrozenSet(e) => e.occurs_unguarded(target, true),
             Schema::Mapping { key, value } => {
                 key.occurs_unguarded(target, true) || value.occurs_unguarded(target, true)
             }
@@ -422,14 +582,12 @@ impl Schema {
     #[must_use]
     pub fn simplify(&self) -> Schema {
         match self {
-            Schema::Sequence(e) => Schema::Sequence(Box::new(e.simplify())),
-            Schema::VariadicTuple(e) => Schema::VariadicTuple(Box::new(e.simplify())),
+            Schema::Seq { container, regex } => Schema::Seq {
+                container: *container,
+                regex: regex.simplify(),
+            },
             Schema::Set(e) => Schema::Set(Box::new(e.simplify())),
             Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.simplify())),
-            Schema::FixedSequence(es) => {
-                Schema::FixedSequence(es.iter().map(Schema::simplify).collect())
-            }
-            Schema::Tuple(es) => Schema::Tuple(es.iter().map(Schema::simplify).collect()),
             Schema::Mapping { key, value } => Schema::Mapping {
                 key: Box::new(key.simplify()),
                 value: Box::new(value.simplify()),
@@ -500,13 +658,13 @@ impl Schema {
                 class_index: *class_index,
                 fields: fields_open(fields),
             },
-            Schema::Sequence(e) => Schema::Sequence(Box::new(recur(e))),
-            Schema::FixedSequence(es) => Schema::FixedSequence(es.iter().map(recur).collect()),
-            Schema::VariadicTuple(e) => Schema::VariadicTuple(Box::new(recur(e))),
+            Schema::Seq { container, regex } => Schema::Seq {
+                container: *container,
+                regex: regex.with_records_open(open),
+            },
             Schema::Set(e) => Schema::Set(Box::new(recur(e))),
             Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(recur(e))),
             Schema::Complement(e) => Schema::Complement(Box::new(recur(e))),
-            Schema::Tuple(es) => Schema::Tuple(es.iter().map(recur).collect()),
             Schema::Union(es) => Schema::Union(es.iter().map(recur).collect()),
             Schema::Intersection(es) => Schema::Intersection(es.iter().map(recur).collect()),
             Schema::Mapping { key, value } => Schema::Mapping {
@@ -666,6 +824,16 @@ impl std::error::Error for Violation {}
 mod tests {
     use super::*;
 
+    /// The element schema of a homogeneous (`[T, ...]`) sequence node.
+    fn homogeneous_elem(schema: &Schema) -> &Schema {
+        match schema {
+            Schema::Seq { regex, .. } => {
+                regex.linear().expect("linear").1.expect("homogeneous tail")
+            }
+            _ => panic!("not a sequence: {schema:?}"),
+        }
+    }
+
     #[test]
     fn violation_renders_root_message() {
         let v = Violation {
@@ -702,8 +870,16 @@ mod tests {
             (Schema::Str, "str", "string_type"),
             (Schema::Bytes, "bytes", "bytes_type"),
             (Schema::Literal(0), "literal", "literal_value"),
-            (Schema::Sequence(Box::new(Schema::Int)), "list", "list_type"),
-            (Schema::Tuple(vec![Schema::Int]), "tuple", "tuple_type"),
+            (
+                Schema::list(SeqRegex::homogeneous(Schema::Int)),
+                "list",
+                "list_type",
+            ),
+            (
+                Schema::tuple(SeqRegex::fixed([Schema::Int])),
+                "tuple",
+                "tuple_type",
+            ),
             (Schema::Set(Box::new(Schema::Int)), "set", "set_type"),
             (
                 Schema::Mapping {
@@ -786,7 +962,7 @@ mod tests {
 
     #[test]
     fn with_records_open_flips_every_record_in_the_tree() {
-        let schema = Schema::Sequence(Box::new(Schema::Record {
+        let schema = Schema::list(SeqRegex::homogeneous(Schema::Record {
             fields: vec![Field {
                 name: "k".to_owned(),
                 schema: Schema::Int,
@@ -794,36 +970,37 @@ mod tests {
             }],
             open: false,
         }));
-        let Schema::Sequence(inner) = schema.with_records_open(true) else {
-            panic!("shape preserved")
-        };
-        assert!(matches!(*inner, Schema::Record { open: true, .. }));
+        let opened = schema.with_records_open(true);
+        assert!(matches!(
+            homogeneous_elem(&opened),
+            Schema::Record { open: true, .. }
+        ));
         // strict flips it back.
-        let Schema::Sequence(inner) = schema.with_records_open(true).with_records_open(false)
-        else {
-            panic!("shape preserved")
-        };
-        assert!(matches!(*inner, Schema::Record { open: false, .. }));
+        let closed = schema.with_records_open(true).with_records_open(false);
+        assert!(matches!(
+            homogeneous_elem(&closed),
+            Schema::Record { open: false, .. }
+        ));
     }
 
     #[test]
     fn schema_equality_is_structural() {
         assert_eq!(
-            Schema::Sequence(Box::new(Schema::Int)),
-            Schema::Sequence(Box::new(Schema::Int))
+            Schema::list(SeqRegex::homogeneous(Schema::Int)),
+            Schema::list(SeqRegex::homogeneous(Schema::Int))
         );
         assert_ne!(
-            Schema::Sequence(Box::new(Schema::Int)),
-            Schema::Sequence(Box::new(Schema::Str))
+            Schema::list(SeqRegex::homogeneous(Schema::Int)),
+            Schema::list(SeqRegex::homogeneous(Schema::Str))
         );
         assert_ne!(Schema::Literal(0), Schema::Literal(1));
     }
 
     #[test]
     fn resolve_self_replaces_only_the_matching_token() {
-        let body = Schema::Sequence(Box::new(Schema::SelfRef(1)));
-        assert!(matches!(body.resolve_self(1, 3),
-            Schema::Sequence(inner) if matches!(*inner, Schema::Ref(3))));
+        let body = Schema::list(SeqRegex::homogeneous(Schema::SelfRef(1)));
+        let resolved = body.resolve_self(1, 3);
+        assert!(matches!(homogeneous_elem(&resolved), Schema::Ref(3)));
         assert!(matches!(
             Schema::SelfRef(2).resolve_self(1, 3),
             Schema::SelfRef(2)
@@ -832,22 +1009,22 @@ mod tests {
 
     #[test]
     fn contractivity_requires_a_structural_guard() {
-        assert!(!Schema::Sequence(Box::new(Schema::Ref(0))).occurs_unguarded(0, false));
+        assert!(!Schema::list(SeqRegex::homogeneous(Schema::Ref(0))).occurs_unguarded(0, false));
         assert!(Schema::Ref(0).occurs_unguarded(0, false));
         assert!(Schema::Union(vec![Schema::Int, Schema::Ref(0)]).occurs_unguarded(0, false));
         assert!(
-            !Schema::Sequence(Box::new(Schema::Union(vec![Schema::Int, Schema::Ref(0)])))
-                .occurs_unguarded(0, false)
+            !Schema::list(SeqRegex::homogeneous(Schema::Union(vec![
+                Schema::Int,
+                Schema::Ref(0)
+            ])))
+            .occurs_unguarded(0, false)
         );
     }
 
     #[test]
     fn shifted_remaps_ref_by_the_definition_offset() {
-        let Schema::Sequence(inner) = Schema::Sequence(Box::new(Schema::Ref(0))).shifted(7, 4)
-        else {
-            panic!("shape preserved")
-        };
-        assert!(matches!(*inner, Schema::Ref(4)));
+        let shifted = Schema::list(SeqRegex::homogeneous(Schema::Ref(0))).shifted(7, 4);
+        assert!(matches!(homogeneous_elem(&shifted), Schema::Ref(4)));
         assert!(matches!(
             Schema::SelfRef(9).shifted(1, 1),
             Schema::SelfRef(9)

@@ -11,7 +11,7 @@
 //! iteration count is large. Keep the corpus and `ITERATIONS` fixed; changing
 //! either moves the budget and requires re-recording it.
 
-use valgebra_core::{Field, Schema};
+use valgebra_core::{Field, Schema, SeqRegex};
 
 /// Iterations per operation. Large enough that startup is a rounding error.
 const ITERATIONS: usize = 2_000;
@@ -62,7 +62,7 @@ fn nested_records(depth: usize) -> Schema {
         inner = Schema::Record {
             fields: vec![Field {
                 name: "child".to_owned(),
-                schema: Schema::Sequence(Box::new(inner)),
+                schema: Schema::list(SeqRegex::homogeneous(inner)),
                 required: true,
             }],
             open: false,
@@ -92,6 +92,17 @@ fn main() {
     println!("checksum={checksum}");
 }
 
+/// Sum the depth markers of a sequence regex's element schemas, without
+/// allocating, so the workload's cost is stable across runs.
+fn regex_depth(regex: &SeqRegex) -> usize {
+    match regex {
+        SeqRegex::Empty => 0,
+        SeqRegex::Elem(s) => s.depth_marker(),
+        SeqRegex::Cat(parts) | SeqRegex::Or(parts) => parts.iter().map(regex_depth).sum(),
+        SeqRegex::Star(inner) => regex_depth(inner),
+    }
+}
+
 /// A cheap structural fingerprint, just enough to keep results observable.
 trait DepthMarker {
     fn depth_marker(&self) -> usize;
@@ -100,16 +111,12 @@ trait DepthMarker {
 impl DepthMarker for Schema {
     fn depth_marker(&self) -> usize {
         match self {
-            Schema::Union(members)
-            | Schema::Intersection(members)
-            | Schema::Tuple(members)
-            | Schema::FixedSequence(members) => members.len(),
+            Schema::Union(members) | Schema::Intersection(members) => members.len(),
             Schema::Record { fields, .. } | Schema::Object { fields, .. } => fields.len(),
-            Schema::Complement(inner)
-            | Schema::Sequence(inner)
-            | Schema::Set(inner)
-            | Schema::FrozenSet(inner)
-            | Schema::VariadicTuple(inner) => 1 + inner.depth_marker(),
+            Schema::Seq { regex, .. } => 1 + regex_depth(regex),
+            Schema::Complement(inner) | Schema::Set(inner) | Schema::FrozenSet(inner) => {
+                1 + inner.depth_marker()
+            }
             _ => 0,
         }
     }

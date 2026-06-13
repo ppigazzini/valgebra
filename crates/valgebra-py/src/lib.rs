@@ -20,7 +20,7 @@ use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyString, PyTuple};
-use valgebra_core::{Schema, fresh_self_token};
+use valgebra_core::{Schema, SeqRegex, fresh_self_token};
 
 use crate::build::{build_schema, combine};
 use crate::check::{Ctx, member};
@@ -361,7 +361,7 @@ fn intersect(schemas: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
 #[pyfunction]
 #[pyo3(signature = (*members))]
 fn fixed_sequence(members: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
-    combine(members, Schema::FixedSequence)
+    combine(members, |elements| Schema::list(SeqRegex::fixed(elements)))
 }
 
 /// The complement of a schema: every value not in its set.
