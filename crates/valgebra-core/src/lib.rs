@@ -240,6 +240,38 @@ impl SeqRegex {
         }
     }
 
+    /// Whether every sequence this regex matches is also matched by `other` —
+    /// language inclusion, decided on the prefix-and-tail [`linear`](Self::linear)
+    /// form. Sound: it decides exactly the cases below and returns `false`
+    /// (conservatively) for everything it cannot — `Or` regexes, or a
+    /// prefix-plus-tail on the right — which need the general regex product.
+    fn regex_subtype(&self, other: &SeqRegex) -> bool {
+        if self == other {
+            return true;
+        }
+        let (Some((prefix, tail)), Some((other_prefix, other_tail))) =
+            (self.linear(), other.linear())
+        else {
+            return false;
+        };
+        match other_tail {
+            // `other` is a homogeneous tail `B*` with no fixed prefix: every
+            // element this regex can produce — each prefix element and the
+            // repeated tail, if any — must be a subtype of `B`.
+            Some(b) if other_prefix.is_empty() => {
+                prefix.iter().all(|element| element.is_subtype(b))
+                    && tail.is_none_or(|t| t.is_subtype(b))
+            }
+            // `other` is a fixed-length sequence: this regex must be the same
+            // fixed length with pointwise-subtype elements.
+            None if tail.is_none() && prefix.len() == other_prefix.len() => prefix
+                .iter()
+                .zip(&other_prefix)
+                .all(|(element, other_element)| element.is_subtype(other_element)),
+            _ => false,
+        }
+    }
+
     fn shifted(&self, pool: usize, defs: usize) -> SeqRegex {
         self.map_elems(&|s| s.shifted(pool, defs))
     }
@@ -853,13 +885,47 @@ impl Schema {
 
     /// Whether every value of `self` is also a value of `other` — set inclusion,
     /// the semantic-subtyping relation. Complete on the scalar fragment via
-    /// `self ∧ ¬other = ∅`; elsewhere sound and reflexive (equal schemas are
-    /// subtypes, otherwise the relation is left unproven).
+    /// `self ∧ ¬other = ∅`, and decided structurally past it by recursion on
+    /// matching constructors (the lattice rules, set/frozenset element
+    /// inclusion, and sequence inclusion on the prefix-and-tail form). Every
+    /// rule is **sound** — it never reports a subtype it cannot justify — and
+    /// conservative where it cannot decide (`Or` regexes, recursive references,
+    /// instances, literals): there it returns `false` rather than guess.
     #[must_use]
     pub fn is_subtype(&self, other: &Schema) -> bool {
-        match (self.region_set(), other.region_set()) {
-            (Some(a), Some(b)) => a & !b & REGION_ALL == 0,
-            _ => self == other,
+        // Scalar fragment: exact via the region partition.
+        if let (Some(a), Some(b)) = (self.region_set(), other.region_set()) {
+            return a & !b & REGION_ALL == 0;
+        }
+        if self == other {
+            return true;
+        }
+        match (self, other) {
+            // ∅ is a subset of every set, and every set is a subset of the top.
+            (Schema::Nothing, _) | (_, Schema::Anything) => true,
+            (_, Schema::Nothing) => self.is_empty(), // A ⊆ ∅ exactly when A is empty
+            // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z; A ⊆ (Y ∩ Z) iff A ⊆ Y and A ⊆ Z.
+            (Schema::Union(members), _) => members.iter().all(|m| m.is_subtype(other)),
+            (_, Schema::Intersection(members)) => members.iter().all(|m| self.is_subtype(m)),
+            // Sound one-directional rules for the remaining lattice shapes.
+            (_, Schema::Union(members)) => members.iter().any(|m| self.is_subtype(m)),
+            (Schema::Intersection(members), _) => members.iter().any(|m| m.is_subtype(other)),
+            // Set and frozenset inclusion reduces to element inclusion.
+            (Schema::Set(a), Schema::Set(b)) | (Schema::FrozenSet(a), Schema::FrozenSet(b)) => {
+                a.is_subtype(b)
+            }
+            // Same-kind sequence inclusion is language inclusion on the regexes.
+            (
+                Schema::Seq {
+                    container: ka,
+                    regex: ra,
+                },
+                Schema::Seq {
+                    container: kb,
+                    regex: rb,
+                },
+            ) if ka == kb => ra.regex_subtype(rb),
+            _ => false,
         }
     }
 
@@ -1713,6 +1779,107 @@ mod laws {
         assert!(!Schema::Union(vec![Schema::Int, empty_pair]).is_empty());
     }
 
+    #[test]
+    fn decides_structural_subtyping_between_containers() {
+        let set = |s| Schema::Set(Box::new(s));
+        let frozenset = |s| Schema::FrozenSet(Box::new(s));
+        // Sets and frozensets reduce to element inclusion (bool ⊆ int).
+        assert!(set(Schema::Bool).is_subtype(&set(Schema::Int)));
+        assert!(!set(Schema::Int).is_subtype(&set(Schema::Bool)));
+        assert!(frozenset(Schema::Bool).is_subtype(&frozenset(Schema::Int)));
+        // Different container kinds are never subtypes.
+        assert!(!set(Schema::Int).is_subtype(&frozenset(Schema::Int)));
+        // Homogeneous sequences: list[bool] ⊆ list[int], not list[int] ⊆ list[str].
+        let list = |r| Schema::list(r);
+        let tuple = |r| Schema::tuple(r);
+        assert!(
+            list(SeqRegex::homogeneous(Schema::Bool))
+                .is_subtype(&list(SeqRegex::homogeneous(Schema::Int)))
+        );
+        assert!(
+            !list(SeqRegex::homogeneous(Schema::Int))
+                .is_subtype(&list(SeqRegex::homogeneous(Schema::Str)))
+        );
+        // Fixed sequences compare pointwise; a tuple is not a list.
+        assert!(
+            tuple(SeqRegex::fixed([Schema::Bool, Schema::Str]))
+                .is_subtype(&tuple(SeqRegex::fixed([Schema::Int, Schema::Str])))
+        );
+        assert!(
+            !tuple(SeqRegex::fixed([Schema::Int]))
+                .is_subtype(&list(SeqRegex::homogeneous(Schema::Int)))
+        );
+        // A fixed list is a subtype of a homogeneous list when each element is.
+        assert!(
+            list(SeqRegex::fixed([Schema::Bool, Schema::Int]))
+                .is_subtype(&list(SeqRegex::homogeneous(Schema::Int)))
+        );
+        // Equivalence between structurally different container schemas.
+        assert!(set(Schema::Union(vec![Schema::Bool, Schema::Int])).equivalent(&set(Schema::Int)));
+    }
+
+    /// A sample value for the subtyping oracle: a scalar, or a set whose element
+    /// kinds are listed. Sets suffice to exercise the container rule without a
+    /// regex matcher; sequence rules are covered by the unit test above.
+    #[derive(Clone)]
+    enum Val {
+        Scalar(Sample),
+        SetOf(Vec<Sample>),
+    }
+
+    fn samples_v() -> Vec<Val> {
+        let mut values: Vec<Val> = SAMPLES.iter().map(|&s| Val::Scalar(s)).collect();
+        values.push(Val::SetOf(vec![]));
+        values.push(Val::SetOf(vec![Sample::Bool]));
+        values.push(Val::SetOf(vec![Sample::Int]));
+        values.push(Val::SetOf(vec![Sample::Str]));
+        values.push(Val::SetOf(vec![Sample::Int, Sample::Str]));
+        values
+    }
+
+    /// Reference membership for the scalar-and-set fragment, the oracle the
+    /// structural subtyping decision is checked against.
+    fn member_v(schema: &Schema, value: &Val) -> bool {
+        match schema {
+            Schema::Anything => true,
+            Schema::Nothing => false,
+            Schema::Set(element) => match value {
+                Val::SetOf(elements) => elements.iter().all(|&e| member(element, e)),
+                Val::Scalar(_) => false,
+            },
+            Schema::Union(members) => members.iter().any(|m| member_v(m, value)),
+            Schema::Intersection(members) => members.iter().all(|m| member_v(m, value)),
+            Schema::Complement(inner) => !member_v(inner, value),
+            scalar => match value {
+                Val::Scalar(sample) => member(scalar, *sample),
+                Val::SetOf(_) => false,
+            },
+        }
+    }
+
+    /// A generator over scalars, sets of scalar schemas, and their Boolean
+    /// combinations — the fragment the `member_v` oracle covers.
+    fn scalar_or_set_schema() -> impl Strategy<Value = Schema> {
+        let leaf = prop_oneof![
+            Just(Schema::Anything),
+            Just(Schema::Nothing),
+            Just(Schema::NoneType),
+            Just(Schema::Bool),
+            Just(Schema::Int),
+            Just(Schema::Float),
+            Just(Schema::Str),
+            Just(Schema::Bytes),
+            scalar_schema().prop_map(|s| Schema::Set(Box::new(s))),
+        ];
+        leaf.prop_recursive(3, 16, 3, |inner| {
+            prop_oneof![
+                proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Union),
+                proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Intersection),
+                inner.prop_map(|s| Schema::Complement(Box::new(s))),
+            ]
+        })
+    }
+
     proptest! {
         #[test]
         fn scalar_decision_matches_the_value_oracle(a in scalar_schema(), b in scalar_schema()) {
@@ -1723,6 +1890,17 @@ mod laws {
             let b_sub_a = SAMPLES.iter().all(|&v| !member(&b, v) || member(&a, v));
             prop_assert_eq!(a.is_subtype(&b), a_sub_b);
             prop_assert_eq!(a.equivalent(&b), a_sub_b && b_sub_a);
+        }
+
+        #[test]
+        fn structural_subtyping_is_sound(a in scalar_or_set_schema(), b in scalar_or_set_schema()) {
+            prop_assert!(a.is_subtype(&a)); // reflexivity holds everywhere
+            // Soundness: a claimed subtype never accepts a sample the supertype rejects.
+            if a.is_subtype(&b) {
+                for value in &samples_v() {
+                    prop_assert!(!member_v(&a, value) || member_v(&b, value));
+                }
+            }
         }
 
         #[test]
