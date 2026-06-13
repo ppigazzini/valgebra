@@ -19,8 +19,8 @@ use jiter::{JsonValue, PythonParse};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyString, PyTuple};
-use valgebra_core::{Schema, SeqRegex, fresh_self_token};
+use pyo3::types::{PyBytes, PyString, PyTuple, PyType};
+use valgebra_core::{LeafRelations, Schema, SeqRegex, fresh_self_token};
 
 use crate::build::{build_schema, combine};
 use crate::check::{Ctx, member};
@@ -252,7 +252,12 @@ impl CompiledValidator {
         let mut literals: Vec<Py<PyAny>> = self.literals.iter().map(|o| o.clone_ref(py)).collect();
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
-        Ok(self.schema.is_subtype(&other))
+        let oracle = PoolRelations {
+            py,
+            literals: &literals,
+            definitions: &definitions,
+        };
+        Ok(self.schema.is_subtype_with(&other, &oracle))
     }
 
     /// Whether this schema and `other` denote the same set — mutual inclusion.
@@ -270,7 +275,12 @@ impl CompiledValidator {
         let mut literals: Vec<Py<PyAny>> = self.literals.iter().map(|o| o.clone_ref(py)).collect();
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
-        Ok(self.schema.is_subtype(&other) && other.is_subtype(&self.schema))
+        let oracle = PoolRelations {
+            py,
+            literals: &literals,
+            definitions: &definitions,
+        };
+        Ok(self.schema.equivalent_with(&other, &oracle))
     }
 
     /// Render the compiled schema back as the annotation expression that
@@ -485,6 +495,65 @@ fn atom(py: Python<'_>, schema: Schema) -> PyResult<Py<CompiledValidator>> {
             definitions: Vec::new(),
         },
     )
+}
+
+/// A [`LeafRelations`] oracle backed by a validator's constant pool. It decides
+/// a `Literal` subtyping by running membership of the literal's value against
+/// the candidate supertype, and an `Instance`-versus-`Instance` subtyping by
+/// `issubclass` on the pooled classes.
+struct PoolRelations<'py, 'pool> {
+    py: Python<'py>,
+    literals: &'pool [Py<PyAny>],
+    definitions: &'pool [Schema],
+}
+
+impl PoolRelations<'_, '_> {
+    fn is_member(&self, schema: &Schema, value: &Bound<'_, PyAny>) -> bool {
+        let guard = RefCell::new(HashSet::new());
+        let ctx = Ctx {
+            pool: self.literals,
+            defs: self.definitions,
+            guard: &guard,
+            explain: false,
+            fail_fast: false,
+        };
+        member(
+            schema,
+            &Value::Py(value),
+            &mut Vec::new(),
+            ctx,
+            &mut Vec::new(),
+        )
+    }
+}
+
+impl LeafRelations for PoolRelations<'_, '_> {
+    fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
+        match sub {
+            // A literal denotes a singleton: `{v}` is a subtype of `sup` exactly
+            // when `v` is a member of `sup`.
+            Schema::Literal(index) => {
+                let value = self.literals.get(*index)?.bind(self.py);
+                Some(self.is_member(sup, value))
+            }
+            // The `isinstance(., C)` values are a subset of the `isinstance(., D)`
+            // values exactly when `C` is a subclass of `D`.
+            Schema::Instance(index) => match sup {
+                Schema::Instance(superindex) => {
+                    let class = self.literals.get(*index)?.bind(self.py);
+                    let superclass = self.literals.get(*superindex)?.bind(self.py);
+                    let decided = class
+                        .cast::<PyType>()
+                        .ok()
+                        .and_then(|class| class.is_subclass(superclass).ok())
+                        .unwrap_or(false);
+                    Some(decided)
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
 }
 
 /// The `valgebra._valgebra` extension module.

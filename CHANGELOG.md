@@ -24,9 +24,11 @@ will form the first release.
   `nothing`, the derived `ifthen`/`cond`, and a law-justified `simplify`, with
   the lattice laws property-tested.
 - Set-relation queries on a compiled validator: `is_subtype` (set inclusion),
-  `equivalent` (mutual inclusion), and `is_empty` (an unsatisfiable schema),
-  decided soundly over the scalar atoms and structural containers and
-  conservative beyond them.
+  `equivalent` (mutual inclusion), and `is_empty` (an unsatisfiable schema, including
+  a recursive schema with no base case). Decided soundly across scalars,
+  containers, records and mappings, sequence forms, class subtyping
+  (`issubclass`), and literal values (by membership), and conservative on the
+  cases it cannot prove.
 - Recursive schemas via the `lazy` fixpoint, with cycle and depth guards.
 - A structured, machine-readable error model: aggregated failures, opt-in
   fail-fast, and closest-branch reporting for unions.

@@ -8,7 +8,7 @@ conservative (it may answer ``False`` for a true relation it cannot prove), so
 completeness is not asserted.
 """
 
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from hypothesis import given
 from hypothesis import strategies as st
@@ -19,6 +19,14 @@ from valgebra import complement, intersect, lazy, union, validator
 class _Point(TypedDict):
     x: int
     y: int
+
+
+class _Animal:
+    pass
+
+
+class _Dog(_Animal):
+    pass
 
 
 # Schema specs valgebra compiles, spanning scalars, structural containers, and
@@ -46,6 +54,10 @@ SPECS = [
     {"x": int, "y?": str},
     {"x?": int},
     {"x": bool},
+    Literal["red"],
+    Literal[5],
+    _Animal,
+    _Dog,
 ]
 
 # A value corpus exercising the scalar and container boundaries.
@@ -77,6 +89,10 @@ VALUES = [
     {"x": 1, "y": "a"},
     {"x": True},
     {},
+    "red",
+    5,
+    _Animal(),
+    _Dog(),
     object(),
 ]
 
@@ -130,6 +146,18 @@ def test_known_relations() -> None:
     assert union(bool, int).equivalent(int)  # bool | int is just int
     assert intersect(int, complement(int)).is_empty()
     assert not validator(int).is_empty()
+
+
+def test_instance_and_literal_relations() -> None:
+    # A literal is a subtype of any schema that admits its value.
+    assert validator(Literal["red"]).is_subtype(str)
+    assert not validator(str).is_subtype(Literal["red"])
+    assert validator(Literal["red"]).is_subtype(Literal["red", "green"])
+    assert validator(list[Literal["red"]]).is_subtype(list[str])  # nested
+    # A class is a subtype of another exactly when it is a subclass.
+    assert validator(_Dog).is_subtype(_Animal)
+    assert not validator(_Animal).is_subtype(_Dog)
+    assert validator(_Dog).equivalent(_Dog)
 
 
 def test_is_empty_detects_uninhabited_recursion() -> None:

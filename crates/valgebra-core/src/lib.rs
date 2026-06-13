@@ -245,7 +245,7 @@ impl SeqRegex {
     /// the prefix-and-tail [`linear`](Self::linear) form and
     /// [`linear_subtype`]. Sound throughout: a regex shape it cannot put in
     /// linear form (a nested non-trailing star) yields `false`, never a guess.
-    fn regex_subtype(&self, other: &SeqRegex) -> bool {
+    fn regex_subtype(&self, other: &SeqRegex, oracle: &dyn LeafRelations) -> bool {
         if self == other {
             return true;
         }
@@ -253,13 +253,13 @@ impl SeqRegex {
         // included in a union if it lands in one branch (sound, conservative —
         // it may instead split across several).
         if let SeqRegex::Or(parts) = self {
-            return parts.iter().all(|part| part.regex_subtype(other));
+            return parts.iter().all(|part| part.regex_subtype(other, oracle));
         }
         if let SeqRegex::Or(parts) = other {
-            return parts.iter().any(|part| self.regex_subtype(part));
+            return parts.iter().any(|part| self.regex_subtype(part, oracle));
         }
         match (self.linear(), other.linear()) {
-            (Some((pa, ta)), Some((pb, tb))) => linear_subtype(&pa, ta, &pb, tb),
+            (Some((pa, ta)), Some((pb, tb))) => linear_subtype(&pa, ta, &pb, tb, oracle),
             _ => false,
         }
     }
@@ -917,6 +917,16 @@ impl Schema {
     /// instances, literals): there it returns `false` rather than guess.
     #[must_use]
     pub fn is_subtype(&self, other: &Schema) -> bool {
+        self.is_subtype_with(other, &NoLeafRelations)
+    }
+
+    /// [`is_subtype`](Self::is_subtype) parameterized by a [`LeafRelations`]
+    /// oracle deciding the leaf relations the structural rules cannot —
+    /// subtyping between `Instance` classes and membership of a `Literal`
+    /// value. The oracle is consulted only where the structural rules give up,
+    /// so its `None` keeps the conservative `false`.
+    #[must_use]
+    pub fn is_subtype_with(&self, other: &Schema, oracle: &dyn LeafRelations) -> bool {
         // Scalar fragment: exact via the region partition.
         if let (Some(a), Some(b)) = (self.region_set(), other.region_set()) {
             return a & !b & REGION_ALL == 0;
@@ -929,14 +939,18 @@ impl Schema {
             (Schema::Nothing, _) | (_, Schema::Anything) => true,
             (_, Schema::Nothing) => self.is_empty(), // A ⊆ ∅ exactly when A is empty
             // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z; A ⊆ (Y ∩ Z) iff A ⊆ Y and A ⊆ Z.
-            (Schema::Union(members), _) => members.iter().all(|m| m.is_subtype(other)),
-            (_, Schema::Intersection(members)) => members.iter().all(|m| self.is_subtype(m)),
+            (Schema::Union(members), _) => members.iter().all(|m| m.is_subtype_with(other, oracle)),
+            (_, Schema::Intersection(members)) => {
+                members.iter().all(|m| self.is_subtype_with(m, oracle))
+            }
             // Sound one-directional rules for the remaining lattice shapes.
-            (_, Schema::Union(members)) => members.iter().any(|m| self.is_subtype(m)),
-            (Schema::Intersection(members), _) => members.iter().any(|m| m.is_subtype(other)),
+            (_, Schema::Union(members)) => members.iter().any(|m| self.is_subtype_with(m, oracle)),
+            (Schema::Intersection(members), _) => {
+                members.iter().any(|m| m.is_subtype_with(other, oracle))
+            }
             // Set and frozenset inclusion reduces to element inclusion.
             (Schema::Set(a), Schema::Set(b)) | (Schema::FrozenSet(a), Schema::FrozenSet(b)) => {
-                a.is_subtype(b)
+                a.is_subtype_with(b, oracle)
             }
             // Same-kind sequence inclusion is language inclusion on the regexes.
             (
@@ -948,7 +962,7 @@ impl Schema {
                     container: kb,
                     regex: rb,
                 },
-            ) if ka == kb => ra.regex_subtype(rb),
+            ) if ka == kb => ra.regex_subtype(rb, oracle),
             // Record and mapping inclusion.
             (
                 Schema::KeyedMap {
@@ -959,15 +973,43 @@ impl Schema {
                     fields: fb,
                     defaults: db,
                 },
-            ) => keyed_map_subtype(fa, da, fb, db),
-            _ => false,
+            ) => keyed_map_subtype(fa, da, fb, db, oracle),
+            // A leaf the structural rules cannot relate (an instance or literal):
+            // defer to the oracle, conservative when it declines.
+            _ => oracle.leaf_subtype(self, other).unwrap_or(false),
         }
     }
 
     /// Whether `self` and `other` denote the same set — mutual inclusion.
     #[must_use]
     pub fn equivalent(&self, other: &Schema) -> bool {
-        self.is_subtype(other) && other.is_subtype(self)
+        self.equivalent_with(other, &NoLeafRelations)
+    }
+
+    /// [`equivalent`](Self::equivalent) under a [`LeafRelations`] oracle.
+    #[must_use]
+    pub fn equivalent_with(&self, other: &Schema, oracle: &dyn LeafRelations) -> bool {
+        self.is_subtype_with(other, oracle) && other.is_subtype_with(self, oracle)
+    }
+}
+
+/// Resolves the leaf relations the structural subtyping decision cannot: those
+/// that depend on the Python class hierarchy (an `Instance`) or on a concrete
+/// value (a `Literal`). The bindings implement it with `issubclass` and
+/// membership; the core defaults to [`NoLeafRelations`].
+pub trait LeafRelations {
+    /// Whether leaf schema `sub` is a subtype of `sup`, or `None` to leave the
+    /// relation conservatively undecided.
+    fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool>;
+}
+
+/// The trivial [`LeafRelations`] that decides nothing — the core default, under
+/// which `Instance` and `Literal` relations stay conservative.
+pub struct NoLeafRelations;
+
+impl LeafRelations for NoLeafRelations {
+    fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
+        None
     }
 }
 
@@ -979,6 +1021,7 @@ fn linear_subtype(
     ta: Option<&Schema>,
     pb: &[&Schema],
     tb: Option<&Schema>,
+    oracle: &dyn LeafRelations,
 ) -> bool {
     // A repeated tail with an empty element language never repeats, so the left
     // side is then just its fixed prefix.
@@ -987,8 +1030,8 @@ fn linear_subtype(
     // then against B's repeated tail past it (which B must therefore have).
     let prefix_aligns = pa.len() >= pb.len()
         && pa.iter().enumerate().all(|(i, element)| match pb.get(i) {
-            Some(expected) => element.is_subtype(expected),
-            None => tb.is_some_and(|tail| element.is_subtype(tail)),
+            Some(expected) => element.is_subtype_with(expected, oracle),
+            None => tb.is_some_and(|tail| element.is_subtype_with(tail, oracle)),
         });
     match (ta, tb) {
         (None, None) => pa.len() == pb.len() && prefix_aligns,
@@ -996,7 +1039,7 @@ fn linear_subtype(
         // A repeats without bound but B is finite-length: impossible.
         (Some(_), None) => false,
         // A's repeated element must also land in B's repeated tail.
-        (Some(a), Some(tail)) => prefix_aligns && a.is_subtype(tail),
+        (Some(a), Some(tail)) => prefix_aligns && a.is_subtype_with(tail, oracle),
     }
 }
 
@@ -1011,12 +1054,13 @@ fn keyed_map_subtype(
     da: &[(Schema, Schema)],
     fb: &[Field],
     db: &[(Schema, Schema)],
+    oracle: &dyn LeafRelations,
 ) -> bool {
     if da.is_empty() && db.is_empty() {
         let width_and_depth = fa.iter().all(|a| {
             fb.iter()
                 .find(|b| b.name == a.name)
-                .is_some_and(|b| a.schema.is_subtype(&b.schema))
+                .is_some_and(|b| a.schema.is_subtype_with(&b.schema, oracle))
         });
         let required = fb
             .iter()
@@ -1024,7 +1068,7 @@ fn keyed_map_subtype(
             .all(|b| fa.iter().any(|a| a.name == b.name && a.required));
         width_and_depth && required
     } else if fa.is_empty() && fb.is_empty() && da.len() == 1 && db.len() == 1 {
-        da[0].0.is_subtype(&db[0].0) && da[0].1.is_subtype(&db[0].1)
+        da[0].0.is_subtype_with(&db[0].0, oracle) && da[0].1.is_subtype_with(&db[0].1, oracle)
     } else {
         false
     }
