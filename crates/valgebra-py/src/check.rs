@@ -89,13 +89,12 @@ pub(crate) fn member(
         Schema::Seq { container, regex } => check_seq(*container, regex, value, path, ctx, out),
         Schema::Set(element) => check_set(element, value, path, ctx, out),
         Schema::FrozenSet(element) => check_frozenset(element, value, path, ctx, out),
-        Schema::Mapping { key, value: val } => check_mapping(key, val, value, path, ctx, out),
-        Schema::Record { fields, open } => {
+        Schema::KeyedMap { fields, defaults } => {
             // Membership is the single-pass fast check; on failure the explain
             // pass re-walks in declared order to aggregate ordered violations.
-            let ok = record_matches(fields, *open, value, ctx);
+            let ok = keyed_map_matches(fields, defaults, value, ctx);
             if !ok && ctx.explain {
-                record_explain(fields, *open, value, path, ctx, out);
+                keyed_map_explain(fields, defaults, value, path, ctx, out);
             }
             ok
         }
@@ -338,85 +337,51 @@ fn check_frozenset(
     ok
 }
 
-/// A dict whose keys all match `key_schema` and values all match `value_schema`.
-/// A JSON object's keys are strings; a duplicate key keeps its last value, as
-/// `json.loads` does. The key segment for an entry's path is built only in
-/// explain mode, so the fast path allocates nothing per entry.
-fn check_mapping(
-    key_schema: &Schema,
-    value_schema: &Schema,
+/// Membership for a keyed map: named fields, then a default clause for every
+/// other key. The walk is inverted — it visits each entry once — and a JSON
+/// object's keys are strings, a duplicate keeping its last value as
+/// `json.loads` does.
+fn keyed_map_matches(
+    fields: &[Field],
+    defaults: &[(Schema, Schema)],
     value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
 ) -> bool {
     match value {
-        Value::Py(v) => match v.cast::<PyDict>() {
-            Ok(dict) => {
-                let mut ok = true;
-                for (key, val) in dict.iter() {
-                    if ctx.explain {
-                        path.push(PathSegment::Key(key_label(&key)));
-                    }
-                    let entry_ok = member(key_schema, &Value::Py(&key), path, ctx, out)
-                        & member(value_schema, &Value::Py(&val), path, ctx, out);
-                    if ctx.explain {
-                        path.pop();
-                    }
-                    ok &= entry_ok;
-                    if !ok && stop(ctx) {
-                        return false;
-                    }
-                }
-                ok
-            }
-            Err(_) => type_fail("dict_type", "dict", value, path, ctx, out),
-        },
+        Value::Py(v) => keyed_map_matches_py(fields, defaults, v, ctx),
         Value::Json(py, JsonValue::Object(entries)) => {
-            let mut ok = true;
-            for (i, (key, val)) in entries.iter().enumerate() {
-                // A duplicate key keeps its last value, so skip an entry whose
-                // key recurs later (json.loads semantics).
-                if entries[i + 1..].iter().any(|(later, _)| later == key) {
-                    continue;
-                }
-                let key_value = JsonValue::Str(Cow::Borrowed(key.as_ref()));
-                if ctx.explain {
-                    path.push(PathSegment::Key(truncate(key.as_ref(), 40)));
-                }
-                let entry_ok = member(key_schema, &Value::Json(*py, &key_value), path, ctx, out)
-                    & member(value_schema, &Value::Json(*py, val), path, ctx, out);
-                if ctx.explain {
-                    path.pop();
-                }
-                ok &= entry_ok;
-                if !ok && stop(ctx) {
-                    return false;
-                }
-            }
-            ok
-        }
-        Value::Json(..) => type_fail("dict_type", "dict", value, path, ctx, out),
-    }
-}
-
-/// Membership for a record: the single-pass fast check. The walk is inverted —
-/// it visits each entry once and matches the key against the declared fields —
-/// rather than looking up every declared field and rescanning for extra keys.
-fn record_matches(fields: &[Field], open: bool, value: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
-    match value {
-        Value::Py(v) => record_matches_py(fields, open, v, ctx),
-        Value::Json(py, JsonValue::Object(entries)) => {
-            record_matches_json(fields, open, *py, entries, ctx)
+            keyed_map_matches_json(fields, defaults, *py, entries, ctx)
         }
         Value::Json(..) => false,
     }
 }
 
-/// The record fast path over a Python dict. The key's UTF-8 is borrowed without
-/// allocating; a non-string key whose `str()` names a field never fills it,
-/// exactly as a string-key lookup would miss it.
-fn record_matches_py(fields: &[Field], open: bool, dict: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> bool {
+/// Whether `(key, val)` is covered by some default clause: the key belongs to a
+/// clause's key schema and the value to that clause's value schema. The clauses
+/// denote a union of key×value rectangles.
+fn covered(
+    defaults: &[(Schema, Schema)],
+    key: &Value<'_, '_>,
+    val: &Value<'_, '_>,
+    ctx: Ctx<'_>,
+) -> bool {
+    let sub = fast(ctx);
+    defaults.iter().any(|(key_schema, value_schema)| {
+        member(key_schema, key, &mut Vec::new(), sub, &mut Vec::new())
+            && member(value_schema, val, &mut Vec::new(), sub, &mut Vec::new())
+    })
+}
+
+/// The keyed-map fast path over a Python dict. A string key naming a declared
+/// field is checked against it; any other key (non-string, or undeclared) must
+/// be covered by a default clause. Closed records have no clauses, so an
+/// undeclared key is rejected; an open record's `anything` clause covers it.
+fn keyed_map_matches_py(
+    fields: &[Field],
+    defaults: &[(Schema, Schema)],
+    dict: &Bound<'_, PyAny>,
+    ctx: Ctx<'_>,
+) -> bool {
     let Ok(dict) = dict.cast::<PyDict>() else {
         return false;
     };
@@ -424,27 +389,28 @@ fn record_matches_py(fields: &[Field], open: bool, dict: &Bound<'_, PyAny>, ctx:
     let mut required_remaining = fields.iter().filter(|f| f.required).count();
     let sub = fast(ctx);
     for (key, val) in dict.iter() {
-        match key.cast::<PyString>().ok().and_then(|s| s.to_str().ok()) {
-            Some(name) => match declared.get(name) {
-                Some(field) => {
-                    if !member(
-                        &field.schema,
-                        &Value::Py(&val),
-                        &mut Vec::new(),
-                        sub,
-                        &mut Vec::new(),
-                    ) {
-                        return false;
-                    }
-                    if field.required {
-                        required_remaining -= 1;
-                    }
+        let field = key
+            .cast::<PyString>()
+            .ok()
+            .and_then(|s| s.to_str().ok())
+            .and_then(|name| declared.get(name));
+        match field {
+            Some(field) => {
+                if !member(
+                    &field.schema,
+                    &Value::Py(&val),
+                    &mut Vec::new(),
+                    sub,
+                    &mut Vec::new(),
+                ) {
+                    return false;
                 }
-                None if open => {}
-                None => return false,
-            },
+                if field.required {
+                    required_remaining -= 1;
+                }
+            }
             None => {
-                if !open && !stringifies_to_declared(&key, &declared) {
+                if !covered(defaults, &Value::Py(&key), &Value::Py(&val), ctx) {
                     return false;
                 }
             }
@@ -453,12 +419,12 @@ fn record_matches_py(fields: &[Field], open: bool, dict: &Bound<'_, PyAny>, ctx:
     required_remaining == 0
 }
 
-/// The record fast path over a JSON object. Keys are strings; a duplicate key
+/// The keyed-map fast path over a JSON object. Keys are strings; a duplicate key
 /// keeps its last value (a reverse find), as `json.loads` does. Records are
 /// small, so a linear scan beats building a per-object map.
-fn record_matches_json(
+fn keyed_map_matches_json(
     fields: &[Field],
-    open: bool,
+    defaults: &[(Schema, Schema)],
     py: Python<'_>,
     entries: &[(Cow<'_, str>, JsonValue<'_>)],
     ctx: Ctx<'_>,
@@ -485,31 +451,36 @@ fn record_matches_json(
             None => {}
         }
     }
-    if open {
-        return true;
+    // Every key that is not a declared field must be covered by a default clause,
+    // testing each key's last value (json.loads semantics).
+    for (i, (key, val)) in entries.iter().enumerate() {
+        if fields.iter().any(|f| f.name == key.as_ref()) {
+            continue;
+        }
+        if entries[i + 1..].iter().any(|(later, _)| later == key) {
+            continue;
+        }
+        let key_value = JsonValue::Str(Cow::Borrowed(key.as_ref()));
+        if !covered(
+            defaults,
+            &Value::Json(py, &key_value),
+            &Value::Json(py, val),
+            ctx,
+        ) {
+            return false;
+        }
     }
-    // Closed: every object key must name a declared field.
-    entries
-        .iter()
-        .all(|(key, _)| fields.iter().any(|f| f.name == key.as_ref()))
+    true
 }
 
-/// Whether the `str()` of a non-string key names a declared field, mirroring the
-/// stringified extra-key check on the explain path.
-fn stringifies_to_declared(key: &Bound<'_, PyAny>, declared: &HashMap<&str, &Field>) -> bool {
-    key.str()
-        .ok()
-        .and_then(|text| text.to_str().ok().map(|name| declared.contains_key(name)))
-        .unwrap_or(false)
-}
-
-/// The explain pass over a record, run only after [`record_matches`] has already
-/// reported the value is not a member. It re-walks in declared order so the
-/// aggregated violations read in declared order: present fields checked in order,
-/// then absent required keys, then (for a closed record) extra keys.
-fn record_explain(
+/// The explain pass over a keyed map, run only after [`keyed_map_matches`] has
+/// reported the value is not a member. It walks in declared order — present
+/// fields checked in order, then absent required keys — then reports each
+/// undeclared key: an uncovered key with no clauses reads as an unexpected key,
+/// and with clauses its key and value are checked against the first clause.
+fn keyed_map_explain(
     fields: &[Field],
-    open: bool,
+    defaults: &[(Schema, Schema)],
     value: &Value<'_, '_>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
@@ -525,6 +496,7 @@ fn record_explain(
         out.push(type_mismatch("dict_type", "dict", value, path));
         return;
     };
+    let declared: HashSet<&str> = fields.iter().map(|field| field.name.as_str()).collect();
     for field in fields {
         match dict.get_item(field.name.as_str()) {
             Ok(Some(item)) => {
@@ -546,15 +518,27 @@ fn record_explain(
             return;
         }
     }
-    if open {
-        return;
-    }
-    let declared: HashSet<&str> = fields.iter().map(|field| field.name.as_str()).collect();
-    for (key, _) in dict.iter() {
-        let key_text = key
-            .str()
-            .map_or_else(|_| String::new(), |text| text.to_string());
-        if !declared.contains(key_text.as_str()) {
+    for (key, val) in dict.iter() {
+        if let Some(name) = key.cast::<PyString>().ok().and_then(|s| s.to_str().ok())
+            && declared.contains(name)
+        {
+            continue;
+        }
+        if covered(defaults, &Value::Py(&key), &Value::Py(&val), ctx) {
+            continue;
+        }
+        if let Some((key_schema, value_schema)) = defaults.first() {
+            // A clause exists but did not cover this key: surface the key and
+            // value violations against it (the homogeneous-mapping error).
+            path.push(PathSegment::Key(key_label(&key)));
+            member(key_schema, &Value::Py(&key), path, ctx, out);
+            member(value_schema, &Value::Py(&val), path, ctx, out);
+            path.pop();
+        } else {
+            // A closed record: the key is simply not allowed.
+            let key_text = key
+                .str()
+                .map_or_else(|_| String::new(), |text| text.to_string());
             out.push(located(
                 path,
                 key_text.clone(),
@@ -562,9 +546,9 @@ fn record_explain(
                 "no unexpected key".to_owned(),
                 format!("{key_text:?}"),
             ));
-            if ctx.fail_fast {
-                return;
-            }
+        }
+        if ctx.fail_fast && !out.is_empty() {
+            return;
         }
     }
 }

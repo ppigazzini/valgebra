@@ -66,8 +66,9 @@ pub(crate) fn render(
         }
         Schema::Set(e) => format!("set[{}]", r(e)),
         Schema::FrozenSet(e) => format!("frozenset[{}]", r(e)),
-        Schema::Mapping { key, value } => format!("dict[{}, {}]", r(key), r(value)),
-        Schema::Record { fields, open } => render_record(py, fields, *open, pool, defs, active),
+        Schema::KeyedMap { fields, defaults } => {
+            render_keyed_map(py, fields, defaults, pool, defs, active)
+        }
         Schema::Union(members) => members.iter().map(&r).collect::<Vec<_>>().join(" | "),
         Schema::Intersection(members) => format!("intersect({})", kids(members)),
         Schema::Complement(inner) => format!("complement({})", r(inner)),
@@ -93,29 +94,36 @@ pub(crate) fn render(
     }
 }
 
-fn render_record(
+fn render_keyed_map(
     py: Python<'_>,
     fields: &[Field],
-    open: bool,
+    defaults: &[(Schema, Schema)],
     pool: &[Py<PyAny>],
     defs: &[Schema],
     active: &RefCell<HashSet<usize>>,
 ) -> String {
+    let r = |s: &Schema| render(py, s, pool, defs, active);
+    // A pure mapping — no named fields, one clause — is dict[K, V].
+    if fields.is_empty()
+        && let [(key, value)] = defaults
+    {
+        return format!("dict[{}, {}]", r(key), r(value));
+    }
+    // Otherwise a record/struct: named fields, then any catch-all clauses.
     let mut entries: Vec<String> = fields
         .iter()
         .map(|field| {
             let suffix = if field.required { "" } else { "?" };
-            format!(
-                "'{}{}': {}",
-                field.name,
-                suffix,
-                render(py, &field.schema, pool, defs, active)
-            )
+            format!("'{}{}': {}", field.name, suffix, r(&field.schema))
         })
         .collect();
-    // An open (lax) record admits more keys; show that with a trailing marker.
-    if open {
-        entries.push("...".to_owned());
+    for (key, value) in defaults {
+        // An anything-to-anything catch-all reads as the open-record marker.
+        if matches!(key, Schema::Anything) && matches!(value, Schema::Anything) {
+            entries.push("...".to_owned());
+        } else {
+            entries.push(format!("{}: {}", r(key), r(value)));
+        }
     }
     format!("{{{}}}", entries.join(", "))
 }

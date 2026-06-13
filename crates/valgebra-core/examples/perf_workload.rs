@@ -42,31 +42,28 @@ fn wide_record(width: usize) -> Schema {
             required: i % 2 == 0,
         })
         .collect();
-    Schema::Record {
-        fields,
-        open: false,
-    }
+    Schema::record(fields, false)
 }
 
 /// A record nested `depth` levels deep.
 fn nested_records(depth: usize) -> Schema {
-    let mut inner = Schema::Record {
-        fields: vec![Field {
+    let mut inner = Schema::record(
+        vec![Field {
             name: "leaf".to_owned(),
             schema: Schema::Int,
             required: true,
         }],
-        open: false,
-    };
+        false,
+    );
     for _ in 0..depth {
-        inner = Schema::Record {
-            fields: vec![Field {
+        inner = Schema::record(
+            vec![Field {
                 name: "child".to_owned(),
                 schema: Schema::list(SeqRegex::homogeneous(inner)),
                 required: true,
             }],
-            open: false,
-        };
+            false,
+        );
     }
     inner
 }
@@ -112,7 +109,7 @@ impl DepthMarker for Schema {
     fn depth_marker(&self) -> usize {
         match self {
             Schema::Union(members) | Schema::Intersection(members) => members.len(),
-            Schema::Record { fields, .. } | Schema::Object { fields, .. } => fields.len(),
+            Schema::KeyedMap { fields, .. } | Schema::Object { fields, .. } => fields.len(),
             Schema::Seq { regex, .. } => 1 + regex_depth(regex),
             Schema::Complement(inner) | Schema::Set(inner) | Schema::FrozenSet(inner) => {
                 1 + inner.depth_marker()

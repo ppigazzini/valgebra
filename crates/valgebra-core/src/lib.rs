@@ -109,25 +109,27 @@ pub enum Schema {
     Set(Box<Schema>),
     /// Denotes frozensets whose every element belongs to the inner schema.
     FrozenSet(Box<Schema>),
-    /// Denotes dicts whose keys all match `key` and values all match `value`.
-    Mapping {
-        /// Schema every key must satisfy.
-        key: Box<Schema>,
-        /// Schema every value must satisfy.
-        value: Box<Schema>,
-    },
-    /// Denotes dicts with named fields, closed (strict) by default.
+    /// Denotes dicts with named fields and key-schema-keyed defaults for the
+    /// rest.
     ///
-    /// A required field's key must be present with a matching value; an optional
-    /// field's value is checked only when its key is present. When `open` is
-    /// false (the default) no key outside the declared field names is admitted;
-    /// when `open` is true undeclared keys are allowed (the lax variant). The
-    /// empty closed record denotes only the empty dict.
-    Record {
-        /// The declared fields, in order.
+    /// A dict is a member iff every required field's key is present with a
+    /// matching value, every present optional field's value matches, and every
+    /// key that is *not* a declared field name is covered by some default
+    /// clause — a `(key-schema, value-schema)` pair the key and its value both
+    /// satisfy. Named fields take precedence over the defaults.
+    ///
+    /// One node subsumes the record, the homogeneous mapping, the heterogeneous
+    /// mapping, and their combination: a closed record has no default clause, an
+    /// open (lax) record a single `(Anything, Anything)` clause, `dict[K, V]` a
+    /// single `(K, V)` clause with no fields, and a typed catch-all a record's
+    /// fields plus a typed clause. The empty closed map denotes only the empty
+    /// dict.
+    KeyedMap {
+        /// The declared string-named fields, in order.
         fields: Vec<Field>,
-        /// Whether keys outside the declared fields are admitted.
-        open: bool,
+        /// Ordered `(key-schema, value-schema)` clauses governing every key that
+        /// is not a declared field name.
+        defaults: Vec<(Schema, Schema)>,
     },
     /// Denotes the union of the member sets: a value is a member iff it belongs
     /// to at least one member schema.
@@ -300,6 +302,28 @@ impl Schema {
             regex,
         }
     }
+
+    /// A homogeneous mapping `dict[K, V]`: every key in `key`, every value in
+    /// `value`.
+    #[must_use]
+    pub fn mapping(key: Schema, value: Schema) -> Schema {
+        Schema::KeyedMap {
+            fields: Vec::new(),
+            defaults: vec![(key, value)],
+        }
+    }
+
+    /// A record of named fields, closed (`open` false) or lax (`open` true). An
+    /// open record admits any other key; a closed one admits none.
+    #[must_use]
+    pub fn record(fields: Vec<Field>, open: bool) -> Schema {
+        let defaults = if open {
+            vec![(Schema::Anything, Schema::Anything)]
+        } else {
+            Vec::new()
+        };
+        Schema::KeyedMap { fields, defaults }
+    }
 }
 
 impl SeqRegex {
@@ -357,7 +381,7 @@ pub enum Constraint {
     Predicate(usize),
 }
 
-/// A named field of a [`Schema::Record`].
+/// A named field of a [`Schema::KeyedMap`] or [`Schema::Object`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Field {
     /// The key name.
@@ -394,7 +418,7 @@ impl Schema {
             } => "tuple",
             Schema::Set(_) => "set",
             Schema::FrozenSet(_) => "frozenset",
-            Schema::Mapping { .. } | Schema::Record { .. } => "dict",
+            Schema::KeyedMap { .. } => "dict",
             Schema::Union(_) => "union",
             Schema::Intersection(_) => "intersection",
             Schema::Complement(_) => "complement",
@@ -434,7 +458,7 @@ impl Schema {
             } => "tuple_type",
             Schema::Set(_) => "set_type",
             Schema::FrozenSet(_) => "frozenset_type",
-            Schema::Mapping { .. } | Schema::Record { .. } => "dict_type",
+            Schema::KeyedMap { .. } => "dict_type",
             Schema::Union(_) => "union_error",
             Schema::Intersection(_) => "intersection_error",
             Schema::Complement(_) => "unexpected_match",
@@ -479,13 +503,12 @@ impl Schema {
             Schema::Intersection(es) => {
                 Schema::Intersection(es.iter().map(|s| s.shifted(pool, defs)).collect())
             }
-            Schema::Mapping { key, value } => Schema::Mapping {
-                key: Box::new(key.shifted(pool, defs)),
-                value: Box::new(value.shifted(pool, defs)),
-            },
-            Schema::Record { fields, open } => Schema::Record {
+            Schema::KeyedMap { fields, defaults } => Schema::KeyedMap {
                 fields: fields.iter().map(|f| f.shifted(pool, defs)).collect(),
-                open: *open,
+                defaults: defaults
+                    .iter()
+                    .map(|(k, v)| (k.shifted(pool, defs), v.shifted(pool, defs)))
+                    .collect(),
             },
             Schema::Object {
                 class_index,
@@ -517,11 +540,7 @@ impl Schema {
             Schema::Complement(e) => Schema::Complement(Box::new(recur(e))),
             Schema::Union(es) => Schema::Union(es.iter().map(recur).collect()),
             Schema::Intersection(es) => Schema::Intersection(es.iter().map(recur).collect()),
-            Schema::Mapping { key, value } => Schema::Mapping {
-                key: Box::new(recur(key)),
-                value: Box::new(recur(value)),
-            },
-            Schema::Record { fields, open } => Schema::Record {
+            Schema::KeyedMap { fields, defaults } => Schema::KeyedMap {
                 fields: fields
                     .iter()
                     .map(|f| Field {
@@ -530,7 +549,7 @@ impl Schema {
                         required: f.required,
                     })
                     .collect(),
-                open: *open,
+                defaults: defaults.iter().map(|(k, v)| (recur(k), recur(v))).collect(),
             },
             Schema::Object {
                 class_index,
@@ -566,10 +585,15 @@ impl Schema {
             // Structural constructors guard their children.
             Schema::Seq { regex, .. } => regex.occurs_guarded(target),
             Schema::Set(e) | Schema::FrozenSet(e) => e.occurs_unguarded(target, true),
-            Schema::Mapping { key, value } => {
-                key.occurs_unguarded(target, true) || value.occurs_unguarded(target, true)
+            Schema::KeyedMap { fields, defaults } => {
+                fields
+                    .iter()
+                    .any(|f| f.schema.occurs_unguarded(target, true))
+                    || defaults.iter().any(|(k, v)| {
+                        k.occurs_unguarded(target, true) || v.occurs_unguarded(target, true)
+                    })
             }
-            Schema::Record { fields, .. } | Schema::Object { fields, .. } => fields
+            Schema::Object { fields, .. } => fields
                 .iter()
                 .any(|f| f.schema.occurs_unguarded(target, true)),
             // Algebraic combinators do not guard: they pass `guarded` through.
@@ -600,11 +624,7 @@ impl Schema {
             },
             Schema::Set(e) => Schema::Set(Box::new(e.simplify())),
             Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.simplify())),
-            Schema::Mapping { key, value } => Schema::Mapping {
-                key: Box::new(key.simplify()),
-                value: Box::new(value.simplify()),
-            },
-            Schema::Record { fields, open } => Schema::Record {
+            Schema::KeyedMap { fields, defaults } => Schema::KeyedMap {
                 fields: fields
                     .iter()
                     .map(|f| Field {
@@ -613,7 +633,10 @@ impl Schema {
                         required: f.required,
                     })
                     .collect(),
-                open: *open,
+                defaults: defaults
+                    .iter()
+                    .map(|(k, v)| (k.simplify(), v.simplify()))
+                    .collect(),
             },
             Schema::Object {
                 class_index,
@@ -641,10 +664,13 @@ impl Schema {
         }
     }
 
-    /// Return a copy with every [`Schema::Record`] in the tree set to `open`.
+    /// Return a copy with every record-shaped [`Schema::KeyedMap`] in the tree
+    /// set to `open`.
     ///
     /// This backs the `lax`/`strict` wrappers: `lax` opens every record in a
-    /// subtree (undeclared keys allowed), `strict` closes them.
+    /// subtree (undeclared keys allowed via an `anything` catch-all), `strict`
+    /// closes them. A pure mapping (no named fields) is not a record and keeps
+    /// its clauses.
     #[must_use]
     pub fn with_records_open(&self, open: bool) -> Schema {
         let recur = |s: &Schema| s.with_records_open(open);
@@ -659,9 +685,20 @@ impl Schema {
                 .collect()
         };
         match self {
-            Schema::Record { fields, .. } => Schema::Record {
+            // A record (named fields) opens or closes its catch-all; a pure
+            // mapping (no fields) is not a record, so only its clause schemas are
+            // recursed.
+            Schema::KeyedMap { fields, .. } if !fields.is_empty() => Schema::KeyedMap {
                 fields: fields_open(fields),
-                open,
+                defaults: if open {
+                    vec![(Schema::Anything, Schema::Anything)]
+                } else {
+                    Vec::new()
+                },
+            },
+            Schema::KeyedMap { defaults, .. } => Schema::KeyedMap {
+                fields: Vec::new(),
+                defaults: defaults.iter().map(|(k, v)| (recur(k), recur(v))).collect(),
             },
             Schema::Object {
                 class_index,
@@ -679,10 +716,6 @@ impl Schema {
             Schema::Complement(e) => Schema::Complement(Box::new(recur(e))),
             Schema::Union(es) => Schema::Union(es.iter().map(recur).collect()),
             Schema::Intersection(es) => Schema::Intersection(es.iter().map(recur).collect()),
-            Schema::Mapping { key, value } => Schema::Mapping {
-                key: Box::new(recur(key)),
-                value: Box::new(recur(value)),
-            },
             Schema::Refine { base, constraints } => Schema::Refine {
                 base: Box::new(recur(base)),
                 constraints: constraints.clone(),
@@ -894,22 +927,19 @@ mod tests {
             ),
             (Schema::Set(Box::new(Schema::Int)), "set", "set_type"),
             (
-                Schema::Mapping {
-                    key: Box::new(Schema::Str),
-                    value: Box::new(Schema::Int),
-                },
+                Schema::mapping(Schema::Str, Schema::Int),
                 "dict",
                 "dict_type",
             ),
             (
-                Schema::Record {
-                    fields: vec![Field {
+                Schema::record(
+                    vec![Field {
                         name: "k".to_owned(),
                         schema: Schema::Int,
                         required: true,
                     }],
-                    open: false,
-                },
+                    false,
+                ),
                 "dict",
                 "dict_type",
             ),
@@ -960,39 +990,36 @@ mod tests {
 
     #[test]
     fn mapping_and_record_share_the_dict_label() {
-        let mapping = Schema::Mapping {
-            key: Box::new(Schema::Str),
-            value: Box::new(Schema::Int),
-        };
-        let record = Schema::Record {
-            fields: Vec::new(),
-            open: false,
-        };
+        let mapping = Schema::mapping(Schema::Str, Schema::Int);
+        let record = Schema::record(Vec::new(), false);
         assert_eq!(mapping.expected(), record.expected());
         assert_eq!(mapping.error_code(), record.error_code());
     }
 
+    /// Whether a record-shaped keyed map admits undeclared keys (has a default).
+    fn record_is_open(schema: &Schema) -> bool {
+        match schema {
+            Schema::KeyedMap { defaults, .. } => !defaults.is_empty(),
+            _ => panic!("not a keyed map: {schema:?}"),
+        }
+    }
+
     #[test]
     fn with_records_open_flips_every_record_in_the_tree() {
-        let schema = Schema::list(SeqRegex::homogeneous(Schema::Record {
-            fields: vec![Field {
+        let record = Schema::record(
+            vec![Field {
                 name: "k".to_owned(),
                 schema: Schema::Int,
                 required: true,
             }],
-            open: false,
-        }));
+            false,
+        );
+        let schema = Schema::list(SeqRegex::homogeneous(record));
         let opened = schema.with_records_open(true);
-        assert!(matches!(
-            homogeneous_elem(&opened),
-            Schema::Record { open: true, .. }
-        ));
+        assert!(record_is_open(homogeneous_elem(&opened)));
         // strict flips it back.
         let closed = schema.with_records_open(true).with_records_open(false);
-        assert!(matches!(
-            homogeneous_elem(&closed),
-            Schema::Record { open: false, .. }
-        ));
+        assert!(!record_is_open(homogeneous_elem(&closed)));
     }
 
     #[test]

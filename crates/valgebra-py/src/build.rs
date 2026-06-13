@@ -270,10 +270,7 @@ fn build_typed_dict(
             required: required.contains(&name)?,
         });
     }
-    Ok(Schema::Record {
-        fields,
-        open: false,
-    })
+    Ok(Schema::record(fields, false))
 }
 
 /// Build an Object node (isinstance plus per-attribute checks) for a class
@@ -335,10 +332,10 @@ fn build_parametrized(
                 "dict[...] needs a key type and a value type",
             ));
         }
-        return Ok(Schema::Mapping {
-            key: Box::new(build_schema(&args.get_item(0)?, lits, defs)?),
-            value: Box::new(build_schema(&args.get_item(1)?, lits, defs)?),
-        });
+        return Ok(Schema::mapping(
+            build_schema(&args.get_item(0)?, lits, defs)?,
+            build_schema(&args.get_item(1)?, lits, defs)?,
+        ));
     }
     if origin.is(py.get_type::<PyTuple>()) {
         // tuple[T, ...] is the homogeneous variadic form.
@@ -493,10 +490,7 @@ fn build_dict(
 ) -> PyResult<Schema> {
     // An empty dict is the empty closed record: it matches only {}.
     if dict.is_empty() {
-        return Ok(Schema::Record {
-            fields: Vec::new(),
-            open: false,
-        });
+        return Ok(Schema::record(Vec::new(), false));
     }
     // All-string keys: a record. A single type-keyed entry: a mapping.
     if dict.iter().all(|(key, _)| key.is_instance_of::<PyString>()) {
@@ -506,10 +500,10 @@ fn build_dict(
         && let Some((key, value)) = dict.iter().next()
         && key.cast::<PyType>().is_ok()
     {
-        return Ok(Schema::Mapping {
-            key: Box::new(build_schema(&key, lits, defs)?),
-            value: Box::new(build_schema(&value, lits, defs)?),
-        });
+        return Ok(Schema::mapping(
+            build_schema(&key, lits, defs)?,
+            build_schema(&value, lits, defs)?,
+        ));
     }
     Err(not_implemented(
         "a dict schema must use all string keys (a record) or a single \
@@ -535,10 +529,7 @@ fn build_record(
             required,
         });
     }
-    Ok(Schema::Record {
-        fields,
-        open: false,
-    })
+    Ok(Schema::record(fields, false))
 }
 
 /// Build a Refine node from an `Annotated` base and its metadata markers.

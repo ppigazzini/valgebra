@@ -99,6 +99,36 @@ def _set_pred(elem: Pred) -> Pred:
     return lambda x: isinstance(x, set) and all(elem(e) for e in x)
 
 
+def _record_of(children: list[Spec]) -> Spec:
+    """Build a closed record schema and its predicate from child specs."""
+    spec: dict[str, object] = {}
+    preds: dict[str, tuple[bool, Pred]] = {}
+    for i, (child_spec, child_pred) in enumerate(children):
+        required = i % 2 == 0
+        spec[f"f{i}" if required else f"f{i}?"] = child_spec
+        preds[f"f{i}"] = (required, child_pred)
+    return (spec, _record_pred(preds))
+
+
+def _record_pred(preds: dict[str, tuple[bool, Pred]]) -> Pred:
+    names = set(preds)
+
+    def pred(x: object) -> bool:
+        if not isinstance(x, dict):
+            return False
+        present: dict[str, object] = {}
+        for key, val in x.items():
+            if not (isinstance(key, str) and key in names):
+                return False  # a closed record admits only its declared keys
+            present[key] = val
+        return all(
+            (p(present[name]) if name in present else not required)
+            for name, (required, p) in preds.items()
+        )
+
+    return pred
+
+
 def _prefix_tail_pred(prefix: list[Pred], tail: Pred) -> Pred:
     n = len(prefix)
 
@@ -157,6 +187,8 @@ def _specs() -> st.SearchStrategy[Spec]:
                     _prefix_tail_pred([ab[0][1]], ab[1][1]),
                 )
             ),
+            # A closed record of named fields.
+            st.lists(child, min_size=1, max_size=2).map(_record_of),
         ),
         max_leaves=5,
     )

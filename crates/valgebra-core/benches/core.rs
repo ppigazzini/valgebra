@@ -40,26 +40,23 @@ fn wide_record(width: usize) -> Schema {
             required: i % 2 == 0,
         })
         .collect();
-    Schema::Record {
-        fields,
-        open: false,
-    }
+    Schema::record(fields, false)
 }
 
 /// A record nested `depth` levels deep, each level holding a small record, so
 /// `with_records_open` rebuilds the whole spine.
 fn nested_records(depth: usize) -> Schema {
-    let mut inner = Schema::Record {
-        fields: vec![Field {
+    let mut inner = Schema::record(
+        vec![Field {
             name: "leaf".to_owned(),
             schema: Schema::Int,
             required: true,
         }],
-        open: false,
-    };
+        false,
+    );
     for _ in 0..depth {
-        inner = Schema::Record {
-            fields: vec![
+        inner = Schema::record(
+            vec![
                 Field {
                     name: "child".to_owned(),
                     schema: Schema::list(SeqRegex::homogeneous(inner)),
@@ -71,8 +68,8 @@ fn nested_records(depth: usize) -> Schema {
                     required: false,
                 },
             ],
-            open: false,
-        };
+            false,
+        );
     }
     inner
 }
