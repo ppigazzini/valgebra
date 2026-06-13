@@ -1065,6 +1065,101 @@ mod tests {
         assert!(!copy.required);
         assert_eq!(copy.schema, Schema::Int);
     }
+
+    #[test]
+    fn linear_recognizes_the_frontend_sequence_shapes() {
+        let homogeneous = SeqRegex::homogeneous(Schema::Int);
+        let (prefix, tail) = homogeneous.linear().expect("homogeneous is linear");
+        assert!(prefix.is_empty());
+        assert!(matches!(tail, Some(Schema::Int)));
+
+        let fixed = SeqRegex::fixed([Schema::Int, Schema::Str]);
+        let (prefix, tail) = fixed.linear().expect("fixed is linear");
+        assert_eq!(prefix.len(), 2);
+        assert!(tail.is_none());
+
+        let prefix_tail = SeqRegex::prefix_tail([Schema::Str], Schema::Int);
+        let (prefix, tail) = prefix_tail.linear().expect("prefix-plus-tail is linear");
+        assert_eq!(prefix.len(), 1);
+        assert!(matches!(tail, Some(Schema::Int)));
+
+        let (prefix, tail) = SeqRegex::Empty.linear().expect("empty is linear");
+        assert!(prefix.is_empty() && tail.is_none());
+    }
+
+    #[test]
+    fn linear_rejects_the_non_linear_shapes() {
+        let elem = || SeqRegex::Elem(Box::new(Schema::Int));
+        // Alternation is not a linear sequence.
+        assert!(SeqRegex::Or(vec![elem()]).linear().is_none());
+        // A repetition of something other than a single element.
+        assert!(
+            SeqRegex::Star(Box::new(SeqRegex::Cat(vec![])))
+                .linear()
+                .is_none()
+        );
+        // A repetition that is not in tail position.
+        let star_first = SeqRegex::Cat(vec![SeqRegex::Star(Box::new(elem())), elem()]);
+        assert!(star_first.linear().is_none());
+        // Alternation nested inside a concatenation.
+        let cat_or = SeqRegex::Cat(vec![SeqRegex::Or(vec![SeqRegex::Empty])]);
+        assert!(cat_or.linear().is_none());
+    }
+
+    #[test]
+    fn sequence_transforms_recurse_through_every_regex_arm() {
+        // A regex touching Or, Cat, Star, and Elem, with a Ref element and a
+        // SelfRef under a repetition, so every arm of the transforms is walked.
+        let regex = SeqRegex::Or(vec![
+            SeqRegex::Cat(vec![
+                SeqRegex::Elem(Box::new(Schema::Ref(0))),
+                SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::SelfRef(7))))),
+            ]),
+            SeqRegex::Empty,
+        ]);
+        let seq = Schema::list(regex);
+
+        // The Ref sits under the sequence guard, so it is not unguarded.
+        assert!(!seq.occurs_unguarded(0, false));
+        // simplify and with_records_open preserve the sequence shape.
+        assert!(matches!(seq.simplify(), Schema::Seq { .. }));
+        assert!(matches!(seq.with_records_open(true), Schema::Seq { .. }));
+
+        // shifted moves the Ref element by the definitions offset.
+        let Schema::Seq {
+            regex: SeqRegex::Or(branches),
+            ..
+        } = seq.shifted(0, 5)
+        else {
+            panic!("shape preserved")
+        };
+        let SeqRegex::Cat(parts) = &branches[0] else {
+            panic!("Or branch is a Cat")
+        };
+        let SeqRegex::Elem(head) = &parts[0] else {
+            panic!("first part is an element")
+        };
+        assert!(matches!(**head, Schema::Ref(5)));
+
+        // resolve_self rewrites the SelfRef under the repetition into a Ref.
+        let Schema::Seq {
+            regex: SeqRegex::Or(branches),
+            ..
+        } = seq.resolve_self(7, 3)
+        else {
+            panic!("shape preserved")
+        };
+        let SeqRegex::Cat(parts) = &branches[0] else {
+            panic!("Or branch is a Cat")
+        };
+        let SeqRegex::Star(inner) = &parts[1] else {
+            panic!("second part is a repetition")
+        };
+        let SeqRegex::Elem(tail) = inner.as_ref() else {
+            panic!("repetition wraps an element")
+        };
+        assert!(matches!(**tail, Schema::Ref(3)));
+    }
 }
 
 #[cfg(test)]

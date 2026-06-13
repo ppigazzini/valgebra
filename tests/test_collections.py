@@ -36,3 +36,14 @@ def test_fixed_and_variadic_tuples_are_distinct() -> None:
     assert validator(tuple[int, str]).is_valid((1, "a"))
     assert not validator(tuple[int, str]).is_valid((1, 2, 3))
     assert validator(tuple[int, ...]).is_valid((1, 2, 3))
+
+
+def test_mapping_error_path_tolerates_a_key_whose_str_raises() -> None:
+    # The aggregating walk labels each entry by its key; a key whose str()
+    # raises falls back to a repr summary rather than crashing.
+    class Unprintable:
+        def __str__(self) -> str:
+            raise RuntimeError("no str")
+
+    with pytest.raises(ValidationError):
+        validator(dict[int, int]).validate({Unprintable(): 1})

@@ -1,6 +1,6 @@
 import pytest
 
-from valgebra import ValidationError, validator
+from valgebra import ValidationError, lax, validator
 
 
 def test_record_accepts_a_matching_dict() -> None:
@@ -63,6 +63,24 @@ def test_is_valid_rejects_a_non_string_key_in_a_closed_record() -> None:
     # non-string key is undeclared.
     user = validator({"name": str})
     assert not user.is_valid({"name": "Ada", 0: 1})
+
+
+def test_non_string_key_does_not_fill_a_same_named_field() -> None:
+    # A non-string key whose str() matches a declared field name does not fill
+    # that field: the real key is not a string, so the required field is absent.
+    schema = validator({"0": int})
+    assert schema.is_valid({"0": 1})
+    assert not schema.is_valid({0: 1})
+
+
+def test_open_record_explains_a_failing_field() -> None:
+    # An open (lax) record admits extra keys, so it fails only on a declared
+    # field; the aggregating walk reports that field.
+    schema = lax(validator({"name": str}))
+    assert schema.is_valid({"name": "Ada", "extra": 1})
+    with pytest.raises(ValidationError) as info:
+        schema.validate({"name": 1, "extra": 2})
+    assert info.value.code == "string_type"
 
 
 @pytest.mark.parametrize(
