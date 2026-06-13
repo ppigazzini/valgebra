@@ -1,7 +1,9 @@
 # Quickstart
 
-This page goes from a one-line scalar check to a refined `TypedDict` and a
-composed contract. Every snippet runs as written.
+This is the condensed tour — a one-line scalar check through a refined
+`TypedDict` to a composed contract — for a reader who wants valgebra at a glance.
+For a guided, step-by-step path, start with the [tutorial](tutorial.md) instead.
+Every snippet runs as written.
 
 ## Compile once, check many
 

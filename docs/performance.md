@@ -98,8 +98,9 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
   pure-Python check). It answers "how fast is the validation step for each
   tool," not "are these tools interchangeable" — they are not. See the README
   for what valgebra is and is not for.
-- These figures predate the JSON input path. Validating parsed JSON directly on
-  the Rust side is a separate, later effort and is not reflected here.
+- These figures are for the object path — validating a value already in hand.
+  The JSON input path is measured separately, on the same machine class, in the
+  [JSON page](json.md).
 
 ## How the record fast path is tuned
 
