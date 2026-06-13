@@ -37,6 +37,8 @@ SPECS = [
     set[bool],
     tuple[int, str],
     tuple[bool, str],
+    [bool, int, ...],  # a list: a bool, then zero or more ints
+    [int, int, ...],  # a non-empty list of ints
     dict[str, int],
     dict[str, bool],
     _Point,
@@ -60,6 +62,8 @@ VALUES = [
     3.14,
     [1, 2],
     [True],
+    [True, 1],
+    [True, 1, 2],
     ["a"],
     [],
     {1, 2},

@@ -241,33 +241,25 @@ impl SeqRegex {
     }
 
     /// Whether every sequence this regex matches is also matched by `other` —
-    /// language inclusion, decided on the prefix-and-tail [`linear`](Self::linear)
-    /// form. Sound: it decides exactly the cases below and returns `false`
-    /// (conservatively) for everything it cannot — `Or` regexes, or a
-    /// prefix-plus-tail on the right — which need the general regex product.
+    /// language inclusion. Alternation distributes; everything else reduces to
+    /// the prefix-and-tail [`linear`](Self::linear) form and
+    /// [`linear_subtype`]. Sound throughout: a regex shape it cannot put in
+    /// linear form (a nested non-trailing star) yields `false`, never a guess.
     fn regex_subtype(&self, other: &SeqRegex) -> bool {
         if self == other {
             return true;
         }
-        let (Some((prefix, tail)), Some((other_prefix, other_tail))) =
-            (self.linear(), other.linear())
-        else {
-            return false;
-        };
-        match other_tail {
-            // `other` is a homogeneous tail `B*` with no fixed prefix: every
-            // element this regex can produce — each prefix element and the
-            // repeated tail, if any — must be a subtype of `B`.
-            Some(b) if other_prefix.is_empty() => {
-                prefix.iter().all(|element| element.is_subtype(b))
-                    && tail.is_none_or(|t| t.is_subtype(b))
-            }
-            // `other` is a fixed-length sequence: this regex must be the same
-            // fixed length with pointwise-subtype elements.
-            None if tail.is_none() && prefix.len() == other_prefix.len() => prefix
-                .iter()
-                .zip(&other_prefix)
-                .all(|(element, other_element)| element.is_subtype(other_element)),
+        // A union of languages is included iff every branch is; a language is
+        // included in a union if it lands in one branch (sound, conservative —
+        // it may instead split across several).
+        if let SeqRegex::Or(parts) = self {
+            return parts.iter().all(|part| part.regex_subtype(other));
+        }
+        if let SeqRegex::Or(parts) = other {
+            return parts.iter().any(|part| self.regex_subtype(part));
+        }
+        match (self.linear(), other.linear()) {
+            (Some((pa, ta)), Some((pb, tb))) => linear_subtype(&pa, ta, &pb, tb),
             _ => false,
         }
     }
@@ -947,13 +939,41 @@ impl Schema {
     }
 }
 
+/// Whether the linear language `pa · ta*` is included in `pb · tb*` — a fixed
+/// prefix optionally followed by a repeated tail, the shape
+/// [`SeqRegex::linear`] returns. `ta`/`tb` of `None` mean no repeated tail.
+fn linear_subtype(
+    pa: &[&Schema],
+    ta: Option<&Schema>,
+    pb: &[&Schema],
+    tb: Option<&Schema>,
+) -> bool {
+    // A repeated tail with an empty element language never repeats, so the left
+    // side is then just its fixed prefix.
+    let ta = ta.filter(|element| !element.is_empty());
+    // A's fixed prefix must align with B: against B's prefix where they overlap,
+    // then against B's repeated tail past it (which B must therefore have).
+    let prefix_aligns = pa.len() >= pb.len()
+        && pa.iter().enumerate().all(|(i, element)| match pb.get(i) {
+            Some(expected) => element.is_subtype(expected),
+            None => tb.is_some_and(|tail| element.is_subtype(tail)),
+        });
+    match (ta, tb) {
+        (None, None) => pa.len() == pb.len() && prefix_aligns,
+        (None, Some(_)) => prefix_aligns,
+        // A repeats without bound but B is finite-length: impossible.
+        (Some(_), None) => false,
+        // A's repeated element must also land in B's repeated tail.
+        (Some(a), Some(tail)) => prefix_aligns && a.is_subtype(tail),
+    }
+}
+
 /// Whether keyed-map `a` (fields `fa`, default clauses `da`) is a subtype of
-/// keyed-map `b`. Decided for two shapes, conservative otherwise:
-/// - **Closed records** (no defaults): width and depth — every field of `a` is a
-///   field of `b` with a subtype schema — and required — every field `b` requires
-///   is required in `a`, so a required key is always present.
-/// - **Pure mappings** (no fields, one default clause each): the key and value
-///   schemas covary.
+/// keyed-map `b`. For two closed records (no defaults) it holds by width and
+/// depth — every field of `a` is a field of `b` with a subtype schema — and by
+/// required-ness — every field `b` requires is required in `a`. For two pure
+/// mappings (no fields, one default clause each) the key and value schemas
+/// covary. Every other shape is conservative.
 fn keyed_map_subtype(
     fa: &[Field],
     da: &[(Schema, Schema)],
@@ -1902,6 +1922,46 @@ mod laws {
         assert!(!mapping(Schema::Str, Schema::Int).is_subtype(&mapping(Schema::Str, Schema::Bool)));
         // A record and a mapping are not compared — conservative.
         assert!(!narrow.is_subtype(&mapping(Schema::Str, Schema::Int)));
+    }
+
+    #[test]
+    fn decides_sequence_subtyping_with_prefix_tail_and_alternation() {
+        // A list `[head, tail*]`: a one-element fixed prefix then a repeated tail.
+        let prefix_tail = |head, tail| {
+            Schema::list(SeqRegex::Cat(vec![
+                SeqRegex::Elem(Box::new(head)),
+                SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(tail)))),
+            ]))
+        };
+        // Prefix and tail covary (bool ⊆ int), in both positions.
+        assert!(
+            prefix_tail(Schema::Bool, Schema::Bool)
+                .is_subtype(&prefix_tail(Schema::Int, Schema::Int))
+        );
+        assert!(
+            !prefix_tail(Schema::Int, Schema::Int)
+                .is_subtype(&prefix_tail(Schema::Int, Schema::Bool))
+        );
+        // A fixed-length list is a subtype of a prefix-and-tail one it fits.
+        assert!(
+            Schema::list(SeqRegex::fixed([Schema::Bool, Schema::Int]))
+                .is_subtype(&prefix_tail(Schema::Int, Schema::Int))
+        );
+        // Alternation distributes: (bool* | int*) ⊆ int*, but int* ⊄ (bool* | str*).
+        let alternation = |a, b| {
+            Schema::list(SeqRegex::Or(vec![
+                SeqRegex::homogeneous(a),
+                SeqRegex::homogeneous(b),
+            ]))
+        };
+        assert!(
+            alternation(Schema::Bool, Schema::Int)
+                .is_subtype(&Schema::list(SeqRegex::homogeneous(Schema::Int)))
+        );
+        assert!(
+            !Schema::list(SeqRegex::homogeneous(Schema::Int))
+                .is_subtype(&alternation(Schema::Bool, Schema::Str))
+        );
     }
 
     /// A sample value for the subtyping oracle: a scalar, or a set whose element
