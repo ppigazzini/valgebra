@@ -1,0 +1,108 @@
+"""Subtyping, equivalence, and emptiness checked against real membership.
+
+`is_subtype(a, b)` claims every value of `a` is a value of `b`. The fuzzer holds
+that claim to actual membership: for a corpus of values, a claimed subtype never
+accepts a value its supertype rejects, and equivalent schemas accept exactly the
+same values. Soundness is the property under test; the decision is intentionally
+conservative (it may answer ``False`` for a true relation it cannot prove), so
+completeness is not asserted.
+"""
+
+from hypothesis import given
+from hypothesis import strategies as st
+
+from valgebra import complement, intersect, union, validator
+
+# Schema specs valgebra compiles, spanning scalars and the structural containers.
+SPECS = [
+    int,
+    str,
+    bool,
+    float,
+    bytes,
+    None,
+    list[int],
+    list[bool],
+    list[str],
+    set[int],
+    set[bool],
+    tuple[int, str],
+    tuple[bool, str],
+    dict[str, int],
+]
+
+# A value corpus exercising the scalar and container boundaries.
+VALUES = [
+    0,
+    1,
+    True,
+    False,
+    1.0,
+    "x",
+    "",
+    b"y",
+    None,
+    3.14,
+    [1, 2],
+    [True],
+    ["a"],
+    [],
+    {1, 2},
+    {True},
+    (1, "a"),
+    (True, "a"),
+    (1, 2),
+    {"a": 1},
+    object(),
+]
+
+specs = st.sampled_from(SPECS)
+
+
+def accepts(schema: object) -> list[bool]:
+    compiled = validator(schema)
+    return [compiled.is_valid(value) for value in VALUES]
+
+
+@given(a=specs, b=specs)
+def test_subtype_is_sound(a: object, b: object) -> None:
+    # A claimed subtype never accepts a value the supertype rejects.
+    if validator(a).is_subtype(b):
+        a_accepts, b_accepts = accepts(a), accepts(b)
+        assert all(
+            b_in for a_in, b_in in zip(a_accepts, b_accepts, strict=True) if a_in
+        )
+
+
+@given(a=specs)
+def test_subtype_is_reflexive(a: object) -> None:
+    assert validator(a).is_subtype(a)
+
+
+@given(a=specs, b=specs)
+def test_equivalent_is_mutual_subtyping(a: object, b: object) -> None:
+    left = validator(a)
+    assert left.equivalent(b) == (left.is_subtype(b) and validator(b).is_subtype(a))
+
+
+@given(a=specs, b=specs)
+def test_equivalent_implies_equal_acceptance(a: object, b: object) -> None:
+    if validator(a).equivalent(b):
+        assert accepts(a) == accepts(b)
+
+
+@given(a=specs, b=specs)
+def test_empty_intersection_accepts_nothing(a: object, b: object) -> None:
+    meet = intersect(a, b)
+    if meet.is_empty():
+        assert not any(meet.is_valid(value) for value in VALUES)
+
+
+def test_known_relations() -> None:
+    assert validator(bool).is_subtype(int)  # bool is a subtype of int
+    assert not validator(int).is_subtype(bool)
+    assert validator(list[bool]).is_subtype(list[int])
+    assert not validator(list[int]).is_subtype(set[int])  # distinct kinds
+    assert union(bool, int).equivalent(int)  # bool | int is just int
+    assert intersect(int, complement(int)).is_empty()
+    assert not validator(int).is_empty()

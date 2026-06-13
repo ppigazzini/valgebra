@@ -119,6 +119,37 @@ conservative: it never claims an equivalence it cannot justify, so a result is
 always sound, never reporting a non-empty schema as empty. It never treats `Any`
 as the top, so a deliberately-unchecked schema is preserved.
 
+## Subtyping, equivalence, and emptiness
+
+A compiled validator can be compared with another schema as *sets*. `is_subtype`
+is set inclusion, `equivalent` is mutual inclusion, and `is_empty` reports an
+unsatisfiable schema:
+
+```python
+from valgebra import complement, intersect, union, validator
+
+# subtyping is set inclusion; bool is a subtype of int
+assert validator(bool).is_subtype(int)
+assert not validator(int).is_subtype(bool)
+assert validator(list[bool]).is_subtype(list[int])
+
+# equivalence is mutual inclusion, whatever the syntax
+assert union(bool, int).equivalent(int)
+
+# emptiness detects a schema no value can satisfy
+assert intersect(int, complement(int)).is_empty()
+assert not validator(int).is_empty()
+```
+
+The other side of a comparison is any schema spec or compiled validator. These
+decisions are **sound**: they answer `True` only when the relation provably
+holds — exactly on the scalar atoms (with `bool` a subtype of `int`) and the
+structural containers (set, frozenset, and sequence inclusion by element), and
+conservatively `False` for what they cannot yet decide (alternation regexes,
+recursive references, and class checks compared across schemas). A `True` is
+always correct; a `False` may be a relation that holds but is not yet provable.
+See the [foundations](foundations.md) for the theory.
+
 ## `Any` versus `anything`
 
 Both admit every value at runtime, but they are different in the algebra:

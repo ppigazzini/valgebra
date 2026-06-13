@@ -218,6 +218,60 @@ impl CompiledValidator {
         }
     }
 
+    /// Whether the schema is unsatisfiable — provably empty, so `is_valid`
+    /// returns `False` for every value.
+    ///
+    /// Decided soundly: `True` only when no value can belong to the schema — an
+    /// unsatisfiable intersection, a fixed sequence with an impossible position,
+    /// a record with an impossible required field. It never reports a
+    /// satisfiable schema as empty; for forms it cannot decide it returns
+    /// `False`.
+    ///
+    /// Returns:
+    ///     `True` if the schema denotes the empty set, else `False`.
+    fn is_empty(&self) -> bool {
+        self.schema.is_empty()
+    }
+
+    /// Whether every value of this schema is also a value of `other` — set
+    /// inclusion, the subtyping relation.
+    ///
+    /// `other` is any schema spec or compiled validator. The decision is sound:
+    /// `True` only when the inclusion provably holds (`bool` is a subtype of
+    /// `int`, `list[bool]` of `list[int]`); for forms it cannot decide — `Or`
+    /// sequences, recursive references, class checks across schemas — it returns
+    /// `False` rather than a relation it cannot justify.
+    ///
+    /// Args:
+    ///     other: The candidate supertype, as a schema spec or validator.
+    ///
+    /// Returns:
+    ///     `True` if this schema is a subtype of `other`, else `False`.
+    fn is_subtype(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let mut literals: Vec<Py<PyAny>> = self.literals.iter().map(|o| o.clone_ref(py)).collect();
+        let mut definitions = self.definitions.clone();
+        let other = build_schema(other, &mut literals, &mut definitions)?;
+        Ok(self.schema.is_subtype(&other))
+    }
+
+    /// Whether this schema and `other` denote the same set — mutual inclusion.
+    ///
+    /// `other` is any schema spec or compiled validator. Sound, like
+    /// `is_subtype`: `True` only when the two are provably equivalent, whatever
+    /// their syntax (`bool | int` is equivalent to `int`).
+    ///
+    /// Args:
+    ///     other: The schema to compare, as a spec or validator.
+    ///
+    /// Returns:
+    ///     `True` if the two schemas are equivalent, else `False`.
+    fn equivalent(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let mut literals: Vec<Py<PyAny>> = self.literals.iter().map(|o| o.clone_ref(py)).collect();
+        let mut definitions = self.definitions.clone();
+        let other = build_schema(other, &mut literals, &mut definitions)?;
+        Ok(self.schema.is_subtype(&other) && other.is_subtype(&self.schema))
+    }
+
     /// Render the compiled schema back as the annotation expression that
     /// produces it.
     fn __repr__(&self, py: Python<'_>) -> String {

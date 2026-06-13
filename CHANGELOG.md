@@ -23,6 +23,10 @@ will form the first release.
 - A complete Boolean algebra: `union`, `intersect`, `complement`, `anything`,
   `nothing`, the derived `ifthen`/`cond`, and a law-justified `simplify`, with
   the lattice laws property-tested.
+- Set-relation queries on a compiled validator: `is_subtype` (set inclusion),
+  `equivalent` (mutual inclusion), and `is_empty` (an unsatisfiable schema),
+  decided soundly over the scalar atoms and structural containers and
+  conservative beyond them.
 - Recursive schemas via the `lazy` fixpoint, with cycle and depth guards.
 - A structured, machine-readable error model: aggregated failures, opt-in
   fail-fast, and closest-branch reporting for unions.
