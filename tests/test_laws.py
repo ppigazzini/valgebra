@@ -5,7 +5,7 @@ checked over a fixed spread of values that exercises the atom boundaries (the
 int/bool/float distinctions and the typed-singleton literals).
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 from hypothesis import given
 from hypothesis import strategies as st
@@ -157,3 +157,18 @@ def test_simplify_is_idempotent_on_acceptance(a: object, b: object) -> None:
     once = simplify(intersect(a, complement(b)))
     twice = simplify(once)
     assert equivalent(once, twice)
+
+
+def test_simplify_decides_the_complement_laws() -> None:
+    # The decision the conservative canonicalizer could not make: a schema and
+    # its complement collapse, and provably disjoint types collapse.
+    assert repr(simplify(intersect(int, complement(int)))) == "nothing"
+    assert repr(simplify(union(int, complement(int)))) == "anything"
+    assert repr(simplify(intersect(int, str))) == "nothing"
+    assert repr(simplify(union(complement(int), complement(str)))) == "anything"
+
+
+def test_simplify_leaves_the_gradual_any_uncollapsed() -> None:
+    # `Any` is unchecked, not the lattice top, so the complement laws skip it.
+    assert repr(simplify(intersect(Any, complement(Any)))) != "nothing"
+    assert repr(simplify(union(Any, complement(Any)))) != "anything"
