@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 66cd8a1ac162bb41c64bd0153c272caee8589de72e5526b985a56f3ef16871ac # shrinks to a = Union([Complement(Int), Complement(Str)])
