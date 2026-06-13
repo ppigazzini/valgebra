@@ -226,6 +226,20 @@ impl SeqRegex {
         }
     }
 
+    /// Whether the regex matches **no** sequence at all — its language is empty.
+    /// `Empty` and `Star` always match the empty sequence, so they are never
+    /// empty; a single element is empty when its schema is; a concatenation is
+    /// empty when any part is (every part must be matchable); an alternation is
+    /// empty only when every alternative is.
+    fn language_is_empty(&self) -> bool {
+        match self {
+            SeqRegex::Empty | SeqRegex::Star(_) => false,
+            SeqRegex::Elem(schema) => schema.is_empty(),
+            SeqRegex::Cat(parts) => parts.iter().any(SeqRegex::language_is_empty),
+            SeqRegex::Or(parts) => parts.iter().all(SeqRegex::language_is_empty),
+        }
+    }
+
     fn shifted(&self, pool: usize, defs: usize) -> SeqRegex {
         self.map_elems(&|s| s.shifted(pool, defs))
     }
@@ -814,13 +828,27 @@ impl Schema {
     }
 
     /// Whether this schema is provably empty — denotes no value. Complete on the
-    /// scalar fragment (every Boolean combination of scalar atoms), and sound
-    /// elsewhere: it never reports a non-empty schema as empty. The gradual
-    /// `Any` is never scalar-decidable, so a combination containing it is never
-    /// decided empty.
+    /// scalar fragment (every Boolean combination of scalar atoms) and on the
+    /// structural fragment reached here — a sequence whose regex matches no
+    /// sequence, a keyed map with an impossible required field, and a union of
+    /// empties — and sound everywhere else: it never reports a non-empty schema
+    /// as empty. A set or frozenset is never empty (the empty collection is
+    /// always a member). The gradual `Any`, instances, literals, refinements,
+    /// and recursive references are not decided, so a combination containing one
+    /// is never reported empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        matches!(self.region_set(), Some(0))
+        match self {
+            Schema::Seq { regex, .. } => regex.language_is_empty(),
+            Schema::Set(_) | Schema::FrozenSet(_) => false,
+            Schema::KeyedMap { fields, .. } => {
+                fields.iter().any(|f| f.required && f.schema.is_empty())
+            }
+            Schema::Union(members) => members.iter().all(Schema::is_empty),
+            // Scalars and their Boolean combinations decide via the region set;
+            // a combination with an opaque leaf yields `None`, hence not empty.
+            _ => matches!(self.region_set(), Some(0)),
+        }
     }
 
     /// Whether every value of `self` is also a value of `other` — set inclusion,
@@ -1647,6 +1675,42 @@ mod laws {
         // Subtyping off the fragment is reflexive only.
         assert!(Schema::Instance(0).is_subtype(&Schema::Instance(0)));
         assert!(!Schema::Instance(0).is_subtype(&Schema::Instance(1)));
+    }
+
+    #[test]
+    fn decides_structural_container_emptiness() {
+        // A fixed sequence with an impossible element matches no sequence.
+        let empty_pair = Schema::tuple(SeqRegex::fixed([Schema::Int, Schema::Nothing]));
+        assert!(empty_pair.is_empty());
+        // A list or tuple that admits the empty sequence is never empty.
+        assert!(!Schema::list(SeqRegex::homogeneous(Schema::Nothing)).is_empty());
+        assert!(!Schema::tuple(SeqRegex::fixed([Schema::Int])).is_empty());
+        // A set or frozenset is never empty: the empty collection is a member.
+        assert!(!Schema::Set(Box::new(Schema::Nothing)).is_empty());
+        assert!(!Schema::FrozenSet(Box::new(Schema::Nothing)).is_empty());
+        // A keyed map is empty exactly when a required field is impossible.
+        let field = |required| Field {
+            name: "x".to_owned(),
+            schema: Schema::Nothing,
+            required,
+        };
+        assert!(
+            Schema::KeyedMap {
+                fields: vec![field(true)],
+                defaults: Vec::new(),
+            }
+            .is_empty()
+        );
+        assert!(
+            !Schema::KeyedMap {
+                fields: vec![field(false)],
+                defaults: Vec::new(),
+            }
+            .is_empty()
+        );
+        // A union is empty only when every member is.
+        assert!(Schema::Union(vec![Schema::Nothing, empty_pair.clone()]).is_empty());
+        assert!(!Schema::Union(vec![Schema::Int, empty_pair]).is_empty());
     }
 
     proptest! {
