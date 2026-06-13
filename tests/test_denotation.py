@@ -99,6 +99,18 @@ def _set_pred(elem: Pred) -> Pred:
     return lambda x: isinstance(x, set) and all(elem(e) for e in x)
 
 
+def _prefix_tail_pred(prefix: list[Pred], tail: Pred) -> Pred:
+    n = len(prefix)
+
+    def pred(x: object) -> bool:
+        if not isinstance(x, list) or len(x) < n:
+            return False
+        head = all(p(e) for p, e in zip(prefix, x[:n], strict=False))
+        return head and all(tail(e) for e in x[n:])
+
+    return pred
+
+
 def _leaf() -> st.SearchStrategy[Spec]:
     return st.one_of(
         st.sampled_from(_SCALARS),
@@ -137,6 +149,13 @@ def _specs() -> st.SearchStrategy[Spec]:
             ),
             st.sampled_from(_HASHABLE).map(
                 lambda sp: (GenericAlias(set, (sp[0],)), _set_pred(sp[1]))
+            ),
+            # A native [A, B, ...] list: a fixed prefix then a repeated tail.
+            st.tuples(child, child).map(
+                lambda ab: (
+                    [ab[0][0], ab[1][0], ...],
+                    _prefix_tail_pred([ab[0][1]], ab[1][1]),
+                )
             ),
         ),
         max_leaves=5,

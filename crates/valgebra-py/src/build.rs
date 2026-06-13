@@ -437,19 +437,38 @@ fn build_sequence(
     lits: &mut Vec<Py<PyAny>>,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
-    match list.len() {
-        1 => Ok(Schema::list(SeqRegex::homogeneous(build_schema(
-            &list.get_item(0)?,
-            lits,
-            defs,
-        )?))),
-        2 if is_ellipsis(&list.get_item(1)?) => Ok(Schema::list(SeqRegex::homogeneous(
-            build_schema(&list.get_item(0)?, lits, defs)?,
-        ))),
-        _ => Err(not_implemented(
-            "a list schema must be [T] or [T, ...]; other list shapes are not supported",
-        )),
+    let len = list.len();
+    // [T]: a homogeneous list of T.
+    if len == 1 && !is_ellipsis(&list.get_item(0)?) {
+        let element = build_schema(&list.get_item(0)?, lits, defs)?;
+        return Ok(Schema::list(SeqRegex::homogeneous(element)));
     }
+    // [p0, ..., tail, ...]: a trailing `...` repeats the element before it, after
+    // a fixed prefix of the earlier elements. [T, ...] is the prefix-free case,
+    // and [T, T, ...] is the non-empty list.
+    if len >= 2 && is_ellipsis(&list.get_item(len - 1)?) {
+        let mut elements = Vec::with_capacity(len - 1);
+        for index in 0..len - 1 {
+            let item = list.get_item(index)?;
+            if is_ellipsis(&item) {
+                return Err(not_implemented(
+                    "`...` may appear only as the last element of a list schema",
+                ));
+            }
+            elements.push(build_schema(&item, lits, defs)?);
+        }
+        let tail = elements.pop().expect("at least one element precedes `...`");
+        let regex = if elements.is_empty() {
+            SeqRegex::homogeneous(tail)
+        } else {
+            SeqRegex::prefix_tail(elements, tail)
+        };
+        return Ok(Schema::list(regex));
+    }
+    Err(not_implemented(
+        "a list schema must be [T], [T, ...], or [A, ..., Z, ...]; \
+         other list shapes are not supported",
+    ))
 }
 
 fn build_set(

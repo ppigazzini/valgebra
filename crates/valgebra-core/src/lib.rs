@@ -319,6 +319,18 @@ impl SeqRegex {
                 .collect(),
         )
     }
+
+    /// The prefix-plus-tail form `Cat([Elem(p0), ..., Star(Elem(tail))])`: a fixed
+    /// positional prefix, then zero or more elements matching `tail`.
+    #[must_use]
+    pub fn prefix_tail(prefix: impl IntoIterator<Item = Schema>, tail: Schema) -> SeqRegex {
+        let mut parts: Vec<SeqRegex> = prefix
+            .into_iter()
+            .map(|s| SeqRegex::Elem(Box::new(s)))
+            .collect();
+        parts.push(SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(tail)))));
+        SeqRegex::Cat(parts)
+    }
 }
 
 /// A constraint narrowing a [`Schema::Refine`] base set.
