@@ -45,6 +45,8 @@ nav:
       - JSON input: json.md
       - Error model: error-model.md
       - Performance: performance.md
+  - Explanation:
+      - Foundations: foundations.md
   - Reference:
       - API reference: api.md
 

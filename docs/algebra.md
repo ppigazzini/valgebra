@@ -37,6 +37,12 @@ idempotence, absorption, identities, distributivity, De Morgan, and double
 negation. These are property-tested in both Rust and Python against the
 membership relation, not asserted.
 
+The model — schemas as value-sets, subtyping as set inclusion, full union,
+intersection, and complement — is *semantic subtyping*. The
+[foundations](foundations.md) page records the theory and its references, and
+states where the simplifier decides relationships versus where it stays
+conservative.
+
 ## Conditional combinators
 
 `ifthen` and `cond` are derived purely from the algebra — they add no new

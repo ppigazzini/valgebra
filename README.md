@@ -246,16 +246,19 @@ the matching version.
   predicates are a documented slow path, never a silent fallback. *(In place.)*
 - **A lawful algebra.** Union, intersection, and complement form a Boolean
   lattice whose laws are property-tested in both Rust and Python, and a
-  law-justified `simplify` reduces a schema without changing its value set.
-  *(In place.)*
+  law-justified `simplify` reduces a schema without changing its value set. The
+  set-theoretic model and its references are in the
+  [foundations](docs/foundations.md). *(In place.)*
 - **Immutable and thread-safe.** A compiled validator never mutates after it is
   built, so one validator can be shared and used from many threads at once,
   including on free-threaded (no-GIL) CPython. *(In place.)*
 
 ## Contributing
 
-Development standards, the build-health gate, and the project's non-negotiable
-rules live in [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+[ARCHITECTURE.md](ARCHITECTURE.md) maps the components and the path a value
+takes through them. Development standards, the build-health gate, and the
+project's non-negotiable rules live in [AGENTS.md](AGENTS.md) and
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 cargo fmt --check
