@@ -129,6 +129,26 @@ def _record_pred(preds: dict[str, tuple[bool, Pred]]) -> Pred:
     return pred
 
 
+def _hetero_pred(str_val: Pred, int_val: Pred) -> Pred:
+    """Predicate for `{str: V1, int: V2}` (str keys take V1, int keys V2)."""
+
+    def pred(x: object) -> bool:
+        if not isinstance(x, dict):
+            return False
+        for key, val in x.items():
+            if isinstance(key, str):
+                if not str_val(val):
+                    return False
+            elif isinstance(key, int):
+                if not int_val(val):
+                    return False
+            else:
+                return False
+        return True
+
+    return pred
+
+
 def _prefix_tail_pred(prefix: list[Pred], tail: Pred) -> Pred:
     n = len(prefix)
 
@@ -189,6 +209,13 @@ def _specs() -> st.SearchStrategy[Spec]:
             ),
             # A closed record of named fields.
             st.lists(child, min_size=1, max_size=2).map(_record_of),
+            # A heterogeneous mapping keyed by disjoint key schemas.
+            st.tuples(child, child).map(
+                lambda ab: (
+                    {str: ab[0][0], int: ab[1][0]},
+                    _hetero_pred(ab[0][1], ab[1][1]),
+                )
+            ),
         ),
         max_leaves=5,
     )

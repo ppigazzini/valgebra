@@ -488,48 +488,33 @@ fn build_dict(
     lits: &mut Vec<Py<PyAny>>,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
-    // An empty dict is the empty closed record: it matches only {}.
-    if dict.is_empty() {
-        return Ok(Schema::record(Vec::new(), false));
-    }
-    // All-string keys: a record. A single type-keyed entry: a mapping.
-    if dict.iter().all(|(key, _)| key.is_instance_of::<PyString>()) {
-        return build_record(dict, lits, defs);
-    }
-    if dict.len() == 1
-        && let Some((key, value)) = dict.iter().next()
-        && key.cast::<PyType>().is_ok()
-    {
-        return Ok(Schema::mapping(
-            build_schema(&key, lits, defs)?,
-            build_schema(&value, lits, defs)?,
-        ));
-    }
-    Err(not_implemented(
-        "a dict schema must use all string keys (a record) or a single \
-         {KeyType: ValueType} entry (a mapping)",
-    ))
-}
-
-fn build_record(
-    dict: &Bound<'_, PyDict>,
-    lits: &mut Vec<Py<PyAny>>,
-    defs: &mut Vec<Schema>,
-) -> PyResult<Schema> {
-    let mut fields = Vec::with_capacity(dict.len());
+    // A string key is a named field (with the `"key?"` optional convention); any
+    // other key is a schema keying a default clause for the rest. All string keys
+    // give a record; a single schema key with no fields gives `dict[K, V]`;
+    // several schema keys a heterogeneous mapping; a mix a record with a typed
+    // catch-all; the empty dict the empty closed record.
+    let mut fields = Vec::new();
+    let mut defaults = Vec::new();
     for (key, value) in dict.iter() {
-        let raw = key.str()?.to_string();
-        let (name, required) = match raw.strip_suffix('?') {
-            Some(stripped) => (stripped.to_owned(), false),
-            None => (raw, true),
-        };
-        fields.push(Field {
-            name,
-            schema: build_schema(&value, lits, defs)?,
-            required,
-        });
+        if let Ok(name) = key.cast::<PyString>() {
+            let raw = name.to_string();
+            let (name, required) = match raw.strip_suffix('?') {
+                Some(stripped) => (stripped.to_owned(), false),
+                None => (raw, true),
+            };
+            fields.push(Field {
+                name,
+                schema: build_schema(&value, lits, defs)?,
+                required,
+            });
+        } else {
+            defaults.push((
+                build_schema(&key, lits, defs)?,
+                build_schema(&value, lits, defs)?,
+            ));
+        }
     }
-    Ok(Schema::record(fields, false))
+    Ok(Schema::KeyedMap { fields, defaults })
 }
 
 /// Build a Refine node from an `Annotated` base and its metadata markers.

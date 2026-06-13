@@ -111,8 +111,6 @@ def test_malformed_schema_forms_are_rejected() -> None:
         validator(GenericAlias(dict, (int,)))  # dict needs key and value
     with pytest.raises(NotImplementedError):
         validator([int, str, float])  # a list schema is [T] or [T, ...]
-    with pytest.raises(NotImplementedError):
-        validator({1: 2})  # not all-string keys and not a single {Type: Type}
 
 
 def test_native_list_forms_compile_and_check() -> None:
