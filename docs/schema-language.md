@@ -179,6 +179,29 @@ assert not closed.is_valid({"name": "Ada", "extra": 1})
 assert lax(closed).is_valid({"name": "Ada", "extra": 1})
 ```
 
+### Heterogeneous maps and catch-alls
+
+A dict schema's string keys are named fields; any *other* key is a schema that
+keys a default clause for the rest. One form therefore expresses records,
+mappings, and their combination: several schema keys give a **heterogeneous map**
+whose value type depends on which key schema matches, and named fields plus a
+schema key give a record with a **typed catch-all**. Named fields take
+precedence over the catch-all.
+
+```python
+from valgebra import validator
+
+# str keys map to ints, int keys map to strs
+hetero = validator({str: int, int: str})
+assert hetero.is_valid({"a": 1, 2: "b"})
+assert not hetero.is_valid({"a": "x"})  # a str key needs an int value
+
+# a record whose every other key must be an int
+extensible = validator({"name": str, str: int})
+assert extensible.is_valid({"name": "Ada", "age": 36})
+assert not extensible.is_valid({"name": "Ada", "age": "old"})
+```
+
 ## Classes
 
 | Form | How it validates |
