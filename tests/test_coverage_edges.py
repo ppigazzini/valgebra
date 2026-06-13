@@ -89,9 +89,19 @@ def test_fixed_length_list_wrong_type_reports_list_type() -> None:
 def test_frontend_rejects_an_unbuildable_inner_schema() -> None:
     # A container whose element cannot compile propagates the build error.
     with pytest.raises(NotImplementedError):
-        validator(set[list])  # bare `list` is not a usable element schema
+        validator(set[Iterator[int]])
     with pytest.raises(NotImplementedError):
-        validator(list[dict])  # bare `dict` likewise
+        validator(list[Iterator[int]])
+
+
+def test_bare_class_is_an_isinstance_check() -> None:
+    # A bare class names its instances. Builtins without a dedicated atom, and
+    # arbitrary classes, validate by isinstance.
+    assert validator(list).is_valid([1, "x"])  # any list
+    assert not validator(list).is_valid((1, 2))
+    assert validator(complex).is_valid(1 + 2j)
+    assert not validator(complex).is_valid(1)
+    assert validator(bytearray).is_valid(bytearray(b"x"))
 
 
 def test_too_many_set_arguments_is_rejected() -> None:
@@ -153,15 +163,15 @@ def test_native_set_form_compiles_and_checks() -> None:
 @pytest.mark.parametrize(
     "spec",
     [
-        set[list],
-        frozenset[list],
-        dict[list, int],
-        dict[int, list],
-        list[dict],
-        tuple[list, ...],
-        {list},
-        [list],  # native [T] with an unbuildable element
-        [dict, ...],  # native [T, ...] with an unbuildable element
+        set[Iterator[int]],
+        frozenset[Iterator[int]],
+        dict[Iterator[int], int],
+        dict[int, Iterator[int]],
+        list[Iterator[int]],
+        tuple[Iterator[int], ...],
+        {Iterator[int]},
+        [Iterator[int]],  # native [T] with an unbuildable element
+        [Iterator[int], ...],  # native [T, ...] with an unbuildable element
     ],
 )
 def test_unbuildable_inner_schema_propagates(spec: object) -> None:

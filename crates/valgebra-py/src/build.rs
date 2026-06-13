@@ -226,10 +226,11 @@ fn build_type_object(
             "a Protocol must be @runtime_checkable to be used as a schema",
         ));
     }
-    Err(not_implemented(&format!(
-        "unsupported type schema: {}",
-        summarize(ty.as_any())
-    )))
+    // Any other class names its instances: a bare class is an isinstance check.
+    // This covers the remaining builtins (complex, bytearray, memoryview, range,
+    // the `collections.abc` ABCs including Callable, ...) and arbitrary user
+    // classes uniformly.
+    Ok(Schema::Instance(intern(lits, ty.as_any())))
 }
 
 /// True if `obj.<name>` exists and is truthy; false on absence or error.
@@ -385,9 +386,15 @@ fn build_parametrized(
             Schema::Union(members)
         });
     }
+    if origin.is(&py.import("collections.abc")?.getattr("Callable")?) {
+        // Callable[...] checks only callability at runtime; the argument and
+        // return types cannot be inspected, so the parameters are ignored and
+        // the schema is the opaque `isinstance(x, Callable)` test.
+        return Ok(Schema::Instance(intern(lits, origin)));
+    }
     Err(not_implemented(&format!(
         "unsupported typing form with origin {}; supported: list, set, dict, \
-         tuple, Union, Optional, Literal",
+         tuple, Union, Optional, Literal, Callable",
         summarize(origin)
     )))
 }
