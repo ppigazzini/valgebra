@@ -29,6 +29,11 @@ class _Dog(_Animal):
     pass
 
 
+# Two structurally identical recursive linked-list schemas (equivalent).
+_LINKED = lazy(lambda t: union(None, {"value": int, "next": t}))
+_LINKED_TWIN = lazy(lambda t: union(None, {"value": int, "next": t}))
+
+
 # Schema specs valgebra compiles, spanning scalars, structural containers, and
 # records and mappings (closed dict-literal records, TypedDicts, and dict[K, V]).
 SPECS = [
@@ -58,6 +63,8 @@ SPECS = [
     Literal[5],
     _Animal,
     _Dog,
+    _LINKED,
+    _LINKED_TWIN,
 ]
 
 # A value corpus exercising the scalar and container boundaries.
@@ -93,6 +100,8 @@ VALUES = [
     5,
     _Animal(),
     _Dog(),
+    {"value": 1, "next": None},
+    {"value": 1, "next": {"value": 2, "next": None}},
     object(),
 ]
 
@@ -158,6 +167,17 @@ def test_instance_and_literal_relations() -> None:
     assert validator(_Dog).is_subtype(_Animal)
     assert not validator(_Animal).is_subtype(_Dog)
     assert validator(_Dog).equivalent(_Dog)
+
+
+def test_recursive_subtyping_is_coinductive() -> None:
+    # Two structurally identical recursive types are equivalent.
+    assert _LINKED.is_subtype(_LINKED_TWIN)
+    assert _LINKED.equivalent(_LINKED_TWIN)
+    # A bool-valued recursive list is a subtype of an int-valued one, not reverse.
+    bool_list = lazy(lambda t: union(None, {"value": bool, "next": t}))
+    int_list = lazy(lambda t: union(None, {"value": int, "next": t}))
+    assert bool_list.is_subtype(int_list)
+    assert not int_list.is_subtype(bool_list)
 
 
 def test_is_empty_detects_uninhabited_recursion() -> None:

@@ -257,7 +257,7 @@ impl CompiledValidator {
             literals: &literals,
             definitions: &definitions,
         };
-        Ok(self.schema.is_subtype_with(&other, &oracle))
+        Ok(self.schema.is_subtype_under(&other, &oracle, &definitions))
     }
 
     /// Whether this schema and `other` denote the same set — mutual inclusion.
@@ -280,7 +280,7 @@ impl CompiledValidator {
             literals: &literals,
             definitions: &definitions,
         };
-        Ok(self.schema.equivalent_with(&other, &oracle))
+        Ok(self.schema.equivalent_under(&other, &oracle, &definitions))
     }
 
     /// Render the compiled schema back as the annotation expression that

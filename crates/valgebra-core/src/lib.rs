@@ -245,7 +245,12 @@ impl SeqRegex {
     /// the prefix-and-tail [`linear`](Self::linear) form and
     /// [`linear_subtype`]. Sound throughout: a regex shape it cannot put in
     /// linear form (a nested non-trailing star) yields `false`, never a guess.
-    fn regex_subtype(&self, other: &SeqRegex, oracle: &dyn LeafRelations) -> bool {
+    fn regex_subtype(
+        &self,
+        other: &SeqRegex,
+        cx: SubtypeCx<'_>,
+        assumptions: &mut Vec<(Schema, Schema)>,
+    ) -> bool {
         if self == other {
             return true;
         }
@@ -253,13 +258,17 @@ impl SeqRegex {
         // included in a union if it lands in one branch (sound, conservative —
         // it may instead split across several).
         if let SeqRegex::Or(parts) = self {
-            return parts.iter().all(|part| part.regex_subtype(other, oracle));
+            return parts
+                .iter()
+                .all(|part| part.regex_subtype(other, cx, assumptions));
         }
         if let SeqRegex::Or(parts) = other {
-            return parts.iter().any(|part| self.regex_subtype(part, oracle));
+            return parts
+                .iter()
+                .any(|part| self.regex_subtype(part, cx, assumptions));
         }
         match (self.linear(), other.linear()) {
-            (Some((pa, ta)), Some((pb, tb))) => linear_subtype(&pa, ta, &pb, tb, oracle),
+            (Some((pa, ta)), Some((pb, tb))) => linear_subtype(&pa, ta, &pb, tb, cx, assumptions),
             _ => false,
         }
     }
@@ -917,16 +926,36 @@ impl Schema {
     /// instances, literals): there it returns `false` rather than guess.
     #[must_use]
     pub fn is_subtype(&self, other: &Schema) -> bool {
-        self.is_subtype_with(other, &NoLeafRelations)
+        self.is_subtype_under(other, &NoLeafRelations, &[])
     }
 
-    /// [`is_subtype`](Self::is_subtype) parameterized by a [`LeafRelations`]
-    /// oracle deciding the leaf relations the structural rules cannot —
-    /// subtyping between `Instance` classes and membership of a `Literal`
-    /// value. The oracle is consulted only where the structural rules give up,
-    /// so its `None` keeps the conservative `false`.
+    /// [`is_subtype`](Self::is_subtype) with a [`LeafRelations`] oracle deciding
+    /// the leaf relations the structural rules cannot (an `Instance` class or a
+    /// `Literal` value), and the `defs` that resolve recursive references so
+    /// subtyping is decided between recursive schemas too. The oracle's `None`
+    /// and an unresolved reference both keep the conservative `false`.
     #[must_use]
-    pub fn is_subtype_with(&self, other: &Schema, oracle: &dyn LeafRelations) -> bool {
+    pub fn is_subtype_under(
+        &self,
+        other: &Schema,
+        oracle: &dyn LeafRelations,
+        defs: &[Schema],
+    ) -> bool {
+        self.is_subtype_rec(other, SubtypeCx { oracle, defs }, &mut Vec::new())
+    }
+
+    fn is_subtype_rec(
+        &self,
+        other: &Schema,
+        cx: SubtypeCx<'_>,
+        assumptions: &mut Vec<(Schema, Schema)>,
+    ) -> bool {
+        // Coinductive hypothesis: a goal already being proven on this path is
+        // assumed to hold, so two recursive types are compared at their greatest
+        // fixpoint rather than unfolded forever.
+        if assumptions.iter().any(|(a, b)| a == self && b == other) {
+            return true;
+        }
         // Scalar fragment: exact via the region partition.
         if let (Some(a), Some(b)) = (self.region_set(), other.region_set()) {
             return a & !b & REGION_ALL == 0;
@@ -938,19 +967,43 @@ impl Schema {
             // ∅ is a subset of every set, and every set is a subset of the top.
             (Schema::Nothing, _) | (_, Schema::Anything) => true,
             (_, Schema::Nothing) => self.is_empty(), // A ⊆ ∅ exactly when A is empty
+            // Unfold a recursive reference, recording the goal so a cycle back to
+            // it is caught by the coinductive hypothesis above.
+            (Schema::Ref(id), _) => match cx.defs.get(*id) {
+                Some(def) => {
+                    assumptions.push((self.clone(), other.clone()));
+                    let holds = def.is_subtype_rec(other, cx, assumptions);
+                    assumptions.pop();
+                    holds
+                }
+                None => false,
+            },
+            (_, Schema::Ref(id)) => match cx.defs.get(*id) {
+                Some(def) => {
+                    assumptions.push((self.clone(), other.clone()));
+                    let holds = self.is_subtype_rec(def, cx, assumptions);
+                    assumptions.pop();
+                    holds
+                }
+                None => false,
+            },
             // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z; A ⊆ (Y ∩ Z) iff A ⊆ Y and A ⊆ Z.
-            (Schema::Union(members), _) => members.iter().all(|m| m.is_subtype_with(other, oracle)),
-            (_, Schema::Intersection(members)) => {
-                members.iter().all(|m| self.is_subtype_with(m, oracle))
-            }
+            (Schema::Union(members), _) => members
+                .iter()
+                .all(|m| m.is_subtype_rec(other, cx, assumptions)),
+            (_, Schema::Intersection(members)) => members
+                .iter()
+                .all(|m| self.is_subtype_rec(m, cx, assumptions)),
             // Sound one-directional rules for the remaining lattice shapes.
-            (_, Schema::Union(members)) => members.iter().any(|m| self.is_subtype_with(m, oracle)),
-            (Schema::Intersection(members), _) => {
-                members.iter().any(|m| m.is_subtype_with(other, oracle))
-            }
+            (_, Schema::Union(members)) => members
+                .iter()
+                .any(|m| self.is_subtype_rec(m, cx, assumptions)),
+            (Schema::Intersection(members), _) => members
+                .iter()
+                .any(|m| m.is_subtype_rec(other, cx, assumptions)),
             // Set and frozenset inclusion reduces to element inclusion.
             (Schema::Set(a), Schema::Set(b)) | (Schema::FrozenSet(a), Schema::FrozenSet(b)) => {
-                a.is_subtype_with(b, oracle)
+                a.is_subtype_rec(b, cx, assumptions)
             }
             // Same-kind sequence inclusion is language inclusion on the regexes.
             (
@@ -962,7 +1015,7 @@ impl Schema {
                     container: kb,
                     regex: rb,
                 },
-            ) if ka == kb => ra.regex_subtype(rb, oracle),
+            ) if ka == kb => ra.regex_subtype(rb, cx, assumptions),
             // Record and mapping inclusion.
             (
                 Schema::KeyedMap {
@@ -973,24 +1026,38 @@ impl Schema {
                     fields: fb,
                     defaults: db,
                 },
-            ) => keyed_map_subtype(fa, da, fb, db, oracle),
+            ) => keyed_map_subtype(fa, da, fb, db, cx, assumptions),
             // A leaf the structural rules cannot relate (an instance or literal):
             // defer to the oracle, conservative when it declines.
-            _ => oracle.leaf_subtype(self, other).unwrap_or(false),
+            _ => cx.oracle.leaf_subtype(self, other).unwrap_or(false),
         }
     }
 
     /// Whether `self` and `other` denote the same set — mutual inclusion.
     #[must_use]
     pub fn equivalent(&self, other: &Schema) -> bool {
-        self.equivalent_with(other, &NoLeafRelations)
+        self.equivalent_under(other, &NoLeafRelations, &[])
     }
 
-    /// [`equivalent`](Self::equivalent) under a [`LeafRelations`] oracle.
+    /// [`equivalent`](Self::equivalent) under a [`LeafRelations`] oracle and the
+    /// recursive definitions.
     #[must_use]
-    pub fn equivalent_with(&self, other: &Schema, oracle: &dyn LeafRelations) -> bool {
-        self.is_subtype_with(other, oracle) && other.is_subtype_with(self, oracle)
+    pub fn equivalent_under(
+        &self,
+        other: &Schema,
+        oracle: &dyn LeafRelations,
+        defs: &[Schema],
+    ) -> bool {
+        self.is_subtype_under(other, oracle, defs) && other.is_subtype_under(self, oracle, defs)
     }
+}
+
+/// Threaded state for the subtyping decision: the leaf-relation oracle and the
+/// definitions that resolve recursive references.
+#[derive(Clone, Copy)]
+struct SubtypeCx<'a> {
+    oracle: &'a dyn LeafRelations,
+    defs: &'a [Schema],
 }
 
 /// Resolves the leaf relations the structural subtyping decision cannot: those
@@ -1021,7 +1088,8 @@ fn linear_subtype(
     ta: Option<&Schema>,
     pb: &[&Schema],
     tb: Option<&Schema>,
-    oracle: &dyn LeafRelations,
+    cx: SubtypeCx<'_>,
+    assumptions: &mut Vec<(Schema, Schema)>,
 ) -> bool {
     // A repeated tail with an empty element language never repeats, so the left
     // side is then just its fixed prefix.
@@ -1030,8 +1098,8 @@ fn linear_subtype(
     // then against B's repeated tail past it (which B must therefore have).
     let prefix_aligns = pa.len() >= pb.len()
         && pa.iter().enumerate().all(|(i, element)| match pb.get(i) {
-            Some(expected) => element.is_subtype_with(expected, oracle),
-            None => tb.is_some_and(|tail| element.is_subtype_with(tail, oracle)),
+            Some(expected) => element.is_subtype_rec(expected, cx, assumptions),
+            None => tb.is_some_and(|tail| element.is_subtype_rec(tail, cx, assumptions)),
         });
     match (ta, tb) {
         (None, None) => pa.len() == pb.len() && prefix_aligns,
@@ -1039,7 +1107,7 @@ fn linear_subtype(
         // A repeats without bound but B is finite-length: impossible.
         (Some(_), None) => false,
         // A's repeated element must also land in B's repeated tail.
-        (Some(a), Some(tail)) => prefix_aligns && a.is_subtype_with(tail, oracle),
+        (Some(a), Some(tail)) => prefix_aligns && a.is_subtype_rec(tail, cx, assumptions),
     }
 }
 
@@ -1054,13 +1122,14 @@ fn keyed_map_subtype(
     da: &[(Schema, Schema)],
     fb: &[Field],
     db: &[(Schema, Schema)],
-    oracle: &dyn LeafRelations,
+    cx: SubtypeCx<'_>,
+    assumptions: &mut Vec<(Schema, Schema)>,
 ) -> bool {
     if da.is_empty() && db.is_empty() {
         let width_and_depth = fa.iter().all(|a| {
             fb.iter()
                 .find(|b| b.name == a.name)
-                .is_some_and(|b| a.schema.is_subtype_with(&b.schema, oracle))
+                .is_some_and(|b| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
         });
         let required = fb
             .iter()
@@ -1068,7 +1137,8 @@ fn keyed_map_subtype(
             .all(|b| fa.iter().any(|a| a.name == b.name && a.required));
         width_and_depth && required
     } else if fa.is_empty() && fb.is_empty() && da.len() == 1 && db.len() == 1 {
-        da[0].0.is_subtype_with(&db[0].0, oracle) && da[0].1.is_subtype_with(&db[0].1, oracle)
+        da[0].0.is_subtype_rec(&db[0].0, cx, assumptions)
+            && da[0].1.is_subtype_rec(&db[0].1, cx, assumptions)
     } else {
         false
     }
@@ -2079,6 +2149,35 @@ mod laws {
         assert!(!Schema::Ref(9).is_empty_under(&uninhabited));
         // Without the definitions, recursion is not resolved (no-arg is_empty).
         assert!(!Schema::Ref(0).is_empty());
+    }
+
+    #[test]
+    fn decides_recursive_subtyping_coinductively() {
+        let field = |name: &str, schema, required| Field {
+            name: name.to_owned(),
+            schema,
+            required,
+        };
+        let list_of = |value, next| {
+            Schema::Union(vec![
+                Schema::NoneType,
+                Schema::KeyedMap {
+                    fields: vec![
+                        field("value", value, true),
+                        field("next", Schema::Ref(next), true),
+                    ],
+                    defaults: Vec::new(),
+                },
+            ])
+        };
+        // Two structurally identical recursive linked-list types are equivalent.
+        let identical = [list_of(Schema::Int, 0), list_of(Schema::Int, 1)];
+        assert!(Schema::Ref(0).equivalent_under(&Schema::Ref(1), &NoLeafRelations, &identical));
+        // Depth covariance through the recursion: a bool-valued list is a subtype
+        // of an int-valued one (bool ⊆ int), but not the reverse.
+        let covary = [list_of(Schema::Bool, 0), list_of(Schema::Int, 1)];
+        assert!(Schema::Ref(0).is_subtype_under(&Schema::Ref(1), &NoLeafRelations, &covary));
+        assert!(!Schema::Ref(1).is_subtype_under(&Schema::Ref(0), &NoLeafRelations, &covary));
     }
 
     /// A sample value for the subtyping oracle: a scalar, or a set whose element
