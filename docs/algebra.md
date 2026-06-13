@@ -92,9 +92,26 @@ assert repr(simplify(complement(complement(int)))) == "int"
 assert repr(simplify(union(int, int))) == "int"
 ```
 
-The simplifier is conservative: it never claims an equivalence it cannot justify
-structurally, and it never treats `Any` as the top, so a deliberately-unchecked
-schema is preserved.
+It also decides the **complement laws** and provable **disjointness**: a schema
+met with its complement, or with a provably disjoint type, is empty; a schema
+joined with its complement, or with the complement of a disjoint type, is
+everything.
+
+```python
+from valgebra import complement, intersect, simplify, union
+
+assert repr(simplify(intersect(int, complement(int)))) == "nothing"
+assert repr(simplify(union(int, complement(int)))) == "anything"
+assert repr(simplify(intersect(int, str))) == "nothing"  # disjoint types
+```
+
+Disjointness is decided soundly for the concrete fragment — the builtin scalars
+(with `bool` a subtype of `int`), the container kinds, and a refinement through
+its base. Elsewhere — `Literal` and class `isinstance` checks (a class may
+subclass a builtin), and recursive references — the simplifier stays
+conservative: it never claims an equivalence it cannot justify, so a result is
+always sound, never reporting a non-empty schema as empty. It never treats `Any`
+as the top, so a deliberately-unchecked schema is preserved.
 
 ## `Any` versus `anything`
 
