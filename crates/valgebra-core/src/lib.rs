@@ -775,7 +775,85 @@ impl Schema {
             _ => return None,
         })
     }
+
+    /// The value-universe regions this schema denotes, as a bitset over the
+    /// `REGION_*` partition, or `None` when the schema is not *scalar-decidable*
+    /// — built only from the scalar atoms, `Nothing`, `Anything`, and the
+    /// `Union`/`Intersection`/`Complement` combinators. On that fragment the
+    /// bitset is exact, so emptiness and subtyping are decided completely;
+    /// elsewhere the caller stays conservative. The gradual `Any`, literals,
+    /// instances, refinements, content-bearing containers, and references are
+    /// not scalar-decidable, so any combination containing one yields `None`.
+    fn region_set(&self) -> Option<u16> {
+        Some(match self {
+            Schema::Nothing => 0,
+            Schema::Anything => REGION_ALL,
+            Schema::NoneType => REGION_NONE,
+            Schema::Bool => REGION_BOOL,
+            Schema::Int => REGION_BOOL | REGION_INT, // bool ⊆ int
+            Schema::Float => REGION_FLOAT,
+            Schema::Str => REGION_STR,
+            Schema::Bytes => REGION_BYTES,
+            Schema::Union(members) => {
+                let mut acc = 0;
+                for member in members {
+                    acc |= member.region_set()?;
+                }
+                acc
+            }
+            Schema::Intersection(members) => {
+                let mut acc = REGION_ALL;
+                for member in members {
+                    acc &= member.region_set()?;
+                }
+                acc
+            }
+            Schema::Complement(inner) => REGION_ALL & !inner.region_set()?,
+            _ => return None,
+        })
+    }
+
+    /// Whether this schema is provably empty — denotes no value. Complete on the
+    /// scalar fragment (every Boolean combination of scalar atoms), and sound
+    /// elsewhere: it never reports a non-empty schema as empty. The gradual
+    /// `Any` is never scalar-decidable, so a combination containing it is never
+    /// decided empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        matches!(self.region_set(), Some(0))
+    }
+
+    /// Whether every value of `self` is also a value of `other` — set inclusion,
+    /// the semantic-subtyping relation. Complete on the scalar fragment via
+    /// `self ∧ ¬other = ∅`; elsewhere sound and reflexive (equal schemas are
+    /// subtypes, otherwise the relation is left unproven).
+    #[must_use]
+    pub fn is_subtype(&self, other: &Schema) -> bool {
+        match (self.region_set(), other.region_set()) {
+            (Some(a), Some(b)) => a & !b & REGION_ALL == 0,
+            _ => self == other,
+        }
+    }
+
+    /// Whether `self` and `other` denote the same set — mutual inclusion.
+    #[must_use]
+    pub fn equivalent(&self, other: &Schema) -> bool {
+        self.is_subtype(other) && other.is_subtype(self)
+    }
 }
+
+/// The value universe partitioned into mutually-disjoint regions, so a Boolean
+/// combination of scalar atoms denotes a set computed by bitset operations. The
+/// scalar atoms occupy `NONE`..`BYTES` (with `int` covering `BOOL | INT`); the
+/// container kinds and `OTHER` complete the partition so a complement of a
+/// scalar correctly includes every non-scalar value.
+const REGION_NONE: u16 = 1 << 0;
+const REGION_BOOL: u16 = 1 << 1;
+const REGION_INT: u16 = 1 << 2; // int values other than bool
+const REGION_FLOAT: u16 = 1 << 3;
+const REGION_STR: u16 = 1 << 4;
+const REGION_BYTES: u16 = 1 << 5;
+const REGION_ALL: u16 = (1 << 12) - 1; // 6 scalar + 5 container kinds + OTHER
 
 /// A concrete runtime type, for the sound fragment of disjointness.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -846,8 +924,16 @@ fn simplify_union(members: &[Schema]) -> Schema {
     }
     flat.sort();
     flat.dedup();
-    // X ∪ ¬X is everything, as is ¬A ∪ ¬B for disjoint A and B.
-    if has_complementary_pair(&flat) || has_disjoint_complement_pair(&flat) {
+    // X ∪ ¬X is everything, as is ¬A ∪ ¬B for disjoint A and B; and a union is
+    // everything once its scalar-decidable members alone cover every region of
+    // the value universe (opaque members can only add coverage, so they are
+    // ignored — keeping the decision independent of grouping).
+    let covers_universe = flat
+        .iter()
+        .filter_map(Schema::region_set)
+        .fold(0u16, |acc, regions| acc | regions)
+        == REGION_ALL;
+    if has_complementary_pair(&flat) || has_disjoint_complement_pair(&flat) || covers_universe {
         return Schema::Anything;
     }
     match flat.len() {
@@ -870,8 +956,16 @@ fn simplify_intersection(members: &[Schema]) -> Schema {
     }
     flat.sort();
     flat.dedup();
-    // X ∩ ¬X is empty, as is an intersection of two provably disjoint members.
-    if has_complementary_pair(&flat) || has_disjoint_pair(&flat) {
+    // X ∩ ¬X is empty, as is an intersection of two provably disjoint members;
+    // and an intersection is empty once its scalar-decidable members alone
+    // cancel to no region (opaque members only narrow further, so they are
+    // ignored — keeping the decision independent of grouping).
+    let region_empty = flat
+        .iter()
+        .filter_map(Schema::region_set)
+        .fold(REGION_ALL, |acc, regions| acc & regions)
+        == 0;
+    if has_complementary_pair(&flat) || has_disjoint_pair(&flat) || region_empty {
         return Schema::Nothing;
     }
     match flat.len() {
@@ -1448,7 +1542,125 @@ mod laws {
         Schema::Complement(Box::new(a))
     }
 
+    /// One representative value per distinguishable scalar region. The five
+    /// container kinds and `OTHER` are indistinguishable to a scalar schema (no
+    /// scalar atom touches them, and a complement includes them together), so a
+    /// single `Other` sample stands for that whole class.
+    #[derive(Clone, Copy)]
+    enum Sample {
+        None,
+        Bool,
+        Int,
+        Float,
+        Str,
+        Bytes,
+        Other,
+    }
+
+    const SAMPLES: [Sample; 7] = [
+        Sample::None,
+        Sample::Bool,
+        Sample::Int,
+        Sample::Float,
+        Sample::Str,
+        Sample::Bytes,
+        Sample::Other,
+    ];
+
+    /// A reference membership predicate for the scalar fragment, independent of
+    /// the region-set decision under test, used as its oracle.
+    fn member(schema: &Schema, value: Sample) -> bool {
+        match schema {
+            Schema::Anything => true,
+            Schema::Nothing => false,
+            Schema::NoneType => matches!(value, Sample::None),
+            Schema::Bool => matches!(value, Sample::Bool),
+            Schema::Int => matches!(value, Sample::Bool | Sample::Int), // bool ⊆ int
+            Schema::Float => matches!(value, Sample::Float),
+            Schema::Str => matches!(value, Sample::Str),
+            Schema::Bytes => matches!(value, Sample::Bytes),
+            Schema::Union(members) => members.iter().any(|m| member(m, value)),
+            Schema::Intersection(members) => members.iter().all(|m| member(m, value)),
+            Schema::Complement(inner) => !member(inner, value),
+            other => unreachable!("oracle is scalar-only, got {other:?}"),
+        }
+    }
+
+    /// A generator over the scalar-decidable fragment: scalar atoms combined by
+    /// union, intersection, and complement.
+    fn scalar_schema() -> impl Strategy<Value = Schema> {
+        let atom = prop_oneof![
+            Just(Schema::Anything),
+            Just(Schema::Nothing),
+            Just(Schema::NoneType),
+            Just(Schema::Bool),
+            Just(Schema::Int),
+            Just(Schema::Float),
+            Just(Schema::Str),
+            Just(Schema::Bytes),
+        ];
+        atom.prop_recursive(4, 24, 3, |inner| {
+            prop_oneof![
+                proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::Union),
+                proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::Intersection),
+                inner.prop_map(|s| Schema::Complement(Box::new(s))),
+            ]
+        })
+    }
+
+    #[test]
+    fn decides_scalar_emptiness_subtyping_and_equivalence() {
+        // Multi-way emptiness the pairwise checks cannot reach.
+        assert!(
+            Schema::Intersection(vec![Schema::Int, not(Schema::Bool), not(Schema::Int)]).is_empty()
+        );
+        assert!(
+            Schema::Intersection(vec![
+                Schema::Union(vec![Schema::Int, Schema::Str]),
+                not(Schema::Int),
+                not(Schema::Str),
+            ])
+            .is_empty()
+        );
+        assert!(!Schema::Intersection(vec![Schema::Int, not(Schema::Bool)]).is_empty());
+        // Subtyping, with bool ⊆ int.
+        assert!(Schema::Bool.is_subtype(&Schema::Int));
+        assert!(!Schema::Int.is_subtype(&Schema::Bool));
+        assert!(!Schema::Float.is_subtype(&Schema::Int));
+        // Equivalence between structurally different schemas: bool ∪ int = int.
+        assert!(Schema::Union(vec![Schema::Bool, Schema::Int]).equivalent(&Schema::Int));
+    }
+
+    #[test]
+    fn is_empty_and_subtype_are_sound_off_the_scalar_fragment() {
+        // Non-scalar leaves are never decided empty.
+        assert!(!Schema::Any.is_empty());
+        assert!(!Schema::Literal(0).is_empty());
+        assert!(!Schema::Instance(0).is_empty());
+        assert!(!Schema::Set(Box::new(Schema::Int)).is_empty());
+        assert!(!Schema::list(SeqRegex::homogeneous(Schema::Int)).is_empty());
+        // A scalar mixed with a non-scalar leaf is undecidable here, so it is
+        // never claimed empty (an instance could subclass the scalar's type).
+        assert!(!Schema::Intersection(vec![Schema::Int, Schema::Instance(0)]).is_empty());
+        // The gradual `Any` is never collapsed.
+        assert!(!Schema::Intersection(vec![Schema::Any, not(Schema::Any)]).is_empty());
+        // Subtyping off the fragment is reflexive only.
+        assert!(Schema::Instance(0).is_subtype(&Schema::Instance(0)));
+        assert!(!Schema::Instance(0).is_subtype(&Schema::Instance(1)));
+    }
+
     proptest! {
+        #[test]
+        fn scalar_decision_matches_the_value_oracle(a in scalar_schema(), b in scalar_schema()) {
+            let a_empty = SAMPLES.iter().all(|&v| !member(&a, v));
+            prop_assert_eq!(a.is_empty(), a_empty);
+
+            let a_sub_b = SAMPLES.iter().all(|&v| !member(&a, v) || member(&b, v));
+            let b_sub_a = SAMPLES.iter().all(|&v| !member(&b, v) || member(&a, v));
+            prop_assert_eq!(a.is_subtype(&b), a_sub_b);
+            prop_assert_eq!(a.equivalent(&b), a_sub_b && b_sub_a);
+        }
+
         #[test]
         fn simplify_is_idempotent(a in schema()) {
             let once = a.simplify();

@@ -5,3 +5,6 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 66cd8a1ac162bb41c64bd0153c272caee8589de72e5526b985a56f3ef16871ac # shrinks to a = Union([Complement(Int), Complement(Str)])
+cc aaa1ad9917ba139ec64a3305d32259f5278548da71add8c4dec680aa37af8d14 # shrinks to a = Union([Literal(0)]), b = Complement(Union([Bool])), c = Intersection([Int])
+cc 6294e11a16c5e8ec9a7c6089674b104ee584dabfa3ec9a3e37776f9024781bf1 # shrinks to a = Intersection([Union([Int]), Union([Bool])]), b = Union([Complement(Bool)])
+cc 0ba347e25b3542f01149671325a4e117f2bf03e48b072d3305bf7adc42e7cbe0 # shrinks to a = Intersection([Union([Int, Bool]), Intersection([Intersection([Str])])])
