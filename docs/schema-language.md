@@ -242,6 +242,14 @@ assert not validator(Point).is_valid(Point(1, "y"))
     recursive and cannot compile directly — express it with
     [`lazy`](recursion.md), which ties the fixpoint explicitly.
 
+!!! note "Bare classes, callables, and the runtime boundary"
+    A bare class is an `isinstance` check: `validator(complex)` admits any
+    `complex`, and any user class admits its instances. `Callable` (and
+    `Callable[...]`) checks only that the value is callable — the argument and
+    return types cannot be inspected at runtime, so they are not enforced. `Any`
+    is admitted unchecked. Everything else is decided structurally: a `list[int]`
+    schema does check each element.
+
 ## Refinements
 
 `Annotated[T, ...markers]` narrows `T` with constraints — bounds, lengths,
