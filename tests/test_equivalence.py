@@ -1,15 +1,17 @@
-"""The bool fast path and the explain walk must agree on membership.
+"""The fast and explain modes of the membership walk must agree.
 
-``is_valid`` (the membership fast path) and ``validate`` (the aggregating explain
-walk) are two separate traversals of the IR that must reach the same membership
-verdict for every schema and value. That invariant is maintained by hand, one
-node at a time; this property test fuzzes it across the node kinds so a future
-divergence in one walk that the other does not share is caught.
+``is_valid`` runs the one membership walk in its fast mode (a bool, no
+allocation); ``validate`` runs the same walk in explain mode (aggregating a
+violation per failure). The fast-mode verdict and "explain mode produced no
+violation" must coincide for every schema and value. This property test fuzzes
+that agreement across the node kinds, so a mode-specific divergence — an explain
+pass that describes a failure the fast check does not make, or the reverse — is
+caught.
 
-This is membership-equivalence between the two *walks*, which is distinct from
-correctness against a node's denotation: both walks share the frontend, so a
-build-time bug would make them agree while both being wrong. Targeted tests cover
-denotations; this covers walk equivalence.
+This is agreement between the two *modes* of the walk, distinct from correctness
+against a node's denotation: both modes share the frontend, so a build-time bug
+would make them agree while both being wrong. The denotation oracle in
+``tests/test_denotation.py`` covers that; this covers mode agreement.
 """
 
 from __future__ import annotations
