@@ -12,10 +12,14 @@ from __future__ import annotations
 import enum
 import json
 from dataclasses import dataclass
+from functools import reduce
+from types import GenericAlias
 from typing import Annotated, Literal
 
 import annotated_types as at
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from valgebra import (
     complement,
@@ -177,6 +181,59 @@ def test_mapping_and_record_reject_a_non_object_json() -> None:
     assert validator(dict[str, int]).is_valid_json("[1, 2]") is False
     assert validator({"a": int}).is_valid_json("[1]") is False
     assert validator({"a": int}).is_valid_json("5") is False
+
+
+# --- A fuzzer pinning the in-place JSON walk to the object walk -------------
+# Both must reach the same verdict for every JSON-meaningful schema and every
+# JSON document: is_valid_json walks the parsed value in place, is_valid walks
+# the object json.loads produces. Independent schema and value drive both the
+# type-mismatch and the structural-recursion paths.
+
+
+def _json_schemas() -> st.SearchStrategy[object]:
+    leaf = st.sampled_from([int, float, str, bool, type(None)])
+    refined = st.one_of(
+        st.integers(min_value=-5, max_value=5).map(lambda k: Annotated[int, at.Ge(k)]),
+        st.integers(min_value=0, max_value=5).map(
+            lambda k: Annotated[str, at.MinLen(k)]
+        ),
+    )
+    return st.recursive(
+        st.one_of(leaf, refined),
+        lambda child: st.one_of(
+            child.map(lambda t: GenericAlias(list, (t,))),  # list[T]
+            child.map(lambda t: GenericAlias(dict, (str, t))),  # dict[str, T]
+            st.tuples(child, child).map(lambda ab: [ab[0], ab[1], ...]),  # [A, B, ...]
+            st.lists(leaf, min_size=2, max_size=3, unique=True).map(
+                lambda ts: reduce(lambda a, b: a | b, ts)
+            ),  # a union of scalars
+        ),
+        max_leaves=4,
+    )
+
+
+def _json_values() -> st.SearchStrategy[object]:
+    return st.recursive(
+        st.one_of(
+            st.none(),
+            st.booleans(),
+            st.integers(min_value=-8, max_value=8),
+            st.floats(allow_nan=False, allow_infinity=False),
+            st.text(max_size=3),
+        ),
+        lambda child: st.one_of(
+            st.lists(child, max_size=4),
+            st.dictionaries(st.text(max_size=3), child, max_size=3),
+        ),
+        max_leaves=6,
+    )
+
+
+@given(spec=_json_schemas(), value=_json_values())
+def test_json_walk_matches_the_object_walk(spec: object, value: object) -> None:
+    schema = validator(spec)
+    doc = json.dumps(value)
+    assert schema.is_valid_json(doc) == schema.is_valid(json.loads(doc))
 
 
 def test_fixed_and_variadic_sequences_reject_wrong_json_shapes() -> None:

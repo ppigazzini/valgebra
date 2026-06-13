@@ -21,11 +21,50 @@ from valgebra import (
     validator,
 )
 
-# Schema specs: each is an annotation valgebra can compile.
-ATOM_SCHEMAS = [int, float, str, bool, None, Literal[0], Literal["x"], Literal[True]]
+# Schema specs: each is an annotation or native form valgebra can compile. The
+# container and sequence forms make the laws (and the simplifier) recurse into a
+# Seq/Coll/Mapping node, not just scalars.
+ATOM_SCHEMAS = [
+    int,
+    float,
+    str,
+    bool,
+    None,
+    Literal[0],
+    Literal["x"],
+    Literal[True],
+    list[int],
+    set[int],
+    dict[str, int],
+    tuple[int, str],
+    tuple[int, ...],
+    [int, str, ...],  # a prefix-plus-tail list
+]
 
-# A spread of values exercising the atom boundaries.
-VALUES = [0, 1, -1, True, False, 1.0, 0.0, "x", "", "y", None, 3.14]
+# A spread of values exercising the atom and container boundaries.
+VALUES = [
+    0,
+    1,
+    -1,
+    True,
+    False,
+    1.0,
+    0.0,
+    "x",
+    "",
+    "y",
+    None,
+    3.14,
+    [1, 2],
+    [1, "a"],
+    [1, "a", 2, 3],
+    [],
+    {1, 2},
+    {"k": 1},
+    {},
+    (1, "a"),
+    (1, 2, 3),
+]
 
 schemas = st.sampled_from(ATOM_SCHEMAS)
 
