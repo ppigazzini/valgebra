@@ -2495,5 +2495,14 @@ mod laws {
                 intersection(not(a.clone()), not(b)).simplify()
             );
         }
+
+        #[test]
+        fn complement_laws_on_the_scalar_fragment(a in scalar_schema()) {
+            // On the decidable scalar fragment the complement laws hold exactly:
+            // a meet its complement is empty, and a join its complement is the
+            // universe. The decision procedure folds both to the lattice bounds.
+            prop_assert!(intersection(a.clone(), not(a.clone())).is_empty());
+            prop_assert!(not(union(a.clone(), not(a))).is_empty());
+        }
     }
 }

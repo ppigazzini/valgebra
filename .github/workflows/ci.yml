@@ -5,6 +5,8 @@ on:
     branches: [main, dev]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "0 4 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -135,6 +137,8 @@ jobs:
       - name: Build the extension into the venv
         run: uv run maturin develop --uv
       - name: pytest
+        env:
+          HYPOTHESIS_PROFILE: ci
         run: uv run pytest
       # ruff and ty are static and pinned to a target version, so their result
       # does not depend on the runner's Python; run them once on the floor.
@@ -238,6 +242,36 @@ jobs:
 
   # Single required check for branch protection: green only if every job above
   # succeeds. Mirrors the ruff required-checks and pydantic check aggregators.
+  nightly-fuzz:
+    name: nightly deep fuzz
+    # The hole-hunting property suites at the deep example budget. Scheduled and
+    # manual only, and never a merge gate: it is an early-warning lane.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - name: Install dev dependencies
+        run: uv sync --no-install-project
+      - name: Build the extension into the venv
+        run: uv run maturin develop --uv
+      - name: Deep property suite
+        env:
+          HYPOTHESIS_PROFILE: nightly
+        run: >
+          uv run pytest
+          tests/test_completeness_ledger.py
+          tests/test_metamorphic.py
+          tests/test_decision_adversarial.py
+          tests/test_denotation.py
+
   ci:
     name: ci
     if: always()
