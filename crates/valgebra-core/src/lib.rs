@@ -1401,9 +1401,30 @@ fn keyed_map_subtype(
                 ka.is_subtype_rec(kb, cx, assumptions) && va.is_subtype_rec(vb, cx, assumptions)
             })
         })
+    } else if fa.len() == fb.len() && fa.iter().all(|a| fb.iter().any(|b| b.name == a.name)) {
+        // A record mixed with a catch-all, the same field names on both sides: a
+        // subtype when each field narrows, the supertype's required fields are
+        // required here, and every catch-all clause is subsumed by one of the
+        // supertype's. A field key is matched as a field on both sides, so the
+        // catch-all clauses govern only the non-field keys and their subsumption
+        // is sound. Differing field-name sets need the full quasi-constant-function
+        // comparison and stay conservative.
+        let fields = fa.iter().all(|a| {
+            fb.iter()
+                .find(|b| b.name == a.name)
+                .is_some_and(|b| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
+        });
+        let required = fb
+            .iter()
+            .filter(|b| b.required)
+            .all(|b| fa.iter().any(|a| a.name == b.name && a.required));
+        let defaults = da.iter().all(|(ka, va)| {
+            db.iter().any(|(kb, vb)| {
+                ka.is_subtype_rec(kb, cx, assumptions) && va.is_subtype_rec(vb, cx, assumptions)
+            })
+        });
+        fields && required && defaults
     } else {
-        // A record mixed with a catch-all needs the full quasi-constant-function
-        // comparison and stays conservative.
         false
     }
 }
@@ -2533,6 +2554,22 @@ mod laws {
             closed(vec![field("x", Schema::Int, true)])
                 .is_subtype(&Schema::record(vec![field("x", Schema::Int, true)], true))
         );
+
+        // A record mixed with a catch-all narrows field-wise and clause-wise when
+        // the field names match; a widening field or value, or differing field
+        // names, are not subtypes.
+        let mixed = |value_field, value_default| Schema::KeyedMap {
+            fields: vec![field("a", value_field, true)],
+            defaults: vec![(Schema::Str, value_default)],
+        };
+        assert!(mixed(Schema::Bool, Schema::Bool).is_subtype(&mixed(Schema::Int, Schema::Int)));
+        assert!(!mixed(Schema::Int, Schema::Int).is_subtype(&mixed(Schema::Int, Schema::Bool)));
+        assert!(!mixed(Schema::Int, Schema::Bool).is_subtype(&mixed(Schema::Bool, Schema::Bool)));
+        let mixed_b = Schema::KeyedMap {
+            fields: vec![field("b", Schema::Int, true)],
+            defaults: vec![(Schema::Str, Schema::Int)],
+        };
+        assert!(!mixed(Schema::Int, Schema::Int).is_subtype(&mixed_b));
     }
 
     #[test]
