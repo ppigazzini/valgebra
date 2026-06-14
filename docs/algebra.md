@@ -142,13 +142,16 @@ assert not validator(int).is_empty()
 ```
 
 The other side of a comparison is any schema spec or compiled validator. These
-decisions are **sound**: they answer `True` only when the relation provably
-holds — exactly on the scalar atoms (with `bool` a subtype of `int`) and the
-structural containers (set, frozenset, and sequence inclusion by element), and
-conservatively `False` for what they cannot yet decide (alternation regexes,
-recursive references, and class checks compared across schemas). A `True` is
-always correct; a `False` may be a relation that holds but is not yet provable.
-See the [foundations](foundations.md) for the theory.
+decisions are **sound**: a `True` is always correct, and a `False` (or a
+"not empty") is either a genuine non-relation or a relation valgebra does not yet
+prove — never a wrong answer. They decide completely over a wide fragment — the
+scalar Boolean algebra, class and literal inclusion, refinements with bound and
+length constraints, prefix-and-tail sequences, sets and frozensets, records and
+mappings (including multi-clause and matching-field-name mixed maps), and
+recursion — and stay conservative on the rest. The
+[decidability boundary](decidability.md) lists exactly what is decided, what is
+conservative, and what is undecidable at runtime; see the
+[foundations](foundations.md) for the theory.
 
 ## `Any` versus `anything`
 

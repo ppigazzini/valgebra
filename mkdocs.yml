@@ -48,6 +48,7 @@ nav:
       - Performance: performance.md
   - Explanation:
       - Foundations: foundations.md
+      - Decidability boundary: decidability.md
   - Reference:
       - API reference: api.md
 
