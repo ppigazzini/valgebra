@@ -45,3 +45,7 @@ htmlcov/
 *.swp
 *~
 .DS_Store
+
+# cargo-mutants run output
+/mutants.out/
+/mutants.out.old/

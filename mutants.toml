@@ -1,0 +1,9 @@
+# cargo-mutants configuration.
+#
+# Mutation testing scopes to the soundness-critical core crate. The binding
+# crate's logic is exercised by the Python suite (pytest), not `cargo test`, so
+# its mutants cannot be observed by this harness and would only add noise.
+exclude_globs = ["crates/valgebra-py/**"]
+
+# A few mutants run longer than the baseline; give generous headroom over it.
+timeout_multiplier = 5.0

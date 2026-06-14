@@ -274,6 +274,24 @@ jobs:
           tests/test_recursion.py
           tests/test_real_world_corpus.py
 
+  nightly-mutants:
+    name: nightly mutation sweep
+    # cargo-mutants over the core, auditing whether the Rust unit tests register
+    # an injected defect. Scheduled and manual only, never a merge gate; surviving
+    # mutants are an early-warning signal of a test gap, surfaced in the summary.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: Install cargo-mutants
+        run: cargo install cargo-mutants --locked
+      - name: Mutation sweep over the core
+        run: cargo mutants --package valgebra-core -j 4
+
   ci:
     name: ci
     if: always()

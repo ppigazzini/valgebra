@@ -2486,6 +2486,139 @@ mod laws {
     }
 
     #[test]
+    fn decision_arms_are_pinned_independently_of_the_python_suite() {
+        // Each assertion fails under a specific mutation of a decision arm, so the
+        // core's own unit tests catch a defect without relying on the Python layer.
+        use core::cmp::Ordering;
+        struct ByIndex;
+        impl LeafRelations for ByIndex {
+            fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+                None
+            }
+            fn compare(&self, a: usize, b: usize) -> Option<Ordering> {
+                Some(a.cmp(&b))
+            }
+        }
+        let list = |element| Schema::list(SeqRegex::homogeneous(element));
+
+        // Bottom-below and top-above on a non-scalar (region_set is None there, so
+        // the dedicated arms decide it).
+        assert!(Schema::Nothing.is_subtype(&list(Schema::Int)));
+        assert!(list(Schema::Int).is_subtype(&Schema::Anything));
+        // A meet is below a member of a join, and a conjunct decides a meet's
+        // supertype.
+        assert!(list(Schema::Bool).is_subtype(&Schema::Intersection(vec![
+            list(Schema::Int),
+            Schema::Anything
+        ])));
+        assert!(
+            Schema::Intersection(vec![list(Schema::Bool), list(Schema::Int)])
+                .is_subtype(&list(Schema::Int))
+        );
+        // Complement is contravariant, on a non-scalar so the region check does
+        // not decide it before the complement arm.
+        assert!(not(list(Schema::Int)).is_subtype(&not(list(Schema::Bool))));
+        assert!(!not(list(Schema::Bool)).is_subtype(&not(list(Schema::Int))));
+        // A schema is below the empty set exactly when it is empty, decided through
+        // the oracle for a refinement with unsatisfiable bounds.
+        assert!(
+            Schema::Refine {
+                base: Box::new(Schema::Int),
+                constraints: vec![Constraint::Ge(10), Constraint::Le(0)],
+            }
+            .is_subtype_under(&Schema::Nothing, &ByIndex, &[])
+        );
+
+        // Refinement bounds: equal closed bounds are a singleton (not empty), and
+        // a strict pair at the same value is empty; a length window that is exactly
+        // satisfiable is not empty.
+        let refine = |constraints| Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints,
+        };
+        assert!(!refine(vec![Constraint::Ge(5), Constraint::Le(5)]).is_empty_with(&ByIndex, &[]));
+        assert!(refine(vec![Constraint::Gt(5), Constraint::Lt(5)]).is_empty_with(&ByIndex, &[]));
+        assert!(!refine(vec![Constraint::MinLen(5), Constraint::MaxLen(5)]).is_empty());
+        // An intersection's refinement bounds are joined: both sides are needed.
+        assert!(
+            Schema::Intersection(vec![
+                refine(vec![Constraint::Ge(5)]),
+                refine(vec![Constraint::Le(0)]),
+            ])
+            .is_empty_with(&ByIndex, &[])
+        );
+        assert!(
+            !Schema::Intersection(vec![
+                refine(vec![Constraint::Ge(0)]),
+                refine(vec![Constraint::Le(5)]),
+            ])
+            .is_empty_with(&ByIndex, &[])
+        );
+
+        // Keyed maps: each branch's conjunction is needed -- a depth failure is not
+        // rescued by the required-coverage holding.
+        let field = |name: &str, schema, required| Field {
+            name: name.to_owned(),
+            schema,
+            required,
+        };
+        let closed = |fields| Schema::record(fields, false);
+        // Closed record: a depth failure is not rescued by required-coverage.
+        assert!(
+            !closed(vec![field("x", Schema::Int, true)]).is_subtype(&closed(vec![field(
+                "x",
+                Schema::Str,
+                true
+            )]))
+        );
+        // Closed record: an optional field is not a subtype of the same field made
+        // required (required-coverage must hold on top of width and depth).
+        assert!(
+            !closed(vec![field("x", Schema::Int, false)]).is_subtype(&closed(vec![field(
+                "x",
+                Schema::Int,
+                true
+            )]))
+        );
+        // Pure mapping: a clause is subsumed only when both key and value narrow;
+        // a key mismatch is not rescued by the value matching.
+        assert!(
+            !Schema::mapping(Schema::Str, Schema::Int)
+                .is_subtype(&Schema::mapping(Schema::Bytes, Schema::Int))
+        );
+        // Mixed record-and-catch-all: required-coverage must hold there too.
+        let mixed = |required| Schema::KeyedMap {
+            fields: vec![field("x", Schema::Int, required)],
+            defaults: vec![(Schema::Str, Schema::Int)],
+        };
+        assert!(!mixed(false).is_subtype(&mixed(true)));
+        // A pure mapping is not a subtype of a mixed map that requires a field it
+        // lacks: the pure-mapping branch must need both sides field-free.
+        assert!(
+            !Schema::mapping(Schema::Str, Schema::Int).is_subtype(&Schema::KeyedMap {
+                fields: vec![field("x", Schema::Int, true)],
+                defaults: vec![(Schema::Str, Schema::Int)],
+            })
+        );
+        // A mixed map is not a subtype of one with an extra field whose catch-all
+        // would admit an incompatible value: the mixed rule needs matching field
+        // names, so its guard needs both an equal count and a name match.
+        assert!(
+            !Schema::KeyedMap {
+                fields: vec![field("x", Schema::Int, false)],
+                defaults: vec![(Schema::Str, Schema::Int)],
+            }
+            .is_subtype(&Schema::KeyedMap {
+                fields: vec![
+                    field("x", Schema::Int, false),
+                    field("z", Schema::Bool, false),
+                ],
+                defaults: vec![(Schema::Str, Schema::Int)],
+            })
+        );
+    }
+
+    #[test]
     fn decides_refinement_subtyping_structurally() {
         let refine = |base, constraints: Vec<Constraint>| Schema::Refine {
             base: Box::new(base),
