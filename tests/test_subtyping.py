@@ -195,6 +195,18 @@ def test_recursive_subtyping_is_coinductive() -> None:
     assert not int_list.is_subtype(bool_list)
 
 
+def test_recursion_composed_with_literals_and_instances() -> None:
+    # Regression: the coinductive subtyping must compose with the leaf oracle
+    # (literal-by-membership, instance-by-subclass) inside a recursive type.
+    a = lazy(lambda t: union(Literal["leaf"], {"value": int, "next": t}))
+    b = lazy(lambda t: union(Literal["leaf"], {"value": int, "next": t}))
+    assert a.equivalent(b)
+    bool_valued = lazy(lambda t: union(Literal["leaf"], {"value": bool, "next": t}))
+    int_valued = lazy(lambda t: union(Literal["leaf"], {"value": int, "next": t}))
+    assert bool_valued.is_subtype(int_valued)
+    assert not int_valued.is_subtype(bool_valued)
+
+
 def test_is_empty_detects_uninhabited_recursion() -> None:
     # A mandatory self-reference with no base case has no finite inhabitant.
     assert lazy(lambda t: {"value": int, "next": t}).is_empty()

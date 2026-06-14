@@ -13,7 +13,7 @@ import annotated_types as at
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import complement, intersect, union, validator
+from valgebra import complement, intersect, lazy, union, validator
 
 _bases = st.sampled_from([int, str, bool, float, bytes, None, complex, bytearray])
 _lits = st.sampled_from(
@@ -28,7 +28,16 @@ _lits = st.sampled_from(
     ]
 )
 _refines = st.integers(-2, 2).map(lambda n: Annotated[int, at.Ge(n)])
-_leaf = st.one_of(_bases, _lits, _refines)
+# Fixed recursive schemas, so the hunt also exercises recursion (uninhabited
+# detection and coinductive subtyping) composed with everything else.
+_recursive = st.sampled_from(
+    [
+        lazy(lambda t: union(None, {"value": int, "next": t})),
+        lazy(lambda t: union(None, [t])),
+        lazy(lambda t: union(int, str, [t], {str: t})),
+    ]
+)
+_leaf = st.one_of(_bases, _lits, _refines, _recursive)
 
 
 def _extend(children: st.SearchStrategy) -> st.SearchStrategy:

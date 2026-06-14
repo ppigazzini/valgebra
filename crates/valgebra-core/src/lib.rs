@@ -1040,8 +1040,25 @@ impl Schema {
             // ∅ is a subset of every set, and every set is a subset of the top.
             (Schema::Nothing, _) | (_, Schema::Anything) => true,
             (_, Schema::Nothing) => self.is_empty(), // A ⊆ ∅ exactly when A is empty
-            // Unfold a recursive reference, recording the goal so a cycle back to
-            // it is caught by the coinductive hypothesis above.
+            // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z; A ⊆ (Y ∩ Z) iff A ⊆ Y and A ⊆ Z.
+            (Schema::Union(members), _) => members
+                .iter()
+                .all(|m| m.is_subtype_rec(other, cx, assumptions)),
+            (_, Schema::Intersection(members)) => members
+                .iter()
+                .all(|m| self.is_subtype_rec(m, cx, assumptions)),
+            // Sound one-directional rules for the remaining lattice shapes.
+            (_, Schema::Union(members)) => members
+                .iter()
+                .any(|m| self.is_subtype_rec(m, cx, assumptions)),
+            (Schema::Intersection(members), _) => members
+                .iter()
+                .any(|m| m.is_subtype_rec(other, cx, assumptions)),
+            // Unfold a recursive reference — after the lattice rules, so an
+            // intersection or union meeting a reference decomposes first (which
+            // lets a recursive member be compared against the reference rather
+            // than the reference being unfolded past it). The goal is recorded so
+            // a cycle back to it is caught by the coinductive hypothesis above.
             (Schema::Ref(id), _) => match cx.defs.get(*id) {
                 Some(def) => {
                     assumptions.push((self.clone(), other.clone()));
@@ -1060,20 +1077,6 @@ impl Schema {
                 }
                 None => false,
             },
-            // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z; A ⊆ (Y ∩ Z) iff A ⊆ Y and A ⊆ Z.
-            (Schema::Union(members), _) => members
-                .iter()
-                .all(|m| m.is_subtype_rec(other, cx, assumptions)),
-            (_, Schema::Intersection(members)) => members
-                .iter()
-                .all(|m| self.is_subtype_rec(m, cx, assumptions)),
-            // Sound one-directional rules for the remaining lattice shapes.
-            (_, Schema::Union(members)) => members
-                .iter()
-                .any(|m| self.is_subtype_rec(m, cx, assumptions)),
-            (Schema::Intersection(members), _) => members
-                .iter()
-                .any(|m| m.is_subtype_rec(other, cx, assumptions)),
             // Set and frozenset inclusion reduces to element inclusion.
             (Schema::Set(a), Schema::Set(b)) | (Schema::FrozenSet(a), Schema::FrozenSet(b)) => {
                 a.is_subtype_rec(b, cx, assumptions)
@@ -1676,6 +1679,33 @@ mod tests {
             Schema::SelfRef(9).shifted(1, 1),
             Schema::SelfRef(9)
         ));
+    }
+
+    #[test]
+    fn reindexed_maps_pool_indices_through_the_table() {
+        let schema = Schema::Union(vec![
+            Schema::Literal(0),
+            Schema::Instance(1),
+            Schema::Refine {
+                base: Box::new(Schema::Int),
+                constraints: vec![Constraint::Ge(0), Constraint::MinLen(2)],
+            },
+            Schema::Ref(0),
+        ]);
+        let reindexed = schema.reindexed(&[10, 11], 5);
+        assert_eq!(
+            reindexed,
+            Schema::Union(vec![
+                Schema::Literal(10),  // 0 -> table[0] = 10
+                Schema::Instance(11), // 1 -> table[1] = 11
+                Schema::Refine {
+                    base: Box::new(Schema::Int),
+                    // Ge index remaps through the table; MinLen is a length, untouched.
+                    constraints: vec![Constraint::Ge(10), Constraint::MinLen(2)],
+                },
+                Schema::Ref(5), // ref offset by def_offset = 5
+            ])
+        );
     }
 
     #[test]
