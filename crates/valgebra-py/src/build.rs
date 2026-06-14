@@ -156,7 +156,35 @@ pub(crate) fn build_schema(
         return Ok(inner.schema.reindexed(&lit_map, def_offset));
     }
 
+    // A type variable or typing special form reaches the constant fallthrough
+    // only because it has no typing origin and is not a value. Reject it with a
+    // clear message rather than interning it as a literal that would match
+    // almost nothing (a free `T` accepts only objects equal to the TypeVar).
+    if is_typing_construct(obj)? {
+        return Err(not_implemented(&format!(
+            "{} is a typing construct, not a value: a type variable, ParamSpec, \
+             TypeVarTuple, or special form (such as Final or ClassVar) cannot be a \
+             schema; use a concrete type",
+            summarize(obj)
+        )));
+    }
+
     Ok(Schema::Literal(intern(lits, obj)))
+}
+
+/// True if `obj` is a type variable or a typing special form (`Final`,
+/// `ClassVar`, a bare `Optional`/`Union`/`Literal`, ...): a type-system
+/// construct carrying no runtime value, so it cannot denote a set of values.
+fn is_typing_construct(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let typing = obj.py().import("typing")?;
+    for name in ["TypeVar", "ParamSpec", "TypeVarTuple", "_SpecialForm"] {
+        if let Ok(class) = typing.getattr(name)
+            && obj.is_instance(&class)?
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Compile arguments into one shared pool and combine them with `make`.
@@ -205,6 +233,22 @@ fn build_type_object(
     }
     if ty.is(&py.import("builtins")?.getattr("object")?) {
         return Ok(Schema::Anything);
+    }
+    // A bare typing special form is a class on some Pythons (notably `Union`).
+    // It is not a value, so reject it rather than building an instance check that
+    // accepts nothing; the special forms that are not types are rejected on the
+    // value fallthrough in build_schema.
+    let typing = py.import("typing")?;
+    for name in ["Union", "Optional"] {
+        if let Ok(form) = typing.getattr(name)
+            && ty.is(&form)
+        {
+            return Err(not_implemented(&format!(
+                "{} is a typing special form, not a value; write a concrete type \
+                 (for a union, X | Y or Union[X, Y])",
+                summarize(ty.as_any())
+            )));
+        }
     }
     // TypedDict: a closed record whose required keys come from the class.
     if ty.hasattr("__required_keys__")? {

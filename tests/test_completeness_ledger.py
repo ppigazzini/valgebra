@@ -20,7 +20,8 @@ The ledger entries marked xfail are the known holes recorded in the completeness
 report; the count pytest prints as "xfailed" is the live conservatism counter.
 """
 
-from typing import Annotated, Final, TypeVar
+import enum
+from typing import Annotated, ClassVar, Final, Literal, Optional, TypeVar, Union
 
 import annotated_types as at
 import pytest
@@ -166,30 +167,21 @@ def test_decision_decides_true_relations(
     _check(operation, left, right)
 
 
-# --- Silent-acceptance ledger: the frontend must reject non-value objects -----
+# --- Frontend integrity: non-value objects are rejected -----------------------
 #
-# A construct carrying no runtime value must be rejected, not interned as a
-# literal that silently accepts almost nothing. These assert the intended
-# rejection; the current build succeeds, so they are ledgered misses.
+# A construct carrying no runtime value is rejected, not interned as a literal
+# that silently accepts almost nothing.
 
 _T = TypeVar("_T")
 
 _REJECTED = [
-    pytest.param(
-        _T,
-        id="TypeVar",
-        marks=pytest.mark.xfail(strict=True, reason="interned as Literal[~T]"),
-    ),
-    pytest.param(
-        list[_T],
-        id="list[TypeVar]",
-        marks=pytest.mark.xfail(strict=True, reason="interned as list[Literal[~T]]"),
-    ),
-    pytest.param(
-        Final,
-        id="Final",
-        marks=pytest.mark.xfail(strict=True, reason="interned as Literal[Final]"),
-    ),
+    pytest.param(_T, id="TypeVar"),
+    pytest.param(list[_T], id="list[TypeVar]"),
+    pytest.param(Final, id="Final"),
+    pytest.param(ClassVar, id="ClassVar"),
+    pytest.param(Union, id="bare-Union"),
+    pytest.param(Optional, id="bare-Optional"),
+    pytest.param(Literal, id="bare-Literal"),
 ]
 
 
@@ -197,6 +189,20 @@ _REJECTED = [
 def test_frontend_rejects_non_value_objects(schema: object) -> None:
     with pytest.raises((TypeError, ValueError, NotImplementedError)):
         validator(schema)
+
+
+def test_value_literals_still_build() -> None:
+    # The rejection above does not over-reach: genuine constant values still build
+    # as typed literals.
+    class Color(enum.Enum):
+        RED = 1
+
+    sentinel = object()
+    assert validator(1).is_valid(1)
+    assert validator("a").is_valid("a")
+    assert validator(Color.RED).is_valid(Color.RED)
+    assert validator(sentinel).is_valid(sentinel)
+    assert not validator(sentinel).is_valid(object())
 
 
 # --- Finite-universe soundness fuzzer ----------------------------------------
