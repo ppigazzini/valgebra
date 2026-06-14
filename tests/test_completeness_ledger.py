@@ -125,22 +125,20 @@ _DECIDED = [
     pytest.param(
         "empty", intersect(_GE0, Annotated[int, at.Lt(0)]), None, id="empty:Ge(0)&Lt(0)"
     ),
-]
-
-# Known holes (completeness report). The reflexivity case is a recursion-fragment
-# defect a decision slice closes.
-_LEDGERED = [
+    # An intersection that mixes a recursive reference with a union is a subtype
+    # of itself: reflexivity holds even when the meet contains its own supertype.
     pytest.param(
         "subtype",
         intersect(_RECURSIVE, union(int, str)),
         intersect(_RECURSIVE, union(int, str)),
         id="reflexive:intersect(rec,union)",
-        marks=pytest.mark.xfail(
-            strict=True,
-            reason="reflexivity of intersect(recursive, union) across merged pools",
-        ),
     ),
 ]
+
+# Known decision-completeness misses. None remain: each relation the procedure
+# declines on a decidable fragment has been closed. An entry returns here only if
+# a future change reintroduces a miss, recorded as a strict expected failure.
+_LEDGERED: list[object] = []
 
 
 @pytest.mark.parametrize(("operation", "left", "right"), _DECIDED + _LEDGERED)

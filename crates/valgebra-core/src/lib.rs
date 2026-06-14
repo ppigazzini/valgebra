@@ -1087,13 +1087,22 @@ impl Schema {
             (_, Schema::Intersection(members)) => members
                 .iter()
                 .all(|m| self.is_subtype_rec(m, cx, assumptions)),
-            // Sound one-directional rules for the remaining lattice shapes.
+            // (A ∩ B) ⊆ C if some conjunct already is. When C is a union, the meet
+            // may instead land in one branch, so that sound rule is tried too —
+            // ahead of the plain `_ ⊆ (Y ∪ Z)` rule, so a meet that contains its
+            // own supertype (a reference beside that union) decides, which is what
+            // lets such a meet be recognised as a subtype of itself.
+            (Schema::Intersection(members), _) => {
+                members
+                    .iter()
+                    .any(|m| m.is_subtype_rec(other, cx, assumptions))
+                    || matches!(other, Schema::Union(branches)
+                        if branches.iter().any(|b| self.is_subtype_rec(b, cx, assumptions)))
+            }
+            // A ⊆ (Y ∪ Z) if A lands in one branch (sound, conservative).
             (_, Schema::Union(members)) => members
                 .iter()
                 .any(|m| self.is_subtype_rec(m, cx, assumptions)),
-            (Schema::Intersection(members), _) => members
-                .iter()
-                .any(|m| m.is_subtype_rec(other, cx, assumptions)),
             // Unfold a recursive reference — after the lattice rules, so an
             // intersection or union meeting a reference decomposes first (which
             // lets a recursive member be compared against the reference rather
