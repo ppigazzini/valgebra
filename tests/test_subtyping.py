@@ -51,6 +51,7 @@ SPECS = [
     set[bool],
     tuple[int, str],
     tuple[bool, str],
+    tuple[bool, int, ...],  # ty: ignore[invalid-type-form]  # a bool, then zero or more ints
     [bool, int, ...],  # a list: a bool, then zero or more ints
     [int, int, ...],  # a non-empty list of ints
     dict[str, int],

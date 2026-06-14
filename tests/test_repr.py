@@ -33,6 +33,7 @@ from valgebra import (
         (dict[str, int], "dict[str, int]"),
         (tuple[int, str], "tuple[int, str]"),
         (tuple[int, ...], "tuple[int, ...]"),
+        (tuple[str, int, ...], "tuple[str, int, ...]"),  # ty: ignore[invalid-type-form]
         (list[dict[str, int]], "list[dict[str, int]]"),
         (int | str, "int | str"),
         (Literal["a"], "Literal['a']"),
@@ -94,6 +95,7 @@ ROUNDTRIP_SCHEMAS = [
     dict[str, int],
     tuple[int, str],
     tuple[int, ...],
+    tuple[str, int, ...],  # ty: ignore[invalid-type-form]
     list[dict[str, int]],
     int | str,
     Literal["a"],

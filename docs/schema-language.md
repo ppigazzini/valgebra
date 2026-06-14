@@ -53,6 +53,7 @@ assert validator(Any).is_valid(object())
 | `dict[K, V]` | dicts whose keys are in `K` and values in `V` |
 | `tuple[A, B]` | length-2 tuples with `A` then `B` |
 | `tuple[T, ...]` | tuples of any length, every element in `T` |
+| `tuple[A, B, ...]` | a fixed prefix `A`, then zero or more `B` (see below) |
 
 ```python
 from valgebra import validator
@@ -61,6 +62,7 @@ assert validator(list[int]).is_valid([1, 2, 3])
 assert validator(dict[str, int]).is_valid({"a": 1})
 assert validator(tuple[int, str]).is_valid((1, "a"))
 assert validator(tuple[int, ...]).is_valid((1, 2, 3))
+assert validator(tuple[str, int, ...]).is_valid(("x", 1, 2))
 ```
 
 ## Native forms
@@ -99,15 +101,18 @@ assert not pair.is_valid([1])  # wrong length
 
 ### Prefix and repeated tail
 
-A list schema is, in general, a **regular expression over element types**: a
+A sequence schema is, in general, a **regular expression over element types**: a
 fixed positional prefix followed by an optional repeated tail. A trailing `...`
 repeats the element just before it, so `[T, ...]` (any number of `T`) is the
-prefix-free case.
+prefix-free case. The same shape is available for tuples with `tuple[A, B, ...]`;
+the container is part of the type, so a tuple is never a member of the list form
+and vice versa.
 
-| Native form | Denotes |
+| Form | Denotes |
 | --- | --- |
-| `[A, B, ...]` | an `A`, then zero or more `B` |
+| `[A, B, ...]` | a list: an `A`, then zero or more `B` |
 | `[T, T, ...]` | a non-empty list of `T` (at least one) |
+| `tuple[A, B, ...]` | a tuple: an `A`, then zero or more `B` |
 
 ```python
 from valgebra import validator
@@ -120,6 +125,10 @@ assert not prefixed.is_valid([1])  # the prefix must be a str
 non_empty = validator([int, int, ...])  # at least one int
 assert non_empty.is_valid([1])
 assert not non_empty.is_valid([])
+
+tup = validator(tuple[str, int, ...])  # the same shape, as a tuple
+assert tup.is_valid(("x", 1, 2))
+assert not tup.is_valid(["x", 1, 2])  # a list is not a member of the tuple form
 ```
 
 ## Literals

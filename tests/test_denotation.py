@@ -149,11 +149,16 @@ def _hetero_pred(str_val: Pred, int_val: Pred) -> Pred:
     return pred
 
 
-def _prefix_tail_pred(prefix: list[Pred], tail: Pred) -> Pred:
+def _prefix_tail_pred(prefix: list[Pred], tail: Pred, container: type = list) -> Pred:
     n = len(prefix)
 
     def pred(x: object) -> bool:
-        if not isinstance(x, list) or len(x) < n:
+        # Membership is container-strict: a tuple is never a member of the list
+        # form and vice versa. The first check narrows to a sized sequence; the
+        # second pins the exact container (`container` is list or tuple).
+        if not isinstance(x, list | tuple) or not isinstance(x, container):
+            return False
+        if len(x) < n:
             return False
         head = all(p(e) for p, e in zip(prefix, x[:n], strict=False))
         return head and all(tail(e) for e in x[n:])
@@ -205,6 +210,14 @@ def _specs() -> st.SearchStrategy[Spec]:
                 lambda ab: (
                     [ab[0][0], ab[1][0], ...],
                     _prefix_tail_pred([ab[0][1]], ab[1][1]),
+                )
+            ),
+            # A (A, B, ...) tuple: the same prefix-plus-tail under the tuple
+            # container, so membership rejects the list form and vice versa.
+            st.tuples(child, child).map(
+                lambda ab: (
+                    (ab[0][0], ab[1][0], ...),
+                    _prefix_tail_pred([ab[0][1]], ab[1][1], tuple),
                 )
             ),
             # A closed record of named fields.

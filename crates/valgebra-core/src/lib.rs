@@ -2237,6 +2237,48 @@ mod laws {
     }
 
     #[test]
+    fn decides_tuple_prefix_tail_distinctly_from_lists() {
+        // The same prefix-plus-tail regex carried by the tuple container. The
+        // decision procedure shares the regex with lists, so this pins that the
+        // container is honoured throughout subtyping, emptiness, and equivalence.
+        let tup = |head, tail| Schema::tuple(SeqRegex::prefix_tail([head], tail));
+
+        // Subtyping is covariant in both the prefix and the repeated tail.
+        assert!(tup(Schema::Bool, Schema::Bool).is_subtype(&tup(Schema::Int, Schema::Int)));
+        assert!(!tup(Schema::Int, Schema::Int).is_subtype(&tup(Schema::Int, Schema::Bool)));
+        // A fixed-length tuple is a subtype of a prefix-and-tail one it fits.
+        assert!(
+            Schema::tuple(SeqRegex::fixed([Schema::Bool, Schema::Int]))
+                .is_subtype(&tup(Schema::Int, Schema::Int))
+        );
+
+        // The container is part of the type: a list is never a tuple, even with
+        // an identical element regex.
+        assert!(
+            !Schema::list(SeqRegex::prefix_tail([Schema::Int], Schema::Int))
+                .is_subtype(&tup(Schema::Int, Schema::Int))
+        );
+        assert!(
+            !tup(Schema::Int, Schema::Int).is_subtype(&Schema::list(SeqRegex::prefix_tail(
+                [Schema::Int],
+                Schema::Int
+            )))
+        );
+
+        // Emptiness reasons about position: an uninhabited prefix empties the
+        // whole tuple, but an uninhabited *tail* only forbids the repeats, so a
+        // single-element tuple matching the prefix still inhabits it.
+        assert!(tup(Schema::Nothing, Schema::Int).is_empty());
+        assert!(!tup(Schema::Int, Schema::Nothing).is_empty());
+
+        // Equivalence collapses a redundant union in the tail (bool ⊆ int).
+        assert!(
+            tup(Schema::Int, Schema::Union(vec![Schema::Bool, Schema::Int]))
+                .equivalent(&tup(Schema::Int, Schema::Int))
+        );
+    }
+
+    #[test]
     fn detects_uninhabited_recursive_schemas() {
         let field = |name: &str, schema, required| Field {
             name: name.to_owned(),

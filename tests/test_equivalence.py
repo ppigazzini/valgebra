@@ -54,6 +54,9 @@ def _schemas() -> st.SearchStrategy[object]:
             child.map(lambda x: GenericAlias(frozenset, (x,))),
             child.map(lambda x: GenericAlias(tuple, (x, ...))),
             st.tuples(child, child).map(lambda ab: GenericAlias(tuple, ab)),
+            st.tuples(child, child).map(
+                lambda ab: GenericAlias(tuple, (ab[0], ab[1], ...))
+            ),  # a prefix-plus-tail tuple
             st.tuples(child, child).map(lambda ab: GenericAlias(dict, ab)),
             st.tuples(child, child).map(lambda ab: {"a": ab[0], "b?": ab[1]}),
             st.tuples(child, child).map(lambda ab: union(ab[0], ab[1])),

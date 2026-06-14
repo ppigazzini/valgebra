@@ -344,20 +344,34 @@ fn build_parametrized(
         ));
     }
     if origin.is(py.get_type::<PyTuple>()) {
-        // tuple[T, ...] is the homogeneous variadic form.
-        if args.len() == 2 && is_ellipsis(&args.get_item(1)?) {
-            return Ok(Schema::tuple(SeqRegex::homogeneous(build_schema(
-                &args.get_item(0)?,
-                lits,
-                defs,
-            )?)));
+        // tuple[A, ..., Z, ...]: a trailing `...` repeats the element before it
+        // after a fixed prefix, mirroring the list form; tuple[T, ...] is the
+        // prefix-free homogeneous case. Other shapes are a fixed-length tuple.
+        let len = args.len();
+        if len >= 2 && is_ellipsis(&args.get_item(len - 1)?) {
+            let mut elements = Vec::with_capacity(len - 1);
+            for index in 0..len - 1 {
+                let item = args.get_item(index)?;
+                if is_ellipsis(&item) {
+                    return Err(not_implemented(
+                        "`...` may appear only as the last element of a tuple schema",
+                    ));
+                }
+                elements.push(build_schema(&item, lits, defs)?);
+            }
+            let tail = elements.pop().expect("at least one element precedes `...`");
+            let regex = if elements.is_empty() {
+                SeqRegex::homogeneous(tail)
+            } else {
+                SeqRegex::prefix_tail(elements, tail)
+            };
+            return Ok(Schema::tuple(regex));
         }
-        let mut elements = Vec::with_capacity(args.len());
+        let mut elements = Vec::with_capacity(len);
         for arg in args.iter() {
             if is_ellipsis(&arg) {
                 return Err(not_implemented(
-                    "tuple[...] supports a fixed shape or the homogeneous \
-                     tuple[T, ...]; other uses of ... are not supported",
+                    "`...` may appear only as the last element of a tuple schema",
                 ));
             }
             elements.push(build_schema(&arg, lits, defs)?);

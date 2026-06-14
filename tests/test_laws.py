@@ -38,6 +38,7 @@ ATOM_SCHEMAS = [
     dict[str, int],
     tuple[int, str],
     tuple[int, ...],
+    tuple[str, int, ...],  # ty: ignore[invalid-type-form]  # a prefix-plus-tail tuple
     [int, str, ...],  # a prefix-plus-tail list
 ]
 

@@ -14,12 +14,14 @@ will form the first release.
 - Compile-once / validate-fast engine: `validator(schema)` builds an immutable
   validator with `validate` (raises), `is_valid` (bool fast path), and `cast`.
 - Typing-annotation frontend: scalars, `None`, `Any`, `list`/`set`/`frozenset`/
-  `dict`, fixed and variadic tuples, unions and `Optional`, `Literal`,
-  `TypedDict`, dataclasses, `NamedTuple`, enums, runtime-checkable protocols,
-  `NewType`, PEP 695 aliases, and `Annotated` refinements (with bounds, length,
-  and predicate constraints).
-- Native forms: a dict literal as a closed record (`"key?"` optional), a single
-  `{KeyType: ValueType}` entry as a mapping, and any constant as a typed literal.
+  `dict`, fixed, variadic, and prefix-plus-tail tuples (`tuple[A, B, ...]`),
+  unions and `Optional`, `Literal`, `TypedDict`, dataclasses, `NamedTuple`,
+  enums, runtime-checkable protocols, `NewType`, PEP 695 aliases, and
+  `Annotated` refinements (with bounds, length, and predicate constraints).
+- Native forms: a list literal as a sequence — `[T]`, the fixed `[A, B]`, and the
+  prefix-plus-tail `[A, B, ...]` (a fixed prefix then a repeated tail); a dict
+  literal as a closed record (`"key?"` optional); a single `{KeyType: ValueType}`
+  entry as a mapping; and any constant as a typed literal.
 - A complete Boolean algebra: `union`, `intersect`, `complement`, `anything`,
   `nothing`, the derived `ifthen`/`cond`, and a law-justified `simplify`, with
   the lattice laws property-tested.
