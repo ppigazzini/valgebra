@@ -277,6 +277,10 @@ impl SeqRegex {
         self.map_elems(&|s| s.shifted(pool, defs))
     }
 
+    fn reindexed(&self, lit_map: &[usize], def_offset: usize) -> SeqRegex {
+        self.map_elems(&|s| s.reindexed(lit_map, def_offset))
+    }
+
     fn resolve_self(&self, token: u64, ref_id: usize) -> SeqRegex {
         self.map_elems(&|s| s.resolve_self(token, ref_id))
     }
@@ -567,6 +571,75 @@ impl Schema {
             Schema::Refine { base, constraints } => Schema::Refine {
                 base: Box::new(base.shifted(pool, defs)),
                 constraints: constraints.iter().map(|c| c.shifted(pool)).collect(),
+            },
+        }
+    }
+
+    /// Like [`shifted`](Self::shifted), but remapping pool indices through
+    /// `lit_map` (an old→new table from interning one pool into another, so
+    /// identity-shared constants collapse to one index) while still offsetting
+    /// definition indices by `def_offset`.
+    #[must_use]
+    pub fn reindexed(&self, lit_map: &[usize], def_offset: usize) -> Schema {
+        match self {
+            Schema::Anything
+            | Schema::Any
+            | Schema::Nothing
+            | Schema::NoneType
+            | Schema::Bool
+            | Schema::Int
+            | Schema::Float
+            | Schema::Str
+            | Schema::Bytes
+            | Schema::SelfRef(_) => self.clone(),
+            Schema::Literal(i) => Schema::Literal(lit_map[*i]),
+            Schema::Instance(i) => Schema::Instance(lit_map[*i]),
+            Schema::Ref(i) => Schema::Ref(i + def_offset),
+            Schema::Seq { container, regex } => Schema::Seq {
+                container: *container,
+                regex: regex.reindexed(lit_map, def_offset),
+            },
+            Schema::Set(e) => Schema::Set(Box::new(e.reindexed(lit_map, def_offset))),
+            Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.reindexed(lit_map, def_offset))),
+            Schema::Complement(e) => Schema::Complement(Box::new(e.reindexed(lit_map, def_offset))),
+            Schema::Union(es) => Schema::Union(
+                es.iter()
+                    .map(|s| s.reindexed(lit_map, def_offset))
+                    .collect(),
+            ),
+            Schema::Intersection(es) => Schema::Intersection(
+                es.iter()
+                    .map(|s| s.reindexed(lit_map, def_offset))
+                    .collect(),
+            ),
+            Schema::KeyedMap { fields, defaults } => Schema::KeyedMap {
+                fields: fields
+                    .iter()
+                    .map(|f| f.reindexed(lit_map, def_offset))
+                    .collect(),
+                defaults: defaults
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.reindexed(lit_map, def_offset),
+                            v.reindexed(lit_map, def_offset),
+                        )
+                    })
+                    .collect(),
+            },
+            Schema::Object {
+                class_index,
+                fields,
+            } => Schema::Object {
+                class_index: lit_map[*class_index],
+                fields: fields
+                    .iter()
+                    .map(|f| f.reindexed(lit_map, def_offset))
+                    .collect(),
+            },
+            Schema::Refine { base, constraints } => Schema::Refine {
+                base: Box::new(base.reindexed(lit_map, def_offset)),
+                constraints: constraints.iter().map(|c| c.reindexed(lit_map)).collect(),
             },
         }
     }
@@ -1027,6 +1100,8 @@ impl Schema {
                     defaults: db,
                 },
             ) => keyed_map_subtype(fa, da, fb, db, cx, assumptions),
+            // Complement is contravariant: ¬A ⊆ ¬B exactly when B ⊆ A.
+            (Schema::Complement(a), Schema::Complement(b)) => b.is_subtype_rec(a, cx, assumptions),
             // A leaf the structural rules cannot relate (an instance or literal):
             // defer to the oracle, conservative when it declines.
             _ => cx.oracle.leaf_subtype(self, other).unwrap_or(false),
@@ -1304,6 +1379,14 @@ impl Field {
             required: self.required,
         }
     }
+
+    fn reindexed(&self, lit_map: &[usize], def_offset: usize) -> Field {
+        Field {
+            name: self.name.clone(),
+            schema: self.schema.reindexed(lit_map, def_offset),
+            required: self.required,
+        }
+    }
 }
 
 impl Constraint {
@@ -1317,6 +1400,19 @@ impl Constraint {
             Constraint::MaxLen(n) => Constraint::MaxLen(*n),
             Constraint::MultipleOf(i) => Constraint::MultipleOf(i + pool),
             Constraint::Predicate(i) => Constraint::Predicate(i + pool),
+        }
+    }
+
+    fn reindexed(&self, lit_map: &[usize]) -> Constraint {
+        match self {
+            Constraint::Ge(i) => Constraint::Ge(lit_map[*i]),
+            Constraint::Gt(i) => Constraint::Gt(lit_map[*i]),
+            Constraint::Le(i) => Constraint::Le(lit_map[*i]),
+            Constraint::Lt(i) => Constraint::Lt(lit_map[*i]),
+            Constraint::MinLen(n) => Constraint::MinLen(*n),
+            Constraint::MaxLen(n) => Constraint::MaxLen(*n),
+            Constraint::MultipleOf(i) => Constraint::MultipleOf(lit_map[*i]),
+            Constraint::Predicate(i) => Constraint::Predicate(lit_map[*i]),
         }
     }
 }
@@ -2149,6 +2245,18 @@ mod laws {
         assert!(!Schema::Ref(9).is_empty_under(&uninhabited));
         // Without the definitions, recursion is not resolved (no-arg is_empty).
         assert!(!Schema::Ref(0).is_empty());
+    }
+
+    #[test]
+    fn decides_complement_subtyping_contravariantly() {
+        let not = |s| Schema::Complement(Box::new(s));
+        // ¬A ⊆ ¬B iff B ⊆ A: ¬int ⊆ ¬bool because bool ⊆ int.
+        assert!(not(Schema::Int).is_subtype(&not(Schema::Bool)));
+        assert!(!not(Schema::Bool).is_subtype(&not(Schema::Int)));
+        // Reflexivity holds for a complement (regression: it failed before this
+        // rule existed).
+        assert!(not(Schema::Int).is_subtype(&not(Schema::Int)));
+        assert!(not(Schema::Literal(0)).is_subtype(&not(Schema::Literal(0))));
     }
 
     #[test]

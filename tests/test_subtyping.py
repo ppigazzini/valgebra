@@ -8,8 +8,9 @@ conservative (it may answer ``False`` for a true relation it cannot prove), so
 completeness is not asserted.
 """
 
-from typing import Literal, TypedDict
+from typing import Annotated, Literal, TypedDict
 
+import annotated_types as at
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -155,6 +156,20 @@ def test_known_relations() -> None:
     assert union(bool, int).equivalent(int)  # bool | int is just int
     assert intersect(int, complement(int)).is_empty()
     assert not validator(int).is_empty()
+
+
+def test_complement_reflexivity_and_contravariance() -> None:
+    # Regression: a complement or refinement must be a subtype of itself. This
+    # needs both the contravariant complement rule and the identity-interning
+    # pool merge (so a shared constant keeps one index across the comparison).
+    assert complement(Literal[0]).is_subtype(complement(Literal[0]))
+    assert validator(Annotated[int, at.Ge(0)]).is_subtype(Annotated[int, at.Ge(0)])
+    assert complement(Annotated[int, at.Ge(0)]).is_subtype(
+        complement(Annotated[int, at.Ge(0)])
+    )
+    # Contravariance, checked against membership: a non-int is never a bool.
+    assert validator(complement(int)).is_subtype(complement(bool))
+    assert not validator(complement(bool)).is_subtype(complement(int))
 
 
 def test_instance_and_literal_relations() -> None:

@@ -135,20 +135,25 @@ pub(crate) fn build_schema(
         return build_dict(dict, lits, defs);
     }
 
-    // An already-compiled validator composes in: append its pool and
-    // definitions and shift its schema's indices past what is already there.
+    // An already-compiled validator composes in: intern its pooled constants
+    // (so a constant shared by identity with one already present collapses to a
+    // single index, which keeps structurally-equal schemas equal across a
+    // merge), append its definitions, and remap its schema's indices.
     if let Ok(compiled) = obj.cast::<CompiledValidator>() {
         let inner = compiled.get();
-        let pool_offset = lits.len();
         let def_offset = defs.len();
-        lits.extend(inner.literals.iter().map(|o| o.clone_ref(py)));
+        let lit_map: Vec<usize> = inner
+            .literals
+            .iter()
+            .map(|o| intern(lits, o.bind(py)))
+            .collect();
         defs.extend(
             inner
                 .definitions
                 .iter()
-                .map(|d| d.shifted(pool_offset, def_offset)),
+                .map(|d| d.reindexed(&lit_map, def_offset)),
         );
-        return Ok(inner.schema.shifted(pool_offset, def_offset));
+        return Ok(inner.schema.reindexed(&lit_map, def_offset));
     }
 
     Ok(Schema::Literal(intern(lits, obj)))
