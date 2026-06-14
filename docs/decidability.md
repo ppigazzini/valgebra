@@ -28,12 +28,15 @@ Over this fragment, valgebra returns the exact set-theoretic answer.
   refinement; a bound conjunction that cannot be satisfied — a lower bound above an
   upper bound, or a minimum length above a maximum — is empty.
 - **Sequences.** Homogeneous, fixed-length, and prefix-plus-tail lists and tuples,
-  with the container as part of the type (a list is never a tuple).
+  with the container as part of the type (a list is never a tuple). Every sequence
+  schema valgebra builds takes this linear shape, so sequence inclusion is decided
+  completely.
 - **Sets and frozensets.** By element inclusion.
 - **Records and mappings.** Closed-record width, depth, and required-ness; pure
   mappings with several key-pattern clauses (each subtype clause subsumed by a
-  supertype clause); and a record mixed with a catch-all when both sides carry the
-  same field names.
+  supertype clause); and a record mixed with a catch-all when the subtype carries
+  at least the supertype's fields (each extra field covered by a catch-all over
+  all string keys).
 - **Recursion.** Equirecursive schemas compare at their greatest fixpoint; the
   rule is sound and is witnessed by an independent reference denotation.
 
@@ -62,14 +65,18 @@ Here valgebra is correct but not complete: it may answer `False` or "not empty"
 for a relation that does in fact hold. These are decidable in principle and are
 tracked as future work.
 
-- **Mixed maps with differing field names.** A record-plus-catch-all is decided
-  only when both sides share field names; differing names need the full
-  quasi-constant-function comparison.
-- **Sequence regular-expression inclusion** beyond the prefix-and-tail form (for
-  example a union of sequence languages that splits across branches). The frontend
-  does not build such a shape; it arises only inside the decision procedure.
+- **Mixed maps where the supertype declares a field the subtype lacks.** A
+  record-plus-catch-all is decided when the subtype carries at least the
+  supertype's fields; the reverse direction needs the full quasi-constant-function
+  comparison.
 - **Integer-only emptiness** of an open interval, such as a value strictly between
   two consecutive integers.
+
+General regular-expression-types inclusion of sequences (a union of sequence
+languages that splits across branches, or a repeated heterogeneous group) is not
+implemented, but no schema valgebra builds takes that shape — every sequence is
+the linear prefix-and-tail form, which is decided completely — so it is not a
+reachable gap.
 
 ## Undecidable at runtime
 

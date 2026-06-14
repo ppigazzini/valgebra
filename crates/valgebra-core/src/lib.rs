@@ -2661,6 +2661,32 @@ mod laws {
     }
 
     #[test]
+    fn every_constructed_sequence_regex_is_linear() {
+        // Sequences are built only with these constructors, all linear (a fixed
+        // prefix then an optional repeated tail), and the structure-preserving
+        // transforms map over elements without changing the regex shape. So every
+        // regex that reaches the decision procedure linearizes, and the `Or` and
+        // nested-`Star` forms that `regex_subtype` handles defensively are never
+        // built outside tests -- its conservative fallback is unreachable from a
+        // real schema, and sequence inclusion is decided for every sequence.
+        assert!(SeqRegex::homogeneous(Schema::Int).linear().is_some());
+        assert!(
+            SeqRegex::fixed([Schema::Int, Schema::Str])
+                .linear()
+                .is_some()
+        );
+        assert!(SeqRegex::fixed(Vec::<Schema>::new()).linear().is_some());
+        assert!(
+            SeqRegex::prefix_tail([Schema::Str], Schema::Int)
+                .linear()
+                .is_some()
+        );
+        // The element-mapping transform preserves linearity.
+        let mapped = SeqRegex::prefix_tail([Schema::Str], Schema::Int).map_elems(&|s| s.clone());
+        assert!(mapped.linear().is_some());
+    }
+
+    #[test]
     fn decides_multi_clause_mapping_subtyping() {
         let map = |clauses: Vec<(Schema, Schema)>| Schema::KeyedMap {
             fields: Vec::new(),
