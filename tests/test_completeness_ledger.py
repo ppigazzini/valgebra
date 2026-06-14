@@ -114,25 +114,17 @@ _DECIDED = [
     pytest.param("empty", intersect(int, str), None, id="empty:int&str"),
     pytest.param("equivalent", union(bool, int), int, id="bool|int==int"),
     pytest.param("equivalent", intersect(int, int), int, id="int&int==int"),
+    # A refinement is a subtype of its base, and a refinement with more bound or
+    # length constraints is a subtype of one with fewer (equal bounds share a
+    # pool index, so nested bounds decide by syntactic containment).
+    pytest.param("subtype", _GE0, int, id="refine:Ge(0)<=int"),
+    pytest.param("subtype", _GE0_LE10, _GE0, id="refine:Ge(0)Le(10)<=Ge(0)"),
 ]
 
-# Known holes (completeness report, refinement fragment). Each is a true relation
-# the procedure declines because refinement constraints are opaque to it.
+# Known holes (completeness report). The bound-contradiction emptiness cases need
+# value comparison between pool bounds, which a later slice supplies; the
+# reflexivity case is a recursion-fragment defect a decision slice closes.
 _LEDGERED = [
-    pytest.param(
-        "subtype",
-        _GE0,
-        int,
-        id="refine:Ge(0)<=int",
-        marks=pytest.mark.xfail(strict=True, reason="refinement bounds are opaque"),
-    ),
-    pytest.param(
-        "subtype",
-        _GE0_LE10,
-        _GE0,
-        id="refine:Ge(0)Le(10)<=Ge(0)",
-        marks=pytest.mark.xfail(strict=True, reason="refinement bounds are opaque"),
-    ),
     pytest.param(
         "empty",
         _GE10_LE0,

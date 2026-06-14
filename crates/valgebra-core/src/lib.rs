@@ -978,6 +978,10 @@ impl Schema {
                 }
             }
             Schema::Seq { regex, .. } => regex.language_is_empty(defs, visiting),
+            // A refinement is a subset of its base, so an empty base empties it.
+            // Unsatisfiable bounds over an inhabited base need value comparison
+            // and are decided elsewhere; here the answer stays conservative.
+            Schema::Refine { base, .. } => base.is_empty_rec(defs, visiting),
             Schema::Set(_) | Schema::FrozenSet(_) => false,
             Schema::KeyedMap { fields, .. } => fields
                 .iter()
@@ -1105,6 +1109,28 @@ impl Schema {
             ) => keyed_map_subtype(fa, da, fb, db, cx, assumptions),
             // Complement is contravariant: ¬A ⊆ ¬B exactly when B ⊆ A.
             (Schema::Complement(a), Schema::Complement(b)) => b.is_subtype_rec(a, cx, assumptions),
+            // A refinement is a subset of its base. Against another refinement the
+            // base must subtype and every constraint of the supertype must be
+            // present, since more constraints denote a smaller set; equal bounds
+            // share a pool index, so this decides nested bounds and lengths.
+            // Bound-value entailment beyond syntactic containment is conservative.
+            (
+                Schema::Refine {
+                    base: narrow_base,
+                    constraints: narrow_cons,
+                },
+                Schema::Refine {
+                    base: wide_base,
+                    constraints: wide_cons,
+                },
+            ) => {
+                narrow_base.is_subtype_rec(wide_base, cx, assumptions)
+                    && wide_cons
+                        .iter()
+                        .all(|constraint| narrow_cons.contains(constraint))
+            }
+            // Against a non-refinement, a refinement inherits its base's supertypes.
+            (Schema::Refine { base, .. }, _) => base.is_subtype_rec(other, cx, assumptions),
             // A leaf the structural rules cannot relate (an instance or literal):
             // defer to the oracle, conservative when it declines.
             _ => cx.oracle.leaf_subtype(self, other).unwrap_or(false),
@@ -2276,6 +2302,36 @@ mod laws {
             tup(Schema::Int, Schema::Union(vec![Schema::Bool, Schema::Int]))
                 .equivalent(&tup(Schema::Int, Schema::Int))
         );
+    }
+
+    #[test]
+    fn decides_refinement_subtyping_structurally() {
+        let refine = |base, constraints: Vec<Constraint>| Schema::Refine {
+            base: Box::new(base),
+            constraints,
+        };
+
+        // A refinement is a subtype of its base, and of anything its base subtypes.
+        assert!(refine(Schema::Bool, vec![Constraint::Ge(0)]).is_subtype(&Schema::Int));
+        // More constraints denote a smaller set: a superset of constraints (with
+        // the supertype's constraints all present) is a subtype.
+        assert!(
+            refine(Schema::Int, vec![Constraint::Ge(0), Constraint::Le(1)])
+                .is_subtype(&refine(Schema::Int, vec![Constraint::Ge(0)]))
+        );
+        // The looser refinement is not a subtype of the tighter one.
+        assert!(
+            !refine(Schema::Int, vec![Constraint::Ge(0)]).is_subtype(&refine(
+                Schema::Int,
+                vec![Constraint::Ge(0), Constraint::Le(1)]
+            ))
+        );
+        // The base must still subtype: a refined int is not a str.
+        assert!(!refine(Schema::Int, vec![Constraint::Ge(0)]).is_subtype(&Schema::Str));
+        // An empty base empties the refinement; an inhabited base does not (bound
+        // contradictions need value comparison and stay conservative here).
+        assert!(refine(Schema::Nothing, vec![Constraint::Ge(0)]).is_empty());
+        assert!(!refine(Schema::Int, vec![Constraint::Ge(0), Constraint::Le(0)]).is_empty());
     }
 
     #[test]
