@@ -239,3 +239,25 @@ def test_fail_fast_stops_at_first_element_in_every_collection(
     with pytest.raises(ValidationError) as info:
         v.validate(bad, fail_fast=True)
     assert len(info.value.errors) == 1
+
+
+@pytest.mark.parametrize("value", [5, [1, 2], "x", None, (1, 2)])
+def test_non_dict_against_a_record_reports_dict_type(value: object) -> None:
+    # The explain path for a record or mapping given a non-dict value.
+    assert _errors({"name": int}, value) == ["dict_type"]
+    assert _errors({str: int}, value) == ["dict_type"]
+
+
+def test_json_against_a_class_schema_rejects_every_json_value() -> None:
+    # A parsed JSON value is a builtin, never a user-class instance, so a class
+    # or dataclass schema rejects it on the JSON path.
+    class Widget:
+        pass
+
+    @dataclass
+    class Point:
+        x: int
+
+    assert not validator(Widget).is_valid_json("5")
+    assert not validator(Widget).is_valid_json("[1, 2]")
+    assert not validator(Point).is_valid_json('{"x": 1}')

@@ -7,13 +7,22 @@ accepts a value, and every schema is a subtype of itself. This is deliberately
 adversarial — it found the complement-reflexivity and pool-merge bugs.
 """
 
+import json
 from typing import Annotated, Literal
 
 import annotated_types as at
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import complement, intersect, lazy, union, validator
+from valgebra import (
+    ValidationError,
+    complement,
+    intersect,
+    lazy,
+    simplify,
+    union,
+    validator,
+)
 
 _bases = st.sampled_from([int, str, bool, float, bytes, None, complex, bytearray])
 _lits = st.sampled_from(
@@ -114,3 +123,35 @@ def test_decision_is_sound_against_membership(
         assert not in_a
     if left.equivalent(b):
         assert in_a == right.is_valid(v)
+
+
+def _json_safe(value: object) -> bool:
+    try:
+        json.dumps(value)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+@given(sa=_specs, v=_values)
+def test_membership_walks_and_paths_agree(sa: object, v: object) -> None:
+    # Metamorphic checks needing no oracle: the fast and explaining walks agree,
+    # simplify preserves acceptance, the JSON path matches validating the parsed
+    # value, and cast returns the input unchanged exactly when it is a member.
+    try:
+        compiled = validator(_build(sa))
+    except (ValueError, TypeError, NotImplementedError, RecursionError):
+        return
+    member = compiled.is_valid(v)
+    try:
+        compiled.validate(v)
+        explained = True
+    except ValidationError:
+        explained = False
+    assert member == explained
+    assert simplify(compiled).is_valid(v) == member
+    if _json_safe(v):
+        text = json.dumps(v)
+        assert compiled.is_valid_json(text) == compiled.is_valid(json.loads(text))
+    if member:
+        assert compiled.cast(v) is v
