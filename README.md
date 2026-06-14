@@ -147,6 +147,27 @@ assert repr(simplify(complement(complement(int)))) == "int"
 assert repr(simplify(union(int, int))) == "int"
 ```
 
+### Comparing schemas as sets
+
+Because schemas denote sets, a compiled validator can be compared with another —
+`is_subtype` is set inclusion, `equivalent` is mutual inclusion, and `is_empty`
+detects an unsatisfiable schema. The answers are sound (a positive answer is a
+proof) and decide a wide fragment; what stays conservative is mapped in the
+[decidability boundary](docs/decidability.md).
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import complement, intersect, union, validator
+
+assert validator(bool).is_subtype(int)                       # bool is a subtype of int
+assert union(bool, int).equivalent(int)                      # bool | int is just int
+assert validator(Annotated[int, at.Ge(0)]).is_subtype(int)   # a refinement <= its base
+assert intersect(int, complement(int)).is_empty()            # an unsatisfiable schema
+```
+
 ## Recursive schemas
 
 `lazy` ties a fixpoint: the builder receives a placeholder standing for the
