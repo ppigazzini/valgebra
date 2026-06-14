@@ -1401,29 +1401,41 @@ fn keyed_map_subtype(
                 ka.is_subtype_rec(kb, cx, assumptions) && va.is_subtype_rec(vb, cx, assumptions)
             })
         })
-    } else if fa.len() == fb.len() && fa.iter().all(|a| fb.iter().any(|b| b.name == a.name)) {
-        // A record mixed with a catch-all, the same field names on both sides: a
-        // subtype when each field narrows, the supertype's required fields are
-        // required here, and every catch-all clause is subsumed by one of the
-        // supertype's. A field key is matched as a field on both sides, so the
-        // catch-all clauses govern only the non-field keys and their subsumption
-        // is sound. Differing field-name sets need the full quasi-constant-function
-        // comparison and stay conservative.
-        let fields = fa.iter().all(|a| {
-            fb.iter()
-                .find(|b| b.name == a.name)
-                .is_some_and(|b| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
+    } else if fb.iter().all(|b| fa.iter().any(|a| a.name == b.name)) {
+        // A record mixed with a catch-all whose fields include every field of the
+        // supertype: a subtype when each shared field narrows, the supertype's
+        // required fields are required here, every extra subtype field is covered
+        // by a supertype catch-all whose keys include all field names (a `str` or
+        // `anything` key), and every subtype catch-all clause is subsumed. A field
+        // key is matched as a field, so the catch-all clauses govern the non-field
+        // keys; the extra-field coverage handles the keys the supertype reads
+        // through its catch-all. The reverse direction -- the supertype declaring a
+        // field the subtype lacks -- needs the full comparison and stays
+        // conservative.
+        let shared = fb.iter().all(|b| {
+            fa.iter()
+                .find(|a| a.name == b.name)
+                .is_some_and(|a| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
         });
         let required = fb
             .iter()
             .filter(|b| b.required)
             .all(|b| fa.iter().any(|a| a.name == b.name && a.required));
+        let extra_covered = fa
+            .iter()
+            .filter(|a| !fb.iter().any(|b| b.name == a.name))
+            .all(|a| {
+                db.iter().any(|(kb, vb)| {
+                    matches!(kb, Schema::Str | Schema::Anything)
+                        && a.schema.is_subtype_rec(vb, cx, assumptions)
+                })
+            });
         let defaults = da.iter().all(|(ka, va)| {
             db.iter().any(|(kb, vb)| {
                 ka.is_subtype_rec(kb, cx, assumptions) && va.is_subtype_rec(vb, cx, assumptions)
             })
         });
-        fields && required && defaults
+        shared && required && extra_covered && defaults
     } else {
         false
     }
@@ -2703,6 +2715,47 @@ mod laws {
             defaults: vec![(Schema::Str, Schema::Int)],
         };
         assert!(!mixed(Schema::Int, Schema::Int).is_subtype(&mixed_b));
+
+        // A mixed map with an extra field is a subtype when a supertype catch-all
+        // over all string keys covers that field's value.
+        let with_extra = Schema::KeyedMap {
+            fields: vec![field("a", Schema::Int, true), field("b", Schema::Str, true)],
+            defaults: vec![(Schema::Str, Schema::Bytes)],
+        };
+        let covering = Schema::KeyedMap {
+            fields: vec![field("a", Schema::Int, true)],
+            defaults: vec![(Schema::Str, Schema::Anything)],
+        };
+        assert!(with_extra.is_subtype(&covering));
+        // The extra field is not covered when the catch-all value is too narrow,
+        // even though the catch-all clauses subsume (so only the extra-field
+        // coverage decides it -- the "extra" set must be the fields not shared).
+        let extra_uncovered = Schema::KeyedMap {
+            fields: vec![
+                field("a", Schema::Int, true),
+                field("b", Schema::Bytes, true),
+            ],
+            defaults: vec![(Schema::Str, Schema::Int)],
+        };
+        let str_catch_all = Schema::KeyedMap {
+            fields: vec![field("a", Schema::Int, true)],
+            defaults: vec![(Schema::Str, Schema::Int)],
+        };
+        assert!(!extra_uncovered.is_subtype(&str_catch_all));
+        // The catch-all key must admit the field name: an int-keyed catch-all does
+        // not cover a string field name even when its value would.
+        let extra_str = Schema::KeyedMap {
+            fields: vec![field("a", Schema::Int, true), field("b", Schema::Str, true)],
+            defaults: vec![(Schema::Int, Schema::Int)],
+        };
+        let int_catch_all = Schema::KeyedMap {
+            fields: vec![field("a", Schema::Int, true)],
+            defaults: vec![(Schema::Int, Schema::Anything)],
+        };
+        assert!(!extra_str.is_subtype(&int_catch_all));
+        // The reverse direction -- the supertype declaring a field the subtype
+        // lacks -- stays conservative.
+        assert!(!covering.is_subtype(&with_extra));
     }
 
     #[test]

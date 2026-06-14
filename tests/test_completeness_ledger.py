@@ -73,6 +73,8 @@ _UNIVERSE = [
     {"k": 1, 5: True},
     {"a": 1},
     {"a": 1, "k": "x"},
+    {"a": 1, "b": "y"},
+    {"a": 1, "b": "y", "k": "z"},
 ]
 
 
@@ -147,6 +149,13 @@ _DECIDED = [
     pytest.param(
         "subtype", {"a": bool, str: bool}, {"a": int, str: int}, id="map:mixed-narrow"
     ),
+    # A mixed map with an extra field covered by the supertype's catch-all.
+    pytest.param(
+        "subtype",
+        {"a": int, "b": str, str: bytes},
+        {"a": int, str: object},
+        id="map:mixed-extra-field-covered",
+    ),
 ]
 
 # Known decision-completeness misses. None remain: each relation the procedure
@@ -219,6 +228,7 @@ def _compose(children: st.SearchStrategy) -> st.SearchStrategy:
         children.map(lambda c: {str: c}),
         pair.map(lambda p: {str: p[0], int: p[1]}),  # multi-clause mapping
         pair.map(lambda p: {"a": p[0], str: p[1]}),  # record mixed with a catch-all
+        pair.map(lambda p: {"a": p[0], "b": p[1], str: p[0]}),  # two fields + catch-all
         pair.map(lambda p: union(p[0], p[1])),
         pair.map(lambda p: intersect(p[0], p[1])),
         children.map(complement),
