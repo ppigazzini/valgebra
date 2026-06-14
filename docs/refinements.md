@@ -18,6 +18,28 @@ assert adult.is_valid(21)
 assert not adult.is_valid(5)
 ```
 
+Refinements built from bound and length markers also take part in the
+[decision procedure](decidability.md): a refinement is a subtype of its base and
+of a looser refinement, and a bound conjunction that cannot be satisfied is
+detected as empty.
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import validator
+
+assert validator(Annotated[int, at.Ge(0)]).is_subtype(int)  # refinement <= base
+assert validator(Annotated[int, at.Ge(0), at.Le(10)]).is_subtype(
+    Annotated[int, at.Ge(0)]  # a tighter bound is a subtype of a looser one
+)
+assert validator(Annotated[int, at.Ge(10), at.Le(0)]).is_empty()  # no such int
+```
+
+A predicate marker is checked at validation time but stays opaque to subtyping
+and emptiness — its satisfiability is undecidable in general.
+
 ## Supported markers
 
 | Marker | Constraint | Failure code |

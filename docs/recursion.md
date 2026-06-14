@@ -65,3 +65,21 @@ cyclic = []
 cyclic.append(cyclic)
 assert not lazy(lambda s: union(int, [s])).is_valid(cyclic)  # recursion_loop
 ```
+
+## Recursion in the decision procedure
+
+Recursive schemas also take part in [subtyping, equivalence, and
+emptiness](decidability.md). Equirecursive schemas compare at their greatest
+fixpoint — a coinductive comparison that assumes a goal already being proven on
+the current path — so a recursive schema is a subtype of itself and two
+structurally identical recursive schemas are equivalent, and a recursive schema
+with no base case is detected as uninhabited.
+
+```python
+from valgebra import lazy, union, validator
+
+json_value = lazy(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+assert validator(json_value).is_subtype(json_value)  # reflexive across the fixpoint
+assert lazy(lambda t: {"value": int, "next": t}).is_empty()  # no base case
+assert not lazy(lambda t: union(None, {"next": t})).is_empty()  # a base case exists
+```

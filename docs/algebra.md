@@ -111,13 +111,12 @@ assert repr(simplify(union(int, complement(int)))) == "anything"
 assert repr(simplify(intersect(int, str))) == "nothing"  # disjoint types
 ```
 
-Disjointness is decided soundly for the concrete fragment — the builtin scalars
-(with `bool` a subtype of `int`), the container kinds, and a refinement through
-its base. Elsewhere — `Literal` and class `isinstance` checks (a class may
-subclass a builtin), and recursive references — the simplifier stays
-conservative: it never claims an equivalence it cannot justify, so a result is
-always sound, never reporting a non-empty schema as empty. It never treats `Any`
-as the top, so a deliberately-unchecked schema is preserved.
+The simplifier folds the scalar Boolean fragment — the builtin scalars (with
+`bool` a subtype of `int`) and the complement laws — so `simplify(intersect(int,
+str))` is `nothing`. It never treats `Any` as the top, so a deliberately-unchecked
+schema is preserved. The comparison operators below decide a wider fragment than
+the simplifier folds; the [decidability boundary](decidability.md) maps exactly
+what is decided.
 
 ## Subtyping, equivalence, and emptiness
 

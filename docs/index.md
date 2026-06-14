@@ -66,6 +66,10 @@ schemas (union, intersection, complement, refinement, fixpoints) with
 - New here? Start with [installation](installation.md) and the
   [quickstart](quickstart.md).
 - Writing schemas? The [schema language](schema-language.md) reference covers
-  every form with its denotation.
+  every form with its denotation; [refinements](refinements.md) covers
+  constraints, and [recursive schemas](recursion.md) the `lazy` fixpoint.
 - Composing them? See the [Boolean algebra](algebra.md).
+- What does it decide? The [decidability boundary](decidability.md) maps what
+  subtyping, equivalence, and emptiness answer exactly and what stays
+  conservative; the [foundations](foundations.md) record the theory.
 - Everything callable is in the [API reference](api.md).

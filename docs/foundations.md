@@ -75,19 +75,25 @@ not need that decision to validate: membership is answered directly by the walk,
 not by reducing the schema. So the simplifier implements the **soundly decidable
 fragment** and is honest about the rest:
 
-- **Decided.** The complement laws (`X ∩ ¬X = ⊥`, `X ∪ ¬X = ⊤`) for any `X`
-  except the gradual `Any`, and provable disjointness for the concrete fragment —
-  the builtin scalars (with `bool` a subtype of `int`), the container kinds, and
-  a refinement through its base. So `simplify(intersect(int, complement(int)))`
-  is `nothing` and `simplify(intersect(int, str))` is `nothing`.
-- **Conservative.** For `Literal`, class `isinstance` checks (a class may
-  subclass a builtin), and recursive references, the simplifier never claims an
-  equivalence it cannot justify. A result is always sound — it never reports a
-  non-empty schema as empty.
+- **Folded by the simplifier.** The complement laws (`X ∩ ¬X = ⊥`,
+  `X ∪ ¬X = ⊤`) for any `X` except the gradual `Any`, and disjointness of the
+  scalar fragment. So `simplify(intersect(int, complement(int)))` is `nothing`
+  and `simplify(intersect(int, str))` is `nothing`. It never treats `Any` as the
+  top, so a deliberately-unchecked schema is preserved.
+- **Decided by the comparison operators.** `is_subtype`, `equivalent`, and
+  `is_empty` decide a wider fragment than the simplifier folds — class and literal
+  inclusion, refinements (including the emptiness of contradictory bounds like
+  `Ge(10) & Le(0)`), sequences, sets, records and mappings, and recursion at its
+  greatest fixpoint. The [decidability boundary](decidability.md) lists exactly
+  what is decided and what stays conservative.
+- **Conservative.** A predicate refinement is opaque, and a narrow decidable tail
+  and the runtime-undecidable constructs remain (the boundary records them). Every
+  answer is sound: `is_empty` never reports a non-empty schema as empty, and a
+  subtype is never claimed unless it provably holds.
 
-The full set-theoretic emptiness procedure (type automata, coinductive
-decomposition) is not implemented, because nothing at runtime consumes it; it
-would only make `simplify` more complete, never change a membership decision.
+The decision realizes the set-theoretic emptiness test directly rather than via a
+full type-automaton construction; that construction would only widen the few
+conservative cases the boundary records, never change a membership decision.
 
 ## References
 
