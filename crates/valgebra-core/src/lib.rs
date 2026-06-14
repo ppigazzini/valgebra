@@ -231,12 +231,21 @@ impl SeqRegex {
     /// empty; a single element is empty when its schema is; a concatenation is
     /// empty when any part is (every part must be matchable); an alternation is
     /// empty only when every alternative is.
-    fn language_is_empty(&self, defs: &[Schema], visiting: &mut Vec<usize>) -> bool {
+    fn language_is_empty(
+        &self,
+        oracle: &dyn LeafRelations,
+        defs: &[Schema],
+        visiting: &mut Vec<usize>,
+    ) -> bool {
         match self {
             SeqRegex::Empty | SeqRegex::Star(_) => false,
-            SeqRegex::Elem(schema) => schema.is_empty_rec(defs, visiting),
-            SeqRegex::Cat(parts) => parts.iter().any(|p| p.language_is_empty(defs, visiting)),
-            SeqRegex::Or(parts) => parts.iter().all(|p| p.language_is_empty(defs, visiting)),
+            SeqRegex::Elem(schema) => schema.is_empty_rec(oracle, defs, visiting),
+            SeqRegex::Cat(parts) => parts
+                .iter()
+                .any(|p| p.language_is_empty(oracle, defs, visiting)),
+            SeqRegex::Or(parts) => parts
+                .iter()
+                .all(|p| p.language_is_empty(oracle, defs, visiting)),
         }
     }
 
@@ -945,7 +954,7 @@ impl Schema {
     /// use [`is_empty_under`](Self::is_empty_under).
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.is_empty_under(&[])
+        self.is_empty_rec(&NoLeafRelations, &[], &mut Vec::new())
     }
 
     /// Like [`is_empty`](Self::is_empty), but resolving recursive references
@@ -954,10 +963,22 @@ impl Schema {
     /// not resolve stays conservative (never reported empty).
     #[must_use]
     pub fn is_empty_under(&self, defs: &[Schema]) -> bool {
-        self.is_empty_rec(defs, &mut Vec::new())
+        self.is_empty_rec(&NoLeafRelations, defs, &mut Vec::new())
     }
 
-    fn is_empty_rec(&self, defs: &[Schema], visiting: &mut Vec<usize>) -> bool {
+    /// Like [`is_empty_under`](Self::is_empty_under), but with an `oracle` that
+    /// can order the pool values behind refinement bounds, so an unsatisfiable
+    /// bound conjunction (a lower bound above an upper bound) is detected.
+    pub fn is_empty_with(&self, oracle: &dyn LeafRelations, defs: &[Schema]) -> bool {
+        self.is_empty_rec(oracle, defs, &mut Vec::new())
+    }
+
+    fn is_empty_rec(
+        &self,
+        oracle: &dyn LeafRelations,
+        defs: &[Schema],
+        visiting: &mut Vec<usize>,
+    ) -> bool {
         match self {
             Schema::Ref(id) => {
                 // A reference reached again while resolving it is a cycle: this
@@ -970,23 +991,36 @@ impl Schema {
                 match defs.get(*id) {
                     Some(def) => {
                         visiting.push(*id);
-                        let empty = def.is_empty_rec(defs, visiting);
+                        let empty = def.is_empty_rec(oracle, defs, visiting);
                         visiting.pop();
                         empty
                     }
                     None => false,
                 }
             }
-            Schema::Seq { regex, .. } => regex.language_is_empty(defs, visiting),
-            // A refinement is a subset of its base, so an empty base empties it.
-            // Unsatisfiable bounds over an inhabited base need value comparison
-            // and are decided elsewhere; here the answer stays conservative.
-            Schema::Refine { base, .. } => base.is_empty_rec(defs, visiting),
+            Schema::Seq { regex, .. } => regex.language_is_empty(oracle, defs, visiting),
+            // A refinement is a subset of its base: an empty base empties it, and
+            // so does an unsatisfiable bound conjunction (decided by the oracle).
+            Schema::Refine { base, constraints } => {
+                base.is_empty_rec(oracle, defs, visiting)
+                    || bounds_unsatisfiable(constraints, oracle)
+            }
+            // An intersection is empty if a member is, if the scalar regions cancel,
+            // or if the refinement bounds across its members cannot hold together.
+            Schema::Intersection(members) => {
+                members
+                    .iter()
+                    .any(|m| m.is_empty_rec(oracle, defs, visiting))
+                    || matches!(self.region_set(), Some(0))
+                    || intersection_bounds_unsatisfiable(members, oracle)
+            }
             Schema::Set(_) | Schema::FrozenSet(_) => false,
             Schema::KeyedMap { fields, .. } => fields
                 .iter()
-                .any(|field| field.required && field.schema.is_empty_rec(defs, visiting)),
-            Schema::Union(members) => members.iter().all(|m| m.is_empty_rec(defs, visiting)),
+                .any(|field| field.required && field.schema.is_empty_rec(oracle, defs, visiting)),
+            Schema::Union(members) => members
+                .iter()
+                .all(|m| m.is_empty_rec(oracle, defs, visiting)),
             // Scalars and their Boolean combinations decide via the region set;
             // a combination with an opaque leaf yields `None`, hence not empty.
             _ => matches!(self.region_set(), Some(0)),
@@ -1043,7 +1077,9 @@ impl Schema {
         match (self, other) {
             // ∅ is a subset of every set, and every set is a subset of the top.
             (Schema::Nothing, _) | (_, Schema::Anything) => true,
-            (_, Schema::Nothing) => self.is_empty(), // A ⊆ ∅ exactly when A is empty
+            // A ⊆ ∅ exactly when A is empty, decided with the same oracle so a
+            // refinement with unsatisfiable bounds is recognised here too.
+            (_, Schema::Nothing) => self.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new()),
             // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z; A ⊆ (Y ∩ Z) iff A ⊆ Y and A ⊆ Z.
             (Schema::Union(members), _) => members
                 .iter()
@@ -1172,6 +1208,13 @@ pub trait LeafRelations {
     /// Whether leaf schema `sub` is a subtype of `sup`, or `None` to leave the
     /// relation conservatively undecided.
     fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool>;
+
+    /// Order the two pool values behind refinement bounds at indices `left` and
+    /// `right`, or `None` when the core cannot or the values are not comparable.
+    /// The default decides nothing, so bound satisfiability stays conservative.
+    fn compare(&self, _left: usize, _right: usize) -> Option<core::cmp::Ordering> {
+        None
+    }
 }
 
 /// The trivial [`LeafRelations`] that decides nothing — the core default, under
@@ -1182,6 +1225,101 @@ impl LeafRelations for NoLeafRelations {
     fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
         None
     }
+}
+
+/// Whether a refinement's bound and length constraints cannot hold together: a
+/// required minimum length above the allowed maximum, or a numeric lower bound
+/// above the upper bound (or equal with a strict end). Sound: it reports
+/// unsatisfiable only when the ordering the oracle returns forces it, and stays
+/// conservative when the oracle cannot compare two bounds.
+fn bounds_unsatisfiable(constraints: &[Constraint], oracle: &dyn LeafRelations) -> bool {
+    use core::cmp::Ordering;
+    let min_len = constraints
+        .iter()
+        .filter_map(|c| match c {
+            Constraint::MinLen(n) => Some(*n),
+            _ => None,
+        })
+        .max();
+    let max_len = constraints
+        .iter()
+        .filter_map(|c| match c {
+            Constraint::MaxLen(n) => Some(*n),
+            _ => None,
+        })
+        .min();
+    if let (Some(lo), Some(hi)) = (min_len, max_len)
+        && lo > hi
+    {
+        return true;
+    }
+    let mut lower: Option<(usize, bool)> = None;
+    let mut upper: Option<(usize, bool)> = None;
+    for constraint in constraints {
+        match constraint {
+            Constraint::Ge(i) => lower = Some(tighter_bound(lower, (*i, false), oracle, true)),
+            Constraint::Gt(i) => lower = Some(tighter_bound(lower, (*i, true), oracle, true)),
+            Constraint::Le(i) => upper = Some(tighter_bound(upper, (*i, false), oracle, false)),
+            Constraint::Lt(i) => upper = Some(tighter_bound(upper, (*i, true), oracle, false)),
+            _ => {}
+        }
+    }
+    if let (Some((lo, lo_strict)), Some((hi, hi_strict))) = (lower, upper) {
+        return match oracle.compare(lo, hi) {
+            Some(Ordering::Greater) => true,
+            Some(Ordering::Equal) => lo_strict || hi_strict,
+            _ => false,
+        };
+    }
+    false
+}
+
+/// Keep the tighter of two one-sided bounds: the greater value for a lower bound,
+/// the lesser for an upper bound; on equal values the strict end wins, and on an
+/// incomparable pair the current bound is kept (conservative).
+fn tighter_bound(
+    current: Option<(usize, bool)>,
+    candidate: (usize, bool),
+    oracle: &dyn LeafRelations,
+    is_lower: bool,
+) -> (usize, bool) {
+    use core::cmp::Ordering;
+    let Some(current) = current else {
+        return candidate;
+    };
+    match oracle.compare(candidate.0, current.0) {
+        Some(Ordering::Equal) => (current.0, current.1 || candidate.1),
+        Some(Ordering::Greater) => {
+            if is_lower {
+                candidate
+            } else {
+                current
+            }
+        }
+        Some(Ordering::Less) => {
+            if is_lower {
+                current
+            } else {
+                candidate
+            }
+        }
+        None => current,
+    }
+}
+
+/// Whether the refinement constraints across the members of an intersection
+/// cannot hold together. A value in the intersection satisfies every member, so
+/// all their refinement constraints apply to it at once.
+fn intersection_bounds_unsatisfiable(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
+    let merged: Vec<Constraint> = members
+        .iter()
+        .filter_map(|m| match m {
+            Schema::Refine { constraints, .. } => Some(constraints.clone()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    !merged.is_empty() && bounds_unsatisfiable(&merged, oracle)
 }
 
 /// Whether the linear language `pa · ta*` is included in `pb · tb*` — a fixed
@@ -2332,6 +2470,43 @@ mod laws {
         // contradictions need value comparison and stay conservative here).
         assert!(refine(Schema::Nothing, vec![Constraint::Ge(0)]).is_empty());
         assert!(!refine(Schema::Int, vec![Constraint::Ge(0), Constraint::Le(0)]).is_empty());
+    }
+
+    #[test]
+    fn decides_refinement_bound_emptiness_with_an_ordering_oracle() {
+        use core::cmp::Ordering;
+        // A mock oracle that treats each pool index as its own value, so
+        // comparing indices orders the bounds those indices stand for.
+        struct ByIndex;
+        impl LeafRelations for ByIndex {
+            fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+                None
+            }
+            fn compare(&self, a: usize, b: usize) -> Option<Ordering> {
+                Some(a.cmp(&b))
+            }
+        }
+        let refine = |constraints| Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints,
+        };
+        // A lower bound above the upper bound is empty.
+        assert!(refine(vec![Constraint::Ge(10), Constraint::Le(0)]).is_empty_with(&ByIndex, &[]));
+        // Equal bounds with one strict end are empty; both closed is a singleton.
+        assert!(refine(vec![Constraint::Ge(5), Constraint::Lt(5)]).is_empty_with(&ByIndex, &[]));
+        assert!(!refine(vec![Constraint::Ge(5), Constraint::Le(5)]).is_empty_with(&ByIndex, &[]));
+        // A satisfiable range is not empty.
+        assert!(!refine(vec![Constraint::Ge(0), Constraint::Le(10)]).is_empty_with(&ByIndex, &[]));
+        // A length contradiction needs no value comparison.
+        assert!(refine(vec![Constraint::MinLen(5), Constraint::MaxLen(3)]).is_empty());
+        // Refinements with contradictory bounds across an intersection are empty.
+        let intersection = Schema::Intersection(vec![
+            refine(vec![Constraint::Ge(5)]),
+            refine(vec![Constraint::Lt(5)]),
+        ]);
+        assert!(intersection.is_empty_with(&ByIndex, &[]));
+        // Without an ordering oracle the numeric bounds stay conservative.
+        assert!(!refine(vec![Constraint::Ge(10), Constraint::Le(0)]).is_empty());
     }
 
     #[test]

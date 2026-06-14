@@ -119,26 +119,17 @@ _DECIDED = [
     # pool index, so nested bounds decide by syntactic containment).
     pytest.param("subtype", _GE0, int, id="refine:Ge(0)<=int"),
     pytest.param("subtype", _GE0_LE10, _GE0, id="refine:Ge(0)Le(10)<=Ge(0)"),
+    # A bound conjunction whose lower bound exceeds its upper bound is empty,
+    # whether the bounds sit on one refinement or across an intersection.
+    pytest.param("empty", _GE10_LE0, None, id="empty:Ge(10)Le(0)"),
+    pytest.param(
+        "empty", intersect(_GE0, Annotated[int, at.Lt(0)]), None, id="empty:Ge(0)&Lt(0)"
+    ),
 ]
 
-# Known holes (completeness report). The bound-contradiction emptiness cases need
-# value comparison between pool bounds, which a later slice supplies; the
-# reflexivity case is a recursion-fragment defect a decision slice closes.
+# Known holes (completeness report). The reflexivity case is a recursion-fragment
+# defect a decision slice closes.
 _LEDGERED = [
-    pytest.param(
-        "empty",
-        _GE10_LE0,
-        None,
-        id="empty:Ge(10)Le(0)",
-        marks=pytest.mark.xfail(strict=True, reason="unsatisfiable bounds undetected"),
-    ),
-    pytest.param(
-        "empty",
-        intersect(_GE0, Annotated[int, at.Lt(0)]),
-        None,
-        id="empty:Ge(0)&Lt(0)",
-        marks=pytest.mark.xfail(strict=True, reason="contradictory bounds undetected"),
-    ),
     pytest.param(
         "subtype",
         intersect(_RECURSIVE, union(int, str)),

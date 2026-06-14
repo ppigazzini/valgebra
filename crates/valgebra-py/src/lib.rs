@@ -223,15 +223,21 @@ impl CompiledValidator {
     ///
     /// Decided soundly: `True` only when no value can belong to the schema — an
     /// unsatisfiable intersection, a fixed sequence with an impossible position,
-    /// a record with an impossible required field, or a recursive schema with no
-    /// base case (a mandatory self-reference that can never bottom out). It never
-    /// reports a satisfiable schema as empty; for forms it cannot decide it
-    /// returns `False`.
+    /// a record with an impossible required field, a refinement whose bounds
+    /// cannot hold together (a lower bound above an upper bound, or a minimum
+    /// length above a maximum), or a recursive schema with no base case (a
+    /// mandatory self-reference that can never bottom out). It never reports a
+    /// satisfiable schema as empty; for forms it cannot decide it returns `False`.
     ///
     /// Returns:
     ///     `True` if the schema denotes the empty set, else `False`.
-    fn is_empty(&self) -> bool {
-        self.schema.is_empty_under(&self.definitions)
+    fn is_empty(&self, py: Python<'_>) -> bool {
+        let oracle = PoolRelations {
+            py,
+            literals: &self.literals,
+            definitions: &self.definitions,
+        };
+        self.schema.is_empty_with(&oracle, &self.definitions)
     }
 
     /// Whether every value of this schema is also a value of `other` — set
@@ -553,6 +559,15 @@ impl LeafRelations for PoolRelations<'_, '_> {
             },
             _ => None,
         }
+    }
+
+    fn compare(&self, left: usize, right: usize) -> Option<core::cmp::Ordering> {
+        // Order two refinement-bound values by Python's own comparison, so the
+        // core can decide an unsatisfiable bound conjunction. An incomparable
+        // pair (a TypeError) leaves the bound undecided.
+        let left = self.literals.get(left)?.bind(self.py);
+        let right = self.literals.get(right)?.bind(self.py);
+        left.compare(right).ok()
     }
 }
 
