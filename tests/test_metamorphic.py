@@ -17,13 +17,24 @@ from valgebra import (
     anything,
     complement,
     intersect,
+    lazy,
     nothing,
     union,
     validator,
 )
 
 _GE0 = Annotated[int, at.Ge(0)]
-_atoms = st.sampled_from([int, str, bool, float, bytes, None, _GE0, 0, 1, "a"])
+# Recursive schemas exercise the coinductive rules under every invariant, so a
+# meet, complement, or nesting that mixes recursion is checked for reflexivity and
+# the other laws -- the shape the reflexivity defect lived in.
+_RECURSIVE = [
+    lazy(lambda t: union(None, {"next": t})),
+    lazy(lambda t: union(int, [t])),
+    lazy(lambda t: union(None, bool, int, str, [t], {str: t})),
+]
+_atoms = st.sampled_from(
+    [int, str, bool, float, bytes, None, _GE0, 0, 1, "a", *_RECURSIVE]
+)
 
 
 def _compose(children: st.SearchStrategy) -> st.SearchStrategy:

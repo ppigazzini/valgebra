@@ -196,8 +196,13 @@ def test_value_literals_still_build() -> None:
 
 # --- Finite-universe soundness fuzzer ----------------------------------------
 
+_RECURSIVE_FAMILY = [
+    _RECURSIVE,
+    lazy(lambda t: union(int, [t])),
+    lazy(lambda t: union(None, bool, int, str, [t], {str: t})),
+]
 _atoms = st.sampled_from(
-    [int, str, bool, float, bytes, None, _GE0, _GE0_LE10, 0, 1, "a"]
+    [int, str, bool, float, bytes, None, _GE0, _GE0_LE10, 0, 1, "a", *_RECURSIVE_FAMILY]
 )
 
 

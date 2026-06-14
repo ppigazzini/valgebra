@@ -1,10 +1,48 @@
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from valgebra import ValidationError, lazy, union, validator
 
 json_value = lazy(
     lambda j: union(None, bool, int, float, str, [j], {str: j}),
 )
+
+
+def _is_json(value: object) -> bool:
+    """Independent reference denotation for `json_value`, by structural recursion."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return True
+    if isinstance(value, list):
+        return all(_is_json(item) for item in value)
+    if isinstance(value, dict):
+        return all(isinstance(k, str) and _is_json(v) for k, v in value.items())
+    return False
+
+
+# A value generator that reaches both members and non-members (bytes and tuples
+# are foreign to the JSON schema, and a non-string dict key is foreign too).
+_json_values = st.recursive(
+    st.none()
+    | st.booleans()
+    | st.integers()
+    | st.floats(allow_nan=False)
+    | st.text(max_size=3)
+    | st.binary(max_size=2),
+    lambda child: (
+        st.lists(child, max_size=3)
+        | st.tuples(child, child)
+        | st.dictionaries(st.text(max_size=2) | st.integers(), child, max_size=3)
+    ),
+    max_leaves=8,
+)
+
+
+@given(value=_json_values)
+def test_recursive_membership_matches_a_reference_denotation(value: object) -> None:
+    # The recursive membership walk agrees with an independent recursive predicate
+    # on members and non-members alike -- the denotation oracle for recursion.
+    assert json_value.is_valid(value) == _is_json(value)
 
 
 def test_recursive_json_value_accepts_nested_data() -> None:
