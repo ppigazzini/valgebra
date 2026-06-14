@@ -1376,7 +1376,12 @@ fn keyed_map_subtype(
     cx: SubtypeCx<'_>,
     assumptions: &mut Vec<(Schema, Schema)>,
 ) -> bool {
-    if da.is_empty() && db.is_empty() {
+    if da.is_empty() {
+        // A closed record carries only its declared fields, so it is a subtype
+        // when every field maps into a like-named field of the supertype (width
+        // and depth) and the supertype's required fields are required here too. A
+        // field the supertype does not declare would need the supertype's
+        // catch-all to cover that exact key name, which stays conservative.
         let width_and_depth = fa.iter().all(|a| {
             fb.iter()
                 .find(|b| b.name == a.name)
@@ -1387,10 +1392,18 @@ fn keyed_map_subtype(
             .filter(|b| b.required)
             .all(|b| fa.iter().any(|a| a.name == b.name && a.required));
         width_and_depth && required
-    } else if fa.is_empty() && fb.is_empty() && da.len() == 1 && db.len() == 1 {
-        da[0].0.is_subtype_rec(&db[0].0, cx, assumptions)
-            && da[0].1.is_subtype_rec(&db[0].1, cx, assumptions)
+    } else if fa.is_empty() && fb.is_empty() {
+        // Pure mappings: every key-pattern clause of the subtype must be subsumed
+        // by a clause of the supertype, with both its keys and its values
+        // narrower, so every entry the subtype admits the supertype admits too.
+        da.iter().all(|(ka, va)| {
+            db.iter().any(|(kb, vb)| {
+                ka.is_subtype_rec(kb, cx, assumptions) && va.is_subtype_rec(vb, cx, assumptions)
+            })
+        })
     } else {
+        // A record mixed with a catch-all needs the full quasi-constant-function
+        // comparison and stays conservative.
         false
     }
 }
@@ -2479,6 +2492,47 @@ mod laws {
         // contradictions need value comparison and stay conservative here).
         assert!(refine(Schema::Nothing, vec![Constraint::Ge(0)]).is_empty());
         assert!(!refine(Schema::Int, vec![Constraint::Ge(0), Constraint::Le(0)]).is_empty());
+    }
+
+    #[test]
+    fn decides_multi_clause_mapping_subtyping() {
+        let map = |clauses: Vec<(Schema, Schema)>| Schema::KeyedMap {
+            fields: Vec::new(),
+            defaults: clauses,
+        };
+        // A mapping is a subtype of one with more clauses that subsume its own.
+        assert!(map(vec![(Schema::Str, Schema::Int)]).is_subtype(&map(vec![
+            (Schema::Str, Schema::Int),
+            (Schema::Int, Schema::Bool),
+        ])));
+        // The reverse fails: the extra int-keyed clause is not covered.
+        assert!(
+            !map(vec![
+                (Schema::Str, Schema::Int),
+                (Schema::Int, Schema::Bool)
+            ])
+            .is_subtype(&map(vec![(Schema::Str, Schema::Int)]))
+        );
+        // A clause is subsumed only when both key and value narrow.
+        assert!(
+            map(vec![(Schema::Str, Schema::Bool)])
+                .is_subtype(&map(vec![(Schema::Str, Schema::Int)]))
+        );
+        assert!(
+            !map(vec![(Schema::Str, Schema::Int)])
+                .is_subtype(&map(vec![(Schema::Str, Schema::Bool)]))
+        );
+        // A closed record is a subtype of an open one that declares its fields.
+        let closed = |fields| Schema::record(fields, false);
+        let field = |name: &str, schema, required| Field {
+            name: name.to_owned(),
+            schema,
+            required,
+        };
+        assert!(
+            closed(vec![field("x", Schema::Int, true)])
+                .is_subtype(&Schema::record(vec![field("x", Schema::Int, true)], true))
+        );
     }
 
     #[test]

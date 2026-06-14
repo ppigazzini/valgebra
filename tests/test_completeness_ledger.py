@@ -69,6 +69,8 @@ _UNIVERSE = [
     {1},
     frozenset({1}),
     {"k": 1},
+    {5: True},
+    {"k": 1, 5: True},
 ]
 
 
@@ -133,6 +135,12 @@ _DECIDED = [
         intersect(_RECURSIVE, union(int, str)),
         id="reflexive:intersect(rec,union)",
     ),
+    # A mapping is a subtype of one with more clauses subsuming its own; a closed
+    # record is a subtype of an open map that declares its fields.
+    pytest.param(
+        "subtype", {str: int}, {str: int, int: bool}, id="map:{str}<={str,int}"
+    ),
+    pytest.param("subtype", {}, {str: int}, id="map:{}<={str:int}"),
 ]
 
 # Known decision-completeness misses. None remain: each relation the procedure
@@ -198,6 +206,7 @@ def _compose(children: st.SearchStrategy) -> st.SearchStrategy:
     return st.one_of(
         children.map(lambda c: [c]),
         children.map(lambda c: {str: c}),
+        pair.map(lambda p: {str: p[0], int: p[1]}),  # multi-clause mapping
         pair.map(lambda p: union(p[0], p[1])),
         pair.map(lambda p: intersect(p[0], p[1])),
         children.map(complement),
