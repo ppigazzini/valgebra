@@ -99,18 +99,18 @@ A non-`str`, non-`bytes` argument is a `TypeError`, not a validation failure.
 place**: no intermediate Python objects are built for the structure it walks, so
 membership of a large array or a deep document is decided entirely in Rust. The
 same walk runs over either input source — a Python object or a JSON value — so
-the two paths stay equivalent. On the benchmark machine (Intel i7-3770K, WSL2,
-CPython 3.14.5, jiter 0.15, valgebra release build), per-call median on a passing
-document:
+the two paths stay equivalent. On the benchmark machine (AMD Ryzen 7 PRO 7840U,
+WSL2, CPython 3.14.6, jiter 0.15, valgebra release build), per-call median on a
+passing document:
 
 | Shape | `is_valid_json` | `json.loads` + `is_valid` | speedup |
 | --- | --- | --- | --- |
-| Record, 50 int fields | 8.2 us | 16.8 us | ~2.0x |
-| List of 200 small records | 45 us | 78 us | ~1.7x |
-| `list[int]`, 10,000 elements | 230 us | 1,024 us | ~4.5x |
+| Record, 50 int fields | 4.6 us | 7.8 us | ~1.7x |
+| List of 200 small records | 33.9 us | 44.0 us | ~1.3x |
+| `list[int]`, 10,000 elements | 171 us | 545 us | ~3.2x |
 
 Avoiding materialization helps most where the document is large or scalar-heavy:
-the 10,000-element array is over four times faster than parse-then-validate and
+the 10,000-element array is over three times faster than parse-then-validate and
 faster than a strict pydantic adapter on the same input.
 
 Nodes that compare against a Python object — literals, refinements, instance and

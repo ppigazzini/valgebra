@@ -56,8 +56,8 @@ three check the same set of named fields.
 
 ## Baseline matrix
 
-Machine class: Intel Core i7-3770K (Ivy Bridge, 4c/8t, 3.5 GHz, a 2012-era
-desktop part) under WSL2 on Linux 6.18. Toolchain: rustc 1.96.0, CPython 3.14.5,
+Machine class: AMD Ryzen 7 PRO 7840U (Zen 4, 8c/16t, up to 5.1 GHz, a 2023-era
+mobile part) under WSL2 on Linux 6.18. Toolchain: rustc 1.96.0, CPython 3.14.6,
 pydantic 2.13.4, jsonschema 4.26.0, criterion 0.8.2, pytest-benchmark 5.2.3. The
 extension is the release build (`maturin develop --release`, fat LTO — the same
 profile as the shipped wheel); a debug build is not representative. Figures are
@@ -68,32 +68,36 @@ better):
 
 | Shape | valgebra | pydantic (strict) | jsonschema |
 | --- | --- | --- | --- |
-| `list[int]`, 10,000 elements | 60 us | 143 us | 99,800 us |
-| Closed record, 50 int fields | 3.4 us | 3.9 us | 533 us |
-| Nested `list[...]`, depth 25 | 0.39 us | 3.7 us | 303 us |
+| `list[int]`, 10,000 elements | 82 us | 88 us | 26,300 us |
+| Closed record, 50 int fields | 2.2 us | 2.0 us | 135 us |
+| Nested `list[...]`, depth 25 | 0.39 us | 1.95 us | 78.9 us |
 
-valgebra relative to pydantic on this machine: ~2.4x faster on the large flat
-array, ~9.5x faster on deep nesting, and slightly faster (~1.1x) on the wide
-record. It is consistently far ahead of pure-Python jsonschema. The wide-record
-margin is slim and pydantic does more work (it constructs output), so read that
-shape as "comparable," not a decisive win.
+valgebra relative to pydantic on this machine: ~5x faster on deep nesting,
+roughly tied on the large flat array (~1.07x), and slightly behind on the wide
+record (pydantic ~1.13x faster). It is consistently far ahead of pure-Python
+jsonschema — by two orders of magnitude on every shape. The wide-record and
+flat-array margins are within machine-to-machine swing, and pydantic does more
+work there (it constructs output), so read those shapes as "comparable," not a
+result either way.
 
 Core micro-benchmarks (criterion, release+LTO, indicative single run):
 
 | Operation | Corpus | Median |
 | --- | --- | --- |
-| `simplify` | redundant Boolean expression, depth 8 | ~2.3 us |
-| `shifted` | 64-field pool-indexed record | ~3.6 us |
-| `with_records_open` | record spine, depth 32 | ~6.4 us |
+| `simplify` | redundant Boolean expression, depth 8 | ~1.3 us |
+| `shifted` | 64-field pool-indexed record | ~2.0 us |
+| `with_records_open` | record spine, depth 32 | ~4.8 us |
 
 ## Honest limits
 
 - The numbers are a single machine class. They establish relative behavior, not
   a universal ranking. Shared CI runners are too noisy for a tight wall-clock
   budget, so the merge gate measures a deterministic instruction count instead.
-- The wide-record margin over pydantic is slim, and the two tools do different
-  work (pydantic constructs output). Read that shape as comparable, not a
-  decisive win; a small machine-to-machine swing could put either ahead.
+- The wide-record and flat-array margins against pydantic are within
+  machine-to-machine swing, and the two tools do different work (pydantic
+  constructs output). Read those shapes as comparable, not a win or loss; a
+  small swing could put either ahead. The deep-nesting margin is the one
+  durable, large gap.
 - The comparison measures different operations (check vs check-and-construct vs
   pure-Python check). It answers "how fast is the validation step for each
   tool," not "are these tools interchangeable" — they are not. See the README
@@ -108,12 +112,13 @@ The closed-record membership check visits each dict entry once and matches the
 key against the declared fields, rather than looking up every declared field in
 turn (which builds a temporary Python string per field) and then scanning the
 dict a second time for undeclared keys. The key's UTF-8 is borrowed without
-allocating. On the 50-field record above this cut the per-call median from
-~9.2 us to ~3.4 us (release build, same machine), profiled with cachegrind:
-the dominant cost was temporary-string creation, hashing, and allocation churn
-from the per-field lookups, all removed by the single pass. The bool fast path
-and the aggregating explain walk stay membership-equivalent, locked by tests
-that assert both reach the same verdict across record shapes.
+allocating. On the 50-field record above this single pass measures ~2.2 us per
+call (release build); the earlier per-field-lookup form was roughly 2.7x slower.
+Profiling with cachegrind attributed the removed cost to temporary-string
+creation, hashing, and allocation churn from the per-field lookups, and that
+attribution is an instruction count, so it holds across machine classes. The
+bool fast path and the aggregating explain walk stay membership-equivalent,
+locked by tests that assert both reach the same verdict across record shapes.
 
 ## Regression gate
 
