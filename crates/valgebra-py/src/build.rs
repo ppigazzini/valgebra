@@ -3,7 +3,7 @@
 
 use std::cell::Cell;
 
-use pyo3::exceptions::PyNotImplementedError;
+use pyo3::exceptions::{PyNotImplementedError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
@@ -599,7 +599,7 @@ fn build_refine(
     let base_schema = build_schema(base, lits, defs)?;
     let mut constraints = Vec::new();
     for marker in metadata.iter() {
-        parse_constraint(&marker, &mut constraints, lits);
+        parse_constraint(&marker, &mut constraints, lits)?;
     }
     if constraints.is_empty() {
         Ok(base_schema)
@@ -615,7 +615,20 @@ fn parse_constraint(
     marker: &Bound<'_, PyAny>,
     out: &mut Vec<Constraint>,
     lits: &mut Vec<Py<PyAny>>,
-) {
+) -> PyResult<()> {
+    // A string-pattern marker: valgebra's `Pattern(...)` or a compiled
+    // `re.Pattern`, both carrying the source pattern as `.pattern`. The pattern
+    // is validated (anchored) here so an invalid expression fails at compile
+    // time, not at first validation; the compiled regex is cached per validator.
+    if let Ok(attr) = marker.getattr("pattern")
+        && let Ok(pattern) = attr.extract::<String>()
+    {
+        crate::check::compile_pattern(&pattern).map_err(|err| {
+            PyValueError::new_err(format!("invalid regular expression {pattern:?}: {err}"))
+        })?;
+        out.push(Constraint::Regex(pattern));
+        return Ok(());
+    }
     // Comparison bounds. One marker may carry several (e.g. an interval).
     for (attr, make) in [
         ("ge", Constraint::Ge as fn(usize) -> Constraint),
@@ -656,6 +669,7 @@ fn parse_constraint(
     } else if marker.is_callable() {
         out.push(Constraint::Predicate(intern(lits, marker)));
     }
+    Ok(())
 }
 
 /// Pool `obj` and return its index, deduplicating by object identity.

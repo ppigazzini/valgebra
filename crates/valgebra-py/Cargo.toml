@@ -30,6 +30,12 @@ jiter = { version = "0.15", features = ["python"] }
 # the default hasher pays on every walk. This is the hasher ty uses for the same
 # reason.
 rustc-hash = "2"
+# Native string-pattern refinements: the `regex` crate compiles a `Pattern(...)`
+# marker once and matches on the Rust path, off the Python-predicate slow path.
+# Its linear-time guarantee (no catastrophic backtracking) matches valgebra's
+# stance that constructed sequence regexes are linear, and pydantic-core uses it
+# for the same `pattern` constraint.
+regex = "1"
 
 [lints]
 workspace = true

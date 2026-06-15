@@ -51,7 +51,30 @@ and emptiness — its satisfiability is undecidable in general.
 | `MinLen(n)` | `len(value) >= n` | `too_short` |
 | `MaxLen(n)` | `len(value) <= n` | `too_long` |
 | `MultipleOf(n)` | `value % n == 0` | `not_multiple_of` |
+| `Pattern(p)` | the string fully matches the regex `p` | `string_pattern` |
 | `Predicate(f)` | `f(value)` is truthy | `predicate_failed` |
+
+`Pattern` is valgebra's own marker (`from valgebra import Pattern`), since
+`annotated-types` defines none for strings. The match is **anchored** — the whole
+string must match, like `re.fullmatch` — and runs natively in Rust with a
+linear-time engine (no catastrophic backtracking), so unlike a `Predicate` it
+stays on the fast path and never crosses into Python per value. An invalid
+pattern is rejected when the validator is built, not at first use. A compiled
+`re.Pattern` works as metadata too:
+
+```python
+import re
+from typing import Annotated
+
+from valgebra import Pattern, validator
+
+oid = validator(Annotated[str, Pattern(r"[0-9a-f]{24}")])
+assert oid.is_valid("0123456789abcdef01234567")
+assert not oid.is_valid("0123456789abcdef0123456X")  # not hex
+assert not oid.is_valid("0123")  # not the full 24 characters
+
+assert validator(Annotated[str, re.compile(r"\d+")]).is_valid("123")
+```
 
 The compound markers `Interval` and `Len` expand to the bounds they carry, so
 `Interval(ge=0, le=10)` contributes `Ge(0)` and `Le(10)`, and `Len(2, 4)`

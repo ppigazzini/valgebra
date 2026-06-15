@@ -21,6 +21,7 @@ use std::cell::RefCell;
 use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple};
+use regex::Regex;
 use rustc_hash::{FxHashMap, FxHashSet};
 use valgebra_core::{Constraint, Field, PathSegment, Schema, SeqKind, SeqRegex, Violation};
 
@@ -48,6 +49,9 @@ pub(crate) struct Ctx<'a> {
     /// branch; any other case (an explain walk, a non-literal union, a value of
     /// another type, a JSON value) falls back to the linear scan.
     pub(crate) unions: &'a UnionIndex,
+    /// Compiled string patterns, keyed by source pattern; the refinement walk
+    /// reads it for a `Pattern(...)` constraint instead of recompiling.
+    pub(crate) regexes: &'a RegexIndex,
     pub(crate) guard: &'a RefCell<FxHashSet<(usize, usize)>>,
     /// Build violations into `out`. When false the walk is the membership fast
     /// path: it never touches `out`, never builds a path, and short-circuits.
@@ -108,12 +112,26 @@ impl UnionPlan {
 /// address mapped to its [`UnionPlan`]. Keyed and rebuilt like [`RecordIndex`].
 pub(crate) type UnionIndex = FxHashMap<usize, UnionPlan>;
 
-/// The per-validator precompute: record-field lookups and literal-union decision
-/// tables, both built once from the finished schema and reused across calls.
+/// Each `Pattern(...)` constraint's source pattern mapped to its compiled,
+/// anchored regex, built once per validator so a string-pattern refinement
+/// matches natively without recompiling on every call.
+pub(crate) type RegexIndex = FxHashMap<String, Regex>;
+
+/// Anchor a user pattern so the whole string must match (`re.fullmatch`
+/// semantics): `\A` and `\z` are absolute string boundaries, and the
+/// non-capturing group keeps the user's alternation from escaping them.
+pub(crate) fn compile_pattern(pattern: &str) -> Result<Regex, regex::Error> {
+    Regex::new(&format!(r"\A(?:{pattern})\z"))
+}
+
+/// The per-validator precompute: record-field lookups, literal-union decision
+/// tables, and compiled string patterns, all built once from the finished schema
+/// and reused across calls.
 #[derive(Default)]
 pub(crate) struct ValidatorIndex {
     pub(crate) records: RecordIndex,
     pub(crate) unions: UnionIndex,
+    pub(crate) regexes: RegexIndex,
 }
 
 /// Build the index for a finished schema plus its recursion definitions. `pool`
@@ -178,7 +196,17 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
         Schema::Set(inner) | Schema::FrozenSet(inner) | Schema::Complement(inner) => {
             collect(py, inner, pool, index);
         }
-        Schema::Refine { base, .. } => collect(py, base, pool, index),
+        Schema::Refine { base, constraints } => {
+            collect(py, base, pool, index);
+            for constraint in constraints {
+                if let Constraint::Regex(pattern) = constraint
+                    && !index.regexes.contains_key(pattern)
+                    && let Ok(compiled) = compile_pattern(pattern)
+                {
+                    index.regexes.insert(pattern.clone(), compiled);
+                }
+            }
+        }
         Schema::Object { fields, .. } => {
             for f in fields {
                 collect(py, &f.schema, pool, index);
@@ -1065,6 +1093,27 @@ fn check_constraint(
                     format!("a predicate that does not raise (raised {err})"),
                 ),
             }
+        }
+        Constraint::Regex(pattern) => {
+            // Native fast path: the precompiled, anchored pattern matches the
+            // borrowed string UTF-8 in Rust. A non-string never matches (the base
+            // of a pattern refinement is a string, so this is reached only after
+            // a string base check, but stays defensive). A pattern absent from
+            // the per-validator cache (an incomplete build traversal) is compiled
+            // on the spot rather than silently passing.
+            let matched = value
+                .cast::<PyString>()
+                .ok()
+                .and_then(|s| s.to_str().ok())
+                .is_some_and(|text| match ctx.regexes.get(pattern) {
+                    Some(compiled) => compiled.is_match(text),
+                    None => compile_pattern(pattern).is_ok_and(|re| re.is_match(text)),
+                });
+            (
+                matched,
+                "string_pattern",
+                format!("a string matching {pattern:?}"),
+            )
         }
     };
     if !ok && ctx.explain {

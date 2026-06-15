@@ -1,3 +1,4 @@
+from ._markers import Pattern
 from ._valgebra import (
     CompiledValidator,
     ValidationError,
@@ -16,6 +17,7 @@ from ._valgebra import (
 
 __all__ = [
     "CompiledValidator",
+    "Pattern",
     "ValidationError",
     "anything",
     "complement",

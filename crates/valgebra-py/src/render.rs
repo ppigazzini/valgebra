@@ -138,6 +138,7 @@ fn render_constraint(py: Python<'_>, constraint: &Constraint, pool: &[Py<PyAny>]
         Constraint::MaxLen(n) => format!("MaxLen({n})"),
         Constraint::MultipleOf(i) => format!("MultipleOf({})", pool_repr(py, pool, *i)),
         Constraint::Predicate(_) => "Predicate(...)".to_owned(),
+        Constraint::Regex(pattern) => format!("Pattern({pattern:?})"),
     }
 }
 

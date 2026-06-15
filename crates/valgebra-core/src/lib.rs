@@ -439,6 +439,12 @@ pub enum Constraint {
     MultipleOf(usize),
     /// `pool[i](value)` is truthy. The documented Python-callback slow path.
     Predicate(usize),
+    /// The string fully matches this regular expression (anchored, `re.fullmatch`
+    /// semantics). The pattern is held inline rather than pooled; the bindings
+    /// compile it once and match natively. Like [`Constraint::Predicate`] it is a
+    /// leaf the decision procedure treats opaquely: two regex constraints relate
+    /// only when their patterns are identical.
+    Regex(String),
 }
 
 /// A named field of a [`Schema::KeyedMap`] or [`Schema::Object`].
@@ -1622,6 +1628,7 @@ impl Constraint {
             Constraint::MaxLen(n) => Constraint::MaxLen(*n),
             Constraint::MultipleOf(i) => Constraint::MultipleOf(i + pool),
             Constraint::Predicate(i) => Constraint::Predicate(i + pool),
+            Constraint::Regex(p) => Constraint::Regex(p.clone()),
         }
     }
 
@@ -1635,6 +1642,7 @@ impl Constraint {
             Constraint::MaxLen(n) => Constraint::MaxLen(*n),
             Constraint::MultipleOf(i) => Constraint::MultipleOf(lit_map[*i]),
             Constraint::Predicate(i) => Constraint::Predicate(lit_map[*i]),
+            Constraint::Regex(p) => Constraint::Regex(p.clone()),
         }
     }
 }

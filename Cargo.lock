@@ -1028,6 +1028,7 @@ version = "0.0.1"
 dependencies = [
  "jiter",
  "pyo3",
+ "regex",
  "rustc-hash",
  "valgebra-core",
 ]

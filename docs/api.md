@@ -27,6 +27,10 @@ from the top-level `valgebra` namespace.
 
 ::: valgebra.strict
 
+## Refinement markers
+
+::: valgebra.Pattern
+
 ## Recursion
 
 ::: valgebra.lazy
