@@ -198,11 +198,7 @@ pub(crate) fn combine(
     for arg in args.iter() {
         members.push(build_schema(&arg, &mut literals, &mut definitions)?);
     }
-    Ok(CompiledValidator {
-        schema: make(members),
-        literals,
-        definitions,
-    })
+    Ok(CompiledValidator::new(make(members), literals, definitions))
 }
 
 /// Build the schema for a Python type object (a builtin, `TypedDict`, `Enum`,

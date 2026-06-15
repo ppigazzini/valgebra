@@ -13,6 +13,7 @@ mod input;
 mod render;
 
 use std::cell::RefCell;
+use std::sync::OnceLock;
 
 use jiter::{JsonValue, PythonParse};
 use pyo3::create_exception;
@@ -23,7 +24,7 @@ use rustc_hash::FxHashSet;
 use valgebra_core::{LeafRelations, Schema, SeqRegex, fresh_self_token};
 
 use crate::build::{build_schema, combine};
-use crate::check::{Ctx, member};
+use crate::check::{Ctx, RecordIndex, build_record_index, member};
 use crate::errors::{into_pyerr, json_invalid_error};
 use crate::input::Value;
 use crate::render::render;
@@ -50,11 +51,34 @@ pub struct CompiledValidator {
     pub(crate) schema: Schema,
     pub(crate) literals: Vec<Py<PyAny>>,
     pub(crate) definitions: Vec<Schema>,
+    /// Per-record declared-field lookups, built once on first use from this
+    /// validator's own schema and reused across calls. Lazy so an unused
+    /// validator never pays for it, and rebuilt per validator (a copy starts
+    /// empty) so its buffer-address keys always refer to this schema's nodes.
+    records: OnceLock<RecordIndex>,
 }
 
 impl CompiledValidator {
-    /// The read-only walk context: the pool, the definitions, a fresh recursion
-    /// guard, the explain flag, and the fail-fast flag.
+    /// Assemble a validator from its parts, deferring the record index to first
+    /// use. Every construction path goes through here so the index is never
+    /// copied between validators.
+    pub(crate) fn new(schema: Schema, literals: Vec<Py<PyAny>>, definitions: Vec<Schema>) -> Self {
+        CompiledValidator {
+            schema,
+            literals,
+            definitions,
+            records: OnceLock::new(),
+        }
+    }
+
+    /// The record index, built once from this validator's schema and definitions.
+    fn records(&self) -> &RecordIndex {
+        self.records
+            .get_or_init(|| build_record_index(&self.schema, &self.definitions))
+    }
+
+    /// The read-only walk context: the pool, the definitions, the record index, a
+    /// fresh recursion guard, the explain flag, and the fail-fast flag.
     fn context<'a>(
         &'a self,
         guard: &'a RefCell<FxHashSet<(usize, usize)>>,
@@ -64,6 +88,7 @@ impl CompiledValidator {
         Ctx {
             pool: &self.literals,
             defs: &self.definitions,
+            records: self.records(),
             guard,
             explain,
             fail_fast,
@@ -300,11 +325,11 @@ impl CompiledValidator {
     /// shares the pooled constants, classes, and predicates rather than
     /// duplicating them.
     fn __copy__(&self, py: Python<'_>) -> CompiledValidator {
-        CompiledValidator {
-            schema: self.schema.clone(),
-            literals: self.literals.iter().map(|o| o.clone_ref(py)).collect(),
-            definitions: self.definitions.clone(),
-        }
+        CompiledValidator::new(
+            self.schema.clone(),
+            self.literals.iter().map(|o| o.clone_ref(py)).collect(),
+            self.definitions.clone(),
+        )
     }
 
     /// Deep-copy to an equivalent validator. Since the validator is immutable,
@@ -366,11 +391,7 @@ fn validator(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
     let mut literals = Vec::new();
     let mut definitions = Vec::new();
     let schema = build_schema(schema, &mut literals, &mut definitions)?;
-    Ok(CompiledValidator {
-        schema,
-        literals,
-        definitions,
-    })
+    Ok(CompiledValidator::new(schema, literals, definitions))
 }
 
 /// Build a recursive schema as a checked fixpoint.
@@ -385,11 +406,7 @@ fn lazy(builder: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
     let token = fresh_self_token();
     let placeholder = Py::new(
         py,
-        CompiledValidator {
-            schema: Schema::SelfRef(token),
-            literals: Vec::new(),
-            definitions: Vec::new(),
-        },
+        CompiledValidator::new(Schema::SelfRef(token), Vec::new(), Vec::new()),
     )?;
     let body_obj = builder.call1((placeholder,))?;
     let mut literals = Vec::new();
@@ -406,11 +423,11 @@ fn lazy(builder: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
         ));
     }
     definitions.push(resolved);
-    Ok(CompiledValidator {
-        schema: Schema::Ref(ref_id),
+    Ok(CompiledValidator::new(
+        Schema::Ref(ref_id),
         literals,
         definitions,
-    })
+    ))
 }
 
 /// The union of the given schemas: a value in at least one of their sets.
@@ -441,11 +458,11 @@ fn complement(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
     let mut literals = Vec::new();
     let mut definitions = Vec::new();
     let inner = build_schema(schema, &mut literals, &mut definitions)?;
-    Ok(CompiledValidator {
-        schema: Schema::Complement(Box::new(inner)),
+    Ok(CompiledValidator::new(
+        Schema::Complement(Box::new(inner)),
         literals,
         definitions,
-    })
+    ))
 }
 
 /// Open every record in a schema: undeclared keys are admitted throughout.
@@ -469,11 +486,11 @@ fn with_records_open(
     open: bool,
     py: Python<'_>,
 ) -> CompiledValidator {
-    CompiledValidator {
-        schema: validator.schema.with_records_open(open),
-        literals: validator.literals.iter().map(|o| o.clone_ref(py)).collect(),
-        definitions: validator.definitions.clone(),
-    }
+    CompiledValidator::new(
+        validator.schema.with_records_open(open),
+        validator.literals.iter().map(|o| o.clone_ref(py)).collect(),
+        validator.definitions.clone(),
+    )
 }
 
 /// An equivalent validator reduced by the lattice laws.
@@ -483,24 +500,17 @@ fn with_records_open(
 /// negation-normal form). Returns a new validator; the original is unchanged.
 #[pyfunction]
 fn simplify(validator: &CompiledValidator, py: Python<'_>) -> CompiledValidator {
-    CompiledValidator {
-        schema: validator.schema.simplify(),
-        literals: validator.literals.iter().map(|o| o.clone_ref(py)).collect(),
-        definitions: validator.definitions.clone(),
-    }
+    CompiledValidator::new(
+        validator.schema.simplify(),
+        validator.literals.iter().map(|o| o.clone_ref(py)).collect(),
+        validator.definitions.clone(),
+    )
 }
 
 /// A pool-free validator wrapping a single atom (the `anything`/`nothing`
 /// lattice bounds).
 fn atom(py: Python<'_>, schema: Schema) -> PyResult<Py<CompiledValidator>> {
-    Py::new(
-        py,
-        CompiledValidator {
-            schema,
-            literals: Vec::new(),
-            definitions: Vec::new(),
-        },
-    )
+    Py::new(py, CompiledValidator::new(schema, Vec::new(), Vec::new()))
 }
 
 /// A [`LeafRelations`] oracle backed by a validator's constant pool. It decides
@@ -516,9 +526,14 @@ struct PoolRelations<'py, 'pool> {
 impl PoolRelations<'_, '_> {
     fn is_member(&self, schema: &Schema, value: &Bound<'_, PyAny>) -> bool {
         let guard = RefCell::new(FxHashSet::default());
+        // These leaf-subtype probes run on transient schemas during compilation,
+        // not on a finished validator, so they carry no precomputed index; the
+        // keyed-map walk falls back to building its map for any record here.
+        let records = RecordIndex::default();
         let ctx = Ctx {
             pool: self.literals,
             defs: self.definitions,
+            records: &records,
             guard: &guard,
             explain: false,
             fail_fast: false,

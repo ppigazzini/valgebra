@@ -69,11 +69,11 @@ better):
 | Shape | valgebra | pydantic (strict) | jsonschema |
 | --- | --- | --- | --- |
 | `list[int]`, 10,000 elements | 82 us | 88 us | 26,300 us |
-| Closed record, 50 int fields | 1.4 us | 2.0 us | 135 us |
+| Closed record, 50 int fields | 1.3 us | 2.0 us | 135 us |
 | Nested `list[...]`, depth 25 | 0.39 us | 1.95 us | 78.9 us |
 
 valgebra relative to pydantic on this machine: ~5x faster on deep nesting,
-~1.4x faster on the wide record, and roughly tied on the large flat array
+~1.5x faster on the wide record, and roughly tied on the large flat array
 (~1.07x). It is consistently far ahead of pure-Python jsonschema — by two orders
 of magnitude on every shape. The flat-array margin is within machine-to-machine
 swing, and pydantic does more work on the record (it constructs output), so read
@@ -111,9 +111,11 @@ The closed-record membership check visits each dict entry once and matches the
 key against the declared fields, rather than looking up every declared field in
 turn (which builds a temporary Python string per field) and then scanning the
 dict a second time for undeclared keys. The key's UTF-8 is borrowed without
-allocating, and the field-name index is built with a fast non-cryptographic
-hasher, since the keys are the schema's own declared names rather than attacker
-input. On the 50-field record above this measures ~1.4 us per call (release
+allocating, and the field-name index is computed once when the validator is
+first used — with a fast non-cryptographic hasher, since the keys are the
+schema's own declared names rather than attacker input — then reused across
+calls, so a wide record no longer rebuilds and reallocates its name map on every
+validation. On the 50-field record above this measures ~1.3 us per call (release
 build); the earlier per-field-lookup form was several times slower. Profiling
 with cachegrind attributed the removed cost to temporary-string creation,
 hashing, and allocation churn from the per-field lookups, and that attribution

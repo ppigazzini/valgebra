@@ -220,7 +220,7 @@ Schemas compile once; the hot path crosses into Rust a single time per call and
 checks membership with no copy or coercion. On a synthetic benchmark over a
 2023-era mobile CPU (release build), validating a passing value is much faster
 than a strict pydantic `TypeAdapter` on a deeply nested list (~5x) and a 50-field
-record (~1.4x), roughly tied on a large `list[int]` (within machine-to-machine
+record (~1.5x), roughly tied on a large `list[int]` (within machine-to-machine
 swing), and far faster than pure-Python jsonschema throughout. The comparison is
 not
 apples-to-apples — pydantic also constructs output, jsonschema is pure Python —

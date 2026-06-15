@@ -28,20 +28,108 @@ use crate::errors::{class_label, summarize, truncate};
 use crate::input::Value;
 
 /// The read-only context threaded through a validation walk: the constants pool,
-/// the recursion definitions, the active recursion guard, and the two mode flags.
-/// The guard records `(object id, definition index)` pairs currently on the path
-/// so a value that contains itself fails with `recursion_loop` instead of
-/// looping.
+/// the recursion definitions, the precomputed record index, the active recursion
+/// guard, and the two mode flags. The guard records `(object id, definition
+/// index)` pairs currently on the path so a value that contains itself fails with
+/// `recursion_loop` instead of looping.
 #[derive(Clone, Copy)]
 pub(crate) struct Ctx<'a> {
     pub(crate) pool: &'a [Py<PyAny>],
     pub(crate) defs: &'a [Schema],
+    /// Per-record declared-field lookups, built once per validator and keyed by
+    /// the address of each record's `fields` buffer. The keyed-map fast path
+    /// reads it instead of rebuilding the name map on every call; a node absent
+    /// from it falls back to building the map, so correctness never depends on
+    /// it being complete.
+    pub(crate) records: &'a RecordIndex,
     pub(crate) guard: &'a RefCell<FxHashSet<(usize, usize)>>,
     /// Build violations into `out`. When false the walk is the membership fast
     /// path: it never touches `out`, never builds a path, and short-circuits.
     pub(crate) explain: bool,
     /// In explain mode, stop at the first failure instead of aggregating siblings.
     pub(crate) fail_fast: bool,
+}
+
+/// A precomputed lookup for one record (`KeyedMap`) node: declared field name to
+/// its index in the node's `fields`, plus the count of required fields. Built
+/// once when a validator is first used and reused across calls, so a wide record
+/// no longer rebuilds and rehashes its field-name map on every validation.
+pub(crate) struct RecordPlan {
+    by_name: FxHashMap<Box<str>, usize>,
+    required: usize,
+}
+
+/// The record index for a whole validator: each record's `fields`-buffer address
+/// mapped to its [`RecordPlan`]. The buffer address is stable for the life of the
+/// (immutable) schema, and the index is rebuilt per validator from its own
+/// schema, so an entry always refers to the same live node.
+pub(crate) type RecordIndex = FxHashMap<usize, RecordPlan>;
+
+/// Build the record index for a finished schema plus its recursion definitions.
+/// A record with no declared fields is skipped: its plan is trivial and an empty
+/// `Vec` carries no distinct buffer address to key on.
+pub(crate) fn build_record_index(schema: &Schema, defs: &[Schema]) -> RecordIndex {
+    let mut index = RecordIndex::default();
+    collect_records(schema, &mut index);
+    for def in defs {
+        collect_records(def, &mut index);
+    }
+    index
+}
+
+fn collect_records(schema: &Schema, index: &mut RecordIndex) {
+    match schema {
+        Schema::KeyedMap { fields, defaults } => {
+            if !fields.is_empty() {
+                index
+                    .entry(fields.as_ptr() as usize)
+                    .or_insert_with(|| RecordPlan {
+                        by_name: fields
+                            .iter()
+                            .enumerate()
+                            .map(|(i, f)| (f.name.as_str().into(), i))
+                            .collect(),
+                        required: fields.iter().filter(|f| f.required).count(),
+                    });
+            }
+            for f in fields {
+                collect_records(&f.schema, index);
+            }
+            for (key_schema, value_schema) in defaults {
+                collect_records(key_schema, index);
+                collect_records(value_schema, index);
+            }
+        }
+        Schema::Union(members) | Schema::Intersection(members) => {
+            for member in members {
+                collect_records(member, index);
+            }
+        }
+        Schema::Set(inner) | Schema::FrozenSet(inner) | Schema::Complement(inner) => {
+            collect_records(inner, index);
+        }
+        Schema::Refine { base, .. } => collect_records(base, index),
+        Schema::Object { fields, .. } => {
+            for f in fields {
+                collect_records(&f.schema, index);
+            }
+        }
+        Schema::Seq { regex, .. } => collect_seq_records(regex, index),
+        _ => {}
+    }
+}
+
+fn collect_seq_records(regex: &SeqRegex, index: &mut RecordIndex) {
+    match regex {
+        SeqRegex::Empty => {}
+        SeqRegex::Elem(schema) => collect_records(schema, index),
+        SeqRegex::Cat(parts) | SeqRegex::Or(parts) => {
+            for part in parts {
+                collect_seq_records(part, index);
+            }
+        }
+        SeqRegex::Star(inner) => collect_seq_records(inner, index),
+    }
 }
 
 /// Whether the sibling loop should stop after a failure: always in the fast path
@@ -376,6 +464,11 @@ fn covered(
 /// field is checked against it; any other key (non-string, or undeclared) must
 /// be covered by a default clause. Closed records have no clauses, so an
 /// undeclared key is rejected; an open record's `anything` clause covers it.
+///
+/// The declared-field lookup comes from the validator's precomputed
+/// [`RecordIndex`] when present, so a wide record skips rebuilding its name map
+/// on every call; a record not in the index (an empty one, or a node the
+/// build-time traversal did not reach) falls back to building the map here.
 fn keyed_map_matches_py(
     fields: &[Field],
     defaults: &[(Schema, Schema)],
@@ -385,17 +478,46 @@ fn keyed_map_matches_py(
     let Ok(dict) = dict.cast::<PyDict>() else {
         return false;
     };
-    let declared: FxHashMap<&str, &Field> = fields.iter().map(|f| (f.name.as_str(), f)).collect();
-    let mut required_remaining = fields.iter().filter(|f| f.required).count();
+    if let Some(plan) = ctx.records.get(&(fields.as_ptr() as usize)) {
+        keyed_map_scan(fields, defaults, dict, ctx, plan.required, |name| {
+            plan.by_name.get(name).copied()
+        })
+    } else {
+        let declared: FxHashMap<&str, usize> = fields
+            .iter()
+            .enumerate()
+            .map(|(i, f)| (f.name.as_str(), i))
+            .collect();
+        let required = fields.iter().filter(|f| f.required).count();
+        keyed_map_scan(fields, defaults, dict, ctx, required, |name| {
+            declared.get(name).copied()
+        })
+    }
+}
+
+/// Walk a dict once against a record's fields, resolving each string key to a
+/// declared-field index through `lookup` (a precomputed plan or a freshly built
+/// map). A key that resolves checks its value against that field; any other key
+/// must be covered by a default clause. The record matches iff every entry
+/// matches and every required field was seen.
+fn keyed_map_scan(
+    fields: &[Field],
+    defaults: &[(Schema, Schema)],
+    dict: &Bound<'_, PyDict>,
+    ctx: Ctx<'_>,
+    mut required_remaining: usize,
+    lookup: impl Fn(&str) -> Option<usize>,
+) -> bool {
     let sub = fast(ctx);
     for (key, val) in dict.iter() {
-        let field = key
+        let index = key
             .cast::<PyString>()
             .ok()
             .and_then(|s| s.to_str().ok())
-            .and_then(|name| declared.get(name));
-        match field {
-            Some(field) => {
+            .and_then(&lookup);
+        match index {
+            Some(i) => {
+                let field = &fields[i];
                 if !member(
                     &field.schema,
                     &Value::Py(&val),
