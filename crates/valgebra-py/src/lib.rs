@@ -24,7 +24,7 @@ use rustc_hash::FxHashSet;
 use valgebra_core::{LeafRelations, Schema, SeqRegex, fresh_self_token};
 
 use crate::build::{build_schema, combine};
-use crate::check::{Ctx, RecordIndex, build_record_index, member};
+use crate::check::{Ctx, ValidatorIndex, build_index, member};
 use crate::errors::{into_pyerr, json_invalid_error};
 use crate::input::Value;
 use crate::render::render;
@@ -51,15 +51,16 @@ pub struct CompiledValidator {
     pub(crate) schema: Schema,
     pub(crate) literals: Vec<Py<PyAny>>,
     pub(crate) definitions: Vec<Schema>,
-    /// Per-record declared-field lookups, built once on first use from this
-    /// validator's own schema and reused across calls. Lazy so an unused
-    /// validator never pays for it, and rebuilt per validator (a copy starts
-    /// empty) so its buffer-address keys always refer to this schema's nodes.
-    records: OnceLock<RecordIndex>,
+    /// Per-node precompute (record-field lookups and literal-union decision
+    /// tables), built once on first use from this validator's own schema and
+    /// reused across calls. Lazy so an unused validator never pays for it, and
+    /// rebuilt per validator (a copy starts empty) so its buffer-address keys
+    /// always refer to this schema's nodes.
+    index: OnceLock<ValidatorIndex>,
 }
 
 impl CompiledValidator {
-    /// Assemble a validator from its parts, deferring the record index to first
+    /// Assemble a validator from its parts, deferring the precompute to first
     /// use. Every construction path goes through here so the index is never
     /// copied between validators.
     pub(crate) fn new(schema: Schema, literals: Vec<Py<PyAny>>, definitions: Vec<Schema>) -> Self {
@@ -67,28 +68,33 @@ impl CompiledValidator {
             schema,
             literals,
             definitions,
-            records: OnceLock::new(),
+            index: OnceLock::new(),
         }
     }
 
-    /// The record index, built once from this validator's schema and definitions.
-    fn records(&self) -> &RecordIndex {
-        self.records
-            .get_or_init(|| build_record_index(&self.schema, &self.definitions))
+    /// The precompute, built once from this validator's schema, definitions, and
+    /// constants pool.
+    fn index(&self, py: Python<'_>) -> &ValidatorIndex {
+        self.index
+            .get_or_init(|| build_index(py, &self.schema, &self.definitions, &self.literals))
     }
 
-    /// The read-only walk context: the pool, the definitions, the record index, a
-    /// fresh recursion guard, the explain flag, and the fail-fast flag.
+    /// The read-only walk context: the pool, the definitions, the precomputed
+    /// record and union indexes, a fresh recursion guard, the explain flag, and
+    /// the fail-fast flag.
     fn context<'a>(
         &'a self,
+        py: Python<'_>,
         guard: &'a RefCell<FxHashSet<(usize, usize)>>,
         explain: bool,
         fail_fast: bool,
     ) -> Ctx<'a> {
+        let index = self.index(py);
         Ctx {
             pool: &self.literals,
             defs: &self.definitions,
-            records: self.records(),
+            records: &index.records,
+            unions: &index.unions,
             guard,
             explain,
             fail_fast,
@@ -107,7 +113,7 @@ impl CompiledValidator {
             &self.schema,
             &Value::Json(py, &json),
             &mut Vec::new(),
-            self.context(&guard, false, true),
+            self.context(py, &guard, false, true),
             &mut Vec::new(),
         )
     }
@@ -144,7 +150,7 @@ impl CompiledValidator {
             &self.schema,
             &Value::Py(obj),
             &mut path,
-            self.context(&guard, true, fail_fast),
+            self.context(obj.py(), &guard, true, fail_fast),
             &mut violations,
         );
         if ok {
@@ -170,7 +176,7 @@ impl CompiledValidator {
             &self.schema,
             &Value::Py(obj),
             &mut Vec::new(),
-            self.context(&guard, false, true),
+            self.context(obj.py(), &guard, false, true),
             &mut Vec::new(),
         )
     }
@@ -528,12 +534,13 @@ impl PoolRelations<'_, '_> {
         let guard = RefCell::new(FxHashSet::default());
         // These leaf-subtype probes run on transient schemas during compilation,
         // not on a finished validator, so they carry no precomputed index; the
-        // keyed-map walk falls back to building its map for any record here.
-        let records = RecordIndex::default();
+        // walk falls back to its general path for any record or union here.
+        let index = ValidatorIndex::default();
         let ctx = Ctx {
             pool: self.literals,
             defs: self.definitions,
-            records: &records,
+            records: &index.records,
+            unions: &index.unions,
             guard: &guard,
             explain: false,
             fail_fast: false,

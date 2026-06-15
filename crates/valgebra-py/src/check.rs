@@ -20,7 +20,7 @@ use std::cell::RefCell;
 
 use jiter::JsonValue;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
+use pyo3::types::{PyDict, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple};
 use rustc_hash::{FxHashMap, FxHashSet};
 use valgebra_core::{Constraint, Field, PathSegment, Schema, SeqKind, SeqRegex, Violation};
 
@@ -42,6 +42,12 @@ pub(crate) struct Ctx<'a> {
     /// from it falls back to building the map, so correctness never depends on
     /// it being complete.
     pub(crate) records: &'a RecordIndex,
+    /// Per-union value sets for unions whose members are all literals, keyed by
+    /// the address of the union's members buffer. The membership fast path
+    /// dispatches an exact int or str value through it instead of scanning every
+    /// branch; any other case (an explain walk, a non-literal union, a value of
+    /// another type, a JSON value) falls back to the linear scan.
+    pub(crate) unions: &'a UnionIndex,
     pub(crate) guard: &'a RefCell<FxHashSet<(usize, usize)>>,
     /// Build violations into `out`. When false the walk is the membership fast
     /// path: it never touches `out`, never builds a path, and short-circuits.
@@ -65,23 +71,76 @@ pub(crate) struct RecordPlan {
 /// schema, so an entry always refers to the same live node.
 pub(crate) type RecordIndex = FxHashMap<usize, RecordPlan>;
 
-/// Build the record index for a finished schema plus its recursion definitions.
-/// A record with no declared fields is skipped: its plan is trivial and an empty
-/// `Vec` carries no distinct buffer address to key on.
-pub(crate) fn build_record_index(schema: &Schema, defs: &[Schema]) -> RecordIndex {
-    let mut index = RecordIndex::default();
-    collect_records(schema, &mut index);
+/// A precomputed decision table for one union whose members are all literals: the
+/// `int`-typed literal values that fit a machine integer, and the `str`-typed
+/// literal values. An exact `int`/`str` value's membership is then a single set
+/// lookup instead of a scan of every branch.
+pub(crate) struct UnionPlan {
+    ints: FxHashSet<i64>,
+    strs: FxHashSet<Box<str>>,
+}
+
+impl UnionPlan {
+    /// Decide membership of `value` if the value's exact type is one this plan
+    /// covers, else `None` to defer to the linear scan. Only an exact `int`
+    /// matches `int` literals and only an exact `str` matches `str` literals
+    /// (Python's cross-type equality is excluded by the same-type literal rule),
+    /// so the set lookup is authoritative for those two types. A boolean, float,
+    /// `None`, bytes, big integer, subclass instance, or JSON value returns `None`
+    /// and is scanned linearly, matching `literal_matches` exactly.
+    fn decide(&self, value: &Value<'_, '_>) -> Option<bool> {
+        let Value::Py(v) = value else { return None };
+        if v.is_exact_instance_of::<PyInt>() {
+            // A big integer (outside i64) cannot equal any i64-valued literal, so
+            // deferring to the scan handles it against any big-integer literal.
+            let i = v.extract::<i64>().ok()?;
+            return Some(self.ints.contains(&i));
+        }
+        if v.is_exact_instance_of::<PyString>() {
+            let s = v.cast::<PyString>().ok()?.to_str().ok()?;
+            return Some(self.strs.contains(s));
+        }
+        None
+    }
+}
+
+/// The union index for a whole validator: each all-literal union's members-buffer
+/// address mapped to its [`UnionPlan`]. Keyed and rebuilt like [`RecordIndex`].
+pub(crate) type UnionIndex = FxHashMap<usize, UnionPlan>;
+
+/// The per-validator precompute: record-field lookups and literal-union decision
+/// tables, both built once from the finished schema and reused across calls.
+#[derive(Default)]
+pub(crate) struct ValidatorIndex {
+    pub(crate) records: RecordIndex,
+    pub(crate) unions: UnionIndex,
+}
+
+/// Build the index for a finished schema plus its recursion definitions. `pool`
+/// is the validator's constants pool, needed to read each literal's value while
+/// building union plans. A record with no declared fields, and a union with a
+/// non-literal member, are skipped; the walk falls back to its general path for
+/// anything not indexed, so an incomplete traversal only costs speed.
+pub(crate) fn build_index(
+    py: Python<'_>,
+    schema: &Schema,
+    defs: &[Schema],
+    pool: &[Py<PyAny>],
+) -> ValidatorIndex {
+    let mut index = ValidatorIndex::default();
+    collect(py, schema, pool, &mut index);
     for def in defs {
-        collect_records(def, &mut index);
+        collect(py, def, pool, &mut index);
     }
     index
 }
 
-fn collect_records(schema: &Schema, index: &mut RecordIndex) {
+fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut ValidatorIndex) {
     match schema {
         Schema::KeyedMap { fields, defaults } => {
             if !fields.is_empty() {
                 index
+                    .records
                     .entry(fields.as_ptr() as usize)
                     .or_insert_with(|| RecordPlan {
                         by_name: fields
@@ -93,43 +152,82 @@ fn collect_records(schema: &Schema, index: &mut RecordIndex) {
                     });
             }
             for f in fields {
-                collect_records(&f.schema, index);
+                collect(py, &f.schema, pool, index);
             }
             for (key_schema, value_schema) in defaults {
-                collect_records(key_schema, index);
-                collect_records(value_schema, index);
+                collect(py, key_schema, pool, index);
+                collect(py, value_schema, pool, index);
             }
         }
-        Schema::Union(members) | Schema::Intersection(members) => {
+        Schema::Union(members) => {
+            if let Some(plan) = literal_union_plan(py, members, pool) {
+                index
+                    .unions
+                    .entry(members.as_ptr() as usize)
+                    .or_insert(plan);
+            }
             for member in members {
-                collect_records(member, index);
+                collect(py, member, pool, index);
+            }
+        }
+        Schema::Intersection(members) => {
+            for member in members {
+                collect(py, member, pool, index);
             }
         }
         Schema::Set(inner) | Schema::FrozenSet(inner) | Schema::Complement(inner) => {
-            collect_records(inner, index);
+            collect(py, inner, pool, index);
         }
-        Schema::Refine { base, .. } => collect_records(base, index),
+        Schema::Refine { base, .. } => collect(py, base, pool, index),
         Schema::Object { fields, .. } => {
             for f in fields {
-                collect_records(&f.schema, index);
+                collect(py, &f.schema, pool, index);
             }
         }
-        Schema::Seq { regex, .. } => collect_seq_records(regex, index),
+        Schema::Seq { regex, .. } => collect_seq(py, regex, pool, index),
         _ => {}
     }
 }
 
-fn collect_seq_records(regex: &SeqRegex, index: &mut RecordIndex) {
+fn collect_seq(py: Python<'_>, regex: &SeqRegex, pool: &[Py<PyAny>], index: &mut ValidatorIndex) {
     match regex {
         SeqRegex::Empty => {}
-        SeqRegex::Elem(schema) => collect_records(schema, index),
+        SeqRegex::Elem(schema) => collect(py, schema, pool, index),
         SeqRegex::Cat(parts) | SeqRegex::Or(parts) => {
             for part in parts {
-                collect_seq_records(part, index);
+                collect_seq(py, part, pool, index);
             }
         }
-        SeqRegex::Star(inner) => collect_seq_records(inner, index),
+        SeqRegex::Star(inner) => collect_seq(py, inner, pool, index),
     }
+}
+
+/// Build a [`UnionPlan`] when every union member is a literal, bucketing the
+/// `int` and `str` literal values; returns `None` (so the union stays a linear
+/// scan) when any member is not a literal. A big-integer or other-typed literal
+/// is simply not bucketed — values of those types are scanned linearly.
+fn literal_union_plan(py: Python<'_>, members: &[Schema], pool: &[Py<PyAny>]) -> Option<UnionPlan> {
+    let mut ints = FxHashSet::default();
+    let mut strs = FxHashSet::default();
+    for member in members {
+        let Schema::Literal(idx) = member else {
+            return None;
+        };
+        let constant = pool[*idx].bind(py);
+        if constant.is_exact_instance_of::<PyInt>() {
+            if let Ok(i) = constant.extract::<i64>() {
+                ints.insert(i);
+            }
+        } else if constant.is_exact_instance_of::<PyString>()
+            && let Some(s) = constant
+                .cast::<PyString>()
+                .ok()
+                .and_then(|s| s.to_str().ok())
+        {
+            strs.insert(s.into());
+        }
+    }
+    Some(UnionPlan { ints, strs })
 }
 
 /// Whether the sibling loop should stop after a failure: always in the fast path
@@ -682,6 +780,16 @@ fn check_union(
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
+    // Fast path for an all-literal union: an exact int or str value is decided by
+    // a single set lookup. Only the membership decision uses it; the explain walk
+    // below, and every value type the plan does not cover, fall through to the
+    // linear scan, which stays the one source of truth for behavior.
+    if !ctx.explain
+        && let Some(plan) = ctx.unions.get(&(members.as_ptr() as usize))
+        && let Some(decided) = plan.decide(value)
+    {
+        return decided;
+    }
     // A value is a member iff it matches at least one branch; decide that on the
     // fast path, where a discarded branch pays for no path or violation.
     let sub = fast(ctx);

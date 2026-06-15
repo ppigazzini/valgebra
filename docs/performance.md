@@ -123,6 +123,20 @@ is an instruction count, so it holds across machine classes. The bool fast path
 and the aggregating explain walk stay membership-equivalent, locked by tests
 that assert both reach the same verdict across record shapes.
 
+## How large literal unions dispatch
+
+A union whose members are all literals (a `Literal["a", "b", ...]` enum, or a
+discriminator) is compiled once into value-keyed sets — one for the integer
+literals, one for the string literals. An exact `int` or `str` value is then a
+single set lookup rather than a scan of every branch, so membership cost stops
+growing with the number of literals. The same-type literal rule is preserved:
+the integer set is consulted only for an exact `int` (never a `bool`), the string
+set only for an exact `str`, and any other value — a `bool`, `float`, `None`, a
+subclass instance, a big integer, or a JSON value — falls back to the linear scan
+that remains the single source of truth. On a 32-literal union this cuts the
+per-call median several-fold; the decision is identical to the scan, locked by
+tests over the cross-type cases.
+
 ## Regression gate
 
 The wall-clock numbers above are for humans reading results; they are too noisy
