@@ -67,7 +67,11 @@ release ships (`maturin build --release --pgo`); a plain `--release` build is a
 few tens of percent slower on these shapes, and a debug build is not
 representative. pydantic's PyPI wheels are likewise PGO-built, so this is a
 release-to-release comparison. Figures are the per-call median; re-run on your
-own hardware for absolute numbers.
+own hardware for absolute numbers. They are measured on the wheel carrying
+valgebra's complete feature set — the per-validator precompute (record-field
+lookups, literal-union dispatch) and native string patterns — which leaves these
+shapes unchanged: the features earn their keep elsewhere, not by regressing the
+core.
 
 End-to-end validation of a value that passes (median time per call, lower is
 better):
@@ -76,7 +80,7 @@ better):
 | --- | --- | --- | --- |
 | `list[int]`, 10,000 elements | 47 us | 88 us | 26,000 us |
 | Closed record, 50 int fields | 0.97 us | 1.9 us | 134 us |
-| Nested `list[...]`, depth 25 | 0.27 us | 1.9 us | 77 us |
+| Nested `list[...]`, depth 25 | 0.25 us | 1.9 us | 77 us |
 
 valgebra relative to pydantic on this machine: ~7x faster on deep nesting, ~2x
 faster on the wide record, and ~1.9x faster on the large flat array. It is
