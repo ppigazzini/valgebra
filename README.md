@@ -102,10 +102,7 @@ from typing import Annotated
 import annotated_types as at
 
 from valgebra import (
-    anything,
     complement,
-    cond,
-    ifthen,
     intersect,
     nothing,
     union,
@@ -116,14 +113,14 @@ assert intersect(int, complement(bool)).is_valid(5)  # ints that are not bools
 assert not intersect(int, complement(bool)).is_valid(True)
 assert complement(nothing).is_valid(5)            # the complement of bottom is top
 
-# conditional shapes derived from the algebra: "if it is an int, it must be >= 0"
-assert not ifthen(int, Annotated[int, at.Ge(0)]).is_valid(-1)
-assert ifthen(int, Annotated[int, at.Ge(0)]).is_valid("x")  # not an int: admitted
-assert cond(
-    (str, Annotated[str, at.MinLen(1)]),
-    (int, Annotated[int, at.Ge(0)]),
-    default=nothing,
-).is_valid("ok")
+# conditional shapes are composed, not built in: "if it is an int it must be >= 0"
+# is "(int and >= 0) or (not an int)" — a union of two intersections.
+if_int_non_negative = union(
+    intersect(int, Annotated[int, at.Ge(0)]),
+    complement(int),
+)
+assert not if_int_non_negative.is_valid(-1)
+assert if_int_non_negative.is_valid("x")  # not an int: admitted
 ```
 
 The refinement "an int that is not a bool" is `intersect(int, complement(bool))`

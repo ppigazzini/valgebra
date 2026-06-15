@@ -23,8 +23,9 @@ will form the first release.
   literal as a closed record (`"key?"` optional); a single `{KeyType: ValueType}`
   entry as a mapping; and any constant as a typed literal.
 - A complete Boolean algebra: `union`, `intersect`, `complement`, `anything`,
-  `nothing`, the derived `ifthen`/`cond`, and a law-justified `simplify`, with
-  the lattice laws property-tested.
+  `nothing`, and a law-justified `simplify`, with the lattice laws
+  property-tested. Conditional fields and key cardinality are composed from these
+  (documented recipes), not shipped as combinators.
 - Set-relation queries on a compiled validator: `is_subtype` (set inclusion),
   `equivalent` (mutual inclusion), and `is_empty` (an unsatisfiable schema, including
   a recursive schema with no base case). Decided soundly across scalars,

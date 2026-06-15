@@ -106,10 +106,10 @@ The theory this rests on is in [docs/foundations.md](docs/foundations.md).
 The package re-exports everything from the top-level `valgebra` namespace:
 `validator` and the `CompiledValidator` it returns (`validate`, `is_valid`,
 `cast`, `validate_json`, `is_valid_json`); the combinators `union`, `intersect`,
-`complement`, the derived `ifthen`/`cond`
-([`python/valgebra/_derived.py`](python/valgebra/_derived.py)), and `simplify`;
-the structural builders `fixed_sequence`, `lax`, `strict`; the `lazy` fixpoint;
-the lattice bounds `anything` and `nothing`; and `ValidationError`.
+`complement`, and `simplify`; the structural builders `fixed_sequence`, `lax`,
+`strict`; the `lazy` fixpoint; the lattice bounds `anything` and `nothing`; and
+`ValidationError`. Conditional fields and key cardinality are composed from the
+algebra (documented recipes), not shipped as combinators.
 
 ## Invariants
 

@@ -17,10 +17,6 @@ from the top-level `valgebra` namespace.
 
 ::: valgebra.complement
 
-::: valgebra.ifthen
-
-::: valgebra.cond
-
 ::: valgebra.simplify
 
 ## Structural builders

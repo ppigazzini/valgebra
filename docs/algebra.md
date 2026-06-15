@@ -43,37 +43,66 @@ intersection, and complement — is *semantic subtyping*. The
 states where the simplifier decides relationships versus where it stays
 conservative.
 
-## Conditional combinators
+## Composition recipes
 
-`ifthen` and `cond` are derived purely from the algebra — they add no new
-semantics.
+valgebra ships only the irreducible algebra; common patterns that reduce to it
+are recipes you compose, not combinators it bundles. The algebra expressing them
+is the point — a named wrapper for a one-line composition would be a standard
+library, not a schema algebra.
 
-`ifthen(condition, then)` requires `then` of any value that matches `condition`,
-and admits everything else (so it reads as "condition implies then"):
+### Conditional fields
+
+"Condition implies consequent" is a `union` of two intersections: a value either
+matches the condition and must then satisfy the consequent, or fails the
+condition and must satisfy the alternative (`anything` by default):
 
 ```python
 from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import ifthen
+from valgebra import anything, complement, intersect, union
 
-non_negative_if_int = ifthen(int, Annotated[int, at.Ge(0)])
+
+def implies(condition, then, otherwise=anything):
+    return union(
+        intersect(condition, then),
+        intersect(complement(condition), otherwise),
+    )
+
+
+non_negative_if_int = implies(int, Annotated[int, at.Ge(0)])
 assert non_negative_if_int.is_valid(5)
 assert not non_negative_if_int.is_valid(-1)
 assert non_negative_if_int.is_valid("not an int")  # not an int: admitted
 ```
 
-`cond` selects the `then` of the first matching `(condition, then)` case:
+First-matching-case dispatch nests `implies` from the last case inward, so the
+earliest matching condition selects its consequent:
 
 ```python
 from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import cond, nothing
+from valgebra import anything, complement, intersect, nothing, union, validator
 
-shape = cond(
+
+def implies(condition, then, otherwise):
+    return union(
+        intersect(condition, then),
+        intersect(complement(condition), otherwise),
+    )
+
+
+def first_match(*cases, default=anything):
+    result = validator(default)
+    for condition, then in reversed(cases):
+        result = implies(condition, then, result)
+    return result
+
+
+shape = first_match(
     (str, Annotated[str, at.MinLen(1)]),
     (int, Annotated[int, at.Ge(0)]),
     default=nothing,
@@ -82,6 +111,40 @@ assert shape.is_valid("ok")
 assert shape.is_valid(5)
 assert not shape.is_valid("")
 assert not shape.is_valid(1.5)  # matches no case, falls to the default
+```
+
+### Key cardinality
+
+"At least one of these keys is present", and its siblings, are also algebra. A
+record that merely asserts a key is present is an open record requiring it —
+`lax({key: anything})` — and the cardinality follows from `union`, `intersect`,
+and `complement`:
+
+```python
+from valgebra import anything, complement, intersect, lax, union, validator
+
+
+def has(key):
+    return lax(validator({key: anything}))
+
+
+at_least_one = union(has("a"), has("b"))
+assert at_least_one.is_valid({"a": 1})
+assert at_least_one.is_valid({"b": 2, "x": 0})
+assert not at_least_one.is_valid({"x": 0})
+
+at_most_one = complement(intersect(has("a"), has("b")))  # not both
+assert at_most_one.is_valid({"a": 1})
+assert at_most_one.is_valid({})
+assert not at_most_one.is_valid({"a": 1, "b": 2})
+
+exactly_one = union(
+    intersect(has("a"), complement(has("b"))),
+    intersect(has("b"), complement(has("a"))),
+)
+assert exactly_one.is_valid({"a": 1})
+assert not exactly_one.is_valid({"a": 1, "b": 2})
+assert not exactly_one.is_valid({})
 ```
 
 ## The simplifier
