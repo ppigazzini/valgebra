@@ -61,6 +61,11 @@ module-name = "valgebra._valgebra"
 manifest-path = "crates/valgebra-py/Cargo.toml"
 # Build the abi3-incompatible per-version module; strip the binary in release.
 strip = true
+# Profile-guided-optimization training workload for `maturin build --pgo`
+# (release lane only). Runs against the instrumented build to record a profile
+# over a broad, production-like spread of validation shapes; depends only on the
+# package itself, so it runs in the minimal environment maturin provisions.
+pgo-command = "python scripts/pgo_workload.py"
 
 [tool.pytest.ini_options]
 minversion = "8.0"
