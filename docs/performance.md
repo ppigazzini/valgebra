@@ -30,7 +30,10 @@ cargo bench --bench core
 
 # End-to-end and comparison benchmarks (Python); install the bench group first:
 uv sync --group bench
-uv run --group bench maturin develop --uv
+# To match the published figures, build the same PGO wheel the release ships
+# (needs the llvm-tools rustup component) and install it; a plain build is slower:
+uv run --group bench maturin build --release --pgo --out dist
+uv pip install --reinstall --no-deps dist/*.whl
 uv run --group bench pytest benches/bench_validate.py
 uv run --group bench pytest benches/bench_compare.py --benchmark-group-by=group
 ```
@@ -59,25 +62,28 @@ three check the same set of named fields.
 Machine class: AMD Ryzen 7 PRO 7840U (Zen 4, 8c/16t, up to 5.1 GHz, a 2023-era
 mobile part) under WSL2 on Linux 6.18. Toolchain: rustc 1.96.0, CPython 3.14.6,
 pydantic 2.13.4, jsonschema 4.26.0, criterion 0.8.2, pytest-benchmark 5.2.3. The
-extension is the release build (`maturin develop --release`, fat LTO — the same
-profile as the shipped wheel); a debug build is not representative. Figures are
-the per-call median; re-run on your own hardware for absolute numbers.
+extension is the **PGO** release build — the profile-guided, fat-LTO wheel the
+release ships (`maturin build --release --pgo`); a plain `--release` build is a
+few tens of percent slower on these shapes, and a debug build is not
+representative. pydantic's PyPI wheels are likewise PGO-built, so this is a
+release-to-release comparison. Figures are the per-call median; re-run on your
+own hardware for absolute numbers.
 
 End-to-end validation of a value that passes (median time per call, lower is
 better):
 
 | Shape | valgebra | pydantic (strict) | jsonschema |
 | --- | --- | --- | --- |
-| `list[int]`, 10,000 elements | 82 us | 88 us | 26,300 us |
-| Closed record, 50 int fields | 1.3 us | 2.0 us | 135 us |
-| Nested `list[...]`, depth 25 | 0.39 us | 1.95 us | 78.9 us |
+| `list[int]`, 10,000 elements | 47 us | 88 us | 26,000 us |
+| Closed record, 50 int fields | 0.97 us | 1.9 us | 134 us |
+| Nested `list[...]`, depth 25 | 0.27 us | 1.9 us | 77 us |
 
-valgebra relative to pydantic on this machine: ~5x faster on deep nesting,
-~1.5x faster on the wide record, and roughly tied on the large flat array
-(~1.07x). It is consistently far ahead of pure-Python jsonschema — by two orders
-of magnitude on every shape. The flat-array margin is within machine-to-machine
-swing, and pydantic does more work on the record (it constructs output), so read
-the array as "comparable" rather than a result either way.
+valgebra relative to pydantic on this machine: ~7x faster on deep nesting, ~2x
+faster on the wide record, and ~1.9x faster on the large flat array. It is
+consistently far ahead of pure-Python jsonschema — by two to three orders of
+magnitude on every shape. pydantic does strictly more work on the record (it
+constructs output), so read that shape as a margin over a heavier operation, not
+a like-for-like loss for pydantic.
 
 Core micro-benchmarks (criterion, release+LTO, indicative single run):
 
@@ -92,11 +98,11 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
 - The numbers are a single machine class. They establish relative behavior, not
   a universal ranking. Shared CI runners are too noisy for a tight wall-clock
   budget, so the merge gate measures a deterministic instruction count instead.
-- The flat-array margin against pydantic is within machine-to-machine swing,
-  and the two tools do different work (pydantic constructs output). Read that
-  shape as comparable, not a win or loss; a
-  small swing could put either ahead. The deep-nesting margin is the one
-  durable, large gap.
+- The margins against pydantic come with the caveat that the two tools do
+  different work: pydantic constructs output, valgebra only checks membership.
+  The ratios answer "how fast is each tool's validation step," not "how much
+  faster is membership than construction." Deep nesting is the widest gap; the
+  array and record margins are narrower but consistent.
 - The comparison measures different operations (check vs check-and-construct vs
   pure-Python check). It answers "how fast is the validation step for each
   tool," not "are these tools interchangeable" — they are not. See the README
@@ -115,8 +121,8 @@ allocating, and the field-name index is computed once when the validator is
 first used — with a fast non-cryptographic hasher, since the keys are the
 schema's own declared names rather than attacker input — then reused across
 calls, so a wide record no longer rebuilds and reallocates its name map on every
-validation. On the 50-field record above this measures ~1.3 us per call (release
-build); the earlier per-field-lookup form was several times slower. Profiling
+validation. On the 50-field record above this measures ~1.0 us per call (PGO
+release build); the earlier per-field-lookup form was several times slower. Profiling
 with cachegrind attributed the removed cost to temporary-string creation,
 hashing, and allocation churn from the per-field lookups, and that attribution
 is an instruction count, so it holds across machine classes. The bool fast path

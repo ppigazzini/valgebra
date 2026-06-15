@@ -100,18 +100,18 @@ place**: no intermediate Python objects are built for the structure it walks, so
 membership of a large array or a deep document is decided entirely in Rust. The
 same walk runs over either input source — a Python object or a JSON value — so
 the two paths stay equivalent. On the benchmark machine (AMD Ryzen 7 PRO 7840U,
-WSL2, CPython 3.14.6, jiter 0.15, valgebra release build), per-call median on a
-passing document:
+WSL2, CPython 3.14.6, jiter 0.15, the PGO release wheel — the same profile the
+release ships), per-call median on a passing document:
 
 | Shape | `is_valid_json` | `json.loads` + `is_valid` | speedup |
 | --- | --- | --- | --- |
-| Record, 50 int fields | 4.6 us | 7.8 us | ~1.7x |
-| List of 200 small records | 33.9 us | 44.0 us | ~1.3x |
-| `list[int]`, 10,000 elements | 171 us | 545 us | ~3.2x |
+| Record, 50 int fields | 3.7 us | 6.5 us | ~1.8x |
+| List of 200 small records | 27.3 us | 40.6 us | ~1.5x |
+| `list[int]`, 10,000 elements | 105 us | 501 us | ~4.8x |
 
 Avoiding materialization helps most where the document is large or scalar-heavy:
-the 10,000-element array is over three times faster than parse-then-validate and
-faster than a strict pydantic adapter on the same input.
+the 10,000-element array is nearly five times faster than parse-then-validate and
+well over twice as fast as a strict pydantic adapter on the same input.
 
 Nodes that compare against a Python object — literals, refinements, instance and
 object checks, and predicates — materialize just the value at that node, since
