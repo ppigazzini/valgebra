@@ -1,23 +1,30 @@
 name: Docs
 
-# Build the documentation site and publish it to GitHub Pages. The site tracks
-# the main branch; a manual run can republish on demand. Enable Pages for the
-# repository (serving from the gh-pages branch) before the first run.
+# Build the documentation site and publish it to GitHub Pages with the
+# Actions-based deployment (an uploaded artifact deployed over OIDC — no
+# gh-pages branch). The site tracks the main branch; a manual run republishes
+# on demand. One-time setup: in the repository, set
+# Settings -> Pages -> Build and deployment -> Source to "GitHub Actions".
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+# Least privilege for the Actions Pages deployment: read the repo, write the
+# Pages deployment, and mint the OIDC token deploy-pages verifies.
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
+# One Pages deployment at a time; never cancel a publish already in flight.
 concurrency:
-  group: docs-${{ github.ref }}
-  cancel-in-progress: true
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: build and deploy
+  build:
+    name: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -28,8 +35,24 @@ jobs:
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           enable-cache: true
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - run: uv sync --group docs
       # mkdocstrings imports the package to read its docstrings.
       - run: uv run --group docs maturin develop --uv
-      # Build with --strict, then push the result to the gh-pages branch.
-      - run: uv run --group docs mkdocs gh-deploy --force --strict
+      # --strict fails the build on a broken link or an unresolved reference.
+      - run: uv run --group docs mkdocs build --strict
+      # mkdocs builds into ./site (upload-pages-artifact defaults to ./_site).
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    name: deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
