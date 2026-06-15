@@ -277,8 +277,10 @@ jobs:
   nightly-mutants:
     name: nightly mutation sweep
     # cargo-mutants over the core, auditing whether the Rust unit tests register
-    # an injected defect. Scheduled and manual only, never a merge gate; surviving
-    # mutants are an early-warning signal of a test gap, surfaced in the summary.
+    # an injected defect. Scheduled and manual only, never a merge gate: surviving
+    # mutants are an early-warning signal of a test gap, surfaced in the job
+    # summary rather than failing the lane. A broken baseline or a usage error
+    # still fails, because those are real breakage unrelated to test coverage.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -290,7 +292,57 @@ jobs:
       - name: Install cargo-mutants
         run: cargo install cargo-mutants --locked
       - name: Mutation sweep over the core
-        run: cargo mutants --package valgebra-core -j 4
+        run: |
+          # cargo-mutants exit codes: 0 clean, 2 missed mutants, 3 timeouts,
+          # 1 usage error, 4 baseline build/test failure. Missed mutants and
+          # timeouts are test-gap signals reported in the summary without
+          # failing the lane; a usage error or a broken baseline fails it.
+          set +e
+          cargo mutants --package valgebra-core -j 4
+          status=$?
+          set -e
+
+          report() {
+            echo "## Mutation sweep over the core"
+            echo
+            missed=0 caught=0 timeout=0 unviable=0
+            [ -f mutants.out/missed.txt ] && missed=$(wc -l < mutants.out/missed.txt)
+            [ -f mutants.out/caught.txt ] && caught=$(wc -l < mutants.out/caught.txt)
+            [ -f mutants.out/timeout.txt ] && timeout=$(wc -l < mutants.out/timeout.txt)
+            [ -f mutants.out/unviable.txt ] && unviable=$(wc -l < mutants.out/unviable.txt)
+            echo "| outcome | count |"
+            echo "| --- | --- |"
+            echo "| caught | $caught |"
+            echo "| missed | $missed |"
+            echo "| timeout | $timeout |"
+            echo "| unviable | $unviable |"
+            if [ "$missed" -gt 0 ]; then
+              echo
+              echo "<details><summary>Missed mutants ($missed)</summary>"
+              echo
+              echo '```'
+              cat mutants.out/missed.txt
+              echo '```'
+              echo
+              echo "</details>"
+            fi
+            if [ "$timeout" -gt 0 ]; then
+              echo
+              echo "<details><summary>Timed-out mutants ($timeout)</summary>"
+              echo
+              echo '```'
+              cat mutants.out/timeout.txt
+              echo '```'
+              echo
+              echo "</details>"
+            fi
+          }
+          report >> "$GITHUB_STEP_SUMMARY"
+
+          case "$status" in
+            0 | 2 | 3) exit 0 ;;
+            *) exit "$status" ;;
+          esac
 
   ci:
     name: ci
