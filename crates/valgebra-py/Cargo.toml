@@ -23,6 +23,13 @@ valgebra-core = { workspace = true }
 # faster than the stdlib json module, and the parsed value runs the same
 # validation walk as a native object so the two paths agree by construction.
 jiter = { version = "0.15", features = ["python"] }
+# The validation walk's maps and the recursion guard are keyed by trusted
+# internal data (declared field names, value/definition ids), never attacker
+# input, so they do not need SipHash's DoS resistance. FxHash is faster to build
+# and probe, and its zero-sized build hasher drops the per-call random-seed setup
+# the default hasher pays on every walk. This is the hasher ty uses for the same
+# reason.
+rustc-hash = "2"
 
 [lints]
 workspace = true

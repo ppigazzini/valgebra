@@ -13,13 +13,13 @@ mod input;
 mod render;
 
 use std::cell::RefCell;
-use std::collections::HashSet;
 
 use jiter::{JsonValue, PythonParse};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyString, PyTuple, PyType};
+use rustc_hash::FxHashSet;
 use valgebra_core::{LeafRelations, Schema, SeqRegex, fresh_self_token};
 
 use crate::build::{build_schema, combine};
@@ -57,7 +57,7 @@ impl CompiledValidator {
     /// guard, the explain flag, and the fail-fast flag.
     fn context<'a>(
         &'a self,
-        guard: &'a RefCell<HashSet<(usize, usize)>>,
+        guard: &'a RefCell<FxHashSet<(usize, usize)>>,
         explain: bool,
         fail_fast: bool,
     ) -> Ctx<'a> {
@@ -77,7 +77,7 @@ impl CompiledValidator {
         let Ok(json) = JsonValue::parse(bytes, false) else {
             return false;
         };
-        let guard = RefCell::new(HashSet::new());
+        let guard = RefCell::new(FxHashSet::default());
         member(
             &self.schema,
             &Value::Json(py, &json),
@@ -112,7 +112,7 @@ impl CompiledValidator {
     ///         failure with a code and a path.
     #[pyo3(signature = (obj, *, fail_fast = false))]
     fn validate(&self, obj: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
-        let guard = RefCell::new(HashSet::new());
+        let guard = RefCell::new(FxHashSet::default());
         let mut path = Vec::new();
         let mut violations = Vec::new();
         let ok = member(
@@ -140,7 +140,7 @@ impl CompiledValidator {
     /// Returns:
     ///     `True` if `obj` is a member of the schema's set, else `False`.
     fn is_valid(&self, obj: &Bound<'_, PyAny>) -> bool {
-        let guard = RefCell::new(HashSet::new());
+        let guard = RefCell::new(FxHashSet::default());
         member(
             &self.schema,
             &Value::Py(obj),
@@ -292,7 +292,7 @@ impl CompiledValidator {
     /// Render the compiled schema back as the annotation expression that
     /// produces it.
     fn __repr__(&self, py: Python<'_>) -> String {
-        let active = RefCell::new(HashSet::new());
+        let active = RefCell::new(FxHashSet::default());
         render(py, &self.schema, &self.literals, &self.definitions, &active)
     }
 
@@ -515,7 +515,7 @@ struct PoolRelations<'py, 'pool> {
 
 impl PoolRelations<'_, '_> {
     fn is_member(&self, schema: &Schema, value: &Bound<'_, PyAny>) -> bool {
-        let guard = RefCell::new(HashSet::new());
+        let guard = RefCell::new(FxHashSet::default());
         let ctx = Ctx {
             pool: self.literals,
             defs: self.definitions,

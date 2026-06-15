@@ -1,9 +1,9 @@
 //! Render a compiled schema back to a readable annotation/combinator string.
 
 use std::cell::RefCell;
-use std::collections::HashSet;
 
 use pyo3::prelude::*;
+use rustc_hash::FxHashSet;
 use valgebra_core::{Constraint, Field, Schema, SeqKind};
 
 use crate::errors::{class_label, summarize};
@@ -16,7 +16,7 @@ pub(crate) fn render(
     schema: &Schema,
     pool: &[Py<PyAny>],
     defs: &[Schema],
-    active: &RefCell<HashSet<usize>>,
+    active: &RefCell<FxHashSet<usize>>,
 ) -> String {
     let r = |s: &Schema| render(py, s, pool, defs, active);
     let kids = |members: &[Schema]| members.iter().map(&r).collect::<Vec<_>>().join(", ");
@@ -100,7 +100,7 @@ fn render_keyed_map(
     defaults: &[(Schema, Schema)],
     pool: &[Py<PyAny>],
     defs: &[Schema],
-    active: &RefCell<HashSet<usize>>,
+    active: &RefCell<FxHashSet<usize>>,
 ) -> String {
     let r = |s: &Schema| render(py, s, pool, defs, active);
     // A pure mapping — no named fields, one clause — is dict[K, V].

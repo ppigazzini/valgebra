@@ -69,16 +69,15 @@ better):
 | Shape | valgebra | pydantic (strict) | jsonschema |
 | --- | --- | --- | --- |
 | `list[int]`, 10,000 elements | 82 us | 88 us | 26,300 us |
-| Closed record, 50 int fields | 2.2 us | 2.0 us | 135 us |
+| Closed record, 50 int fields | 1.4 us | 2.0 us | 135 us |
 | Nested `list[...]`, depth 25 | 0.39 us | 1.95 us | 78.9 us |
 
 valgebra relative to pydantic on this machine: ~5x faster on deep nesting,
-roughly tied on the large flat array (~1.07x), and slightly behind on the wide
-record (pydantic ~1.13x faster). It is consistently far ahead of pure-Python
-jsonschema — by two orders of magnitude on every shape. The wide-record and
-flat-array margins are within machine-to-machine swing, and pydantic does more
-work there (it constructs output), so read those shapes as "comparable," not a
-result either way.
+~1.4x faster on the wide record, and roughly tied on the large flat array
+(~1.07x). It is consistently far ahead of pure-Python jsonschema — by two orders
+of magnitude on every shape. The flat-array margin is within machine-to-machine
+swing, and pydantic does more work on the record (it constructs output), so read
+the array as "comparable" rather than a result either way.
 
 Core micro-benchmarks (criterion, release+LTO, indicative single run):
 
@@ -93,9 +92,9 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
 - The numbers are a single machine class. They establish relative behavior, not
   a universal ranking. Shared CI runners are too noisy for a tight wall-clock
   budget, so the merge gate measures a deterministic instruction count instead.
-- The wide-record and flat-array margins against pydantic are within
-  machine-to-machine swing, and the two tools do different work (pydantic
-  constructs output). Read those shapes as comparable, not a win or loss; a
+- The flat-array margin against pydantic is within machine-to-machine swing,
+  and the two tools do different work (pydantic constructs output). Read that
+  shape as comparable, not a win or loss; a
   small swing could put either ahead. The deep-nesting margin is the one
   durable, large gap.
 - The comparison measures different operations (check vs check-and-construct vs
@@ -112,13 +111,15 @@ The closed-record membership check visits each dict entry once and matches the
 key against the declared fields, rather than looking up every declared field in
 turn (which builds a temporary Python string per field) and then scanning the
 dict a second time for undeclared keys. The key's UTF-8 is borrowed without
-allocating. On the 50-field record above this single pass measures ~2.2 us per
-call (release build); the earlier per-field-lookup form was roughly 2.7x slower.
-Profiling with cachegrind attributed the removed cost to temporary-string
-creation, hashing, and allocation churn from the per-field lookups, and that
-attribution is an instruction count, so it holds across machine classes. The
-bool fast path and the aggregating explain walk stay membership-equivalent,
-locked by tests that assert both reach the same verdict across record shapes.
+allocating, and the field-name index is built with a fast non-cryptographic
+hasher, since the keys are the schema's own declared names rather than attacker
+input. On the 50-field record above this measures ~1.4 us per call (release
+build); the earlier per-field-lookup form was several times slower. Profiling
+with cachegrind attributed the removed cost to temporary-string creation,
+hashing, and allocation churn from the per-field lookups, and that attribution
+is an instruction count, so it holds across machine classes. The bool fast path
+and the aggregating explain walk stay membership-equivalent, locked by tests
+that assert both reach the same verdict across record shapes.
 
 ## Regression gate
 

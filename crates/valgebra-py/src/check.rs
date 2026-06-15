@@ -17,11 +17,11 @@
 
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 
 use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
+use rustc_hash::{FxHashMap, FxHashSet};
 use valgebra_core::{Constraint, Field, PathSegment, Schema, SeqKind, SeqRegex, Violation};
 
 use crate::errors::{class_label, summarize, truncate};
@@ -36,7 +36,7 @@ use crate::input::Value;
 pub(crate) struct Ctx<'a> {
     pub(crate) pool: &'a [Py<PyAny>],
     pub(crate) defs: &'a [Schema],
-    pub(crate) guard: &'a RefCell<HashSet<(usize, usize)>>,
+    pub(crate) guard: &'a RefCell<FxHashSet<(usize, usize)>>,
     /// Build violations into `out`. When false the walk is the membership fast
     /// path: it never touches `out`, never builds a path, and short-circuits.
     pub(crate) explain: bool,
@@ -385,7 +385,7 @@ fn keyed_map_matches_py(
     let Ok(dict) = dict.cast::<PyDict>() else {
         return false;
     };
-    let declared: HashMap<&str, &Field> = fields.iter().map(|f| (f.name.as_str(), f)).collect();
+    let declared: FxHashMap<&str, &Field> = fields.iter().map(|f| (f.name.as_str(), f)).collect();
     let mut required_remaining = fields.iter().filter(|f| f.required).count();
     let sub = fast(ctx);
     for (key, val) in dict.iter() {
@@ -496,7 +496,7 @@ fn keyed_map_explain(
         out.push(type_mismatch("dict_type", "dict", value, path));
         return;
     };
-    let declared: HashSet<&str> = fields.iter().map(|field| field.name.as_str()).collect();
+    let declared: FxHashSet<&str> = fields.iter().map(|field| field.name.as_str()).collect();
     for field in fields {
         match dict.get_item(field.name.as_str()) {
             Ok(Some(item)) => {
