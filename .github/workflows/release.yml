@@ -17,6 +17,10 @@ on:
         description: "Exact version to publish (must match the built wheels)"
         type: string
         default: ""
+      attach_github_release:
+        description: "Attach the built wheels to a GitHub pre-release for off-index installs"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -95,6 +99,44 @@ jobs:
         with:
           name: sdist
           path: dist
+
+  github-release:
+    name: attach wheels to a github pre-release
+    needs: [wheels, sdist]
+    runs-on: ubuntu-latest
+    # A dispatch can attach the built artifacts to a deletable GitHub
+    # pre-release so the exact wheels install by their asset URL with no package
+    # index. The pre-release tag is a build marker (build-<version>-<run>), not
+    # a version tag, and triggers nothing: no workflow listens for tag pushes.
+    if: ${{ inputs.attach_github_release }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Cut a pre-release carrying the built wheels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          wheel="$(ls dist/*.whl 2>/dev/null | head -n1 || true)"
+          if [ -z "$wheel" ]; then
+            echo "::error::no wheels found in dist/"; exit 1
+          fi
+          version="$(basename "$wheel")"; version="${version#valgebra-}"; version="${version%%-*}"
+          tag="build-${version}-${{ github.run_number }}"
+          notes="Unofficial build of valgebra ${version} for off-index testing."
+          notes="${notes} Install a wheel matching the target platform by its"
+          notes="${notes} asset URL, e.g. uv pip install <asset-url>. Not"
+          notes="${notes} published to any package index."
+          gh release create "$tag" dist/* \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "valgebra ${version} (build ${{ github.run_number }})" \
+            --notes "$notes" \
+            --prerelease
 
   publish:
     name: publish to ${{ inputs.publish_target }}
