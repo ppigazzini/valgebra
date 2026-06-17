@@ -21,19 +21,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # `pgo: true` builds a profile-guided-optimized wheel, a measured
-        # ~30-45% faster on the validation hot paths. PGO must *run* the
-        # instrumented build to record a profile, so it is enabled only on
-        # targets the runner executes natively; the cross-compiled aarch64
-        # targets ship portable non-PGO wheels.
+        # `pgo: true` adds profile-guided optimization on top of the release
+        # profile, a measured ~30-45% faster on the validation hot paths.
+        # Recording a profile means *running* the instrumented build, so PGO
+        # applies only where the build host executes its own output: the glibc
+        # Linux (x86_64 and aarch64), macOS, and Windows x64 runners. Two
+        # targets ship a plain (non-profiled) release build instead, with the
+        # same platform compatibility: the Windows arm64 wheel, whose
+        # instrumentation profile fails to merge on that toolchain, and the
+        # musllinux wheels, which cross-build in a glibc container that cannot
+        # run a musl-linked extension to train a profile. Native musl PGO is
+        # possible in an Alpine container but is deliberately out of scope,
+        # matching the reference build toolchain.
         platform:
           - { runner: ubuntu-latest, target: x86_64, pgo: true }
-          - { runner: ubuntu-latest, target: aarch64 }
-          - { runner: ubuntu-latest, target: x86_64, manylinux: musllinux_1_2, pgo: true }
+          - { runner: ubuntu-24.04-arm, target: aarch64, pgo: true }
+          - { runner: ubuntu-latest, target: x86_64, manylinux: musllinux_1_2 }
           - { runner: ubuntu-latest, target: aarch64, manylinux: musllinux_1_2 }
-          - { runner: macos-13, target: x86_64, pgo: true }
+          # macos-15-intel is the last GitHub-hosted x86_64 macOS image (macOS
+          # 15, available through August 2027); it replaces the retired
+          # macos-13. The arm64 build below runs on macos-latest.
+          - { runner: macos-15-intel, target: x86_64, pgo: true }
           - { runner: macos-latest, target: aarch64, pgo: true }
           - { runner: windows-latest, target: x64, pgo: true }
+          - { runner: windows-11-arm, target: aarch64 }
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       # PGO merges profiles with llvm-profdata, from the llvm-tools component.
