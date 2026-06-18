@@ -103,6 +103,27 @@ impl Validator {
         }
     }
 
+    /// Union this schema with `other` (a spec or validator), placing `other`
+    /// first when it is the `|` right operand. Backs `__or__`/`__ror__`: the
+    /// fresh pool seeds with this validator's constants so its schema indices
+    /// stay valid, then `other` interns into it.
+    fn union_with(&self, other: &Bound<'_, PyAny>, other_first: bool) -> PyResult<Validator> {
+        let py = other.py();
+        let mut literals: Vec<Py<PyAny>> = self.literals.iter().map(|o| o.clone_ref(py)).collect();
+        let mut definitions = self.definitions.clone();
+        let other_schema = build_schema(other, &mut literals, &mut definitions)?;
+        let members = if other_first {
+            vec![other_schema, self.schema.clone()]
+        } else {
+            vec![self.schema.clone(), other_schema]
+        };
+        Ok(Validator::new(
+            Schema::Union(members),
+            literals,
+            definitions,
+        ))
+    }
+
     /// Whether the JSON in `bytes` parses and belongs to the schema's set,
     /// validated in place against the parsed JSON value with no intermediate
     /// Python objects. `bytes` outlives the parsed value and the walk.
@@ -392,6 +413,63 @@ impl Validator {
     ///     A validator whose every record admits only its declared keys.
     fn close(&self, py: Python<'_>) -> Validator {
         with_records_open(self, false, py)
+    }
+
+    /// Whether `obj` is a member of the schema's set: the operator form of
+    /// `is_valid`, so `obj in validator` reads as the set membership it is.
+    fn __contains__(&self, obj: &Bound<'_, PyAny>) -> bool {
+        self.is_valid(obj)
+    }
+
+    /// The union of this schema and `other`, written `validator | other`. `|` is
+    /// the one operator typing already uses for unions; intersection and
+    /// complement stay spelled out as `intersection`/`complement`. `other` is any
+    /// schema spec or validator.
+    fn __or__(&self, other: &Bound<'_, PyAny>) -> PyResult<Validator> {
+        self.union_with(other, false)
+    }
+
+    /// The union `other | validator`, used when the left operand does not handle
+    /// `|` (for example `None | validator`).
+    fn __ror__(&self, other: &Bound<'_, PyAny>) -> PyResult<Validator> {
+        self.union_with(other, true)
+    }
+
+    /// Structural equality: two validators are equal when their schema trees,
+    /// recursive definitions, and pooled constants all match. This is *syntactic*
+    /// — `union(int, str)` and `union(str, int)` are not equal — whereas
+    /// `is_equivalent` compares the sets two schemas denote regardless of shape.
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        let Ok(bound) = other.cast::<Validator>() else {
+            return false;
+        };
+        let py = bound.py();
+        let other = bound.get();
+        if self.schema != other.schema
+            || self.definitions != other.definitions
+            || self.literals.len() != other.literals.len()
+        {
+            return false;
+        }
+        // Compare pooled constants by value (identity first, so a validator
+        // equals itself even when it pools a value that is not equal to itself,
+        // such as NaN).
+        self.literals.iter().zip(&other.literals).all(|(a, b)| {
+            let (a, b) = (a.bind(py), b.bind(py));
+            a.is(b) || a.eq(b).unwrap_or(false)
+        })
+    }
+
+    /// A hash consistent with structural equality. It digests the schema shape
+    /// and definitions only, never the pooled constant values, so it stays total
+    /// (an unhashable pooled constant cannot break it) and equal validators hash
+    /// alike.
+    fn __hash__(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.schema.hash(&mut hasher);
+        self.definitions.hash(&mut hasher);
+        hasher.finish()
     }
 }
 

@@ -45,7 +45,7 @@ pub enum PathSegment {
 /// - bindings (`valgebra-py`): the single `member` membership walk (which
 ///   decides membership and, in explain mode, aggregates the violation) plus
 ///   `render`.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Schema {
     /// Top. Denotes every Python value; membership always holds.
     Anything,
@@ -173,7 +173,7 @@ pub enum Schema {
 }
 
 /// Whether a [`Schema::Seq`] denotes lists or tuples.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SeqKind {
     /// `list` values.
     List,
@@ -190,7 +190,7 @@ pub enum SeqKind {
 /// trailing `Star`. `Or` and nesting are produced only by the decision procedure
 /// (closure under the Boolean operations); the frontend emits linear shapes only,
 /// which [`SeqRegex::linear`] recognizes for the membership walk.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SeqRegex {
     /// The empty sequence.
     Empty,
@@ -421,7 +421,7 @@ impl SeqRegex {
 ///
 /// Comparison and predicate operands live in the validator's object pool; the
 /// payload is an index. Length bounds carry the length directly.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Constraint {
     /// `value >= pool[i]`.
     Ge(usize),
@@ -448,7 +448,7 @@ pub enum Constraint {
 }
 
 /// A named field of a [`Schema::KeyedMap`] or [`Schema::Object`].
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Field {
     /// The key name.
     pub name: String,

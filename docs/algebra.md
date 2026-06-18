@@ -29,6 +29,17 @@ assert not_empty_text.is_valid("x")
 assert not not_empty_text.is_valid("")
 ```
 
+Union has an operator form, `|` — the same spelling typing uses for unions — so a
+compiled validator joins with another schema directly. Intersection and
+complement stay spelled out (typing has no operator for them, and valgebra
+invents none):
+
+```python
+from valgebra import Validator, union
+
+assert (Validator(int) | str | None).is_equivalent(union(int, str, None))
+```
+
 ## The laws hold
 
 Because membership is Boolean and the combinators are exactly *or*, *and*, and

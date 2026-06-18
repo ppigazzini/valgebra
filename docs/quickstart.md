@@ -19,11 +19,20 @@ assert not is_int.is_valid("42")
 
 A validator has three entry points:
 
-- `is_valid(obj)` returns a `bool` (the fast path).
+- `is_valid(obj)` returns a `bool` (the fast path). Since validation is set
+  membership, `obj in validator` is the same check written as an operator.
 - `validate(obj)` returns `None` or raises `ValidationError`.
 - `ensure(obj)` validates and returns the object unchanged (the explicit,
   separate value-returning mode — validation is a membership check, so there is
   nothing to convert).
+
+```python
+from valgebra import Validator
+
+ints = Validator(list[int])
+assert [1, 2, 3] in ints  # membership, the operator form of is_valid
+assert ["x"] not in ints
+```
 
 ## Schemas are standard annotations
 
