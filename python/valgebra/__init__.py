@@ -4,11 +4,9 @@ from ._valgebra import (
     Validator,
     anything,
     complement,
-    fixed_sequence,
     intersection,
     nothing,
     recursive,
-    simplify,
     union,
 )
 
@@ -18,10 +16,8 @@ __all__ = [
     "Validator",
     "anything",
     "complement",
-    "fixed_sequence",
     "intersection",
     "nothing",
     "recursive",
-    "simplify",
     "union",
 ]

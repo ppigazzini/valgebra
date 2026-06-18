@@ -67,37 +67,37 @@ assert Validator(tuple[str, int, ...]).is_valid(("x", 1, 2))
 
 ## Native forms
 
-Compact literals build the same nodes without importing typing:
+A native form exists only where standard typing **cannot** spell the set: the
+list literal carries the sequence shapes typing has no syntax for. Everything a
+typing annotation already expresses is written that way — `set[T]`, not `{T}`;
+`tuple[A, B]`, not `(A, B)`; both literals are rejected with a message pointing
+to the typing spelling.
 
-| Native form | Equivalent |
+| Native form | Denotes |
 | --- | --- |
-| `[T]` | `list[T]` |
-| `[T, ...]` | `list[T]` |
-| `{T}` | `set[T]` |
-| `{KeyType: ValueType}` | `dict[KeyType, ValueType]` |
+| `[T]` | `list[T]` — a homogeneous list (the single-element idiom) |
+| `[T, ...]` | `list[T]` — homogeneous, written with the tail marker |
+| `[A, B]` | a **fixed-length list**, matched positionally (`list[A, B]` is illegal typing) |
+| `[A, B, ...]` | a fixed prefix, then a repeated tail (see below) |
+| `{K: V}` | `dict[K, V]` |
 | `{"key": T, "key2?": T}` | a **record** (see below) |
 | any constant `c` | `Literal[c]` |
 
 ```python
 from valgebra import Validator
 
-assert Validator([int]).is_valid([1, 2])           # list[int]
-assert Validator({int}).is_valid({1, 2})           # set[int]
+assert Validator([int]).is_valid([1, 2])           # homogeneous list[int]
+assert Validator([int, str]).is_valid([1, "a"])    # fixed-length list
+assert not Validator([int, str]).is_valid([1])     # wrong length
 assert Validator({str: int}).is_valid({"a": 1})    # dict[str, int]
 assert Validator("active").is_valid("active")      # the literal "active"
 ```
 
-A **fixed-length list** matched positionally is built with `fixed_sequence`
-(see the [API reference](api.md)):
-
-```python
-from valgebra import fixed_sequence
-
-pair = fixed_sequence(int, str)
-assert pair.is_valid([1, "a"])
-assert not pair.is_valid([1, 2])
-assert not pair.is_valid([1])  # wrong length
-```
+A **fixed-length list** is matched positionally: element `i` must satisfy the
+`i`th schema and the length must match. typing cannot spell it (`list[A, B]` is
+illegal), which is the reason the list literal carries the shape; a fixed-length
+*tuple* is the typing `tuple[A, B]`, and the container is part of the type, so a
+list is never a member of the tuple form and vice versa.
 
 ### Prefix and repeated tail
 

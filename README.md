@@ -134,14 +134,14 @@ lattice laws (`complement(anything)` is `nothing`, `intersection(anything, s)` i
 `s`), while `Any` is an atom the simplifier never rewrites, preserving
 "deliberately unchecked" as distinct from "checked: all values admitted".
 
-`simplify(validator)` reduces a schema by the lattice laws while admitting
+`validator.simplify()` reduces a schema by the lattice laws while admitting
 exactly the same values:
 
 ```python
-from valgebra import complement, simplify, union
+from valgebra import complement, union
 
-assert repr(simplify(complement(complement(int)))) == "int"
-assert repr(simplify(union(int, int))) == "int"
+assert repr(complement(complement(int)).simplify()) == "int"
+assert repr(union(int, int).simplify()) == "int"
 ```
 
 ### Comparing schemas as sets

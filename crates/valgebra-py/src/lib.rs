@@ -21,7 +21,7 @@ use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyString, PyTuple, PyType};
 use rustc_hash::FxHashSet;
-use valgebra_core::{LeafRelations, Schema, SeqRegex, fresh_self_token};
+use valgebra_core::{LeafRelations, Schema, fresh_self_token};
 
 use crate::build::{build_schema, combine};
 use crate::check::{Ctx, ValidatorIndex, build_index, member};
@@ -440,6 +440,23 @@ impl Validator {
         with_records_open(self, false, py)
     }
 
+    /// An equivalent validator reduced by the lattice laws.
+    ///
+    /// The result admits exactly the same values in a simpler form (flattened
+    /// and deduplicated unions and intersections, identities applied,
+    /// complements in negation-normal form). Returns a new validator; this one
+    /// is unchanged.
+    ///
+    /// Returns:
+    ///     A validator denoting the same set in negation-normal form.
+    fn simplify(&self, py: Python<'_>) -> Validator {
+        Validator::new(
+            self.schema.simplify(),
+            self.literals.iter().map(|o| o.clone_ref(py)).collect(),
+            self.definitions.clone(),
+        )
+    }
+
     /// Whether `obj` is a member of the schema's set: the operator form of
     /// `is_valid`, so `obj in validator` reads as the set membership it is.
     fn __contains__(&self, obj: &Bound<'_, PyAny>) -> bool {
@@ -571,14 +588,6 @@ fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
     combine(schemas, Schema::Intersection)
 }
 
-/// A fixed-length list matched positionally: element `i` must satisfy the `i`th
-/// member schema, and the list length must equal the number of members.
-#[pyfunction]
-#[pyo3(signature = (*members))]
-fn fixed_sequence(members: &Bound<'_, PyTuple>) -> PyResult<Validator> {
-    combine(members, |elements| Schema::list(SeqRegex::fixed(elements)))
-}
-
 /// The complement of a schema: every value not in its set.
 #[pyfunction]
 fn complement(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
@@ -595,20 +604,6 @@ fn complement(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
 fn with_records_open(validator: &Validator, open: bool, py: Python<'_>) -> Validator {
     Validator::new(
         validator.schema.with_records_open(open),
-        validator.literals.iter().map(|o| o.clone_ref(py)).collect(),
-        validator.definitions.clone(),
-    )
-}
-
-/// An equivalent validator reduced by the lattice laws.
-///
-/// The result admits exactly the same values in a simpler form (flattened and
-/// deduplicated unions and intersections, identities applied, complements in
-/// negation-normal form). Returns a new validator; the original is unchanged.
-#[pyfunction]
-fn simplify(validator: &Validator, py: Python<'_>) -> Validator {
-    Validator::new(
-        validator.schema.simplify(),
         validator.literals.iter().map(|o| o.clone_ref(py)).collect(),
         validator.definitions.clone(),
     )
@@ -704,8 +699,6 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(union, module)?)?;
     module.add_function(wrap_pyfunction!(intersection, module)?)?;
     module.add_function(wrap_pyfunction!(complement, module)?)?;
-    module.add_function(wrap_pyfunction!(fixed_sequence, module)?)?;
-    module.add_function(wrap_pyfunction!(simplify, module)?)?;
     module.add_function(wrap_pyfunction!(recursive, module)?)?;
     // The lattice bounds: top admits every value, bottom admits none.
     module.add("anything", atom(py, Schema::Anything)?)?;

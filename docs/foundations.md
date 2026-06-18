@@ -77,9 +77,9 @@ fragment** and is honest about the rest:
 
 - **Folded by the simplifier.** The complement laws (`X ∩ ¬X = ⊥`,
   `X ∪ ¬X = ⊤`) for any `X` except the gradual `Any`, and disjointness of the
-  scalar fragment. So `simplify(intersection(int, complement(int)))` is `nothing`
-  and `simplify(intersection(int, str))` is `nothing`. It never treats `Any` as the
-  top, so a deliberately-unchecked schema is preserved.
+  scalar fragment. So `intersection(int, complement(int)).simplify()` is
+  `nothing` and `intersection(int, str).simplify()` is `nothing`. It never treats
+  `Any` as the top, so a deliberately-unchecked schema is preserved.
 - **Decided by the comparison operators.** `is_subtype_of`, `is_equivalent`, and
   `is_empty` decide a wider fragment than the simplifier folds — class and literal
   inclusion, refinements (including the emptiness of contradictory bounds like

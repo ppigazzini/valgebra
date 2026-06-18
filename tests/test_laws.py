@@ -16,7 +16,6 @@ from valgebra import (
     complement,
     intersection,
     nothing,
-    simplify,
     union,
 )
 
@@ -151,26 +150,26 @@ def test_distributivity(a: object, b: object, c: object) -> None:
 @given(a=schemas, b=schemas, c=schemas)
 def test_simplify_preserves_acceptance(a: object, b: object, c: object) -> None:
     original = complement(union(a, intersection(b, complement(c))))
-    assert equivalent(original, simplify(original))
+    assert equivalent(original, original.simplify())
 
 
 @given(a=schemas, b=schemas)
 def test_simplify_is_idempotent_on_acceptance(a: object, b: object) -> None:
-    once = simplify(intersection(a, complement(b)))
-    twice = simplify(once)
+    once = intersection(a, complement(b)).simplify()
+    twice = once.simplify()
     assert equivalent(once, twice)
 
 
 def test_simplify_decides_the_complement_laws() -> None:
     # The decision the conservative canonicalizer could not make: a schema and
     # its complement collapse, and provably disjoint types collapse.
-    assert repr(simplify(intersection(int, complement(int)))) == "nothing"
-    assert repr(simplify(union(int, complement(int)))) == "anything"
-    assert repr(simplify(intersection(int, str))) == "nothing"
-    assert repr(simplify(union(complement(int), complement(str)))) == "anything"
+    assert repr(intersection(int, complement(int)).simplify()) == "nothing"
+    assert repr(union(int, complement(int)).simplify()) == "anything"
+    assert repr(intersection(int, str).simplify()) == "nothing"
+    assert repr(union(complement(int), complement(str)).simplify()) == "anything"
 
 
 def test_simplify_leaves_the_gradual_any_uncollapsed() -> None:
     # `Any` is unchecked, not the lattice top, so the complement laws skip it.
-    assert repr(simplify(intersection(Any, complement(Any)))) != "nothing"
-    assert repr(simplify(union(Any, complement(Any)))) != "anything"
+    assert repr(intersection(Any, complement(Any)).simplify()) != "nothing"
+    assert repr(union(Any, complement(Any)).simplify()) != "anything"

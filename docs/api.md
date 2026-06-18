@@ -15,14 +15,10 @@ from the top-level `valgebra` namespace.
 
 ::: valgebra.complement
 
-::: valgebra.simplify
-
-## Structural builders
-
-::: valgebra.fixed_sequence
-
-Opening and closing a record's key set are methods on the compiled validator
-(`Validator.open` and `Validator.close`), documented above.
+The whole-schema transforms `simplify` (reduce by the lattice laws), `open`, and
+`close` (a record's key set) are methods on the compiled validator
+(`Validator.simplify`/`open`/`close`), documented above. A fixed-length list is
+the native `[A, B]` literal (see the [schema language](schema-language.md)).
 
 ## Refinement markers
 

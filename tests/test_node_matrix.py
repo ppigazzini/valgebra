@@ -18,11 +18,9 @@ import pytest
 from valgebra import (
     Validator,
     complement,
-    fixed_sequence,
     intersection,
     nothing,
     recursive,
-    simplify,
     union,
 )
 
@@ -79,14 +77,14 @@ def test_every_node_is_reachable_and_handled(spec: object) -> None:
     assert compiled.is_subtype_of(spec)  # reflexivity
     assert compiled.is_equivalent(spec)  # self-equivalence
     # The rendered form is stable under simplification.
-    assert repr(simplify(compiled)) == repr(simplify(simplify(compiled)))
+    assert repr(compiled.simplify()) == repr(compiled.simplify().simplify())
 
 
 # Each sequence shape must be reachable via both containers; the list and tuple
 # forms of one shape are unrelated, since the container is part of the type.
 _SHAPES: dict[str, tuple[object, object]] = {
     "homogeneous": (list[int], tuple[int, ...]),
-    "fixed": (fixed_sequence(int, str), tuple[int, str]),
+    "fixed": ([int, str], tuple[int, str]),
     "prefixtail": ([int, int, ...], _pt_tuple(int, int, ...)),
 }
 

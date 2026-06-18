@@ -57,10 +57,12 @@ impl Drop for BuildGuard {
 /// Build the IR from a native Python schema description.
 ///
 /// Recognized forms: the scalar types and `None`/`type(None)`; `object` as the
-/// top schema; `[T]`/`[T, ...]` as a list; `(A, B, ...)` as a fixed tuple;
-/// `{T}` as a set; a single `{KeyType: ValueType}` entry as a mapping; an
-/// all-string-key dict as a closed record (a trailing `"?"` marks an optional
-/// key); any other value as an exact-value literal.
+/// top schema and `Never`/`NoReturn` as the bottom; the list literal `[T]`
+/// (homogeneous), `[A, B]` (fixed-length), and `[A, B, ...]` (prefix-plus-tail);
+/// a single `{KeyType: ValueType}` entry as a mapping; an all-string-key dict as
+/// a closed record (a trailing `"?"` marks an optional key); any other value as
+/// an exact-value literal. Set literals (`{T}`) and tuple literals (`(A, B)`)
+/// are rejected: they duplicate `set[T]`/`tuple[...]`, which typing spells.
 pub(crate) fn build_schema(
     obj: &Bound<'_, PyAny>,
     lits: &mut Vec<Py<PyAny>>,
@@ -132,15 +134,21 @@ pub(crate) fn build_schema(
     if let Ok(list) = obj.cast::<PyList>() {
         return build_sequence(list, lits, defs);
     }
-    if let Ok(tuple) = obj.cast::<PyTuple>() {
-        let mut elements = Vec::with_capacity(tuple.len());
-        for item in tuple.iter() {
-            elements.push(build_schema(&item, lits, defs)?);
-        }
-        return Ok(Schema::tuple(SeqRegex::fixed(elements)));
+    // A tuple literal duplicates `tuple[...]`, which typing spells, so it is not
+    // a native form. (The list literal exists only because typing cannot spell a
+    // fixed-length list: `[A, B]` is the fixed list, `tuple[A, B]` the tuple.)
+    if obj.is_instance_of::<PyTuple>() {
+        return Err(not_implemented(
+            "a tuple literal is not a schema; write a fixed-length tuple as \
+             tuple[A, B] (the list literal [A, B] is the fixed-length list)",
+        ));
     }
-    if let Ok(set) = obj.cast::<PySet>() {
-        return build_set(set, lits, defs);
+    // A set literal duplicates `set[T]`, which typing spells, so it is not a
+    // native form either.
+    if obj.is_instance_of::<PySet>() {
+        return Err(not_implemented(
+            "a set literal is not a schema; write a set as set[T]",
+        ));
     }
     if let Ok(dict) = obj.cast::<PyDict>() {
         return build_dict(dict, lits, defs);
@@ -512,7 +520,7 @@ fn build_sequence(
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
     let len = list.len();
-    // [T]: a homogeneous list of T.
+    // [T]: a homogeneous list of T (the single-element idiom).
     if len == 1 && !is_ellipsis(&list.get_item(0)?) {
         let element = build_schema(&list.get_item(0)?, lits, defs)?;
         return Ok(Schema::list(SeqRegex::homogeneous(element)));
@@ -539,25 +547,20 @@ fn build_sequence(
         };
         return Ok(Schema::list(regex));
     }
-    Err(not_implemented(
-        "a list schema must be [T], [T, ...], or [A, ..., Z, ...]; \
-         other list shapes are not supported",
-    ))
-}
-
-fn build_set(
-    set: &Bound<'_, PySet>,
-    lits: &mut Vec<Py<PyAny>>,
-    defs: &mut Vec<Schema>,
-) -> PyResult<Schema> {
-    if set.len() == 1
-        && let Some(element) = set.iter().next()
-    {
-        return Ok(Schema::Set(Box::new(build_schema(&element, lits, defs)?)));
+    // [A, B]: a fixed-length list matched positionally (and `[]` the empty list).
+    // typing cannot spell a fixed-length list (`list[A, B]` is illegal), so the
+    // list literal carries this shape; `tuple[A, B]` is the tuple counterpart.
+    let mut elements = Vec::with_capacity(len);
+    for index in 0..len {
+        let item = list.get_item(index)?;
+        if is_ellipsis(&item) {
+            return Err(not_implemented(
+                "`...` may appear only as the last element of a list schema",
+            ));
+        }
+        elements.push(build_schema(&item, lits, defs)?);
     }
-    Err(not_implemented(
-        "a set schema must have exactly one element, as in {T}",
-    ))
+    Ok(Schema::list(SeqRegex::fixed(elements)))
 }
 
 fn build_dict(

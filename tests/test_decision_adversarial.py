@@ -20,7 +20,6 @@ from valgebra import (
     complement,
     intersection,
     recursive,
-    simplify,
     union,
 )
 
@@ -151,7 +150,7 @@ def test_membership_walks_and_paths_agree(sa: object, v: object) -> None:
     except ValidationError:
         explained = False
     assert member == explained
-    assert simplify(compiled).is_valid(v) == member
+    assert compiled.simplify().is_valid(v) == member
     if _json_safe(v):
         text = json.dumps(v)
         assert compiled.is_valid_json(text) == compiled.is_valid(json.loads(text))

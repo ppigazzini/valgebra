@@ -25,25 +25,25 @@ def test_sequence_rejects_a_non_list() -> None:
 
 
 def test_tuple_matches_positionally() -> None:
-    schema = Validator((int, str))
+    schema = Validator(tuple[int, str])
     assert schema.is_valid((1, "a"))
     assert not schema.is_valid((1, 2))
 
 
 def test_tuple_length_must_match() -> None:
-    schema = Validator((int, str))
+    schema = Validator(tuple[int, str])
     with pytest.raises(ValidationError) as info:
         schema.validate((1,))
     assert info.value.code == "tuple_length"
 
 
 def test_set_accepts_a_homogeneous_set() -> None:
-    assert Validator({int}).is_valid({1, 2, 3})
-    assert not Validator({int}).is_valid({1, "x"})
+    assert Validator(set[int]).is_valid({1, 2, 3})
+    assert not Validator(set[int]).is_valid({1, "x"})
 
 
 def test_set_rejects_a_non_set() -> None:
-    assert not Validator({int}).is_valid([1, 2])
+    assert not Validator(set[int]).is_valid([1, 2])
 
 
 def test_mapping_checks_keys_and_values() -> None:

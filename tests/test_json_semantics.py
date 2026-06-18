@@ -24,7 +24,6 @@ from hypothesis import strategies as st
 from valgebra import (
     Validator,
     complement,
-    fixed_sequence,
     intersection,
     recursive,
     union,
@@ -156,7 +155,7 @@ def test_is_valid_json_rejects_non_string_input() -> None:
 
 
 def test_fixed_length_list_over_json() -> None:
-    v = fixed_sequence(int, str)
+    v = Validator([int, str])
     assert v.is_valid_json('[1, "a"]') is True
     assert v.is_valid_json("[1, 2]") is False
     assert v.is_valid_json("[1]") is False  # wrong length
@@ -244,6 +243,6 @@ def test_json_walk_matches_the_object_walk(spec: object, value: object) -> None:
 def test_fixed_and_variadic_sequences_reject_wrong_json_shapes() -> None:
     # A fixed-length list schema rejects a non-array JSON; a tuple (fixed or
     # variadic) never matches JSON, which has no tuples.
-    assert fixed_sequence(int, str).is_valid_json("{}") is False
-    assert fixed_sequence(int, str).is_valid_json("5") is False
+    assert Validator([int, str]).is_valid_json("{}") is False
+    assert Validator([int, str]).is_valid_json("5") is False
     assert Validator(tuple[int, ...]).is_valid_json("[1, 2]") is False

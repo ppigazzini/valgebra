@@ -17,7 +17,6 @@ import pytest
 from valgebra import (
     ValidationError,
     Validator,
-    fixed_sequence,
 )
 
 
@@ -80,7 +79,7 @@ def test_aggregation_collects_every_failure_then_fail_fast_stops() -> None:
 
 def test_fixed_length_list_wrong_type_reports_list_type() -> None:
     with pytest.raises(ValidationError) as info:
-        fixed_sequence(int, int).validate("not a list", fail_fast=True)
+        Validator([int, int]).validate("not a list", fail_fast=True)
     assert info.value.code == "list_type"
 
 
@@ -138,7 +137,7 @@ def test_malformed_schema_forms_are_rejected() -> None:
     with pytest.raises(NotImplementedError):
         Validator(GenericAlias(dict, (int,)))  # dict needs key and value
     with pytest.raises(NotImplementedError):
-        Validator([int, str, float])  # a list schema is [T] or [T, ...]
+        Validator([int, ..., str])  # `...` may appear only as the last element
 
 
 def test_native_list_forms_compile_and_check() -> None:
@@ -171,11 +170,16 @@ def test_fail_fast_stops_at_the_first_extra_key() -> None:
     assert info.value.code == "extra_key"
 
 
-def test_native_set_form_compiles_and_checks() -> None:
-    v = Validator({int})
-    assert v.is_valid({1, 2})
-    assert not v.is_valid({1, "x"})
-    assert not v.is_valid([1])
+def test_set_and_tuple_literals_are_rejected() -> None:
+    # A set literal duplicates set[T] and a tuple literal duplicates tuple[...],
+    # so neither is a native schema form; both point at the typing spelling.
+    with pytest.raises(NotImplementedError, match="set"):
+        Validator({int})
+    with pytest.raises(NotImplementedError, match="tuple"):
+        Validator((int, str))
+    # set[T] is the way to spell a set schema
+    assert Validator(set[int]).is_valid({1, 2})
+    assert not Validator(set[int]).is_valid({1, "x"})
 
 
 @pytest.mark.parametrize(
@@ -210,7 +214,7 @@ def test_single_argument_generics_reject_extra_args() -> None:
 # (validator, value with two wrong-typed elements). Each collection's explain
 # walk aggregates by default and stops at the first failure under fail_fast.
 _COLLECTIONS = [
-    ("fixed_sequence", Validator(fixed_sequence(int, int)), ["x", "y"]),
+    ("fixed_list", Validator([int, int]), ["x", "y"]),
     ("tuple", Validator(tuple[int, int]), ("x", "y")),
     ("variadic_tuple", Validator(tuple[int, ...]), (1, "x", "y")),
     ("set", Validator(set[int]), {"a", "b"}),

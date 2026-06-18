@@ -18,7 +18,6 @@ from valgebra import (
     ValidationError,
     Validator,
     complement,
-    fixed_sequence,
     intersection,
     nothing,
     recursive,
@@ -66,7 +65,7 @@ def test_collection_type_codes() -> None:
 
 def test_length_codes() -> None:
     # A fixed-length list and a fixed tuple report a length mismatch.
-    assert _first(fixed_sequence(int, int), [1]) == ("list_length", ())
+    assert _first(Validator([int, int]), [1]) == ("list_length", ())
     assert _first(tuple[int, int], (1,)) == ("tuple_length", ())
 
 

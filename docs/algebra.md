@@ -163,16 +163,16 @@ assert not exactly_one.is_valid({})
 
 ## The simplifier
 
-`simplify` reduces a schema by the lattice laws while admitting **exactly the
-same values**. It flattens nested unions and
+`simplify` is a method that reduces a schema by the lattice laws while admitting
+**exactly the same values**. It flattens nested unions and
 intersections, drops duplicates and identities, and pushes complements to
 negation-normal form:
 
 ```python
-from valgebra import complement, simplify, union
+from valgebra import complement, union
 
-assert repr(simplify(complement(complement(int)))) == "int"
-assert repr(simplify(union(int, int))) == "int"
+assert repr(complement(complement(int)).simplify()) == "int"
+assert repr(union(int, int).simplify()) == "int"
 ```
 
 It also decides the **complement laws** and provable **disjointness**: a schema
@@ -181,16 +181,17 @@ joined with its complement, or with the complement of a disjoint type, is
 everything.
 
 ```python
-from valgebra import complement, intersection, simplify, union
+from valgebra import complement, intersection, union
 
-assert repr(simplify(intersection(int, complement(int)))) == "nothing"
-assert repr(simplify(union(int, complement(int)))) == "anything"
-assert repr(simplify(intersection(int, str))) == "nothing"  # disjoint types
+assert repr(intersection(int, complement(int)).simplify()) == "nothing"
+assert repr(union(int, complement(int)).simplify()) == "anything"
+assert repr(intersection(int, str).simplify()) == "nothing"  # disjoint types
 ```
 
 The simplifier folds the scalar Boolean fragment — the builtin scalars (with
-`bool` a subtype of `int`) and the complement laws — so `simplify(intersection(int,
-str))` is `nothing`. It never treats `Any` as the top, so a deliberately-unchecked
+`bool` a subtype of `int`) and the complement laws — so
+`intersection(int, str).simplify()` is `nothing`. It never treats `Any` as the
+top, so a deliberately-unchecked
 schema is preserved. The comparison operators below decide a wider fragment than
 the simplifier folds; the [decidability boundary](decidability.md) maps exactly
 what is decided.
@@ -240,10 +241,10 @@ Both admit every value at runtime, but they are different in the algebra:
 ```python
 from typing import Any
 
-from valgebra import anything, complement, simplify, Validator
+from valgebra import Validator, anything, complement
 
-assert repr(simplify(complement(anything))) == "nothing"
-assert repr(simplify(Validator(Any))) == "Any"  # left untouched
+assert repr(complement(anything).simplify()) == "nothing"
+assert repr(Validator(Any).simplify()) == "Any"  # left untouched
 ```
 
 This keeps "checked: every value is admitted" (`anything`) distinct from

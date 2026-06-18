@@ -105,14 +105,14 @@ The theory this rests on is in [docs/foundations.md](docs/foundations.md).
 
 The package re-exports everything from the top-level `valgebra` namespace:
 the `Validator` class -- `Validator(schema)` compiles a schema -- and its
-methods (`validate`, `is_valid`, `ensure`, `validate_json`, `is_valid_json`, the
-record transforms `open` and `close`, and the set relations `is_subtype_of`,
-`is_equivalent`, `is_empty`);
-the combinators `union`, `intersection`, `complement`, and `simplify`; the
-structural builder `fixed_sequence`; the `recursive` fixpoint; the `Regex`
-refinement marker; the lattice bounds `anything` and `nothing`; and
-`ValidationError`. Conditional fields and key cardinality are composed from the
-algebra (documented recipes), not shipped as combinators.
+methods (`validate`, `is_valid`, `ensure`, `validate_json`, `load`,
+`is_valid_json`, the whole-schema transforms `simplify`, `open`, and `close`,
+and the set relations `is_subtype_of`, `is_equivalent`, `is_empty`); the
+combinators `union`, `intersection`, and `complement`; the `recursive` fixpoint;
+the `Regex` refinement marker; the lattice bounds `anything` and `nothing`; and
+`ValidationError`. A fixed-length list is the native `[A, B]` literal.
+Conditional fields and key cardinality are composed from the algebra (documented
+recipes), not shipped as combinators.
 
 ## Invariants
 
