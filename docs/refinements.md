@@ -11,9 +11,9 @@ from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import validator
+from valgebra import Validator
 
-adult = validator(Annotated[int, at.Ge(18), at.Le(150)])
+adult = Validator(Annotated[int, at.Ge(18), at.Le(150)])
 assert adult.is_valid(21)
 assert not adult.is_valid(5)
 ```
@@ -28,13 +28,13 @@ from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import validator
+from valgebra import Validator
 
-assert validator(Annotated[int, at.Ge(0)]).is_subtype_of(int)  # refinement <= base
-assert validator(Annotated[int, at.Ge(0), at.Le(10)]).is_subtype_of(
+assert Validator(Annotated[int, at.Ge(0)]).is_subtype_of(int)  # refinement <= base
+assert Validator(Annotated[int, at.Ge(0), at.Le(10)]).is_subtype_of(
     Annotated[int, at.Ge(0)]  # a tighter bound is a subtype of a looser one
 )
-assert validator(Annotated[int, at.Ge(10), at.Le(0)]).is_empty()  # no such int
+assert Validator(Annotated[int, at.Ge(10), at.Le(0)]).is_empty()  # no such int
 ```
 
 A predicate marker is checked at validation time but stays opaque to subtyping
@@ -66,14 +66,14 @@ pattern is rejected when the validator is built, not at first use. A compiled
 import re
 from typing import Annotated
 
-from valgebra import Regex, validator
+from valgebra import Regex, Validator
 
-oid = validator(Annotated[str, Regex(r"[0-9a-f]{24}")])
+oid = Validator(Annotated[str, Regex(r"[0-9a-f]{24}")])
 assert oid.is_valid("0123456789abcdef01234567")
 assert not oid.is_valid("0123456789abcdef0123456X")  # not hex
 assert not oid.is_valid("0123")  # not the full 24 characters
 
-assert validator(Annotated[str, re.compile(r"\d+")]).is_valid("123")
+assert Validator(Annotated[str, re.compile(r"\d+")]).is_valid("123")
 ```
 
 The compound markers `Interval` and `Len` expand to the bounds they carry, so
@@ -85,15 +85,15 @@ from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import validator
+from valgebra import Validator
 
-assert validator(Annotated[int, at.Interval(ge=0, le=10)]).is_valid(5)
-assert not validator(Annotated[int, at.Interval(ge=0, le=10)]).is_valid(11)
-assert validator(Annotated[str, at.Len(2, 4)]).is_valid("abc")
-assert not validator(Annotated[str, at.Len(2, 4)]).is_valid("a")
+assert Validator(Annotated[int, at.Interval(ge=0, le=10)]).is_valid(5)
+assert not Validator(Annotated[int, at.Interval(ge=0, le=10)]).is_valid(11)
+assert Validator(Annotated[str, at.Len(2, 4)]).is_valid("abc")
+assert not Validator(Annotated[str, at.Len(2, 4)]).is_valid("a")
 
-assert validator(Annotated[int, at.MultipleOf(3)]).is_valid(9)
-assert not validator(Annotated[int, at.MultipleOf(3)]).is_valid(5)
+assert Validator(Annotated[int, at.MultipleOf(3)]).is_valid(9)
+assert not Validator(Annotated[int, at.MultipleOf(3)]).is_valid(5)
 ```
 
 ## Predicates: the slow path
@@ -107,9 +107,9 @@ from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import validator
+from valgebra import Validator
 
-even = validator(Annotated[int, at.Predicate(lambda x: x % 2 == 0)])
+even = Validator(Annotated[int, at.Predicate(lambda x: x % 2 == 0)])
 assert even.is_valid(4)
 assert not even.is_valid(3)
 ```
@@ -128,15 +128,15 @@ from typing import Annotated, TypedDict
 
 import annotated_types as at
 
-from valgebra import validator
+from valgebra import Validator
 
 
 class Account(TypedDict):
     balance: Annotated[int, at.Ge(0)]
 
 
-assert validator(Account).is_valid({"balance": 100})
-assert not validator(Account).is_valid({"balance": -1})
+assert Validator(Account).is_valid({"balance": 100})
+assert not Validator(Account).is_valid({"balance": -1})
 ```
 
 ## Unrecognized markers
@@ -148,7 +148,7 @@ markers) is harmless and carries no membership meaning.
 ```python
 from typing import Annotated
 
-from valgebra import validator
+from valgebra import Validator
 
-assert repr(validator(Annotated[int, "a documentation note"])) == "int"
+assert repr(Validator(Annotated[int, "a documentation note"])) == "int"
 ```

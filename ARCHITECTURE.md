@@ -44,7 +44,7 @@ flowchart LR
     SPEC["typing annotation /<br/>native form / compiled validator"] --> FE
     FE --> IR
     FE -. interns .-> POOL[("constants pool<br/>literals · classes · predicates")]
-    IR --> CV(["CompiledValidator"])
+    IR --> CV(["Validator"])
 
     OBJ["Python object"] --> INP
     JS["JSON str/bytes<br/>(jiter)"] --> INP
@@ -60,7 +60,7 @@ flowchart LR
 reads a typing annotation, a native form (a dict literal as a closed record, a
 constant as a typed literal), or an already-compiled validator, and builds the
 `Schema` IR, interning any literal, class, or predicate it references into the
-constants pool. The result is wrapped in an immutable `CompiledValidator`.
+constants pool. The result is wrapped in an immutable `Validator`.
 
 **Validate fast.** Each call crosses into Rust once. The value — a Python object
 or a JSON document — is presented through one `Value` abstraction
@@ -104,9 +104,10 @@ The theory this rests on is in [docs/foundations.md](docs/foundations.md).
 ## Public surface
 
 The package re-exports everything from the top-level `valgebra` namespace:
-`validator` and the `CompiledValidator` it returns (`validate`, `is_valid`,
-`ensure`, `validate_json`, `is_valid_json`, the record transforms `open` and
-`close`, and the set relations `is_subtype_of`, `is_equivalent`, `is_empty`);
+the `Validator` class -- `Validator(schema)` compiles a schema -- and its
+methods (`validate`, `is_valid`, `ensure`, `validate_json`, `is_valid_json`, the
+record transforms `open` and `close`, and the set relations `is_subtype_of`,
+`is_equivalent`, `is_empty`);
 the combinators `union`, `intersection`, `complement`, and `simplify`; the
 structural builder `fixed_sequence`; the `recursive` fixpoint; the `Regex`
 refinement marker; the lattice bounds `anything` and `nothing`; and

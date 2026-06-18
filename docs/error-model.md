@@ -27,10 +27,10 @@ independent failure — each record field, each sequence or tuple element, each
 mapping entry — into `errors`, so one call reports all the problems with a value.
 
 ```python
-from valgebra import ValidationError, validator
+from valgebra import ValidationError, Validator
 
 try:
-    validator({"a": int, "b": str, "c": int}).validate({"a": "x", "b": 1, "c": "y"})
+    Validator({"a": int, "b": str, "c": int}).validate({"a": "x", "b": 1, "c": "y"})
 except ValidationError as err:
     assert [e["path"] for e in err.errors] == [("a",), ("b",), ("c",)]
 ```
@@ -38,10 +38,10 @@ except ValidationError as err:
 Pass `fail_fast=True` to stop at the first failure instead:
 
 ```python
-from valgebra import ValidationError, validator
+from valgebra import ValidationError, Validator
 
 try:
-    validator({"a": int, "b": str}).validate({"a": "x", "b": 1}, fail_fast=True)
+    Validator({"a": int, "b": str}).validate({"a": "x", "b": 1}, fail_fast=True)
 except ValidationError as err:
     assert len(err.errors) == 1
 ```
@@ -79,9 +79,9 @@ the JSON output mode is the standard library:
 ```python
 import json
 
-from valgebra import ValidationError, validator
+from valgebra import ValidationError, Validator
 
-schema = validator({"name": str, "age": int})
+schema = Validator({"name": str, "age": int})
 try:
     schema.validate({"name": "Ada", "age": "old"})
 except ValidationError as err:

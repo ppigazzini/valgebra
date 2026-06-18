@@ -34,17 +34,17 @@ from typing import Annotated, Literal, TypedDict
 
 import annotated_types as at
 
-from valgebra import validator
+from valgebra import Validator
 
-assert validator(int).is_valid(42)                        # scalars
-assert validator(list[int]).is_valid([1, 2, 3])           # generics
-assert validator(dict[str, int]).is_valid({"a": 1})
-assert validator(tuple[int, ...]).is_valid((1, 2, 3))
-assert validator(int | None).is_valid(None)               # unions and Optional
-assert validator(Literal["red", "green"]).is_valid("red")  # literals
+assert Validator(int).is_valid(42)                        # scalars
+assert Validator(list[int]).is_valid([1, 2, 3])           # generics
+assert Validator(dict[str, int]).is_valid({"a": 1})
+assert Validator(tuple[int, ...]).is_valid((1, 2, 3))
+assert Validator(int | None).is_valid(None)               # unions and Optional
+assert Validator(Literal["red", "green"]).is_valid("red")  # literals
 
 # refinements via Annotated and annotated-types
-adult = validator(Annotated[int, at.Ge(18), at.Le(150)])
+adult = Validator(Annotated[int, at.Ge(18), at.Le(150)])
 assert adult.is_valid(21)
 assert not adult.is_valid(5)
 
@@ -55,11 +55,11 @@ class User(TypedDict):
     age: Annotated[int, at.Ge(0)]
 
 
-assert validator(User).is_valid({"name": "Ada", "age": 36})
-assert not validator(User).is_valid({"name": "Ada", "age": -1})  # field bound holds
+assert Validator(User).is_valid({"name": "Ada", "age": 36})
+assert not Validator(User).is_valid({"name": "Ada", "age": -1})  # field bound holds
 ```
 
-`validator(schema)` builds an immutable validator with `validate` (raises),
+`Validator(schema)` builds an immutable validator with `validate` (raises),
 `is_valid` (returns a bool), and `ensure` (validates, returns the object). A
 failure raises `ValidationError` carrying a machine-readable `code`, the `path`
 to the offending value, the `expected` label, and a `value` summary.
@@ -69,20 +69,20 @@ valgebra also accepts compact native forms — a dict literal is a closed record
 literal. A compiled schema prints back as the annotation that produced it:
 
 ```python
-from valgebra import ValidationError, validator
+from valgebra import ValidationError, Validator
 
-user = validator({"name": str, "age?": int})         # record, closed by default
+user = Validator({"name": str, "age?": int})         # record, closed by default
 assert user.is_valid({"name": "Ada"})
 assert not user.is_valid({"name": "Ada", "x": 1})  # closed: no extra keys
 
 # errors carry a stable code and a path to the offending value
 try:
-    validator({"user": {"name": str}}).validate({"user": {"name": 5}})
+    Validator({"user": {"name": str}}).validate({"user": {"name": 5}})
 except ValidationError as err:
     assert err.code == "string_type"
     assert err.path == ("user", "name")
 
-assert repr(validator(list[dict[str, int]])) == "list[dict[str, int]]"
+assert repr(Validator(list[dict[str, int]])) == "list[dict[str, int]]"
 ```
 
 Semantics follow the real value sets: `bool` is a subtype of `int` (so
@@ -157,11 +157,11 @@ from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import complement, intersection, union, validator
+from valgebra import complement, intersection, union, Validator
 
-assert validator(bool).is_subtype_of(int)                       # bool is a subtype of int
+assert Validator(bool).is_subtype_of(int)                       # bool is a subtype of int
 assert union(bool, int).is_equivalent(int)                      # bool | int is just int
-assert validator(Annotated[int, at.Ge(0)]).is_subtype_of(int)   # a refinement <= its base
+assert Validator(Annotated[int, at.Ge(0)]).is_subtype_of(int)   # a refinement <= its base
 assert intersection(int, complement(int)).is_empty()            # an unsatisfiable schema
 ```
 
@@ -174,7 +174,7 @@ membership stays decidable; a non-contractive body is rejected when the
 validator is built.
 
 ```python
-from valgebra import recursive, union, validator
+from valgebra import recursive, union, Validator
 
 # the recursive JSON value: a fixpoint over the structural constructors
 json_value = recursive(
@@ -186,7 +186,7 @@ assert not json_value.is_valid({"a": object()})
 # a binary tree, then composed into a larger schema
 tree = recursive(lambda t: {"value": int, "left?": t, "right?": t})
 assert tree.is_valid({"value": 1, "left": {"value": 2}})
-assert validator([json_value]).is_valid([1, {"k": [None, 2]}])
+assert Validator([json_value]).is_valid([1, {"k": [None, 2]}])
 ```
 
 A value that contains itself is rejected (`recursion_loop`) rather than looped
@@ -201,11 +201,11 @@ JSON document is judged exactly as `json.loads` of it would be — same decision
 same errors — and parsing in Rust is faster than parse-then-validate:
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-users = validator({"name": str, "age?": int})
+users = Validator({"name": str, "age?": int})
 users.validate_json('{"name": "Ada", "age": 36}')        # passes
-assert validator(list[int]).is_valid_json(b"[1, 2, 3]")  # str or bytes
+assert Validator(list[int]).is_valid_json(b"[1, 2, 3]")  # str or bytes
 ```
 
 The JSON-to-Python value mapping, the object-path consistency contract, and the
@@ -236,7 +236,7 @@ Not yet published to PyPI. Build from source:
 git clone <repository-url> valgebra && cd valgebra
 uv sync                 # create .venv and install dev dependencies
 uv run maturin develop  # build the Rust extension into the venv
-uv run python -c "from valgebra import validator; print(validator(int).is_valid(7))"
+uv run python -c "from valgebra import Validator; print(Validator(int).is_valid(7))"
 ```
 
 Requirements: stable Rust (edition 2024, MSRV 1.88), Python >= 3.10, and

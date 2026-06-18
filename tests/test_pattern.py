@@ -12,11 +12,11 @@ from typing import Annotated
 
 import pytest
 
-from valgebra import Regex, ValidationError, union, validator
+from valgebra import Regex, ValidationError, Validator, union
 
 
 def test_pattern_fullmatch_anchored() -> None:
-    schema = validator(Annotated[str, Regex(r"a+")])
+    schema = Validator(Annotated[str, Regex(r"a+")])
     assert schema.is_valid("aaa")
     assert not schema.is_valid("aXb")  # not a full match
     assert not schema.is_valid("")  # a+ needs at least one
@@ -24,13 +24,13 @@ def test_pattern_fullmatch_anchored() -> None:
 
 
 def test_pattern_rejects_non_string() -> None:
-    schema = validator(Annotated[str, Regex(r"\d+")])
+    schema = Validator(Annotated[str, Regex(r"\d+")])
     assert not schema.is_valid(123)  # the base is str; an int is not a member
     assert schema.is_valid("123")
 
 
 def test_bare_re_pattern_is_accepted_as_metadata() -> None:
-    schema = validator(Annotated[str, re.compile(r"[0-9a-f]{24}")])
+    schema = Validator(Annotated[str, re.compile(r"[0-9a-f]{24}")])
     assert schema.is_valid("0123456789abcdef01234567")
     assert not schema.is_valid("nope")
 
@@ -40,7 +40,7 @@ def test_bare_re_pattern_is_accepted_as_metadata() -> None:
     [r"[A-Za-z0-9_.-]+", r"\d{1,3}(\.\d{1,3}){3}", r"(foo|bar)baz", r"a*", r"[^x]+"],
 )
 def test_pattern_matches_re_fullmatch(pattern: str) -> None:
-    schema = validator(Annotated[str, Regex(pattern)])
+    schema = Validator(Annotated[str, Regex(pattern)])
     reference = re.compile(pattern)
     corpus = ["", "a", "abc", "a.b-c_1", "1.2.3.4", "foobaz", "barbaz", "xax", "x" * 50]
     for value in corpus:
@@ -49,12 +49,12 @@ def test_pattern_matches_re_fullmatch(pattern: str) -> None:
 
 def test_invalid_pattern_raises_at_compile_time() -> None:
     with pytest.raises(ValueError, match="invalid regular expression"):
-        validator(Annotated[str, Regex(r"(unclosed")])
+        Validator(Annotated[str, Regex(r"(unclosed")])
 
 
 def test_pattern_composes_and_reaches_json() -> None:
     oid = Annotated[str, Regex(r"[0-9a-f]{24}")]
-    record = validator({"id": oid, "name": str})
+    record = Validator({"id": oid, "name": str})
     good = {"id": "0123456789abcdef01234567", "name": "x"}
     bad = {"id": "short", "name": "x"}
     assert record.is_valid(good)
@@ -71,5 +71,5 @@ def test_pattern_composes_and_reaches_json() -> None:
 
 def test_pattern_validate_reports_a_pattern_violation() -> None:
     with pytest.raises(ValidationError) as info:
-        validator(Annotated[str, Regex(r"\d+")]).validate("abc")
+        Validator(Annotated[str, Regex(r"\d+")]).validate("abc")
     assert info.value.code == "string_pattern"

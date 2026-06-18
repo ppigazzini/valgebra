@@ -11,19 +11,16 @@ from typing import Annotated
 import annotated_types as at
 
 from valgebra import (
-    CompiledValidator,
+    Validator,
     anything,
     complement,
     intersection,
     nothing,
     union,
-    validator,
 )
 
 
-def implies(
-    condition: object, then: object, otherwise: object = anything
-) -> CompiledValidator:
+def implies(condition: object, then: object, otherwise: object = anything) -> Validator:
     """Require `then` of a value matching `condition`, else `otherwise`.
 
     The conditional-field recipe: a value either matches `condition` and must
@@ -35,15 +32,13 @@ def implies(
     )
 
 
-def first_match(
-    *cases: tuple[object, object], default: object = anything
-) -> CompiledValidator:
+def first_match(*cases: tuple[object, object], default: object = anything) -> Validator:
     """Select the consequent of the first matching `(condition, then)` case.
 
     Nests `implies` from the last case inward, so the earliest matching
     condition selects its consequent, falling back to `default`.
     """
-    result: CompiledValidator = validator(default)
+    result: Validator = Validator(default)
     for condition, then in reversed(cases):
         result = implies(condition, then, result)
     return result

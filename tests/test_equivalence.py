@@ -23,7 +23,7 @@ import annotated_types as at
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import ValidationError, complement, intersection, union, validator
+from valgebra import ValidationError, Validator, complement, intersection, union
 
 # Atoms span the scalar nodes, the top, the gradual node, and a spread of typed
 # literal singletons.
@@ -92,7 +92,7 @@ def _values() -> st.SearchStrategy[object]:
 
 @given(spec=_schemas(), value=_values())
 def test_is_valid_agrees_with_validate(spec: object, value: object) -> None:
-    v = validator(spec)
+    v = Validator(spec)
     fast = v.is_valid(value)
     try:
         v.validate(value)

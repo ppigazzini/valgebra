@@ -16,19 +16,19 @@ import pytest
 
 from valgebra import (
     ValidationError,
+    Validator,
     complement,
     fixed_sequence,
     intersection,
     nothing,
     recursive,
     union,
-    validator,
 )
 
 
 def _first(spec: object, value: object) -> tuple[str, tuple[str | int, ...]]:
     with pytest.raises(ValidationError) as info:
-        validator(spec).validate(value, fail_fast=True)
+        Validator(spec).validate(value, fail_fast=True)
     return info.value.code, info.value.path
 
 
@@ -90,7 +90,7 @@ def test_missing_attribute_code() -> None:
     class Lacks:
         pass
 
-    assert validator(Has).is_valid(Lacks()) is False
+    assert Validator(Has).is_valid(Lacks()) is False
     code, _ = _first(Has, Lacks())
     assert code in {"instance_type", "missing_attribute"}
 
@@ -134,6 +134,6 @@ def test_recursion_codes() -> None:
 
 def test_json_invalid_code() -> None:
     with pytest.raises(ValidationError) as info:
-        validator(int).validate_json("{ not json")
+        Validator(int).validate_json("{ not json")
     assert info.value.code == "json_invalid"
     assert info.value.path == ()

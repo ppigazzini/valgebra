@@ -29,11 +29,11 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import (
+    Validator,
     complement,
     intersection,
     recursive,
     union,
-    validator,
 )
 
 # A recursive schema, reused below to record a reflexivity hole.
@@ -80,7 +80,7 @@ _UNIVERSE = [
 
 def _accepted(spec: object) -> frozenset[int]:
     """Return the universe indices a schema accepts -- its denotation on `U`."""
-    compiled = validator(spec)
+    compiled = Validator(spec)
     return frozenset(i for i, value in enumerate(_UNIVERSE) if compiled.is_valid(value))
 
 
@@ -96,7 +96,7 @@ _GE10_LE0 = Annotated[int, at.Ge(10), at.Le(0)]
 
 
 def _check(operation: str, left: object, right: object) -> None:
-    compiled = validator(left)
+    compiled = Validator(left)
     if operation == "subtype":
         assert compiled.is_subtype_of(right)
     elif operation == "equivalent":
@@ -195,7 +195,7 @@ _REJECTED = [
 @pytest.mark.parametrize("schema", _REJECTED)
 def test_frontend_rejects_non_value_objects(schema: object) -> None:
     with pytest.raises((TypeError, ValueError, NotImplementedError)):
-        validator(schema)
+        Validator(schema)
 
 
 def test_value_literals_still_build() -> None:
@@ -205,11 +205,11 @@ def test_value_literals_still_build() -> None:
         RED = 1
 
     sentinel = object()
-    assert validator(1).is_valid(1)
-    assert validator("a").is_valid("a")
-    assert validator(Color.RED).is_valid(Color.RED)
-    assert validator(sentinel).is_valid(sentinel)
-    assert not validator(sentinel).is_valid(object())
+    assert Validator(1).is_valid(1)
+    assert Validator("a").is_valid("a")
+    assert Validator(Color.RED).is_valid(Color.RED)
+    assert Validator(sentinel).is_valid(sentinel)
+    assert not Validator(sentinel).is_valid(object())
 
 
 # --- Finite-universe soundness fuzzer ----------------------------------------
@@ -247,7 +247,7 @@ def test_subtype_claims_hold_on_the_universe(left: object, right: object) -> Non
     # universe value the claimed supertype rejects. A violation is a real
     # unsoundness, not a conservatism.
     try:
-        compiled = validator(left)
+        compiled = Validator(left)
     except (ValueError, TypeError, NotImplementedError, RecursionError):
         return
     if compiled.is_subtype_of(right):
@@ -259,7 +259,7 @@ def test_emptiness_claims_hold_on_the_universe(spec: object) -> None:
     # A schema reported empty accepts nothing in the universe. The converse does
     # not hold over a finite universe, so only this sound direction is asserted.
     try:
-        compiled = validator(spec)
+        compiled = Validator(spec)
     except (ValueError, TypeError, NotImplementedError, RecursionError):
         return
     if compiled.is_empty():

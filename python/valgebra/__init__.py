@@ -1,7 +1,7 @@
 from ._markers import Regex
 from ._valgebra import (
-    CompiledValidator,
     ValidationError,
+    Validator,
     anything,
     complement,
     fixed_sequence,
@@ -10,13 +10,12 @@ from ._valgebra import (
     recursive,
     simplify,
     union,
-    validator,
 )
 
 __all__ = [
-    "CompiledValidator",
     "Regex",
     "ValidationError",
+    "Validator",
     "anything",
     "complement",
     "fixed_sequence",
@@ -25,5 +24,4 @@ __all__ = [
     "recursive",
     "simplify",
     "union",
-    "validator",
 ]

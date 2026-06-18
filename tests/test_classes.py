@@ -14,7 +14,7 @@ from typing import (
 import annotated_types as at
 import pytest
 
-from valgebra import ValidationError, validator
+from valgebra import ValidationError, Validator
 
 
 class User(TypedDict):
@@ -28,14 +28,14 @@ class PartialUser(TypedDict, total=False):
 
 
 def test_typeddict_requires_all_keys_by_default() -> None:
-    schema = validator(User)
+    schema = Validator(User)
     assert schema.is_valid({"name": "Ada", "age": 36})
     assert not schema.is_valid({"name": "Ada"})
     assert not schema.is_valid({"name": "Ada", "age": "old"})
 
 
 def test_typeddict_total_false_makes_keys_optional() -> None:
-    schema = validator(PartialUser)
+    schema = Validator(PartialUser)
     assert schema.is_valid({})
     assert schema.is_valid({"email": "a@b.c"})
     assert schema.is_valid({"email": "a@b.c", "nickname": "ada"})
@@ -48,7 +48,7 @@ def test_typeddict_required_marker_within_total_false() -> None:
         nickname: str
         email: typing.Required[str]
 
-    schema = validator(Part)
+    schema = Validator(Part)
     assert schema.is_valid({"email": "a@b.c"})
     assert not schema.is_valid({"nickname": "ada"})  # email is required
 
@@ -60,14 +60,14 @@ class Point:
 
 
 def test_dataclass_checks_instance_and_attributes() -> None:
-    assert validator(Point).is_valid(Point(1, 2))
-    assert not validator(Point).is_valid(Point(1, "y"))  # ty: ignore[invalid-argument-type]
-    assert not validator(Point).is_valid({"x": 1, "y": 2})
+    assert Validator(Point).is_valid(Point(1, 2))
+    assert not Validator(Point).is_valid(Point(1, "y"))  # ty: ignore[invalid-argument-type]
+    assert not Validator(Point).is_valid({"x": 1, "y": 2})
 
 
 def test_dataclass_attribute_failure_reports_the_path() -> None:
     with pytest.raises(ValidationError) as info:
-        validator(Point).validate(Point(1, "y"))  # ty: ignore[invalid-argument-type]
+        Validator(Point).validate(Point(1, "y"))  # ty: ignore[invalid-argument-type]
     assert info.value.code == "int_type"
     assert info.value.path == ("y",)
 
@@ -78,9 +78,9 @@ class Pair(NamedTuple):
 
 
 def test_namedtuple_is_a_deep_instance_check() -> None:
-    assert validator(Pair).is_valid(Pair(1, "x"))
-    assert not validator(Pair).is_valid(Pair(1, 2))  # ty: ignore[invalid-argument-type]
-    assert not validator(Pair).is_valid((1, "x"))
+    assert Validator(Pair).is_valid(Pair(1, "x"))
+    assert not Validator(Pair).is_valid(Pair(1, 2))  # ty: ignore[invalid-argument-type]
+    assert not Validator(Pair).is_valid((1, "x"))
 
 
 class Color(enum.Enum):
@@ -89,9 +89,9 @@ class Color(enum.Enum):
 
 
 def test_enum_accepts_its_members() -> None:
-    assert validator(Color).is_valid(Color.RED)
-    assert validator(Color).is_valid(Color.GREEN)
-    assert not validator(Color).is_valid(1)
+    assert Validator(Color).is_valid(Color.RED)
+    assert Validator(Color).is_valid(Color.GREEN)
+    assert not Validator(Color).is_valid(1)
 
 
 @runtime_checkable
@@ -100,9 +100,9 @@ class Sized(Protocol):
 
 
 def test_runtime_checkable_protocol() -> None:
-    assert validator(Sized).is_valid([1, 2])
-    assert validator(Sized).is_valid("abc")
-    assert not validator(Sized).is_valid(5)
+    assert Validator(Sized).is_valid([1, 2])
+    assert Validator(Sized).is_valid("abc")
+    assert not Validator(Sized).is_valid(5)
 
 
 class NotRuntime(Protocol):
@@ -111,22 +111,22 @@ class NotRuntime(Protocol):
 
 def test_non_runtime_protocol_is_rejected() -> None:
     with pytest.raises(NotImplementedError):
-        validator(NotRuntime)
+        Validator(NotRuntime)
 
 
 UserId = NewType("UserId", int)
 
 
 def test_newtype_validates_its_supertype() -> None:
-    assert validator(UserId).is_valid(5)
-    assert not validator(UserId).is_valid("x")
+    assert Validator(UserId).is_valid(5)
+    assert not Validator(UserId).is_valid("x")
 
 
 @pytest.mark.skipif(sys.version_info < (3, 12), reason="PEP 695 type aliases")
 def test_pep695_type_alias_delegates_to_value() -> None:
     int_list = typing.TypeAliasType("int_list", list[int])
-    assert validator(int_list).is_valid([1, 2, 3])
-    assert not validator(int_list).is_valid([1, "x"])
+    assert Validator(int_list).is_valid([1, 2, 3])
+    assert not Validator(int_list).is_valid([1, "x"])
 
 
 class BoundedUser(TypedDict):
@@ -137,7 +137,7 @@ class BoundedUser(TypedDict):
 def test_typeddict_field_refinement_is_enforced() -> None:
     # A refinement on a field must constrain the field, not be dropped: the
     # Annotated metadata has to survive hint resolution.
-    schema = validator(BoundedUser)
+    schema = Validator(BoundedUser)
     assert schema.is_valid({"name": "Ada", "age": 36})
     assert not schema.is_valid({"name": "Ada", "age": -5})
     assert "Ge(0)" in repr(schema)
@@ -149,7 +149,7 @@ class BoundedPoint:
 
 
 def test_dataclass_field_refinement_is_enforced() -> None:
-    schema = validator(BoundedPoint)
+    schema = Validator(BoundedPoint)
     assert schema.is_valid(BoundedPoint(1))
     assert not schema.is_valid(BoundedPoint(-1))
 
@@ -159,7 +159,7 @@ class BoundedPair(NamedTuple):
 
 
 def test_namedtuple_field_refinement_is_enforced() -> None:
-    schema = validator(BoundedPair)
+    schema = Validator(BoundedPair)
     assert schema.is_valid(BoundedPair(1))
     assert not schema.is_valid(BoundedPair(-1))
 
@@ -174,7 +174,7 @@ def test_recursive_dataclass_is_rejected_not_crashed() -> None:
     # A class whose own type appears in a field is recursive; it must be written
     # with recursive. Compiling it directly is rejected cleanly, never crashing.
     with pytest.raises(NotImplementedError):
-        validator(Node)
+        Validator(Node)
 
 
 def test_finite_deep_schema_still_compiles() -> None:
@@ -185,7 +185,7 @@ def test_finite_deep_schema_still_compiles() -> None:
     for _ in range(depth):
         schema = list[schema]  # type: ignore[valid-type]
         value = [value]
-    assert validator(schema).is_valid(value)
+    assert Validator(schema).is_valid(value)
 
 
 def test_typeddict_inheritance_collects_all_fields() -> None:
@@ -195,7 +195,7 @@ def test_typeddict_inheritance_collects_all_fields() -> None:
     class Derived(Base):
         b: str
 
-    schema = validator(Derived)
+    schema = Validator(Derived)
     assert schema.is_valid({"a": 1, "b": "x"})
     assert not schema.is_valid({"b": "x"})  # inherited required key missing
     assert not schema.is_valid({"a": 1})
@@ -206,6 +206,6 @@ def test_intenum_is_an_instance_check() -> None:
         LOW = 1
         HIGH = 2
 
-    schema = validator(Level)
+    schema = Validator(Level)
     assert schema.is_valid(Level.LOW)
     assert not schema.is_valid(1)  # a bare int is not an enum member

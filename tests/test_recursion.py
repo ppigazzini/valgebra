@@ -2,7 +2,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import ValidationError, recursive, union, validator
+from valgebra import ValidationError, Validator, recursive, union
 
 json_value = recursive(
     lambda j: union(None, bool, int, float, str, [j], {str: j}),
@@ -64,8 +64,8 @@ def test_recursive_tree() -> None:
 
 
 def test_recursion_composes_into_larger_schemas() -> None:
-    assert validator([json_value]).is_valid([1, {"k": [None, 2]}])
-    assert not validator([json_value]).is_valid([object()])
+    assert Validator([json_value]).is_valid([1, {"k": [None, 2]}])
+    assert not Validator([json_value]).is_valid([object()])
 
 
 def test_mutual_recursion_through_nested_builders() -> None:

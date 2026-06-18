@@ -11,7 +11,7 @@ will form the first release.
 
 ### Added
 
-- Compile-once / validate-fast engine: `validator(schema)` builds an immutable
+- Compile-once / validate-fast engine: `Validator(schema)` builds an immutable
   validator with `validate` (raises), `is_valid` (bool fast path), and `ensure`.
 - Typing-annotation frontend: scalars, `None`, `Any`, `list`/`set`/`frozenset`/
   `dict`, fixed, variadic, and prefix-plus-tail tuples (`tuple[A, B, ...]`),

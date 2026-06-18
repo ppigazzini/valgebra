@@ -18,7 +18,7 @@ assert anything.is_valid(object())                    # top admits everything
 The combinators accept any schema spec, so they nest and mix freely:
 
 ```python
-from valgebra import complement, union, validator
+from valgebra import complement, union, Validator
 
 color = union("red", "green", "blue")    # union of three literals
 assert color.is_valid("red")
@@ -85,7 +85,7 @@ from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import anything, complement, intersection, nothing, union, validator
+from valgebra import anything, complement, intersection, nothing, union, Validator
 
 
 def implies(condition, then, otherwise):
@@ -96,7 +96,7 @@ def implies(condition, then, otherwise):
 
 
 def first_match(*cases, default=anything):
-    result = validator(default)
+    result = Validator(default)
     for condition, then in reversed(cases):
         result = implies(condition, then, result)
     return result
@@ -117,15 +117,15 @@ assert not shape.is_valid(1.5)  # matches no case, falls to the default
 
 "At least one of these keys is present", and its siblings, are also algebra. A
 record that merely asserts a key is present is an open record requiring it —
-`validator({key: anything}).open()` — and the cardinality follows from `union`,
+`Validator({key: anything}).open()` — and the cardinality follows from `union`,
 `intersection`, and `complement`:
 
 ```python
-from valgebra import anything, complement, intersection, union, validator
+from valgebra import anything, complement, intersection, union, Validator
 
 
 def has(key):
-    return validator({key: anything}).open()
+    return Validator({key: anything}).open()
 
 
 at_least_one = union(has("a"), has("b"))
@@ -188,19 +188,19 @@ is set inclusion, `is_equivalent` is mutual inclusion, and `is_empty` reports an
 unsatisfiable schema:
 
 ```python
-from valgebra import complement, intersection, union, validator
+from valgebra import complement, intersection, union, Validator
 
 # subtyping is set inclusion; bool is a subtype of int
-assert validator(bool).is_subtype_of(int)
-assert not validator(int).is_subtype_of(bool)
-assert validator(list[bool]).is_subtype_of(list[int])
+assert Validator(bool).is_subtype_of(int)
+assert not Validator(int).is_subtype_of(bool)
+assert Validator(list[bool]).is_subtype_of(list[int])
 
 # equivalence is mutual inclusion, whatever the syntax
 assert union(bool, int).is_equivalent(int)
 
 # emptiness detects a schema no value can satisfy
 assert intersection(int, complement(int)).is_empty()
-assert not validator(int).is_empty()
+assert not Validator(int).is_empty()
 ```
 
 The other side of a comparison is any schema spec or compiled validator. These
@@ -226,10 +226,10 @@ Both admit every value at runtime, but they are different in the algebra:
 ```python
 from typing import Any
 
-from valgebra import anything, complement, simplify, validator
+from valgebra import anything, complement, simplify, Validator
 
 assert repr(simplify(complement(anything))) == "nothing"
-assert repr(simplify(validator(Any))) == "Any"  # left untouched
+assert repr(simplify(Validator(Any))) == "Any"  # left untouched
 ```
 
 This keeps "checked: every value is admitted" (`anything`) distinct from

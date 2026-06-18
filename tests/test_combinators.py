@@ -4,12 +4,12 @@ import pytest
 
 from valgebra import (
     ValidationError,
+    Validator,
     anything,
     complement,
     intersection,
     nothing,
     union,
-    validator,
 )
 
 
@@ -43,7 +43,7 @@ def test_lattice_bounds() -> None:
 
 
 def test_combinators_compose_over_compiled_validators() -> None:
-    inner = validator(list[int])
+    inner = Validator(list[int])
     schema = union(inner, str)
     assert schema.is_valid([1, 2, 3])
     assert schema.is_valid("x")

@@ -12,7 +12,7 @@ from typing import Annotated, TypedDict
 
 import annotated_types as at
 
-from valgebra import validator
+from valgebra import Validator
 
 
 class User(TypedDict):
@@ -20,7 +20,7 @@ class User(TypedDict):
     age: Annotated[int, at.Ge(0)]
 
 
-users = validator(User)
+users = Validator(User)
 assert users.is_valid({"name": "Ada", "age": 36})
 assert not users.is_valid({"name": "Ada", "age": -1})
 ```

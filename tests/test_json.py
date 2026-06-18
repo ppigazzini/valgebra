@@ -17,7 +17,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import ValidationError, union, validator
+from valgebra import ValidationError, Validator, union
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -73,7 +73,7 @@ PAIRS = [
 
 @pytest.mark.parametrize(("label", "spec", "doc"), PAIRS, ids=[p[0] for p in PAIRS])
 def test_json_path_agrees_with_object_path(label: str, spec: object, doc: str) -> None:
-    v = validator(spec)
+    v = Validator(spec)
     obj = json.loads(doc)
     # The bool fast path agrees.
     assert v.is_valid_json(doc) == v.is_valid(obj)
@@ -82,18 +82,18 @@ def test_json_path_agrees_with_object_path(label: str, spec: object, doc: str) -
 
 
 def test_validate_json_accepts_bytes() -> None:
-    v = validator({"name": str})
+    v = Validator({"name": str})
     v.validate_json(b'{"name": "Ada"}')
     assert v.is_valid_json(b'{"name": "Ada"}')
     assert not v.is_valid_json(b'{"name": 5}')
 
 
 def test_validate_json_returns_none_on_success() -> None:
-    assert validator(list[int]).validate_json("[1, 2, 3]") is None
+    assert Validator(list[int]).validate_json("[1, 2, 3]") is None
 
 
 def test_malformed_json_raises_a_structured_error() -> None:
-    v = validator(int)
+    v = Validator(int)
     with pytest.raises(ValidationError) as info:
         v.validate_json("{not json")
     assert info.value.code == "json_invalid"
@@ -104,17 +104,17 @@ def test_malformed_json_raises_a_structured_error() -> None:
 
 def test_malformed_json_is_not_valid() -> None:
     # is_valid_json never raises; unparseable input is simply not a member.
-    assert not validator(int).is_valid_json("{not json")
-    assert not validator(int).is_valid_json("")
+    assert not Validator(int).is_valid_json("{not json")
+    assert not Validator(int).is_valid_json("")
 
 
 def test_validate_json_rejects_non_string_input() -> None:
     with pytest.raises(TypeError):
-        validator(int).validate_json(123)  # ty: ignore[invalid-argument-type]
+        Validator(int).validate_json(123)  # ty: ignore[invalid-argument-type]
 
 
 def test_json_aggregates_every_failure_like_the_object_path() -> None:
-    v = validator({"a": int, "b": int, "c": int})
+    v = Validator({"a": int, "b": int, "c": int})
     doc = '{"a": "x", "b": "y", "c": "z"}'
     with pytest.raises(ValidationError) as json_info:
         v.validate_json(doc)
@@ -124,7 +124,7 @@ def test_json_aggregates_every_failure_like_the_object_path() -> None:
 
 
 def test_fail_fast_stops_at_first_failure_on_the_json_path() -> None:
-    v = validator({"a": int, "b": int})
+    v = Validator({"a": int, "b": int})
     doc = '{"a": "x", "b": "y"}'
     with pytest.raises(ValidationError) as info:
         v.validate_json(doc, fail_fast=True)
@@ -171,6 +171,6 @@ def _json_values() -> st.SearchStrategy[object]:
 def test_json_path_fuzz_agrees_with_object_path(spec: object, value: object) -> None:
     # The in-place JSON walk must reach the same verdict as validating the
     # json.loads of the same document on the object path.
-    v = validator(spec)
+    v = Validator(spec)
     doc = json.dumps(value)
     assert v.is_valid_json(doc) == v.is_valid(json.loads(doc))

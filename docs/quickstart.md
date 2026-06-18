@@ -7,12 +7,12 @@ Every snippet runs as written.
 
 ## Compile once, check many
 
-`validator(schema)` compiles a schema into an immutable validator. Reuse it:
+`Validator(schema)` compiles a schema into an immutable validator. Reuse it:
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-is_int = validator(int)
+is_int = Validator(int)
 assert is_int.is_valid(42)
 assert not is_int.is_valid("42")
 ```
@@ -32,13 +32,13 @@ The primary notation is the typing you already write:
 ```python
 from typing import Literal
 
-from valgebra import validator
+from valgebra import Validator
 
-assert validator(list[int]).is_valid([1, 2, 3])
-assert validator(dict[str, int]).is_valid({"a": 1})
-assert validator(tuple[int, ...]).is_valid((1, 2, 3))
-assert validator(int | None).is_valid(None)
-assert validator(Literal["red", "green"]).is_valid("red")
+assert Validator(list[int]).is_valid([1, 2, 3])
+assert Validator(dict[str, int]).is_valid({"a": 1})
+assert Validator(tuple[int, ...]).is_valid((1, 2, 3))
+assert Validator(int | None).is_valid(None)
+assert Validator(Literal["red", "green"]).is_valid("red")
 ```
 
 ## Refinements with `Annotated`
@@ -51,9 +51,9 @@ from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import validator
+from valgebra import Validator
 
-adult = validator(Annotated[int, at.Ge(18), at.Le(150)])
+adult = Validator(Annotated[int, at.Ge(18), at.Le(150)])
 assert adult.is_valid(21)
 assert not adult.is_valid(5)
 ```
@@ -68,7 +68,7 @@ from typing import Annotated, TypedDict
 
 import annotated_types as at
 
-from valgebra import validator
+from valgebra import Validator
 
 
 class User(TypedDict):
@@ -76,7 +76,7 @@ class User(TypedDict):
     age: Annotated[int, at.Ge(0)]
 
 
-users = validator(User)
+users = Validator(User)
 assert users.is_valid({"name": "Ada", "age": 36})
 assert not users.is_valid({"name": "Ada", "age": -1})
 ```
@@ -86,7 +86,7 @@ assert not users.is_valid({"name": "Ada", "age": -1})
 Any schema combines with `union`, `intersection`, and `complement`:
 
 ```python
-from valgebra import complement, intersection, validator
+from valgebra import complement, intersection, Validator
 
 # an int that is not a bool
 strict_int = intersection(int, complement(bool))
@@ -100,10 +100,10 @@ A failure raises `ValidationError` carrying a machine-readable `code`, the
 `path` to the offending value, and a summary:
 
 ```python
-from valgebra import ValidationError, validator
+from valgebra import ValidationError, Validator
 
 try:
-    validator({"user": {"name": str}}).validate({"user": {"name": 5}})
+    Validator({"user": {"name": str}}).validate({"user": {"name": 5}})
 except ValidationError as err:
     assert err.code == "string_type"
     assert err.path == ("user", "name")
@@ -115,9 +115,9 @@ except ValidationError as err:
 decision as validating the parsed object:
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-users = validator({"name": str, "age?": int})
+users = Validator({"name": str, "age?": int})
 users.validate_json('{"name": "Ada", "age": 36}')
-assert validator(list[int]).is_valid_json(b"[1, 2, 3]")
+assert Validator(list[int]).is_valid_json(b"[1, 2, 3]")
 ```

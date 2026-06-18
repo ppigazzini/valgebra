@@ -3,11 +3,11 @@ from typing import Annotated, Literal
 
 import annotated_types as at
 
-from valgebra import recursive, union, validator
+from valgebra import Validator, recursive, union
 
 
 def test_copy_yields_an_equivalent_validator() -> None:
-    v = validator({"name": str, "age?": int})
+    v = Validator({"name": str, "age?": int})
     c = copy.copy(v)
     assert c is not v
     assert c.is_valid({"name": "Ada"})
@@ -16,7 +16,7 @@ def test_copy_yields_an_equivalent_validator() -> None:
 
 
 def test_deepcopy_yields_an_equivalent_validator() -> None:
-    v = validator(list[dict[str, int]])
+    v = Validator(list[dict[str, int]])
     d = copy.deepcopy(v)
     assert d is not v
     assert d.is_valid([{"a": 1}])
@@ -25,11 +25,11 @@ def test_deepcopy_yields_an_equivalent_validator() -> None:
 
 
 def test_copy_preserves_pooled_literals_and_predicates() -> None:
-    lit = validator(Literal["x", "y"])
+    lit = Validator(Literal["x", "y"])
     assert copy.deepcopy(lit).is_valid("x")
     assert not copy.deepcopy(lit).is_valid("z")
 
-    refined = validator(Annotated[int, at.Predicate(lambda n: n > 0)])
+    refined = Validator(Annotated[int, at.Predicate(lambda n: n > 0)])
     assert copy.copy(refined).is_valid(3)
     assert not copy.copy(refined).is_valid(-1)
 

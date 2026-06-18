@@ -16,12 +16,12 @@ from hypothesis import strategies as st
 
 from valgebra import (
     ValidationError,
+    Validator,
     complement,
     intersection,
     recursive,
     simplify,
     union,
-    validator,
 )
 
 _bases = st.sampled_from([int, str, bool, float, bytes, None, complex, bytearray])
@@ -115,7 +115,7 @@ def test_decision_is_sound_against_membership(
     # test_completeness_ledger.py. This fuzzer holds the decision to membership.
     try:
         a, b = _build(sa), _build(sb)
-        left, right = validator(a), validator(b)
+        left, right = Validator(a), Validator(b)
     except (ValueError, TypeError, NotImplementedError, RecursionError):
         return  # an unbuildable combination is not under test
     in_a = left.is_valid(v)
@@ -141,7 +141,7 @@ def test_membership_walks_and_paths_agree(sa: object, v: object) -> None:
     # simplify preserves acceptance, the JSON path matches validating the parsed
     # value, and ensure returns the input unchanged exactly when it is a member.
     try:
-        compiled = validator(_build(sa))
+        compiled = Validator(_build(sa))
     except (ValueError, TypeError, NotImplementedError, RecursionError):
         return
     member = compiled.is_valid(v)

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from valgebra import union, validator
+from valgebra import Validator, union
 
 # Sizes chosen so each shape runs in microseconds-to-milliseconds and the
 # relative costs stay visible; they are recorded alongside results in the docs.
@@ -50,26 +50,26 @@ def wide_record_value(width: int) -> dict[str, int]:
 
 
 def test_large_array(benchmark: object) -> None:
-    check = validator(list[int]).is_valid
+    check = Validator(list[int]).is_valid
     data = list(range(ARRAY_LEN))
     assert benchmark(check, data) is True
 
 
 def test_wide_record_is_valid(benchmark: object) -> None:
-    check = validator(wide_record_schema(RECORD_WIDTH)).is_valid
+    check = Validator(wide_record_schema(RECORD_WIDTH)).is_valid
     data = wide_record_value(RECORD_WIDTH)
     assert benchmark(check, data) is True
 
 
 def test_wide_record_validate(benchmark: object) -> None:
     # The aggregating explain walk on a passing value, versus the bool fast path.
-    validate = validator(wide_record_schema(RECORD_WIDTH)).validate
+    validate = Validator(wide_record_schema(RECORD_WIDTH)).validate
     data = wide_record_value(RECORD_WIDTH)
     benchmark(validate, data)
 
 
 def test_deep_nesting(benchmark: object) -> None:
-    check = validator(nested_list_schema(NESTING_DEPTH)).is_valid
+    check = Validator(nested_list_schema(NESTING_DEPTH)).is_valid
     data = nested_list_value(NESTING_DEPTH)
     assert benchmark(check, data) is True
 
@@ -84,4 +84,4 @@ def test_union_dispatch(benchmark: object) -> None:
 
 def test_compile_wide_record(benchmark: object) -> None:
     schema = wide_record_schema(RECORD_WIDTH)
-    benchmark(validator, schema)
+    benchmark(Validator, schema)

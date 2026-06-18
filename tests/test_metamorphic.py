@@ -13,14 +13,13 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import (
-    CompiledValidator,
+    Validator,
     anything,
     complement,
     intersection,
     nothing,
     recursive,
     union,
-    validator,
 )
 
 _GE0 = Annotated[int, at.Ge(0)]
@@ -54,9 +53,9 @@ _schemas = st.recursive(_atoms, _compose, max_leaves=6)
 _UNIVERSE = [None, True, False, -1, 0, 1, 5, "", "a", b"x", 1.5, [], [1], {1}, {"k": 1}]
 
 
-def _build(spec: object) -> CompiledValidator | None:
+def _build(spec: object) -> Validator | None:
     try:
-        return validator(spec)
+        return Validator(spec)
     except (ValueError, TypeError, NotImplementedError, RecursionError):
         return None
 
@@ -74,7 +73,7 @@ def test_bottom_below_and_top_above(spec: object) -> None:
     if compiled is None:
         return
     assert compiled.is_subtype_of(anything)  # s <= top
-    assert validator(nothing).is_subtype_of(spec)  # bottom <= s
+    assert Validator(nothing).is_subtype_of(spec)  # bottom <= s
 
 
 @given(spec=_schemas)
@@ -82,21 +81,21 @@ def test_double_complement_preserves_membership(spec: object) -> None:
     compiled = _build(spec)
     if compiled is None:
         return
-    doubled = validator(complement(complement(spec)))
+    doubled = Validator(complement(complement(spec)))
     for value in _UNIVERSE:
         assert doubled.is_valid(value) == compiled.is_valid(value)
 
 
 def test_transitivity_on_a_decided_chain() -> None:
     # bool <= int <= int|str, so bool <= int|str.
-    assert validator(bool).is_subtype_of(int)
-    assert validator(int).is_subtype_of(union(int, str))
-    assert validator(bool).is_subtype_of(union(int, str))
+    assert Validator(bool).is_subtype_of(int)
+    assert Validator(int).is_subtype_of(union(int, str))
+    assert Validator(bool).is_subtype_of(union(int, str))
 
 
 def test_antisymmetry_implies_equivalence() -> None:
     # Mutual subtyping is equivalence: bool|int and int include each other.
     left = union(bool, int)
     assert left.is_subtype_of(int)
-    assert validator(int).is_subtype_of(left)
+    assert Validator(int).is_subtype_of(left)
     assert left.is_equivalent(int)

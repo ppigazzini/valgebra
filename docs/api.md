@@ -5,9 +5,7 @@ from the top-level `valgebra` namespace.
 
 ## Compiling and checking
 
-::: valgebra.validator
-
-::: valgebra.CompiledValidator
+::: valgebra.Validator
 
 ## Combinators
 
@@ -24,7 +22,7 @@ from the top-level `valgebra` namespace.
 ::: valgebra.fixed_sequence
 
 Opening and closing a record's key set are methods on the compiled validator
-(`CompiledValidator.open` and `CompiledValidator.close`), documented above.
+(`Validator.open` and `Validator.close`), documented above.
 
 ## Refinement markers
 

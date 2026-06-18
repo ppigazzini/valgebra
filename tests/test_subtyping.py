@@ -14,7 +14,7 @@ import annotated_types as at
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import complement, intersection, recursive, union, validator
+from valgebra import Validator, complement, intersection, recursive, union
 
 
 class _Point(TypedDict):
@@ -111,14 +111,14 @@ specs = st.sampled_from(SPECS)
 
 
 def accepts(schema: object) -> list[bool]:
-    compiled = validator(schema)
+    compiled = Validator(schema)
     return [compiled.is_valid(value) for value in VALUES]
 
 
 @given(a=specs, b=specs)
 def test_subtype_is_sound(a: object, b: object) -> None:
     # A claimed subtype never accepts a value the supertype rejects.
-    if validator(a).is_subtype_of(b):
+    if Validator(a).is_subtype_of(b):
         a_accepts, b_accepts = accepts(a), accepts(b)
         assert all(
             b_in for a_in, b_in in zip(a_accepts, b_accepts, strict=True) if a_in
@@ -127,20 +127,20 @@ def test_subtype_is_sound(a: object, b: object) -> None:
 
 @given(a=specs)
 def test_subtype_is_reflexive(a: object) -> None:
-    assert validator(a).is_subtype_of(a)
+    assert Validator(a).is_subtype_of(a)
 
 
 @given(a=specs, b=specs)
 def test_equivalent_is_mutual_subtyping(a: object, b: object) -> None:
-    left = validator(a)
+    left = Validator(a)
     assert left.is_equivalent(b) == (
-        left.is_subtype_of(b) and validator(b).is_subtype_of(a)
+        left.is_subtype_of(b) and Validator(b).is_subtype_of(a)
     )
 
 
 @given(a=specs, b=specs)
 def test_equivalent_implies_equal_acceptance(a: object, b: object) -> None:
-    if validator(a).is_equivalent(b):
+    if Validator(a).is_equivalent(b):
         assert accepts(a) == accepts(b)
 
 
@@ -152,13 +152,13 @@ def test_empty_intersection_accepts_nothing(a: object, b: object) -> None:
 
 
 def test_known_relations() -> None:
-    assert validator(bool).is_subtype_of(int)  # bool is a subtype of int
-    assert not validator(int).is_subtype_of(bool)
-    assert validator(list[bool]).is_subtype_of(list[int])
-    assert not validator(list[int]).is_subtype_of(set[int])  # distinct kinds
+    assert Validator(bool).is_subtype_of(int)  # bool is a subtype of int
+    assert not Validator(int).is_subtype_of(bool)
+    assert Validator(list[bool]).is_subtype_of(list[int])
+    assert not Validator(list[int]).is_subtype_of(set[int])  # distinct kinds
     assert union(bool, int).is_equivalent(int)  # bool | int is just int
     assert intersection(int, complement(int)).is_empty()
-    assert not validator(int).is_empty()
+    assert not Validator(int).is_empty()
 
 
 def test_complement_reflexivity_and_contravariance() -> None:
@@ -166,25 +166,25 @@ def test_complement_reflexivity_and_contravariance() -> None:
     # needs both the contravariant complement rule and the identity-interning
     # pool merge (so a shared constant keeps one index across the comparison).
     assert complement(Literal[0]).is_subtype_of(complement(Literal[0]))
-    assert validator(Annotated[int, at.Ge(0)]).is_subtype_of(Annotated[int, at.Ge(0)])
+    assert Validator(Annotated[int, at.Ge(0)]).is_subtype_of(Annotated[int, at.Ge(0)])
     assert complement(Annotated[int, at.Ge(0)]).is_subtype_of(
         complement(Annotated[int, at.Ge(0)])
     )
     # Contravariance, checked against membership: a non-int is never a bool.
-    assert validator(complement(int)).is_subtype_of(complement(bool))
-    assert not validator(complement(bool)).is_subtype_of(complement(int))
+    assert Validator(complement(int)).is_subtype_of(complement(bool))
+    assert not Validator(complement(bool)).is_subtype_of(complement(int))
 
 
 def test_instance_and_literal_relations() -> None:
     # A literal is a subtype of any schema that admits its value.
-    assert validator(Literal["red"]).is_subtype_of(str)
-    assert not validator(str).is_subtype_of(Literal["red"])
-    assert validator(Literal["red"]).is_subtype_of(Literal["red", "green"])
-    assert validator(list[Literal["red"]]).is_subtype_of(list[str])  # nested
+    assert Validator(Literal["red"]).is_subtype_of(str)
+    assert not Validator(str).is_subtype_of(Literal["red"])
+    assert Validator(Literal["red"]).is_subtype_of(Literal["red", "green"])
+    assert Validator(list[Literal["red"]]).is_subtype_of(list[str])  # nested
     # A class is a subtype of another exactly when it is a subclass.
-    assert validator(_Dog).is_subtype_of(_Animal)
-    assert not validator(_Animal).is_subtype_of(_Dog)
-    assert validator(_Dog).is_equivalent(_Dog)
+    assert Validator(_Dog).is_subtype_of(_Animal)
+    assert not Validator(_Animal).is_subtype_of(_Dog)
+    assert Validator(_Dog).is_equivalent(_Dog)
 
 
 def test_recursive_subtyping_is_coinductive() -> None:

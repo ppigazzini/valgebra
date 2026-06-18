@@ -3,16 +3,16 @@
 A compiled validator validates JSON source directly, parsing on the Rust path:
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-users = validator({"name": str, "age?": int})
+users = Validator({"name": str, "age?": int})
 
 users.validate_json('{"name": "Ada", "age": 36}')        # passes, returns None
 assert users.is_valid_json('{"name": "Ada"}')            # optional key absent
 assert not users.is_valid_json('{"name": 5}')            # name is not a str
 
 # bytes input is accepted too
-assert validator(list[int]).is_valid_json(b"[1, 2, 3]")
+assert Validator(list[int]).is_valid_json(b"[1, 2, 3]")
 ```
 
 `validate_json(data, *, fail_fast=False)` mirrors `validate`: it raises
@@ -30,9 +30,9 @@ same error codes, and the same paths:
 ```python
 import json
 
-from valgebra import validator
+from valgebra import Validator
 
-v = validator(list[dict[str, int]])
+v = Validator(list[dict[str, int]])
 doc = '[{"a": 1}, {"b": "x"}]'
 
 assert v.is_valid_json(doc) == v.is_valid(json.loads(doc))
@@ -59,14 +59,14 @@ module produces them:
 Two consequences follow from valgebra's value-set semantics:
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
 # JSON 42 is an int, and float is disjoint from int, so it is not a float
-assert not validator(float).is_valid_json("42")
-assert validator(float).is_valid_json("42.0")
+assert not Validator(float).is_valid_json("42")
+assert Validator(float).is_valid_json("42.0")
 
 # JSON true is a bool, and bool is a subtype of int
-assert validator(int).is_valid_json("true")
+assert Validator(int).is_valid_json("true")
 ```
 
 `Infinity` and `NaN` are not valid JSON and are rejected as malformed; whole
@@ -80,9 +80,9 @@ item coded `json_invalid` carrying the parser's diagnostic — and `is_valid_jso
 treats it as a non-member:
 
 ```python
-from valgebra import ValidationError, validator
+from valgebra import ValidationError, Validator
 
-v = validator(int)
+v = Validator(int)
 assert not v.is_valid_json("{ not json")
 
 try:

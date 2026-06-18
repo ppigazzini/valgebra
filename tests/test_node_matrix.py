@@ -16,6 +16,7 @@ import annotated_types as at
 import pytest
 
 from valgebra import (
+    Validator,
     complement,
     fixed_sequence,
     intersection,
@@ -23,7 +24,6 @@ from valgebra import (
     recursive,
     simplify,
     union,
-    validator,
 )
 
 
@@ -74,7 +74,7 @@ _NODES: dict[str, object] = {
 
 @pytest.mark.parametrize("spec", list(_NODES.values()), ids=list(_NODES))
 def test_every_node_is_reachable_and_handled(spec: object) -> None:
-    compiled = validator(spec)  # the frontend builds it
+    compiled = Validator(spec)  # the frontend builds it
     assert isinstance(compiled.is_empty(), bool)  # emptiness terminates
     assert compiled.is_subtype_of(spec)  # reflexivity
     assert compiled.is_equivalent(spec)  # self-equivalence
@@ -95,8 +95,8 @@ _SHAPES: dict[str, tuple[object, object]] = {
     ("listed", "tupled"), list(_SHAPES.values()), ids=list(_SHAPES)
 )
 def test_sequence_shapes_reach_both_containers(listed: object, tupled: object) -> None:
-    list_form = validator(listed)
-    tuple_form = validator(tupled)
+    list_form = Validator(listed)
+    tuple_form = Validator(tupled)
     assert list_form.is_subtype_of(listed)  # the list form builds and is reflexive
     assert tuple_form.is_subtype_of(tupled)  # the tuple form builds and is reflexive
     assert not list_form.is_subtype_of(tupled)  # a list is not a tuple

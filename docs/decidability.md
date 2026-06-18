@@ -45,13 +45,13 @@ from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import complement, intersection, recursive, union, validator
+from valgebra import complement, intersection, recursive, union, Validator
 
-assert validator(bool).is_subtype_of(int)  # bool is a subtype of int
-assert validator(1).is_subtype_of(int)  # a literal is a member of int
-assert validator(Annotated[int, at.Ge(0)]).is_subtype_of(int)  # refinement <= base
-assert validator(Annotated[int, at.Ge(10), at.Le(0)]).is_empty()  # no such int
-assert validator({str: int}).is_subtype_of({str: int, int: bool})  # mapping clauses
+assert Validator(bool).is_subtype_of(int)  # bool is a subtype of int
+assert Validator(1).is_subtype_of(int)  # a literal is a member of int
+assert Validator(Annotated[int, at.Ge(0)]).is_subtype_of(int)  # refinement <= base
+assert Validator(Annotated[int, at.Ge(10), at.Le(0)]).is_empty()  # no such int
+assert Validator({str: int}).is_subtype_of({str: int, int: bool})  # mapping clauses
 assert union(bool, int).is_equivalent(int)  # bool | int is just int
 assert intersection(int, complement(int)).is_empty()  # the complement law
 
@@ -103,13 +103,13 @@ message or treats them opaquely — it never guesses.
 from collections.abc import Sequence
 from typing import TypeVar
 
-from valgebra import validator
+from valgebra import Validator
 
 T = TypeVar("T")
 
 for undecidable in (Sequence[int], T):
     try:
-        validator(undecidable)
+        Validator(undecidable)
         raise AssertionError("expected a rejection")
     except NotImplementedError:
         pass  # rejected with a clear message, never a silent wrong validator

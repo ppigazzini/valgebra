@@ -38,8 +38,8 @@ create_exception!(
 
 /// A compiled, immutable schema validator.
 ///
-/// Build one with `validator`, or with a combinator such as `union`,
-/// `intersection`, or `recursive`. Then check values with `validate`,
+/// Build one by calling `Validator(schema)`, or with a combinator such as
+/// `union`, `intersection`, or `recursive`. Then check values with `validate`,
 /// `is_valid`, or `ensure`, and JSON documents with `validate_json` or
 /// `is_valid_json`.
 ///
@@ -48,7 +48,7 @@ create_exception!(
 /// is safe to share across threads. Its `repr` is the annotation that produces
 /// it, and it can be copied with `copy.copy`/`copy.deepcopy`.
 #[pyclass(frozen, module = "valgebra._valgebra")]
-pub struct CompiledValidator {
+pub struct Validator {
     pub(crate) schema: Schema,
     pub(crate) literals: Vec<Py<PyAny>>,
     pub(crate) definitions: Vec<Schema>,
@@ -60,12 +60,12 @@ pub struct CompiledValidator {
     index: OnceLock<ValidatorIndex>,
 }
 
-impl CompiledValidator {
+impl Validator {
     /// Assemble a validator from its parts, deferring the precompute to first
     /// use. Every construction path goes through here so the index is never
     /// copied between validators.
     pub(crate) fn new(schema: Schema, literals: Vec<Py<PyAny>>, definitions: Vec<Schema>) -> Self {
-        CompiledValidator {
+        Validator {
             schema,
             literals,
             definitions,
@@ -128,7 +128,29 @@ impl CompiledValidator {
 // Python documentation conventions win here over the Rust-doc lint.
 #[allow(clippy::doc_markdown)]
 #[pymethods]
-impl CompiledValidator {
+impl Validator {
+    /// Compile a schema into a reusable, immutable validator.
+    ///
+    /// The schema is any supported form: a type or typing annotation (`int`,
+    /// `list[str]`, `int | None`, `Literal[...]`, a `TypedDict`, a dataclass, an
+    /// `Annotated` refinement, ...), a native form (a `[T]` list, a `{T}` set, a
+    /// `{K: V}` mapping, an all-string-key dict record, or any constant as a
+    /// literal), or another `Validator`.
+    ///
+    /// Args:
+    ///     schema: The schema to compile.
+    ///
+    /// Raises:
+    ///     NotImplementedError: If the schema uses an unsupported form (for
+    ///         example a recursive class, which must be written with `recursive`).
+    #[new]
+    fn py_new(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
+        let mut literals = Vec::new();
+        let mut definitions = Vec::new();
+        let schema = build_schema(schema, &mut literals, &mut definitions)?;
+        Ok(Validator::new(schema, literals, definitions))
+    }
+
     /// Validate `obj`, raising `ValidationError` if it is not a member of the
     /// schema's set. Check-only: `obj` is never copied or coerced.
     ///
@@ -337,8 +359,8 @@ impl CompiledValidator {
     /// Return an equivalent validator. The validator is immutable, so the copy
     /// shares the pooled constants, classes, and predicates rather than
     /// duplicating them.
-    fn __copy__(&self, py: Python<'_>) -> CompiledValidator {
-        CompiledValidator::new(
+    fn __copy__(&self, py: Python<'_>) -> Validator {
+        Validator::new(
             self.schema.clone(),
             self.literals.iter().map(|o| o.clone_ref(py)).collect(),
             self.definitions.clone(),
@@ -347,7 +369,7 @@ impl CompiledValidator {
 
     /// Deep-copy to an equivalent validator. Since the validator is immutable,
     /// this shares the pool like `__copy__`; the memo is unused.
-    fn __deepcopy__(&self, py: Python<'_>, _memo: &Bound<'_, PyAny>) -> CompiledValidator {
+    fn __deepcopy__(&self, py: Python<'_>, _memo: &Bound<'_, PyAny>) -> Validator {
         self.__copy__(py)
     }
 
@@ -357,7 +379,7 @@ impl CompiledValidator {
     ///
     /// Returns:
     ///     A validator whose every record admits keys beyond those declared.
-    fn open(&self, py: Python<'_>) -> CompiledValidator {
+    fn open(&self, py: Python<'_>) -> Validator {
         with_records_open(self, true, py)
     }
 
@@ -368,7 +390,7 @@ impl CompiledValidator {
     ///
     /// Returns:
     ///     A validator whose every record admits only its declared keys.
-    fn close(&self, py: Python<'_>) -> CompiledValidator {
+    fn close(&self, py: Python<'_>) -> Validator {
         with_records_open(self, false, py)
     }
 }
@@ -400,34 +422,6 @@ fn parse_json<'py>(data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     }
 }
 
-/// Compile a schema into a reusable validator.
-///
-/// The schema is any supported form: a type or typing annotation (`int`,
-/// `list[str]`, `int | None`, `Literal[...]`, a `TypedDict`, a dataclass, an
-/// `Annotated` refinement, ...), a native form (a `[T]` list, a `{T}` set, a
-/// `{K: V}` mapping, an all-string-key dict record, or any constant as a
-/// literal), or another compiled validator.
-///
-/// Args:
-///     schema: The schema to compile.
-///
-/// Returns:
-///     An immutable `CompiledValidator` for the schema.
-///
-/// Raises:
-///     NotImplementedError: If the schema uses an unsupported form (for
-///         example a recursive class, which must be written with `recursive`).
-// Google-style docstring for the Python API reference; see the note on the
-// CompiledValidator impl above.
-#[allow(clippy::doc_markdown)]
-#[pyfunction]
-fn validator(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
-    let mut literals = Vec::new();
-    let mut definitions = Vec::new();
-    let schema = build_schema(schema, &mut literals, &mut definitions)?;
-    Ok(CompiledValidator::new(schema, literals, definitions))
-}
-
 /// Build a recursive schema as a checked fixpoint.
 ///
 /// `builder` receives a placeholder validator standing for the schema being
@@ -435,12 +429,12 @@ fn validator(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
 /// to a back edge, and a non-contractive body — one whose recursive reference
 /// is not under a structural constructor — is rejected.
 #[pyfunction]
-fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
+fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
     let py = builder.py();
     let token = fresh_self_token();
     let placeholder = Py::new(
         py,
-        CompiledValidator::new(Schema::SelfRef(token), Vec::new(), Vec::new()),
+        Validator::new(Schema::SelfRef(token), Vec::new(), Vec::new()),
     )?;
     let body_obj = builder.call1((placeholder,))?;
     let mut literals = Vec::new();
@@ -457,24 +451,20 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
         ));
     }
     definitions.push(resolved);
-    Ok(CompiledValidator::new(
-        Schema::Ref(ref_id),
-        literals,
-        definitions,
-    ))
+    Ok(Validator::new(Schema::Ref(ref_id), literals, definitions))
 }
 
 /// The union of the given schemas: a value in at least one of their sets.
 #[pyfunction]
 #[pyo3(signature = (*schemas))]
-fn union(schemas: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
+fn union(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
     combine(schemas, Schema::Union)
 }
 
 /// The intersection of the given schemas: a value in every one of their sets.
 #[pyfunction]
 #[pyo3(signature = (*schemas))]
-fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
+fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
     combine(schemas, Schema::Intersection)
 }
 
@@ -482,29 +472,25 @@ fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
 /// member schema, and the list length must equal the number of members.
 #[pyfunction]
 #[pyo3(signature = (*members))]
-fn fixed_sequence(members: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
+fn fixed_sequence(members: &Bound<'_, PyTuple>) -> PyResult<Validator> {
     combine(members, |elements| Schema::list(SeqRegex::fixed(elements)))
 }
 
 /// The complement of a schema: every value not in its set.
 #[pyfunction]
-fn complement(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
+fn complement(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
     let mut literals = Vec::new();
     let mut definitions = Vec::new();
     let inner = build_schema(schema, &mut literals, &mut definitions)?;
-    Ok(CompiledValidator::new(
+    Ok(Validator::new(
         Schema::Complement(Box::new(inner)),
         literals,
         definitions,
     ))
 }
 
-fn with_records_open(
-    validator: &CompiledValidator,
-    open: bool,
-    py: Python<'_>,
-) -> CompiledValidator {
-    CompiledValidator::new(
+fn with_records_open(validator: &Validator, open: bool, py: Python<'_>) -> Validator {
+    Validator::new(
         validator.schema.with_records_open(open),
         validator.literals.iter().map(|o| o.clone_ref(py)).collect(),
         validator.definitions.clone(),
@@ -517,8 +503,8 @@ fn with_records_open(
 /// deduplicated unions and intersections, identities applied, complements in
 /// negation-normal form). Returns a new validator; the original is unchanged.
 #[pyfunction]
-fn simplify(validator: &CompiledValidator, py: Python<'_>) -> CompiledValidator {
-    CompiledValidator::new(
+fn simplify(validator: &Validator, py: Python<'_>) -> Validator {
+    Validator::new(
         validator.schema.simplify(),
         validator.literals.iter().map(|o| o.clone_ref(py)).collect(),
         validator.definitions.clone(),
@@ -527,8 +513,8 @@ fn simplify(validator: &CompiledValidator, py: Python<'_>) -> CompiledValidator 
 
 /// A pool-free validator wrapping a single atom (the `anything`/`nothing`
 /// lattice bounds).
-fn atom(py: Python<'_>, schema: Schema) -> PyResult<Py<CompiledValidator>> {
-    Py::new(py, CompiledValidator::new(schema, Vec::new(), Vec::new()))
+fn atom(py: Python<'_>, schema: Schema) -> PyResult<Py<Validator>> {
+    Py::new(py, Validator::new(schema, Vec::new(), Vec::new()))
 }
 
 /// A [`LeafRelations`] oracle backed by a validator's constant pool. It decides
@@ -611,8 +597,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
 fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = module.py();
     module.add("ValidationError", py.get_type::<ValidationError>())?;
-    module.add_class::<CompiledValidator>()?;
-    module.add_function(wrap_pyfunction!(validator, module)?)?;
+    module.add_class::<Validator>()?;
     module.add_function(wrap_pyfunction!(union, module)?)?;
     module.add_function(wrap_pyfunction!(intersection, module)?)?;
     module.add_function(wrap_pyfunction!(complement, module)?)?;

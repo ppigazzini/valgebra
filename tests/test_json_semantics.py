@@ -22,12 +22,12 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import (
+    Validator,
     complement,
     fixed_sequence,
     intersection,
     recursive,
     union,
-    validator,
 )
 
 _BIG = 123456789012345678901234567890
@@ -105,7 +105,7 @@ def test_json_matches_object_path_and_expected(
     doc: str,
     expected: bool,  # noqa: FBT001
 ) -> None:
-    v = validator(spec)
+    v = Validator(spec)
     assert v.is_valid_json(doc) is expected
     assert v.is_valid_json(doc) == v.is_valid(json.loads(doc))
 
@@ -136,23 +136,23 @@ def test_duplicate_object_keys_keep_the_last_value() -> None:
     # json.loads keeps the last value for a duplicate key; the in-place walk must
     # agree, for both records and mappings.
     for spec, doc in [
-        (validator({"a": int}), '{"a": "x", "a": 1}'),
-        (validator({"a": int}), '{"a": 1, "a": "x"}'),
-        (validator(dict[str, int]), '{"k": "x", "k": 1}'),
-        (validator(dict[str, int]), '{"k": 1, "k": "x"}'),
+        (Validator({"a": int}), '{"a": "x", "a": 1}'),
+        (Validator({"a": int}), '{"a": 1, "a": "x"}'),
+        (Validator(dict[str, int]), '{"k": "x", "k": 1}'),
+        (Validator(dict[str, int]), '{"k": 1, "k": "x"}'),
     ]:
         assert spec.is_valid_json(doc) == spec.is_valid(json.loads(doc))
 
 
 def test_malformed_and_wrong_type_json_are_not_members() -> None:
-    assert validator(int).is_valid_json("not json") is False
-    assert validator(int).is_valid_json("") is False
-    assert validator(int).is_valid_json(b"5") is True
+    assert Validator(int).is_valid_json("not json") is False
+    assert Validator(int).is_valid_json("") is False
+    assert Validator(int).is_valid_json(b"5") is True
 
 
 def test_is_valid_json_rejects_non_string_input() -> None:
     # Neither str nor bytes: not a member, and never raises.
-    assert validator(int).is_valid_json(123) is False  # ty: ignore[invalid-argument-type]
+    assert Validator(int).is_valid_json(123) is False  # ty: ignore[invalid-argument-type]
 
 
 def test_fixed_length_list_over_json() -> None:
@@ -163,23 +163,23 @@ def test_fixed_length_list_over_json() -> None:
 
 
 def test_open_record_over_json_admits_extra_keys() -> None:
-    v = validator({"a": int}).open()
+    v = Validator({"a": int}).open()
     assert v.is_valid_json('{"a": 1, "b": 2}') is True
     assert v.is_valid_json('{"a": "x"}') is False  # declared value still checked
 
 
 def test_json_null_materializes_for_a_predicate() -> None:
     # A predicate over a JSON null forces materialization to None.
-    v = validator(Annotated[object, at.Predicate(lambda x: x is None)])
+    v = Validator(Annotated[object, at.Predicate(lambda x: x is None)])
     assert v.is_valid_json("null") is True
     assert v.is_valid_json("1") is False
 
 
 def test_mapping_and_record_reject_a_non_object_json() -> None:
     # A dict-shaped schema against a JSON array (or scalar) is not a member.
-    assert validator(dict[str, int]).is_valid_json("[1, 2]") is False
-    assert validator({"a": int}).is_valid_json("[1]") is False
-    assert validator({"a": int}).is_valid_json("5") is False
+    assert Validator(dict[str, int]).is_valid_json("[1, 2]") is False
+    assert Validator({"a": int}).is_valid_json("[1]") is False
+    assert Validator({"a": int}).is_valid_json("5") is False
 
 
 # --- A fuzzer pinning the in-place JSON walk to the object walk -------------
@@ -236,7 +236,7 @@ def _json_values() -> st.SearchStrategy[object]:
 
 @given(spec=_json_schemas(), value=_json_values())
 def test_json_walk_matches_the_object_walk(spec: object, value: object) -> None:
-    schema = validator(spec)
+    schema = Validator(spec)
     doc = json.dumps(value)
     assert schema.is_valid_json(doc) == schema.is_valid(json.loads(doc))
 
@@ -246,4 +246,4 @@ def test_fixed_and_variadic_sequences_reject_wrong_json_shapes() -> None:
     # variadic) never matches JSON, which has no tuples.
     assert fixed_sequence(int, str).is_valid_json("{}") is False
     assert fixed_sequence(int, str).is_valid_json("5") is False
-    assert validator(tuple[int, ...]).is_valid_json("[1, 2]") is False
+    assert Validator(tuple[int, ...]).is_valid_json("[1, 2]") is False

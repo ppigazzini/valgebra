@@ -1,6 +1,6 @@
 import pytest
 
-from valgebra import ValidationError, fixed_sequence, validator
+from valgebra import ValidationError, Validator, fixed_sequence
 
 
 def test_fixed_sequence_matches_positionally() -> None:
@@ -45,6 +45,6 @@ def test_empty_fixed_sequence_matches_the_empty_list() -> None:
 
 
 def test_fixed_sequence_composes_in_a_validator() -> None:
-    schema = validator([fixed_sequence(int, str)])
+    schema = Validator([fixed_sequence(int, str)])
     assert schema.is_valid([[1, "a"], [2, "b"]])
     assert not schema.is_valid([[1, "a"], [2, 3]])

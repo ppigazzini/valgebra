@@ -21,7 +21,7 @@ from collections.abc import Callable, Sequence
 from contextlib import suppress
 from typing import Literal
 
-from valgebra import ValidationError, union, validator
+from valgebra import ValidationError, Validator, union
 
 # A bound validator method; `...` admits is_valid/validate/is_valid_json alike.
 Check = Callable[..., object]
@@ -46,7 +46,7 @@ def main() -> None:
     for width in (4, 16, 50):
         spec: dict[str, object] = {f"f{i}": int for i in range(width)}
         spec["note?"] = str
-        rec = validator(spec)
+        rec = Validator(spec)
         good = {f"f{i}": i for i in range(width)}
         bad_missing = {f"f{i}": i for i in range(width - 1)}
         bad_type = {**good, "f0": "x"}
@@ -59,16 +59,16 @@ def main() -> None:
 
     # Homogeneous and heterogeneous sequences of varied length.
     for length in (8, 64, 1000):
-        ints = validator(list[int])
+        ints = Validator(list[int])
         data: list[object] = list(range(length))
         _run(ints.is_valid, [data, [*data[:-1], "x"]], max(50, 20000 // length))
         json_text = "[" + ", ".join(str(n) for n in range(length)) + "]"
         _run(ints.is_valid_json, [json_text], max(50, 10000 // length))
-    pair = validator(tuple[int, str])
+    pair = Validator(tuple[int, str])
     _run(pair.is_valid, [(1, "a"), (1, 2), ("a", "b")], 5000)
 
     # Nested documents (records of lists of records), valid and invalid.
-    nested = validator({"user": {"name": str, "age?": int}, "tags": list[str]})
+    nested = Validator({"user": {"name": str, "age?": int}, "tags": list[str]})
     _run(
         nested.is_valid,
         [
@@ -81,15 +81,15 @@ def main() -> None:
     )
 
     # Literal unions (string enum and integer codes) and a structural union.
-    status = validator(Literal["pending", "active", "paused", "finished", "failed"])
+    status = Validator(Literal["pending", "active", "paused", "finished", "failed"])
     _run(status.is_valid, ["active", "failed", "unknown", 1], 8000)
     codes = union(*range(32))
     _run(codes.is_valid, [0, 31, 32, "x"], 8000)
-    scalar_or_none = validator(int | str | None)
+    scalar_or_none = Validator(int | str | None)
     _run(scalar_or_none.is_valid, [1, "a", None, 1.5], 8000)
 
     # Mappings.
-    mapping = validator({str: int})
+    mapping = Validator({str: int})
     big_map = {f"k{i}": i for i in range(50)}
     _run(mapping.is_valid, [big_map, {**big_map, "bad": "x"}], 1500)
 
@@ -101,7 +101,7 @@ def main() -> None:
         (bytes, b"x", "x"),
     ]
     for schema, ok, bad in scalars:
-        _run(validator(schema).is_valid, [ok, bad], 12000)
+        _run(Validator(schema).is_valid, [ok, bad], 12000)
 
 
 if __name__ == "__main__":

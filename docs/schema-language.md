@@ -18,13 +18,13 @@ native forms and the combinators are alternatives for the same sets.
 The set relationships follow Python's own, exactly:
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
 # bool is a subclass of int, so True and False are ints
-assert validator(int).is_valid(True)
+assert Validator(int).is_valid(True)
 # int does not subclass float, so an int is not a float
-assert not validator(float).is_valid(1)
-assert validator(float).is_valid(1.0)
+assert not Validator(float).is_valid(1)
+assert Validator(float).is_valid(1.0)
 ```
 
 ## `Any` versus `object`
@@ -37,10 +37,10 @@ distinct atom that the [simplifier](algebra.md) never rewrites, preserving
 ```python
 from typing import Any
 
-from valgebra import validator
+from valgebra import Validator
 
-assert validator(object).is_valid(["anything", 1, None])
-assert validator(Any).is_valid(object())
+assert Validator(object).is_valid(["anything", 1, None])
+assert Validator(Any).is_valid(object())
 ```
 
 ## Collections
@@ -56,13 +56,13 @@ assert validator(Any).is_valid(object())
 | `tuple[A, B, ...]` | a fixed prefix `A`, then zero or more `B` (see below) |
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-assert validator(list[int]).is_valid([1, 2, 3])
-assert validator(dict[str, int]).is_valid({"a": 1})
-assert validator(tuple[int, str]).is_valid((1, "a"))
-assert validator(tuple[int, ...]).is_valid((1, 2, 3))
-assert validator(tuple[str, int, ...]).is_valid(("x", 1, 2))
+assert Validator(list[int]).is_valid([1, 2, 3])
+assert Validator(dict[str, int]).is_valid({"a": 1})
+assert Validator(tuple[int, str]).is_valid((1, "a"))
+assert Validator(tuple[int, ...]).is_valid((1, 2, 3))
+assert Validator(tuple[str, int, ...]).is_valid(("x", 1, 2))
 ```
 
 ## Native forms
@@ -79,12 +79,12 @@ Compact literals build the same nodes without importing typing:
 | any constant `c` | `Literal[c]` |
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-assert validator([int]).is_valid([1, 2])           # list[int]
-assert validator({int}).is_valid({1, 2})           # set[int]
-assert validator({str: int}).is_valid({"a": 1})    # dict[str, int]
-assert validator("active").is_valid("active")      # the literal "active"
+assert Validator([int]).is_valid([1, 2])           # list[int]
+assert Validator({int}).is_valid({1, 2})           # set[int]
+assert Validator({str: int}).is_valid({"a": 1})    # dict[str, int]
+assert Validator("active").is_valid("active")      # the literal "active"
 ```
 
 A **fixed-length list** matched positionally is built with `fixed_sequence`
@@ -115,18 +115,18 @@ and vice versa.
 | `tuple[A, B, ...]` | a tuple: an `A`, then zero or more `B` |
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-prefixed = validator([str, int, ...])  # a str, then zero or more ints
+prefixed = Validator([str, int, ...])  # a str, then zero or more ints
 assert prefixed.is_valid(["x"])
 assert prefixed.is_valid(["x", 1, 2])
 assert not prefixed.is_valid([1])  # the prefix must be a str
 
-non_empty = validator([int, int, ...])  # at least one int
+non_empty = Validator([int, int, ...])  # at least one int
 assert non_empty.is_valid([1])
 assert not non_empty.is_valid([])
 
-tup = validator(tuple[str, int, ...])  # the same shape, as a tuple
+tup = Validator(tuple[str, int, ...])  # the same shape, as a tuple
 assert tup.is_valid(("x", 1, 2))
 assert not tup.is_valid(["x", 1, 2])  # a list is not a member of the tuple form
 ```
@@ -141,11 +141,11 @@ assert not tup.is_valid(["x", 1, 2])  # a list is not a member of the tuple form
 ```python
 from typing import Literal
 
-from valgebra import validator
+from valgebra import Validator
 
-assert validator(Literal[1]).is_valid(1)
-assert not validator(Literal[1]).is_valid(True)
-assert not validator(Literal[1]).is_valid(1.0)
+assert Validator(Literal[1]).is_valid(1)
+assert not Validator(Literal[1]).is_valid(True)
+assert not Validator(Literal[1]).is_valid(1.0)
 ```
 
 ## Unions and `Optional`
@@ -155,10 +155,10 @@ assert not validator(Literal[1]).is_valid(1.0)
 ```python
 from typing import Optional
 
-from valgebra import validator
+from valgebra import Validator
 
-assert validator(int | str).is_valid("x")
-assert validator(Optional[int]).is_valid(None)
+assert Validator(int | str).is_valid("x")
+assert Validator(Optional[int]).is_valid(None)
 ```
 
 ## Records
@@ -169,9 +169,9 @@ default. A required field's key must be present with a matching value; a trailin
 declared names.
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-user = validator({"name": str, "age?": int})
+user = Validator({"name": str, "age?": int})
 assert user.is_valid({"name": "Ada"})              # optional key absent
 assert user.is_valid({"name": "Ada", "age": 36})
 assert not user.is_valid({"name": "Ada", "x": 1})  # closed: no extra keys
@@ -181,9 +181,9 @@ Open the record with `open` (undeclared keys admitted) or re-close it with
 `close`:
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-closed = validator({"name": str})
+closed = Validator({"name": str})
 assert not closed.is_valid({"name": "Ada", "extra": 1})
 assert closed.open().is_valid({"name": "Ada", "extra": 1})
 ```
@@ -198,15 +198,15 @@ schema key give a record with a **typed catch-all**. Named fields take
 precedence over the catch-all.
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
 # str keys map to ints, int keys map to strs
-hetero = validator({str: int, int: str})
+hetero = Validator({str: int, int: str})
 assert hetero.is_valid({"a": 1, 2: "b"})
 assert not hetero.is_valid({"a": "x"})  # a str key needs an int value
 
 # a record whose every other key must be an int
-extensible = validator({"name": str, str: int})
+extensible = Validator({"name": str, str: int})
 assert extensible.is_valid({"name": "Ada", "age": 36})
 assert not extensible.is_valid({"name": "Ada", "age": "old"})
 ```
@@ -227,7 +227,7 @@ assert not extensible.is_valid({"name": "Ada", "age": "old"})
 import enum
 from dataclasses import dataclass
 
-from valgebra import validator
+from valgebra import Validator
 
 
 class Color(enum.Enum):
@@ -241,9 +241,9 @@ class Point:
     y: int
 
 
-assert validator(Color).is_valid(Color.RED)
-assert validator(Point).is_valid(Point(1, 2))
-assert not validator(Point).is_valid(Point(1, "y"))
+assert Validator(Color).is_valid(Color.RED)
+assert Validator(Point).is_valid(Point(1, 2))
+assert not Validator(Point).is_valid(Point(1, "y"))
 ```
 
 !!! note "Recursive classes"
@@ -252,7 +252,7 @@ assert not validator(Point).is_valid(Point(1, "y"))
     [`recursive`](recursion.md), which ties the fixpoint explicitly.
 
 !!! note "Bare classes, callables, and the runtime boundary"
-    A bare class is an `isinstance` check: `validator(complex)` admits any
+    A bare class is an `isinstance` check: `Validator(complex)` admits any
     `complex`, and any user class admits its instances. `Callable` (and
     `Callable[...]`) checks only that the value is callable — the argument and
     return types cannot be inspected at runtime, so they are not enforced. `Any`
@@ -270,8 +270,8 @@ A compiled validator prints back as the annotation that produces it, which makes
 schemas inspectable:
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-assert repr(validator(list[dict[str, int]])) == "list[dict[str, int]]"
-assert repr(validator({"name": str, "age?": int})) == "{'name': str, 'age?': int}"
+assert repr(Validator(list[dict[str, int]])) == "list[dict[str, int]]"
+assert repr(Validator({"name": str, "age?": int})) == "{'name': str, 'age?': int}"
 ```

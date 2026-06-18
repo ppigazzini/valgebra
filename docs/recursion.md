@@ -23,12 +23,12 @@ assert not json_value.is_valid({"a": object()})
 A `recursive` schema is an ordinary validator and composes like any other:
 
 ```python
-from valgebra import recursive, validator
+from valgebra import recursive, Validator
 
 tree = recursive(lambda t: {"value": int, "left?": t, "right?": t})
 assert tree.is_valid({"value": 1, "left": {"value": 2}})
 
-forest = validator([tree])
+forest = Validator([tree])
 assert forest.is_valid([{"value": 1}, {"value": 2, "right": {"value": 3}}])
 ```
 
@@ -76,10 +76,10 @@ structurally identical recursive schemas are equivalent, and a recursive schema
 with no base case is detected as uninhabited.
 
 ```python
-from valgebra import recursive, union, validator
+from valgebra import recursive, union, Validator
 
 json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
-assert validator(json_value).is_subtype_of(json_value)  # reflexive across the fixpoint
+assert Validator(json_value).is_subtype_of(json_value)  # reflexive across the fixpoint
 assert recursive(lambda t: {"value": int, "next": t}).is_empty()  # no base case
 assert not recursive(lambda t: union(None, {"next": t})).is_empty()  # a base case exists
 ```

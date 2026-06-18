@@ -13,17 +13,17 @@ this page is the path, not the catalogue.
 ## 1. Your first validator
 
 A schema denotes a *set of Python values*, and validating asks whether a value
-is in that set. Compile one with `validator`, then ask with `is_valid`:
+is in that set. Compile one with `Validator`, then ask with `is_valid`:
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-is_int = validator(int)
+is_int = Validator(int)
 assert is_int.is_valid(42)
 assert not is_int.is_valid("42")  # a str is not in the set of ints
 ```
 
-`validator(int)` compiles once; call `is_valid` as often as you like.
+`Validator(int)` compiles once; call `is_valid` as often as you like.
 
 ## 2. Failing loudly
 
@@ -31,9 +31,9 @@ assert not is_int.is_valid("42")  # a str is not in the set of ints
 it raises `ValidationError` on a value outside the set:
 
 ```python
-from valgebra import ValidationError, validator
+from valgebra import ValidationError, Validator
 
-is_int = validator(int)
+is_int = Validator(int)
 raised = False
 try:
     is_int.validate("42")
@@ -50,9 +50,9 @@ Schemas nest. A `list[int]` is the set of lists whose every element is an `int`,
 and valgebra checks each element:
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-numbers = validator(list[int])
+numbers = Validator(list[int])
 assert numbers.is_valid([1, 2, 3])
 assert not numbers.is_valid([1, "two", 3])  # one bad element fails the list
 ```
@@ -65,7 +65,7 @@ typing form — and valgebra validates the shape and every field:
 ```python
 from typing import TypedDict
 
-from valgebra import validator
+from valgebra import Validator
 
 
 class User(TypedDict):
@@ -73,7 +73,7 @@ class User(TypedDict):
     age: int
 
 
-users = validator(User)
+users = Validator(User)
 assert users.is_valid({"name": "Ada", "age": 36})
 assert not users.is_valid({"name": "Ada", "age": "old"})  # age must be an int
 ```
@@ -89,7 +89,7 @@ from typing import Annotated, TypedDict
 
 import annotated_types as at
 
-from valgebra import validator
+from valgebra import Validator
 
 
 class User(TypedDict):
@@ -97,7 +97,7 @@ class User(TypedDict):
     age: Annotated[int, at.Ge(0)]
 
 
-users = validator(User)
+users = Validator(User)
 assert users.is_valid({"name": "Ada", "age": 36})
 assert not users.is_valid({"name": "Ada", "age": -1})  # the bound holds
 ```
@@ -108,9 +108,9 @@ A dict literal is a compact record: a trailing `?` on a key marks it optional,
 and the record is *closed* — an undeclared key is rejected.
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-profile = validator({"name": str, "age?": int})
+profile = Validator({"name": str, "age?": int})
 assert profile.is_valid({"name": "Ada"})               # age omitted: fine
 assert profile.is_valid({"name": "Ada", "age": 36})
 assert not profile.is_valid({"name": "Ada", "extra": 1})  # closed: no extra keys
@@ -121,9 +121,9 @@ When a check fails, `validate` raises a `ValidationError` that tells you exactly
 offending value, even deep in a nested structure:
 
 ```python
-from valgebra import ValidationError, validator
+from valgebra import ValidationError, Validator
 
-schema = validator({"user": {"name": str}})
+schema = Validator({"user": {"name": str}})
 try:
     schema.validate({"user": {"name": 5}})
 except ValidationError as err:
@@ -140,11 +140,11 @@ the Rust path and run the very same checks, so a document is judged exactly as
 `json.loads` of it would be:
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-users = validator({"name": str, "age?": int})
+users = Validator({"name": str, "age?": int})
 users.validate_json('{"name": "Ada", "age": 36}')        # passes, raises nothing
-assert validator(list[int]).is_valid_json("[1, 2, 3]")   # str or bytes
+assert Validator(list[int]).is_valid_json("[1, 2, 3]")   # str or bytes
 ```
 
 ## Where to go next

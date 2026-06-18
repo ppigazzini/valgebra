@@ -23,7 +23,7 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import TypeAdapter
 
-from valgebra import validator
+from valgebra import Validator
 
 ARRAY_LEN = 10_000
 RECORD_WIDTH = 50
@@ -56,7 +56,7 @@ def _nested_json_schema(depth: int) -> dict:
 def make_large_array(lib: str) -> tuple[object, object]:
     data = list(range(ARRAY_LEN))
     if lib == "valgebra":
-        return validator(list[int]).is_valid, data
+        return Validator(list[int]).is_valid, data
     if lib == "pydantic":
         adapter = TypeAdapter(list[int])
         return lambda d: adapter.validate_python(d, strict=True), data
@@ -68,7 +68,7 @@ def make_wide_record(lib: str) -> tuple[object, object]:
     data = {f"f{i}": i for i in range(RECORD_WIDTH)}
     fields = {f"f{i}": int for i in range(RECORD_WIDTH)}
     if lib == "valgebra":
-        return validator(fields).is_valid, data
+        return Validator(fields).is_valid, data
     if lib == "pydantic":
         # A named, closed record's analogue is a TypedDict, not dict[str, int]
         # (which is valgebra's Mapping). Build one with the same fields.
@@ -87,7 +87,7 @@ def make_wide_record(lib: str) -> tuple[object, object]:
 def make_deep_nesting(lib: str) -> tuple[object, object]:
     data = _nested_list_value(NESTING_DEPTH)
     if lib == "valgebra":
-        return validator(_nested_list_type(NESTING_DEPTH)).is_valid, data
+        return Validator(_nested_list_type(NESTING_DEPTH)).is_valid, data
     if lib == "pydantic":
         adapter = TypeAdapter(_nested_list_type(NESTING_DEPTH))
         return lambda d: adapter.validate_python(d, strict=True), data

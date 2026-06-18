@@ -25,11 +25,10 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from valgebra import (
-    CompiledValidator,
     ValidationError,
+    Validator,
     complement,
     intersection,
-    validator,
 )
 
 # A predicate deciding membership of a value in a schema's set.
@@ -212,11 +211,11 @@ def _specs() -> st.SearchStrategy[Spec]:
                     _prefix_tail_pred([ab[0][1]], ab[1][1]),
                 )
             ),
-            # A (A, B, ...) tuple: the same prefix-plus-tail under the tuple
+            # A tuple[A, B, ...]: the same prefix-plus-tail under the tuple
             # container, so membership rejects the list form and vice versa.
             st.tuples(child, child).map(
                 lambda ab: (
-                    (ab[0][0], ab[1][0], ...),
+                    GenericAlias(tuple, (ab[0][0], ab[1][0], ...)),
                     _prefix_tail_pred([ab[0][1]], ab[1][1], tuple),
                 )
             ),
@@ -260,7 +259,7 @@ def _values() -> st.SearchStrategy[object]:
 
 
 @st.composite
-def _cases(draw: st.DrawFn) -> tuple[CompiledValidator, Pred]:
+def _cases(draw: st.DrawFn) -> tuple[Validator, Pred]:
     """Draw a compiled validator paired with its denotation predicate.
 
     The plain case compiles the spec directly; the wrapped cases exercise the
@@ -269,7 +268,7 @@ def _cases(draw: st.DrawFn) -> tuple[CompiledValidator, Pred]:
     spec, pred = draw(_specs())
     mode = draw(st.sampled_from(["plain", "complement", "intersection"]))
     if mode == "plain":
-        return validator(spec), pred
+        return Validator(spec), pred
     if mode == "complement":
         return complement(spec), lambda x: not pred(x)
     spec2, pred2 = draw(_specs())
@@ -278,9 +277,7 @@ def _cases(draw: st.DrawFn) -> tuple[CompiledValidator, Pred]:
 
 @settings(max_examples=400, deadline=None)
 @given(case=_cases(), value=_values())
-def test_walk_matches_denotation(
-    case: tuple[CompiledValidator, Pred], value: object
-) -> None:
+def test_walk_matches_denotation(case: tuple[Validator, Pred], value: object) -> None:
     compiled, predicate = case
     expected = predicate(value)
     assert compiled.is_valid(value) is expected

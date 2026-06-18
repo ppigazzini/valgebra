@@ -1,6 +1,6 @@
 import pytest
 
-from valgebra import ValidationError, union, validator
+from valgebra import ValidationError, Validator, union
 
 
 def test_union_reports_the_branch_that_descends_furthest() -> None:
@@ -29,7 +29,7 @@ def test_flat_union_falls_back_to_a_union_error() -> None:
 
 
 def test_optional_failure_on_a_present_value_descends() -> None:
-    schema = validator(list[int] | None)
+    schema = Validator(list[int] | None)
     with pytest.raises(ValidationError) as info:
         schema.validate([1, "x"])
     assert info.value.code == "int_type"

@@ -23,9 +23,9 @@ uv run maturin develop  # build the Rust extension into the venv
 Verify it works:
 
 ```python
-from valgebra import validator
+from valgebra import Validator
 
-assert validator(int).is_valid(7)
+assert Validator(int).is_valid(7)
 ```
 
 ## After the first release

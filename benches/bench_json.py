@@ -22,7 +22,7 @@ import json
 import pytest
 from pydantic import TypeAdapter
 
-from valgebra import validator
+from valgebra import Validator
 
 RECORD_WIDTH = 50
 ARRAY_LEN = 10_000
@@ -60,10 +60,10 @@ def test_json(benchmark: object, shape: str, lib: str) -> None:
     benchmark.group = shape  # type: ignore[attr-defined]
     spec, adapter, text = SHAPES[shape]()
     if lib == "valgebra-json":
-        check = validator(spec).is_valid_json
+        check = Validator(spec).is_valid_json
         assert benchmark(check, text) is True
     elif lib == "valgebra-loads":
-        v = validator(spec)
+        v = Validator(spec)
         benchmark(lambda doc: v.is_valid(json.loads(doc)), text)
     else:
         benchmark(adapter.validate_json, text)

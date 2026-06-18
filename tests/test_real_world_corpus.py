@@ -24,7 +24,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import validator
+from valgebra import Validator
 
 # A spread of values to smoke each compiled validator's membership check.
 _SAMPLES = [None, 0, 1, True, "x", b"y", 1.5, [1], {"a": 1}, (1, "x"), {1}, [], {}]
@@ -60,7 +60,7 @@ _BUILDS = {
 
 @pytest.mark.parametrize("annotation", _BUILDS.values(), ids=list(_BUILDS))
 def test_real_world_annotation_builds_and_runs(annotation: object) -> None:
-    compiled = validator(annotation)
+    compiled = Validator(annotation)
     for sample in _SAMPLES:
         compiled.is_valid(sample)  # membership must not raise
 
@@ -80,7 +80,7 @@ _REJECTS = {
 @pytest.mark.parametrize("annotation", _REJECTS.values(), ids=list(_REJECTS))
 def test_unsupported_annotation_rejects_cleanly(annotation: object) -> None:
     with pytest.raises(NotImplementedError):
-        validator(annotation)
+        Validator(annotation)
 
 
 # Randomly nested typing expressions over the supported forms, built at runtime.
@@ -106,7 +106,7 @@ def test_generated_annotation_never_crashes(annotation: object) -> None:
     # A generated typing expression either builds and runs, or is rejected
     # cleanly; it never panics and never yields a validator that raises.
     try:
-        compiled = validator(annotation)
+        compiled = Validator(annotation)
     except (NotImplementedError, TypeError, ValueError):
         return
     for sample in _SAMPLES:

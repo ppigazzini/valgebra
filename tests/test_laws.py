@@ -11,14 +11,13 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import (
-    CompiledValidator,
+    Validator,
     anything,
     complement,
     intersection,
     nothing,
     simplify,
     union,
-    validator,
 )
 
 # Schema specs: each is an annotation or native form valgebra can compile. The
@@ -70,11 +69,11 @@ VALUES = [
 schemas = st.sampled_from(ATOM_SCHEMAS)
 
 
-def accepts(schema: CompiledValidator) -> list[bool]:
+def accepts(schema: Validator) -> list[bool]:
     return [schema.is_valid(value) for value in VALUES]
 
 
-def equivalent(left: CompiledValidator, right: CompiledValidator) -> bool:
+def equivalent(left: Validator, right: Validator) -> bool:
     return accepts(left) == accepts(right)
 
 
@@ -102,27 +101,27 @@ def test_intersect_associativity(a: object, b: object, c: object) -> None:
 
 @given(a=schemas)
 def test_idempotence(a: object) -> None:
-    assert equivalent(union(a, a), validator(a))
-    assert equivalent(intersection(a, a), validator(a))
+    assert equivalent(union(a, a), Validator(a))
+    assert equivalent(intersection(a, a), Validator(a))
 
 
 @given(a=schemas, b=schemas)
 def test_absorption(a: object, b: object) -> None:
-    assert equivalent(union(a, intersection(a, b)), validator(a))
-    assert equivalent(intersection(a, union(a, b)), validator(a))
+    assert equivalent(union(a, intersection(a, b)), Validator(a))
+    assert equivalent(intersection(a, union(a, b)), Validator(a))
 
 
 @given(a=schemas)
 def test_identities(a: object) -> None:
-    assert equivalent(union(a, nothing), validator(a))
-    assert equivalent(intersection(a, anything), validator(a))
+    assert equivalent(union(a, nothing), Validator(a))
+    assert equivalent(intersection(a, anything), Validator(a))
     assert equivalent(union(a, anything), anything)
     assert equivalent(intersection(a, nothing), nothing)
 
 
 @given(a=schemas)
 def test_double_negation(a: object) -> None:
-    assert equivalent(complement(complement(a)), validator(a))
+    assert equivalent(complement(complement(a)), Validator(a))
 
 
 @given(a=schemas, b=schemas)

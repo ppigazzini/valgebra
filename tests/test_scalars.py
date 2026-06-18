@@ -1,6 +1,6 @@
 import pytest
 
-from valgebra import validator
+from valgebra import Validator
 
 
 @pytest.mark.parametrize(
@@ -19,7 +19,7 @@ from valgebra import validator
     ],
 )
 def test_scalar_accepts_a_member(schema: object, value: object) -> None:
-    assert validator(schema).is_valid(value)
+    assert Validator(schema).is_valid(value)
 
 
 @pytest.mark.parametrize(
@@ -36,15 +36,15 @@ def test_scalar_accepts_a_member(schema: object, value: object) -> None:
     ],
 )
 def test_scalar_rejects_a_non_member(schema: object, value: object) -> None:
-    assert not validator(schema).is_valid(value)
+    assert not Validator(schema).is_valid(value)
 
 
 def test_bool_is_a_subset_of_int() -> None:
-    assert validator(int).is_valid(True)
-    assert validator(int).is_valid(False)
-    assert not validator(bool).is_valid(1)
+    assert Validator(int).is_valid(True)
+    assert Validator(int).is_valid(False)
+    assert not Validator(bool).is_valid(1)
 
 
 def test_int_and_float_are_disjoint() -> None:
-    assert not validator(int).is_valid(2.0)
-    assert not validator(float).is_valid(2)
+    assert not Validator(int).is_valid(2.0)
+    assert not Validator(float).is_valid(2)

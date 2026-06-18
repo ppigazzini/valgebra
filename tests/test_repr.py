@@ -6,13 +6,13 @@ import annotated_types as at
 import pytest
 
 from valgebra import (
+    Validator,
     anything,
     complement,
     intersection,
     nothing,
     recursive,
     union,
-    validator,
 )
 
 
@@ -44,7 +44,7 @@ from valgebra import (
     ],
 )
 def test_repr_renders_the_annotation(schema: object, expected: str) -> None:
-    assert repr(validator(schema)) == expected
+    assert repr(Validator(schema)) == expected
 
 
 # The namespace the rendered form is evaluated in to re-parse it. It holds every
@@ -119,8 +119,8 @@ def test_repr_of_class_and_recursive_forms() -> None:
     class Point:
         x: int
 
-    assert repr(validator(Color)) == "Color"
-    assert repr(validator(Point)) == "Point"
+    assert repr(Validator(Color)) == "Color"
+    assert repr(Validator(Point)) == "Point"
     assert repr(recursive(lambda s: {"v": int, "n?": s})) == "{'v': int, 'n?': ...}"
 
 
@@ -129,6 +129,6 @@ def test_repr_round_trips_through_eval(schema: object) -> None:
     # repr is a fixpoint on this subset: rendering, re-parsing, and rendering
     # again yields the same string, so the printed form really does reconstruct
     # the schema.
-    rendered = repr(validator(schema))
-    rebuilt = validator(eval(rendered, dict(_ROUNDTRIP_NS)))  # noqa: S307
+    rendered = repr(Validator(schema))
+    rebuilt = Validator(eval(rendered, dict(_ROUNDTRIP_NS)))  # noqa: S307
     assert repr(rebuilt) == rendered

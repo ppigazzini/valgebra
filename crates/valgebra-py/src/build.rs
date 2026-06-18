@@ -10,7 +10,7 @@ use pyo3::types::{
 };
 use valgebra_core::{Constraint, Field, Schema, SeqRegex};
 
-use crate::CompiledValidator;
+use crate::Validator;
 use crate::errors::summarize;
 
 thread_local! {
@@ -139,7 +139,7 @@ pub(crate) fn build_schema(
     // (so a constant shared by identity with one already present collapses to a
     // single index, which keeps structurally-equal schemas equal across a
     // merge), append its definitions, and remap its schema's indices.
-    if let Ok(compiled) = obj.cast::<CompiledValidator>() {
+    if let Ok(compiled) = obj.cast::<Validator>() {
         let inner = compiled.get();
         let def_offset = defs.len();
         let lit_map: Vec<usize> = inner
@@ -191,14 +191,14 @@ fn is_typing_construct(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
 pub(crate) fn combine(
     args: &Bound<'_, PyTuple>,
     make: impl FnOnce(Vec<Schema>) -> Schema,
-) -> PyResult<CompiledValidator> {
+) -> PyResult<Validator> {
     let mut literals = Vec::new();
     let mut definitions = Vec::new();
     let mut members = Vec::with_capacity(args.len());
     for arg in args.iter() {
         members.push(build_schema(&arg, &mut literals, &mut definitions)?);
     }
-    Ok(CompiledValidator::new(make(members), literals, definitions))
+    Ok(Validator::new(make(members), literals, definitions))
 }
 
 /// Build the schema for a Python type object (a builtin, `TypedDict`, `Enum`,

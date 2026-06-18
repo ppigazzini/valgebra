@@ -6,7 +6,7 @@ auto-accepted. Values are chosen with stable reprs so the snapshot is identical
 across Python versions and platforms.
 """
 
-from valgebra import CompiledValidator, ValidationError, union, validator
+from valgebra import ValidationError, Validator, union
 
 # (label, schema, value). The schema is either a raw spec or a compiled
 # validator (the named combinators return one).
@@ -23,8 +23,8 @@ CASES: list[tuple[str, object, object]] = [
 ]
 
 
-def _compiled(schema: object) -> CompiledValidator:
-    return schema if isinstance(schema, CompiledValidator) else validator(schema)
+def _compiled(schema: object) -> Validator:
+    return schema if isinstance(schema, Validator) else Validator(schema)
 
 
 def _capture(schema: object, value: object) -> list[dict[str, object]]:

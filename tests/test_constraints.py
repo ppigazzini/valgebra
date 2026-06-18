@@ -12,13 +12,13 @@ from typing import Annotated
 import annotated_types as at
 import pytest
 
-from valgebra import ValidationError, validator
+from valgebra import ValidationError, Validator
 
 
 def _code(spec: object, value: object) -> str | None:
     """Return the first error code if validation raises, else None."""
     try:
-        validator(spec).validate(value)
+        Validator(spec).validate(value)
     except ValidationError as err:
         return err.code
     return None
@@ -56,7 +56,7 @@ def test_constraint_accepts_rejects_codes_and_repr(  # noqa: PLR0913
     code: str,
     shown: str,
 ) -> None:
-    v = validator(spec)
+    v = Validator(spec)
     assert v.is_valid(good)
     assert not v.is_valid(bad)
     assert _code(spec, good) is None
@@ -65,18 +65,18 @@ def test_constraint_accepts_rejects_codes_and_repr(  # noqa: PLR0913
 
 
 def test_multiple_of_handles_negatives_and_floats() -> None:
-    assert validator(Annotated[int, at.MultipleOf(3)]).is_valid(-6)
-    assert validator(Annotated[float, at.MultipleOf(0.5)]).is_valid(1.5)
-    assert not validator(Annotated[float, at.MultipleOf(0.5)]).is_valid(1.3)
+    assert Validator(Annotated[int, at.MultipleOf(3)]).is_valid(-6)
+    assert Validator(Annotated[float, at.MultipleOf(0.5)]).is_valid(1.5)
+    assert not Validator(Annotated[float, at.MultipleOf(0.5)]).is_valid(1.3)
 
 
 def test_multiple_of_on_a_non_number_is_not_a_multiple() -> None:
     # The base admits the value but the modulo is undefined: not a multiple.
-    assert not validator(Annotated[str, at.MultipleOf(3)]).is_valid("abc")
+    assert not Validator(Annotated[str, at.MultipleOf(3)]).is_valid("abc")
 
 
 def test_interval_marker_contributes_both_bounds() -> None:
-    v = validator(Annotated[int, at.Interval(ge=0, le=10)])
+    v = Validator(Annotated[int, at.Interval(ge=0, le=10)])
     assert v.is_valid(0)
     assert v.is_valid(10)
     assert not v.is_valid(-1)
@@ -84,7 +84,7 @@ def test_interval_marker_contributes_both_bounds() -> None:
 
 
 def test_len_marker_contributes_min_and_max() -> None:
-    v = validator(Annotated[str, at.Len(2, 4)])
+    v = Validator(Annotated[str, at.Len(2, 4)])
     assert v.is_valid("ab")
     assert v.is_valid("abcd")
     assert not v.is_valid("a")
@@ -92,7 +92,7 @@ def test_len_marker_contributes_min_and_max() -> None:
 
 
 def test_several_markers_combine() -> None:
-    v = validator(Annotated[int, at.Interval(ge=0, le=20), at.MultipleOf(5)])
+    v = Validator(Annotated[int, at.Interval(ge=0, le=20), at.MultipleOf(5)])
     assert v.is_valid(10)
     assert not v.is_valid(7)
     assert not v.is_valid(25)
@@ -101,13 +101,13 @@ def test_several_markers_combine() -> None:
 def test_unrecognized_marker_is_ignored_per_spec() -> None:
     # A non-constraint marker carries no membership meaning and is dropped, as
     # the typing spec directs for unrecognized Annotated metadata.
-    v = validator(Annotated[int, "just documentation"])
+    v = Validator(Annotated[int, "just documentation"])
     assert v.is_valid(5)
     assert repr(v) == "int"
 
 
 def test_predicate_passes_and_fails() -> None:
-    v = validator(Annotated[int, at.Predicate(lambda x: x % 2 == 0)])
+    v = Validator(Annotated[int, at.Predicate(lambda x: x % 2 == 0)])
     assert v.is_valid(4)
     assert not v.is_valid(3)
     assert (
@@ -122,7 +122,7 @@ def test_predicate_that_raises_is_reported_distinctly() -> None:
         raise RuntimeError
 
     spec = Annotated[int, at.Predicate(boom)]
-    assert not validator(spec).is_valid(5)
+    assert not Validator(spec).is_valid(5)
     assert _code(spec, 5) == "predicate_error"
 
 
@@ -133,6 +133,6 @@ def test_refinement_reports_the_base_failure_before_constraints() -> None:
 
 def test_refinement_failure_reports_the_path() -> None:
     with pytest.raises(ValidationError) as info:
-        validator({"age": Annotated[int, at.Ge(0)]}).validate({"age": -1})
+        Validator({"age": Annotated[int, at.Ge(0)]}).validate({"age": -1})
     assert info.value.code == "greater_than_equal"
     assert info.value.path == ("age",)
