@@ -161,6 +161,45 @@ assert not exactly_one.is_valid({"a": 1, "b": 2})
 assert not exactly_one.is_valid({})
 ```
 
+### Fixed-length and length-bounded lists
+
+The native list literal spells the sequence shapes typing cannot: `[A, B]` is a
+fixed-length list (positional) and `[]` the empty list.
+
+```python
+from valgebra import Validator
+
+pair = Validator([int, str])  # exactly two elements: an int then a str
+assert pair.is_valid([1, "a"])
+assert not pair.is_valid([1])           # wrong length
+assert not pair.is_valid((1, "a"))      # a tuple is not a member of the list form
+```
+
+The single-element `[x]` is deliberately the **homogeneous** "list of x" (any
+length), following Python's `list[T]` — so a fixed-length-*one* list, and any
+length bound, is a refinement of the homogeneous list, not a separate form. This
+is the refinement type `{ x ∈ list[T] | len bound }`, written with `Annotated`:
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import Validator
+
+# a list of exactly one int (what `[int]`, being homogeneous, does not mean)
+one_int = Validator(Annotated[list[int], at.Len(1, 1)])
+assert one_int.is_valid([1])
+assert not one_int.is_valid([])
+assert not one_int.is_valid([1, 2])
+
+# a non-empty list, and an at-most-three list: the same length-refinement family
+non_empty = Validator(Annotated[list[int], at.MinLen(1)])
+assert non_empty.is_valid([1, 2]) and not non_empty.is_valid([])
+small = Validator(Annotated[list[int], at.MaxLen(3)])
+assert small.is_valid([1, 2, 3]) and not small.is_valid([1, 2, 3, 4])
+```
+
 ## The simplifier
 
 `simplify` is a method that reduces a schema by the lattice laws while admitting
