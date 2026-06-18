@@ -52,13 +52,13 @@ def test_scalar_codes() -> None:
 
 def test_bottom_and_literal_codes() -> None:
     assert _first(nothing, 1) == ("no_match", ())
-    assert _first("active", "paused") == ("literal_value", ())
+    assert _first("active", "paused") == ("literal_error", ())
 
 
 def test_collection_type_codes() -> None:
     assert _first(list[int], "x") == ("list_type", ())
     assert _first(set[int], [1]) == ("set_type", ())
-    assert _first(frozenset[int], {1}) == ("frozenset_type", ())
+    assert _first(frozenset[int], {1}) == ("frozen_set_type", ())
     assert _first(tuple[int, str], [1, "a"]) == ("tuple_type", ())
     assert _first(dict[str, int], []) == ("dict_type", ())
 
@@ -71,7 +71,7 @@ def test_length_codes() -> None:
 
 def test_record_codes_and_paths() -> None:
     assert _first({"a": int}, {}) == ("missing_key", ("a",))
-    assert _first({"a": int}, {"a": 1, "b": 2}) == ("extra_key", ("b",))
+    assert _first({"a": int}, {"a": 1, "b": 2}) == ("extra_forbidden", ("b",))
     assert _first({"a": int}, {"a": "x"}) == ("int_type", ("a",))
 
 
@@ -114,7 +114,7 @@ def test_constraint_codes() -> None:
     assert _first(Annotated[int, at.Lt(0)], 0) == ("less_than", ())
     assert _first(Annotated[str, at.MinLen(2)], "a") == ("too_short", ())
     assert _first(Annotated[str, at.MaxLen(1)], "ab") == ("too_long", ())
-    assert _first(Annotated[int, at.MultipleOf(3)], 5) == ("not_multiple_of", ())
+    assert _first(Annotated[int, at.MultipleOf(3)], 5) == ("multiple_of", ())
 
 
 def test_recursion_codes() -> None:

@@ -11,7 +11,7 @@ A `ValidationError` exposes:
 - `errors` — a tuple of structured items, one per failure. Each item is a plain
   dict with these keys:
   - `code` — a stable, machine-readable code (e.g. `int_type`, `missing_key`,
-    `literal_value`).
+    `literal_error`).
   - `path` — the location of the offending value from the root, a tuple of
     string keys and integer indices (empty at the root).
   - `message` — the rendered one-line human message.

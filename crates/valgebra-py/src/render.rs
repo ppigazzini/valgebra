@@ -22,7 +22,7 @@ pub(crate) fn render(
     let kids = |members: &[Schema]| members.iter().map(&r).collect::<Vec<_>>().join(", ");
     match schema {
         Schema::Anything => "anything".to_owned(),
-        Schema::Any => "Any".to_owned(),
+        Schema::Dynamic => "Any".to_owned(),
         Schema::Nothing => "nothing".to_owned(),
         Schema::NoneType => "None".to_owned(),
         Schema::Bool => "bool".to_owned(),
@@ -72,9 +72,7 @@ pub(crate) fn render(
         Schema::Union(members) => members.iter().map(&r).collect::<Vec<_>>().join(" | "),
         Schema::Intersection(members) => format!("intersection({})", kids(members)),
         Schema::Complement(inner) => format!("complement({})", r(inner)),
-        Schema::Instance(i) | Schema::Object { class_index: i, .. } => {
-            pool_class_name(py, pool, *i)
-        }
+        Schema::Instance(i) | Schema::Attrs { class_index: i, .. } => pool_class_name(py, pool, *i),
         Schema::Refine { base, constraints } => {
             let mut parts = vec![r(base)];
             parts.extend(constraints.iter().map(|c| render_constraint(py, c, pool)));

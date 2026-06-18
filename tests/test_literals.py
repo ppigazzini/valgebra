@@ -29,4 +29,4 @@ def test_literal_is_a_typed_singleton() -> None:
 def test_literal_failure_reports_its_code() -> None:
     with pytest.raises(ValidationError) as info:
         Validator(5).validate(6)
-    assert info.value.code == "literal_value"
+    assert info.value.code == "literal_error"

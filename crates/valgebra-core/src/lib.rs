@@ -49,10 +49,12 @@ pub enum PathSegment {
 pub enum Schema {
     /// Top. Denotes every Python value; membership always holds.
     Anything,
-    /// The gradual dynamic type. At runtime it admits every value like the top,
-    /// but it is a distinct atom: the simplifier must not rewrite it by the
-    /// lattice laws, so `Any` and [`Schema::Anything`] are kept separate.
-    Any,
+    /// The gradual dynamic type (the user spells it `typing.Any`). At runtime it
+    /// admits every value like the top, but it is a distinct atom: the simplifier
+    /// must not rewrite it by the lattice laws, so `Dynamic` and
+    /// [`Schema::Anything`] are kept separate. Named for the gradual-typing
+    /// term (Siek-Taha; ty's `Dynamic`), not the Python surface spelling.
+    Dynamic,
     /// Bottom. Denotes the empty set; membership never holds.
     Nothing,
     /// Denotes the singleton set `{None}`.
@@ -143,12 +145,15 @@ pub enum Schema {
     /// Denotes instances of a class, by `isinstance`. The class is held in the
     /// validator's object pool; the payload is its index.
     Instance(usize),
-    /// Denotes instances of a class whose attributes satisfy the given fields.
+    /// An instance of a class whose attributes satisfy the given fields — an
+    /// `isinstance` atom intersected with an attribute record (`Instance ∧
+    /// attrs`). Named `Attrs` so it does not collide with `object`, the lattice
+    /// top, which the frontend maps to [`Schema::Anything`].
     ///
     /// `isinstance` against the pooled class at `class_index` must hold, and
     /// every field's attribute must be present and match. This is the deep
     /// check for dataclasses and named tuples.
-    Object {
+    Attrs {
         /// Index of the class in the validator's object pool.
         class_index: usize,
         /// Per-attribute field schemas; all required.
@@ -447,7 +452,7 @@ pub enum Constraint {
     Regex(String),
 }
 
-/// A named field of a [`Schema::KeyedMap`] or [`Schema::Object`].
+/// A named field of a [`Schema::KeyedMap`] or [`Schema::Attrs`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Field {
     /// The key name.
@@ -464,7 +469,7 @@ impl Schema {
     pub fn expected(&self) -> &'static str {
         match self {
             Schema::Anything => "anything",
-            Schema::Any => "any",
+            Schema::Dynamic => "any",
             Schema::Nothing => "nothing",
             Schema::NoneType => "None",
             Schema::Bool => "bool",
@@ -490,7 +495,7 @@ impl Schema {
             Schema::Complement(_) => "complement",
             // The py layer renders the concrete class name; these are fallbacks.
             Schema::Instance(_) => "instance",
-            Schema::Object { .. } => "object",
+            Schema::Attrs { .. } => "object",
             // A refinement's type is its base; constraints report their own.
             Schema::Refine { base, .. } => base.expected(),
             // A reference reports through its definition at validation time.
@@ -505,7 +510,7 @@ impl Schema {
         match self {
             // Anything and Any never fail; the codes are for completeness.
             Schema::Anything => "anything",
-            Schema::Any => "any",
+            Schema::Dynamic => "any",
             Schema::Nothing => "no_match",
             Schema::NoneType => "none_type",
             Schema::Bool => "bool_type",
@@ -513,7 +518,7 @@ impl Schema {
             Schema::Float => "float_type",
             Schema::Str => "string_type",
             Schema::Bytes => "bytes_type",
-            Schema::Literal(_) => "literal_value",
+            Schema::Literal(_) => "literal_error",
             Schema::Seq {
                 container: SeqKind::List,
                 ..
@@ -523,12 +528,12 @@ impl Schema {
                 ..
             } => "tuple_type",
             Schema::Set(_) => "set_type",
-            Schema::FrozenSet(_) => "frozenset_type",
+            Schema::FrozenSet(_) => "frozen_set_type",
             Schema::KeyedMap { .. } => "dict_type",
             Schema::Union(_) => "union_error",
             Schema::Intersection(_) => "intersection_error",
             Schema::Complement(_) => "unexpected_match",
-            Schema::Instance(_) | Schema::Object { .. } => "instance_type",
+            Schema::Instance(_) | Schema::Attrs { .. } => "instance_type",
             Schema::Refine { base, .. } => base.error_code(),
             Schema::Ref(_) => "recursion",
             Schema::SelfRef(_) => "unresolved_recursion",
@@ -546,7 +551,7 @@ impl Schema {
     pub fn shifted(&self, pool: usize, defs: usize) -> Schema {
         match self {
             Schema::Anything
-            | Schema::Any
+            | Schema::Dynamic
             | Schema::Nothing
             | Schema::NoneType
             | Schema::Bool
@@ -576,10 +581,10 @@ impl Schema {
                     .map(|(k, v)| (k.shifted(pool, defs), v.shifted(pool, defs)))
                     .collect(),
             },
-            Schema::Object {
+            Schema::Attrs {
                 class_index,
                 fields,
-            } => Schema::Object {
+            } => Schema::Attrs {
                 class_index: class_index + pool,
                 fields: fields.iter().map(|f| f.shifted(pool, defs)).collect(),
             },
@@ -598,7 +603,7 @@ impl Schema {
     pub fn reindexed(&self, lit_map: &[usize], def_offset: usize) -> Schema {
         match self {
             Schema::Anything
-            | Schema::Any
+            | Schema::Dynamic
             | Schema::Nothing
             | Schema::NoneType
             | Schema::Bool
@@ -642,10 +647,10 @@ impl Schema {
                     })
                     .collect(),
             },
-            Schema::Object {
+            Schema::Attrs {
                 class_index,
                 fields,
-            } => Schema::Object {
+            } => Schema::Attrs {
                 class_index: lit_map[*class_index],
                 fields: fields
                     .iter()
@@ -686,10 +691,10 @@ impl Schema {
                     .collect(),
                 defaults: defaults.iter().map(|(k, v)| (recur(k), recur(v))).collect(),
             },
-            Schema::Object {
+            Schema::Attrs {
                 class_index,
                 fields,
-            } => Schema::Object {
+            } => Schema::Attrs {
                 class_index: *class_index,
                 fields: fields
                     .iter()
@@ -728,7 +733,7 @@ impl Schema {
                         k.occurs_unguarded(target, true) || v.occurs_unguarded(target, true)
                     })
             }
-            Schema::Object { fields, .. } => fields
+            Schema::Attrs { fields, .. } => fields
                 .iter()
                 .any(|f| f.schema.occurs_unguarded(target, true)),
             // Algebraic combinators do not guard: they pass `guarded` through.
@@ -773,10 +778,10 @@ impl Schema {
                     .map(|(k, v)| (k.simplify(), v.simplify()))
                     .collect(),
             },
-            Schema::Object {
+            Schema::Attrs {
                 class_index,
                 fields,
-            } => Schema::Object {
+            } => Schema::Attrs {
                 class_index: *class_index,
                 fields: fields
                     .iter()
@@ -835,10 +840,10 @@ impl Schema {
                 fields: Vec::new(),
                 defaults: defaults.iter().map(|(k, v)| (recur(k), recur(v))).collect(),
             },
-            Schema::Object {
+            Schema::Attrs {
                 class_index,
                 fields,
-            } => Schema::Object {
+            } => Schema::Attrs {
                 class_index: *class_index,
                 fields: fields_open(fields),
             },
@@ -1484,7 +1489,7 @@ enum TypeTag {
 fn has_complementary_pair(members: &[Schema]) -> bool {
     members.iter().any(|member| {
         if let Schema::Complement(inner) = member {
-            !matches!(**inner, Schema::Any) && members.iter().any(|other| other == &**inner)
+            !matches!(**inner, Schema::Dynamic) && members.iter().any(|other| other == &**inner)
         } else {
             false
         }
@@ -1753,7 +1758,7 @@ mod tests {
             (Schema::Float, "float", "float_type"),
             (Schema::Str, "str", "string_type"),
             (Schema::Bytes, "bytes", "bytes_type"),
-            (Schema::Literal(0), "literal", "literal_value"),
+            (Schema::Literal(0), "literal", "literal_error"),
             (
                 Schema::list(SeqRegex::homogeneous(Schema::Int)),
                 "list",
@@ -2117,11 +2122,11 @@ mod tests {
     fn simplify_preserves_gradual_any_under_complement() {
         // The gradual `Any` must not be rewritten by the complement laws.
         assert_ne!(
-            Schema::Intersection(vec![Schema::Any, not(Schema::Any)]).simplify(),
+            Schema::Intersection(vec![Schema::Dynamic, not(Schema::Dynamic)]).simplify(),
             Schema::Nothing
         );
         assert_ne!(
-            Schema::Union(vec![Schema::Any, not(Schema::Any)]).simplify(),
+            Schema::Union(vec![Schema::Dynamic, not(Schema::Dynamic)]).simplify(),
             Schema::Anything
         );
     }
@@ -2150,7 +2155,7 @@ mod tests {
         // Conservative where the core cannot decide soundly.
         assert!(!Schema::Literal(0).disjoint(&Schema::Int));
         assert!(!Schema::Instance(0).disjoint(&Schema::Int));
-        assert!(!Schema::Any.disjoint(&Schema::Int));
+        assert!(!Schema::Dynamic.disjoint(&Schema::Int));
         // A refinement is disjoint exactly when its base is.
         let refined = Schema::Refine {
             base: Box::new(Schema::Int),
@@ -2172,7 +2177,7 @@ mod laws {
         let atom = prop_oneof![
             Just(Schema::Anything),
             Just(Schema::Nothing),
-            Just(Schema::Any),
+            Just(Schema::Dynamic),
             Just(Schema::Int),
             Just(Schema::Str),
             Just(Schema::Bool),
@@ -2290,7 +2295,7 @@ mod laws {
     #[test]
     fn is_empty_and_subtype_are_sound_off_the_scalar_fragment() {
         // Non-scalar leaves are never decided empty.
-        assert!(!Schema::Any.is_empty());
+        assert!(!Schema::Dynamic.is_empty());
         assert!(!Schema::Literal(0).is_empty());
         assert!(!Schema::Instance(0).is_empty());
         assert!(!Schema::Set(Box::new(Schema::Int)).is_empty());
@@ -2299,7 +2304,7 @@ mod laws {
         // never claimed empty (an instance could subclass the scalar's type).
         assert!(!Schema::Intersection(vec![Schema::Int, Schema::Instance(0)]).is_empty());
         // The gradual `Any` is never collapsed.
-        assert!(!Schema::Intersection(vec![Schema::Any, not(Schema::Any)]).is_empty());
+        assert!(!Schema::Intersection(vec![Schema::Dynamic, not(Schema::Dynamic)]).is_empty());
         // Subtyping off the fragment is reflexive only.
         assert!(Schema::Instance(0).is_subtype_of(&Schema::Instance(0)));
         assert!(!Schema::Instance(0).is_subtype_of(&Schema::Instance(1)));

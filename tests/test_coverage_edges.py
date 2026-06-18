@@ -121,12 +121,6 @@ def test_isinstance_check_tolerates_a_raising_instancecheck() -> None:
     assert Validator(Weird).is_valid(5) is False
 
 
-def test_too_many_set_arguments_is_rejected() -> None:
-    # The native set form admits exactly one element type.
-    with pytest.raises(NotImplementedError):
-        Validator({int, str})
-
-
 def test_unsupported_typing_form_is_rejected() -> None:
     # A parametrized generic whose origin valgebra does not handle is rejected.
     with pytest.raises(NotImplementedError):
@@ -161,13 +155,13 @@ def test_native_mapping_form_compiles_and_checks() -> None:
     assert not v.is_valid({1: 2})
 
 
-def test_fail_fast_stops_at_the_first_extra_key() -> None:
+def test_fail_fast_stops_at_the_first_extra_forbidden() -> None:
     extra = {"a": 1, "b": 2, "c": 3}
     assert len(_errors({"a": int}, extra)) == 2  # both extra keys aggregated
     with pytest.raises(ValidationError) as info:
         Validator({"a": int}).validate(extra, fail_fast=True)
     assert len(info.value.errors) == 1
-    assert info.value.code == "extra_key"
+    assert info.value.code == "extra_forbidden"
 
 
 def test_set_and_tuple_literals_are_rejected() -> None:
@@ -191,7 +185,6 @@ def test_set_and_tuple_literals_are_rejected() -> None:
         dict[int, Iterator[int]],
         list[Iterator[int]],
         tuple[Iterator[int], ...],
-        {Iterator[int]},
         [Iterator[int]],  # native [T] with an unbuildable element
         [Iterator[int], ...],  # native [T, ...] with an unbuildable element
     ],

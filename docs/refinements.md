@@ -50,8 +50,8 @@ and emptiness — its satisfiability is undecidable in general.
 | `Lt(n)` | `value < n` | `less_than` |
 | `MinLen(n)` | `len(value) >= n` | `too_short` |
 | `MaxLen(n)` | `len(value) <= n` | `too_long` |
-| `MultipleOf(n)` | `value % n == 0` | `not_multiple_of` |
-| `Regex(p)` | the string fully matches the regex `p` | `string_pattern` |
+| `MultipleOf(n)` | `value % n == 0` | `multiple_of` |
+| `Regex(p)` | the string fully matches the regex `p` | `string_pattern_mismatch` |
 | `Predicate(f)` | `f(value)` is truthy | `predicate_failed` |
 
 `Regex` is valgebra's own marker (`from valgebra import Regex`), since

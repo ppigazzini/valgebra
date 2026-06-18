@@ -72,4 +72,4 @@ def test_pattern_composes_and_reaches_json() -> None:
 def test_pattern_validate_reports_a_pattern_violation() -> None:
     with pytest.raises(ValidationError) as info:
         Validator(Annotated[str, Regex(r"\d+")]).validate("abc")
-    assert info.value.code == "string_pattern"
+    assert info.value.code == "string_pattern_mismatch"

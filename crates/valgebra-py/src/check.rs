@@ -207,7 +207,7 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
                 }
             }
         }
-        Schema::Object { fields, .. } => {
+        Schema::Attrs { fields, .. } => {
             for f in fields {
                 collect(py, &f.schema, pool, index);
             }
@@ -278,7 +278,7 @@ pub(crate) fn member(
     out: &mut Vec<Violation>,
 ) -> bool {
     match schema {
-        Schema::Anything | Schema::Any => true,
+        Schema::Anything | Schema::Dynamic => true,
         // Bottom admits nothing; an unresolved self-reference is never a member.
         Schema::Nothing => admit(false, schema, value, path, ctx, out),
         Schema::SelfRef(_) => {
@@ -316,7 +316,7 @@ pub(crate) fn member(
         Schema::Intersection(members) => check_intersection(members, value, path, ctx, out),
         Schema::Complement(inner) => check_complement(inner, value, path, ctx, out),
         Schema::Instance(index) => check_instance(*index, value, path, ctx, out),
-        Schema::Object {
+        Schema::Attrs {
             class_index,
             fields,
         } => check_object(*class_index, fields, value, path, ctx, out),
@@ -356,7 +356,7 @@ fn check_literal(
         .is_ok_and(|obj| literal_matches(&obj, literal));
     if !ok && ctx.explain {
         out.push(Violation {
-            code: "literal_value",
+            code: "literal_error",
             path: path.to_vec(),
             expected: format!("the literal {}", summarize(literal)),
             value_summary: summarize_value(value),
@@ -536,10 +536,10 @@ fn check_frozenset(
     out: &mut Vec<Violation>,
 ) -> bool {
     let Value::Py(v) = value else {
-        return type_fail("frozenset_type", "frozenset", value, path, ctx, out);
+        return type_fail("frozen_set_type", "frozenset", value, path, ctx, out);
     };
     let Ok(set) = v.cast::<PyFrozenSet>() else {
-        return type_fail("frozenset_type", "frozenset", value, path, ctx, out);
+        return type_fail("frozen_set_type", "frozenset", value, path, ctx, out);
     };
     let mut ok = true;
     for item in set.iter() {
@@ -790,7 +790,7 @@ fn keyed_map_explain(
             out.push(located(
                 path,
                 key_text.clone(),
-                "extra_key",
+                "extra_forbidden",
                 "no unexpected key".to_owned(),
                 format!("{key_text:?}"),
             ));
@@ -1076,7 +1076,7 @@ fn check_constraint(
             let operand = ctx.pool[*i].bind(py);
             (
                 is_multiple_of(value, operand),
-                "not_multiple_of",
+                "multiple_of",
                 format!("a multiple of {}", summarize(operand)),
             )
         }
@@ -1111,7 +1111,7 @@ fn check_constraint(
                 });
             (
                 matched,
-                "string_pattern",
+                "string_pattern_mismatch",
                 format!("a string matching {pattern:?}"),
             )
         }

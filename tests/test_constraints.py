@@ -37,7 +37,7 @@ CONSTRAINTS = [
         Annotated[int, at.MultipleOf(3)],
         9,
         5,
-        "not_multiple_of",
+        "multiple_of",
         "MultipleOf(3)",
     ),
 ]

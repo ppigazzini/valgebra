@@ -16,7 +16,7 @@ CASES: list[tuple[str, object, object]] = [
     ("aggregated_fields", {"a": int, "b": str, "c": int}, {"a": "x", "b": 1, "c": "y"}),
     ("nested_list", {"items": [int]}, {"items": [1, "x", "y"]}),
     ("missing_required_key", {"a": int}, {}),
-    ("extra_key", {"a": int}, {"a": 1, "b": 2}),
+    ("extra_forbidden", {"a": int}, {"a": 1, "b": 2}),
     ("closest_branch", union(int, {"a": int}), {"a": "x"}),
     ("generic_union", int | str, 1.5),
     ("literal_typed_singleton", 1, True),

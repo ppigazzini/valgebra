@@ -41,11 +41,11 @@
         'value': "'x'",
       }),
     ]),
-    'extra_key': list([
+    'extra_forbidden': list([
       dict({
-        'code': 'extra_key',
+        'code': 'extra_forbidden',
         'expected': 'no unexpected key',
-        'message': 'at b: expected no unexpected key, got "b" [extra_key]',
+        'message': 'at b: expected no unexpected key, got "b" [extra_forbidden]',
         'path': tuple(
           'b',
         ),
@@ -64,9 +64,9 @@
     ]),
     'literal_typed_singleton': list([
       dict({
-        'code': 'literal_value',
+        'code': 'literal_error',
         'expected': 'the literal 1',
-        'message': 'expected the literal 1, got True [literal_value]',
+        'message': 'expected the literal 1, got True [literal_error]',
         'path': tuple(
         ),
         'value': 'True',

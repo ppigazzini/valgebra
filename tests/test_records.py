@@ -31,7 +31,7 @@ def test_record_is_closed_by_default() -> None:
     user = Validator({"name": str})
     with pytest.raises(ValidationError) as info:
         user.validate({"name": "Ada", "extra": 1})
-    assert info.value.code == "extra_key"
+    assert info.value.code == "extra_forbidden"
 
 
 def test_empty_record_matches_only_the_empty_dict() -> None:

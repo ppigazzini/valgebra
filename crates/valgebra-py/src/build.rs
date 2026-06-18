@@ -80,7 +80,7 @@ pub(crate) fn build_schema(
     // checked before the type-object dispatch below because on 3.11+ `Any` is
     // itself a class and would otherwise be taken for an ordinary type.
     if obj.is(&typing.getattr("Any")?) {
-        return Ok(Schema::Any);
+        return Ok(Schema::Dynamic);
     }
 
     // `typing.Never`/`NoReturn` are the empty type: the lattice bottom, the
@@ -356,7 +356,7 @@ fn build_object(
             required: true,
         });
     }
-    Ok(Schema::Object {
+    Ok(Schema::Attrs {
         class_index,
         fields,
     })
