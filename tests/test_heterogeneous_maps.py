@@ -11,7 +11,7 @@ from typing import Annotated
 import annotated_types as at
 import pytest
 
-from valgebra import ValidationError, lazy, union, validator
+from valgebra import ValidationError, recursive, union, validator
 
 
 def test_heterogeneous_mapping_by_key_schema() -> None:
@@ -91,7 +91,7 @@ def test_a_non_string_key_in_a_closed_record_is_rejected() -> None:
 def test_recursion_through_a_field_and_a_catch_all() -> None:
     # A recursive reference sits inside both a named field's value and the
     # catch-all clause's value; the map guards it, so the fixpoint is contractive.
-    tree = lazy(lambda s: {"v": int, str: union(s, None)})
+    tree = recursive(lambda s: {"v": int, str: union(s, None)})
     assert tree.is_valid({"v": 1})
     assert tree.is_valid({"v": 1, "child": {"v": 2}})
     assert not tree.is_valid({"v": 1, "child": {"v": "x"}})

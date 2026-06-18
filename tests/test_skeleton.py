@@ -24,4 +24,4 @@ def test_validate_raises_validation_error_on_mismatch() -> None:
 
 def test_cast_returns_the_validated_object() -> None:
     obj = [1, 2, 3]
-    assert validator([int]).cast(obj) is obj
+    assert validator([int]).ensure(obj) is obj

@@ -1,7 +1,7 @@
 """Conditional fields are a composition recipe, not a shipped combinator.
 
 valgebra ships no `ifthen`/`cond`: material implication and first-match dispatch
-are derived from the Boolean algebra (`union`/`intersect`/`complement`). These
+are derived from the Boolean algebra (`union`/`intersection`/`complement`). These
 helpers are the documented recipe; the tests assert the recipe reaches the
 decisions the removed combinators did, so the derivation stays covered.
 """
@@ -14,7 +14,7 @@ from valgebra import (
     CompiledValidator,
     anything,
     complement,
-    intersect,
+    intersection,
     nothing,
     union,
     validator,
@@ -30,8 +30,8 @@ def implies(
     then satisfy `then`, or fails `condition` and must satisfy `otherwise`.
     """
     return union(
-        intersect(condition, then),
-        intersect(complement(condition), otherwise),
+        intersection(condition, then),
+        intersection(complement(condition), otherwise),
     )
 
 

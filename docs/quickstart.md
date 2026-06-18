@@ -21,8 +21,8 @@ A validator has three entry points:
 
 - `is_valid(obj)` returns a `bool` (the fast path).
 - `validate(obj)` returns `None` or raises `ValidationError`.
-- `cast(obj)` validates and returns the object unchanged (the explicit,
-  separate conversion mode — validation is a membership check, so there is
+- `ensure(obj)` validates and returns the object unchanged (the explicit,
+  separate value-returning mode — validation is a membership check, so there is
   nothing to convert).
 
 ## Schemas are standard annotations
@@ -83,13 +83,13 @@ assert not users.is_valid({"name": "Ada", "age": -1})
 
 ## Compose with the algebra
 
-Any schema combines with `union`, `intersect`, and `complement`:
+Any schema combines with `union`, `intersection`, and `complement`:
 
 ```python
-from valgebra import complement, intersect, validator
+from valgebra import complement, intersection, validator
 
 # an int that is not a bool
-strict_int = intersect(int, complement(bool))
+strict_int = intersection(int, complement(bool))
 assert strict_int.is_valid(5)
 assert not strict_int.is_valid(True)
 ```

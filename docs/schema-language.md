@@ -177,15 +177,15 @@ assert user.is_valid({"name": "Ada", "age": 36})
 assert not user.is_valid({"name": "Ada", "x": 1})  # closed: no extra keys
 ```
 
-Open the record with `lax` (undeclared keys admitted) or re-close it with
-`strict`:
+Open the record with `open` (undeclared keys admitted) or re-close it with
+`close`:
 
 ```python
-from valgebra import lax, validator
+from valgebra import validator
 
 closed = validator({"name": str})
 assert not closed.is_valid({"name": "Ada", "extra": 1})
-assert lax(closed).is_valid({"name": "Ada", "extra": 1})
+assert closed.open().is_valid({"name": "Ada", "extra": 1})
 ```
 
 ### Heterogeneous maps and catch-alls
@@ -249,7 +249,7 @@ assert not validator(Point).is_valid(Point(1, "y"))
 !!! note "Recursive classes"
     A class whose own type appears in a field (a tree node, a linked list) is
     recursive and cannot compile directly — express it with
-    [`lazy`](recursion.md), which ties the fixpoint explicitly.
+    [`recursive`](recursion.md), which ties the fixpoint explicitly.
 
 !!! note "Bare classes, callables, and the runtime boundary"
     A bare class is an `isinstance` check: `validator(complex)` admits any

@@ -155,7 +155,7 @@ JSON. From here:
 - The [schema language](schema-language.md) lists every form and the set it
   denotes.
 - [Refinements](refinements.md) covers the full constraint vocabulary.
-- The [Boolean algebra](algebra.md) composes schemas with `union`, `intersect`,
+- The [Boolean algebra](algebra.md) composes schemas with `union`, `intersection`,
   and `complement`, and the [foundations](foundations.md) explain the theory.
 - [Recursive schemas](recursion.md) handle trees and linked structures with
-  `lazy`.
+  `recursive`.

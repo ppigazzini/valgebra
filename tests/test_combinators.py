@@ -6,7 +6,7 @@ from valgebra import (
     ValidationError,
     anything,
     complement,
-    intersect,
+    intersection,
     nothing,
     union,
     validator,
@@ -21,7 +21,7 @@ def test_union_admits_any_branch() -> None:
 
 
 def test_intersect_requires_every_member() -> None:
-    schema = intersect(int, complement(bool))
+    schema = intersection(int, complement(bool))
     assert schema.is_valid(5)
     assert not schema.is_valid(True)  # an int, but also a bool
     assert not schema.is_valid("x")
@@ -64,6 +64,6 @@ def test_complement_failure_reports_unexpected_match() -> None:
 
 
 def test_intersect_with_an_annotation() -> None:
-    schema = intersect(int, complement(Literal[0]))
+    schema = intersection(int, complement(Literal[0]))
     assert schema.is_valid(1)
     assert not schema.is_valid(0)

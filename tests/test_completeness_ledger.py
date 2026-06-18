@@ -30,14 +30,14 @@ from hypothesis import strategies as st
 
 from valgebra import (
     complement,
-    intersect,
-    lazy,
+    intersection,
+    recursive,
     union,
     validator,
 )
 
 # A recursive schema, reused below to record a reflexivity hole.
-_RECURSIVE = lazy(lambda t: union(None, {"value": int, "next": t}))
+_RECURSIVE = recursive(lambda t: union(None, {"value": int, "next": t}))
 
 # A region-complete value universe whose numbers straddle the bounds the ledger
 # uses, so a subset relation over it reflects the true relation on those cases.
@@ -98,9 +98,9 @@ _GE10_LE0 = Annotated[int, at.Ge(10), at.Le(0)]
 def _check(operation: str, left: object, right: object) -> None:
     compiled = validator(left)
     if operation == "subtype":
-        assert compiled.is_subtype(right)
+        assert compiled.is_subtype_of(right)
     elif operation == "equivalent":
-        assert compiled.equivalent(right)
+        assert compiled.is_equivalent(right)
     elif operation == "empty":
         assert compiled.is_empty()
     else:  # pragma: no cover - guards against a typo in a case
@@ -117,9 +117,9 @@ _DECIDED = [
     pytest.param(
         "subtype", [bool, int, ...], [int, int, ...], id="[bool,int,...]<=[int,int,...]"
     ),
-    pytest.param("empty", intersect(int, str), None, id="empty:int&str"),
+    pytest.param("empty", intersection(int, str), None, id="empty:int&str"),
     pytest.param("equivalent", union(bool, int), int, id="bool|int==int"),
-    pytest.param("equivalent", intersect(int, int), int, id="int&int==int"),
+    pytest.param("equivalent", intersection(int, int), int, id="int&int==int"),
     # A refinement is a subtype of its base, and a refinement with more bound or
     # length constraints is a subtype of one with fewer (equal bounds share a
     # pool index, so nested bounds decide by syntactic containment).
@@ -129,15 +129,18 @@ _DECIDED = [
     # whether the bounds sit on one refinement or across an intersection.
     pytest.param("empty", _GE10_LE0, None, id="empty:Ge(10)Le(0)"),
     pytest.param(
-        "empty", intersect(_GE0, Annotated[int, at.Lt(0)]), None, id="empty:Ge(0)&Lt(0)"
+        "empty",
+        intersection(_GE0, Annotated[int, at.Lt(0)]),
+        None,
+        id="empty:Ge(0)&Lt(0)",
     ),
     # An intersection that mixes a recursive reference with a union is a subtype
     # of itself: reflexivity holds even when the meet contains its own supertype.
     pytest.param(
         "subtype",
-        intersect(_RECURSIVE, union(int, str)),
-        intersect(_RECURSIVE, union(int, str)),
-        id="reflexive:intersect(rec,union)",
+        intersection(_RECURSIVE, union(int, str)),
+        intersection(_RECURSIVE, union(int, str)),
+        id="reflexive:intersection(rec,union)",
     ),
     # A mapping is a subtype of one with more clauses subsuming its own; a closed
     # record is a subtype of an open map that declares its fields.
@@ -213,8 +216,8 @@ def test_value_literals_still_build() -> None:
 
 _RECURSIVE_FAMILY = [
     _RECURSIVE,
-    lazy(lambda t: union(int, [t])),
-    lazy(lambda t: union(None, bool, int, str, [t], {str: t})),
+    recursive(lambda t: union(int, [t])),
+    recursive(lambda t: union(None, bool, int, str, [t], {str: t})),
 ]
 _atoms = st.sampled_from(
     [int, str, bool, float, bytes, None, _GE0, _GE0_LE10, 0, 1, "a", *_RECURSIVE_FAMILY]
@@ -230,7 +233,7 @@ def _compose(children: st.SearchStrategy) -> st.SearchStrategy:
         pair.map(lambda p: {"a": p[0], str: p[1]}),  # record mixed with a catch-all
         pair.map(lambda p: {"a": p[0], "b": p[1], str: p[0]}),  # two fields + catch-all
         pair.map(lambda p: union(p[0], p[1])),
-        pair.map(lambda p: intersect(p[0], p[1])),
+        pair.map(lambda p: intersection(p[0], p[1])),
         children.map(complement),
     )
 
@@ -247,7 +250,7 @@ def test_subtype_claims_hold_on_the_universe(left: object, right: object) -> Non
         compiled = validator(left)
     except (ValueError, TypeError, NotImplementedError, RecursionError):
         return
-    if compiled.is_subtype(right):
+    if compiled.is_subtype_of(right):
         assert _accepted(left) <= _accepted(right)
 
 

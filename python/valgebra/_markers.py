@@ -2,7 +2,7 @@
 
 `Annotated` refinements normally use `annotated_types` markers (`Ge`, `Len`,
 ...), but that package — and the typing stdlib — define no marker for a string
-pattern. `Pattern` fills that one gap: it is `Annotated` metadata, not a
+pattern. `Regex` fills that one gap: it is `Annotated` metadata, not a
 combinator, so the typing-first surface stays the single way to express a
 constraint.
 """
@@ -10,10 +10,10 @@ constraint.
 from __future__ import annotations
 
 
-class Pattern:
+class Regex:
     """`Annotated` metadata: a string fully matches this regular expression.
 
-    Use as `Annotated[str, Pattern(r"[0-9a-f]{24}")]`. The match is anchored — the
+    Use as `Annotated[str, Regex(r"[0-9a-f]{24}")]`. The match is anchored — the
     whole string must match, as `re.fullmatch` does — and runs natively on the
     Rust path (a linear-time engine), so a pattern check stays on the validation
     fast path rather than crossing into Python like a predicate. A bare
@@ -26,10 +26,10 @@ class Pattern:
         self.pattern = pattern
 
     def __repr__(self) -> str:
-        return f"Pattern({self.pattern!r})"
+        return f"Regex({self.pattern!r})"
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, Pattern) and other.pattern == self.pattern
+        return isinstance(other, Regex) and other.pattern == self.pattern
 
     def __hash__(self) -> int:
-        return hash((Pattern, self.pattern))
+        return hash((Regex, self.pattern))

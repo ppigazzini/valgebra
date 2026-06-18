@@ -30,8 +30,8 @@ import annotated_types as at
 
 from valgebra import validator
 
-assert validator(Annotated[int, at.Ge(0)]).is_subtype(int)  # refinement <= base
-assert validator(Annotated[int, at.Ge(0), at.Le(10)]).is_subtype(
+assert validator(Annotated[int, at.Ge(0)]).is_subtype_of(int)  # refinement <= base
+assert validator(Annotated[int, at.Ge(0), at.Le(10)]).is_subtype_of(
     Annotated[int, at.Ge(0)]  # a tighter bound is a subtype of a looser one
 )
 assert validator(Annotated[int, at.Ge(10), at.Le(0)]).is_empty()  # no such int
@@ -51,10 +51,10 @@ and emptiness — its satisfiability is undecidable in general.
 | `MinLen(n)` | `len(value) >= n` | `too_short` |
 | `MaxLen(n)` | `len(value) <= n` | `too_long` |
 | `MultipleOf(n)` | `value % n == 0` | `not_multiple_of` |
-| `Pattern(p)` | the string fully matches the regex `p` | `string_pattern` |
+| `Regex(p)` | the string fully matches the regex `p` | `string_pattern` |
 | `Predicate(f)` | `f(value)` is truthy | `predicate_failed` |
 
-`Pattern` is valgebra's own marker (`from valgebra import Pattern`), since
+`Regex` is valgebra's own marker (`from valgebra import Regex`), since
 `annotated-types` defines none for strings. The match is **anchored** — the whole
 string must match, like `re.fullmatch` — and runs natively in Rust with a
 linear-time engine (no catastrophic backtracking), so unlike a `Predicate` it
@@ -66,9 +66,9 @@ pattern is rejected when the validator is built, not at first use. A compiled
 import re
 from typing import Annotated
 
-from valgebra import Pattern, validator
+from valgebra import Regex, validator
 
-oid = validator(Annotated[str, Pattern(r"[0-9a-f]{24}")])
+oid = validator(Annotated[str, Regex(r"[0-9a-f]{24}")])
 assert oid.is_valid("0123456789abcdef01234567")
 assert not oid.is_valid("0123456789abcdef0123456X")  # not hex
 assert not oid.is_valid("0123")  # not the full 24 characters

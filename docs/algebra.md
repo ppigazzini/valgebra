@@ -5,11 +5,11 @@ forms, or other compiled validators — into a complete, lawful Boolean lattice.
 `anything` is the top (every value) and `nothing` is the bottom (no value).
 
 ```python
-from valgebra import anything, complement, intersect, nothing, union
+from valgebra import anything, complement, intersection, nothing, union
 
 assert union(int, str).is_valid("x")                  # a value in either set
-assert intersect(int, complement(bool)).is_valid(5)   # ints that are not bools
-assert not intersect(int, complement(bool)).is_valid(True)
+assert intersection(int, complement(bool)).is_valid(5)   # ints that are not bools
+assert not intersection(int, complement(bool)).is_valid(True)
 assert complement(nothing).is_valid(5)                # the complement of bottom is top
 assert not nothing.is_valid(5)                        # bottom admits nothing
 assert anything.is_valid(object())                    # top admits everything
@@ -61,13 +61,13 @@ from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import anything, complement, intersect, union
+from valgebra import anything, complement, intersection, union
 
 
 def implies(condition, then, otherwise=anything):
     return union(
-        intersect(condition, then),
-        intersect(complement(condition), otherwise),
+        intersection(condition, then),
+        intersection(complement(condition), otherwise),
     )
 
 
@@ -85,13 +85,13 @@ from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import anything, complement, intersect, nothing, union, validator
+from valgebra import anything, complement, intersection, nothing, union, validator
 
 
 def implies(condition, then, otherwise):
     return union(
-        intersect(condition, then),
-        intersect(complement(condition), otherwise),
+        intersection(condition, then),
+        intersection(complement(condition), otherwise),
     )
 
 
@@ -117,15 +117,15 @@ assert not shape.is_valid(1.5)  # matches no case, falls to the default
 
 "At least one of these keys is present", and its siblings, are also algebra. A
 record that merely asserts a key is present is an open record requiring it —
-`lax({key: anything})` — and the cardinality follows from `union`, `intersect`,
-and `complement`:
+`validator({key: anything}).open()` — and the cardinality follows from `union`,
+`intersection`, and `complement`:
 
 ```python
-from valgebra import anything, complement, intersect, lax, union, validator
+from valgebra import anything, complement, intersection, union, validator
 
 
 def has(key):
-    return lax(validator({key: anything}))
+    return validator({key: anything}).open()
 
 
 at_least_one = union(has("a"), has("b"))
@@ -133,14 +133,14 @@ assert at_least_one.is_valid({"a": 1})
 assert at_least_one.is_valid({"b": 2, "x": 0})
 assert not at_least_one.is_valid({"x": 0})
 
-at_most_one = complement(intersect(has("a"), has("b")))  # not both
+at_most_one = complement(intersection(has("a"), has("b")))  # not both
 assert at_most_one.is_valid({"a": 1})
 assert at_most_one.is_valid({})
 assert not at_most_one.is_valid({"a": 1, "b": 2})
 
 exactly_one = union(
-    intersect(has("a"), complement(has("b"))),
-    intersect(has("b"), complement(has("a"))),
+    intersection(has("a"), complement(has("b"))),
+    intersection(has("b"), complement(has("a"))),
 )
 assert exactly_one.is_valid({"a": 1})
 assert not exactly_one.is_valid({"a": 1, "b": 2})
@@ -167,15 +167,15 @@ joined with its complement, or with the complement of a disjoint type, is
 everything.
 
 ```python
-from valgebra import complement, intersect, simplify, union
+from valgebra import complement, intersection, simplify, union
 
-assert repr(simplify(intersect(int, complement(int)))) == "nothing"
+assert repr(simplify(intersection(int, complement(int)))) == "nothing"
 assert repr(simplify(union(int, complement(int)))) == "anything"
-assert repr(simplify(intersect(int, str))) == "nothing"  # disjoint types
+assert repr(simplify(intersection(int, str))) == "nothing"  # disjoint types
 ```
 
 The simplifier folds the scalar Boolean fragment — the builtin scalars (with
-`bool` a subtype of `int`) and the complement laws — so `simplify(intersect(int,
+`bool` a subtype of `int`) and the complement laws — so `simplify(intersection(int,
 str))` is `nothing`. It never treats `Any` as the top, so a deliberately-unchecked
 schema is preserved. The comparison operators below decide a wider fragment than
 the simplifier folds; the [decidability boundary](decidability.md) maps exactly
@@ -183,23 +183,23 @@ what is decided.
 
 ## Subtyping, equivalence, and emptiness
 
-A compiled validator can be compared with another schema as *sets*. `is_subtype`
-is set inclusion, `equivalent` is mutual inclusion, and `is_empty` reports an
+A compiled validator can be compared with another schema as *sets*. `is_subtype_of`
+is set inclusion, `is_equivalent` is mutual inclusion, and `is_empty` reports an
 unsatisfiable schema:
 
 ```python
-from valgebra import complement, intersect, union, validator
+from valgebra import complement, intersection, union, validator
 
 # subtyping is set inclusion; bool is a subtype of int
-assert validator(bool).is_subtype(int)
-assert not validator(int).is_subtype(bool)
-assert validator(list[bool]).is_subtype(list[int])
+assert validator(bool).is_subtype_of(int)
+assert not validator(int).is_subtype_of(bool)
+assert validator(list[bool]).is_subtype_of(list[int])
 
 # equivalence is mutual inclusion, whatever the syntax
-assert union(bool, int).equivalent(int)
+assert union(bool, int).is_equivalent(int)
 
 # emptiness detects a schema no value can satisfy
-assert intersect(int, complement(int)).is_empty()
+assert intersection(int, complement(int)).is_empty()
 assert not validator(int).is_empty()
 ```
 
@@ -220,7 +220,7 @@ conservative, and what is undecidable at runtime; see the
 Both admit every value at runtime, but they are different in the algebra:
 
 - `anything` is the lattice **top**. It obeys the laws —
-  `complement(anything)` is `nothing`, `intersect(anything, s)` is `s`.
+  `complement(anything)` is `nothing`, `intersection(anything, s)` is `s`.
 - `Any` is the gradual dynamic type, an **atom** the simplifier never rewrites.
 
 ```python

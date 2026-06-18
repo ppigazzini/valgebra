@@ -10,10 +10,10 @@ use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Fresh, process-unique tokens for the transient [`Schema::SelfRef`] marker, so
-/// nested `lazy` definitions never resolve each other's self-references.
+/// nested `recursive` definitions never resolve each other's self-references.
 static NEXT_SELF_TOKEN: AtomicU64 = AtomicU64::new(0);
 
-/// Allocate a fresh self-reference token for a `lazy` definition.
+/// Allocate a fresh self-reference token for a `recursive` definition.
 #[must_use]
 pub fn fresh_self_token() -> u64 {
     NEXT_SELF_TOKEN.fetch_add(1, Ordering::Relaxed)
@@ -120,7 +120,7 @@ pub enum Schema {
     ///
     /// One node subsumes the record, the homogeneous mapping, the heterogeneous
     /// mapping, and their combination: a closed record has no default clause, an
-    /// open (lax) record a single `(Anything, Anything)` clause, `dict[K, V]` a
+    /// open record a single `(Anything, Anything)` clause, `dict[K, V]` a
     /// single `(K, V)` clause with no fields, and a typed catch-all a record's
     /// fields plus a typed clause. The empty closed map denotes only the empty
     /// dict.
@@ -164,9 +164,9 @@ pub enum Schema {
     },
     /// A reference to a recursive definition: denotes the same set as the
     /// definition at this index in the validator's definitions table. The back
-    /// edge of a fixpoint, produced by `lazy`.
+    /// edge of a fixpoint, produced by `recursive`.
     Ref(usize),
-    /// A transient self-reference marker used only while a `lazy` definition is
+    /// A transient self-reference marker used only while a `recursive` definition is
     /// being built; it is resolved to a [`Schema::Ref`] before the validator is
     /// returned and never appears in a finished schema.
     SelfRef(u64),
@@ -373,7 +373,7 @@ impl Schema {
         }
     }
 
-    /// A record of named fields, closed (`open` false) or lax (`open` true). An
+    /// A record of named fields, closed (`open` false) or open (`open` true). An
     /// open record admits any other key; a closed one admits none.
     #[must_use]
     pub fn record(fields: Vec<Field>, open: bool) -> Schema {
@@ -660,7 +660,7 @@ impl Schema {
     }
 
     /// Replace each `SelfRef(token)` with `Ref(ref_id)`, leaving other tokens
-    /// (from enclosing `lazy` definitions) untouched.
+    /// (from enclosing `recursive` definitions) untouched.
     #[must_use]
     pub fn resolve_self(&self, token: u64, ref_id: usize) -> Schema {
         let recur = |s: &Schema| s.resolve_self(token, ref_id);
@@ -710,7 +710,7 @@ impl Schema {
 
     /// Whether `Ref(target)` occurs without a structural guard above it.
     ///
-    /// A `lazy` definition is contractive (productive) only when every
+    /// A `recursive` definition is contractive (productive) only when every
     /// occurrence of its self-reference sits under a structural constructor;
     /// `guarded` records whether such a constructor has been crossed.
     #[must_use]
@@ -802,8 +802,8 @@ impl Schema {
     /// Return a copy with every record-shaped [`Schema::KeyedMap`] in the tree
     /// set to `open`.
     ///
-    /// This backs the `lax`/`strict` wrappers: `lax` opens every record in a
-    /// subtree (undeclared keys allowed via an `anything` catch-all), `strict`
+    /// This backs the `open`/`close` methods: `open` opens every record in a
+    /// subtree (undeclared keys allowed via an `anything` catch-all), `close`
     /// closes them. A pure mapping (no named fields) is not a record and keeps
     /// its clauses.
     #[must_use]
@@ -1042,17 +1042,17 @@ impl Schema {
     /// conservative where it cannot decide (`Or` regexes, recursive references,
     /// instances, literals): there it returns `false` rather than guess.
     #[must_use]
-    pub fn is_subtype(&self, other: &Schema) -> bool {
-        self.is_subtype_under(other, &NoLeafRelations, &[])
+    pub fn is_subtype_of(&self, other: &Schema) -> bool {
+        self.is_subtype_of_under(other, &NoLeafRelations, &[])
     }
 
-    /// [`is_subtype`](Self::is_subtype) with a [`LeafRelations`] oracle deciding
+    /// [`is_subtype_of`](Self::is_subtype_of) with a [`LeafRelations`] oracle deciding
     /// the leaf relations the structural rules cannot (an `Instance` class or a
     /// `Literal` value), and the `defs` that resolve recursive references so
     /// subtyping is decided between recursive schemas too. The oracle's `None`
     /// and an unresolved reference both keep the conservative `false`.
     #[must_use]
-    pub fn is_subtype_under(
+    pub fn is_subtype_of_under(
         &self,
         other: &Schema,
         oracle: &dyn LeafRelations,
@@ -1190,20 +1190,21 @@ impl Schema {
 
     /// Whether `self` and `other` denote the same set — mutual inclusion.
     #[must_use]
-    pub fn equivalent(&self, other: &Schema) -> bool {
-        self.equivalent_under(other, &NoLeafRelations, &[])
+    pub fn is_equivalent(&self, other: &Schema) -> bool {
+        self.is_equivalent_under(other, &NoLeafRelations, &[])
     }
 
-    /// [`equivalent`](Self::equivalent) under a [`LeafRelations`] oracle and the
-    /// recursive definitions.
+    /// [`is_equivalent`](Self::is_equivalent) under a [`LeafRelations`] oracle and
+    /// the recursive definitions.
     #[must_use]
-    pub fn equivalent_under(
+    pub fn is_equivalent_under(
         &self,
         other: &Schema,
         oracle: &dyn LeafRelations,
         defs: &[Schema],
     ) -> bool {
-        self.is_subtype_under(other, oracle, defs) && other.is_subtype_under(self, oracle, defs)
+        self.is_subtype_of_under(other, oracle, defs)
+            && other.is_subtype_of_under(self, oracle, defs)
     }
 }
 
@@ -2279,11 +2280,11 @@ mod laws {
         );
         assert!(!Schema::Intersection(vec![Schema::Int, not(Schema::Bool)]).is_empty());
         // Subtyping, with bool ⊆ int.
-        assert!(Schema::Bool.is_subtype(&Schema::Int));
-        assert!(!Schema::Int.is_subtype(&Schema::Bool));
-        assert!(!Schema::Float.is_subtype(&Schema::Int));
+        assert!(Schema::Bool.is_subtype_of(&Schema::Int));
+        assert!(!Schema::Int.is_subtype_of(&Schema::Bool));
+        assert!(!Schema::Float.is_subtype_of(&Schema::Int));
         // Equivalence between structurally different schemas: bool ∪ int = int.
-        assert!(Schema::Union(vec![Schema::Bool, Schema::Int]).equivalent(&Schema::Int));
+        assert!(Schema::Union(vec![Schema::Bool, Schema::Int]).is_equivalent(&Schema::Int));
     }
 
     #[test]
@@ -2300,8 +2301,8 @@ mod laws {
         // The gradual `Any` is never collapsed.
         assert!(!Schema::Intersection(vec![Schema::Any, not(Schema::Any)]).is_empty());
         // Subtyping off the fragment is reflexive only.
-        assert!(Schema::Instance(0).is_subtype(&Schema::Instance(0)));
-        assert!(!Schema::Instance(0).is_subtype(&Schema::Instance(1)));
+        assert!(Schema::Instance(0).is_subtype_of(&Schema::Instance(0)));
+        assert!(!Schema::Instance(0).is_subtype_of(&Schema::Instance(1)));
     }
 
     #[test]
@@ -2345,38 +2346,40 @@ mod laws {
         let set = |s| Schema::Set(Box::new(s));
         let frozenset = |s| Schema::FrozenSet(Box::new(s));
         // Sets and frozensets reduce to element inclusion (bool ⊆ int).
-        assert!(set(Schema::Bool).is_subtype(&set(Schema::Int)));
-        assert!(!set(Schema::Int).is_subtype(&set(Schema::Bool)));
-        assert!(frozenset(Schema::Bool).is_subtype(&frozenset(Schema::Int)));
+        assert!(set(Schema::Bool).is_subtype_of(&set(Schema::Int)));
+        assert!(!set(Schema::Int).is_subtype_of(&set(Schema::Bool)));
+        assert!(frozenset(Schema::Bool).is_subtype_of(&frozenset(Schema::Int)));
         // Different container kinds are never subtypes.
-        assert!(!set(Schema::Int).is_subtype(&frozenset(Schema::Int)));
+        assert!(!set(Schema::Int).is_subtype_of(&frozenset(Schema::Int)));
         // Homogeneous sequences: list[bool] ⊆ list[int], not list[int] ⊆ list[str].
         let list = |r| Schema::list(r);
         let tuple = |r| Schema::tuple(r);
         assert!(
             list(SeqRegex::homogeneous(Schema::Bool))
-                .is_subtype(&list(SeqRegex::homogeneous(Schema::Int)))
+                .is_subtype_of(&list(SeqRegex::homogeneous(Schema::Int)))
         );
         assert!(
             !list(SeqRegex::homogeneous(Schema::Int))
-                .is_subtype(&list(SeqRegex::homogeneous(Schema::Str)))
+                .is_subtype_of(&list(SeqRegex::homogeneous(Schema::Str)))
         );
         // Fixed sequences compare pointwise; a tuple is not a list.
         assert!(
             tuple(SeqRegex::fixed([Schema::Bool, Schema::Str]))
-                .is_subtype(&tuple(SeqRegex::fixed([Schema::Int, Schema::Str])))
+                .is_subtype_of(&tuple(SeqRegex::fixed([Schema::Int, Schema::Str])))
         );
         assert!(
             !tuple(SeqRegex::fixed([Schema::Int]))
-                .is_subtype(&list(SeqRegex::homogeneous(Schema::Int)))
+                .is_subtype_of(&list(SeqRegex::homogeneous(Schema::Int)))
         );
         // A fixed list is a subtype of a homogeneous list when each element is.
         assert!(
             list(SeqRegex::fixed([Schema::Bool, Schema::Int]))
-                .is_subtype(&list(SeqRegex::homogeneous(Schema::Int)))
+                .is_subtype_of(&list(SeqRegex::homogeneous(Schema::Int)))
         );
         // Equivalence between structurally different container schemas.
-        assert!(set(Schema::Union(vec![Schema::Bool, Schema::Int])).equivalent(&set(Schema::Int)));
+        assert!(
+            set(Schema::Union(vec![Schema::Bool, Schema::Int])).is_equivalent(&set(Schema::Int))
+        );
     }
 
     #[test]
@@ -2401,11 +2404,11 @@ mod laws {
             field("x", Schema::Int, true),
             field("y", Schema::Str, false),
         ]);
-        assert!(narrow.is_subtype(&wide));
-        assert!(!wide.is_subtype(&narrow)); // wide admits key y; narrow (closed) forbids it
+        assert!(narrow.is_subtype_of(&wide));
+        assert!(!wide.is_subtype_of(&narrow)); // wide admits key y; narrow (closed) forbids it
         // Depth: shared field schemas covary (bool ⊆ int).
         assert!(
-            record(vec![field("x", Schema::Bool, true)]).is_subtype(&record(vec![field(
+            record(vec![field("x", Schema::Bool, true)]).is_subtype_of(&record(vec![field(
                 "x",
                 Schema::Int,
                 true
@@ -2414,13 +2417,17 @@ mod laws {
         // Required: a field the supertype requires must be required in the subtype.
         let required = record(vec![field("x", Schema::Int, true)]);
         let optional = record(vec![field("x", Schema::Int, false)]);
-        assert!(required.is_subtype(&optional));
-        assert!(!optional.is_subtype(&required));
+        assert!(required.is_subtype_of(&optional));
+        assert!(!optional.is_subtype_of(&required));
         // Mappings covary in key and value.
-        assert!(mapping(Schema::Str, Schema::Bool).is_subtype(&mapping(Schema::Str, Schema::Int)));
-        assert!(!mapping(Schema::Str, Schema::Int).is_subtype(&mapping(Schema::Str, Schema::Bool)));
+        assert!(
+            mapping(Schema::Str, Schema::Bool).is_subtype_of(&mapping(Schema::Str, Schema::Int))
+        );
+        assert!(
+            !mapping(Schema::Str, Schema::Int).is_subtype_of(&mapping(Schema::Str, Schema::Bool))
+        );
         // A record and a mapping are not compared — conservative.
-        assert!(!narrow.is_subtype(&mapping(Schema::Str, Schema::Int)));
+        assert!(!narrow.is_subtype_of(&mapping(Schema::Str, Schema::Int)));
     }
 
     #[test]
@@ -2435,16 +2442,16 @@ mod laws {
         // Prefix and tail covary (bool ⊆ int), in both positions.
         assert!(
             prefix_tail(Schema::Bool, Schema::Bool)
-                .is_subtype(&prefix_tail(Schema::Int, Schema::Int))
+                .is_subtype_of(&prefix_tail(Schema::Int, Schema::Int))
         );
         assert!(
             !prefix_tail(Schema::Int, Schema::Int)
-                .is_subtype(&prefix_tail(Schema::Int, Schema::Bool))
+                .is_subtype_of(&prefix_tail(Schema::Int, Schema::Bool))
         );
         // A fixed-length list is a subtype of a prefix-and-tail one it fits.
         assert!(
             Schema::list(SeqRegex::fixed([Schema::Bool, Schema::Int]))
-                .is_subtype(&prefix_tail(Schema::Int, Schema::Int))
+                .is_subtype_of(&prefix_tail(Schema::Int, Schema::Int))
         );
         // Alternation distributes: (bool* | int*) ⊆ int*, but int* ⊄ (bool* | str*).
         let alternation = |a, b| {
@@ -2455,11 +2462,11 @@ mod laws {
         };
         assert!(
             alternation(Schema::Bool, Schema::Int)
-                .is_subtype(&Schema::list(SeqRegex::homogeneous(Schema::Int)))
+                .is_subtype_of(&Schema::list(SeqRegex::homogeneous(Schema::Int)))
         );
         assert!(
             !Schema::list(SeqRegex::homogeneous(Schema::Int))
-                .is_subtype(&alternation(Schema::Bool, Schema::Str))
+                .is_subtype_of(&alternation(Schema::Bool, Schema::Str))
         );
     }
 
@@ -2471,26 +2478,23 @@ mod laws {
         let tup = |head, tail| Schema::tuple(SeqRegex::prefix_tail([head], tail));
 
         // Subtyping is covariant in both the prefix and the repeated tail.
-        assert!(tup(Schema::Bool, Schema::Bool).is_subtype(&tup(Schema::Int, Schema::Int)));
-        assert!(!tup(Schema::Int, Schema::Int).is_subtype(&tup(Schema::Int, Schema::Bool)));
+        assert!(tup(Schema::Bool, Schema::Bool).is_subtype_of(&tup(Schema::Int, Schema::Int)));
+        assert!(!tup(Schema::Int, Schema::Int).is_subtype_of(&tup(Schema::Int, Schema::Bool)));
         // A fixed-length tuple is a subtype of a prefix-and-tail one it fits.
         assert!(
             Schema::tuple(SeqRegex::fixed([Schema::Bool, Schema::Int]))
-                .is_subtype(&tup(Schema::Int, Schema::Int))
+                .is_subtype_of(&tup(Schema::Int, Schema::Int))
         );
 
         // The container is part of the type: a list is never a tuple, even with
         // an identical element regex.
         assert!(
             !Schema::list(SeqRegex::prefix_tail([Schema::Int], Schema::Int))
-                .is_subtype(&tup(Schema::Int, Schema::Int))
+                .is_subtype_of(&tup(Schema::Int, Schema::Int))
         );
-        assert!(
-            !tup(Schema::Int, Schema::Int).is_subtype(&Schema::list(SeqRegex::prefix_tail(
-                [Schema::Int],
-                Schema::Int
-            )))
-        );
+        assert!(!tup(Schema::Int, Schema::Int).is_subtype_of(&Schema::list(
+            SeqRegex::prefix_tail([Schema::Int], Schema::Int)
+        )));
 
         // Emptiness reasons about position: an uninhabited prefix empties the
         // whole tuple, but an uninhabited *tail* only forbids the repeats, so a
@@ -2501,7 +2505,7 @@ mod laws {
         // Equivalence collapses a redundant union in the tail (bool ⊆ int).
         assert!(
             tup(Schema::Int, Schema::Union(vec![Schema::Bool, Schema::Int]))
-                .equivalent(&tup(Schema::Int, Schema::Int))
+                .is_equivalent(&tup(Schema::Int, Schema::Int))
         );
     }
 
@@ -2523,22 +2527,22 @@ mod laws {
 
         // Bottom-below and top-above on a non-scalar (region_set is None there, so
         // the dedicated arms decide it).
-        assert!(Schema::Nothing.is_subtype(&list(Schema::Int)));
-        assert!(list(Schema::Int).is_subtype(&Schema::Anything));
+        assert!(Schema::Nothing.is_subtype_of(&list(Schema::Int)));
+        assert!(list(Schema::Int).is_subtype_of(&Schema::Anything));
         // A meet is below a member of a join, and a conjunct decides a meet's
         // supertype.
-        assert!(list(Schema::Bool).is_subtype(&Schema::Intersection(vec![
+        assert!(list(Schema::Bool).is_subtype_of(&Schema::Intersection(vec![
             list(Schema::Int),
             Schema::Anything
         ])));
         assert!(
             Schema::Intersection(vec![list(Schema::Bool), list(Schema::Int)])
-                .is_subtype(&list(Schema::Int))
+                .is_subtype_of(&list(Schema::Int))
         );
         // Complement is contravariant, on a non-scalar so the region check does
         // not decide it before the complement arm.
-        assert!(not(list(Schema::Int)).is_subtype(&not(list(Schema::Bool))));
-        assert!(!not(list(Schema::Bool)).is_subtype(&not(list(Schema::Int))));
+        assert!(not(list(Schema::Int)).is_subtype_of(&not(list(Schema::Bool))));
+        assert!(!not(list(Schema::Bool)).is_subtype_of(&not(list(Schema::Int))));
         // A schema is below the empty set exactly when it is empty, decided through
         // the oracle for a refinement with unsatisfiable bounds.
         assert!(
@@ -2546,7 +2550,7 @@ mod laws {
                 base: Box::new(Schema::Int),
                 constraints: vec![Constraint::Ge(10), Constraint::Le(0)],
             }
-            .is_subtype_under(&Schema::Nothing, &ByIndex, &[])
+            .is_subtype_of_under(&Schema::Nothing, &ByIndex, &[])
         );
 
         // Refinement bounds: equal closed bounds are a singleton (not empty), and
@@ -2585,7 +2589,7 @@ mod laws {
         let closed = |fields| Schema::record(fields, false);
         // Closed record: a depth failure is not rescued by required-coverage.
         assert!(
-            !closed(vec![field("x", Schema::Int, true)]).is_subtype(&closed(vec![field(
+            !closed(vec![field("x", Schema::Int, true)]).is_subtype_of(&closed(vec![field(
                 "x",
                 Schema::Str,
                 true
@@ -2594,7 +2598,7 @@ mod laws {
         // Closed record: an optional field is not a subtype of the same field made
         // required (required-coverage must hold on top of width and depth).
         assert!(
-            !closed(vec![field("x", Schema::Int, false)]).is_subtype(&closed(vec![field(
+            !closed(vec![field("x", Schema::Int, false)]).is_subtype_of(&closed(vec![field(
                 "x",
                 Schema::Int,
                 true
@@ -2604,18 +2608,18 @@ mod laws {
         // a key mismatch is not rescued by the value matching.
         assert!(
             !Schema::mapping(Schema::Str, Schema::Int)
-                .is_subtype(&Schema::mapping(Schema::Bytes, Schema::Int))
+                .is_subtype_of(&Schema::mapping(Schema::Bytes, Schema::Int))
         );
         // Mixed record-and-catch-all: required-coverage must hold there too.
         let mixed = |required| Schema::KeyedMap {
             fields: vec![field("x", Schema::Int, required)],
             defaults: vec![(Schema::Str, Schema::Int)],
         };
-        assert!(!mixed(false).is_subtype(&mixed(true)));
+        assert!(!mixed(false).is_subtype_of(&mixed(true)));
         // A pure mapping is not a subtype of a mixed map that requires a field it
         // lacks: the pure-mapping branch must need both sides field-free.
         assert!(
-            !Schema::mapping(Schema::Str, Schema::Int).is_subtype(&Schema::KeyedMap {
+            !Schema::mapping(Schema::Str, Schema::Int).is_subtype_of(&Schema::KeyedMap {
                 fields: vec![field("x", Schema::Int, true)],
                 defaults: vec![(Schema::Str, Schema::Int)],
             })
@@ -2628,7 +2632,7 @@ mod laws {
                 fields: vec![field("x", Schema::Int, false)],
                 defaults: vec![(Schema::Str, Schema::Int)],
             }
-            .is_subtype(&Schema::KeyedMap {
+            .is_subtype_of(&Schema::KeyedMap {
                 fields: vec![
                     field("x", Schema::Int, false),
                     field("z", Schema::Bool, false),
@@ -2646,22 +2650,22 @@ mod laws {
         };
 
         // A refinement is a subtype of its base, and of anything its base subtypes.
-        assert!(refine(Schema::Bool, vec![Constraint::Ge(0)]).is_subtype(&Schema::Int));
+        assert!(refine(Schema::Bool, vec![Constraint::Ge(0)]).is_subtype_of(&Schema::Int));
         // More constraints denote a smaller set: a superset of constraints (with
         // the supertype's constraints all present) is a subtype.
         assert!(
             refine(Schema::Int, vec![Constraint::Ge(0), Constraint::Le(1)])
-                .is_subtype(&refine(Schema::Int, vec![Constraint::Ge(0)]))
+                .is_subtype_of(&refine(Schema::Int, vec![Constraint::Ge(0)]))
         );
         // The looser refinement is not a subtype of the tighter one.
         assert!(
-            !refine(Schema::Int, vec![Constraint::Ge(0)]).is_subtype(&refine(
+            !refine(Schema::Int, vec![Constraint::Ge(0)]).is_subtype_of(&refine(
                 Schema::Int,
                 vec![Constraint::Ge(0), Constraint::Le(1)]
             ))
         );
         // The base must still subtype: a refined int is not a str.
-        assert!(!refine(Schema::Int, vec![Constraint::Ge(0)]).is_subtype(&Schema::Str));
+        assert!(!refine(Schema::Int, vec![Constraint::Ge(0)]).is_subtype_of(&Schema::Str));
         // An empty base empties the refinement; an inhabited base does not (bound
         // contradictions need value comparison and stay conservative here).
         assert!(refine(Schema::Nothing, vec![Constraint::Ge(0)]).is_empty());
@@ -2701,26 +2705,28 @@ mod laws {
             defaults: clauses,
         };
         // A mapping is a subtype of one with more clauses that subsume its own.
-        assert!(map(vec![(Schema::Str, Schema::Int)]).is_subtype(&map(vec![
-            (Schema::Str, Schema::Int),
-            (Schema::Int, Schema::Bool),
-        ])));
+        assert!(
+            map(vec![(Schema::Str, Schema::Int)]).is_subtype_of(&map(vec![
+                (Schema::Str, Schema::Int),
+                (Schema::Int, Schema::Bool),
+            ]))
+        );
         // The reverse fails: the extra int-keyed clause is not covered.
         assert!(
             !map(vec![
                 (Schema::Str, Schema::Int),
                 (Schema::Int, Schema::Bool)
             ])
-            .is_subtype(&map(vec![(Schema::Str, Schema::Int)]))
+            .is_subtype_of(&map(vec![(Schema::Str, Schema::Int)]))
         );
         // A clause is subsumed only when both key and value narrow.
         assert!(
             map(vec![(Schema::Str, Schema::Bool)])
-                .is_subtype(&map(vec![(Schema::Str, Schema::Int)]))
+                .is_subtype_of(&map(vec![(Schema::Str, Schema::Int)]))
         );
         assert!(
             !map(vec![(Schema::Str, Schema::Int)])
-                .is_subtype(&map(vec![(Schema::Str, Schema::Bool)]))
+                .is_subtype_of(&map(vec![(Schema::Str, Schema::Bool)]))
         );
         // A closed record is a subtype of an open one that declares its fields.
         let closed = |fields| Schema::record(fields, false);
@@ -2731,7 +2737,7 @@ mod laws {
         };
         assert!(
             closed(vec![field("x", Schema::Int, true)])
-                .is_subtype(&Schema::record(vec![field("x", Schema::Int, true)], true))
+                .is_subtype_of(&Schema::record(vec![field("x", Schema::Int, true)], true))
         );
 
         // A record mixed with a catch-all narrows field-wise and clause-wise when
@@ -2741,14 +2747,16 @@ mod laws {
             fields: vec![field("a", value_field, true)],
             defaults: vec![(Schema::Str, value_default)],
         };
-        assert!(mixed(Schema::Bool, Schema::Bool).is_subtype(&mixed(Schema::Int, Schema::Int)));
-        assert!(!mixed(Schema::Int, Schema::Int).is_subtype(&mixed(Schema::Int, Schema::Bool)));
-        assert!(!mixed(Schema::Int, Schema::Bool).is_subtype(&mixed(Schema::Bool, Schema::Bool)));
+        assert!(mixed(Schema::Bool, Schema::Bool).is_subtype_of(&mixed(Schema::Int, Schema::Int)));
+        assert!(!mixed(Schema::Int, Schema::Int).is_subtype_of(&mixed(Schema::Int, Schema::Bool)));
+        assert!(
+            !mixed(Schema::Int, Schema::Bool).is_subtype_of(&mixed(Schema::Bool, Schema::Bool))
+        );
         let mixed_b = Schema::KeyedMap {
             fields: vec![field("b", Schema::Int, true)],
             defaults: vec![(Schema::Str, Schema::Int)],
         };
-        assert!(!mixed(Schema::Int, Schema::Int).is_subtype(&mixed_b));
+        assert!(!mixed(Schema::Int, Schema::Int).is_subtype_of(&mixed_b));
 
         // A mixed map with an extra field is a subtype when a supertype catch-all
         // over all string keys covers that field's value.
@@ -2760,7 +2768,7 @@ mod laws {
             fields: vec![field("a", Schema::Int, true)],
             defaults: vec![(Schema::Str, Schema::Anything)],
         };
-        assert!(with_extra.is_subtype(&covering));
+        assert!(with_extra.is_subtype_of(&covering));
         // The extra field is not covered when the catch-all value is too narrow,
         // even though the catch-all clauses subsume (so only the extra-field
         // coverage decides it -- the "extra" set must be the fields not shared).
@@ -2775,7 +2783,7 @@ mod laws {
             fields: vec![field("a", Schema::Int, true)],
             defaults: vec![(Schema::Str, Schema::Int)],
         };
-        assert!(!extra_uncovered.is_subtype(&str_catch_all));
+        assert!(!extra_uncovered.is_subtype_of(&str_catch_all));
         // The catch-all key must admit the field name: an int-keyed catch-all does
         // not cover a string field name even when its value would.
         let extra_str = Schema::KeyedMap {
@@ -2786,10 +2794,10 @@ mod laws {
             fields: vec![field("a", Schema::Int, true)],
             defaults: vec![(Schema::Int, Schema::Anything)],
         };
-        assert!(!extra_str.is_subtype(&int_catch_all));
+        assert!(!extra_str.is_subtype_of(&int_catch_all));
         // The reverse direction -- the supertype declaring a field the subtype
         // lacks -- stays conservative.
-        assert!(!covering.is_subtype(&with_extra));
+        assert!(!covering.is_subtype_of(&with_extra));
     }
 
     #[test]
@@ -2874,12 +2882,12 @@ mod laws {
     fn decides_complement_subtyping_contravariantly() {
         let not = |s| Schema::Complement(Box::new(s));
         // ¬A ⊆ ¬B iff B ⊆ A: ¬int ⊆ ¬bool because bool ⊆ int.
-        assert!(not(Schema::Int).is_subtype(&not(Schema::Bool)));
-        assert!(!not(Schema::Bool).is_subtype(&not(Schema::Int)));
+        assert!(not(Schema::Int).is_subtype_of(&not(Schema::Bool)));
+        assert!(!not(Schema::Bool).is_subtype_of(&not(Schema::Int)));
         // Reflexivity holds for a complement (regression: it failed before this
         // rule existed).
-        assert!(not(Schema::Int).is_subtype(&not(Schema::Int)));
-        assert!(not(Schema::Literal(0)).is_subtype(&not(Schema::Literal(0))));
+        assert!(not(Schema::Int).is_subtype_of(&not(Schema::Int)));
+        assert!(not(Schema::Literal(0)).is_subtype_of(&not(Schema::Literal(0))));
     }
 
     #[test]
@@ -2903,12 +2911,12 @@ mod laws {
         };
         // Two structurally identical recursive linked-list types are equivalent.
         let identical = [list_of(Schema::Int, 0), list_of(Schema::Int, 1)];
-        assert!(Schema::Ref(0).equivalent_under(&Schema::Ref(1), &NoLeafRelations, &identical));
+        assert!(Schema::Ref(0).is_equivalent_under(&Schema::Ref(1), &NoLeafRelations, &identical));
         // Depth covariance through the recursion: a bool-valued list is a subtype
         // of an int-valued one (bool ⊆ int), but not the reverse.
         let covary = [list_of(Schema::Bool, 0), list_of(Schema::Int, 1)];
-        assert!(Schema::Ref(0).is_subtype_under(&Schema::Ref(1), &NoLeafRelations, &covary));
-        assert!(!Schema::Ref(1).is_subtype_under(&Schema::Ref(0), &NoLeafRelations, &covary));
+        assert!(Schema::Ref(0).is_subtype_of_under(&Schema::Ref(1), &NoLeafRelations, &covary));
+        assert!(!Schema::Ref(1).is_subtype_of_under(&Schema::Ref(0), &NoLeafRelations, &covary));
     }
 
     /// A sample value for the subtyping oracle: a scalar, or a set whose element
@@ -2981,15 +2989,15 @@ mod laws {
 
             let a_sub_b = SAMPLES.iter().all(|&v| !member(&a, v) || member(&b, v));
             let b_sub_a = SAMPLES.iter().all(|&v| !member(&b, v) || member(&a, v));
-            prop_assert_eq!(a.is_subtype(&b), a_sub_b);
-            prop_assert_eq!(a.equivalent(&b), a_sub_b && b_sub_a);
+            prop_assert_eq!(a.is_subtype_of(&b), a_sub_b);
+            prop_assert_eq!(a.is_equivalent(&b), a_sub_b && b_sub_a);
         }
 
         #[test]
         fn structural_subtyping_is_sound(a in scalar_or_set_schema(), b in scalar_or_set_schema()) {
-            prop_assert!(a.is_subtype(&a)); // reflexivity holds everywhere
+            prop_assert!(a.is_subtype_of(&a)); // reflexivity holds everywhere
             // Soundness: a claimed subtype never accepts a sample the supertype rejects.
-            if a.is_subtype(&b) {
+            if a.is_subtype_of(&b) {
                 for value in &samples_v() {
                     prop_assert!(!member_v(&a, value) || member_v(&b, value));
                 }

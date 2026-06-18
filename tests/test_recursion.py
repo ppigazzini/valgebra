@@ -2,9 +2,9 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import ValidationError, lazy, union, validator
+from valgebra import ValidationError, recursive, union, validator
 
-json_value = lazy(
+json_value = recursive(
     lambda j: union(None, bool, int, float, str, [j], {str: j}),
 )
 
@@ -56,7 +56,7 @@ def test_recursive_json_value_rejects_a_foreign_leaf() -> None:
 
 
 def test_recursive_tree() -> None:
-    tree = lazy(lambda t: {"value": int, "left?": t, "right?": t})
+    tree = recursive(lambda t: {"value": int, "left?": t, "right?": t})
     assert tree.is_valid({"value": 1, "left": {"value": 2}})
     assert tree.is_valid({"value": 1, "left": {"value": 2}, "right": {"value": 3}})
     assert not tree.is_valid({"value": "x"})
@@ -69,7 +69,7 @@ def test_recursion_composes_into_larger_schemas() -> None:
 
 
 def test_mutual_recursion_through_nested_builders() -> None:
-    schema = lazy(lambda x: union(int, [x]))
+    schema = recursive(lambda x: union(int, [x]))
     assert schema.is_valid(1)
     assert schema.is_valid([1, [2], [[3]]])
     assert not schema.is_valid([1, "x"])
@@ -77,7 +77,7 @@ def test_mutual_recursion_through_nested_builders() -> None:
 
 def test_non_contractive_body_is_rejected() -> None:
     with pytest.raises(ValueError, match="contractive"):
-        lazy(lambda r: union(int, r))
+        recursive(lambda r: union(int, r))
 
 
 def test_self_containing_value_is_rejected_as_a_loop() -> None:
@@ -89,7 +89,7 @@ def test_self_containing_value_is_rejected_as_a_loop() -> None:
 
 
 def test_deeply_nested_value_fails_cleanly() -> None:
-    chain = lazy(lambda c: union(None, [c]))
+    chain = recursive(lambda c: union(None, [c]))
     value: object = None
     for _ in range(500):
         value = [value]
@@ -98,5 +98,5 @@ def test_deeply_nested_value_fails_cleanly() -> None:
 
 
 def test_recursive_schema_renders_finitely() -> None:
-    tree = lazy(lambda t: {"value": int, "left?": t})
+    tree = recursive(lambda t: {"value": int, "left?": t})
     assert repr(tree) == "{'value': int, 'left?': ...}"

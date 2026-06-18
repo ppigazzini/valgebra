@@ -12,7 +12,7 @@ will form the first release.
 ### Added
 
 - Compile-once / validate-fast engine: `validator(schema)` builds an immutable
-  validator with `validate` (raises), `is_valid` (bool fast path), and `cast`.
+  validator with `validate` (raises), `is_valid` (bool fast path), and `ensure`.
 - Typing-annotation frontend: scalars, `None`, `Any`, `list`/`set`/`frozenset`/
   `dict`, fixed, variadic, and prefix-plus-tail tuples (`tuple[A, B, ...]`),
   unions and `Optional`, `Literal`, `TypedDict`, dataclasses, `NamedTuple`,
@@ -22,17 +22,17 @@ will form the first release.
   prefix-plus-tail `[A, B, ...]` (a fixed prefix then a repeated tail); a dict
   literal as a closed record (`"key?"` optional); a single `{KeyType: ValueType}`
   entry as a mapping; and any constant as a typed literal.
-- A complete Boolean algebra: `union`, `intersect`, `complement`, `anything`,
+- A complete Boolean algebra: `union`, `intersection`, `complement`, `anything`,
   `nothing`, and a law-justified `simplify`, with the lattice laws
   property-tested. Conditional fields and key cardinality are composed from these
   (documented recipes), not shipped as combinators.
-- Set-relation queries on a compiled validator: `is_subtype` (set inclusion),
-  `equivalent` (mutual inclusion), and `is_empty` (an unsatisfiable schema, including
-  a recursive schema with no base case). Decided soundly across scalars,
-  containers, records and mappings, sequence forms, class subtyping
+- Set-relation queries on a compiled validator: `is_subtype_of` (set inclusion),
+  `is_equivalent` (mutual inclusion), and `is_empty` (an unsatisfiable schema,
+  including a recursive schema with no base case). Decided soundly across
+  scalars, containers, records and mappings, sequence forms, class subtyping
   (`issubclass`), and literal values (by membership), and conservative on the
   cases it cannot prove.
-- Recursive schemas via the `lazy` fixpoint, with cycle and depth guards.
+- Recursive schemas via the `recursive` fixpoint, with cycle and depth guards.
 - A structured, machine-readable error model: aggregated failures, opt-in
   fail-fast, and closest-branch reporting for unions.
 - JSON input on the Rust path: `validate_json` and `is_valid_json`, consistent

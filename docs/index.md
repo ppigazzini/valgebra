@@ -48,12 +48,12 @@ schemas (union, intersection, complement, refinement, fixpoints) with
 
 - **Schemas denote sets; validation is membership.** Subtyping is set inclusion;
   equivalence is mutual inclusion. The whole model is one idea.
-- **A real Boolean algebra.** `union`, `intersect`, and `complement` compose any
+- **A real Boolean algebra.** `union`, `intersection`, and `complement` compose any
   schema into a lattice whose laws are property-tested, with a law-justified
   [simplifier](algebra.md) that never changes a schema's value set.
 - **Typing-first.** Standard annotations are the primary notation, read through
   the typing spec's own introspection.
-- **Check, don't parse.** `validate` and `is_valid` never copy or coerce; `cast`
+- **Check, don't parse.** `validate` and `is_valid` never copy or coerce; `ensure`
   is the explicit, separate conversion mode.
 - **One boundary crossing.** The validator tree runs entirely in Rust; a Python
   predicate is a documented slow path, never a silent fallback.
@@ -67,7 +67,7 @@ schemas (union, intersection, complement, refinement, fixpoints) with
   [quickstart](quickstart.md).
 - Writing schemas? The [schema language](schema-language.md) reference covers
   every form with its denotation; [refinements](refinements.md) covers
-  constraints, and [recursive schemas](recursion.md) the `lazy` fixpoint.
+  constraints, and [recursive schemas](recursion.md) the `recursive` fixpoint.
 - Composing them? See the [Boolean algebra](algebra.md).
 - What does it decide? The [decidability boundary](decidability.md) maps what
   subtyping, equivalence, and emptiness answer exactly and what stays

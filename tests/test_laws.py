@@ -14,7 +14,7 @@ from valgebra import (
     CompiledValidator,
     anything,
     complement,
-    intersect,
+    intersection,
     nothing,
     simplify,
     union,
@@ -85,7 +85,7 @@ def test_union_commutativity(a: object, b: object) -> None:
 
 @given(a=schemas, b=schemas)
 def test_intersect_commutativity(a: object, b: object) -> None:
-    assert equivalent(intersect(a, b), intersect(b, a))
+    assert equivalent(intersection(a, b), intersection(b, a))
 
 
 @given(a=schemas, b=schemas, c=schemas)
@@ -95,27 +95,29 @@ def test_union_associativity(a: object, b: object, c: object) -> None:
 
 @given(a=schemas, b=schemas, c=schemas)
 def test_intersect_associativity(a: object, b: object, c: object) -> None:
-    assert equivalent(intersect(intersect(a, b), c), intersect(a, intersect(b, c)))
+    assert equivalent(
+        intersection(intersection(a, b), c), intersection(a, intersection(b, c))
+    )
 
 
 @given(a=schemas)
 def test_idempotence(a: object) -> None:
     assert equivalent(union(a, a), validator(a))
-    assert equivalent(intersect(a, a), validator(a))
+    assert equivalent(intersection(a, a), validator(a))
 
 
 @given(a=schemas, b=schemas)
 def test_absorption(a: object, b: object) -> None:
-    assert equivalent(union(a, intersect(a, b)), validator(a))
-    assert equivalent(intersect(a, union(a, b)), validator(a))
+    assert equivalent(union(a, intersection(a, b)), validator(a))
+    assert equivalent(intersection(a, union(a, b)), validator(a))
 
 
 @given(a=schemas)
 def test_identities(a: object) -> None:
     assert equivalent(union(a, nothing), validator(a))
-    assert equivalent(intersect(a, anything), validator(a))
+    assert equivalent(intersection(a, anything), validator(a))
     assert equivalent(union(a, anything), anything)
-    assert equivalent(intersect(a, nothing), nothing)
+    assert equivalent(intersection(a, nothing), nothing)
 
 
 @given(a=schemas)
@@ -127,10 +129,10 @@ def test_double_negation(a: object) -> None:
 def test_de_morgan(a: object, b: object) -> None:
     assert equivalent(
         complement(union(a, b)),
-        intersect(complement(a), complement(b)),
+        intersection(complement(a), complement(b)),
     )
     assert equivalent(
-        complement(intersect(a, b)),
+        complement(intersection(a, b)),
         union(complement(a), complement(b)),
     )
 
@@ -138,24 +140,24 @@ def test_de_morgan(a: object, b: object) -> None:
 @given(a=schemas, b=schemas, c=schemas)
 def test_distributivity(a: object, b: object, c: object) -> None:
     assert equivalent(
-        union(a, intersect(b, c)),
-        intersect(union(a, b), union(a, c)),
+        union(a, intersection(b, c)),
+        intersection(union(a, b), union(a, c)),
     )
     assert equivalent(
-        intersect(a, union(b, c)),
-        union(intersect(a, b), intersect(a, c)),
+        intersection(a, union(b, c)),
+        union(intersection(a, b), intersection(a, c)),
     )
 
 
 @given(a=schemas, b=schemas, c=schemas)
 def test_simplify_preserves_acceptance(a: object, b: object, c: object) -> None:
-    original = complement(union(a, intersect(b, complement(c))))
+    original = complement(union(a, intersection(b, complement(c))))
     assert equivalent(original, simplify(original))
 
 
 @given(a=schemas, b=schemas)
 def test_simplify_is_idempotent_on_acceptance(a: object, b: object) -> None:
-    once = simplify(intersect(a, complement(b)))
+    once = simplify(intersection(a, complement(b)))
     twice = simplify(once)
     assert equivalent(once, twice)
 
@@ -163,13 +165,13 @@ def test_simplify_is_idempotent_on_acceptance(a: object, b: object) -> None:
 def test_simplify_decides_the_complement_laws() -> None:
     # The decision the conservative canonicalizer could not make: a schema and
     # its complement collapse, and provably disjoint types collapse.
-    assert repr(simplify(intersect(int, complement(int)))) == "nothing"
+    assert repr(simplify(intersection(int, complement(int)))) == "nothing"
     assert repr(simplify(union(int, complement(int)))) == "anything"
-    assert repr(simplify(intersect(int, str))) == "nothing"
+    assert repr(simplify(intersection(int, str))) == "nothing"
     assert repr(simplify(union(complement(int), complement(str)))) == "anything"
 
 
 def test_simplify_leaves_the_gradual_any_uncollapsed() -> None:
     # `Any` is unchecked, not the lattice top, so the complement laws skip it.
-    assert repr(simplify(intersect(Any, complement(Any)))) != "nothing"
+    assert repr(simplify(intersection(Any, complement(Any)))) != "nothing"
     assert repr(simplify(union(Any, complement(Any)))) != "anything"

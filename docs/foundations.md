@@ -24,7 +24,7 @@ the set-algebra laws by construction rather than by convention.
 
 ## A Boolean algebra of schemas
 
-`union`, `intersect`, and `complement` are set union, intersection, and
+`union`, `intersection`, and `complement` are set union, intersection, and
 complement; `anything` is the top (every value) and `nothing` is the bottom (no
 value). Schemas under these operations form a **Boolean lattice**: a bounded,
 distributive, complemented lattice. Every Boolean-algebra law therefore holds —
@@ -45,7 +45,7 @@ Castagna, and Benzaken. valgebra is a runtime membership checker built on that
 model rather than a static type system, but it inherits the model's payoff: the
 combinators are not ad-hoc primitives, they are the Boolean operations on
 value-sets, and refinements like "an int that is not a bool" are simply
-`intersect(int, complement(bool))`.
+`intersection(int, complement(bool))`.
 
 The same line of work models the structural forms valgebra uses:
 
@@ -62,7 +62,7 @@ The same line of work models the structural forms valgebra uses:
 `Any` (the gradual dynamic type) and `anything` (the lattice top) both admit
 every value at runtime, but they are different objects in the algebra. `anything`
 obeys the laws — `complement(anything)` is `nothing`. `Any` is the **gradual**
-dynamic type: an atom the simplifier never rewrites, so `intersect(Any, s)` is
+dynamic type: an atom the simplifier never rewrites, so `intersection(Any, s)` is
 not collapsed and "deliberately unchecked" stays distinct from "checked: all
 values admitted". This follows the treatment of the gradual `?` under union and
 intersection types, where the dynamic type is an interval, not the top.
@@ -77,10 +77,10 @@ fragment** and is honest about the rest:
 
 - **Folded by the simplifier.** The complement laws (`X ∩ ¬X = ⊥`,
   `X ∪ ¬X = ⊤`) for any `X` except the gradual `Any`, and disjointness of the
-  scalar fragment. So `simplify(intersect(int, complement(int)))` is `nothing`
-  and `simplify(intersect(int, str))` is `nothing`. It never treats `Any` as the
+  scalar fragment. So `simplify(intersection(int, complement(int)))` is `nothing`
+  and `simplify(intersection(int, str))` is `nothing`. It never treats `Any` as the
   top, so a deliberately-unchecked schema is preserved.
-- **Decided by the comparison operators.** `is_subtype`, `equivalent`, and
+- **Decided by the comparison operators.** `is_subtype_of`, `is_equivalent`, and
   `is_empty` decide a wider fragment than the simplifier folds — class and literal
   inclusion, refinements (including the emptiness of contradictory bounds like
   `Ge(10) & Le(0)`), sequences, sets, records and mappings, and recursion at its

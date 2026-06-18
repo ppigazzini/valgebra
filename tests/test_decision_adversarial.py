@@ -1,8 +1,8 @@
 """Broad generative soundness check for the decision procedure.
 
 Arbitrary nested schemas ``a`` and ``b`` and an arbitrary value ``v`` are
-generated, then the decision is held to real membership: ``is_subtype`` and
-``equivalent`` never claim a relation membership contradicts, ``is_empty`` never
+generated, then the decision is held to real membership: ``is_subtype_of`` and
+``is_equivalent`` never claim a relation membership contradicts, ``is_empty`` never
 accepts a value, and every schema is a subtype of itself. This is deliberately
 adversarial — it found the complement-reflexivity and pool-merge bugs.
 """
@@ -17,8 +17,8 @@ from hypothesis import strategies as st
 from valgebra import (
     ValidationError,
     complement,
-    intersect,
-    lazy,
+    intersection,
+    recursive,
     simplify,
     union,
     validator,
@@ -41,9 +41,9 @@ _refines = st.integers(-2, 2).map(lambda n: Annotated[int, at.Ge(n)])
 # detection and coinductive subtyping) composed with everything else.
 _recursive = st.sampled_from(
     [
-        lazy(lambda t: union(None, {"value": int, "next": t})),
-        lazy(lambda t: union(None, [t])),
-        lazy(lambda t: union(int, str, [t], {str: t})),
+        recursive(lambda t: union(None, {"value": int, "next": t})),
+        recursive(lambda t: union(None, [t])),
+        recursive(lambda t: union(int, str, [t], {str: t})),
     ]
 )
 _leaf = st.one_of(_bases, _lits, _refines, _recursive)
@@ -58,7 +58,7 @@ def _extend(children: st.SearchStrategy) -> st.SearchStrategy:
         children.map(lambda c: ("dict", c)),
         children.map(lambda c: ("record", c)),
         pair.map(lambda p: ("union", p[0], p[1])),
-        pair.map(lambda p: ("intersect", p[0], p[1])),
+        pair.map(lambda p: ("intersection", p[0], p[1])),
         children.map(lambda c: ("complement", c)),
     )
 
@@ -72,7 +72,7 @@ _BUILDERS = {
     "dict": lambda a: {str: a[0]},
     "record": lambda a: {"k": a[0], "j?": a[0]},
     "union": lambda a: union(a[0], a[1]),
-    "intersect": lambda a: intersect(a[0], a[1]),
+    "intersection": lambda a: intersection(a[0], a[1]),
     "complement": lambda a: complement(a[0]),
 }
 
@@ -119,11 +119,11 @@ def test_decision_is_sound_against_membership(
     except (ValueError, TypeError, NotImplementedError, RecursionError):
         return  # an unbuildable combination is not under test
     in_a = left.is_valid(v)
-    if left.is_subtype(b) and in_a:
+    if left.is_subtype_of(b) and in_a:
         assert right.is_valid(v)
     if left.is_empty():
         assert not in_a
-    if left.equivalent(b):
+    if left.is_equivalent(b):
         assert in_a == right.is_valid(v)
 
 
@@ -139,7 +139,7 @@ def _json_safe(value: object) -> bool:
 def test_membership_walks_and_paths_agree(sa: object, v: object) -> None:
     # Metamorphic checks needing no oracle: the fast and explaining walks agree,
     # simplify preserves acceptance, the JSON path matches validating the parsed
-    # value, and cast returns the input unchanged exactly when it is a member.
+    # value, and ensure returns the input unchanged exactly when it is a member.
     try:
         compiled = validator(_build(sa))
     except (ValueError, TypeError, NotImplementedError, RecursionError):
@@ -156,4 +156,4 @@ def test_membership_walks_and_paths_agree(sa: object, v: object) -> None:
         text = json.dumps(v)
         assert compiled.is_valid_json(text) == compiled.is_valid(json.loads(text))
     if member:
-        assert compiled.cast(v) is v
+        assert compiled.ensure(v) is v

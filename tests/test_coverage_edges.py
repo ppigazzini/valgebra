@@ -18,7 +18,6 @@ from valgebra import (
     CompiledValidator,
     ValidationError,
     fixed_sequence,
-    lax,
     validator,
 )
 
@@ -153,7 +152,7 @@ def test_native_list_forms_compile_and_check() -> None:
 
 def test_open_record_explain_path_admits_extra_keys() -> None:
     # The aggregating walk over an open record returns without flagging extras.
-    lax(validator({"a": int})).validate({"a": 1, "b": 2, "c": 3})
+    validator({"a": int}).open().validate({"a": 1, "b": 2, "c": 3})
 
 
 def test_native_mapping_form_compiles_and_checks() -> None:

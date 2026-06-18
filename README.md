@@ -11,8 +11,8 @@ crosses into Rust exactly once per call.
 
 > [!WARNING]
 > **Pre-alpha.** valgebra is under active development. The validator engine, the
-> typing-annotation frontend, the Boolean algebra (`union`, `intersect`,
-> `complement`) with its law-justified simplifier, recursive schemas (`lazy`),
+> typing-annotation frontend, the Boolean algebra (`union`, `intersection`,
+> `complement`) with its law-justified simplifier, recursive schemas (`recursive`),
 > [JSON input](docs/json.md), and the benchmarked
 > [performance program](docs/performance.md) work today. There is no PyPI
 > release.
@@ -60,7 +60,7 @@ assert not validator(User).is_valid({"name": "Ada", "age": -1})  # field bound h
 ```
 
 `validator(schema)` builds an immutable validator with `validate` (raises),
-`is_valid` (returns a bool), and `cast` (validates, returns the object). A
+`is_valid` (returns a bool), and `ensure` (validates, returns the object). A
 failure raises `ValidationError` carrying a machine-readable `code`, the `path`
 to the offending value, the `expected` label, and a `value` summary.
 
@@ -71,7 +71,7 @@ literal. A compiled schema prints back as the annotation that produced it:
 ```python
 from valgebra import ValidationError, validator
 
-user = validator({"name": str, "age?": int})         # record, strict by default
+user = validator({"name": str, "age?": int})         # record, closed by default
 assert user.is_valid({"name": "Ada"})
 assert not user.is_valid({"name": "Ada", "x": 1})  # closed: no extra keys
 
@@ -103,34 +103,34 @@ import annotated_types as at
 
 from valgebra import (
     complement,
-    intersect,
+    intersection,
     nothing,
     union,
 )
 
 assert union(int, str).is_valid("x")              # a value in either set
-assert intersect(int, complement(bool)).is_valid(5)  # ints that are not bools
-assert not intersect(int, complement(bool)).is_valid(True)
+assert intersection(int, complement(bool)).is_valid(5)  # ints that are not bools
+assert not intersection(int, complement(bool)).is_valid(True)
 assert complement(nothing).is_valid(5)            # the complement of bottom is top
 
 # conditional shapes are composed, not built in: "if it is an int it must be >= 0"
 # is "(int and >= 0) or (not an int)" — a union of two intersections.
 if_int_non_negative = union(
-    intersect(int, Annotated[int, at.Ge(0)]),
+    intersection(int, Annotated[int, at.Ge(0)]),
     complement(int),
 )
 assert not if_int_non_negative.is_valid(-1)
 assert if_int_non_negative.is_valid("x")  # not an int: admitted
 ```
 
-The refinement "an int that is not a bool" is `intersect(int, complement(bool))`
+The refinement "an int that is not a bool" is `intersection(int, complement(bool))`
 — expressed with the algebra, never baked into the primitives.
 
 ### `Any` versus `anything`
 
 `Any` is the gradual dynamic type; `anything` is the top of the lattice. At
 runtime both admit every value, but they are different: `anything` obeys the
-lattice laws (`complement(anything)` is `nothing`, `intersect(anything, s)` is
+lattice laws (`complement(anything)` is `nothing`, `intersection(anything, s)` is
 `s`), while `Any` is an atom the simplifier never rewrites, preserving
 "deliberately unchecked" as distinct from "checked: all values admitted".
 
@@ -147,7 +147,7 @@ assert repr(simplify(union(int, int))) == "int"
 ### Comparing schemas as sets
 
 Because schemas denote sets, a compiled validator can be compared with another —
-`is_subtype` is set inclusion, `equivalent` is mutual inclusion, and `is_empty`
+`is_subtype_of` is set inclusion, `is_equivalent` is mutual inclusion, and `is_empty`
 detects an unsatisfiable schema. The answers are sound (a positive answer is a
 proof) and decide a wide fragment; what stays conservative is mapped in the
 [decidability boundary](docs/decidability.md).
@@ -157,34 +157,34 @@ from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import complement, intersect, union, validator
+from valgebra import complement, intersection, union, validator
 
-assert validator(bool).is_subtype(int)                       # bool is a subtype of int
-assert union(bool, int).equivalent(int)                      # bool | int is just int
-assert validator(Annotated[int, at.Ge(0)]).is_subtype(int)   # a refinement <= its base
-assert intersect(int, complement(int)).is_empty()            # an unsatisfiable schema
+assert validator(bool).is_subtype_of(int)                       # bool is a subtype of int
+assert union(bool, int).is_equivalent(int)                      # bool | int is just int
+assert validator(Annotated[int, at.Ge(0)]).is_subtype_of(int)   # a refinement <= its base
+assert intersection(int, complement(int)).is_empty()            # an unsatisfiable schema
 ```
 
 ## Recursive schemas
 
-`lazy` ties a fixpoint: the builder receives a placeholder standing for the
+`recursive` ties a fixpoint: the builder receives a placeholder standing for the
 schema being defined and returns its body. The recursive reference must occur
 under a structural constructor (a list, tuple, set, dict, record, or object) so
 membership stays decidable; a non-contractive body is rejected when the
 validator is built.
 
 ```python
-from valgebra import lazy, union, validator
+from valgebra import recursive, union, validator
 
 # the recursive JSON value: a fixpoint over the structural constructors
-json_value = lazy(
+json_value = recursive(
     lambda j: union(None, bool, int, float, str, [j], {str: j}),
 )
 assert json_value.is_valid({"a": [1, "x", {"b": None}], "c": [True, 3.5]})
 assert not json_value.is_valid({"a": object()})
 
 # a binary tree, then composed into a larger schema
-tree = lazy(lambda t: {"value": int, "left?": t, "right?": t})
+tree = recursive(lambda t: {"value": int, "left?": t, "right?": t})
 assert tree.is_valid({"value": 1, "left": {"value": 2}})
 assert validator([json_value]).is_valid([1, {"k": [None, 2]}])
 ```
@@ -259,8 +259,8 @@ the matching version.
 
 - **Schemas denote sets; validation is membership.** Subtyping is set
   inclusion, equivalence is mutual inclusion. *(In place.)*
-- **Check, don't parse.** `validate` and `is_valid` never copy or coerce; `cast`
-  is the explicit, separate conversion mode. *(In place.)*
+- **Check, don't parse.** `validate` and `is_valid` never copy or coerce;
+  `ensure` is the explicit, separate value-returning mode. *(In place.)*
 - **One boundary crossing.** The validator tree runs entirely in Rust; Python
   predicates are a documented slow path, never a silent fallback. *(In place.)*
 - **A lawful algebra.** Union, intersection, and complement form a Boolean

@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 import annotated_types as at
 
-from valgebra import lazy, union, validator
+from valgebra import recursive, union, validator
 
 
 def test_copy_yields_an_equivalent_validator() -> None:
@@ -35,7 +35,7 @@ def test_copy_preserves_pooled_literals_and_predicates() -> None:
 
 
 def test_copy_preserves_recursion() -> None:
-    tree = lazy(lambda t: {"value": int, "left?": t})
+    tree = recursive(lambda t: {"value": int, "left?": t})
     c = copy.deepcopy(tree)
     assert c.is_valid({"value": 1, "left": {"value": 2}})
     assert not c.is_valid({"value": "x"})

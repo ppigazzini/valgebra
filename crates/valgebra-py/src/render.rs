@@ -70,7 +70,7 @@ pub(crate) fn render(
             render_keyed_map(py, fields, defaults, pool, defs, active)
         }
         Schema::Union(members) => members.iter().map(&r).collect::<Vec<_>>().join(" | "),
-        Schema::Intersection(members) => format!("intersect({})", kids(members)),
+        Schema::Intersection(members) => format!("intersection({})", kids(members)),
         Schema::Complement(inner) => format!("complement({})", r(inner)),
         Schema::Instance(i) | Schema::Object { class_index: i, .. } => {
             pool_class_name(py, pool, *i)
@@ -138,7 +138,7 @@ fn render_constraint(py: Python<'_>, constraint: &Constraint, pool: &[Py<PyAny>]
         Constraint::MaxLen(n) => format!("MaxLen({n})"),
         Constraint::MultipleOf(i) => format!("MultipleOf({})", pool_repr(py, pool, *i)),
         Constraint::Predicate(_) => "Predicate(...)".to_owned(),
-        Constraint::Regex(pattern) => format!("Pattern({pattern:?})"),
+        Constraint::Regex(pattern) => format!("Regex({pattern:?})"),
     }
 }
 

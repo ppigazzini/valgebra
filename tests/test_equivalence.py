@@ -23,7 +23,7 @@ import annotated_types as at
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import ValidationError, complement, intersect, union, validator
+from valgebra import ValidationError, complement, intersection, union, validator
 
 # Atoms span the scalar nodes, the top, the gradual node, and a spread of typed
 # literal singletons.
@@ -60,7 +60,7 @@ def _schemas() -> st.SearchStrategy[object]:
             st.tuples(child, child).map(lambda ab: GenericAlias(dict, ab)),
             st.tuples(child, child).map(lambda ab: {"a": ab[0], "b?": ab[1]}),
             st.tuples(child, child).map(lambda ab: union(ab[0], ab[1])),
-            st.tuples(child, child).map(lambda ab: intersect(ab[0], ab[1])),
+            st.tuples(child, child).map(lambda ab: intersection(ab[0], ab[1])),
             child.map(complement),
         ),
         max_leaves=12,

@@ -1,33 +1,29 @@
-from ._markers import Pattern
+from ._markers import Regex
 from ._valgebra import (
     CompiledValidator,
     ValidationError,
     anything,
     complement,
     fixed_sequence,
-    intersect,
-    lax,
-    lazy,
+    intersection,
     nothing,
+    recursive,
     simplify,
-    strict,
     union,
     validator,
 )
 
 __all__ = [
     "CompiledValidator",
-    "Pattern",
+    "Regex",
     "ValidationError",
     "anything",
     "complement",
     "fixed_sequence",
-    "intersect",
-    "lax",
-    "lazy",
+    "intersection",
     "nothing",
+    "recursive",
     "simplify",
-    "strict",
     "union",
     "validator",
 ]

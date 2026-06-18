@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import threading
 
-from valgebra import ValidationError, lazy, validator
+from valgebra import ValidationError, recursive, validator
 
 _RECORD = validator({"name": str, "age?": int, "tags": list[str]})
 _JSON = validator(list[dict[str, int]])
-_TREE = lazy(lambda t: {"value": int, "left?": t, "right?": t})
+_TREE = recursive(lambda t: {"value": int, "left?": t, "right?": t})
 
 _GOOD_RECORD = {"name": "Ada", "age": 36, "tags": ["a", "b"]}
 _BAD_RECORD = {"name": 5, "tags": "x"}

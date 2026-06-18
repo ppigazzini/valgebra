@@ -18,9 +18,9 @@ import pytest
 from valgebra import (
     complement,
     fixed_sequence,
-    intersect,
-    lazy,
+    intersection,
     nothing,
+    recursive,
     simplify,
     union,
     validator,
@@ -63,12 +63,12 @@ _NODES: dict[str, object] = {
     "KeyedMap:record": {"x": int},
     "KeyedMap:mapping": {str: int},
     "Union": union(int, str),
-    "Intersection": intersect(int, complement(str)),
+    "Intersection": intersection(int, complement(str)),
     "Complement": complement(int),
     "Instance": _Klass,
     "Object": _Record,
     "Refine": Annotated[int, at.Ge(0)],
-    "Recursive": lazy(lambda t: union(None, {"next": t})),
+    "Recursive": recursive(lambda t: union(None, {"next": t})),
 }
 
 
@@ -76,8 +76,8 @@ _NODES: dict[str, object] = {
 def test_every_node_is_reachable_and_handled(spec: object) -> None:
     compiled = validator(spec)  # the frontend builds it
     assert isinstance(compiled.is_empty(), bool)  # emptiness terminates
-    assert compiled.is_subtype(spec)  # reflexivity
-    assert compiled.equivalent(spec)  # self-equivalence
+    assert compiled.is_subtype_of(spec)  # reflexivity
+    assert compiled.is_equivalent(spec)  # self-equivalence
     # The rendered form is stable under simplification.
     assert repr(simplify(compiled)) == repr(simplify(simplify(compiled)))
 
@@ -97,7 +97,7 @@ _SHAPES: dict[str, tuple[object, object]] = {
 def test_sequence_shapes_reach_both_containers(listed: object, tupled: object) -> None:
     list_form = validator(listed)
     tuple_form = validator(tupled)
-    assert list_form.is_subtype(listed)  # the list form builds and is reflexive
-    assert tuple_form.is_subtype(tupled)  # the tuple form builds and is reflexive
-    assert not list_form.is_subtype(tupled)  # a list is not a tuple
-    assert not tuple_form.is_subtype(listed)  # a tuple is not a list
+    assert list_form.is_subtype_of(listed)  # the list form builds and is reflexive
+    assert tuple_form.is_subtype_of(tupled)  # the tuple form builds and is reflexive
+    assert not list_form.is_subtype_of(tupled)  # a list is not a tuple
+    assert not tuple_form.is_subtype_of(listed)  # a tuple is not a list

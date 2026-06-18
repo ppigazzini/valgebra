@@ -172,7 +172,7 @@ class Node:
 
 def test_recursive_dataclass_is_rejected_not_crashed() -> None:
     # A class whose own type appears in a field is recursive; it must be written
-    # with lazy. Compiling it directly is rejected cleanly, never crashing.
+    # with recursive. Compiling it directly is rejected cleanly, never crashing.
     with pytest.raises(NotImplementedError):
         validator(Node)
 

@@ -50,7 +50,7 @@ pub(crate) struct Ctx<'a> {
     /// another type, a JSON value) falls back to the linear scan.
     pub(crate) unions: &'a UnionIndex,
     /// Compiled string patterns, keyed by source pattern; the refinement walk
-    /// reads it for a `Pattern(...)` constraint instead of recompiling.
+    /// reads it for a `Regex(...)` constraint instead of recompiling.
     pub(crate) regexes: &'a RegexIndex,
     pub(crate) guard: &'a RefCell<FxHashSet<(usize, usize)>>,
     /// Build violations into `out`. When false the walk is the membership fast
@@ -112,7 +112,7 @@ impl UnionPlan {
 /// address mapped to its [`UnionPlan`]. Keyed and rebuilt like [`RecordIndex`].
 pub(crate) type UnionIndex = FxHashMap<usize, UnionPlan>;
 
-/// Each `Pattern(...)` constraint's source pattern mapped to its compiled,
+/// Each `Regex(...)` constraint's source pattern mapped to its compiled,
 /// anchored regex, built once per validator so a string-pattern refinement
 /// matches natively without recompiling on every call.
 pub(crate) type RegexIndex = FxHashMap<String, Regex>;

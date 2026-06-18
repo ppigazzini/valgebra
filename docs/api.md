@@ -13,7 +13,7 @@ from the top-level `valgebra` namespace.
 
 ::: valgebra.union
 
-::: valgebra.intersect
+::: valgebra.intersection
 
 ::: valgebra.complement
 
@@ -23,17 +23,16 @@ from the top-level `valgebra` namespace.
 
 ::: valgebra.fixed_sequence
 
-::: valgebra.lax
-
-::: valgebra.strict
+Opening and closing a record's key set are methods on the compiled validator
+(`CompiledValidator.open` and `CompiledValidator.close`), documented above.
 
 ## Refinement markers
 
-::: valgebra.Pattern
+::: valgebra.Regex
 
 ## Recursion
 
-::: valgebra.lazy
+::: valgebra.recursive
 
 ## Lattice bounds
 

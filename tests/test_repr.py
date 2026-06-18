@@ -8,9 +8,9 @@ import pytest
 from valgebra import (
     anything,
     complement,
-    intersect,
-    lazy,
+    intersection,
     nothing,
+    recursive,
     union,
     validator,
 )
@@ -72,7 +72,7 @@ _ROUNDTRIP_NS = {
     "anything": anything,
     "nothing": nothing,
     "union": union,
-    "intersect": intersect,
+    "intersection": intersection,
     "complement": complement,
 }
 
@@ -104,7 +104,7 @@ ROUNDTRIP_SCHEMAS = [
     Annotated[int, at.Ge(0)],
     Annotated[str, at.MinLen(1)],
     union(int, str),
-    intersect(int, complement(bool)),
+    intersection(int, complement(bool)),
     complement(int),
 ]
 
@@ -121,7 +121,7 @@ def test_repr_of_class_and_recursive_forms() -> None:
 
     assert repr(validator(Color)) == "Color"
     assert repr(validator(Point)) == "Point"
-    assert repr(lazy(lambda s: {"v": int, "n?": s})) == "{'v': int, 'n?': ...}"
+    assert repr(recursive(lambda s: {"v": int, "n?": s})) == "{'v': int, 'n?': ...}"
 
 
 @pytest.mark.parametrize("schema", ROUNDTRIP_SCHEMAS)

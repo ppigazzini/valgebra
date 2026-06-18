@@ -1,6 +1,6 @@
 import pytest
 
-from valgebra import ValidationError, lax, validator
+from valgebra import ValidationError, validator
 
 
 def test_record_accepts_a_matching_dict() -> None:
@@ -74,9 +74,9 @@ def test_non_string_key_does_not_fill_a_same_named_field() -> None:
 
 
 def test_open_record_explains_a_failing_field() -> None:
-    # An open (lax) record admits extra keys, so it fails only on a declared
+    # An open record admits extra keys, so it fails only on a declared
     # field; the aggregating walk reports that field.
-    schema = lax(validator({"name": str}))
+    schema = validator({"name": str}).open()
     assert schema.is_valid({"name": "Ada", "extra": 1})
     with pytest.raises(ValidationError) as info:
         schema.validate({"name": 1, "extra": 2})

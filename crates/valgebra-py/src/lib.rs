@@ -39,8 +39,9 @@ create_exception!(
 /// A compiled, immutable schema validator.
 ///
 /// Build one with `validator`, or with a combinator such as `union`,
-/// `intersect`, or `lazy`. Then check values with `validate`, `is_valid`, or
-/// `cast`, and JSON documents with `validate_json` or `is_valid_json`.
+/// `intersection`, or `recursive`. Then check values with `validate`,
+/// `is_valid`, or `ensure`, and JSON documents with `validate_json` or
+/// `is_valid_json`.
 ///
 /// Validation is a membership test against the set the schema denotes: the value
 /// is never copied or coerced. A validator never changes after it is built and
@@ -184,9 +185,10 @@ impl CompiledValidator {
 
     /// Validate `obj` and return it unchanged.
     ///
-    /// The explicit conversion entry point. Because validation is a membership
-    /// check rather than a coercion, the returned object is exactly the input;
-    /// `cast` exists so converting code reads distinctly from checking code.
+    /// The value-returning check. Because validation is a membership test rather
+    /// than a coercion, the returned object is exactly the input; `ensure` exists
+    /// so code that wants the checked value back reads distinctly from the
+    /// boolean `is_valid`.
     ///
     /// Args:
     ///     obj: The object to check.
@@ -196,7 +198,7 @@ impl CompiledValidator {
     ///
     /// Raises:
     ///     ValidationError: If `obj` is not a member of the schema's set.
-    fn cast<'py>(&self, obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    fn ensure<'py>(&self, obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         self.validate(obj, false)?;
         Ok(obj.clone())
     }
@@ -286,7 +288,7 @@ impl CompiledValidator {
     ///
     /// Returns:
     ///     `True` if this schema is a subtype of `other`, else `False`.
-    fn is_subtype(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+    fn is_subtype_of(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         let mut literals: Vec<Py<PyAny>> = self.literals.iter().map(|o| o.clone_ref(py)).collect();
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
@@ -295,21 +297,23 @@ impl CompiledValidator {
             literals: &literals,
             definitions: &definitions,
         };
-        Ok(self.schema.is_subtype_under(&other, &oracle, &definitions))
+        Ok(self
+            .schema
+            .is_subtype_of_under(&other, &oracle, &definitions))
     }
 
     /// Whether this schema and `other` denote the same set — mutual inclusion.
     ///
     /// `other` is any schema spec or compiled validator. Sound, like
-    /// `is_subtype`: `True` only when the two are provably equivalent, whatever
-    /// their syntax (`bool | int` is equivalent to `int`).
+    /// `is_subtype_of`: `True` only when the two are provably equivalent,
+    /// whatever their syntax (`bool | int` is equivalent to `int`).
     ///
     /// Args:
     ///     other: The schema to compare, as a spec or validator.
     ///
     /// Returns:
     ///     `True` if the two schemas are equivalent, else `False`.
-    fn equivalent(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+    fn is_equivalent(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         let mut literals: Vec<Py<PyAny>> = self.literals.iter().map(|o| o.clone_ref(py)).collect();
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
@@ -318,7 +322,9 @@ impl CompiledValidator {
             literals: &literals,
             definitions: &definitions,
         };
-        Ok(self.schema.equivalent_under(&other, &oracle, &definitions))
+        Ok(self
+            .schema
+            .is_equivalent_under(&other, &oracle, &definitions))
     }
 
     /// Render the compiled schema back as the annotation expression that
@@ -343,6 +349,27 @@ impl CompiledValidator {
     /// this shares the pool like `__copy__`; the memo is unused.
     fn __deepcopy__(&self, py: Python<'_>, _memo: &Bound<'_, PyAny>) -> CompiledValidator {
         self.__copy__(py)
+    }
+
+    /// Open every record in the schema: undeclared keys are admitted throughout.
+    ///
+    /// Returns a new validator; this one is unchanged.
+    ///
+    /// Returns:
+    ///     A validator whose every record admits keys beyond those declared.
+    fn open(&self, py: Python<'_>) -> CompiledValidator {
+        with_records_open(self, true, py)
+    }
+
+    /// Close every record in the schema: only declared keys are admitted
+    /// throughout. The inverse of `open`.
+    ///
+    /// Returns a new validator; this one is unchanged.
+    ///
+    /// Returns:
+    ///     A validator whose every record admits only its declared keys.
+    fn close(&self, py: Python<'_>) -> CompiledValidator {
+        with_records_open(self, false, py)
     }
 }
 
@@ -389,7 +416,7 @@ fn parse_json<'py>(data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 ///
 /// Raises:
 ///     NotImplementedError: If the schema uses an unsupported form (for
-///         example a recursive class, which must be written with `lazy`).
+///         example a recursive class, which must be written with `recursive`).
 // Google-style docstring for the Python API reference; see the note on the
 // CompiledValidator impl above.
 #[allow(clippy::doc_markdown)]
@@ -408,7 +435,7 @@ fn validator(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
 /// to a back edge, and a non-contractive body — one whose recursive reference
 /// is not under a structural constructor — is rejected.
 #[pyfunction]
-fn lazy(builder: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
+fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
     let py = builder.py();
     let token = fresh_self_token();
     let placeholder = Py::new(
@@ -424,9 +451,9 @@ fn lazy(builder: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
     let resolved = body.resolve_self(token, ref_id);
     if resolved.occurs_unguarded(ref_id, false) {
         return Err(PyValueError::new_err(
-            "lazy schema is not contractive: the recursive reference must occur \
-             under a structural constructor (a list, tuple, set, dict, record, \
-             or object)",
+            "recursive schema is not contractive: the recursive reference must \
+             occur under a structural constructor (a list, tuple, set, dict, \
+             record, or object)",
         ));
     }
     definitions.push(resolved);
@@ -447,7 +474,7 @@ fn union(schemas: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
 /// The intersection of the given schemas: a value in every one of their sets.
 #[pyfunction]
 #[pyo3(signature = (*schemas))]
-fn intersect(schemas: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
+fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<CompiledValidator> {
     combine(schemas, Schema::Intersection)
 }
 
@@ -470,22 +497,6 @@ fn complement(schema: &Bound<'_, PyAny>) -> PyResult<CompiledValidator> {
         literals,
         definitions,
     ))
-}
-
-/// Open every record in a schema: undeclared keys are admitted throughout.
-///
-/// Returns a new validator; the original is unchanged.
-#[pyfunction]
-fn lax(validator: &CompiledValidator, py: Python<'_>) -> CompiledValidator {
-    with_records_open(validator, true, py)
-}
-
-/// Close every record in a schema: only declared keys are admitted throughout.
-///
-/// The inverse of `lax`. Returns a new validator; the original is unchanged.
-#[pyfunction]
-fn strict(validator: &CompiledValidator, py: Python<'_>) -> CompiledValidator {
-    with_records_open(validator, false, py)
 }
 
 fn with_records_open(
@@ -603,13 +614,11 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<CompiledValidator>()?;
     module.add_function(wrap_pyfunction!(validator, module)?)?;
     module.add_function(wrap_pyfunction!(union, module)?)?;
-    module.add_function(wrap_pyfunction!(intersect, module)?)?;
+    module.add_function(wrap_pyfunction!(intersection, module)?)?;
     module.add_function(wrap_pyfunction!(complement, module)?)?;
     module.add_function(wrap_pyfunction!(fixed_sequence, module)?)?;
     module.add_function(wrap_pyfunction!(simplify, module)?)?;
-    module.add_function(wrap_pyfunction!(lax, module)?)?;
-    module.add_function(wrap_pyfunction!(strict, module)?)?;
-    module.add_function(wrap_pyfunction!(lazy, module)?)?;
+    module.add_function(wrap_pyfunction!(recursive, module)?)?;
     // The lattice bounds: top admits every value, bottom admits none.
     module.add("anything", atom(py, Schema::Anything)?)?;
     module.add("nothing", atom(py, Schema::Nothing)?)?;

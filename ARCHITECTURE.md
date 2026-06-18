@@ -93,8 +93,8 @@ variants are the node set:
   `Object { fields }` (an instance whose attributes satisfy field schemas),
   `Refine { base, constraint }` (a base narrowed by a bound, length, or
   predicate constraint).
-- **Recursion** — `SelfRef` / `Ref` tie the `lazy` fixpoint; the body must be
-  guarded by a structural constructor so membership stays decidable.
+- **Recursion** — `SelfRef` / `Ref` tie the `recursive` fixpoint; the body must
+  be guarded by a structural constructor so membership stays decidable.
 
 `simplify` reduces a schema by the lattice laws — flatten, dedup, identities,
 negation-normal form — and decides the complement laws and provable disjointness
@@ -105,9 +105,11 @@ The theory this rests on is in [docs/foundations.md](docs/foundations.md).
 
 The package re-exports everything from the top-level `valgebra` namespace:
 `validator` and the `CompiledValidator` it returns (`validate`, `is_valid`,
-`cast`, `validate_json`, `is_valid_json`); the combinators `union`, `intersect`,
-`complement`, and `simplify`; the structural builders `fixed_sequence`, `lax`,
-`strict`; the `lazy` fixpoint; the lattice bounds `anything` and `nothing`; and
+`ensure`, `validate_json`, `is_valid_json`, the record transforms `open` and
+`close`, and the set relations `is_subtype_of`, `is_equivalent`, `is_empty`);
+the combinators `union`, `intersection`, `complement`, and `simplify`; the
+structural builder `fixed_sequence`; the `recursive` fixpoint; the `Regex`
+refinement marker; the lattice bounds `anything` and `nothing`; and
 `ValidationError`. Conditional fields and key cardinality are composed from the
 algebra (documented recipes), not shipped as combinators.
 
@@ -124,8 +126,8 @@ trade-off.
   added. A user predicate is a documented Python-callback slow path, never a
   silent fallback on the default loop.
 - **Check, don't parse.** `validate` and `is_valid` check membership of the
-  actual object; they never copy or coerce. `cast` is the explicit, separate
-  conversion mode.
+  actual object; they never copy or coerce. `ensure` is the explicit, separate
+  value-returning mode.
 - **Pyo3-free core.** The core crate links no interpreter; Python-aware logic
   lives in the bindings, and the constants pool keeps the IR language-agnostic.
 - **Immutable validators.** A compiled validator never mutates after it is

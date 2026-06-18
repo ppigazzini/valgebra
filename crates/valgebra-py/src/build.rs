@@ -22,7 +22,7 @@ thread_local! {
 
 /// The most levels of schema nesting allowed while compiling. A real schema is
 /// nowhere near this deep; the bound exists so a recursive class — which must be
-/// expressed with `lazy` — is rejected with a message instead of a crash.
+/// expressed with `recursive` — is rejected with a message instead of a crash.
 const MAX_BUILD_DEPTH: usize = 100;
 
 /// RAII guard that bounds `build_schema` recursion. Entering past the bound is an
@@ -41,7 +41,7 @@ impl BuildGuard {
             return Err(not_implemented(
                 "schema nesting is too deep to compile; a class whose own type \
                  appears in its fields is recursive and must be written with \
-                 lazy(...), which ties the fixpoint explicitly",
+                 recursive(...), which ties the fixpoint explicitly",
             ));
         }
         Ok(BuildGuard)
@@ -616,7 +616,7 @@ fn parse_constraint(
     out: &mut Vec<Constraint>,
     lits: &mut Vec<Py<PyAny>>,
 ) -> PyResult<()> {
-    // A string-pattern marker: valgebra's `Pattern(...)` or a compiled
+    // A string-pattern marker: valgebra's `Regex(...)` or a compiled
     // `re.Pattern`, both carrying the source pattern as `.pattern`. The pattern
     // is validated (anchored) here so an invalid expression fails at compile
     // time, not at first validation; the compiled regex is cached per validator.

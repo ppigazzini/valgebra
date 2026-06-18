@@ -28,7 +28,7 @@ from valgebra import (
     CompiledValidator,
     ValidationError,
     complement,
-    intersect,
+    intersection,
     validator,
 )
 
@@ -264,16 +264,16 @@ def _cases(draw: st.DrawFn) -> tuple[CompiledValidator, Pred]:
     """Draw a compiled validator paired with its denotation predicate.
 
     The plain case compiles the spec directly; the wrapped cases exercise the
-    top-level algebra: complement negates the predicate, intersect conjoins two.
+    top-level algebra: complement negates the predicate, intersection conjoins two.
     """
     spec, pred = draw(_specs())
-    mode = draw(st.sampled_from(["plain", "complement", "intersect"]))
+    mode = draw(st.sampled_from(["plain", "complement", "intersection"]))
     if mode == "plain":
         return validator(spec), pred
     if mode == "complement":
         return complement(spec), lambda x: not pred(x)
     spec2, pred2 = draw(_specs())
-    return intersect(spec, spec2), lambda x: pred(x) and pred2(x)
+    return intersection(spec, spec2), lambda x: pred(x) and pred2(x)
 
 
 @settings(max_examples=400, deadline=None)

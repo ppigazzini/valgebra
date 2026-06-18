@@ -72,15 +72,17 @@ def test_prefix_tail_tuple_decides_distinctly_from_lists() -> None:
     # throughout subtyping, emptiness, and equivalence.
 
     # Subtyping is covariant in the prefix and the repeated tail.
-    assert validator(_pt_tuple(bool, bool, ...)).is_subtype(_pt_tuple(int, int, ...))
-    assert not validator(_pt_tuple(int, int, ...)).is_subtype(_pt_tuple(int, bool, ...))
+    assert validator(_pt_tuple(bool, bool, ...)).is_subtype_of(_pt_tuple(int, int, ...))
+    assert not validator(_pt_tuple(int, int, ...)).is_subtype_of(
+        _pt_tuple(int, bool, ...)
+    )
     # A fixed-length tuple is a subtype of a prefix-and-tail one it fits.
-    assert validator(tuple[bool, int]).is_subtype(_pt_tuple(int, int, ...))
+    assert validator(tuple[bool, int]).is_subtype_of(_pt_tuple(int, int, ...))
 
     # The container is part of the type: the list form and the tuple form with an
     # identical element regex are unrelated.
-    assert not validator([int, int, ...]).is_subtype(_pt_tuple(int, int, ...))
-    assert not validator(_pt_tuple(int, int, ...)).is_subtype([int, int, ...])
+    assert not validator([int, int, ...]).is_subtype_of(_pt_tuple(int, int, ...))
+    assert not validator(_pt_tuple(int, int, ...)).is_subtype_of([int, int, ...])
 
     # An uninhabited prefix empties the tuple; an uninhabited tail only forbids
     # the repeats, so a single-element tuple matching the prefix still inhabits it.
@@ -89,7 +91,7 @@ def test_prefix_tail_tuple_decides_distinctly_from_lists() -> None:
 
     # Equivalence collapses a redundant union in the tail (bool is a subtype of int).
     collapsed = validator(_pt_tuple(int, bool | int, ...))
-    assert collapsed.equivalent(_pt_tuple(int, int, ...))
+    assert collapsed.is_equivalent(_pt_tuple(int, int, ...))
 
 
 def test_mapping_error_path_tolerates_a_key_whose_str_raises() -> None:

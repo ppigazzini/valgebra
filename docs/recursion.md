@@ -1,6 +1,6 @@
 # Recursive schemas
 
-`lazy` ties a fixpoint: the builder it receives is given a placeholder standing
+`recursive` ties a fixpoint: the builder it receives is given a placeholder standing
 for the schema being defined, and returns the body. The recursive reference must
 occur under a structural constructor (a list, tuple, set, dict, record, or
 object) so membership stays decidable; a non-contractive body is rejected when
@@ -9,9 +9,9 @@ the validator is built.
 ## A recursive JSON value
 
 ```python
-from valgebra import lazy, union
+from valgebra import recursive, union
 
-json_value = lazy(
+json_value = recursive(
     lambda j: union(None, bool, int, float, str, [j], {str: j}),
 )
 assert json_value.is_valid({"a": [1, "x", {"b": None}], "c": [True, 3.5]})
@@ -20,12 +20,12 @@ assert not json_value.is_valid({"a": object()})
 
 ## A tree, then composed
 
-A `lazy` schema is an ordinary validator and composes like any other:
+A `recursive` schema is an ordinary validator and composes like any other:
 
 ```python
-from valgebra import lazy, validator
+from valgebra import recursive, validator
 
-tree = lazy(lambda t: {"value": int, "left?": t, "right?": t})
+tree = recursive(lambda t: {"value": int, "left?": t, "right?": t})
 assert tree.is_valid({"value": 1, "left": {"value": 2}})
 
 forest = validator([tree])
@@ -36,13 +36,13 @@ assert forest.is_valid([{"value": 1}, {"value": 2, "right": {"value": 3}}])
 
 A class whose own type appears in a field is recursive in the same way, but a
 class definition has no place to tie the fixpoint. Compiling such a class
-directly is rejected with a message pointing here; model it with `lazy` instead:
+directly is rejected with a message pointing here; model it with `recursive` instead:
 
 ```python
-from valgebra import lazy
+from valgebra import recursive
 
-# instead of a self-referential @dataclass Node, write the shape with lazy:
-node = lazy(lambda n: {"value": int, "next?": n})
+# instead of a self-referential @dataclass Node, write the shape with recursive:
+node = recursive(lambda n: {"value": int, "next?": n})
 assert node.is_valid({"value": 1, "next": {"value": 2}})
 ```
 
@@ -59,11 +59,11 @@ Recursion is bounded so it always terminates cleanly:
   validation time.
 
 ```python
-from valgebra import lazy, union
+from valgebra import recursive, union
 
 cyclic = []
 cyclic.append(cyclic)
-assert not lazy(lambda s: union(int, [s])).is_valid(cyclic)  # recursion_loop
+assert not recursive(lambda s: union(int, [s])).is_valid(cyclic)  # recursion_loop
 ```
 
 ## Recursion in the decision procedure
@@ -76,10 +76,10 @@ structurally identical recursive schemas are equivalent, and a recursive schema
 with no base case is detected as uninhabited.
 
 ```python
-from valgebra import lazy, union, validator
+from valgebra import recursive, union, validator
 
-json_value = lazy(lambda j: union(None, bool, int, float, str, [j], {str: j}))
-assert validator(json_value).is_subtype(json_value)  # reflexive across the fixpoint
-assert lazy(lambda t: {"value": int, "next": t}).is_empty()  # no base case
-assert not lazy(lambda t: union(None, {"next": t})).is_empty()  # a base case exists
+json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+assert validator(json_value).is_subtype_of(json_value)  # reflexive across the fixpoint
+assert recursive(lambda t: {"value": int, "next": t}).is_empty()  # no base case
+assert not recursive(lambda t: union(None, {"next": t})).is_empty()  # a base case exists
 ```

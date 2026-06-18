@@ -1,11 +1,11 @@
 # The decidability boundary
 
-valgebra compares schemas as sets: `is_subtype` is set inclusion, `equivalent` is
+valgebra compares schemas as sets: `is_subtype_of` is set inclusion, `is_equivalent` is
 mutual inclusion, and `is_empty` reports an unsatisfiable schema. The relation is
 `s <= t` exactly when `s` and `not t` share no value, so every comparison reduces
 to an emptiness test (see [foundations](foundations.md)).
 
-Every answer is **sound**. A `True` from `is_subtype`/`equivalent`, or a `True`
+Every answer is **sound**. A `True` from `is_subtype_of`/`is_equivalent`, or a `True`
 from `is_empty`, is always correct. Where valgebra cannot yet prove a relation it
 answers conservatively — `False`, or "not empty" — never a wrong `True`. So a
 positive answer is a guarantee, and a negative answer is "no, or not proven".
@@ -45,17 +45,17 @@ from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import complement, intersect, lazy, union, validator
+from valgebra import complement, intersection, recursive, union, validator
 
-assert validator(bool).is_subtype(int)  # bool is a subtype of int
-assert validator(1).is_subtype(int)  # a literal is a member of int
-assert validator(Annotated[int, at.Ge(0)]).is_subtype(int)  # refinement <= base
+assert validator(bool).is_subtype_of(int)  # bool is a subtype of int
+assert validator(1).is_subtype_of(int)  # a literal is a member of int
+assert validator(Annotated[int, at.Ge(0)]).is_subtype_of(int)  # refinement <= base
 assert validator(Annotated[int, at.Ge(10), at.Le(0)]).is_empty()  # no such int
-assert validator({str: int}).is_subtype({str: int, int: bool})  # mapping clauses
-assert union(bool, int).equivalent(int)  # bool | int is just int
-assert intersect(int, complement(int)).is_empty()  # the complement law
+assert validator({str: int}).is_subtype_of({str: int, int: bool})  # mapping clauses
+assert union(bool, int).is_equivalent(int)  # bool | int is just int
+assert intersection(int, complement(int)).is_empty()  # the complement law
 
-json_value = lazy(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
 assert json_value.is_valid({"a": [1, "x", {"b": None}]})
 ```
 
@@ -117,7 +117,7 @@ for undecidable in (Sequence[int], T):
 
 ## The contract
 
-A positive answer (`is_subtype`/`equivalent`/`is_empty` returning `True`) is a
+A positive answer (`is_subtype_of`/`is_equivalent`/`is_empty` returning `True`) is a
 proof. A negative answer is "no, or not yet proven". valgebra never reports a
 relation it cannot justify, so widening the decided fragment can only turn a
 conservative `False` into a `True` — it can never change a previously-correct

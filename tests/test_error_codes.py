@@ -18,9 +18,9 @@ from valgebra import (
     ValidationError,
     complement,
     fixed_sequence,
-    intersect,
-    lazy,
+    intersection,
     nothing,
+    recursive,
     union,
     validator,
 )
@@ -99,7 +99,7 @@ def test_combinator_codes() -> None:
     assert _first(complement(int), 5) == ("unexpected_match", ())
     assert _first(union(int, str), 1.5) == ("union_error", ())
     # An intersection reports the member that failed.
-    assert _first(intersect(int, complement(bool)), True) == ("unexpected_match", ())
+    assert _first(intersection(int, complement(bool)), True) == ("unexpected_match", ())
 
 
 def test_nested_path_reporting() -> None:
@@ -119,7 +119,7 @@ def test_constraint_codes() -> None:
 
 
 def test_recursion_codes() -> None:
-    deep = lazy(lambda s: union(int, [s]))
+    deep = recursive(lambda s: union(int, [s]))
     # Depth bound: a value nested past the limit fails with recursion_limit.
     value: object = 0
     for _ in range(200):

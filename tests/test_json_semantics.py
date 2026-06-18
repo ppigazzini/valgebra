@@ -24,9 +24,8 @@ from hypothesis import strategies as st
 from valgebra import (
     complement,
     fixed_sequence,
-    intersect,
-    lax,
-    lazy,
+    intersection,
+    recursive,
     union,
     validator,
 )
@@ -84,8 +83,8 @@ CASES: list[tuple[str, object, str, bool]] = [
     ("union", union(int, str), "1", True),
     ("union-no", union(int, str), "1.5", False),
     ("complement", complement(int), '"x"', True),
-    ("intersect", intersect(int, complement(bool)), "5", True),
-    ("intersect-bool", intersect(int, complement(bool)), "true", False),
+    ("intersection", intersection(int, complement(bool)), "5", True),
+    ("intersection-bool", intersection(int, complement(bool)), "true", False),
     # nested structure walked in place
     ("nested", list[dict[str, int]], '[{"a": 1}, {"b": 2}]', True),
     ("nested-no", list[dict[str, int]], '[{"a": "x"}]', False),
@@ -112,14 +111,14 @@ def test_json_matches_object_path_and_expected(
 
 
 def test_recursive_schema_over_json_in_place() -> None:
-    json_value = lazy(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
     doc = '{"a": [1, "x", {"b": null}], "c": [true, 3.5]}'
     assert json_value.is_valid_json(doc)
     assert json_value.is_valid_json(doc) == json_value.is_valid(json.loads(doc))
 
 
 def test_recursive_tree_over_json() -> None:
-    tree = lazy(lambda t: {"value": int, "left?": t, "right?": t})
+    tree = recursive(lambda t: {"value": int, "left?": t, "right?": t})
     assert tree.is_valid_json('{"value": 1, "left": {"value": 2}}')
     assert not tree.is_valid_json('{"value": 1, "left": {"value": "x"}}')
 
@@ -127,7 +126,7 @@ def test_recursive_tree_over_json() -> None:
 def test_deeply_nested_json_recursion_is_bounded() -> None:
     # A recursive schema over a very deep document fails cleanly (depth guard),
     # never overflowing the native stack.
-    deep = lazy(lambda s: union(int, [s]))
+    deep = recursive(lambda s: union(int, [s]))
     doc = "[" * 200 + "1" + "]" * 200
     assert deep.is_valid_json(doc) is False
     assert deep.is_valid_json(doc) == deep.is_valid(json.loads(doc))
@@ -164,7 +163,7 @@ def test_fixed_length_list_over_json() -> None:
 
 
 def test_open_record_over_json_admits_extra_keys() -> None:
-    v = lax(validator({"a": int}))
+    v = validator({"a": int}).open()
     assert v.is_valid_json('{"a": 1, "b": 2}') is True
     assert v.is_valid_json('{"a": "x"}') is False  # declared value still checked
 
