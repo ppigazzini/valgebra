@@ -81,6 +81,17 @@ pub(crate) fn build_schema(
         return Ok(Schema::Any);
     }
 
+    // `typing.Never`/`NoReturn` are the empty type: the lattice bottom, the
+    // typing-native spelling of `nothing`. (`object` maps to the top below.)
+    // `Never` is 3.11+, so a missing attribute simply skips it.
+    for name in ["Never", "NoReturn"] {
+        if let Ok(form) = typing.getattr(name)
+            && obj.is(&form)
+        {
+            return Ok(Schema::Nothing);
+        }
+    }
+
     // A plain type or class (a scalar, `object`, TypedDict, dataclass, enum,
     // protocol, ...) is dispatched here, before the typing introspection below.
     // A type never has a typing origin, so taking this path first skips a

@@ -174,3 +174,34 @@ def test_json_path_fuzz_agrees_with_object_path(spec: object, value: object) -> 
     v = Validator(spec)
     doc = json.dumps(value)
     assert v.is_valid_json(doc) == v.is_valid(json.loads(doc))
+
+
+def test_load_returns_the_parsed_value() -> None:
+    # load parses, validates, and hands back the parsed object (no second parse).
+    v = Validator({"name": str, "age?": int})
+    parsed = v.load('{"name": "Ada", "age": 36}')
+    assert parsed == {"name": "Ada", "age": 36}
+    # bytes input works too
+    assert v.load(b'{"name": "Ada"}') == {"name": "Ada"}
+
+
+def test_load_raises_on_a_non_member() -> None:
+    v = Validator(list[int])
+    with pytest.raises(ValidationError) as info:
+        v.load('[1, "x"]')
+    assert info.value.code == "int_type"
+
+
+def test_load_raises_on_malformed_json() -> None:
+    with pytest.raises(ValidationError) as info:
+        Validator(int).load("{not json")
+    assert info.value.code == "json_invalid"
+
+
+@given(spec=_json_schemas(), value=_json_values())
+def test_load_round_trips_with_json_loads(spec: object, value: object) -> None:
+    # When the document is a member, load returns exactly what json.loads would.
+    v = Validator(spec)
+    doc = json.dumps(value)
+    if v.is_valid(json.loads(doc)):
+        assert v.load(doc) == json.loads(doc)

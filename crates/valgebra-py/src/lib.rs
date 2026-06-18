@@ -270,6 +270,31 @@ impl Validator {
         self.validate(&parsed, fail_fast)
     }
 
+    /// Validate a JSON document and return the parsed value.
+    ///
+    /// Like `validate_json`, but returns the parsed Python object instead of
+    /// discarding it, so a caller that needs the data does not parse it again.
+    /// Parsing runs in Rust (jiter), and the parsed value is validated by the
+    /// same walk, reaching the same decision and errors as `validate`.
+    ///
+    /// Args:
+    ///     data: The JSON document, as `str` or `bytes`.
+    ///     fail_fast: Stop at the first failure instead of aggregating.
+    ///
+    /// Returns:
+    ///     The parsed Python object, once it is confirmed a member of the set.
+    ///
+    /// Raises:
+    ///     ValidationError: If the document is malformed JSON (code
+    ///         `json_invalid`) or is not a member of the schema's set.
+    ///     TypeError: If `data` is not `str` or `bytes`.
+    #[pyo3(signature = (data, *, fail_fast = false))]
+    fn load<'py>(&self, data: &Bound<'py, PyAny>, fail_fast: bool) -> PyResult<Bound<'py, PyAny>> {
+        let parsed = parse_json(data)?;
+        self.validate(&parsed, fail_fast)?;
+        Ok(parsed)
+    }
+
     /// Whether a JSON document parses and is a member of the schema's set.
     ///
     /// Check-only and never raises: malformed JSON, or input that is neither

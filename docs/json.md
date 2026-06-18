@@ -20,6 +20,21 @@ assert Validator(list[int]).is_valid_json(b"[1, 2, 3]")
 `is_valid_json(data)` mirrors `is_valid`: it returns a bool and never raises.
 Both accept a JSON `str` or `bytes`.
 
+When you need the data, not just the verdict, `load` validates and **returns the
+parsed value**, so it is not parsed twice:
+
+```python
+from valgebra import Validator
+
+users = Validator({"name": str, "age?": int})
+record = users.load('{"name": "Ada", "age": 36}')
+assert record == {"name": "Ada", "age": 36}
+```
+
+`load(data, *, fail_fast=False)` raises `ValidationError` on malformed JSON or a
+non-member, exactly as `validate_json` does, and otherwise returns the parsed
+object.
+
 ## Same decisions as the object path
 
 The JSON path parses the document into a Python value and runs the **same**
