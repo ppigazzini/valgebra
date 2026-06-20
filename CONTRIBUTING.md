@@ -105,8 +105,11 @@ block — a differential lane that cross-checks membership against pydantic-core
 and jsonschema, the doc-example runner, a strict docs build, and a Linux wheel
 build. Scheduled lanes run the deep property suites, a libFuzzer soak over the
 core, and a mutation sweep.
-Performance is gated by a **deterministic cachegrind instruction count** compared
-to a committed budget: independent of runner noise, so it blocks merges where a
+Performance is gated two ways: a **deterministic cachegrind instruction count**
+over the core engine compared to a committed budget, and a **competitive ratio**
+of per-call time against pydantic-core across a shape matrix. Both are
+independent of the runner's absolute speed — the instruction count by
+construction, the ratio by cancellation — so they block merges where a
 wall-clock budget could not.
 
 ## Working on changes

@@ -238,26 +238,42 @@ jobs:
       - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
           toolchain: stable
+          # llvm-tools merges the profile-guided-optimization profiles.
+          components: llvm-tools
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Install valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           enable-cache: true
-      - run: uv sync --group bench
-      - run: uv run --group bench maturin develop --uv
+      - run: uv sync --no-install-project --group bench
+      # The wall-clock benches must measure the shipped artifact, not a debug
+      # build, so build the release wheel with LTO and profile-guided
+      # optimization exactly as the release workflow does, then install it in
+      # place of an editable build. Every step below runs with --no-sync so uv
+      # never reinstalls the editable project over the optimized wheel.
+      - name: Build and install the optimized wheel
+        run: |
+          uv run --no-sync --group bench maturin build --release --pgo --out dist
+          uv pip install --no-deps --reinstall dist/*.whl
       # Deterministic instruction-count regression gate: cachegrind over the
       # fixed core workload, compared against the committed budget. Independent
       # of runner noise, so it blocks merges; a wall-clock budget could not.
       - name: Instruction-count regression gate
-        run: uv run python scripts/perf_gate.py
+        run: uv run --no-sync python scripts/perf_gate.py
       # Smoke-run the wall-clock benches once (timing disabled) so the suites
       # keep working; their numbers are recorded by hand in the performance
       # page. The files are named bench_*, so override the collection pattern.
       - name: Smoke-run the benchmarks
         run: >
-          uv run --group bench pytest benches/
+          uv run --no-sync --group bench pytest benches/
           -o python_files="bench_*.py" --benchmark-disable -q
+      # Competitive regression gate: the per-shape ratio of valgebra to
+      # pydantic-core, measured on the optimized wheel. A ratio cancels the
+      # runner's absolute speed, so it gates on the merge path where an absolute
+      # wall-clock budget could not.
+      - name: Competitive comparison gate
+        run: uv run --no-sync --group bench python scripts/compare_gate.py
 
   wheel:
     name: wheel (linux)

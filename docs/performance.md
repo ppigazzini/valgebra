@@ -162,11 +162,21 @@ far larger than the tolerance.
 
 The gate covers the pure-Rust schema engine, which is portable enough for a
 committed budget. The end-to-end wall-clock suites run on the same CI lane with
-timing disabled, as a smoke test that they keep working; their numbers are
-re-recorded by hand in the matrix above rather than gated.
+timing disabled, as a smoke test that they keep working.
 
-Re-record the budget after an intentional workload change with:
+The headline claim — that valgebra is pydantic-core-class — is gated too, by
+`scripts/compare_gate.py`. For each shape in a matrix it measures the *ratio* of
+per-call time (valgebra over pydantic-core), taking the minimum over many repeats,
+and compares each ratio against a recorded baseline (`scripts/perf_compare.json`)
+with a tolerance. A ratio cancels the runner's absolute speed: if the machine is
+slow, both libraries are slow in proportion, so the comparison survives the
+shared-runner noise an absolute budget cannot. A shape fails the merge gate when
+valgebra's ratio rises materially past its baseline — a competitive regression,
+whether from valgebra slowing down or ceding ground.
+
+Re-record the budgets after an intentional change with:
 
 ```bash
-python scripts/perf_gate.py --update
+python scripts/perf_gate.py --update            # core instruction budget
+python scripts/compare_gate.py --update         # competitive ratios
 ```

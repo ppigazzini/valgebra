@@ -1,0 +1,9 @@
+{
+  "tolerance": 0.5,
+  "ratios": {
+    "scalar": 0.1861,
+    "large_array": 0.5157,
+    "wide_record": 0.4586,
+    "deep_nesting": 0.1488
+  }
+}
