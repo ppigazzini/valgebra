@@ -691,7 +691,17 @@ impl LeafRelations for PoolRelations<'_, '_> {
 }
 
 /// The `valgebra._valgebra` extension module.
-#[pymodule]
+///
+/// `gil_used = false` declares the module free-threading-ready, so a
+/// free-threaded interpreter keeps the global interpreter lock disabled on
+/// import instead of re-enabling it. This is sound because every shared surface
+/// is immutable or internally synchronized: a `Validator` is `frozen`, its
+/// schema, constants pool, and definitions never change after construction, and
+/// its only lazy state is a `std::sync::OnceLock` holding pure-Rust precompute
+/// (no Python objects), whose initialization the standard library serializes.
+/// The validation walk keeps its recursion guard in a per-call local, so no two
+/// threads share mutable walk state.
+#[pymodule(gil_used = false)]
 fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = module.py();
     module.add("ValidationError", py.get_type::<ValidationError>())?;

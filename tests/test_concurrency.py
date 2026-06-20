@@ -2,10 +2,14 @@
 
 A compiled validator is immutable (frozen, with an interned pool it never
 mutates) and the validation walk keeps its recursion guard in a per-call local,
-so the same validator can be validated from many threads at once. Under a
-free-threaded interpreter this runs with no GIL, so the test exercises true
-parallel access; under a regular interpreter it still checks correctness under
-concurrency.
+so the same validator can be validated from many threads at once. The lazy
+per-validator precompute is the only shared mutable state, and it is a
+thread-safe one-time init holding pure-Rust data, so first use races safely.
+
+The extension module declares itself free-threading-ready, so a free-threaded
+interpreter keeps the global interpreter lock disabled and this test exercises
+true parallel access; under a regular interpreter it still checks correctness
+under concurrency.
 """
 
 from __future__ import annotations
