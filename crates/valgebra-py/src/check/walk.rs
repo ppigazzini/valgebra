@@ -6,6 +6,25 @@
 //! each sequence element, each mapping entry), unless `ctx.fail_fast` stops it at
 //! the first. In *fast* mode it allocates nothing and short-circuits as soon as
 //! membership is decided.
+//!
+//! ## Comparison-raises policy
+//!
+//! Membership reads a value through Python operations that can raise — `__eq__`
+//! for a literal, a rich comparison for a bound, `isinstance` for a class,
+//! `__mod__` for a multiple-of, `__len__` for a length. The single rule across
+//! every such site: **a value whose comparison, instance check, or attribute
+//! access raises is treated as a non-member** (the helper `cmp` and the
+//! `unwrap_or(false)`/`is_ok_and` sites encode this). This matches pydantic-core:
+//! a value that cannot answer "are you in this set?" is not in it. The one
+//! exception is a *user predicate*, whose raised error is surfaced as a distinct
+//! `predicate_error` rather than folded, so a buggy predicate is visible.
+//!
+//! Because the walk returns `bool` (never a `PyResult`) — the one-walk, one
+//! boundary-crossing design — a fatal interpreter signal raised inside such an
+//! operation (`KeyboardInterrupt`, `MemoryError`, `RecursionError`) is folded
+//! the same way rather than propagated. Distinguishing those would require making
+//! the whole walk fallible; that is a deliberate, recorded trade, not an
+//! oversight.
 
 use std::borrow::Cow;
 

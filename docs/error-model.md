@@ -100,6 +100,20 @@ except ValidationError as err:
     assert restored[0]["expected"] == "int"
 ```
 
+## When a comparison raises
+
+Checking membership reads a value through Python operations that can raise: an
+`__eq__` for a literal, a rich comparison for a numeric bound, `isinstance` for a
+class, `__len__` for a length, `__mod__` for a multiple-of. A value whose
+comparison, instance check, or attribute access **raises is treated as a
+non-member** — a value that cannot answer "are you in this set?" is not in it, the
+same pragmatic stance pydantic-core takes. The one exception is a user predicate
+(`Annotated[..., some_callable]`): a predicate that raises is reported as a
+distinct `predicate_error`, not folded into an ordinary failed match, so a buggy
+predicate stays visible. The membership walk returns a plain decision, so a fatal
+interpreter signal raised inside one of these operations is folded the same way
+rather than propagated.
+
 ## Determinism
 
 For a given schema and value the error model is deterministic: the same codes,
