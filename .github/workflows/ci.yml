@@ -271,6 +271,8 @@ jobs:
           tests/test_metamorphic.py
           tests/test_decision_adversarial.py
           tests/test_denotation.py
+          tests/test_laws.py
+          tests/test_subtyping.py
           tests/test_recursion.py
           tests/test_real_world_corpus.py
 

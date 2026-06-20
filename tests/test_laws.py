@@ -1,8 +1,13 @@
 """Property tests for the Boolean-algebra laws, checked as membership equivalence.
 
 Two schemas are equivalent when they accept exactly the same values. Each law is
-checked over a fixed spread of values that exercises the atom boundaries (the
-int/bool/float distinctions and the typed-singleton literals).
+checked over generated values drawn from a strategy spanning scalars and nested
+containers, seeded with a curated spread that pins the atom boundaries (the
+int/bool/float distinctions and the typed-singleton literals). Generating the
+witness values, rather than iterating a fixed list, means two schemas that merely
+agree on a handful of constants no longer pass a law: a value that distinguishes
+them is searched for. The semantic decision (`is_equivalent`) is cross-checked
+against membership separately in the subtyping suite.
 """
 
 from typing import Any, Literal
@@ -40,7 +45,8 @@ ATOM_SCHEMAS = [
     [int, str, ...],  # a prefix-plus-tail list
 ]
 
-# A spread of values exercising the atom and container boundaries.
+# A curated spread that pins the atom and container boundaries; generated values
+# (below) widen the search beyond it on every example.
 VALUES = [
     0,
     1,
@@ -67,97 +73,135 @@ VALUES = [
 
 schemas = st.sampled_from(ATOM_SCHEMAS)
 
+# Hashable leaves for set members and dict keys.
+_hashable = st.one_of(
+    st.integers(min_value=-3, max_value=3),
+    st.booleans(),
+    st.text(max_size=2),
+    st.none(),
+)
+# Arbitrary Python values spanning scalars and nested containers — the witnesses
+# the laws are checked over, on top of the curated boundary spread.
+_value = st.recursive(
+    st.one_of(
+        st.integers(min_value=-3, max_value=3),
+        st.booleans(),
+        st.floats(allow_nan=False, allow_infinity=False),
+        st.text(max_size=2),
+        st.none(),
+    ),
+    lambda children: st.one_of(
+        st.lists(children, max_size=3),
+        st.sets(_hashable, max_size=3),
+        st.frozensets(_hashable, max_size=3),
+        st.dictionaries(st.text(max_size=2), children, max_size=2),
+        st.tuples(children),
+        st.tuples(children, children),
+    ),
+    max_leaves=5,
+)
+value_lists = st.lists(_value, max_size=6)
 
-def accepts(schema: Validator) -> list[bool]:
-    return [schema.is_valid(value) for value in VALUES]
+
+def equivalent(left: Validator, right: Validator, extra: list[object]) -> bool:
+    values = [*VALUES, *extra]
+    return all(left.is_valid(v) == right.is_valid(v) for v in values)
 
 
-def equivalent(left: Validator, right: Validator) -> bool:
-    return accepts(left) == accepts(right)
+@given(a=schemas, b=schemas, vals=value_lists)
+def test_union_commutativity(a: object, b: object, vals: list[object]) -> None:
+    assert equivalent(union(a, b), union(b, a), vals)
 
 
-@given(a=schemas, b=schemas)
-def test_union_commutativity(a: object, b: object) -> None:
-    assert equivalent(union(a, b), union(b, a))
+@given(a=schemas, b=schemas, vals=value_lists)
+def test_intersect_commutativity(a: object, b: object, vals: list[object]) -> None:
+    assert equivalent(intersection(a, b), intersection(b, a), vals)
 
 
-@given(a=schemas, b=schemas)
-def test_intersect_commutativity(a: object, b: object) -> None:
-    assert equivalent(intersection(a, b), intersection(b, a))
+@given(a=schemas, b=schemas, c=schemas, vals=value_lists)
+def test_union_associativity(
+    a: object, b: object, c: object, vals: list[object]
+) -> None:
+    assert equivalent(union(union(a, b), c), union(a, union(b, c)), vals)
 
 
-@given(a=schemas, b=schemas, c=schemas)
-def test_union_associativity(a: object, b: object, c: object) -> None:
-    assert equivalent(union(union(a, b), c), union(a, union(b, c)))
-
-
-@given(a=schemas, b=schemas, c=schemas)
-def test_intersect_associativity(a: object, b: object, c: object) -> None:
+@given(a=schemas, b=schemas, c=schemas, vals=value_lists)
+def test_intersect_associativity(
+    a: object, b: object, c: object, vals: list[object]
+) -> None:
     assert equivalent(
-        intersection(intersection(a, b), c), intersection(a, intersection(b, c))
+        intersection(intersection(a, b), c), intersection(a, intersection(b, c)), vals
     )
 
 
-@given(a=schemas)
-def test_idempotence(a: object) -> None:
-    assert equivalent(union(a, a), Validator(a))
-    assert equivalent(intersection(a, a), Validator(a))
+@given(a=schemas, vals=value_lists)
+def test_idempotence(a: object, vals: list[object]) -> None:
+    assert equivalent(union(a, a), Validator(a), vals)
+    assert equivalent(intersection(a, a), Validator(a), vals)
 
 
-@given(a=schemas, b=schemas)
-def test_absorption(a: object, b: object) -> None:
-    assert equivalent(union(a, intersection(a, b)), Validator(a))
-    assert equivalent(intersection(a, union(a, b)), Validator(a))
+@given(a=schemas, b=schemas, vals=value_lists)
+def test_absorption(a: object, b: object, vals: list[object]) -> None:
+    assert equivalent(union(a, intersection(a, b)), Validator(a), vals)
+    assert equivalent(intersection(a, union(a, b)), Validator(a), vals)
 
 
-@given(a=schemas)
-def test_identities(a: object) -> None:
-    assert equivalent(union(a, nothing), Validator(a))
-    assert equivalent(intersection(a, anything), Validator(a))
-    assert equivalent(union(a, anything), anything)
-    assert equivalent(intersection(a, nothing), nothing)
+@given(a=schemas, vals=value_lists)
+def test_identities(a: object, vals: list[object]) -> None:
+    assert equivalent(union(a, nothing), Validator(a), vals)
+    assert equivalent(intersection(a, anything), Validator(a), vals)
+    assert equivalent(union(a, anything), anything, vals)
+    assert equivalent(intersection(a, nothing), nothing, vals)
 
 
-@given(a=schemas)
-def test_double_negation(a: object) -> None:
-    assert equivalent(complement(complement(a)), Validator(a))
+@given(a=schemas, vals=value_lists)
+def test_double_negation(a: object, vals: list[object]) -> None:
+    assert equivalent(complement(complement(a)), Validator(a), vals)
 
 
-@given(a=schemas, b=schemas)
-def test_de_morgan(a: object, b: object) -> None:
+@given(a=schemas, b=schemas, vals=value_lists)
+def test_de_morgan(a: object, b: object, vals: list[object]) -> None:
     assert equivalent(
         complement(union(a, b)),
         intersection(complement(a), complement(b)),
+        vals,
     )
     assert equivalent(
         complement(intersection(a, b)),
         union(complement(a), complement(b)),
+        vals,
     )
 
 
-@given(a=schemas, b=schemas, c=schemas)
-def test_distributivity(a: object, b: object, c: object) -> None:
+@given(a=schemas, b=schemas, c=schemas, vals=value_lists)
+def test_distributivity(a: object, b: object, c: object, vals: list[object]) -> None:
     assert equivalent(
         union(a, intersection(b, c)),
         intersection(union(a, b), union(a, c)),
+        vals,
     )
     assert equivalent(
         intersection(a, union(b, c)),
         union(intersection(a, b), intersection(a, c)),
+        vals,
     )
 
 
-@given(a=schemas, b=schemas, c=schemas)
-def test_simplify_preserves_acceptance(a: object, b: object, c: object) -> None:
+@given(a=schemas, b=schemas, c=schemas, vals=value_lists)
+def test_simplify_preserves_acceptance(
+    a: object, b: object, c: object, vals: list[object]
+) -> None:
     original = complement(union(a, intersection(b, complement(c))))
-    assert equivalent(original, original.simplify())
+    assert equivalent(original, original.simplify(), vals)
 
 
-@given(a=schemas, b=schemas)
-def test_simplify_is_idempotent_on_acceptance(a: object, b: object) -> None:
+@given(a=schemas, b=schemas, vals=value_lists)
+def test_simplify_is_idempotent_on_acceptance(
+    a: object, b: object, vals: list[object]
+) -> None:
     once = intersection(a, complement(b)).simplify()
     twice = once.simplify()
-    assert equivalent(once, twice)
+    assert equivalent(once, twice, vals)
 
 
 def test_simplify_decides_the_complement_laws() -> None:

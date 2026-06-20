@@ -1,11 +1,13 @@
 """Subtyping, equivalence, and emptiness checked against real membership.
 
 `is_subtype_of(a, b)` claims every value of `a` is a value of `b`. The fuzzer holds
-that claim to actual membership: for a corpus of values, a claimed subtype never
-accepts a value its supertype rejects, and equivalent schemas accept exactly the
-same values. Soundness is the property under test; the decision is intentionally
-conservative (it may answer ``False`` for a true relation it cannot prove), so
-completeness is not asserted.
+that claim to actual membership: for generated values on top of a curated corpus,
+a claimed subtype never accepts a value its supertype rejects, and equivalent
+schemas accept exactly the same values. Drawing the witness values, rather than
+iterating a fixed list, widens the soundness search on every example. Soundness
+is the property under test; the decision is intentionally conservative (it may
+answer ``False`` for a true relation it cannot prove), so completeness is not
+asserted.
 """
 
 from typing import Annotated, Literal, TypedDict
@@ -109,17 +111,46 @@ VALUES = [
 
 specs = st.sampled_from(SPECS)
 
+# Hashable leaves for set members and dict keys.
+_hashable = st.one_of(
+    st.integers(min_value=-3, max_value=3),
+    st.booleans(),
+    st.text(max_size=2),
+    st.none(),
+)
+# Arbitrary Python values spanning scalars and nested containers, generated on
+# top of the curated corpus to widen the soundness search.
+_value = st.recursive(
+    st.one_of(
+        st.integers(min_value=-3, max_value=3),
+        st.booleans(),
+        st.floats(allow_nan=False, allow_infinity=False),
+        st.text(max_size=2),
+        st.binary(max_size=2),
+        st.none(),
+    ),
+    lambda children: st.one_of(
+        st.lists(children, max_size=3),
+        st.sets(_hashable, max_size=3),
+        st.dictionaries(st.text(max_size=2), children, max_size=2),
+        st.tuples(children),
+        st.tuples(children, children),
+    ),
+    max_leaves=5,
+)
+value_lists = st.lists(_value, max_size=6)
 
-def accepts(schema: object) -> list[bool]:
+
+def accepts(schema: object, extra: list[object]) -> list[bool]:
     compiled = Validator(schema)
-    return [compiled.is_valid(value) for value in VALUES]
+    return [compiled.is_valid(value) for value in (*VALUES, *extra)]
 
 
-@given(a=specs, b=specs)
-def test_subtype_is_sound(a: object, b: object) -> None:
+@given(a=specs, b=specs, vals=value_lists)
+def test_subtype_is_sound(a: object, b: object, vals: list[object]) -> None:
     # A claimed subtype never accepts a value the supertype rejects.
     if Validator(a).is_subtype_of(b):
-        a_accepts, b_accepts = accepts(a), accepts(b)
+        a_accepts, b_accepts = accepts(a, vals), accepts(b, vals)
         assert all(
             b_in for a_in, b_in in zip(a_accepts, b_accepts, strict=True) if a_in
         )
@@ -138,17 +169,21 @@ def test_equivalent_is_mutual_subtyping(a: object, b: object) -> None:
     )
 
 
-@given(a=specs, b=specs)
-def test_equivalent_implies_equal_acceptance(a: object, b: object) -> None:
+@given(a=specs, b=specs, vals=value_lists)
+def test_equivalent_implies_equal_acceptance(
+    a: object, b: object, vals: list[object]
+) -> None:
     if Validator(a).is_equivalent(b):
-        assert accepts(a) == accepts(b)
+        assert accepts(a, vals) == accepts(b, vals)
 
 
-@given(a=specs, b=specs)
-def test_empty_intersection_accepts_nothing(a: object, b: object) -> None:
+@given(a=specs, b=specs, vals=value_lists)
+def test_empty_intersection_accepts_nothing(
+    a: object, b: object, vals: list[object]
+) -> None:
     meet = intersection(a, b)
     if meet.is_empty():
-        assert not any(meet.is_valid(value) for value in VALUES)
+        assert not any(meet.is_valid(value) for value in (*VALUES, *vals))
 
 
 def test_known_relations() -> None:
