@@ -20,6 +20,17 @@ impl Schema {
     /// form (De Morgan) and double negations cancelled. `Any` (gradual) is left
     /// untouched: it is never treated as the top. Conservative by design — it
     /// never claims an equivalence it cannot justify structurally.
+    ///
+    /// This is purely the lattice-law normal form: it does **not** run the
+    /// emptiness/subtyping decision. So an intersection that is empty only by a
+    /// deeper argument — contradictory refinement bounds like
+    /// `int & Ge(10) & Le(0)`, or two disjoint refined bases — survives
+    /// simplification unchanged, even though [`is_empty`](Self::is_empty) reports
+    /// it empty. A caller must not treat a simplified schema as fully reduced and
+    /// then read membership relations off its structure;
+    /// [`is_empty`](Self::is_empty), [`is_subtype_of`](Self::is_subtype_of), and
+    /// [`is_equivalent`](Self::is_equivalent) are the stronger, separate decision
+    /// procedures, deciding a wider fragment than `simplify` folds.
     #[must_use]
     pub fn simplify(&self) -> Schema {
         match self {

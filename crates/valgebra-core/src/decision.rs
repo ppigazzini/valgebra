@@ -573,11 +573,25 @@ fn linear_subtype(
 }
 
 /// Whether keyed-map `a` (fields `fa`, default clauses `da`) is a subtype of
-/// keyed-map `b`. For two closed records (no defaults) it holds by width and
-/// depth — every field of `a` is a field of `b` with a subtype schema — and by
-/// required-ness — every field `b` requires is required in `a`. For two pure
-/// mappings (no fields, one default clause each) the key and value schemas
-/// covary. Every other shape is conservative.
+/// keyed-map `b`. Sound everywhere; complete on three shapes, conservative
+/// (returns `false`) outside them:
+///
+/// 1. **Closed record ≤ anything** (`da` empty): holds by width and depth (each
+///    field of `a` maps into a like-named field of `b` with a subtype schema) and
+///    by required-ness (every field `b` requires is required in `a`).
+/// 2. **Pure mapping ≤ pure mapping** (`fa` and `fb` empty): every clause of `a`
+///    is subsumed by a clause of `b` with both key and value narrower.
+/// 3. **Mixed record-and-catch-all ≤ mixed**, *when `a` declares every field `b`
+///    declares*: shared fields narrow, `b`'s required fields are required in `a`,
+///    each extra field of `a` is covered by a `str`/`anything`-keyed catch-all of
+///    `b`, and every clause of `a` is subsumed by one of `b`.
+///
+/// The decided boundary's one deliberate gap: when the **supertype declares a
+/// field the subtype lacks**, the relation needs the full set-theoretic decision
+/// (the subtype's catch-all would have to cover that exact key name), so it stays
+/// conservative. Extending that direction is the planned route toward
+/// completeness; until then a true relation there is reported `false`, never an
+/// unsound `true`.
 fn keyed_map_subtype(
     fa: &[Field],
     da: &[(Schema, Schema)],

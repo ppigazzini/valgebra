@@ -249,6 +249,25 @@ schema is preserved. The comparison operators below decide a wider fragment than
 the simplifier folds; the [decidability boundary](decidability.md) maps exactly
 what is decided.
 
+`simplify` applies the lattice laws only; it does not run the emptiness
+decision. An intersection that is empty by a deeper argument — contradictory
+refinement bounds, for instance — is left as written, even though `is_empty`
+reports it empty. So a simplified schema is a lattice normal form, not a fully
+reduced one: use `is_empty`, `is_subtype_of`, and `is_equivalent` to decide
+membership relations rather than reading them off the simplified structure.
+
+```python
+from typing import Annotated
+
+from annotated_types import Ge, Le
+
+from valgebra import Validator, intersection
+
+contradiction = intersection(Annotated[int, Ge(10)], Annotated[int, Le(0)])
+assert contradiction.is_empty()  # decided empty
+assert repr(contradiction.simplify()) != "nothing"  # but simplify leaves it
+```
+
 ## Subtyping, equivalence, and emptiness
 
 A compiled validator can be compared with another schema as *sets*. `is_subtype_of`
