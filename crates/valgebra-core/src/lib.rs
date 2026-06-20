@@ -1674,4 +1674,112 @@ mod laws {
         assert!(int_list.is_subtype_of_under(&wide_list, &oracle, &defs));
         assert!(!wide_list.is_subtype_of_under(&int_list, &oracle, &defs));
     }
+
+    /// A structural-attribute schema with an uninhabited required attribute is
+    /// empty: no value can carry that attribute, so the dataclass-style schema
+    /// denotes nothing. The symmetric keyed-map rule already held; this closes the
+    /// asymmetry.
+    #[test]
+    fn an_uninhabited_required_attribute_empties_the_schema() {
+        let empty_field = Schema::Attrs {
+            class_index: 0,
+            fields: vec![Field {
+                name: "x".into(),
+                schema: intersection(Schema::Int, Schema::Str),
+                required: true,
+            }],
+        };
+        assert!(empty_field.is_empty());
+        let live_field = Schema::Attrs {
+            class_index: 0,
+            fields: vec![Field {
+                name: "x".into(),
+                schema: Schema::Int,
+                required: true,
+            }],
+        };
+        assert!(!live_field.is_empty());
+    }
+
+    /// Two attribute schemas over the same class relate by attribute width and
+    /// depth: a schema carrying every attribute of the supertype with a narrower
+    /// schema is a subtype. Across different classes the relation stays
+    /// conservative (the nominal hierarchy is not decided in the core).
+    #[test]
+    fn attribute_schemas_subtype_by_width_and_depth() {
+        let narrow = Schema::Attrs {
+            class_index: 0,
+            fields: vec![
+                Field {
+                    name: "x".into(),
+                    schema: Schema::Bool,
+                    required: true,
+                },
+                Field {
+                    name: "y".into(),
+                    schema: Schema::Str,
+                    required: true,
+                },
+            ],
+        };
+        let wide = Schema::Attrs {
+            class_index: 0,
+            fields: vec![Field {
+                name: "x".into(),
+                schema: Schema::Int, // bool ⊆ int, and x is narrower; y is extra
+                required: true,
+            }],
+        };
+        assert!(narrow.is_subtype_of(&wide));
+        assert!(!wide.is_subtype_of(&narrow)); // wide lacks y
+        let other_class = Schema::Attrs {
+            class_index: 1,
+            fields: narrow_fields_clone(&narrow),
+        };
+        // Same fields, different class: conservative (not decided in the core).
+        assert!(!narrow.is_subtype_of(&other_class));
+    }
+
+    fn narrow_fields_clone(schema: &Schema) -> Vec<Field> {
+        match schema {
+            Schema::Attrs { fields, .. } => fields.clone(),
+            _ => unreachable!(),
+        }
+    }
+
+    /// A sequence whose repeated tail is empty only under the recursive
+    /// definitions matches just its fixed prefix, so it is a subtype of the bare
+    /// prefix sequence. The tail's emptiness is decided with the active context,
+    /// not the public no-context check, which would miss it.
+    #[test]
+    fn a_tail_empty_under_defs_reduces_to_the_prefix() {
+        // def 0 references only itself: an uninhabited recursive schema.
+        let defs = vec![Schema::Ref(0)];
+        let with_phantom_tail = Schema::Seq {
+            container: SeqKind::List,
+            regex: SeqRegex::Cat(vec![
+                SeqRegex::Elem(Box::new(Schema::Int)),
+                SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Ref(0))))),
+            ]),
+        };
+        let just_int = Schema::Seq {
+            container: SeqKind::List,
+            regex: SeqRegex::Elem(Box::new(Schema::Int)),
+        };
+        let oracle = NoLeafRelations;
+        // The phantom tail never repeats, so the two denote the same language.
+        assert!(with_phantom_tail.is_subtype_of_under(&just_int, &oracle, &defs));
+        assert!(just_int.is_subtype_of_under(&with_phantom_tail, &oracle, &defs));
+    }
+
+    /// The union-covers-the-universe fold is a live simplification, not dead code:
+    /// the complement of a scalar carries the non-scalar region, so a complement
+    /// beside a covering scalar reduces to the top even when no complementary or
+    /// disjoint-complement pair is present.
+    #[test]
+    fn a_complement_plus_a_covering_scalar_is_the_universe() {
+        // ¬bool covers everything except bools; int adds the bools back.
+        let everything = union(not(Schema::Bool), Schema::Int);
+        assert_eq!(everything.simplify(), Schema::Anything);
+    }
 }

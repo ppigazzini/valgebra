@@ -468,7 +468,7 @@ impl Schema {
     ///
     /// Used when composing two compiled validators: their constants pools and
     /// definitions tables are concatenated, so the second schema's
-    /// `Literal`/`Instance`/`Object`/`Refine` indices move past the first
+    /// `Literal`/`Instance`/`Attrs`/`Refine` indices move past the first
     /// pool's length and its `Ref` indices past the first definitions' length.
     #[must_use]
     pub fn shifted(&self, pool: usize, defs: usize) -> Schema {

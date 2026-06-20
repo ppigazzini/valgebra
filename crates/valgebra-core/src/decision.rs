@@ -190,6 +190,7 @@ impl Schema {
     /// Like [`is_empty_under`](Self::is_empty_under), but with an `oracle` that
     /// can order the pool values behind refinement bounds, so an unsatisfiable
     /// bound conjunction (a lower bound above an upper bound) is detected.
+    #[must_use]
     pub fn is_empty_with(&self, oracle: &dyn LeafRelations, defs: &[Schema]) -> bool {
         self.is_empty_rec(oracle, defs, &mut Vec::new())
     }
@@ -237,6 +238,13 @@ impl Schema {
             }
             Schema::Set(_) | Schema::FrozenSet(_) => false,
             Schema::KeyedMap { fields, .. } => fields
+                .iter()
+                .any(|field| field.required && field.schema.is_empty_rec(oracle, defs, visiting)),
+            // A structural-attribute schema requires every field, so an empty
+            // required field's schema empties it — the same rule as a keyed map.
+            // An uninhabited dataclass-style schema is detected here; the nominal
+            // `isinstance` part stays opaque, so it never narrows to empty.
+            Schema::Attrs { fields, .. } => fields
                 .iter()
                 .any(|field| field.required && field.schema.is_empty_rec(oracle, defs, visiting)),
             Schema::Union(members) => members
@@ -306,9 +314,11 @@ impl Schema {
         if assumptions.iter().any(|(a, b)| a == self && b == other) {
             return true;
         }
-        // Scalar fragment: exact via the region partition.
+        // Scalar fragment: exact via the region partition. `a` is already a
+        // subset of `REGION_ALL`, so `a & !b` needs no further mask: it holds
+        // exactly when every region of `self` is also a region of `other`.
         if let (Some(a), Some(b)) = (self.region_set(), other.region_set()) {
-            return a & !b & REGION_ALL == 0;
+            return a & !b == 0;
         }
         if self == other {
             return true;
@@ -403,6 +413,25 @@ impl Schema {
                     defaults: db,
                 },
             ) => keyed_map_subtype(fa, da, fb, db, cx, assumptions),
+            // Two structural-attribute schemas over the same class: a subtype when
+            // it carries every attribute the supertype requires with a narrower
+            // schema (width and depth; all attributes are required). Across
+            // different classes the relation needs the nominal class hierarchy,
+            // which the core cannot decide, so it stays conservative.
+            (
+                Schema::Attrs {
+                    class_index: ca,
+                    fields: fa,
+                },
+                Schema::Attrs {
+                    class_index: cb,
+                    fields: fb,
+                },
+            ) if ca == cb => fb.iter().all(|b| {
+                fa.iter()
+                    .find(|a| a.name == b.name)
+                    .is_some_and(|a| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
+            }),
             // Complement is contravariant: ¬A ⊆ ¬B exactly when B ⊆ A.
             (Schema::Complement(a), Schema::Complement(b)) => b.is_subtype_rec(a, cx, assumptions),
             // A refinement is a subset of its base. Against another refinement the
@@ -599,8 +628,11 @@ fn linear_subtype(
     assumptions: &mut Vec<(Schema, Schema)>,
 ) -> bool {
     // A repeated tail with an empty element language never repeats, so the left
-    // side is then just its fixed prefix.
-    let ta = ta.filter(|element| !element.is_empty());
+    // side is then just its fixed prefix. Emptiness is decided with the same
+    // oracle and definitions as the rest of the decision, so a tail empty only
+    // under a refinement bound or an uninhabited recursive reference is
+    // recognised here too, consistent with the context-aware recursion around it.
+    let ta = ta.filter(|element| !element.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new()));
     // A's fixed prefix must align with B: against B's prefix where they overlap,
     // then against B's repeated tail past it (which B must therefore have).
     let prefix_aligns = pa.len() >= pb.len()
@@ -722,7 +754,13 @@ const REGION_INT: u16 = 1 << 2; // int values other than bool
 const REGION_FLOAT: u16 = 1 << 3;
 const REGION_STR: u16 = 1 << 4;
 const REGION_BYTES: u16 = 1 << 5;
-pub(crate) const REGION_ALL: u16 = (1 << 12) - 1; // 6 scalar + 5 container kinds + OTHER
+// Bit 6 is the single non-scalar region: every value that is not one of the six
+// scalar kinds (containers, instances, callables, everything else) lumped
+// together. No atom ever names it on its own, so the non-scalar kinds need no
+// further bits; it exists so the complement of a scalar includes every non-scalar
+// value, which keeps emptiness sound (e.g. the meet of all six scalar complements
+// is the non-empty non-scalar region, not the empty set).
+pub(crate) const REGION_ALL: u16 = (1 << 7) - 1; // 6 scalar regions + the non-scalar region
 
 /// A concrete runtime type, for the sound fragment of disjointness.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
