@@ -1,5 +1,6 @@
 {
-  "tolerance": 0.5,
+  "_comment": "Competitive wall-clock ratio of valgebra to pydantic-core per shape, a coarse tripwire (the deterministic cachegrind budget in perf_budget.json is the hard gate). Tolerance tightened from 0.5 to 0.35 so a regression past ~1.35x of a recorded ratio trips it; the ratio cancels the runner's absolute speed, but shared-runner noise keeps it coarser than the instruction-count gate. Provisional pending observed CI variance. Re-record after an intentional change.",
+  "tolerance": 0.35,
   "ratios": {
     "scalar": 0.1861,
     "large_array": 0.5157,

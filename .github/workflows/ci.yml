@@ -428,10 +428,45 @@ jobs:
           }
           report >> "$GITHUB_STEP_SUMMARY"
 
+          # Surface a dropped result as a warning annotation, not just a summary
+          # table, so a missed mutant or a timed-out (unjudged) one is visible at
+          # a glance rather than silently absorbed into a green lane.
+          missed=0 timeout=0
+          [ -f mutants.out/missed.txt ] && missed=$(wc -l < mutants.out/missed.txt)
+          [ -f mutants.out/timeout.txt ] && timeout=$(wc -l < mutants.out/timeout.txt)
+          if [ "$missed" -gt 0 ]; then
+            echo "::warning::$missed mutant(s) survived the tests; see the job summary"
+          fi
+          if [ "$timeout" -gt 0 ]; then
+            echo "::warning::$timeout mutant(s) timed out and were not judged; see the job summary"
+          fi
+
           case "$status" in
             0 | 2 | 3) exit 0 ;;
             *) exit "$status" ;;
           esac
+
+  fuzz-build:
+    name: fuzz build
+    # Compile-only check that the libFuzzer targets still build against the
+    # current core, on every run. The fuzz workspace is detached, so the merge
+    # build/clippy/test never reach it and a renamed schema variant would break a
+    # target unseen until the scheduled soak; building it here fails the change
+    # instead. Runs unconditionally so the aggregate gate never sees it skipped;
+    # the soak (nightly-libfuzzer) still runs the fuzzers.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: fuzz
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Build the fuzz targets
+        run: cargo +nightly fuzz build
 
   ci:
     name: ci
@@ -449,10 +484,27 @@ jobs:
         docs,
         bench,
         wheel,
+        fuzz-build,
       ]
     runs-on: ubuntu-latest
     steps:
-      - name: Fail if any required job did not succeed
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      # Gate on every required job having *succeeded*, so a skipped or otherwise
+      # non-successful job blocks the merge rather than slipping through a check
+      # that only catches failure and cancellation. Each need is listed
+      # explicitly so the gate cannot silently drift from the job set.
+      - name: Fail unless every required job succeeded
+        if: >-
+          needs.rust-lint.result != 'success' ||
+          needs.rust-test.result != 'success' ||
+          needs.rust-msrv.result != 'success' ||
+          needs.rust-coverage.result != 'success' ||
+          needs.binding-coverage.result != 'success' ||
+          needs.python.result != 'success' ||
+          needs.differential.result != 'success' ||
+          needs.doc-examples.result != 'success' ||
+          needs.docs.result != 'success' ||
+          needs.bench.result != 'success' ||
+          needs.wheel.result != 'success' ||
+          needs.fuzz-build.result != 'success'
         run: exit 1
       - run: echo "All required jobs passed."
