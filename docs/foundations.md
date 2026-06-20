@@ -5,7 +5,8 @@ combinators form a real Boolean algebra, and where the algebra decides
 relationships versus where it stays deliberately conservative. It is the
 reference behind the claims the rest of the docs make — "a closed, lawful
 lattice", "subtyping is set inclusion", "a law-justified simplifier" — so each
-is backed rather than asserted.
+is backed rather than asserted. The [soundness argument](soundness.md) takes the
+next step: why an accept is never wrong, node by node.
 
 ## Schemas denote sets; validation is membership
 
