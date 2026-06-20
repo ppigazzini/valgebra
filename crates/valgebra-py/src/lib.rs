@@ -5,6 +5,10 @@
 //! into the IR, the walk ([`check`]) with its explain path and membership fast
 //! path, the [`render`] back to an annotation string, and [`errors`] that build
 //! the Python [`ValidationError`].
+//!
+//! The crate forbids `unsafe`, so the security policy's no-unsafe guarantee is
+//! compiler-enforced across the binding boundary too, not merely asserted.
+#![forbid(unsafe_code)]
 
 mod build;
 mod check;
@@ -371,8 +375,9 @@ impl Validator {
     ///
     /// `other` is any schema spec or compiled validator. The decision is sound:
     /// `True` only when the inclusion provably holds (`bool` is a subtype of
-    /// `int`, `list[bool]` of `list[int]`); for forms it cannot decide — `Or`
-    /// sequences, recursive references, class checks across schemas — it returns
+    /// `int`, `list[bool]` of `list[int]`, a recursive schema of a wider one, a
+    /// class of a base class). For the forms it cannot decide — an alternation of
+    /// sequence shapes, or a leaf relation the oracle declines — it returns
     /// `False` rather than a relation it cannot justify.
     ///
     /// Args:

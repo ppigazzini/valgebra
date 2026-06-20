@@ -5,6 +5,11 @@
 //! structured [`Violation`] produced when membership fails. Inspecting a Python
 //! object requires `PyO3`, so the validator walk itself lives in the bindings
 //! crate; this crate is the stable, language-agnostic core.
+//!
+//! The crate forbids `unsafe`: the security policy's no-unsafe guarantee is
+//! compiler-enforced here, not merely asserted, so a future `unsafe` block fails
+//! the build instead of silently voiding it.
+#![forbid(unsafe_code)]
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
