@@ -45,6 +45,7 @@ nav:
       - Recursive schemas: recursion.md
       - JSON input: json.md
       - Error model: error-model.md
+      - Resource limits: limits.md
       - Performance: performance.md
   - Explanation:
       - Foundations: foundations.md
