@@ -35,8 +35,13 @@ uv run pre-commit install   # enable the git hooks
 Verify the build:
 
 ```bash
-uv run python -c "from valgebra import validator; print(validator(int).is_valid(7))"
+uv run python -c "from valgebra import Validator; print(Validator(int).is_valid(7))"
 ```
+
+Building the docs site locally needs the extension built first
+(`uv run maturin develop`): the API reference introspects the compiled module to
+render the public surface's docstrings, which live on the Rust objects rather
+than being duplicated in the type stub.
 
 ## The gate
 

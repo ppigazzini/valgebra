@@ -41,6 +41,8 @@ invents none):
 from valgebra import Validator, union
 
 assert (Validator(int) | str | None).is_equivalent(union(int, str, None))
+# `|` works in either order: a validator on the right is the reflected operand.
+assert (int | Validator(str)).is_equivalent(union(int, str))
 ```
 
 ## The laws hold
@@ -288,6 +290,20 @@ assert union(bool, int).is_equivalent(int)
 # emptiness detects a schema no value can satisfy
 assert intersection(int, complement(int)).is_empty()
 assert not Validator(int).is_empty()
+```
+
+`is_equivalent` is **semantic**: it compares the value sets, however the two
+schemas are spelled. Keep it distinct from `==` on validators, which is
+**syntactic** — `==` compares schema *shape*, so two schemas that denote the same
+set but are written differently are equal under `is_equivalent` yet not under
+`==`. Ask `is_equivalent` "do these mean the same set?" and `==` "are these the
+same shape?".
+
+```python
+from valgebra import Validator, union
+
+assert union(bool, int).is_equivalent(int)  # same set: bool is a subtype of int
+assert union(bool, int) != Validator(int)  # different shape
 ```
 
 The other side of a comparison is any schema spec or compiled validator. These

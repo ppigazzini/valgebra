@@ -75,6 +75,14 @@ the current path — so a recursive schema is a subtype of itself and two
 structurally identical recursive schemas are equivalent, and a recursive schema
 with no base case is detected as uninhabited.
 
+These are two views of one definition, not two definitions. *Membership* unfolds
+the unique guarded (contractive) fixpoint against a finite value — a value is in
+the set when its finite unfolding matches. *Comparison* uses the greatest
+fixpoint coinductively, which is the sound way to relate two such definitions
+without unfolding forever. On the inhabitants the two agree: the greatest
+fixpoint admits exactly the values the guarded unfolding accepts, so a subtype
+result never contradicts membership.
+
 ```python
 from valgebra import recursive, union, Validator
 

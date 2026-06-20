@@ -1,3 +1,11 @@
+# Typed signatures for the compiled `valgebra._valgebra` extension.
+#
+# This stub carries the *types* of the public surface for type checkers and IDEs.
+# The prose documentation lives on the compiled objects themselves (the Rust
+# docstrings) and is rendered on the API reference page, so it has a single
+# source and cannot drift from a hand-copied duplicate here. Import the public
+# names from the top-level `valgebra` package, not from this module.
+
 from collections.abc import Callable
 
 class ValidationError(Exception):
