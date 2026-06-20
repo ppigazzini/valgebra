@@ -5,8 +5,10 @@ use std::cell::Cell;
 
 use pyo3::exceptions::{PyNotImplementedError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{
-    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
+    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyModule, PySet, PyString,
+    PyTuple, PyType,
 };
 use valgebra_core::{Constraint, Field, Schema, SeqRegex};
 
@@ -54,6 +56,55 @@ impl Drop for BuildGuard {
     }
 }
 
+/// Per-interpreter cache of the typing and builtins special-form objects the
+/// frontend compares schema descriptions against. Resolved once on first
+/// compile rather than re-fetched on every node, so a deep schema does not
+/// re-import a module and re-`getattr` the same singleton dozens of times. The
+/// handles are immutable interpreter singletons; the optional ones are absent on
+/// older Pythons (`Never`/`TypeAliasType`).
+struct Forms {
+    any: Py<PyAny>,
+    never: Option<Py<PyAny>>,
+    noreturn: Option<Py<PyAny>>,
+    type_alias_type: Option<Py<PyAny>>,
+    union: Py<PyAny>,
+    optional: Py<PyAny>,
+    union_type: Py<PyAny>,
+    literal: Py<PyAny>,
+    object: Py<PyAny>,
+    enum_class: Py<PyAny>,
+    callable: Py<PyAny>,
+    ellipsis: Py<PyAny>,
+}
+
+static FORMS: PyOnceLock<Forms> = PyOnceLock::new();
+
+/// The special-form cache for this interpreter, built once. `PyOnceLock` makes
+/// the one-time initialization safe under free-threading.
+fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
+    FORMS.get_or_try_init(py, || {
+        let typing = py.import("typing")?;
+        let builtins = py.import("builtins")?;
+        let optional_form = |module: &Bound<'_, PyModule>, name: &str| -> Option<Py<PyAny>> {
+            module.getattr(name).ok().map(Bound::unbind)
+        };
+        Ok(Forms {
+            any: typing.getattr("Any")?.unbind(),
+            never: optional_form(&typing, "Never"),
+            noreturn: optional_form(&typing, "NoReturn"),
+            type_alias_type: optional_form(&typing, "TypeAliasType"),
+            union: typing.getattr("Union")?.unbind(),
+            optional: typing.getattr("Optional")?.unbind(),
+            union_type: py.import("types")?.getattr("UnionType")?.unbind(),
+            literal: typing.getattr("Literal")?.unbind(),
+            object: builtins.getattr("object")?.unbind(),
+            enum_class: py.import("enum")?.getattr("Enum")?.unbind(),
+            callable: py.import("collections.abc")?.getattr("Callable")?.unbind(),
+            ellipsis: builtins.getattr("Ellipsis")?.unbind(),
+        })
+    })
+}
+
 /// Build the IR from a native Python schema description.
 ///
 /// Recognized forms: the scalar types and `None`/`type(None)`; `object` as the
@@ -74,22 +125,21 @@ pub(crate) fn build_schema(
         return Ok(Schema::NoneType);
     }
 
+    let forms = forms(py)?;
     let typing = py.import("typing")?;
 
     // `typing.Any` is a singleton special form: the gradual dynamic type. It is
     // checked before the type-object dispatch below because on 3.11+ `Any` is
     // itself a class and would otherwise be taken for an ordinary type.
-    if obj.is(&typing.getattr("Any")?) {
+    if obj.is(forms.any.bind(py)) {
         return Ok(Schema::Dynamic);
     }
 
     // `typing.Never`/`NoReturn` are the empty type: the lattice bottom, the
     // typing-native spelling of `nothing`. (`object` maps to the top below.)
-    // `Never` is 3.11+, so a missing attribute simply skips it.
-    for name in ["Never", "NoReturn"] {
-        if let Ok(form) = typing.getattr(name)
-            && obj.is(&form)
-        {
+    // `Never` is 3.11+, so it is absent (skipped) on older Pythons.
+    for form in [&forms.never, &forms.noreturn].into_iter().flatten() {
+        if obj.is(form.bind(py)) {
             return Ok(Schema::Nothing);
         }
     }
@@ -120,8 +170,8 @@ pub(crate) fn build_schema(
     }
 
     // PEP 695 `type X = ...` alias (3.12+): validate the aliased type.
-    if let Ok(alias_type) = typing.getattr("TypeAliasType")
-        && obj.is_instance(&alias_type)?
+    if let Some(alias_type) = &forms.type_alias_type
+        && obj.is_instance(alias_type.bind(py))?
     {
         return build_schema(&obj.getattr("__value__")?, lits, defs);
     }
@@ -246,18 +296,16 @@ fn build_type_object(
     if ty.is(py.None().bind(py).get_type()) {
         return Ok(Schema::NoneType);
     }
-    if ty.is(&py.import("builtins")?.getattr("object")?) {
+    let forms = forms(py)?;
+    if ty.is(forms.object.bind(py)) {
         return Ok(Schema::Anything);
     }
     // A bare typing special form is a class on some Pythons (notably `Union`).
     // It is not a value, so reject it rather than building an instance check that
     // accepts nothing; the special forms that are not types are rejected on the
     // value fallthrough in build_schema.
-    let typing = py.import("typing")?;
-    for name in ["Union", "Optional"] {
-        if let Ok(form) = typing.getattr(name)
-            && ty.is(&form)
-        {
+    for form in [&forms.union, &forms.optional] {
+        if ty.is(form.bind(py)) {
             return Err(not_implemented(&format!(
                 "{} is a typing special form, not a value; write a concrete type \
                  (for a union, X | Y or Union[X, Y])",
@@ -270,7 +318,7 @@ fn build_type_object(
         return build_typed_dict(ty, lits, defs);
     }
     // Enum: an instance of the enumeration class (any of its members).
-    if ty.is_subclass(&py.import("enum")?.getattr("Enum")?)? {
+    if ty.is_subclass(forms.enum_class.bind(py))? {
         return Ok(Schema::Instance(intern(lits, ty.as_any())));
     }
     // dataclass / NamedTuple: isinstance plus a deep check of each field.
@@ -477,7 +525,7 @@ fn build_parametrized(
             Schema::Union(members)
         });
     }
-    if origin.is(&py.import("collections.abc")?.getattr("Callable")?) {
+    if origin.is(forms(py)?.callable.bind(py)) {
         // Callable[...] checks only callability at runtime; the argument and
         // return types cannot be inspected, so the parameters are ignored and
         // the schema is the opaque `isinstance(x, Callable)` test.
@@ -494,14 +542,14 @@ fn build_parametrized(
 /// `types.UnionType` (from `X | Y`).
 fn is_union_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = origin.py();
-    let typing_union = py.import("typing")?.getattr("Union")?;
-    let pep604_union = py.import("types")?.getattr("UnionType")?;
-    Ok(origin.is(&typing_union) || origin.is(&pep604_union))
+    let forms = forms(py)?;
+    Ok(origin.is(forms.union.bind(py)) || origin.is(forms.union_type.bind(py)))
 }
 
 /// True if `origin` is `typing.Literal`.
 fn is_literal_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(origin.is(&origin.py().import("typing")?.getattr("Literal")?))
+    let py = origin.py();
+    Ok(origin.is(forms(py)?.literal.bind(py)))
 }
 
 /// True if `origin` is `typing.Required` or `typing.NotRequired`, the
@@ -711,10 +759,8 @@ fn intern(pool: &mut Vec<Py<PyAny>>, obj: &Bound<'_, PyAny>) -> usize {
 }
 
 fn is_ellipsis(obj: &Bound<'_, PyAny>) -> bool {
-    obj.py()
-        .import("builtins")
-        .and_then(|builtins| builtins.getattr("Ellipsis"))
-        .is_ok_and(|ellipsis| obj.is(&ellipsis))
+    let py = obj.py();
+    forms(py).is_ok_and(|forms| obj.is(forms.ellipsis.bind(py)))
 }
 
 pub(crate) fn not_implemented(message: &str) -> PyErr {
