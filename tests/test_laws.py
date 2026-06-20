@@ -60,6 +60,8 @@ VALUES = [
     "y",
     None,
     3.14,
+    b"x",
+    b"",
     [1, 2],
     [1, "a"],
     [1, "a", 2, 3],
@@ -105,7 +107,15 @@ value_lists = st.lists(_value, max_size=6)
 
 def equivalent(left: Validator, right: Validator, extra: list[object]) -> bool:
     values = [*VALUES, *extra]
-    return all(left.is_valid(v) == right.is_valid(v) for v in values)
+    sample_agree = all(left.is_valid(v) == right.is_valid(v) for v in values)
+    # The semantic decision is sound: a True from is_equivalent is a proof, so it
+    # must never contradict a sampled disagreement. Cross-checking it here means a
+    # law's claim is validated by the decision procedure too, not only by sample
+    # agreement, and an unsound is_equivalent that claimed two distinct schemas
+    # equal would be caught by the witnessing values.
+    if left.is_equivalent(right):
+        assert sample_agree, "is_equivalent claimed equality the values refute"
+    return sample_agree
 
 
 @given(a=schemas, b=schemas, vals=value_lists)

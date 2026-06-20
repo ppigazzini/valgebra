@@ -1782,4 +1782,289 @@ mod laws {
         let everything = union(not(Schema::Bool), Schema::Int);
         assert_eq!(everything.simplify(), Schema::Anything);
     }
+
+    // -- An independent, value-aware denotation oracle ----------------------------
+    //
+    // The scalar oracle above models kinds, so it cannot tell `Literal[1]` from
+    // `Literal[2]` or `Ge(0)` from `Ge(5)`. This oracle carries concrete values
+    // and a fixed constant pool, so it decides membership for the whole
+    // non-opaque fragment — literals, refinement bounds and lengths, sequences,
+    // sets, and records — and is the ground truth `simplify` is checked against
+    // over that fragment. It is a direct transcription of each node's denotation,
+    // sharing no code with `simplify` or the decision procedure under test.
+
+    /// A concrete Python-shaped value.
+    #[derive(Clone, Debug)]
+    enum Obj {
+        None,
+        Bool(bool),
+        Int(i32),
+        Float(f64),
+        Str(&'static str),
+        Bytes,
+        List(Vec<Obj>),
+        Set(Vec<Obj>),
+        Map(Vec<(&'static str, Obj)>),
+    }
+
+    /// The fixed constant pool that generated `Literal` and bound indices point
+    /// into. Indices 0..=2 are numbers (usable as bounds); 3 and 4 add a string
+    /// and a bool so the typed-singleton distinction is exercised.
+    fn const_pool() -> Vec<Obj> {
+        vec![
+            Obj::Int(0),
+            Obj::Int(1),
+            Obj::Int(5),
+            Obj::Str("a"),
+            Obj::Bool(true),
+        ]
+    }
+    const POOL_LEN: usize = 5;
+
+    fn as_num(v: &Obj) -> Option<f64> {
+        match v {
+            // bool is an int in Python, so it orders numerically.
+            Obj::Bool(b) => Some(f64::from(u8::from(*b))),
+            Obj::Int(i) => Some(f64::from(*i)),
+            Obj::Float(f) => Some(*f),
+            _ => None,
+        }
+    }
+
+    fn val_len(v: &Obj) -> Option<usize> {
+        match v {
+            Obj::Str(s) => Some(s.chars().count()),
+            Obj::List(xs) | Obj::Set(xs) => Some(xs.len()),
+            Obj::Map(m) => Some(m.len()),
+            _ => None,
+        }
+    }
+
+    /// Typed-singleton equality: same type *and* equal, so `Literal[1]` admits
+    /// neither `True` nor `1.0`.
+    fn typed_eq(constant: &Obj, v: &Obj) -> bool {
+        match (constant, v) {
+            (Obj::None, Obj::None) | (Obj::Bytes, Obj::Bytes) => true,
+            (Obj::Bool(a), Obj::Bool(b)) => a == b,
+            (Obj::Int(a), Obj::Int(b)) => a == b,
+            (Obj::Float(a), Obj::Float(b)) => a == b,
+            (Obj::Str(a), Obj::Str(b)) => a == b,
+            _ => false,
+        }
+    }
+
+    #[allow(clippy::many_single_char_names)]
+    fn bound_holds(c: &Constraint, v: &Obj, pool: &[Obj]) -> bool {
+        use core::cmp::Ordering;
+        let cmp_to = |i: &usize, ok: fn(Ordering) -> bool| match (as_num(v), as_num(&pool[*i])) {
+            (Some(a), Some(b)) => a.partial_cmp(&b).is_some_and(ok),
+            _ => false, // a numeric bound on a non-numeric value raises: non-member
+        };
+        match c {
+            Constraint::Ge(i) => cmp_to(i, |o| o != Ordering::Less),
+            Constraint::Gt(i) => cmp_to(i, |o| o == Ordering::Greater),
+            Constraint::Le(i) => cmp_to(i, |o| o != Ordering::Greater),
+            Constraint::Lt(i) => cmp_to(i, |o| o == Ordering::Less),
+            Constraint::MinLen(n) => val_len(v).is_some_and(|len| len >= *n),
+            Constraint::MaxLen(n) => val_len(v).is_some_and(|len| len <= *n),
+            Constraint::MultipleOf(i) => match (as_num(v), as_num(&pool[*i])) {
+                (Some(a), Some(b)) if b != 0.0 => a % b == 0.0,
+                _ => false,
+            },
+            // Not generated for this oracle (opaque user code); never reached.
+            Constraint::Predicate(_) | Constraint::Regex(_) => false,
+        }
+    }
+
+    /// Reference membership over the non-opaque fragment, transcribing each node's
+    /// denotation directly.
+    #[allow(clippy::many_single_char_names)]
+    fn member_full(schema: &Schema, v: &Obj, pool: &[Obj]) -> bool {
+        match schema {
+            Schema::Anything | Schema::Dynamic => true,
+            Schema::Nothing => false,
+            Schema::NoneType => matches!(v, Obj::None),
+            Schema::Bool => matches!(v, Obj::Bool(_)),
+            Schema::Int => matches!(v, Obj::Bool(_) | Obj::Int(_)), // bool ⊆ int
+            Schema::Float => matches!(v, Obj::Float(_)),
+            Schema::Str => matches!(v, Obj::Str(_)),
+            Schema::Bytes => matches!(v, Obj::Bytes),
+            Schema::Literal(i) => typed_eq(&pool[*i], v),
+            Schema::Set(element) => match v {
+                Obj::Set(items) => items.iter().all(|item| member_full(element, item, pool)),
+                _ => false,
+            },
+            Schema::Seq {
+                container: SeqKind::List,
+                regex,
+            } => match (v, regex.linear()) {
+                (Obj::List(items), Some((prefix, tail))) => match tail {
+                    Some(t) => {
+                        items.len() >= prefix.len()
+                            && prefix
+                                .iter()
+                                .zip(items)
+                                .all(|(s, item)| member_full(s, item, pool))
+                            && items[prefix.len()..]
+                                .iter()
+                                .all(|item| member_full(t, item, pool))
+                    }
+                    None => {
+                        items.len() == prefix.len()
+                            && prefix
+                                .iter()
+                                .zip(items)
+                                .all(|(s, item)| member_full(s, item, pool))
+                    }
+                },
+                _ => false,
+            },
+            Schema::KeyedMap { fields, defaults } => match v {
+                Obj::Map(entries) => {
+                    let fields_ok =
+                        fields
+                            .iter()
+                            .all(|f| match entries.iter().find(|(k, _)| f.name == *k) {
+                                Some((_, val)) => member_full(&f.schema, val, pool),
+                                None => !f.required,
+                            });
+                    let rest_ok = entries.iter().all(|(k, val)| {
+                        if fields.iter().any(|f| f.name == *k) {
+                            return true;
+                        }
+                        defaults.iter().any(|(ks, vs)| {
+                            member_full(ks, &Obj::Str(k), pool) && member_full(vs, val, pool)
+                        })
+                    });
+                    fields_ok && rest_ok
+                }
+                _ => false,
+            },
+            Schema::Refine { base, constraints } => {
+                member_full(base, v, pool) && constraints.iter().all(|c| bound_holds(c, v, pool))
+            }
+            Schema::Union(members) => members.iter().any(|m| member_full(m, v, pool)),
+            Schema::Intersection(members) => members.iter().all(|m| member_full(m, v, pool)),
+            Schema::Complement(inner) => !member_full(inner, v, pool),
+            // The opaque leaves are excluded from the generator below.
+            other => unreachable!("oracle does not model {other:?}"),
+        }
+    }
+
+    fn sample_values() -> Vec<Obj> {
+        vec![
+            Obj::None,
+            Obj::Bool(true),
+            Obj::Bool(false),
+            Obj::Int(0),
+            Obj::Int(1),
+            Obj::Int(2),
+            Obj::Int(5),
+            Obj::Float(1.0),
+            Obj::Float(2.5),
+            Obj::Str("a"),
+            Obj::Str("b"),
+            Obj::Str(""),
+            Obj::Bytes,
+            Obj::List(vec![]),
+            Obj::List(vec![Obj::Int(1)]),
+            Obj::List(vec![Obj::Int(1), Obj::Str("a")]),
+            Obj::Set(vec![]),
+            Obj::Set(vec![Obj::Int(1)]),
+            Obj::Map(vec![]),
+            Obj::Map(vec![("a", Obj::Int(1))]),
+            Obj::Map(vec![("a", Obj::Int(1)), ("b", Obj::Str("a"))]),
+        ]
+    }
+
+    /// A bound or length constraint over the pool: comparisons point at the
+    /// numeric entries, `MultipleOf` at a nonzero one, lengths at small counts.
+    fn constraint_strategy() -> impl Strategy<Value = Constraint> {
+        prop_oneof![
+            (0usize..3).prop_map(Constraint::Ge),
+            (0usize..3).prop_map(Constraint::Gt),
+            (0usize..3).prop_map(Constraint::Le),
+            (0usize..3).prop_map(Constraint::Lt),
+            (0usize..4usize).prop_map(Constraint::MinLen),
+            (0usize..4usize).prop_map(Constraint::MaxLen),
+            (1usize..3).prop_map(Constraint::MultipleOf),
+        ]
+    }
+
+    /// A generator over the non-opaque fragment the value oracle decides: scalars,
+    /// pool literals, sets, linear list sequences, refinements, closed records,
+    /// and their Boolean combinations.
+    fn decidable_schema() -> impl Strategy<Value = Schema> {
+        let leaf = prop_oneof![
+            Just(Schema::Anything),
+            Just(Schema::Nothing),
+            Just(Schema::Dynamic),
+            Just(Schema::NoneType),
+            Just(Schema::Bool),
+            Just(Schema::Int),
+            Just(Schema::Float),
+            Just(Schema::Str),
+            Just(Schema::Bytes),
+            (0usize..POOL_LEN).prop_map(Schema::Literal),
+        ];
+        leaf.prop_recursive(3, 48, 4, |inner| {
+            let field =
+                (0usize..2, inner.clone(), proptest::bool::ANY).prop_map(|(n, schema, req)| {
+                    Field {
+                        name: ["a", "b"][n].to_owned(),
+                        schema,
+                        required: req,
+                    }
+                });
+            prop_oneof![
+                inner.clone().prop_map(|s| Schema::Set(Box::new(s))),
+                inner.clone().prop_map(|s| Schema::Seq {
+                    container: SeqKind::List,
+                    regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(s)))),
+                }),
+                (inner.clone(), inner.clone()).prop_map(|(a, b)| Schema::Seq {
+                    container: SeqKind::List,
+                    regex: SeqRegex::Cat(vec![
+                        SeqRegex::Elem(Box::new(a)),
+                        SeqRegex::Elem(Box::new(b)),
+                    ]),
+                }),
+                (
+                    inner.clone(),
+                    proptest::collection::vec(constraint_strategy(), 1..3)
+                )
+                    .prop_map(|(base, constraints)| Schema::Refine {
+                        base: Box::new(base),
+                        constraints,
+                    }),
+                proptest::collection::vec(field, 0..3).prop_map(|fields| Schema::KeyedMap {
+                    fields,
+                    defaults: vec![],
+                }),
+                proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Union),
+                proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Intersection),
+                inner.prop_map(|s| Schema::Complement(Box::new(s))),
+            ]
+        })
+    }
+
+    proptest! {
+        /// Simplification preserves membership over the whole non-opaque fragment,
+        /// judged by an independent value-aware oracle. This is the strong form of
+        /// the scalar-only check above: it distinguishes literal values and bound
+        /// thresholds, so a rewrite that quietly changes which values a literal,
+        /// refinement, sequence, set, or record admits is caught.
+        #[test]
+        fn simplify_preserves_membership_over_values(schema in decidable_schema()) {
+            let pool = const_pool();
+            let simplified = schema.simplify();
+            for value in &sample_values() {
+                prop_assert_eq!(
+                    member_full(&simplified, value, &pool),
+                    member_full(&schema, value, &pool),
+                    "simplify changed membership of {:?}", value
+                );
+            }
+        }
+    }
 }

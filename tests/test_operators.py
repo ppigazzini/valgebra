@@ -40,7 +40,13 @@ def test_or_operator_is_union(a: object, b: object, value: object) -> None:
     # the validator is the left operand, so `|` always dispatches to __or__
     # (a bare typing union on the left would handle `|` itself); __ror__ is
     # covered separately.
-    assert (Validator(a) | b).is_valid(value) is union(a, b).is_valid(value)
+    #
+    # Checked against the independent denotation of union -- a value is in the
+    # union iff it is in one of the operands -- computed from each operand's own
+    # membership, not from the union() constructor (which shares the operator's
+    # implementation, so comparing the two would prove nothing).
+    expected = Validator(a).is_valid(value) or Validator(b).is_valid(value)
+    assert (Validator(a) | b).is_valid(value) is expected
 
 
 def test_ror_when_left_operand_defers() -> None:

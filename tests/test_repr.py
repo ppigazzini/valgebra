@@ -124,6 +124,30 @@ def test_repr_of_class_and_recursive_forms() -> None:
     assert repr(recursive(lambda s: {"v": int, "n?": s})) == "{'v': int, 'n?': ...}"
 
 
+# A spread of values to witness that two validators accept the same set, rather
+# than only that a repr string is stable.
+_WITNESS_VALUES = [
+    None,
+    True,
+    False,
+    0,
+    1,
+    -1,
+    1.5,
+    "x",
+    "",
+    b"x",
+    b"",
+    [1],
+    [1, "a"],
+    [],
+    {1},
+    {"k": 1},
+    (1,),
+    (1, "a"),
+]
+
+
 @pytest.mark.parametrize("schema", ROUNDTRIP_SCHEMAS)
 def test_repr_round_trips_through_eval(schema: object) -> None:
     # repr is a fixpoint on this subset: rendering, re-parsing, and rendering
@@ -132,3 +156,9 @@ def test_repr_round_trips_through_eval(schema: object) -> None:
     rendered = repr(Validator(schema))
     rebuilt = Validator(eval(rendered, dict(_ROUNDTRIP_NS)))  # noqa: S307
     assert repr(rebuilt) == rendered
+    # The fixpoint alone would pass for a wrong-but-stable repr; require the
+    # reconstructed validator to accept exactly the same values as the original,
+    # so the printed form preserves meaning, not just its own shape.
+    original = Validator(schema)
+    for value in _WITNESS_VALUES:
+        assert rebuilt.is_valid(value) == original.is_valid(value)
