@@ -19,16 +19,18 @@
 //! exception is a *user predicate*, whose raised error is surfaced as a distinct
 //! `predicate_error` rather than folded, so a buggy predicate is visible.
 //!
-//! Because the walk returns `bool` (never a `PyResult`) — the one-walk, one
-//! boundary-crossing design — a fatal interpreter signal raised inside such an
-//! operation (`KeyboardInterrupt`, `MemoryError`, `RecursionError`) is folded
-//! the same way rather than propagated. Distinguishing those would require making
-//! the whole walk fallible; that is a deliberate, recorded trade, not an
-//! oversight.
+//! A *fatal* interpreter signal is the one error not folded. A base exception
+//! that is not an ordinary exception — `KeyboardInterrupt`, `MemoryError`,
+//! `SystemExit`, `RecursionError` — is not an answer to "are you in this set?":
+//! it means the interpreter is unwinding. The [`fold`] helper records the first
+//! such signal in `ctx.fatal`; the walk then short-circuits (every later
+//! [`member`] call returns at once) and the entry point re-raises it, so an
+//! interrupted check stops instead of being silently reported as a non-member.
 
 use std::borrow::Cow;
 
 use jiter::JsonValue;
+use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -46,6 +48,37 @@ fn stop(ctx: Ctx<'_>) -> bool {
     !ctx.explain || ctx.fail_fast
 }
 
+/// Fold a membership probe's result into a boolean. An ordinary exception means
+/// the value cannot answer "are you in this set?", so it is a non-member. A fatal
+/// interpreter signal (a base exception that is not an ordinary exception) is not
+/// a membership answer: it is recorded in `ctx.fatal` so the walk unwinds and the
+/// entry point re-raises it, and reported locally as a non-member so the current
+/// frame returns.
+fn fold(result: PyResult<bool>, py: Python<'_>, ctx: Ctx<'_>) -> bool {
+    match result {
+        Ok(holds) => holds,
+        Err(err) => {
+            if !err.is_instance_of::<PyException>(py) {
+                let mut slot = ctx.fatal.borrow_mut();
+                if slot.is_none() {
+                    *slot = Some(err);
+                }
+            }
+            false
+        }
+    }
+}
+
+/// Bind a pooled object by index, or `None` when the index is out of range. Every
+/// IR index is in range by construction (the builder fills the pool), so a miss is
+/// an internal invariant break unreachable from user input; the walk degrades to a
+/// non-member rather than panicking across the language boundary.
+fn pooled<'py>(ctx: Ctx<'_>, index: usize, py: Python<'py>) -> Option<Bound<'py, PyAny>> {
+    let obj = ctx.pool.get(index);
+    debug_assert!(obj.is_some(), "pool index {index} out of range");
+    obj.map(|object| object.bind(py).clone())
+}
+
 /// Decide whether `value` is a member of `schema`'s set.
 ///
 /// In explain mode a [`Violation`] is pushed into `out` for every independent
@@ -59,6 +92,12 @@ pub(crate) fn member(
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
+    // A fatal interpreter signal recorded earlier in the walk unwinds the whole
+    // traversal: every remaining node reports a non-member at once, so a large
+    // value stops promptly instead of finishing the walk after a KeyboardInterrupt.
+    if ctx.fatal.borrow().is_some() {
+        return false;
+    }
     match schema {
         Schema::Anything | Schema::Dynamic => true,
         // Bottom admits nothing; an unresolved self-reference is never a member.
@@ -132,15 +171,21 @@ fn check_literal(
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    let literal = ctx.pool[index].bind(value.py());
-    let ok = value
-        .to_python()
-        .is_ok_and(|obj| literal_matches(&obj, literal));
+    let Some(literal) = pooled(ctx, index, value.py()) else {
+        return false;
+    };
+    let ok = fold(
+        value
+            .to_python()
+            .and_then(|obj| literal_matches(&obj, &literal)),
+        value.py(),
+        ctx,
+    );
     if !ok && ctx.explain {
         out.push(Violation {
             code: "literal_error",
             path: path.to_vec(),
-            expected: format!("the literal {}", summarize(literal)),
+            expected: format!("the literal {}", summarize(&literal)),
             value_summary: summarize_value(value),
         });
     }
@@ -426,9 +471,8 @@ fn keyed_map_scan(
             .ok()
             .and_then(|s| s.to_str().ok())
             .and_then(&lookup);
-        match index {
-            Some(i) => {
-                let field = &fields[i];
+        match index.and_then(|i| fields.get(i)) {
+            Some(field) => {
                 if !member(
                     &field.schema,
                     &Value::Py(&val),
@@ -439,7 +483,10 @@ fn keyed_map_scan(
                     return false;
                 }
                 if field.required {
-                    required_remaining -= 1;
+                    // Saturating: the counter is the precomputed required-field
+                    // count, so it cannot legitimately pass zero, but a malformed
+                    // index must not wrap a release build into a false pass.
+                    required_remaining = required_remaining.saturating_sub(1);
                 }
             }
             None => {
@@ -485,15 +532,20 @@ fn keyed_map_matches_json(
         }
     }
     // Every key that is not a declared field must be covered by a default clause,
-    // testing each key's last value (json.loads semantics).
-    for (i, (key, val)) in entries.iter().enumerate() {
-        if fields.iter().any(|f| f.name == key.as_ref()) {
+    // testing each key's last value (json.loads semantics). Collapse the entries
+    // to each non-field key's last value in one pass, so a document with many keys
+    // (or many duplicates) is covered linearly rather than by rescanning the tail
+    // per key.
+    let field_names: FxHashSet<&str> = fields.iter().map(|f| f.name.as_str()).collect();
+    let mut last_value: FxHashMap<&str, &JsonValue<'_>> = FxHashMap::default();
+    for (key, val) in entries {
+        if field_names.contains(key.as_ref()) {
             continue;
         }
-        if entries[i + 1..].iter().any(|(later, _)| later == key) {
-            continue;
-        }
-        let key_value = JsonValue::Str(Cow::Borrowed(key.as_ref()));
+        last_value.insert(key.as_ref(), val);
+    }
+    for (key, val) in last_value {
+        let key_value = JsonValue::Str(Cow::Borrowed(key));
         if !covered(
             defaults,
             &Value::Json(py, &key_value),
@@ -717,14 +769,18 @@ fn check_instance(
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    let class = ctx.pool[index].bind(value.py());
-    let ok = value
-        .to_python()
-        .is_ok_and(|obj| obj.is_instance(class).unwrap_or(false));
+    let Some(class) = pooled(ctx, index, value.py()) else {
+        return false;
+    };
+    let ok = fold(
+        value.to_python().and_then(|obj| obj.is_instance(&class)),
+        value.py(),
+        ctx,
+    );
     if !ok && ctx.explain {
         out.push(type_mismatch(
             "instance_type",
-            &class_label(class),
+            &class_label(&class),
             value,
             path,
         ));
@@ -744,13 +800,15 @@ fn check_object(
     let Ok(obj) = value.to_python() else {
         return false;
     };
-    let class = ctx.pool[class_index].bind(value.py());
-    if !obj.is_instance(class).unwrap_or(false) {
+    let Some(class) = pooled(ctx, class_index, value.py()) else {
+        return false;
+    };
+    if !fold(obj.is_instance(&class), value.py(), ctx) {
         // Not an instance: the attribute checks below cannot be trusted.
         if ctx.explain {
             out.push(type_mismatch(
                 "instance_type",
-                &class_label(class),
+                &class_label(&class),
                 value,
                 path,
             ));
@@ -824,61 +882,73 @@ fn check_constraint(
     let py = value.py();
     let (ok, code, expected): (bool, &'static str, String) = match constraint {
         Constraint::Ge(i) => {
-            let bound = ctx.pool[*i].bind(py);
+            let Some(bound) = pooled(ctx, *i, py) else {
+                return false;
+            };
             (
-                cmp(value.ge(bound)),
+                fold(value.ge(&bound), py, ctx),
                 "greater_than_equal",
-                format!(">= {}", summarize(bound)),
+                format!(">= {}", summarize(&bound)),
             )
         }
         Constraint::Gt(i) => {
-            let bound = ctx.pool[*i].bind(py);
+            let Some(bound) = pooled(ctx, *i, py) else {
+                return false;
+            };
             (
-                cmp(value.gt(bound)),
+                fold(value.gt(&bound), py, ctx),
                 "greater_than",
-                format!("> {}", summarize(bound)),
+                format!("> {}", summarize(&bound)),
             )
         }
         Constraint::Le(i) => {
-            let bound = ctx.pool[*i].bind(py);
+            let Some(bound) = pooled(ctx, *i, py) else {
+                return false;
+            };
             (
-                cmp(value.le(bound)),
+                fold(value.le(&bound), py, ctx),
                 "less_than_equal",
-                format!("<= {}", summarize(bound)),
+                format!("<= {}", summarize(&bound)),
             )
         }
         Constraint::Lt(i) => {
-            let bound = ctx.pool[*i].bind(py);
+            let Some(bound) = pooled(ctx, *i, py) else {
+                return false;
+            };
             (
-                cmp(value.lt(bound)),
+                fold(value.lt(&bound), py, ctx),
                 "less_than",
-                format!("< {}", summarize(bound)),
+                format!("< {}", summarize(&bound)),
             )
         }
         Constraint::MinLen(n) => (
-            value.len().is_ok_and(|len| len >= *n),
+            fold(value.len().map(|len| len >= *n), py, ctx),
             "too_short",
             format!("length >= {n}"),
         ),
         Constraint::MaxLen(n) => (
-            value.len().is_ok_and(|len| len <= *n),
+            fold(value.len().map(|len| len <= *n), py, ctx),
             "too_long",
             format!("length <= {n}"),
         ),
         Constraint::MultipleOf(i) => {
-            let operand = ctx.pool[*i].bind(py);
+            let Some(operand) = pooled(ctx, *i, py) else {
+                return false;
+            };
             (
-                is_multiple_of(value, operand),
+                fold(is_multiple_of(value, &operand), py, ctx),
                 "multiple_of",
-                format!("a multiple of {}", summarize(operand)),
+                format!("a multiple of {}", summarize(&operand)),
             )
         }
         Constraint::Predicate(i) => {
             // Slow path: the user's Python callable runs at the boundary. A
             // raising predicate is surfaced as a distinct `predicate_error`
             // rather than masked as an ordinary failed match.
-            let predicate = ctx.pool[*i].bind(py);
-            match predicate_passes(predicate, value) {
+            let Some(predicate) = pooled(ctx, *i, py) else {
+                return false;
+            };
+            match predicate_passes(&predicate, value) {
                 Ok(passed) => (passed, "predicate_failed", "a passing predicate".to_owned()),
                 Err(err) => (
                     false,
@@ -960,7 +1030,15 @@ fn check_ref(
         }
         return false;
     }
-    let result = member(&ctx.defs[id], value, path, ctx, out);
+    let Some(def) = ctx.defs.get(id) else {
+        // A reference past the definitions table is an internal invariant break,
+        // not reachable from user input; release builds degrade to a non-member
+        // rather than panicking across the language boundary.
+        debug_assert!(false, "definition index {id} out of range");
+        ctx.guard.borrow_mut().remove(&key);
+        return false;
+    };
+    let result = member(def, value, path, ctx, out);
     ctx.guard.borrow_mut().remove(&key);
     result
 }
@@ -978,26 +1056,23 @@ fn fast(ctx: Ctx<'_>) -> Ctx<'_> {
 /// Whether `value` is the typed singleton denoted by `literal`: same type and
 /// equal. The same-type guard rules out Python's cross-type equality
 /// (`1 == True == 1.0`), so `Literal[1]` denotes `{1}`, not `{1, True, 1.0}`.
-pub(crate) fn literal_matches(value: &Bound<'_, PyAny>, literal: &Bound<'_, PyAny>) -> bool {
-    value.get_type().is(literal.get_type()) && value.eq(literal).unwrap_or(false)
+/// Returns the comparison result so a raising `__eq__` is folded by the caller.
+pub(crate) fn literal_matches(
+    value: &Bound<'_, PyAny>,
+    literal: &Bound<'_, PyAny>,
+) -> PyResult<bool> {
+    Ok(value.get_type().is(literal.get_type()) && value.eq(literal)?)
 }
 
-/// Whether `value % operand == 0`. A non-numeric value (whose modulo errors or
-/// is not defined) is not a multiple. The remainder is zero iff it is falsy.
-fn is_multiple_of(value: &Bound<'_, PyAny>, operand: &Bound<'_, PyAny>) -> bool {
-    value
-        .call_method1("__mod__", (operand,))
-        .ok()
-        .and_then(|remainder| remainder.is_truthy().ok())
-        .is_some_and(|nonzero| !nonzero)
+/// Whether `value % operand == 0`. The remainder is zero iff it is falsy. Returns
+/// the result so a raising `__mod__` is folded by the caller (a non-numeric value
+/// whose modulo is not defined is then a non-multiple).
+fn is_multiple_of(value: &Bound<'_, PyAny>, operand: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let remainder = value.call_method1("__mod__", (operand,))?;
+    Ok(!remainder.is_truthy()?)
 }
 
 /// Run a user predicate and report whether it returned a truthy result.
 fn predicate_passes(predicate: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<bool> {
     predicate.call1((value,))?.is_truthy()
-}
-
-/// Interpret a rich-comparison result, treating an error as "did not hold".
-fn cmp(result: PyResult<bool>) -> bool {
-    result.unwrap_or(false)
 }

@@ -2,6 +2,18 @@
 //! pure structural operations over them (construction, index shifting,
 //! self-reference resolution, and the structural guardedness check).
 
+/// Remap a pool index through the reindexing map built when two validators merge.
+/// Every index is in range by construction, so a miss is an internal invariant
+/// break; the map keeps the original index rather than panicking, so a malformed
+/// merge degrades to a (later bounds-checked) wrong lookup instead of aborting.
+fn remap(lit_map: &[usize], index: usize) -> usize {
+    debug_assert!(
+        index < lit_map.len(),
+        "literal index {index} out of remap range"
+    );
+    lit_map.get(index).copied().unwrap_or(index)
+}
+
 /// A single step in the location of a value inside a composite structure.
 ///
 /// Scalar schemas never produce a path; structural schemas (records, sequences,
@@ -535,8 +547,8 @@ impl Schema {
             | Schema::Str
             | Schema::Bytes
             | Schema::SelfRef(_) => self.clone(),
-            Schema::Literal(i) => Schema::Literal(lit_map[*i]),
-            Schema::Instance(i) => Schema::Instance(lit_map[*i]),
+            Schema::Literal(i) => Schema::Literal(remap(lit_map, *i)),
+            Schema::Instance(i) => Schema::Instance(remap(lit_map, *i)),
             Schema::Ref(i) => Schema::Ref(i + def_offset),
             Schema::Seq { container, regex } => Schema::Seq {
                 container: *container,
@@ -574,7 +586,7 @@ impl Schema {
                 class_index,
                 fields,
             } => Schema::Attrs {
-                class_index: lit_map[*class_index],
+                class_index: remap(lit_map, *class_index),
                 fields: fields
                     .iter()
                     .map(|f| f.reindexed(lit_map, def_offset))
@@ -765,14 +777,14 @@ impl Constraint {
 
     fn reindexed(&self, lit_map: &[usize]) -> Constraint {
         match self {
-            Constraint::Ge(i) => Constraint::Ge(lit_map[*i]),
-            Constraint::Gt(i) => Constraint::Gt(lit_map[*i]),
-            Constraint::Le(i) => Constraint::Le(lit_map[*i]),
-            Constraint::Lt(i) => Constraint::Lt(lit_map[*i]),
+            Constraint::Ge(i) => Constraint::Ge(remap(lit_map, *i)),
+            Constraint::Gt(i) => Constraint::Gt(remap(lit_map, *i)),
+            Constraint::Le(i) => Constraint::Le(remap(lit_map, *i)),
+            Constraint::Lt(i) => Constraint::Lt(remap(lit_map, *i)),
             Constraint::MinLen(n) => Constraint::MinLen(*n),
             Constraint::MaxLen(n) => Constraint::MaxLen(*n),
-            Constraint::MultipleOf(i) => Constraint::MultipleOf(lit_map[*i]),
-            Constraint::Predicate(i) => Constraint::Predicate(lit_map[*i]),
+            Constraint::MultipleOf(i) => Constraint::MultipleOf(remap(lit_map, *i)),
+            Constraint::Predicate(i) => Constraint::Predicate(remap(lit_map, *i)),
             Constraint::Regex(p) => Constraint::Regex(p.clone()),
         }
     }

@@ -87,6 +87,7 @@ impl Validator {
         &'a self,
         py: Python<'_>,
         guard: &'a RefCell<FxHashSet<(usize, usize)>>,
+        fatal: &'a RefCell<Option<PyErr>>,
         explain: bool,
         fail_fast: bool,
     ) -> Ctx<'a> {
@@ -98,6 +99,7 @@ impl Validator {
             unions: &index.unions,
             regexes: &index.regexes,
             guard,
+            fatal,
             explain,
             fail_fast,
         }
@@ -127,18 +129,20 @@ impl Validator {
     /// Whether the JSON in `bytes` parses and belongs to the schema's set,
     /// validated in place against the parsed JSON value with no intermediate
     /// Python objects. `bytes` outlives the parsed value and the walk.
-    fn matches_json(&self, py: Python<'_>, bytes: &[u8]) -> bool {
+    fn matches_json(&self, py: Python<'_>, bytes: &[u8]) -> PyResult<bool> {
         let Ok(json) = JsonValue::parse(bytes, false) else {
-            return false;
+            return Ok(false);
         };
         let guard = RefCell::new(FxHashSet::default());
-        member(
+        let fatal = RefCell::new(None);
+        let ok = member(
             &self.schema,
             &Value::Json(py, &json),
             &mut Vec::new(),
-            self.context(py, &guard, false, true),
+            self.context(py, &guard, &fatal, false, true),
             &mut Vec::new(),
-        )
+        );
+        reraise_fatal(fatal, ok)
     }
 }
 
@@ -189,15 +193,19 @@ impl Validator {
     #[pyo3(signature = (obj, *, fail_fast = false))]
     fn validate(&self, obj: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
         let guard = RefCell::new(FxHashSet::default());
+        let fatal = RefCell::new(None);
         let mut path = Vec::new();
         let mut violations = Vec::new();
         let ok = member(
             &self.schema,
             &Value::Py(obj),
             &mut path,
-            self.context(obj.py(), &guard, true, fail_fast),
+            self.context(obj.py(), &guard, &fatal, true, fail_fast),
             &mut violations,
         );
+        if let Some(err) = fatal.into_inner() {
+            return Err(err);
+        }
         if ok {
             Ok(())
         } else {
@@ -207,23 +215,32 @@ impl Validator {
 
     /// Whether `obj` is a member of the schema's set.
     ///
-    /// Check-only and never raises. This is the fast path: it returns as soon as
-    /// membership is decided, without building an error.
+    /// Check-only: it does not build an error and returns as soon as membership
+    /// is decided. It raises only if a comparison the membership test performs
+    /// raises a fatal interpreter signal (for example a KeyboardInterrupt during
+    /// a long check); an ordinary exception in a comparison is folded to a
+    /// non-member, as the membership contract requires.
     ///
     /// Args:
     ///     obj: The object to check.
     ///
     /// Returns:
     ///     `True` if `obj` is a member of the schema's set, else `False`.
-    fn is_valid(&self, obj: &Bound<'_, PyAny>) -> bool {
+    ///
+    /// Raises:
+    ///     BaseException: If a membership comparison raises a fatal interpreter
+    ///         signal, it propagates rather than being read as a non-member.
+    fn is_valid(&self, obj: &Bound<'_, PyAny>) -> PyResult<bool> {
         let guard = RefCell::new(FxHashSet::default());
-        member(
+        let fatal = RefCell::new(None);
+        let ok = member(
             &self.schema,
             &Value::Py(obj),
             &mut Vec::new(),
-            self.context(obj.py(), &guard, false, true),
+            self.context(obj.py(), &guard, &fatal, false, true),
             &mut Vec::new(),
-        )
+        );
+        reraise_fatal(fatal, ok)
     }
 
     /// Validate `obj` and return it unchanged.
@@ -297,10 +314,11 @@ impl Validator {
 
     /// Whether a JSON document parses and is a member of the schema's set.
     ///
-    /// Check-only and never raises: malformed JSON, or input that is neither
-    /// `str` nor `bytes`, is simply not a member and returns `False`. The
-    /// document is validated in place against the parsed value, with no
-    /// intermediate Python objects for the structure it walks.
+    /// Check-only: malformed JSON, or input that is neither `str` nor `bytes`, is
+    /// simply not a member and returns `False`. The document is validated in place
+    /// against the parsed value, with no intermediate Python objects for the
+    /// structure it walks. It raises only if a membership comparison raises a
+    /// fatal interpreter signal.
     ///
     /// Args:
     ///     data: The JSON document, as `str` or `bytes`.
@@ -308,15 +326,21 @@ impl Validator {
     /// Returns:
     ///     `True` if `data` parses and is a member of the schema's set, else
     ///     `False`.
-    fn is_valid_json(&self, data: &Bound<'_, PyAny>) -> bool {
+    ///
+    /// Raises:
+    ///     BaseException: If a membership comparison raises a fatal interpreter
+    ///         signal, it propagates rather than being read as a non-member.
+    fn is_valid_json(&self, data: &Bound<'_, PyAny>) -> PyResult<bool> {
         let py = data.py();
         if let Ok(text) = data.cast::<PyString>() {
-            text.to_str()
-                .is_ok_and(|json| self.matches_json(py, json.as_bytes()))
+            match text.to_str() {
+                Ok(json) => self.matches_json(py, json.as_bytes()),
+                Err(_) => Ok(false),
+            }
         } else if let Ok(raw) = data.cast::<PyBytes>() {
             self.matches_json(py, raw.as_bytes())
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -459,7 +483,7 @@ impl Validator {
 
     /// Whether `obj` is a member of the schema's set: the operator form of
     /// `is_valid`, so `obj in validator` reads as the set membership it is.
-    fn __contains__(&self, obj: &Bound<'_, PyAny>) -> bool {
+    fn __contains__(&self, obj: &Bound<'_, PyAny>) -> PyResult<bool> {
         self.is_valid(obj)
     }
 
@@ -522,6 +546,15 @@ impl Validator {
 /// what the object path would receive from `json.loads`. A parse failure is
 /// surfaced as a structured `json_invalid` `ValidationError`; a non-string,
 /// non-bytes argument is a `TypeError`.
+/// Turn a membership walk's outcome into a Python result: re-raise a fatal
+/// interpreter signal the walk recorded, otherwise report the membership verdict.
+fn reraise_fatal(fatal: RefCell<Option<PyErr>>, ok: bool) -> PyResult<bool> {
+    match fatal.into_inner() {
+        Some(err) => Err(err),
+        None => Ok(ok),
+    }
+}
+
 fn parse_json<'py>(data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py = data.py();
     let parse = PythonParse::default();
@@ -630,7 +663,10 @@ impl PoolRelations<'_, '_> {
         let guard = RefCell::new(FxHashSet::default());
         // These leaf-subtype probes run on transient schemas during compilation,
         // not on a finished validator, so they carry no precomputed index; the
-        // walk falls back to its general path for any record or union here.
+        // walk falls back to its general path for any record or union here. A
+        // fatal signal in a probe folds to non-membership here (the decision
+        // procedure is not the interruptible hot path); the cell is local.
+        let fatal = RefCell::new(None);
         let index = ValidatorIndex::default();
         let ctx = Ctx {
             pool: self.literals,
@@ -639,6 +675,7 @@ impl PoolRelations<'_, '_> {
             unions: &index.unions,
             regexes: &index.regexes,
             guard: &guard,
+            fatal: &fatal,
             explain: false,
             fail_fast: false,
         };

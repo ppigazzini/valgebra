@@ -55,6 +55,13 @@ pub(crate) struct Ctx<'a> {
     /// reads it for a `Regex(...)` constraint instead of recompiling.
     pub(crate) regexes: &'a RegexIndex,
     pub(crate) guard: &'a RefCell<FxHashSet<(usize, usize)>>,
+    /// A fatal interpreter signal raised mid-walk — a base exception that is not
+    /// an ordinary exception (`KeyboardInterrupt`, `MemoryError`, `SystemExit`,
+    /// `RecursionError`). The first such error is recorded here; the walk then
+    /// short-circuits and the entry point re-raises it instead of silently
+    /// reporting a non-member. An ordinary exception during a membership probe
+    /// stays folded to non-membership and never lands here.
+    pub(crate) fatal: &'a RefCell<Option<PyErr>>,
     /// Build violations into `out`. When false the walk is the membership fast
     /// path: it never touches `out`, never builds a path, and short-circuits.
     pub(crate) explain: bool,

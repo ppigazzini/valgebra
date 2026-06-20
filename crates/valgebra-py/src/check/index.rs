@@ -270,7 +270,9 @@ mod tests {
                 for value in &candidates {
                     if let Some(decided) = plan.decide(&Value::Py(value)) {
                         committed += 1;
-                        let scan = pool.iter().any(|lit| literal_matches(value, lit.bind(py)));
+                        let scan = pool
+                            .iter()
+                            .any(|lit| literal_matches(value, lit.bind(py)).unwrap_or(false));
                         assert_eq!(decided, scan, "fast-path decision disagreed with the scan");
                     }
                 }

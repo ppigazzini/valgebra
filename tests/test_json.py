@@ -92,6 +92,23 @@ def test_validate_json_returns_none_on_success() -> None:
     assert Validator(list[int]).validate_json("[1, 2, 3]") is None
 
 
+def test_duplicate_json_keys_keep_the_last_value() -> None:
+    # A JSON object may repeat a key; json.loads keeps the last, and the keyed-map
+    # walk covers each non-field key by its last value in a single pass.
+    v = Validator(dict[str, int])
+    assert v.is_valid_json('{"a": 1, "a": 2}')
+    assert not v.is_valid_json('{"a": 1, "a": "x"}')
+    assert v.is_valid_json('{"a": "x", "a": 3}')
+
+
+def test_many_duplicate_json_keys_validate_in_one_pass() -> None:
+    # A document with thousands of repeated keys against an open mapping is covered
+    # without a per-key tail rescan; this finishes promptly rather than quadratically.
+    v = Validator(dict[str, int])
+    doc = "{" + ", ".join(f'"k": {i}' for i in range(20000)) + "}"
+    assert v.is_valid_json(doc)
+
+
 def test_malformed_json_raises_a_structured_error() -> None:
     v = Validator(int)
     with pytest.raises(ValidationError) as info:
