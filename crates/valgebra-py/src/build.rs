@@ -318,6 +318,19 @@ fn resolve_type_hints<'py>(ty: &Bound<'py, PyType>) -> PyResult<Bound<'py, PyAny
         .call_method("get_type_hints", (ty,), Some(&kwargs))
 }
 
+/// Read a record field name as Rust text, refusing a key that is not valid
+/// Unicode (one carrying a lone surrogate). A field name is stored as UTF-8 and
+/// matched against dict keys as UTF-8, so a surrogate key cannot round-trip;
+/// refusing it at build time turns silent corruption — a lossy replacement that
+/// makes the field unmatchable — into an explicit error.
+fn field_name(name: &Bound<'_, PyString>) -> PyResult<String> {
+    name.to_str().map(str::to_owned).map_err(|_| {
+        PyValueError::new_err(
+            "a record key must be valid Unicode; a field name cannot contain a lone surrogate",
+        )
+    })
+}
+
 /// Build a closed record from a `TypedDict`, reading its required keys.
 fn build_typed_dict(
     ty: &Bound<'_, PyType>,
@@ -330,7 +343,7 @@ fn build_typed_dict(
     let mut fields = Vec::with_capacity(hints.len());
     for (name, hint) in hints.iter() {
         fields.push(Field {
-            name: name.str()?.to_string(),
+            name: field_name(&name.str()?)?,
             schema: build_schema(&hint, lits, defs)?,
             required: required.contains(&name)?,
         });
@@ -351,7 +364,7 @@ fn build_object(
     let mut fields = Vec::with_capacity(hints.len());
     for (name, hint) in hints.iter() {
         fields.push(Field {
-            name: name.str()?.to_string(),
+            name: field_name(&name.str()?)?,
             schema: build_schema(&hint, lits, defs)?,
             required: true,
         });
@@ -577,7 +590,7 @@ fn build_dict(
     let mut defaults = Vec::new();
     for (key, value) in dict.iter() {
         if let Ok(name) = key.cast::<PyString>() {
-            let raw = name.to_string();
+            let raw = field_name(name)?;
             let (name, required) = match raw.strip_suffix('?') {
                 Some(stripped) => (stripped.to_owned(), false),
                 None => (raw, true),

@@ -636,6 +636,9 @@ fn keyed_map_scan(
 ) -> bool {
     let sub = fast(ctx);
     for (key, val) in dict.iter() {
+        // A non-string key, or a string carrying a lone surrogate (which cannot
+        // equal a field name, since names are valid UTF-8 by build-time check),
+        // resolves to no field and must instead be covered by a default clause.
         let index = key
             .cast::<PyString>()
             .ok()
