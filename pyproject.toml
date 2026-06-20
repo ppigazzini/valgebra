@@ -142,7 +142,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 python-version = "3.14"
 
 [tool.ty.src]
-# Benchmarks are a separate measurement harness, not the typed public surface;
-# they import the optional bench dependency group, which is absent in the
-# type-check lane.
-exclude = ["benches"]
+# Benchmarks and the differential suite are separate measurement harnesses, not
+# the typed public surface; they import the optional bench dependency group
+# (pydantic, jsonschema), which is absent in the type-check lane.
+exclude = ["benches", "tests/test_differential.py"]

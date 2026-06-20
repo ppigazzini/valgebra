@@ -72,6 +72,11 @@ has four layers:
 - **Differential fuzzers.** The JSON path is fuzzed against the object path
   (a document is judged as `json.loads` of it would be), and the fast `bool`
   walk against the explaining walk, so the two never diverge.
+- **External ground truth.** The same schemas and values run through valgebra and
+  through pydantic-core (strict object path) and jsonschema (JSON path); every
+  divergence is either a valgebra bug that fails the gate or one of a small,
+  enumerated set of documented intentional differences (bool as a subtype of
+  int, int and float as disjoint regions, exact-match `Literal` membership).
 - **Algebra laws as property tests.** Every claimed equivalence — associativity,
   De Morgan, the complement laws, a simplifier rewrite — is proved with proptest
   (Rust) and hypothesis (Python) against the membership relation, never asserted.
@@ -90,7 +95,9 @@ macOS, Windows), an MSRV build at the manifest's `rust-version`, two coverage
 lanes (the core crate, and the bindings measured by instrumenting the extension
 and driving it with the Python suite against a line floor), a Python matrix from
 3.10 through 3.15 — the 3.15 prerelease and the free-threaded lane run but never
-block — the doc-example runner, a strict docs build, and a Linux wheel build.
+block — a differential lane that cross-checks membership against pydantic-core
+and jsonschema, the doc-example runner, a strict docs build, and a Linux wheel
+build.
 Performance is gated by a **deterministic cachegrind instruction count** compared
 to a committed budget: independent of runner noise, so it blocks merges where a
 wall-clock budget could not.
