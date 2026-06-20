@@ -1582,4 +1582,96 @@ mod laws {
             prop_assert!(not(union(a.clone(), not(a))).is_empty());
         }
     }
+
+    /// A balanced tree of complements over unions: every level wraps two copies
+    /// of the level below in a union and complements the result. Its node count
+    /// doubles per level, so a single bottom-up simplification visits each node
+    /// once and finishes in milliseconds, while a pass that re-normalises every
+    /// member once per level it is nested under grows superlinearly on top of
+    /// that and takes tens of seconds at this depth.
+    fn complemented_tower(depth: usize) -> Schema {
+        if depth == 0 {
+            return Schema::Complement(Box::new(Schema::Int));
+        }
+        let child = complemented_tower(depth - 1);
+        Schema::Complement(Box::new(Schema::Union(vec![child.clone(), child])))
+    }
+
+    /// A tower of intersections of unions, the shape whose subtyping decision
+    /// re-explored shared subtrees before the goal memo. The leaves are sets so
+    /// the scalar region fast path does not short-circuit the descent.
+    fn intersection_of_unions_tower(depth: usize, leaf: Schema) -> Schema {
+        let mut node = Schema::Set(Box::new(leaf));
+        for _ in 0..depth {
+            node = Schema::Intersection(vec![
+                Schema::Union(vec![node.clone(), Schema::Set(Box::new(Schema::Str))]),
+                Schema::Union(vec![node, Schema::Set(Box::new(Schema::Bytes))]),
+            ]);
+        }
+        node
+    }
+
+    /// The simplifier stays within a single bottom-up pass: a deeply nested
+    /// complemented tree reduces well inside a generous ceiling. A regression to
+    /// re-normalising each member per nesting level takes tens of seconds at this
+    /// depth and trips the guard.
+    #[test]
+    fn simplify_stays_linear_on_a_complemented_tower() {
+        let schema = complemented_tower(18);
+        let start = std::time::Instant::now();
+        let reduced = schema.simplify();
+        let elapsed = start.elapsed();
+        // The duplicate union members collapse, so the reduced form is small;
+        // the point is the time it took to get there.
+        assert!(matches!(reduced, Schema::Complement(_)));
+        assert!(
+            elapsed < std::time::Duration::from_secs(3),
+            "simplify of a depth-18 complemented tower took {elapsed:?}; the \
+             bottom-up pass should finish in milliseconds"
+        );
+    }
+
+    /// The subtyping decision terminates promptly on a deeply nested
+    /// intersection-of-unions, where the union and intersection distribution
+    /// rules re-explore the schema exponentially in its depth. The work budget
+    /// stops the descent and returns the conservative answer instead of running
+    /// for minutes; this guards against a regression that removes the bound.
+    #[test]
+    fn subtyping_terminates_on_a_distributed_tower() {
+        let narrow = intersection_of_unions_tower(18, Schema::Int);
+        let wide = intersection_of_unions_tower(18, union(Schema::Int, Schema::Float));
+        let start = std::time::Instant::now();
+        // The verdict on this adversarial shape may be conservative; the property
+        // under test is that the decision stops quickly rather than the answer.
+        let _ = narrow.is_subtype_of(&wide);
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed < std::time::Duration::from_secs(3),
+            "is_subtype_of on a depth-18 distributed tower took {elapsed:?}; the \
+             work budget should stop it promptly"
+        );
+    }
+
+    /// The work budget must not change a verdict a real schema needs, including
+    /// under recursion: a recursive list of ints is a subtype of itself and of a
+    /// wider recursive list, and the wider one is not a subtype of the narrower.
+    #[test]
+    fn budgeted_subtyping_decides_recursive_relations() {
+        let int_list = Schema::Seq {
+            container: SeqKind::List,
+            regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Ref(0))))),
+        };
+        let wide_list = Schema::Seq {
+            container: SeqKind::List,
+            regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Ref(1))))),
+        };
+        let defs = vec![
+            union(Schema::Int, int_list.clone()),
+            union(union(Schema::Int, Schema::Str), wide_list.clone()),
+        ];
+        let oracle = NoLeafRelations;
+        assert!(int_list.is_subtype_of_under(&int_list, &oracle, &defs));
+        assert!(int_list.is_subtype_of_under(&wide_list, &oracle, &defs));
+        assert!(!wide_list.is_subtype_of_under(&int_list, &oracle, &defs));
+    }
 }

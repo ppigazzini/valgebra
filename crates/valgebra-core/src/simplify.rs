@@ -147,7 +147,10 @@ fn canonical_refine(mut base: Schema, mut constraints: Vec<Constraint>) -> Schem
     }
 }
 
-/// Flatten, absorb the top, drop the bottom, dedup, and collapse a union.
+/// Simplify a union from its raw members: each member is normalised lazily inside
+/// the loop, so the top identity short-circuits the moment a member reduces to it,
+/// without normalising the members that follow. This is the entry from the top of
+/// `simplify`, where the members are not yet normal.
 fn simplify_union(members: &[Schema]) -> Schema {
     let mut flat = Vec::new();
     for member in members {
@@ -158,6 +161,30 @@ fn simplify_union(members: &[Schema]) -> Schema {
             other => flat.push(other),
         }
     }
+    finish_union(flat)
+}
+
+/// Collapse a union of already-normal members without re-normalising them. The
+/// De Morgan path builds these from members `simplify` has already produced, so
+/// re-running `simplify` on each would repeat the whole subtree's work once per
+/// level it is nested under — the exponential `simplify` blowup. Pushing the
+/// complement inward over already-normal members keeps the pass linear.
+fn union_of_simplified(members: Vec<Schema>) -> Schema {
+    let mut flat = Vec::new();
+    for member in members {
+        match member {
+            Schema::Anything => return Schema::Anything,
+            Schema::Nothing => {}
+            Schema::Union(inner) => flat.extend(inner),
+            other => flat.push(other),
+        }
+    }
+    finish_union(flat)
+}
+
+/// Sort, dedup, apply the union completeness laws, and collapse a flattened set
+/// of normal union members to a single schema. Shared by both union entries.
+fn finish_union(mut flat: Vec<Schema>) -> Schema {
     flat.sort();
     flat.dedup();
     // X ∪ ¬X is everything, as is ¬A ∪ ¬B for disjoint A and B; and a union is
@@ -179,7 +206,10 @@ fn simplify_union(members: &[Schema]) -> Schema {
     }
 }
 
-/// Flatten, absorb the bottom, drop the top, dedup, and collapse an intersection.
+/// Simplify an intersection from its raw members: each member is normalised
+/// lazily inside the loop, so the bottom identity short-circuits the moment a
+/// member reduces to it, without normalising the members that follow. This is the
+/// entry from the top of `simplify`, where the members are not yet normal.
 fn simplify_intersection(members: &[Schema]) -> Schema {
     let mut flat = Vec::new();
     for member in members {
@@ -190,6 +220,28 @@ fn simplify_intersection(members: &[Schema]) -> Schema {
             other => flat.push(other),
         }
     }
+    finish_intersection(flat)
+}
+
+/// Collapse an intersection of already-normal members without re-normalising
+/// them — the De Morgan dual of [`union_of_simplified`], used along the complement
+/// path so a nested complement is not re-simplified once per level.
+fn intersection_of_simplified(members: Vec<Schema>) -> Schema {
+    let mut flat = Vec::new();
+    for member in members {
+        match member {
+            Schema::Nothing => return Schema::Nothing,
+            Schema::Anything => {}
+            Schema::Intersection(inner) => flat.extend(inner),
+            other => flat.push(other),
+        }
+    }
+    finish_intersection(flat)
+}
+
+/// Sort, dedup, apply the intersection emptiness laws, and collapse a flattened
+/// set of normal intersection members. Shared by both intersection entries.
+fn finish_intersection(mut flat: Vec<Schema>) -> Schema {
     flat.sort();
     flat.dedup();
     // X ∩ ¬X is empty, as is an intersection of two provably disjoint members;
@@ -211,21 +263,33 @@ fn simplify_intersection(members: &[Schema]) -> Schema {
     }
 }
 
-/// Push a complement to negation-normal form and cancel double negation.
+/// Simplify a complement from its raw inner schema: normalise the inner once, then
+/// push the complement inward. The inner is normalised lazily here (its own
+/// short-circuits intact); the De Morgan arms then operate on its already-normal
+/// members through [`complement_of_simplified`], so no member is normalised twice.
 fn simplify_complement(inner: &Schema) -> Schema {
-    match inner.simplify() {
+    complement_of_simplified(inner.simplify())
+}
+
+/// Push a complement to negation-normal form and cancel double negation over an
+/// already-normal inner schema. The De Morgan arms complement each already-normal
+/// member (which only inspects its top constructor) and re-collapse the result,
+/// so the traversal stays linear in the tree size — never re-running `simplify` on
+/// a member, which is the rewrite that made nested complements blow up.
+fn complement_of_simplified(inner: Schema) -> Schema {
+    match inner {
         Schema::Complement(x) => *x,
         Schema::Anything => Schema::Nothing,
         Schema::Nothing => Schema::Anything,
-        Schema::Union(members) => simplify_intersection(&complement_each(members)),
-        Schema::Intersection(members) => simplify_union(&complement_each(members)),
+        Schema::Union(members) => intersection_of_simplified(complement_each(members)),
+        Schema::Intersection(members) => union_of_simplified(complement_each(members)),
         other => Schema::Complement(Box::new(other)),
     }
 }
 
+/// Complement each already-normal member, keeping the result normal: a member that
+/// is itself a complement cancels, a union or intersection pushes the complement
+/// further inward by De Morgan, and an atom gains one complement.
 fn complement_each(members: Vec<Schema>) -> Vec<Schema> {
-    members
-        .into_iter()
-        .map(|m| Schema::Complement(Box::new(m)))
-        .collect()
+    members.into_iter().map(complement_of_simplified).collect()
 }

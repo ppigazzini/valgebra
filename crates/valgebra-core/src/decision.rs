@@ -2,6 +2,18 @@
 //! disjointness, with the leaf-relation oracle and the scalar region partition.
 
 use crate::ir::{Constraint, Field, Schema, SeqKind, SeqRegex};
+use std::cell::Cell;
+
+/// The most subtyping-decision steps one top-level query may take before it stops
+/// and returns the conservative `false`. The structural rules distribute over
+/// unions and intersections, so a deeply nested Boolean combination can demand
+/// work exponential in its depth; without interning to share equal subtrees there
+/// is no cheap memo, so the procedure bounds its own work. The ceiling is far
+/// above any schema a real annotation produces, so a legitimate relation is
+/// always decided; only an adversarial schema built to blow up the decision
+/// reaches it, and there a `false` ("not proven") is sound by the conservative
+/// contract. A complete, work-sharing decision is the interning-based procedure.
+const SUBTYPE_BUDGET: u32 = 1_000_000;
 
 impl SeqRegex {
     /// Whether the regex matches **no** sequence at all — its language is empty.
@@ -261,7 +273,16 @@ impl Schema {
         oracle: &dyn LeafRelations,
         defs: &[Schema],
     ) -> bool {
-        self.is_subtype_rec(other, SubtypeCx { oracle, defs }, &mut Vec::new())
+        let budget = Cell::new(SUBTYPE_BUDGET);
+        self.is_subtype_rec(
+            other,
+            SubtypeCx {
+                oracle,
+                defs,
+                budget: &budget,
+            },
+            &mut Vec::new(),
+        )
     }
 
     fn is_subtype_rec(
@@ -270,6 +291,15 @@ impl Schema {
         cx: SubtypeCx<'_>,
         assumptions: &mut Vec<(Schema, Schema)>,
     ) -> bool {
+        // Bound the total work: the distribution rules below can demand effort
+        // exponential in the schema depth, so once the shared budget is spent the
+        // decision stops and returns the conservative `false` rather than running
+        // unbounded. A real annotation decides in a few steps; only an adversarial
+        // schema reaches the ceiling.
+        match cx.budget.get().checked_sub(1) {
+            Some(remaining) => cx.budget.set(remaining),
+            None => return false,
+        }
         // Coinductive hypothesis: a goal already being proven on this path is
         // assumed to hold, so two recursive types are compared at their greatest
         // fixpoint rather than unfolded forever.
@@ -283,6 +313,18 @@ impl Schema {
         if self == other {
             return true;
         }
+        self.subtype_decide(other, cx, assumptions)
+    }
+
+    /// The structural subtyping decision: the lattice, recursion, and
+    /// constructor-matching rules. Reached from [`is_subtype_rec`] after the
+    /// coinductive, scalar, identity, and memo fast paths.
+    fn subtype_decide(
+        &self,
+        other: &Schema,
+        cx: SubtypeCx<'_>,
+        assumptions: &mut Vec<(Schema, Schema)>,
+    ) -> bool {
         match (self, other) {
             // ∅ is a subset of every set, and every set is a subset of the top.
             (Schema::Nothing, _) | (_, Schema::Anything) => true,
@@ -411,12 +453,16 @@ impl Schema {
     }
 }
 
-/// Threaded state for the subtyping decision: the leaf-relation oracle and the
-/// definitions that resolve recursive references.
+/// Threaded state for the subtyping decision: the leaf-relation oracle, the
+/// definitions that resolve recursive references, and the remaining work budget
+/// shared across the whole query. The budget counts decision steps down to zero,
+/// at which point the procedure stops and returns the conservative `false`,
+/// bounding the cost of a deeply nested Boolean combination.
 #[derive(Clone, Copy)]
 struct SubtypeCx<'a> {
     oracle: &'a dyn LeafRelations,
     defs: &'a [Schema],
+    budget: &'a Cell<u32>,
 }
 
 /// Resolves the leaf relations the structural subtyping decision cannot: those
