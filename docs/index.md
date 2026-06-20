@@ -56,8 +56,9 @@ schemas (union, intersection, complement, refinement, fixpoints) with
   the typing spec's own introspection.
 - **Check, don't parse.** `validate` and `is_valid` never copy or coerce; `ensure`
   is the explicit, separate conversion mode.
-- **One boundary crossing.** The validator tree runs entirely in Rust; a Python
-  predicate is a documented slow path, never a silent fallback.
+- **Few boundary crossings.** The validator tree runs in Rust; the one step back
+  into Python is a refinement predicate, a documented slow path, never a silent
+  fallback.
 - **JSON on the Rust path.** `validate_json` parses and validates JSON in Rust,
   consistent with the object path.
 - **Immutable and thread-safe**, including on free-threaded CPython.

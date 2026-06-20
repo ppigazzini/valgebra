@@ -35,8 +35,9 @@ will form the first release.
 - Recursive schemas via the `recursive` fixpoint, with cycle and depth guards.
 - A structured, machine-readable error model: aggregated failures, opt-in
   fail-fast, and closest-branch reporting for unions.
-- JSON input on the Rust path: `validate_json` and `is_valid_json`, consistent
-  with the object path and faster than parse-then-validate.
+- JSON input on the Rust path: `validate_json`, `is_valid_json`, and `load`
+  (validate and return the parsed value), consistent with the object path and
+  faster than parse-then-validate.
 - A stable `repr` that renders a schema back to its annotation form.
 - Thread-safe, immutable validators, usable on free-threaded CPython.
 - A performance program: criterion and pytest-benchmark suites, a recorded

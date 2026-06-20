@@ -104,7 +104,8 @@ import annotated_types as at
 from valgebra import anything, complement, intersection, nothing, union, Validator
 
 
-def implies(condition, then, otherwise):
+# the same implies helper as above, repeated so this example runs on its own
+def implies(condition, then, otherwise=anything):
     return union(
         intersection(condition, then),
         intersection(complement(condition), otherwise),

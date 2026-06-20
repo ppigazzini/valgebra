@@ -37,5 +37,5 @@ toolchain required:
 pip install valgebra
 ```
 
-Wheels are published for Linux (manylinux and musllinux, x86_64 and aarch64),
+Wheels will be published for Linux (manylinux and musllinux, x86_64 and aarch64),
 macOS (Intel and Apple silicon), and Windows, including a free-threaded build.

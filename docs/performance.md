@@ -60,7 +60,9 @@ three check the same set of named fields.
 ## Baseline matrix
 
 Machine class: AMD Ryzen 7 PRO 7840U (Zen 4, 8c/16t, up to 5.1 GHz, a 2023-era
-mobile part) under WSL2 on Linux 6.18. Toolchain: rustc 1.96.0, CPython 3.14.6,
+mobile part) under WSL2 on Linux 6.18. Toolchain: rustc 1.96.0 (the build these
+numbers were measured on; the supported minimum is the lower `rust-version` in
+the manifest), CPython 3.14.6,
 pydantic 2.13.4, jsonschema 4.26.0, criterion 0.8.2, pytest-benchmark 5.2.3. The
 extension is the **PGO** release build — the profile-guided, fat-LTO wheel the
 release ships (`maturin build --release --pgo`); a plain `--release` build is a
