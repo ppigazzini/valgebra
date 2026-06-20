@@ -792,10 +792,9 @@ impl Schema {
                     })
                     .collect(),
             },
-            Schema::Refine { base, constraints } => Schema::Refine {
-                base: Box::new(base.simplify()),
-                constraints: constraints.clone(),
-            },
+            Schema::Refine { base, constraints } => {
+                canonical_refine(base.simplify(), constraints.clone())
+            }
             Schema::Union(members) => simplify_union(members),
             Schema::Intersection(members) => simplify_intersection(members),
             Schema::Complement(inner) => simplify_complement(inner),
@@ -1522,6 +1521,37 @@ fn has_disjoint_complement_pair(members: &[Schema]) -> bool {
         .any(|(i, a)| inners[i + 1..].iter().any(|b| a.disjoint(b)))
 }
 
+/// Build a refinement in canonical form from an already-simplified `base`.
+///
+/// A refinement of a refinement flattens into one refinement over the shared
+/// base (`{x in {y in b | c1} | c2}` is `{x in b | c1 and c2}`), and the merged
+/// constraints are sorted and deduplicated so two refinements that list the same
+/// constraints in any order, or repeat one, share a single normal form. This is
+/// idempotence and commutativity over the conjunction of constraints, the same
+/// laws `simplify` already applies to union and intersection members. A
+/// refinement left with no constraints is exactly its base.
+fn canonical_refine(mut base: Schema, mut constraints: Vec<Constraint>) -> Schema {
+    while let Schema::Refine {
+        base: inner_base,
+        constraints: mut inner_constraints,
+    } = base
+    {
+        inner_constraints.append(&mut constraints);
+        constraints = inner_constraints;
+        base = *inner_base;
+    }
+    constraints.sort_unstable();
+    constraints.dedup();
+    if constraints.is_empty() {
+        base
+    } else {
+        Schema::Refine {
+            base: Box::new(base),
+            constraints,
+        }
+    }
+}
+
 /// Flatten, absorb the top, drop the bottom, dedup, and collapse a union.
 fn simplify_union(members: &[Schema]) -> Schema {
     let mut flat = Vec::new();
@@ -2178,9 +2208,12 @@ mod laws {
             Just(Schema::Anything),
             Just(Schema::Nothing),
             Just(Schema::Dynamic),
-            Just(Schema::Int),
-            Just(Schema::Str),
+            Just(Schema::NoneType),
             Just(Schema::Bool),
+            Just(Schema::Int),
+            Just(Schema::Float),
+            Just(Schema::Str),
+            Just(Schema::Bytes),
             Just(Schema::Literal(0)),
             Just(Schema::Instance(1)),
         ];
@@ -2678,6 +2711,49 @@ mod laws {
     }
 
     #[test]
+    fn simplify_canonicalizes_refinement_constraints() {
+        let refine = |base, constraints: Vec<Constraint>| Schema::Refine {
+            base: Box::new(base),
+            constraints,
+        };
+        // A repeated constraint collapses (idempotence over the conjunction).
+        assert_eq!(
+            refine(Schema::Int, vec![Constraint::Ge(0), Constraint::Ge(0)]).simplify(),
+            refine(Schema::Int, vec![Constraint::Ge(0)])
+        );
+        // Constraint order does not matter: both spellings share one normal form.
+        assert_eq!(
+            refine(Schema::Int, vec![Constraint::Le(1), Constraint::Ge(0)]).simplify(),
+            refine(Schema::Int, vec![Constraint::Ge(0), Constraint::Le(1)]).simplify()
+        );
+        // A refinement of a refinement flattens into one refinement over the base.
+        assert_eq!(
+            refine(
+                refine(Schema::Int, vec![Constraint::Ge(0)]),
+                vec![Constraint::Le(1)],
+            )
+            .simplify(),
+            refine(Schema::Int, vec![Constraint::Ge(0), Constraint::Le(1)])
+        );
+        // The base is simplified before the refinement is rebuilt.
+        assert_eq!(
+            refine(
+                Schema::Union(vec![Schema::Int, Schema::Int]),
+                vec![Constraint::Ge(0)],
+            )
+            .simplify(),
+            refine(Schema::Int, vec![Constraint::Ge(0)])
+        );
+        // Canonicalization is idempotent.
+        let once = refine(
+            Schema::Int,
+            vec![Constraint::Le(1), Constraint::Ge(0), Constraint::Ge(0)],
+        )
+        .simplify();
+        assert_eq!(once.clone(), once.simplify());
+    }
+
+    #[test]
     fn every_constructed_sequence_regex_is_linear() {
         // Sequences are built only with these constructors, all linear (a fixed
         // prefix then an optional repeated tail), and the structure-preserving
@@ -3054,10 +3130,32 @@ mod laws {
 
         #[test]
         fn de_morgan(a in schema(), b in schema()) {
+            // Both forms: the complement of a join is the meet of the complements,
+            // and the complement of a meet is the join of the complements.
             prop_assert_eq!(
                 not(union(a.clone(), b.clone())).simplify(),
-                intersection(not(a.clone()), not(b)).simplify()
+                intersection(not(a.clone()), not(b.clone())).simplify()
             );
+            prop_assert_eq!(
+                not(intersection(a.clone(), b.clone())).simplify(),
+                union(not(a), not(b)).simplify()
+            );
+        }
+
+        /// The strongest law check: simplification preserves membership, not just
+        /// structural shape. Over the scalar-and-set fragment the `member_v` oracle
+        /// decides exactly, so a simplified schema must admit each sample value
+        /// exactly when the original does. This catches an unsound rewrite that the
+        /// structural-equality laws above cannot, since they only compare two
+        /// already-simplified forms. Refinements carry value-level bounds the
+        /// kind-only samples cannot evaluate, so their membership preservation is
+        /// covered by the Python suite over real values.
+        #[test]
+        fn simplify_preserves_membership(a in scalar_or_set_schema()) {
+            let simplified = a.simplify();
+            for value in &samples_v() {
+                prop_assert_eq!(member_v(&simplified, value), member_v(&a, value));
+            }
         }
 
         #[test]

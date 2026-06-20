@@ -214,6 +214,20 @@ assert repr(complement(complement(int)).simplify()) == "int"
 assert repr(union(int, int).simplify()) == "int"
 ```
 
+A refinement is reduced to a single normal form too: nested refinements flatten
+onto their shared base, and the constraint list is sorted and deduplicated, so a
+repeated or reordered constraint does not change the result:
+
+```python
+from typing import Annotated
+
+from annotated_types import Ge
+
+from valgebra import Validator
+
+assert repr(Validator(Annotated[int, Ge(0), Ge(0)]).simplify()) == "Annotated[int, Ge(0)]"
+```
+
 It also decides the **complement laws** and provable **disjointness**: a schema
 met with its complement, or with a provably disjoint type, is empty; a schema
 joined with its complement, or with the complement of a disjoint type, is
