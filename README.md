@@ -249,11 +249,12 @@ is below `1.0` the public API may change between minor versions; every change is
 recorded in [CHANGELOG.md](CHANGELOG.md), and where practical a deprecated form
 keeps working for at least one minor release with a documented replacement.
 
-Releases are tag-driven: pushing a `vX.Y.Z` tag builds the wheel matrix (Linux
-manylinux and musllinux, macOS, and Windows) and the sdist and publishes them to
-PyPI through trusted publishing with PEP 740 attestations. The package version
-is read from the workspace manifest, so a release bumps `Cargo.toml` and tags
-the matching version.
+Releases are dispatch-driven: a manual workflow run builds the wheel matrix
+(Linux manylinux and musllinux, macOS, and Windows, including a free-threaded
+build) and the sdist, and publishes them to PyPI through trusted publishing with
+PEP 740 attestations only when the run names a publish target and confirms the
+version. No tag push publishes. The package version is read from the workspace
+manifest, so a release bumps `Cargo.toml` to the version the run confirms.
 
 ## Design at a glance
 

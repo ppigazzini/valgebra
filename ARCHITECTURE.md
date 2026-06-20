@@ -135,6 +135,34 @@ trade-off.
   built, so one validator is shared across threads, including on free-threaded
   CPython.
 
+## Distribution
+
+The extension ships as a **per-interpreter-version** module, not a stable-ABI
+(`abi3`) wheel. This is a deliberate trade:
+
+- **Why per-version.** A per-version build is free to use profile-guided
+  optimization (PGO) and version-specific fast paths. PGO records its profile by
+  *running* the instrumented build, so it needs a concrete interpreter; an
+  `abi3` wheel would forfeit that and pin the build to the `abi3` floor. The
+  recorded hot-path speedup is on the [performance page](docs/performance.md).
+- **The cost it imposes.** One wheel per supported CPython minor. The release
+  matrix must therefore cover every minor in `requires-python` (`>=3.10`, so
+  3.10 through 3.14, matching the `classifiers` in `pyproject.toml`) plus the
+  free-threaded build; an uncovered minor would get no wheel.
+- **How the matrix covers it.** The release workflow builds with maturin
+  `--find-interpreter`, which builds for every CPython the build image exposes
+  that satisfies `requires-python`, including the free-threaded build where
+  present, across manylinux and musllinux, macOS (Intel and Apple silicon), and
+  Windows. PGO applies on the hosts that run their own output; the musllinux
+  cross-builds and the Windows arm64 target ship plain release builds with the
+  same compatibility. A dispatch with no publish target builds the whole matrix
+  as a dry run, which is how matrix coverage is verified before a release.
+
+The interpreter is never embedded in the shipped wheel: maturin builds the
+extension module, and the `pyo3` `extension-module` feature is injected at
+wheel-build time rather than set in `Cargo.toml`, so non-maturin builds (such as
+`cargo test`) link an interpreter normally.
+
 ## Where to look next
 
 - Building or changing a node: start at the `Schema` enum and its `//!` header
