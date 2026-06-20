@@ -37,5 +37,15 @@ rustc-hash = "2"
 # for the same `pattern` constraint.
 regex = "1"
 
+[features]
+# Enables an embedded interpreter (pyo3 `auto-initialize`) so the binding-internal
+# unit tests can acquire the GIL under `cargo test`. Off by default: without it
+# the test binary does not link libpython, so the standard `cargo test` runs with
+# no interpreter on the loader path, keeping the cross-OS lanes Python-free. The
+# dedicated coverage lane turns it on with the interpreter's library directory on
+# the path. It never reaches the shipped wheel, which maturin builds as an
+# extension module with no embedded interpreter.
+interpreter-tests = ["pyo3/auto-initialize"]
+
 [lints]
 workspace = true

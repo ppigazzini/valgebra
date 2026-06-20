@@ -720,3 +720,37 @@ fn is_ellipsis(obj: &Bound<'_, PyAny>) -> bool {
 pub(crate) fn not_implemented(message: &str) -> PyErr {
     PyNotImplementedError::new_err(message.to_owned())
 }
+
+// Needs a live interpreter; compiled and run only under the `interpreter-tests`
+// feature, which links an embedded Python.
+#[cfg(all(test, feature = "interpreter-tests"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn intern_deduplicates_by_identity() {
+        Python::attach(|py| {
+            let mut pool: Vec<Py<PyAny>> = Vec::new();
+            let a = PyString::new(py, "x").into_any();
+
+            // The same object interns to one slot.
+            let first = intern(&mut pool, &a);
+            let again = intern(&mut pool, &a);
+            assert_eq!(first, again);
+            assert_eq!(pool.len(), 1);
+
+            // A distinct object takes a new slot.
+            let b = PyList::empty(py).into_any();
+            let second = intern(&mut pool, &b);
+            assert_ne!(first, second);
+            assert_eq!(pool.len(), 2);
+
+            // Dedup is by identity, not value: a fresh equal-but-distinct object
+            // gets its own slot rather than collapsing onto the first.
+            let c = PyList::empty(py).into_any();
+            let third = intern(&mut pool, &c);
+            assert_ne!(second, third);
+            assert_eq!(pool.len(), 3);
+        });
+    }
+}

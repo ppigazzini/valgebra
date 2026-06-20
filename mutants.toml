@@ -1,8 +1,13 @@
 # cargo-mutants configuration.
 #
-# Mutation testing scopes to the soundness-critical core crate. The binding
-# crate's logic is exercised by the Python suite (pytest), not `cargo test`, so
-# its mutants cannot be observed by this harness and would only add noise.
+# Mutation testing scopes to the soundness-critical core crate. Most of the
+# binding crate's logic — the validation walk and error formatting — is exercised
+# by the Python suite (pytest), not `cargo test`, so its mutants cannot be
+# observed by this harness and would only add noise. The binding's pure helpers
+# that now carry `cargo test` coverage (the interner, the index remap, the
+# literal fast-path decision) share their source files with that pytest-only
+# code, so a file- or crate-scoped sweep cannot isolate them; their correctness
+# is instead measured by line coverage on the binding-coverage lane.
 exclude_globs = ["crates/valgebra-py/**"]
 
 # A few mutants run longer than the baseline; give generous headroom over it.

@@ -47,7 +47,10 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - run: cargo test --workspace --all-features
+      # The default feature set keeps the binding test binary from linking an
+      # embedded interpreter, so this lane stays Python-free across every OS. The
+      # interpreter-backed binding tests run under the binding-coverage lane.
+      - run: cargo test --workspace
 
   rust-msrv:
     name: rust msrv
@@ -64,7 +67,7 @@ jobs:
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - run: cargo build --workspace --all-features
+      - run: cargo build --workspace
 
   rust-coverage:
     name: rust coverage
@@ -98,17 +101,24 @@ jobs:
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           enable-cache: true
-      # The bindings have no Rust tests by design (the PyO3 boundary needs a live
-      # interpreter), so their coverage is measured by instrumenting the
-      # extension and driving it with the Python suite. The whole flow runs in
-      # one shell so the coverage environment survives across the build and run.
-      - name: Measure binding coverage via the Python suite
+      # Binding coverage combines two drivers under one instrumentation
+      # environment: the Python suite exercising the extension, and the
+      # binding-internal Rust unit tests (interner, index remap, fast-path
+      # decision) that need an embedded interpreter. The whole flow runs in one
+      # shell so the coverage environment survives across the build and runs.
+      - name: Measure binding coverage via the Python suite and Rust unit tests
         run: |
           cargo llvm-cov clean --workspace
           source <(cargo llvm-cov show-env --export-prefix)
           uv sync --no-install-project
           uv run maturin develop --uv
           uv run pytest --deselect tests/test_concurrency.py
+          # The interpreter-backed Rust tests link libpython, so point pyo3 at the
+          # uv interpreter and put its library directory on the loader path.
+          export PYO3_PYTHON="$(uv run python -c 'import sys; print(sys.executable)')"
+          libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
+          LD_LIBRARY_PATH="$libdir:$LD_LIBRARY_PATH" \
+            cargo test -p valgebra-py --features interpreter-tests
           cargo llvm-cov report --summary-only --fail-under-lines 75
 
   python:

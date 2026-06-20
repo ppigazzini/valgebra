@@ -2711,6 +2711,54 @@ mod laws {
     }
 
     #[test]
+    fn reindexed_remaps_pool_and_definition_indices() {
+        // Composing a validator concatenates pools and definitions: `reindexed`
+        // remaps each pooled index through the intern map and offsets each `Ref`.
+        let schema = Schema::Union(vec![
+            Schema::Literal(0),
+            Schema::Instance(1),
+            Schema::Ref(0),
+            Schema::Set(Box::new(Schema::Literal(1))),
+        ]);
+        // The second pool interned into the first: old 0 -> 5, old 1 -> 6.
+        let lit_map = [5, 6];
+        let remapped = schema.reindexed(&lit_map, 3);
+        assert_eq!(
+            remapped,
+            Schema::Union(vec![
+                Schema::Literal(5),
+                Schema::Instance(6),
+                Schema::Ref(3),
+                Schema::Set(Box::new(Schema::Literal(6))),
+            ])
+        );
+
+        // `shifted` is the identity-map case: every index moves by a fixed offset.
+        let shifted = schema.shifted(5, 3);
+        assert_eq!(
+            shifted,
+            Schema::Union(vec![
+                Schema::Literal(5),
+                Schema::Instance(6),
+                Schema::Ref(3),
+                Schema::Set(Box::new(Schema::Literal(6))),
+            ])
+        );
+        // A constraint operand index is remapped too.
+        let refined = Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints: vec![Constraint::Ge(0)],
+        };
+        assert_eq!(
+            refined.reindexed(&lit_map, 0),
+            Schema::Refine {
+                base: Box::new(Schema::Int),
+                constraints: vec![Constraint::Ge(5)],
+            }
+        );
+    }
+
+    #[test]
     fn simplify_canonicalizes_refinement_constraints() {
         let refine = |base, constraints: Vec<Constraint>| Schema::Refine {
             base: Box::new(base),
