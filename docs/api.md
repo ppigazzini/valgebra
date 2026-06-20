@@ -1,6 +1,6 @@
 # API reference
 
-The complete public surface of the `valgebra` package. Every name is re-exported
+The full public surface of the `valgebra` package. Every name is re-exported
 from the top-level `valgebra` namespace.
 
 ## Compiling and checking

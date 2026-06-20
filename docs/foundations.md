@@ -3,7 +3,7 @@
 This page records the theory valgebra rests on: what a schema *means*, why the
 combinators form a real Boolean algebra, and where the algebra decides
 relationships versus where it stays deliberately conservative. It is the
-reference behind the claims the rest of the docs make — "a complete, lawful
+reference behind the claims the rest of the docs make — "a closed, lawful
 lattice", "subtyping is set inclusion", "a law-justified simplifier" — so each
 is backed rather than asserted.
 

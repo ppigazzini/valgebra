@@ -1,6 +1,6 @@
 # valgebra
 
-**Fast runtime validation through a complete Boolean algebra of schemas.**
+**Fast runtime validation through a closed Boolean algebra of schemas.**
 
 A schema denotes a *set of Python values*. Validation is membership: you ask
 whether the object you already hold belongs to the set — no copy, no coercion.
@@ -46,8 +46,9 @@ schemas (union, intersection, complement, refinement, fixpoints) with
 
 ## What makes it different
 
-- **Schemas denote sets; validation is membership.** Subtyping is set inclusion;
-  equivalence is mutual inclusion. The whole model is one idea.
+- **Schemas denote sets; validation is membership.** Subtyping is set inclusion
+  and equivalence is mutual inclusion — decided soundly over a wide fragment and
+  deliberately conservative beyond it. The whole model is one idea.
 - **A real Boolean algebra.** `union`, `intersection`, and `complement` compose any
   schema into a lattice whose laws are property-tested, with a law-justified
   [simplifier](algebra.md) that never changes a schema's value set.

@@ -22,7 +22,7 @@ will form the first release.
   prefix-plus-tail `[A, B, ...]` (a fixed prefix then a repeated tail); a dict
   literal as a closed record (`"key?"` optional); a single `{KeyType: ValueType}`
   entry as a mapping; and any constant as a typed literal.
-- A complete Boolean algebra: `union`, `intersection`, `complement`, `anything`,
+- A closed Boolean algebra: `union`, `intersection`, `complement`, `anything`,
   `nothing`, and a law-justified `simplify`, with the lattice laws
   property-tested. Conditional fields and key cardinality are composed from these
   (documented recipes), not shipped as combinators.

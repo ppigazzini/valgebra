@@ -1,6 +1,6 @@
 # valgebra
 
-**Fast runtime validation through a complete Boolean algebra of schemas.**
+**Fast runtime validation through a closed Boolean algebra of schemas.**
 
 📖 **Documentation: <https://ppigazzini.github.io/valgebra/>**
 
@@ -93,7 +93,7 @@ Semantics follow the real value sets: `bool` is a subtype of `int` (so
 ## The Boolean algebra
 
 Union, intersection, and complement compose any schema — annotations, native
-forms, or other compiled validators — into a complete, lawful Boolean lattice.
+forms, or other compiled validators — into a closed, lawful Boolean lattice.
 `anything` is the top (every value) and `nothing` is the bottom (no value):
 
 ```python

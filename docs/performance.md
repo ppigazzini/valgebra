@@ -68,7 +68,7 @@ few tens of percent slower on these shapes, and a debug build is not
 representative. pydantic's PyPI wheels are likewise PGO-built, so this is a
 release-to-release comparison. Figures are the per-call median; re-run on your
 own hardware for absolute numbers. They are measured on the wheel carrying
-valgebra's complete feature set — the per-validator precompute (record-field
+valgebra's full feature set — the per-validator precompute (record-field
 lookups, literal-union dispatch) and native string patterns — which leaves these
 shapes unchanged: the features earn their keep elsewhere, not by regressing the
 core.

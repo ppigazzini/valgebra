@@ -1,7 +1,7 @@
 # The Boolean algebra
 
 Union, intersection, and complement compose any schema — annotations, native
-forms, or other compiled validators — into a complete, lawful Boolean lattice.
+forms, or other compiled validators — into a closed, lawful Boolean lattice.
 `anything` is the top (every value) and `nothing` is the bottom (no value). The
 typing-native spellings work too: `object` is the top and `Never` (or `NoReturn`)
 is the bottom, so `Validator(object)` equals `anything` and `Validator(Never)`
