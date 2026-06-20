@@ -290,6 +290,15 @@ uv run ty check
 uv run pytest
 ```
 
+## Security
+
+valgebra's load-bearing security property is **soundness of acceptance**: an
+accepted value genuinely belongs to the schema's set. To report a suspected
+unsound acceptance or a resource bound that fails within the
+[documented limits](docs/limits.md), follow the private disclosure process in
+[SECURITY.md](SECURITY.md) — do not open a public issue. valgebra is pre-alpha
+and unaudited; keep that in mind before placing it on a trust boundary.
+
 ## License
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or
