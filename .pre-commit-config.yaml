@@ -11,10 +11,15 @@ repos:
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml
+      # The fuzz seed corpus is binary fuzzer input, not text: the whitespace and
+      # newline fixers would corrupt the bytes the fuzzer replays.
       - id: end-of-file-fixer
+        exclude: ^fuzz/seeds/
       - id: trailing-whitespace
+        exclude: ^fuzz/seeds/
       - id: mixed-line-ending
         args: [--fix=lf]
+        exclude: ^fuzz/seeds/
 
   # Python lint + format (Rust extension is not needed for these).
   - repo: https://github.com/astral-sh/ruff-pre-commit

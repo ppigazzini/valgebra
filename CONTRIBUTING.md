@@ -82,6 +82,12 @@ has four layers:
   (Rust) and hypothesis (Python) against the membership relation, never asserted.
 - **Snapshots.** Error messages and `repr` output are pinned with insta and
   syrupy so a wording change is a deliberate, reviewed diff.
+- **Coverage-guided fuzzing.** libFuzzer targets in `fuzz/` drive the simplifier
+  and the decision procedures with `arbitrary`-built schemas, asserting the sound
+  invariants (no panic, idempotent normalization, the order laws). The same
+  invariants run on the merge gate as structural property tests; the fuzz soak
+  runs nightly. Build and run a target with
+  `cargo +nightly fuzz run simplify fuzz/seeds/simplify` (needs `cargo-fuzz`).
 
 Run the Rust property suites with `cargo test`; raise the example count with
 `PROPTEST_CASES=30000`. Run the Python suites with `uv run pytest`; raise it with
@@ -97,7 +103,8 @@ and driving it with the Python suite against a line floor), a Python matrix from
 3.10 through 3.15 — the 3.15 prerelease and the free-threaded lane run but never
 block — a differential lane that cross-checks membership against pydantic-core
 and jsonschema, the doc-example runner, a strict docs build, and a Linux wheel
-build.
+build. Scheduled lanes run the deep property suites, a libFuzzer soak over the
+core, and a mutation sweep.
 Performance is gated by a **deterministic cachegrind instruction count** compared
 to a committed budget: independent of runner noise, so it blocks merges where a
 wall-clock budget could not.

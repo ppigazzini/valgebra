@@ -1398,6 +1398,65 @@ mod laws {
         })
     }
 
+    fn constraint() -> impl Strategy<Value = Constraint> {
+        prop_oneof![
+            (0usize..3).prop_map(Constraint::Ge),
+            (0usize..3).prop_map(Constraint::Le),
+            (0usize..8).prop_map(Constraint::MinLen),
+            (0usize..8).prop_map(Constraint::MaxLen),
+            Just(Constraint::Regex("a+".into())),
+        ]
+    }
+
+    /// A generator over the whole structural fragment — sequences, sets, records,
+    /// and refinements as well as scalars and Boolean combinations. The decision
+    /// procedures stay conservative here, so this drives the *sound* invariants
+    /// (termination, idempotent normalization, the order laws) rather than the
+    /// value oracle, mirroring on the stable gate what the coverage-guided fuzz
+    /// targets explore.
+    fn structural_schema() -> impl Strategy<Value = Schema> {
+        let leaf = prop_oneof![
+            Just(Schema::Anything),
+            Just(Schema::Dynamic),
+            Just(Schema::Nothing),
+            Just(Schema::NoneType),
+            Just(Schema::Bool),
+            Just(Schema::Int),
+            Just(Schema::Float),
+            Just(Schema::Str),
+            Just(Schema::Bytes),
+            (0usize..3).prop_map(Schema::Literal),
+            (0usize..3).prop_map(Schema::Instance),
+        ];
+        leaf.prop_recursive(4, 32, 3, |inner| {
+            prop_oneof![
+                proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Union),
+                proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Intersection),
+                inner.clone().prop_map(|s| Schema::Complement(Box::new(s))),
+                inner.clone().prop_map(|s| Schema::Set(Box::new(s))),
+                inner.clone().prop_map(|s| Schema::FrozenSet(Box::new(s))),
+                (inner.clone(), proptest::collection::vec(constraint(), 0..3)).prop_map(
+                    |(base, constraints)| Schema::Refine {
+                        base: Box::new(base),
+                        constraints,
+                    }
+                ),
+                inner.clone().prop_map(|s| Schema::Seq {
+                    container: SeqKind::List,
+                    regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(s)))),
+                }),
+                (inner.clone(), inner).prop_map(|(field, default)| Schema::KeyedMap {
+                    fields: vec![Field {
+                        name: "a".into(),
+                        schema: field,
+                        required: true,
+                    }],
+                    defaults: vec![(Schema::Str, default)],
+                }),
+            ]
+        })
+    }
+
     proptest! {
         #[test]
         fn scalar_decision_matches_the_value_oracle(a in scalar_schema(), b in scalar_schema()) {
@@ -1492,6 +1551,26 @@ mod laws {
             for value in &samples_v() {
                 prop_assert_eq!(member_v(&simplified, value), member_v(&a, value));
             }
+        }
+
+        /// The sound invariants over the whole structural fragment: every
+        /// procedure terminates without panicking, `simplify` reaches a fixpoint
+        /// after one application, the order is reflexive with the lattice bounds
+        /// above and below every schema, and equivalence is exactly mutual
+        /// inclusion. These hold despite the conservatism, so a violation is a
+        /// defect; this is the stable-toolchain mirror of the fuzz targets.
+        #[test]
+        fn structural_decision_invariants(a in structural_schema(), b in structural_schema()) {
+            let once = a.simplify();
+            prop_assert_eq!(once.clone(), once.simplify());
+            prop_assert!(a.is_subtype_of(&a));
+            prop_assert!(a.is_equivalent(&a));
+            prop_assert!(a.is_subtype_of(&Schema::Anything));
+            prop_assert!(Schema::Nothing.is_subtype_of(&a));
+            let ab = a.is_subtype_of(&b);
+            let ba = b.is_subtype_of(&a);
+            prop_assert_eq!(a.is_equivalent(&b), ab && ba);
+            let _ = a.is_empty();
         }
 
         #[test]

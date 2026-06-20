@@ -1,0 +1,43 @@
+# Coverage-guided fuzzing of the core algebra and decision procedures. This is
+# its own workspace, detached from the root: it builds only under a nightly
+# toolchain with libFuzzer, so the stable workspace build, lint, and test gates
+# never reach it.
+[package]
+name = "valgebra-core-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+
+[dependencies.valgebra-core]
+path = "../crates/valgebra-core"
+
+[lib]
+path = "src/lib.rs"
+
+# Optimize the harness so the fuzzer spends its budget on the target, not on
+# debug-build overhead in the builder.
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "simplify"
+path = "fuzz_targets/simplify.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decision"
+path = "fuzz_targets/decision.rs"
+test = false
+doc = false
+bench = false
