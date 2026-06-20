@@ -71,6 +71,14 @@ When no branch makes any progress past the union's own location — for example
 is no closer branch, so a single `union_error` is the honest report. A
 `complement` likewise reports one failure at its location.
 
+The closest-branch search is a bounded, best-effort heuristic: it runs only when
+a value has already failed the union, and it inspects at most the first 64
+branches. A union wider than that still reports correctly — the membership
+decision always considers every branch — but its error may fall back to the
+`union_error` summary rather than pinpointing a branch past the cap. This keeps
+building an error for a pathologically wide union (a large `Literal[...]`, say)
+bounded; the successful path is unaffected.
+
 ## JSON output
 
 Every item is JSON-serializable (the `path` is a tuple of strings and ints), so

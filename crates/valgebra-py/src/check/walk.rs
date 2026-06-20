@@ -567,6 +567,14 @@ fn keyed_map_explain(
     }
 }
 
+/// Cap on how many branches the closest-branch error probe re-walks. The
+/// membership decision has already scanned every branch to confirm non-matching;
+/// this bounds the *second*, explain-mode pass so building the error for a
+/// pathologically wide union (a large `Literal[...]`, say) stays linear in the
+/// cap rather than the branch count. Beyond the cap the report falls back to the
+/// union summary. Error-path only — the membership result is never affected.
+const CLOSEST_BRANCH_PROBE_LIMIT: usize = 64;
+
 fn check_union(
     members: &[Schema],
     value: &Value<'_, '_>,
@@ -610,7 +618,7 @@ fn check_union(
         ..ctx
     };
     let mut best: Option<(usize, Vec<Violation>)> = None;
-    for branch_schema in members {
+    for branch_schema in members.iter().take(CLOSEST_BRANCH_PROBE_LIMIT) {
         let mut branch = Vec::new();
         member(branch_schema, value, path, probe, &mut branch);
         let progress = branch
