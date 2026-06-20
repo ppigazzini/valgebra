@@ -73,3 +73,12 @@ def test_pattern_validate_reports_a_pattern_violation() -> None:
     with pytest.raises(ValidationError) as info:
         Validator(Annotated[str, Regex(r"\d+")]).validate("abc")
     assert info.value.code == "string_pattern_mismatch"
+
+
+def test_regex_marker_repr_eq_and_hash() -> None:
+    marker = Regex(r"[0-9]+")
+    assert repr(marker) == "Regex('[0-9]+')"
+    assert marker == Regex(r"[0-9]+")
+    assert marker != Regex(r"[a-z]+")
+    assert marker != "not a marker"
+    assert hash(marker) == hash(Regex(r"[0-9]+"))

@@ -119,7 +119,11 @@ jobs:
           libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           LD_LIBRARY_PATH="$libdir:$LD_LIBRARY_PATH" \
             cargo test -p valgebra-py --features interpreter-tests
-          cargo llvm-cov report --summary-only --fail-under-lines 75
+          # Scope the floor to the binding crate: the instrumented build also
+          # covers valgebra-core (the .so links it), but the core has its own
+          # coverage lane, so including it here would dilute the binding number.
+          cargo llvm-cov report --summary-only \
+            --ignore-filename-regex 'valgebra-core' --fail-under-lines 95
 
   python:
     name: python ${{ matrix.python-version }}
@@ -146,10 +150,13 @@ jobs:
         run: uv sync --no-install-project
       - name: Build the extension into the venv
         run: uv run maturin develop --uv
+      # Coverage over the Python package surface is gated at 100% (configured in
+      # pyproject.toml); the compiled extension's coverage is the separate
+      # binding-coverage lane.
       - name: pytest
         env:
           HYPOTHESIS_PROFILE: ci
-        run: uv run pytest
+        run: uv run pytest --cov=valgebra --cov-report=term-missing
       # ruff and ty are static and pinned to a target version, so their result
       # does not depend on the runner's Python; run them once on the floor.
       - name: Ruff lint

@@ -36,6 +36,7 @@ dev = [
     "maturin>=1.9.4,<2",
     "pre-commit>=4.6.0",
     "pytest>=8",
+    "pytest-cov>=6",
     "ruff>=0.15.16",
     "syrupy>=5.3.2",
     "ty>=0.0.48",
@@ -121,6 +122,21 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["valgebra"]
+
+[tool.coverage.run]
+# Measure the Python package surface. The compiled extension is Rust, measured
+# separately by the binding-coverage lane (cargo-llvm-cov); branch coverage
+# catches a half-taken conditional the line count would miss.
+source = ["valgebra"]
+branch = true
+
+[tool.coverage.report]
+# The Python surface is thin and fully exercised, so the gate is a hard 100%; a
+# regression that leaves a line or branch untested fails the lane rather than
+# silently eroding the number.
+fail_under = 100
+show_missing = true
+exclude_also = ["if TYPE_CHECKING:"]
 
 [tool.ty.environment]
 python-version = "3.14"
