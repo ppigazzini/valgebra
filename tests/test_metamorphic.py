@@ -86,6 +86,20 @@ def test_double_complement_preserves_membership(spec: object) -> None:
         assert doubled.is_valid(value) == compiled.is_valid(value)
 
 
+@given(a=_schemas, b=_schemas)
+def test_de_morgan_preserves_membership(a: object, b: object) -> None:
+    # complement(union(a, b)) and intersection(complement(a), complement(b))
+    # denote the same set (De Morgan). A non-reflexive law over two *different*
+    # schema forms, so an asymmetric defect that reflexivity and self-equivalence
+    # cannot see -- one side wrong, the other right -- fails here.
+    left = _build(complement(union(a, b)))
+    right = _build(intersection(complement(a), complement(b)))
+    if left is None or right is None:
+        return
+    for value in _UNIVERSE:
+        assert left.is_valid(value) == right.is_valid(value)
+
+
 def test_transitivity_on_a_decided_chain() -> None:
     # bool <= int <= int|str, so bool <= int|str.
     assert Validator(bool).is_subtype_of(int)

@@ -1901,7 +1901,9 @@ mod laws {
         Str(&'static str),
         Bytes,
         List(Vec<Obj>),
+        Tuple(Vec<Obj>),
         Set(Vec<Obj>),
+        FrozenSet(Vec<Obj>),
         Map(Vec<(&'static str, Obj)>),
     }
 
@@ -1932,7 +1934,7 @@ mod laws {
     fn val_len(v: &Obj) -> Option<usize> {
         match v {
             Obj::Str(s) => Some(s.chars().count()),
-            Obj::List(xs) | Obj::Set(xs) => Some(xs.len()),
+            Obj::List(xs) | Obj::Tuple(xs) | Obj::Set(xs) | Obj::FrozenSet(xs) => Some(xs.len()),
             Obj::Map(m) => Some(m.len()),
             _ => None,
         }
@@ -1974,6 +1976,32 @@ mod laws {
         }
     }
 
+    /// Match a sequence's items against its regex with the oracle's *own* matcher,
+    /// sharing no code with the production `SeqRegex::linear`/decision under test.
+    /// The generator emits exactly two shapes — `Star(Elem(s))` (a homogeneous
+    /// sequence) and `Cat([Elem(a), Elem(b)])` (a fixed pair) — and `simplify`
+    /// preserves the shape (it only rewrites the element schemas), so a direct
+    /// encoding of those two cases is exact for everything the oracle judges.
+    fn seq_matches(regex: &SeqRegex, items: &[Obj], pool: &[Obj]) -> bool {
+        match regex {
+            // `[s, ...]`: every element is a member of `s`; the empty sequence matches.
+            SeqRegex::Star(inner) => match &**inner {
+                SeqRegex::Elem(s) => items.iter().all(|item| member_full(s, item, pool)),
+                other => unreachable!("oracle does not model regex {other:?}"),
+            },
+            // `[a, b]`: exactly two elements, matched positionally.
+            SeqRegex::Cat(parts) => match parts.as_slice() {
+                [SeqRegex::Elem(a), SeqRegex::Elem(b)] => {
+                    items.len() == 2
+                        && member_full(a, &items[0], pool)
+                        && member_full(b, &items[1], pool)
+                }
+                other => unreachable!("oracle does not model regex {other:?}"),
+            },
+            other => unreachable!("oracle does not model regex {other:?}"),
+        }
+    }
+
     /// Reference membership over the non-opaque fragment, transcribing each node's
     /// denotation directly.
     #[allow(clippy::many_single_char_names)]
@@ -1992,29 +2020,14 @@ mod laws {
                 Obj::Set(items) => items.iter().all(|item| member_full(element, item, pool)),
                 _ => false,
             },
-            Schema::Seq {
-                container: SeqKind::List,
-                regex,
-            } => match (v, regex.linear()) {
-                (Obj::List(items), Some((prefix, tail))) => match tail {
-                    Some(t) => {
-                        items.len() >= prefix.len()
-                            && prefix
-                                .iter()
-                                .zip(items)
-                                .all(|(s, item)| member_full(s, item, pool))
-                            && items[prefix.len()..]
-                                .iter()
-                                .all(|item| member_full(t, item, pool))
-                    }
-                    None => {
-                        items.len() == prefix.len()
-                            && prefix
-                                .iter()
-                                .zip(items)
-                                .all(|(s, item)| member_full(s, item, pool))
-                    }
-                },
+            Schema::FrozenSet(element) => match v {
+                Obj::FrozenSet(items) => items.iter().all(|item| member_full(element, item, pool)),
+                _ => false,
+            },
+            Schema::Seq { container, regex } => match (container, v) {
+                (SeqKind::List, Obj::List(items)) | (SeqKind::Tuple, Obj::Tuple(items)) => {
+                    seq_matches(regex, items, pool)
+                }
                 _ => false,
             },
             Schema::KeyedMap { fields, defaults } => match v {
@@ -2069,9 +2082,18 @@ mod laws {
             Obj::List(vec![Obj::Int(1), Obj::Str("a")]),
             Obj::Set(vec![]),
             Obj::Set(vec![Obj::Int(1)]),
+            Obj::FrozenSet(vec![]),
+            Obj::FrozenSet(vec![Obj::Int(1)]),
+            Obj::Tuple(vec![]),
+            Obj::Tuple(vec![Obj::Int(1)]),
+            Obj::Tuple(vec![Obj::Int(1), Obj::Str("a")]),
             Obj::Map(vec![]),
             Obj::Map(vec![("a", Obj::Int(1))]),
             Obj::Map(vec![("a", Obj::Int(1)), ("b", Obj::Str("a"))]),
+            // An entry whose key is not a declared field exercises the open-record
+            // `defaults` arm against both a matching and a non-matching value.
+            Obj::Map(vec![("c", Obj::Int(1))]),
+            Obj::Map(vec![("a", Obj::Int(1)), ("c", Obj::Str("a"))]),
         ]
     }
 
@@ -2114,11 +2136,33 @@ mod laws {
                         required: req,
                     }
                 });
+            // An open record: 0..2 declared fields plus a `Str -> value` default
+            // arm, so `member_full`'s `defaults` branch is actually reached.
+            let open_record = (
+                proptest::collection::vec(field.clone(), 0..2),
+                inner.clone(),
+            )
+                .prop_map(|(fields, value)| Schema::KeyedMap {
+                    fields,
+                    defaults: vec![(Schema::Str, value)],
+                });
             prop_oneof![
                 inner.clone().prop_map(|s| Schema::Set(Box::new(s))),
+                inner.clone().prop_map(|s| Schema::FrozenSet(Box::new(s))),
                 inner.clone().prop_map(|s| Schema::Seq {
                     container: SeqKind::List,
                     regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(s)))),
+                }),
+                inner.clone().prop_map(|s| Schema::Seq {
+                    container: SeqKind::Tuple,
+                    regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(s)))),
+                }),
+                (inner.clone(), inner.clone()).prop_map(|(a, b)| Schema::Seq {
+                    container: SeqKind::Tuple,
+                    regex: SeqRegex::Cat(vec![
+                        SeqRegex::Elem(Box::new(a)),
+                        SeqRegex::Elem(Box::new(b)),
+                    ]),
                 }),
                 (inner.clone(), inner.clone()).prop_map(|(a, b)| Schema::Seq {
                     container: SeqKind::List,
@@ -2139,11 +2183,87 @@ mod laws {
                     fields,
                     defaults: vec![],
                 }),
+                open_record,
                 proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Union),
                 proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Intersection),
                 inner.prop_map(|s| Schema::Complement(Box::new(s))),
             ]
         })
+    }
+
+    /// The oracle's own sequence matcher (independent of `SeqRegex::linear`) and
+    /// the container arms decide the shapes the generator emits: a homogeneous
+    /// `Star` sequence, a fixed `Cat` pair, and the open-record `defaults` branch.
+    #[test]
+    fn the_value_oracle_matches_sequences_and_open_records_independently() {
+        let pool = const_pool();
+        // `[int, ...]`: empty and homogeneous lists match; a wrong element does not.
+        let int_list = Schema::Seq {
+            container: SeqKind::List,
+            regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Int)))),
+        };
+        assert!(member_full(&int_list, &Obj::List(vec![]), &pool));
+        assert!(member_full(
+            &int_list,
+            &Obj::List(vec![Obj::Int(1), Obj::Int(5)]),
+            &pool
+        ));
+        assert!(!member_full(
+            &int_list,
+            &Obj::List(vec![Obj::Str("a")]),
+            &pool
+        ));
+        // A tuple shape is not a list and vice versa.
+        let int_pair = Schema::Seq {
+            container: SeqKind::Tuple,
+            regex: SeqRegex::Cat(vec![
+                SeqRegex::Elem(Box::new(Schema::Int)),
+                SeqRegex::Elem(Box::new(Schema::Str)),
+            ]),
+        };
+        assert!(member_full(
+            &int_pair,
+            &Obj::Tuple(vec![Obj::Int(1), Obj::Str("a")]),
+            &pool
+        ));
+        assert!(!member_full(
+            &int_pair,
+            &Obj::Tuple(vec![Obj::Int(1)]),
+            &pool
+        )); // wrong arity
+        assert!(!member_full(
+            &int_pair,
+            &Obj::List(vec![Obj::Int(1), Obj::Str("a")]),
+            &pool
+        ));
+        // A frozenset is distinct from a set.
+        let frozen_int = Schema::FrozenSet(Box::new(Schema::Int));
+        assert!(member_full(
+            &frozen_int,
+            &Obj::FrozenSet(vec![Obj::Int(1)]),
+            &pool
+        ));
+        assert!(!member_full(
+            &frozen_int,
+            &Obj::Set(vec![Obj::Int(1)]),
+            &pool
+        ));
+        // Open record `{str: int}` with no declared fields: the `defaults` arm
+        // accepts a matching extra entry and rejects a mistyped one.
+        let open = Schema::KeyedMap {
+            fields: vec![],
+            defaults: vec![(Schema::Str, Schema::Int)],
+        };
+        assert!(member_full(
+            &open,
+            &Obj::Map(vec![("c", Obj::Int(1))]),
+            &pool
+        ));
+        assert!(!member_full(
+            &open,
+            &Obj::Map(vec![("c", Obj::Str("a"))]),
+            &pool
+        ));
     }
 
     proptest! {

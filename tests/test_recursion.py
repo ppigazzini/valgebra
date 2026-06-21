@@ -85,7 +85,9 @@ def test_self_containing_value_is_rejected_as_a_loop() -> None:
     cyclic.append(cyclic)
     with pytest.raises(ValidationError) as info:
         json_value.validate(cyclic)
-    assert info.value.code in {"recursion_loop", "union_error"}
+    # The cycle guard fires on the self-reference; pin the exact code rather than
+    # accept a generic union miss, which would hide a regression.
+    assert info.value.code == "recursion_loop"
 
 
 def test_deeply_nested_value_fails_cleanly() -> None:

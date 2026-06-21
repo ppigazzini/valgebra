@@ -86,12 +86,24 @@ def test_missing_attribute_code() -> None:
     class Has:
         a: int
 
+    # A foreign object fails the nominal type check first: `instance_type`.
     class Lacks:
         pass
 
     assert Validator(Has).is_valid(Lacks()) is False
-    code, _ = _first(Has, Lacks())
-    assert code in {"instance_type", "missing_attribute"}
+    assert _first(Has, Lacks()) == ("instance_type", ())
+
+    # An instance of the class that is missing the field reaches the attribute
+    # branch: the deterministic code is `missing_attribute`, located at the field.
+    class WithoutField(Has):
+        def __init__(self) -> None:  # skip the dataclass init, so `a` is unset
+            pass
+
+    val = WithoutField()
+    assert isinstance(val, Has)  # passes the nominal type check
+    assert not hasattr(val, "a")  # but is missing the field
+    assert Validator(Has).is_valid(val) is False
+    assert _first(Has, val) == ("missing_attribute", ("a",))
 
 
 def test_combinator_codes() -> None:

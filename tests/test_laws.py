@@ -216,14 +216,17 @@ def test_simplify_is_idempotent_on_acceptance(
 
 def test_simplify_decides_the_complement_laws() -> None:
     # The decision the conservative canonicalizer could not make: a schema and
-    # its complement collapse, and provably disjoint types collapse.
-    assert repr(intersection(int, complement(int)).simplify()) == "nothing"
-    assert repr(union(int, complement(int)).simplify()) == "anything"
-    assert repr(intersection(int, str).simplify()) == "nothing"
-    assert repr(union(complement(int), complement(str)).simplify()) == "anything"
+    # its complement collapse, and provably disjoint types collapse. Asserted on
+    # the *denotation* of the simplified form (empty / universal) through the
+    # decision procedure, not on the printed node string.
+    assert intersection(int, complement(int)).simplify().is_empty()
+    assert union(int, complement(int)).simplify().is_equivalent(anything)
+    assert intersection(int, str).simplify().is_empty()
+    assert union(complement(int), complement(str)).simplify().is_equivalent(anything)
 
 
 def test_simplify_leaves_the_gradual_any_uncollapsed() -> None:
-    # `Any` is unchecked, not the lattice top, so the complement laws skip it.
-    assert repr(intersection(Any, complement(Any)).simplify()) != "nothing"
-    assert repr(union(Any, complement(Any)).simplify()) != "anything"
+    # `Any` is unchecked, not the lattice top, so the complement laws skip it: the
+    # simplified forms are neither the empty set nor the universe.
+    assert not intersection(Any, complement(Any)).simplify().is_empty()
+    assert not union(Any, complement(Any)).simplify().is_equivalent(anything)

@@ -76,7 +76,9 @@ def test_self_referential_value_is_caught_as_a_loop() -> None:
     assert not schema.is_valid(cyclic)
     with pytest.raises(ValidationError) as info:
         schema.validate(cyclic)
-    assert info.value.code in {"recursion_loop", "union_error"}
+    # The value's self-reference is caught by the cycle guard, not a generic union
+    # miss: pin the exact code so a regression to `union_error` is visible.
+    assert info.value.code == "recursion_loop"
 
 
 def test_wide_union_membership_is_decided_and_bounded() -> None:
