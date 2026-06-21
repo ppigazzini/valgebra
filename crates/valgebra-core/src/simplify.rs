@@ -190,7 +190,10 @@ fn finish_union(mut flat: Vec<Schema>) -> Schema {
     // X ∪ ¬X is everything, as is ¬A ∪ ¬B for disjoint A and B; and a union is
     // everything once its scalar-decidable members alone cover every region of
     // the value universe (opaque members can only add coverage, so they are
-    // ignored — keeping the decision independent of grouping).
+    // ignored — keeping the decision independent of grouping). `region_set` walks
+    // each already-flattened member once, so this fold is linear in the flattened
+    // breadth; nested unions are flattened above, and a deep region-decidable nest
+    // collapses to an atom under the laws here before it can accumulate depth.
     let covers_universe = flat
         .iter()
         .filter_map(Schema::region_set)
@@ -247,7 +250,9 @@ fn finish_intersection(mut flat: Vec<Schema>) -> Schema {
     // X ∩ ¬X is empty, as is an intersection of two provably disjoint members;
     // and an intersection is empty once its scalar-decidable members alone
     // cancel to no region (opaque members only narrow further, so they are
-    // ignored — keeping the decision independent of grouping).
+    // ignored — keeping the decision independent of grouping). As in `finish_union`,
+    // `region_set` walks each already-flattened member once, so this fold is linear
+    // in the flattened breadth.
     let region_empty = flat
         .iter()
         .filter_map(Schema::region_set)

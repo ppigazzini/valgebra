@@ -1713,6 +1713,66 @@ mod laws {
         );
     }
 
+    /// The bottom-up region the emptiness pass folds from a node's children
+    /// detects a *collective* cancellation — one where no single member is empty
+    /// but their regions cancel — through nesting, exactly as the old whole-subtree
+    /// re-walk did. Two disjoint scalar unions cancel; wrapping the result deeper
+    /// must not lose that.
+    #[test]
+    fn emptiness_folds_collective_region_cancellation_through_nesting() {
+        // Neither member is empty alone; their regions are disjoint, so the
+        // intersection is empty — decided by the folded region, not by a member.
+        let cancel = intersection(
+            union(Schema::Int, Schema::Str),
+            union(Schema::Float, Schema::Bytes),
+        );
+        assert!(cancel.is_empty());
+        // The same cancellation, buried under more Boolean structure, still folds
+        // up: the region reaches zero at the outer intersection.
+        let nested = intersection(
+            intersection(cancel.clone(), Schema::Anything),
+            not(Schema::NoneType),
+        );
+        assert!(nested.is_empty());
+        // A complement chain over scalars keeps the non-scalar region, so it is not
+        // empty — the fold must preserve that, not over-report empty.
+        let surviving = intersection(not(Schema::Int), not(Schema::Str));
+        assert!(!surviving.is_empty());
+    }
+
+    /// The emptiness decision derives each intersection's region from its children
+    /// instead of re-walking the whole subtree at every level, so a deeply nested
+    /// intersection is decided in time linear in its size. The pre-fix quadratic
+    /// re-walk took multiple seconds at this depth (≈ 9 s, growing 4× per
+    /// doubling); the bottom-up fold finishes in milliseconds. Run on a large
+    /// stack because the schema is intentionally left-nested to this depth.
+    #[test]
+    fn emptiness_decides_a_deep_intersection_in_linear_time() {
+        let worker = std::thread::Builder::new()
+            .stack_size(256 * 1024 * 1024)
+            .spawn(|| {
+                // ¬Int ∩ ¬Str ∩ … : region-decidable, never empty (the non-scalar
+                // region survives), so the walk visits every level — the worst case.
+                let mut deep = Schema::Complement(Box::new(Schema::Int));
+                for _ in 0..20_000 {
+                    deep =
+                        Schema::Intersection(vec![deep, Schema::Complement(Box::new(Schema::Str))]);
+                }
+                let start = std::time::Instant::now();
+                let empty = deep.is_empty();
+                let elapsed = start.elapsed();
+                assert!(!empty);
+                assert!(
+                    elapsed < std::time::Duration::from_secs(2),
+                    "is_empty on a depth-20000 intersection took {elapsed:?}; the \
+                     bottom-up region fold should finish in milliseconds, while the \
+                     quadratic re-walk takes many seconds"
+                );
+            })
+            .expect("spawn worker thread");
+        worker.join().expect("deep emptiness worker panicked");
+    }
+
     /// A structural-attribute schema with an uninhabited required attribute is
     /// empty: no value can carry that attribute, so the dataclass-style schema
     /// denotes nothing. The symmetric keyed-map rule already held; this closes the

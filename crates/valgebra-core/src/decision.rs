@@ -31,6 +31,25 @@ fn spend(budget: &Cell<u32>) -> bool {
     }
 }
 
+/// Intersect two region bitsets bottom-up. A missing region (an opaque, not
+/// scalar-decidable child) makes the combination opaque too, matching
+/// [`region_set`](Schema::region_set)'s `?` short-circuit.
+fn and_region(a: Option<u16>, b: Option<u16>) -> Option<u16> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(a & b),
+        _ => None,
+    }
+}
+
+/// Union two region bitsets bottom-up, with the same opaque-propagation rule as
+/// [`and_region`].
+fn or_region(a: Option<u16>, b: Option<u16>) -> Option<u16> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(a | b),
+        _ => None,
+    }
+}
+
 impl SeqRegex {
     /// Whether the regex matches **no** sequence at all — its language is empty.
     /// `Empty` and `Star` always match the empty sequence, so they are never
@@ -194,7 +213,9 @@ impl Schema {
     /// The decision is bounded: a deeply nested adversarial schema that would take
     /// more than a fixed number of steps stops and returns `false`, so a `false`
     /// means "not proven empty within the work bound", not necessarily "non-empty".
-    /// A real schema decides far inside the bound.
+    /// A real schema decides far inside the bound. The scalar-region check is folded
+    /// bottom-up from each node's children, so nested Boolean structure is decided
+    /// in time linear in its size rather than by re-walking each subtree per level.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.is_empty_rec(
@@ -234,64 +255,135 @@ impl Schema {
         visiting: &mut Vec<usize>,
         budget: &Cell<u32>,
     ) -> bool {
+        self.empty_and_region(oracle, defs, visiting, budget).0
+    }
+
+    /// The emptiness verdict and the value-region bitset of `self`, decided in a
+    /// single bottom-up pass: a Boolean node folds its children's already-computed
+    /// regions in O(1) each instead of re-deriving its region by re-walking the
+    /// whole subtree with [`region_set`](Self::region_set). The returned bitset is
+    /// exactly what `region_set` would return (`None` off the scalar-decidable
+    /// fragment), so emptiness on the scalar fragment is decided identically — but
+    /// a deeply nested intersection is now decided in time linear in its size
+    /// rather than quadratically (each level no longer re-walks the levels below).
+    ///
+    /// The work is bounded by the shared `budget`, so the region computation cannot
+    /// run unbounded down a side door any more than the rest of the decision can;
+    /// on exhaustion it returns the conservative "not proven empty" with an unknown
+    /// region.
+    fn empty_and_region(
+        &self,
+        oracle: &dyn LeafRelations,
+        defs: &[Schema],
+        visiting: &mut Vec<usize>,
+        budget: &Cell<u32>,
+    ) -> (bool, Option<u16>) {
         // Bound the work, sharing the budget with the caller (the subtyping
         // decision passes its own `cx.budget` in), so emptiness cannot escape the
         // ceiling subtyping advertises. Exhaustion returns "not proven empty".
         if !spend(budget) {
-            return false;
+            return (false, None);
         }
         match self {
+            // Scalar atoms and the lattice bounds carry a known region; their
+            // emptiness is exactly "the region is empty".
+            Schema::Nothing => (true, Some(0)),
+            Schema::Anything => (false, Some(REGION_ALL)),
+            Schema::NoneType => (false, Some(REGION_NONE)),
+            Schema::Bool => (false, Some(REGION_BOOL)),
+            Schema::Int => (false, Some(REGION_BOOL | REGION_INT)), // bool ⊆ int
+            Schema::Float => (false, Some(REGION_FLOAT)),
+            Schema::Str => (false, Some(REGION_STR)),
+            Schema::Bytes => (false, Some(REGION_BYTES)),
             Schema::Ref(id) => {
                 // A reference reached again while resolving it is a cycle: this
                 // occurrence demands an infinite unfolding, so on its own it has
                 // no finite inhabitant. A union base case or an optional or
                 // starred position escapes before reaching here.
                 if visiting.contains(id) {
-                    return true;
+                    return (true, None);
                 }
                 match defs.get(*id) {
                     Some(def) => {
                         visiting.push(*id);
                         let empty = def.is_empty_rec(oracle, defs, visiting, budget);
                         visiting.pop();
-                        empty
+                        (empty, None)
                     }
-                    None => false,
+                    None => (false, None),
                 }
             }
-            Schema::Seq { regex, .. } => regex.language_is_empty(oracle, defs, visiting, budget),
+            Schema::Seq { regex, .. } => (
+                regex.language_is_empty(oracle, defs, visiting, budget),
+                None,
+            ),
             // A refinement is a subset of its base: an empty base empties it, and
             // so does an unsatisfiable bound conjunction (decided by the oracle).
             Schema::Refine { base, constraints } => {
-                base.is_empty_rec(oracle, defs, visiting, budget)
-                    || bounds_unsatisfiable(constraints, oracle)
+                let empty = base.is_empty_rec(oracle, defs, visiting, budget)
+                    || bounds_unsatisfiable(constraints, oracle);
+                (empty, None)
             }
             // An intersection is empty if a member is, if the scalar regions cancel,
             // or if the refinement bounds across its members cannot hold together.
+            // Its region is the intersection of its members' regions — combined from
+            // the children's results, never by re-walking the subtree.
             Schema::Intersection(members) => {
-                members
-                    .iter()
-                    .any(|m| m.is_empty_rec(oracle, defs, visiting, budget))
-                    || matches!(self.region_set(), Some(0))
-                    || intersection_bounds_unsatisfiable(members, oracle)
+                let mut any_empty = false;
+                let mut region = Some(REGION_ALL);
+                for m in members {
+                    let (empty, member_region) = m.empty_and_region(oracle, defs, visiting, budget);
+                    any_empty |= empty;
+                    region = and_region(region, member_region);
+                }
+                let empty = any_empty
+                    || region == Some(0)
+                    || intersection_bounds_unsatisfiable(members, oracle);
+                (empty, region)
             }
-            Schema::Set(_) | Schema::FrozenSet(_) => false,
-            Schema::KeyedMap { fields, .. } => fields.iter().any(|field| {
-                field.required && field.schema.is_empty_rec(oracle, defs, visiting, budget)
-            }),
+            // A set or frozenset is *known* non-empty — the empty collection is
+            // always a member — so it is never empty for a different reason than the
+            // opaque wildcard below (which is non-empty only by conservatism).
+            #[allow(clippy::match_same_arms)]
+            Schema::Set(_) | Schema::FrozenSet(_) => (false, None),
+            Schema::KeyedMap { fields, .. } => {
+                let empty = fields.iter().any(|field| {
+                    field.required && field.schema.is_empty_rec(oracle, defs, visiting, budget)
+                });
+                (empty, None)
+            }
             // A structural-attribute schema requires every field, so an empty
             // required field's schema empties it — the same rule as a keyed map.
             // An uninhabited dataclass-style schema is detected here; the nominal
             // `isinstance` part stays opaque, so it never narrows to empty.
-            Schema::Attrs { fields, .. } => fields.iter().any(|field| {
-                field.required && field.schema.is_empty_rec(oracle, defs, visiting, budget)
-            }),
-            Schema::Union(members) => members
-                .iter()
-                .all(|m| m.is_empty_rec(oracle, defs, visiting, budget)),
-            // Scalars and their Boolean combinations decide via the region set;
-            // a combination with an opaque leaf yields `None`, hence not empty.
-            _ => matches!(self.region_set(), Some(0)),
+            Schema::Attrs { fields, .. } => {
+                let empty = fields.iter().any(|field| {
+                    field.required && field.schema.is_empty_rec(oracle, defs, visiting, budget)
+                });
+                (empty, None)
+            }
+            // A union is empty when every member is; its region is the union of the
+            // members' regions, again folded from the children.
+            Schema::Union(members) => {
+                let mut all_empty = true;
+                let mut region = Some(0);
+                for m in members {
+                    let (empty, member_region) = m.empty_and_region(oracle, defs, visiting, budget);
+                    all_empty &= empty;
+                    region = or_region(region, member_region);
+                }
+                (all_empty, region)
+            }
+            // A complement's region is the partition minus its inner's region; it is
+            // empty exactly when that region is empty (`¬⊤ = ∅`).
+            Schema::Complement(inner) => {
+                let (_, inner_region) = inner.empty_and_region(oracle, defs, visiting, budget);
+                let region = inner_region.map(|r| REGION_ALL & !r);
+                (region == Some(0), region)
+            }
+            // The gradual `Any`, literals, and instances are not scalar-decidable:
+            // an unknown region, never reported empty.
+            _ => (false, None),
         }
     }
 
