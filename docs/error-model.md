@@ -104,15 +104,21 @@ except ValidationError as err:
 
 Checking membership reads a value through Python operations that can raise: an
 `__eq__` for a literal, a rich comparison for a numeric bound, `isinstance` for a
-class, `__len__` for a length, `__mod__` for a multiple-of. A value whose
-comparison, instance check, or attribute access **raises is treated as a
-non-member** — a value that cannot answer "are you in this set?" is not in it, the
-same pragmatic stance pydantic-core takes. The one exception is a user predicate
-(`Annotated[..., some_callable]`): a predicate that raises is reported as a
-distinct `predicate_error`, not folded into an ordinary failed match, so a buggy
-predicate stays visible. The membership walk returns a plain decision, so a fatal
-interpreter signal raised inside one of these operations is folded the same way
-rather than propagated.
+class, `getattr` for an attribute, `__len__` for a length, `__mod__` for a
+multiple-of. A value whose comparison, instance check, or attribute access
+**raises an ordinary exception is treated as a non-member** — a value that cannot
+answer "are you in this set?" is not in it, the same pragmatic stance
+pydantic-core takes. The one ordinary-exception case carved out is a user
+predicate (`Annotated[..., some_callable]`): a predicate that raises an ordinary
+exception is reported as a distinct `predicate_error`, not folded into an ordinary
+failed match, so a buggy predicate stays visible.
+
+A **fatal interpreter signal is never folded** — at every site, the predicate and
+attribute access included. A base exception that is not an ordinary exception
+(`KeyboardInterrupt`, `SystemExit`, `GeneratorExit`), or a `MemoryError` or
+`RecursionError`, means the interpreter is unwinding, not that the value is a
+non-member, so it propagates out of `validate`/`is_valid` rather than being
+reported as "not a member" or a `predicate_error`.
 
 ## Determinism
 

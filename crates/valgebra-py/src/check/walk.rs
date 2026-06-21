@@ -11,26 +11,28 @@
 //!
 //! Membership reads a value through Python operations that can raise — `__eq__`
 //! for a literal, a rich comparison for a bound, `isinstance` for a class,
-//! `__mod__` for a multiple-of, `__len__` for a length. The single rule across
-//! every such site: **a value whose comparison, instance check, or attribute
-//! access raises is treated as a non-member** (the helper `cmp` and the
-//! `unwrap_or(false)`/`is_ok_and` sites encode this). This matches pydantic-core:
-//! a value that cannot answer "are you in this set?" is not in it. The one
-//! exception is a *user predicate*, whose raised error is surfaced as a distinct
+//! `getattr` for an attribute, `__mod__` for a multiple-of, `__len__` for a
+//! length. The single rule across every such site: **a value whose comparison,
+//! instance check, or attribute access raises an ordinary exception is treated as
+//! a non-member**. This matches pydantic-core: a value that cannot answer "are
+//! you in this set?" is not in it. The one ordinary-exception case carved out is
+//! a *user predicate*, whose raised error is surfaced as a distinct
 //! `predicate_error` rather than folded, so a buggy predicate is visible.
 //!
-//! A *fatal* interpreter signal is the one error not folded. A base exception
-//! that is not an ordinary exception — `KeyboardInterrupt`, `MemoryError`,
-//! `SystemExit`, `RecursionError` — is not an answer to "are you in this set?":
-//! it means the interpreter is unwinding. The [`fold`] helper records the first
-//! such signal in `ctx.fatal`; the walk then short-circuits (every later
+//! A *fatal* interpreter signal is the one error never folded — at every site,
+//! the predicate and `getattr` included. [`is_fatal`] classifies it: a base
+//! exception that is not an ordinary exception (`KeyboardInterrupt`,
+//! `SystemExit`, `GeneratorExit`), and `MemoryError`/`RecursionError` (ordinary
+//! exceptions whose meaning is "the interpreter cannot continue"). It is not an
+//! answer to "are you in this set?": the interpreter is unwinding. The first such
+//! signal is recorded in `ctx.fatal`; the walk then short-circuits (every later
 //! [`member`] call returns at once) and the entry point re-raises it, so an
 //! interrupted check stops instead of being silently reported as a non-member.
 
 use std::borrow::Cow;
 
 use jiter::JsonValue;
-use pyo3::exceptions::PyException;
+use pyo3::exceptions::{PyException, PyMemoryError, PyRecursionError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -48,21 +50,39 @@ fn stop(ctx: Ctx<'_>) -> bool {
     !ctx.explain || ctx.fail_fast
 }
 
+/// Whether a raised error is a *fatal* interpreter signal that must propagate
+/// rather than fold to non-membership. Two disjoint cases: a base exception that
+/// is not an ordinary exception (`KeyboardInterrupt`, `SystemExit`,
+/// `GeneratorExit`), and `MemoryError`/`RecursionError` — which *are* ordinary
+/// exceptions, so the `PyException` test alone misses them, yet they mean "the
+/// interpreter cannot continue", not "this value is not a member". Any other
+/// exception is an ordinary failed comparison and folds to a non-member.
+fn is_fatal(err: &PyErr, py: Python<'_>) -> bool {
+    !err.is_instance_of::<PyException>(py)
+        || err.is_instance_of::<PyMemoryError>(py)
+        || err.is_instance_of::<PyRecursionError>(py)
+}
+
+/// Record the first fatal signal so the walk unwinds (every later `member` call
+/// returns at once) and the entry point re-raises it.
+fn record_fatal(err: PyErr, ctx: Ctx<'_>) {
+    let mut slot = ctx.fatal.borrow_mut();
+    if slot.is_none() {
+        *slot = Some(err);
+    }
+}
+
 /// Fold a membership probe's result into a boolean. An ordinary exception means
 /// the value cannot answer "are you in this set?", so it is a non-member. A fatal
-/// interpreter signal (a base exception that is not an ordinary exception) is not
-/// a membership answer: it is recorded in `ctx.fatal` so the walk unwinds and the
+/// interpreter signal is recorded in `ctx.fatal` so the walk unwinds and the
 /// entry point re-raises it, and reported locally as a non-member so the current
 /// frame returns.
 fn fold(result: PyResult<bool>, py: Python<'_>, ctx: Ctx<'_>) -> bool {
     match result {
         Ok(holds) => holds,
         Err(err) => {
-            if !err.is_instance_of::<PyException>(py) {
-                let mut slot = ctx.fatal.borrow_mut();
-                if slot.is_none() {
-                    *slot = Some(err);
-                }
+            if is_fatal(&err, py) {
+                record_fatal(err, ctx);
             }
             false
         }
@@ -817,25 +837,34 @@ fn check_object(
     }
     let mut ok = true;
     for field in fields {
-        if let Ok(attr) = obj.getattr(field.name.as_str()) {
-            if ctx.explain {
-                path.push(PathSegment::Key(field.name.clone()));
+        match obj.getattr(field.name.as_str()) {
+            Ok(attr) => {
+                if ctx.explain {
+                    path.push(PathSegment::Key(field.name.clone()));
+                }
+                ok &= member(&field.schema, &Value::Py(&attr), path, ctx, out);
+                if ctx.explain {
+                    path.pop();
+                }
             }
-            ok &= member(&field.schema, &Value::Py(&attr), path, ctx, out);
-            if ctx.explain {
-                path.pop();
+            // A fatal signal during attribute access is the interpreter
+            // unwinding, not a missing attribute: record it and stop.
+            Err(err) if is_fatal(&err, value.py()) => {
+                record_fatal(err, ctx);
+                return false;
             }
-        } else {
-            if ctx.explain {
-                out.push(located(
-                    path,
-                    field.name.clone(),
-                    "missing_attribute",
-                    format!("attribute {:?}", field.name),
-                    "missing".to_owned(),
-                ));
+            Err(_) => {
+                if ctx.explain {
+                    out.push(located(
+                        path,
+                        field.name.clone(),
+                        "missing_attribute",
+                        format!("attribute {:?}", field.name),
+                        "missing".to_owned(),
+                    ));
+                }
+                ok = false;
             }
-            ok = false;
         }
         if !ok && stop(ctx) {
             return false;
@@ -872,6 +901,9 @@ fn check_refine(
 
 /// Whether `value` (already a base member, materialized once) satisfies one
 /// constraint, recording a violation on failure in explain mode.
+// A flat dispatch over every constraint kind; its length is the number of kinds,
+// not nested complexity, so the line lint does not apply.
+#[allow(clippy::too_many_lines)]
 fn check_constraint(
     constraint: &Constraint,
     value: &Bound<'_, PyAny>,
@@ -950,6 +982,12 @@ fn check_constraint(
             };
             match predicate_passes(&predicate, value) {
                 Ok(passed) => (passed, "predicate_failed", "a passing predicate".to_owned()),
+                // A fatal signal raised inside the predicate is the interpreter
+                // unwinding, not a predicate that merely errored: propagate it.
+                Err(err) if is_fatal(&err, py) => {
+                    record_fatal(err, ctx);
+                    return false;
+                }
                 Err(err) => (
                     false,
                     "predicate_error",
