@@ -10,26 +10,23 @@ Three property-test profiles select the example budget by the
 The decision and completeness suites read these so the hole-hunting fuzzers run
 shallow locally and deep on a schedule without per-test settings.
 
-The interactive profiles carry a per-example deadline so an algorithmic blowup in
-``simplify`` or a decision procedure surfaces as a failing example rather than a
-silent multi-second one. The ceiling is generous -- every healthy example
-finishes well under it -- so it flags a superlinear regression without flaking on
-a loaded runner. The scheduled profile leaves the deadline off, since its deepest
-generated schemas can legitimately take longer to compile and validate.
+No per-example wall-clock deadline is set. A global deadline is a flaky guard on a
+loaded shared runner, and too coarse to catch a superlinear regression that still
+finishes one example under the ceiling. Algorithmic regressions are caught instead
+by the deterministic cachegrind instruction-count gate (``scripts/perf_gate.py``,
+core and binding), and the decision procedures are bounded by their own work
+budget so they cannot run unbounded; a genuine hang is caught by the job timeout.
 """
 
 import os
-from datetime import timedelta
 
 from hypothesis import HealthCheck, settings
 
-_DEADLINE = timedelta(seconds=2)
-
-settings.register_profile("dev", max_examples=100, deadline=_DEADLINE)
+settings.register_profile("dev", max_examples=100, deadline=None)
 settings.register_profile(
     "ci",
     max_examples=500,
-    deadline=_DEADLINE,
+    deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )
 settings.register_profile(

@@ -14,9 +14,19 @@ under concurrency.
 
 from __future__ import annotations
 
+import sys
 import threading
 
+import pytest
+
 from valgebra import ValidationError, Validator, recursive
+
+
+def _gil_enabled() -> bool:
+    """Whether the interpreter holds a GIL, so threads do not run in parallel."""
+    query = getattr(sys, "_is_gil_enabled", None)
+    return query() if query is not None else True
+
 
 _RECORD = Validator({"name": str, "age?": int, "tags": list[str]})
 _JSON = Validator(list[dict[str, int]])
@@ -46,7 +56,7 @@ def _hammer(failures: list[str]) -> None:
         failures.append(repr(exc))
 
 
-def test_validators_are_thread_safe() -> None:
+def _run_hammer_threads() -> list[str]:
     failures: list[str] = []
     threads = [
         threading.Thread(target=_hammer, args=(failures,)) for _ in range(THREADS)
@@ -55,4 +65,23 @@ def test_validators_are_thread_safe() -> None:
         thread.start()
     for thread in threads:
         thread.join()
-    assert not failures, failures
+    return failures
+
+
+def test_validators_are_thread_safe() -> None:
+    # Always runs. Under the GIL this checks correctness under concurrency (threads
+    # interleave but do not truly overlap); it is not, on its own, a data-race
+    # detector — that is the free-threaded test below.
+    assert not _run_hammer_threads()
+
+
+@pytest.mark.skipif(
+    _gil_enabled(),
+    reason="under the GIL threads do not run in parallel, so first use cannot race; "
+    "the free-threaded interpreter is where a real data race would surface",
+)
+def test_validators_run_truly_parallel_without_the_gil() -> None:
+    # Honest about what is exercised: this body runs only when the GIL is disabled,
+    # so the shared lazy precompute is hit by genuinely parallel first use.
+    assert not _gil_enabled()
+    assert not _run_hammer_threads()
