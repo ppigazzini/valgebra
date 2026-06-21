@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, github_ci]
+    branches: [main]
   pull_request:
     branches: [main]
   schedule:
@@ -301,9 +301,10 @@ jobs:
           manylinux: auto
           # The manylinux container is opaque to Swatinem/rust-cache, so this
           # release build is otherwise uncached. sccache caches compilation via
-          # the GitHub Actions cache, cutting warm rebuilds. Disabled on tag
-          # pushes so a release wheel never trusts a cached artifact.
-          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          # the GitHub Actions cache, cutting warm rebuilds. (This CI workflow has
+          # no tag trigger; release wheels are built by release.yml, so there is no
+          # tag-push case to disable the cache for here.)
+          sccache: true
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheel-linux
@@ -361,8 +362,11 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: fuzz
-      - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked
+      # A prebuilt cargo-fuzz from a version-pinned action, not a from-source
+      # `cargo install` (which `--locked` pins only the deps of, not the tool).
+      - uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2.81.10
+        with:
+          tool: cargo-fuzz
       - name: Fuzz the simplifier
         run: cargo fuzz run simplify fuzz/seeds/simplify -- -max_total_time=180
       - name: Fuzz the decision procedures
@@ -389,8 +393,11 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - name: Install cargo-mutants
-        run: cargo install cargo-mutants --locked
+      # A prebuilt cargo-mutants from a version-pinned action, not a from-source
+      # `cargo install` (which `--locked` pins only the deps of, not the tool).
+      - uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2.81.10
+        with:
+          tool: cargo-mutants
       - name: Mutation sweep over the core
         run: |
           # cargo-mutants exit codes: 0 clean, 2 missed mutants, 3 timeouts,

@@ -8,6 +8,17 @@ updates:
       cargo:
         patterns: ["*"]
 
+  # The fuzz workspace is a detached crate with its own lockfile (libfuzzer-sys,
+  # arbitrary), outside the root workspace, so it needs its own registration or
+  # it rots unmonitored.
+  - package-ecosystem: cargo
+    directory: "/fuzz"
+    schedule:
+      interval: weekly
+    groups:
+      fuzz:
+        patterns: ["*"]
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
