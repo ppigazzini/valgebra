@@ -112,8 +112,9 @@ A non-`str`, non-`bytes` argument is a `TypeError`, not a validation failure.
 
 `is_valid_json` parses with jiter and validates the parsed JSON value **in
 place**: no intermediate Python objects are built for the structure it walks, so
-membership of a large array or a deep document is decided in Rust (a refinement
-predicate is the one documented step back into Python). The
+membership of a large array or a deep document is decided in Rust. A comparison
+against a Python object — a literal, a refinement predicate, or an instance or
+attribute check — is the documented step back into Python (detailed below). The
 same walk runs over either input source — a Python object or a JSON value — so
 the two paths stay equivalent. On the benchmark machine (AMD Ryzen 7 PRO 7840U,
 WSL2, CPython 3.14.6, jiter 0.15, the PGO release wheel — the same profile the

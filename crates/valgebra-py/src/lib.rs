@@ -1,5 +1,8 @@
 //! `PyO3` bindings for valgebra: compile a Python schema once into the core IR
-//! and walk it entirely in Rust, crossing the boundary once per call.
+//! and walk it in Rust — tree walks, key lookups, and bound checks stay in the
+//! validator tree; a comparison against a Python object (a literal, a refinement
+//! predicate, an instance or attribute check) is the documented step back across
+//! the boundary.
 //!
 //! The crate is split into the frontend ([`build`]) that reads Python forms
 //! into the IR, the walk ([`check`]) with its explain path and membership fast
@@ -282,8 +285,8 @@ impl Validator {
     ///     `None` if the document parses and is a member of the schema's set.
     ///
     /// Raises:
-    ///     ValidationError: If the document is malformed JSON (code
-    ///         `json_invalid`) or is not a member of the schema's set.
+    ///     ValidationError: If the document is malformed or undecodable JSON
+    ///         (code `json_invalid`) or is not a member of the schema's set.
     ///     TypeError: If `data` is not `str` or `bytes`.
     #[pyo3(signature = (data, *, fail_fast = false))]
     fn validate_json(&self, data: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
@@ -306,8 +309,8 @@ impl Validator {
     ///     The parsed Python object, once it is confirmed a member of the set.
     ///
     /// Raises:
-    ///     ValidationError: If the document is malformed JSON (code
-    ///         `json_invalid`) or is not a member of the schema's set.
+    ///     ValidationError: If the document is malformed or undecodable JSON
+    ///         (code `json_invalid`) or is not a member of the schema's set.
     ///     TypeError: If `data` is not `str` or `bytes`.
     #[pyo3(signature = (data, *, fail_fast = false))]
     fn load<'py>(&self, data: &Bound<'py, PyAny>, fail_fast: bool) -> PyResult<Bound<'py, PyAny>> {
@@ -318,8 +321,10 @@ impl Validator {
 
     /// Whether a JSON document parses and is a member of the schema's set.
     ///
-    /// Check-only: malformed JSON, or input that is neither `str` nor `bytes`, is
-    /// simply not a member and returns `False`. The document is validated in place
+    /// Check-only: malformed or undecodable JSON, or input that is neither `str`
+    /// nor `bytes`, is simply not a member and returns `False`. The raising entries
+    /// (`validate_json`/`load`) report the same undecodable input as a structured
+    /// `json_invalid` error. The document is validated in place
     /// against the parsed value, with no intermediate Python objects for the
     /// structure it walks. It raises only if a membership comparison raises a
     /// fatal interpreter signal.
@@ -336,15 +341,11 @@ impl Validator {
     ///         signal, it propagates rather than being read as a non-member.
     fn is_valid_json(&self, data: &Bound<'_, PyAny>) -> PyResult<bool> {
         let py = data.py();
-        if let Ok(text) = data.cast::<PyString>() {
-            match text.to_str() {
-                Ok(json) => self.matches_json(py, json.as_bytes()),
-                Err(_) => Ok(false),
-            }
-        } else if let Ok(raw) = data.cast::<PyBytes>() {
-            self.matches_json(py, raw.as_bytes())
-        } else {
-            Ok(false)
+        match decode_json_input(data) {
+            JsonInput::Bytes(bytes) => self.matches_json(py, bytes),
+            // An undecodable string and a non-str/bytes argument are both simply
+            // not members — the same verdict the raising path reports structurally.
+            JsonInput::Undecodable | JsonInput::NotStrOrBytes => Ok(false),
         }
     }
 
@@ -544,13 +545,6 @@ impl Validator {
     }
 }
 
-/// Parse a JSON `str` or `bytes` into a Python value with jiter.
-///
-/// jiter's defaults match the standard JSON model: standard `float`s, no
-/// `Infinity`/`NaN`, and complete (non-partial) input — so the parsed value is
-/// what the object path would receive from `json.loads`. A parse failure is
-/// surfaced as a structured `json_invalid` `ValidationError`; a non-string,
-/// non-bytes argument is a `TypeError`.
 /// Turn a membership walk's outcome into a Python result: re-raise a fatal
 /// interpreter signal the walk recorded, otherwise report the membership verdict.
 fn reraise_fatal(fatal: RefCell<Option<PyErr>>, ok: bool) -> PyResult<bool> {
@@ -560,23 +554,60 @@ fn reraise_fatal(fatal: RefCell<Option<PyErr>>, ok: bool) -> PyResult<bool> {
     }
 }
 
+/// The UTF-8 bytes a JSON `str`/`bytes` argument hands to the parser, or why they
+/// are unavailable. A `str` carrying a lone surrogate cannot be encoded to UTF-8;
+/// both JSON entry points must treat that the same malformed-input way rather than
+/// let the raw `UnicodeEncodeError` leak — which would disagree with the check
+/// path and break `validate_json`'s documented exception set.
+enum JsonInput<'a> {
+    /// Bytes ready for the parser.
+    Bytes(&'a [u8]),
+    /// A `str` the interpreter cannot encode to UTF-8 (a lone surrogate).
+    Undecodable,
+    /// Neither `str` nor `bytes`.
+    NotStrOrBytes,
+}
+
+/// Decode a JSON argument to the bytes the parser reads, classifying the two ways
+/// it can be unusable so both entry points agree on them.
+fn decode_json_input<'a>(data: &'a Bound<'_, PyAny>) -> JsonInput<'a> {
+    if let Ok(text) = data.cast::<PyString>() {
+        match text.to_str() {
+            Ok(text) => JsonInput::Bytes(text.as_bytes()),
+            Err(_) => JsonInput::Undecodable,
+        }
+    } else if let Ok(raw) = data.cast::<PyBytes>() {
+        JsonInput::Bytes(raw.as_bytes())
+    } else {
+        JsonInput::NotStrOrBytes
+    }
+}
+
+/// Parse a JSON `str` or `bytes` into a Python value with jiter.
+///
+/// jiter's defaults match the standard JSON model: standard `float`s, no
+/// `Infinity`/`NaN`, and complete (non-partial) input — so the parsed value is
+/// what the object path would receive from `json.loads`. A parse failure, or a
+/// `str` the interpreter cannot encode to UTF-8, is surfaced as a structured
+/// `json_invalid` `ValidationError`; a non-string, non-bytes argument is a
+/// `TypeError`.
 fn parse_json<'py>(data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py = data.py();
     let parse = PythonParse::default();
-    if let Ok(text) = data.cast::<PyString>() {
-        let bytes = text.to_str()?;
-        parse
-            .python_parse(py, bytes.as_bytes())
-            .map_err(|err| json_invalid_error(py, &err.description(bytes.as_bytes())))
-    } else if let Ok(raw) = data.cast::<PyBytes>() {
-        let bytes = raw.as_bytes();
-        parse
+    match decode_json_input(data) {
+        JsonInput::Bytes(bytes) => parse
             .python_parse(py, bytes)
-            .map_err(|err| json_invalid_error(py, &err.description(bytes)))
-    } else {
-        Err(PyTypeError::new_err(
+            .map_err(|err| json_invalid_error(py, &err.description(bytes))),
+        // An undecodable string is malformed input, reported through the same
+        // structured `json_invalid` model as an unparseable document — never as a
+        // raw `UnicodeEncodeError`, which `validate_json` promises not to raise.
+        JsonInput::Undecodable => Err(json_invalid_error(
+            py,
+            "input string is not valid UTF-8 (contains a lone surrogate)",
+        )),
+        JsonInput::NotStrOrBytes => Err(PyTypeError::new_err(
             "JSON input must be a str or bytes object",
-        ))
+        )),
     }
 }
 

@@ -128,8 +128,10 @@ comparison is not apples-to-apples and is gated against regression in CI; see th
   decisions are sound and decide a wide fragment, staying deliberately
   conservative beyond it ([foundations](docs/foundations.md),
   [decidability](docs/decidability.md), [soundness argument](docs/soundness.md)).
-- **One boundary crossing.** The validator tree runs entirely in Rust; a Python
-  predicate is a documented slow path, never a silent fallback.
+- **One boundary crossing.** Tree walks, key lookups, and bound checks run in
+  Rust; a comparison against a Python object — a literal, a refinement predicate,
+  or an instance or attribute check — is the documented step into Python, never a
+  silent fallback.
 - **Immutable and thread-safe**, including on free-threaded (no-GIL) CPython.
 
 ## Project

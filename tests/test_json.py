@@ -130,6 +130,21 @@ def test_validate_json_rejects_non_string_input() -> None:
         Validator(int).validate_json(123)  # ty: ignore[invalid-argument-type]
 
 
+def test_undecodable_json_string_agrees_across_entry_points() -> None:
+    # A lone surrogate cannot encode to UTF-8. Both JSON entry points must treat
+    # it as the same malformed-input condition: the check returns not-a-member,
+    # and the raising entries report a structured `json_invalid` error rather than
+    # leaking a `UnicodeEncodeError` the contract forbids.
+    v = Validator(int)
+    lone_surrogate = "\udc80"
+    assert not v.is_valid_json(lone_surrogate)
+    for entry in (v.validate_json, v.load):
+        with pytest.raises(ValidationError) as info:
+            entry(lone_surrogate)
+        assert info.value.code == "json_invalid"
+        assert info.value.errors[0]["code"] == "json_invalid"
+
+
 def test_json_aggregates_every_failure_like_the_object_path() -> None:
     v = Validator({"a": int, "b": int, "c": int})
     doc = '{"a": "x", "b": "y", "c": "z"}'
