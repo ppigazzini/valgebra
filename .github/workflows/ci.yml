@@ -10,7 +10,10 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Keyed by event too, so a push to main does not share a group with the
+  # scheduled nightly soak (both resolve github.ref to refs/heads/main) and cancel
+  # it mid-run.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 permissions:
@@ -269,7 +272,7 @@ jobs:
       - name: Binding-path instruction-count regression gate
         run: |
           py="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
-          libdir="$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
+          libdir="$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           PYO3_PYTHON="$py" LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}" \
             uv run --no-sync python scripts/perf_gate.py --binding
       # Smoke-run the wall-clock benches once (timing disabled) so the suites

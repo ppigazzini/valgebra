@@ -191,8 +191,8 @@ jobs:
         # other response (5xx/429/network) leaves it unconfirmed, so abort rather
         # than wave it through. Then also assert the version differs from the
         # index's current latest, so an ungated re-run cannot publish even on a
-        # brief per-version inconsistency.
-        if: inputs.publish_target != 'none'
+        # brief per-version inconsistency. The enclosing job already gates on the
+        # target, so no step-level condition is needed here.
         run: |
           set -euo pipefail
           wheel="$(ls dist/*.whl | head -n1)"
