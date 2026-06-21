@@ -192,6 +192,22 @@ _DECIDED = [
         {"a": int, str: object},
         id="map:mixed-extra-field-covered",
     ),
+    # The supertype declares an *optional* field the subtype lacks; the subtype's
+    # catch-all value type fits it, so the relation now decides.
+    pytest.param(
+        "subtype",
+        {"a": int, str: int},
+        {"a": int, "b?": int, str: int},
+        id="map:b-extra-optional-covered",
+    ),
+    # The subtype is a pure mapping whose catch-all covers the supertype's optional
+    # field and catch-all alike.
+    pytest.param(
+        "subtype",
+        {str: int},
+        {"b?": int, str: int},
+        id="map:pure<=mixed-optional",
+    ),
 ]
 
 # Known decision-completeness misses. None remain: each relation the procedure

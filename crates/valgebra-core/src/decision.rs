@@ -881,16 +881,16 @@ fn linear_subtype(
 ///    by required-ness (every field `b` requires is required in `a`).
 /// 2. **Pure mapping ≤ pure mapping** (`fa` and `fb` empty): every clause of `a`
 ///    is subsumed by a clause of `b` with both key and value narrower.
-/// 3. **Mixed record-and-catch-all ≤ mixed**, *when `a` declares every field `b`
-///    declares*: shared fields narrow, `b`'s required fields are required in `a`,
-///    each extra field of `a` is covered by a `str`/`anything`-keyed catch-all of
-///    `b`, and every clause of `a` is subsumed by one of `b`.
+/// 3. **Mixed record-and-catch-all ≤ mixed** (general): each shared field narrows
+///    and respects required-ness; each field `a` declares that `b` does not is
+///    covered by `b`'s catch-all; each field `b` declares that `a` lacks is
+///    governed by `a`'s catch-all — decidable only when it is **optional** (a
+///    catch-all guarantees a key's value type, never its presence, so a required
+///    such field stays `false`) and every catch-all value of `a` fits it; and
+///    every catch-all clause of `a` is subsumed by one of `b`.
 ///
-/// The decided boundary's one deliberate gap: when the **supertype declares a
-/// field the subtype lacks**, the relation needs the full set-theoretic decision
-/// (the subtype's catch-all would have to cover that exact key name), so it stays
-/// conservative. Extending that direction is the planned route toward
-/// completeness; until then a true relation there is reported `false`, never an
+/// Sound throughout — a required supertype field the subtype cannot guarantee
+/// present, or a clause an oracle cannot relate, is reported `false`, never an
 /// unsound `true`.
 fn keyed_map_subtype(
     fa: &[Field],
@@ -929,43 +929,52 @@ fn keyed_map_subtype(
                 ka.is_subtype_rec(kb, cx, assumptions) && va.is_subtype_rec(vb, cx, assumptions)
             })
         })
-    } else if fb.iter().all(|b| a_by_name.contains_key(b.name.as_str())) {
-        // A record mixed with a catch-all whose fields include every field of the
-        // supertype: a subtype when each shared field narrows, the supertype's
-        // required fields are required here, every extra subtype field is covered
-        // by a supertype catch-all whose keys include all field names (a `str` or
-        // `anything` key), and every subtype catch-all clause is subsumed. A field
-        // key is matched as a field, so the catch-all clauses govern the non-field
-        // keys; the extra-field coverage handles the keys the supertype reads
-        // through its catch-all. The reverse direction -- the supertype declaring a
-        // field the subtype lacks -- needs the full comparison and stays
-        // conservative.
-        let shared = fb.iter().all(|b| {
-            a_by_name
-                .get(b.name.as_str())
-                .is_some_and(|a| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
+    } else {
+        // General mixed record-and-catch-all subtyping (`a` carries a catch-all and
+        // is not the pure-mapping case). Every supertype field is checked against
+        // `a`: a field `a` declares is matched field-wise; a field `a` lacks is
+        // governed by `a`'s catch-all.
+        let fields_ok = fb.iter().all(|b_field| {
+            match a_by_name.get(b_field.name.as_str()) {
+                // Shared field: it must narrow in depth, and a field `b` requires
+                // must be required in `a` too.
+                Some(a_field) => {
+                    a_field
+                        .schema
+                        .is_subtype_rec(&b_field.schema, cx, assumptions)
+                        && (!b_field.required || a_field.required)
+                }
+                // A field `b` declares that `a` lacks: a catch-all guarantees a
+                // key's value type but never its presence, so a *required* such
+                // field stays undecided; an *optional* one holds when every value
+                // `a`'s catch-all could place at that key fits `b`'s field schema.
+                None => {
+                    !b_field.required
+                        && da
+                            .iter()
+                            .all(|(_, va)| va.is_subtype_rec(&b_field.schema, cx, assumptions))
+                }
+            }
         });
-        let required = fb
-            .iter()
-            .filter(|b| b.required)
-            .all(|b| a_by_name.get(b.name.as_str()).is_some_and(|a| a.required));
+        // Each field `a` declares that `b` does not is read by `b` through its
+        // catch-all, so a `str`/`anything`-keyed clause of `b` must cover it.
         let extra_covered = fa
             .iter()
-            .filter(|a| !b_by_name.contains_key(a.name.as_str()))
-            .all(|a| {
+            .filter(|a_field| !b_by_name.contains_key(a_field.name.as_str()))
+            .all(|a_field| {
                 db.iter().any(|(kb, vb)| {
                     matches!(kb, Schema::Str | Schema::Anything)
-                        && a.schema.is_subtype_rec(vb, cx, assumptions)
+                        && a_field.schema.is_subtype_rec(vb, cx, assumptions)
                 })
             });
+        // Every catch-all clause of `a` (governing its non-field keys) is subsumed
+        // by a clause of `b` with both key and value narrower.
         let defaults = da.iter().all(|(ka, va)| {
             db.iter().any(|(kb, vb)| {
                 ka.is_subtype_rec(kb, cx, assumptions) && va.is_subtype_rec(vb, cx, assumptions)
             })
         });
-        shared && required && extra_covered && defaults
-    } else {
-        false
+        fields_ok && extra_covered && defaults
     }
 }
 

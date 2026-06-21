@@ -1015,6 +1015,37 @@ mod laws {
         );
     }
 
+    /// A mixed record with a catch-all is a subtype of one that declares an extra
+    /// *optional* field, when the catch-all's value type fits that field. The
+    /// soundness negatives confirm a *required* extra field stays undecided (a
+    /// catch-all never guarantees a key's presence) and an optional field the
+    /// catch-all value does not fit is not a subtype.
+    #[test]
+    fn keyed_map_subtyping_decides_supertype_extra_field() {
+        let field = |name: &str, schema, required| Field {
+            name: name.to_owned(),
+            schema,
+            required,
+        };
+        let with_catch_all = |fields| Schema::KeyedMap {
+            fields,
+            defaults: vec![(Schema::Str, Schema::Int)],
+        };
+        let base = || with_catch_all(vec![field("x", Schema::Int, true)]);
+        let plus_y = |schema, required| {
+            with_catch_all(vec![
+                field("x", Schema::Int, true),
+                field("y", schema, required),
+            ])
+        };
+        // Optional extra field whose type the catch-all value (int) fits.
+        assert!(base().is_subtype_of(&plus_y(Schema::Int, false)));
+        // Required extra field: undecided, a catch-all does not force presence.
+        assert!(!base().is_subtype_of(&plus_y(Schema::Int, true)));
+        // Optional extra field the catch-all value type does not fit.
+        assert!(!base().is_subtype_of(&plus_y(Schema::Str, false)));
+    }
+
     #[test]
     fn decides_refinement_subtyping_structurally() {
         let refine = |base, constraints: Vec<Constraint>| Schema::Refine {
