@@ -321,7 +321,7 @@ impl Schema {
             // so does an unsatisfiable bound conjunction (decided by the oracle).
             Schema::Refine { base, constraints } => {
                 let empty = base.is_empty_rec(oracle, defs, visiting, budget)
-                    || bounds_unsatisfiable(constraints, oracle);
+                    || bounds_unsatisfiable(constraints.iter(), oracle);
                 (empty, None)
             }
             // An intersection is empty if a member is, if the scalar regions cancel,
@@ -445,7 +445,12 @@ impl Schema {
         }
         // Coinductive hypothesis: a goal already being proven on this path is
         // assumed to hold, so two recursive types are compared at their greatest
-        // fixpoint rather than unfolded forever.
+        // fixpoint rather than unfolded forever. The scan is empty (free) for a
+        // non-recursive query; under recursion the stack holds one entry per
+        // reference goal still being unfolded — bounded by the distinct goals
+        // before a cycle and, overall, by the shared work budget. Every recorded
+        // goal has a `Ref` on one side, so the structural compare rejects a
+        // mismatched goal on the discriminant before walking either subtree.
         if assumptions.iter().any(|(a, b)| a == self && b == other) {
             return true;
         }
@@ -678,17 +683,20 @@ impl LeafRelations for NoLeafRelations {
 /// above the upper bound (or equal with a strict end). Sound: it reports
 /// unsatisfiable only when the ordering the oracle returns forces it, and stays
 /// conservative when the oracle cannot compare two bounds.
-fn bounds_unsatisfiable(constraints: &[Constraint], oracle: &dyn LeafRelations) -> bool {
+fn bounds_unsatisfiable<'a>(
+    constraints: impl Iterator<Item = &'a Constraint> + Clone,
+    oracle: &dyn LeafRelations,
+) -> bool {
     use core::cmp::Ordering;
     let min_len = constraints
-        .iter()
+        .clone()
         .filter_map(|c| match c {
             Constraint::MinLen(n) => Some(*n),
             _ => None,
         })
         .max();
     let max_len = constraints
-        .iter()
+        .clone()
         .filter_map(|c| match c {
             Constraint::MaxLen(n) => Some(*n),
             _ => None,
@@ -761,15 +769,17 @@ fn tighter_bound(
 /// stays sound, since missing a contradiction only forgoes reporting emptiness,
 /// never reports a non-empty intersection empty.
 fn intersection_bounds_unsatisfiable(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
-    let merged: Vec<Constraint> = members
+    // Gather the top-level refine members' constraints by reference — no clone, so
+    // a `Regex` constraint's pattern string is not copied per intersection node.
+    let merged: Vec<&Constraint> = members
         .iter()
         .filter_map(|m| match m {
-            Schema::Refine { constraints, .. } => Some(constraints.clone()),
+            Schema::Refine { constraints, .. } => Some(constraints.as_slice()),
             _ => None,
         })
         .flatten()
         .collect();
-    !merged.is_empty() && bounds_unsatisfiable(&merged, oracle)
+    !merged.is_empty() && bounds_unsatisfiable(merged.iter().copied(), oracle)
 }
 
 /// Whether the linear language `pa · ta*` is included in `pb · tb*` — a fixed
@@ -904,11 +914,22 @@ fn keyed_map_subtype(
     }
 }
 
-/// Index a field list by name for O(1) cross-list lookup during subtyping. Field
-/// names are unique within a record (the frontend rejects duplicates), so a later
-/// entry never shadows an earlier one meaningfully.
+/// Index a field list by name for O(1) cross-list lookup during subtyping.
+///
+/// Unique field names are a hard caller invariant: `collect` into a map keeps the
+/// last entry per key, so a duplicate name would silently shadow an earlier field
+/// and could make the `required`/width checks that consume this index unsound. The
+/// frontend rejects duplicates; the `debug_assert` makes that dependency explicit
+/// and catches a malformed IR in debug rather than deciding on a shadowed field.
 fn field_index(fields: &[Field]) -> std::collections::HashMap<&str, &Field> {
-    fields.iter().map(|f| (f.name.as_str(), f)).collect()
+    let index: std::collections::HashMap<&str, &Field> =
+        fields.iter().map(|f| (f.name.as_str(), f)).collect();
+    debug_assert_eq!(
+        index.len(),
+        fields.len(),
+        "record has duplicate field names; the frontend must reject them"
+    );
+    index
 }
 
 /// The value universe partitioned into mutually-disjoint regions, so a Boolean
