@@ -1995,22 +1995,23 @@ mod laws {
         }
     }
 
-    #[allow(clippy::many_single_char_names)]
-    fn bound_holds(c: &Constraint, v: &Obj, pool: &[Obj]) -> bool {
+    fn bound_holds(constraint: &Constraint, value: &Obj, pool: &[Obj]) -> bool {
         use core::cmp::Ordering;
-        let cmp_to = |i: &usize, ok: fn(Ordering) -> bool| match (as_num(v), as_num(&pool[*i])) {
-            (Some(a), Some(b)) => a.partial_cmp(&b).is_some_and(ok),
-            _ => false, // a numeric bound on a non-numeric value raises: non-member
+        let cmp_to = |index: &usize, ok: fn(Ordering) -> bool| {
+            match (as_num(value), as_num(&pool[*index])) {
+                (Some(lhs), Some(rhs)) => lhs.partial_cmp(&rhs).is_some_and(ok),
+                _ => false, // a numeric bound on a non-numeric value raises: non-member
+            }
         };
-        match c {
-            Constraint::Ge(i) => cmp_to(i, |o| o != Ordering::Less),
-            Constraint::Gt(i) => cmp_to(i, |o| o == Ordering::Greater),
-            Constraint::Le(i) => cmp_to(i, |o| o != Ordering::Greater),
-            Constraint::Lt(i) => cmp_to(i, |o| o == Ordering::Less),
-            Constraint::MinLen(n) => val_len(v).is_some_and(|len| len >= *n),
-            Constraint::MaxLen(n) => val_len(v).is_some_and(|len| len <= *n),
-            Constraint::MultipleOf(i) => match (as_num(v), as_num(&pool[*i])) {
-                (Some(a), Some(b)) if b != 0.0 => a % b == 0.0,
+        match constraint {
+            Constraint::Ge(index) => cmp_to(index, |ord| ord != Ordering::Less),
+            Constraint::Gt(index) => cmp_to(index, |ord| ord == Ordering::Greater),
+            Constraint::Le(index) => cmp_to(index, |ord| ord != Ordering::Greater),
+            Constraint::Lt(index) => cmp_to(index, |ord| ord == Ordering::Less),
+            Constraint::MinLen(min) => val_len(value).is_some_and(|len| len >= *min),
+            Constraint::MaxLen(max) => val_len(value).is_some_and(|len| len <= *max),
+            Constraint::MultipleOf(index) => match (as_num(value), as_num(&pool[*index])) {
+                (Some(lhs), Some(rhs)) if rhs != 0.0 => lhs % rhs == 0.0,
                 _ => false,
             },
             // Not generated for this oracle (opaque user code); never reached.
@@ -2046,47 +2047,46 @@ mod laws {
 
     /// Reference membership over the non-opaque fragment, transcribing each node's
     /// denotation directly.
-    #[allow(clippy::many_single_char_names)]
-    fn member_full(schema: &Schema, v: &Obj, pool: &[Obj]) -> bool {
+    fn member_full(schema: &Schema, value: &Obj, pool: &[Obj]) -> bool {
         match schema {
             Schema::Anything | Schema::Dynamic => true,
             Schema::Nothing => false,
-            Schema::NoneType => matches!(v, Obj::None),
-            Schema::Bool => matches!(v, Obj::Bool(_)),
-            Schema::Int => matches!(v, Obj::Bool(_) | Obj::Int(_)), // bool ⊆ int
-            Schema::Float => matches!(v, Obj::Float(_)),
-            Schema::Str => matches!(v, Obj::Str(_)),
-            Schema::Bytes => matches!(v, Obj::Bytes),
-            Schema::Literal(i) => typed_eq(&pool[*i], v),
-            Schema::Set(element) => match v {
+            Schema::NoneType => matches!(value, Obj::None),
+            Schema::Bool => matches!(value, Obj::Bool(_)),
+            Schema::Int => matches!(value, Obj::Bool(_) | Obj::Int(_)), // bool ⊆ int
+            Schema::Float => matches!(value, Obj::Float(_)),
+            Schema::Str => matches!(value, Obj::Str(_)),
+            Schema::Bytes => matches!(value, Obj::Bytes),
+            Schema::Literal(index) => typed_eq(&pool[*index], value),
+            Schema::Set(element) => match value {
                 Obj::Set(items) => items.iter().all(|item| member_full(element, item, pool)),
                 _ => false,
             },
-            Schema::FrozenSet(element) => match v {
+            Schema::FrozenSet(element) => match value {
                 Obj::FrozenSet(items) => items.iter().all(|item| member_full(element, item, pool)),
                 _ => false,
             },
-            Schema::Seq { container, regex } => match (container, v) {
+            Schema::Seq { container, regex } => match (container, value) {
                 (SeqKind::List, Obj::List(items)) | (SeqKind::Tuple, Obj::Tuple(items)) => {
                     seq_matches(regex, items, pool)
                 }
                 _ => false,
             },
-            Schema::KeyedMap { fields, defaults } => match v {
+            Schema::KeyedMap { fields, defaults } => match value {
                 Obj::Map(entries) => {
-                    let fields_ok =
-                        fields
-                            .iter()
-                            .all(|f| match entries.iter().find(|(k, _)| f.name == *k) {
-                                Some((_, val)) => member_full(&f.schema, val, pool),
-                                None => !f.required,
-                            });
-                    let rest_ok = entries.iter().all(|(k, val)| {
-                        if fields.iter().any(|f| f.name == *k) {
+                    let fields_ok = fields.iter().all(|field| {
+                        match entries.iter().find(|(key, _)| field.name == *key) {
+                            Some((_, val)) => member_full(&field.schema, val, pool),
+                            None => !field.required,
+                        }
+                    });
+                    let rest_ok = entries.iter().all(|(key, val)| {
+                        if fields.iter().any(|field| field.name == *key) {
                             return true;
                         }
-                        defaults.iter().any(|(ks, vs)| {
-                            member_full(ks, &Obj::Str(k), pool) && member_full(vs, val, pool)
+                        defaults.iter().any(|(key_schema, value_schema)| {
+                            member_full(key_schema, &Obj::Str(key), pool)
+                                && member_full(value_schema, val, pool)
                         })
                     });
                     fields_ok && rest_ok
@@ -2094,11 +2094,18 @@ mod laws {
                 _ => false,
             },
             Schema::Refine { base, constraints } => {
-                member_full(base, v, pool) && constraints.iter().all(|c| bound_holds(c, v, pool))
+                member_full(base, value, pool)
+                    && constraints
+                        .iter()
+                        .all(|constraint| bound_holds(constraint, value, pool))
             }
-            Schema::Union(members) => members.iter().any(|m| member_full(m, v, pool)),
-            Schema::Intersection(members) => members.iter().all(|m| member_full(m, v, pool)),
-            Schema::Complement(inner) => !member_full(inner, v, pool),
+            Schema::Union(members) => members
+                .iter()
+                .any(|member| member_full(member, value, pool)),
+            Schema::Intersection(members) => members
+                .iter()
+                .all(|member| member_full(member, value, pool)),
+            Schema::Complement(inner) => !member_full(inner, value, pool),
             // The opaque leaves are excluded from the generator below.
             other => unreachable!("oracle does not model {other:?}"),
         }
