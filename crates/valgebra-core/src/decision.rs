@@ -4,16 +4,32 @@
 use crate::ir::{Constraint, Field, Schema, SeqKind, SeqRegex};
 use std::cell::Cell;
 
-/// The most subtyping-decision steps one top-level query may take before it stops
-/// and returns the conservative `false`. The structural rules distribute over
-/// unions and intersections, so a deeply nested Boolean combination can demand
-/// work exponential in its depth; without interning to share equal subtrees there
-/// is no cheap memo, so the procedure bounds its own work. The ceiling is far
-/// above any schema a real annotation produces, so a legitimate relation is
-/// always decided; only an adversarial schema built to blow up the decision
-/// reaches it, and there a `false` ("not proven") is sound by the conservative
-/// contract. A complete, work-sharing decision is the interning-based procedure.
-const SUBTYPE_BUDGET: u32 = 1_000_000;
+/// The most decision steps one top-level query may take before it stops and
+/// returns the conservative answer. Subtyping distributes over unions and
+/// intersections and emptiness recurses the structural fragment, so a deeply
+/// nested Boolean combination can demand work exponential in its depth; without
+/// interning to share equal subtrees there is no cheap memo, so the procedure
+/// bounds its own work. One budget is threaded through a whole top-level query —
+/// subtyping and the emptiness checks it calls into share it, and the two
+/// directions of an equivalence share it — so the bound cannot be escaped through
+/// a side door or spent twice. The ceiling is far above any schema a real
+/// annotation produces, so a legitimate relation is always decided; only an
+/// adversarial schema built to blow up the decision reaches it, and there a
+/// `false` ("not proven") is sound by the conservative contract. A complete,
+/// work-sharing decision is the interning-based procedure.
+const DECISION_BUDGET: u32 = 1_000_000;
+
+/// Spend one unit of `budget`; returns `false` when it is already exhausted, the
+/// signal a budgeted decision uses to stop and report the conservative answer.
+fn spend(budget: &Cell<u32>) -> bool {
+    match budget.get().checked_sub(1) {
+        Some(remaining) => {
+            budget.set(remaining);
+            true
+        }
+        None => false,
+    }
+}
 
 impl SeqRegex {
     /// Whether the regex matches **no** sequence at all — its language is empty.
@@ -26,16 +42,17 @@ impl SeqRegex {
         oracle: &dyn LeafRelations,
         defs: &[Schema],
         visiting: &mut Vec<usize>,
+        budget: &Cell<u32>,
     ) -> bool {
         match self {
             SeqRegex::Empty | SeqRegex::Star(_) => false,
-            SeqRegex::Elem(schema) => schema.is_empty_rec(oracle, defs, visiting),
+            SeqRegex::Elem(schema) => schema.is_empty_rec(oracle, defs, visiting, budget),
             SeqRegex::Cat(parts) => parts
                 .iter()
-                .any(|p| p.language_is_empty(oracle, defs, visiting)),
+                .any(|p| p.language_is_empty(oracle, defs, visiting, budget)),
             SeqRegex::Or(parts) => parts
                 .iter()
-                .all(|p| p.language_is_empty(oracle, defs, visiting)),
+                .all(|p| p.language_is_empty(oracle, defs, visiting, budget)),
         }
     }
 
@@ -173,9 +190,19 @@ impl Schema {
     /// and unresolved recursive references are not decided, so a combination
     /// containing one is never reported empty. To resolve recursive references,
     /// use [`is_empty_under`](Self::is_empty_under).
+    ///
+    /// The decision is bounded: a deeply nested adversarial schema that would take
+    /// more than a fixed number of steps stops and returns `false`, so a `false`
+    /// means "not proven empty within the work bound", not necessarily "non-empty".
+    /// A real schema decides far inside the bound.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.is_empty_rec(&NoLeafRelations, &[], &mut Vec::new())
+        self.is_empty_rec(
+            &NoLeafRelations,
+            &[],
+            &mut Vec::new(),
+            &Cell::new(DECISION_BUDGET),
+        )
     }
 
     /// Like [`is_empty`](Self::is_empty), but resolving recursive references
@@ -184,7 +211,12 @@ impl Schema {
     /// not resolve stays conservative (never reported empty).
     #[must_use]
     pub fn is_empty_under(&self, defs: &[Schema]) -> bool {
-        self.is_empty_rec(&NoLeafRelations, defs, &mut Vec::new())
+        self.is_empty_rec(
+            &NoLeafRelations,
+            defs,
+            &mut Vec::new(),
+            &Cell::new(DECISION_BUDGET),
+        )
     }
 
     /// Like [`is_empty_under`](Self::is_empty_under), but with an `oracle` that
@@ -192,7 +224,7 @@ impl Schema {
     /// bound conjunction (a lower bound above an upper bound) is detected.
     #[must_use]
     pub fn is_empty_with(&self, oracle: &dyn LeafRelations, defs: &[Schema]) -> bool {
-        self.is_empty_rec(oracle, defs, &mut Vec::new())
+        self.is_empty_rec(oracle, defs, &mut Vec::new(), &Cell::new(DECISION_BUDGET))
     }
 
     fn is_empty_rec(
@@ -200,7 +232,14 @@ impl Schema {
         oracle: &dyn LeafRelations,
         defs: &[Schema],
         visiting: &mut Vec<usize>,
+        budget: &Cell<u32>,
     ) -> bool {
+        // Bound the work, sharing the budget with the caller (the subtyping
+        // decision passes its own `cx.budget` in), so emptiness cannot escape the
+        // ceiling subtyping advertises. Exhaustion returns "not proven empty".
+        if !spend(budget) {
+            return false;
+        }
         match self {
             Schema::Ref(id) => {
                 // A reference reached again while resolving it is a cycle: this
@@ -213,18 +252,18 @@ impl Schema {
                 match defs.get(*id) {
                     Some(def) => {
                         visiting.push(*id);
-                        let empty = def.is_empty_rec(oracle, defs, visiting);
+                        let empty = def.is_empty_rec(oracle, defs, visiting, budget);
                         visiting.pop();
                         empty
                     }
                     None => false,
                 }
             }
-            Schema::Seq { regex, .. } => regex.language_is_empty(oracle, defs, visiting),
+            Schema::Seq { regex, .. } => regex.language_is_empty(oracle, defs, visiting, budget),
             // A refinement is a subset of its base: an empty base empties it, and
             // so does an unsatisfiable bound conjunction (decided by the oracle).
             Schema::Refine { base, constraints } => {
-                base.is_empty_rec(oracle, defs, visiting)
+                base.is_empty_rec(oracle, defs, visiting, budget)
                     || bounds_unsatisfiable(constraints, oracle)
             }
             // An intersection is empty if a member is, if the scalar regions cancel,
@@ -232,24 +271,24 @@ impl Schema {
             Schema::Intersection(members) => {
                 members
                     .iter()
-                    .any(|m| m.is_empty_rec(oracle, defs, visiting))
+                    .any(|m| m.is_empty_rec(oracle, defs, visiting, budget))
                     || matches!(self.region_set(), Some(0))
                     || intersection_bounds_unsatisfiable(members, oracle)
             }
             Schema::Set(_) | Schema::FrozenSet(_) => false,
-            Schema::KeyedMap { fields, .. } => fields
-                .iter()
-                .any(|field| field.required && field.schema.is_empty_rec(oracle, defs, visiting)),
+            Schema::KeyedMap { fields, .. } => fields.iter().any(|field| {
+                field.required && field.schema.is_empty_rec(oracle, defs, visiting, budget)
+            }),
             // A structural-attribute schema requires every field, so an empty
             // required field's schema empties it — the same rule as a keyed map.
             // An uninhabited dataclass-style schema is detected here; the nominal
             // `isinstance` part stays opaque, so it never narrows to empty.
-            Schema::Attrs { fields, .. } => fields
-                .iter()
-                .any(|field| field.required && field.schema.is_empty_rec(oracle, defs, visiting)),
+            Schema::Attrs { fields, .. } => fields.iter().any(|field| {
+                field.required && field.schema.is_empty_rec(oracle, defs, visiting, budget)
+            }),
             Schema::Union(members) => members
                 .iter()
-                .all(|m| m.is_empty_rec(oracle, defs, visiting)),
+                .all(|m| m.is_empty_rec(oracle, defs, visiting, budget)),
             // Scalars and their Boolean combinations decide via the region set;
             // a combination with an opaque leaf yields `None`, hence not empty.
             _ => matches!(self.region_set(), Some(0)),
@@ -264,6 +303,11 @@ impl Schema {
     /// rule is **sound** — it never reports a subtype it cannot justify — and
     /// conservative where it cannot decide (`Or` regexes, recursive references,
     /// instances, literals): there it returns `false` rather than guess.
+    ///
+    /// The decision is bounded: an adversarial schema that would take more than a
+    /// fixed number of steps stops and returns `false`, so a `false` can mean
+    /// "not proven a subtype within the work bound". A real schema decides far
+    /// inside the bound.
     #[must_use]
     pub fn is_subtype_of(&self, other: &Schema) -> bool {
         self.is_subtype_of_under(other, &NoLeafRelations, &[])
@@ -281,7 +325,7 @@ impl Schema {
         oracle: &dyn LeafRelations,
         defs: &[Schema],
     ) -> bool {
-        let budget = Cell::new(SUBTYPE_BUDGET);
+        let budget = Cell::new(DECISION_BUDGET);
         self.is_subtype_rec(
             other,
             SubtypeCx {
@@ -304,9 +348,8 @@ impl Schema {
         // decision stops and returns the conservative `false` rather than running
         // unbounded. A real annotation decides in a few steps; only an adversarial
         // schema reaches the ceiling.
-        match cx.budget.get().checked_sub(1) {
-            Some(remaining) => cx.budget.set(remaining),
-            None => return false,
+        if !spend(cx.budget) {
+            return false;
         }
         // Coinductive hypothesis: a goal already being proven on this path is
         // assumed to hold, so two recursive types are compared at their greatest
@@ -340,7 +383,9 @@ impl Schema {
             (Schema::Nothing, _) | (_, Schema::Anything) => true,
             // A ⊆ ∅ exactly when A is empty, decided with the same oracle so a
             // refinement with unsatisfiable bounds is recognised here too.
-            (_, Schema::Nothing) => self.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new()),
+            (_, Schema::Nothing) => {
+                self.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget)
+            }
             // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z; A ⊆ (Y ∩ Z) iff A ⊆ Y and A ⊆ Z.
             (Schema::Union(members), _) => members
                 .iter()
@@ -463,6 +508,9 @@ impl Schema {
     }
 
     /// Whether `self` and `other` denote the same set — mutual inclusion.
+    ///
+    /// Like the relations it composes, the decision is bounded; a `false` can mean
+    /// "not proven equivalent within the work bound" for an adversarial schema.
     #[must_use]
     pub fn is_equivalent(&self, other: &Schema) -> bool {
         self.is_equivalent_under(other, &NoLeafRelations, &[])
@@ -477,8 +525,17 @@ impl Schema {
         oracle: &dyn LeafRelations,
         defs: &[Schema],
     ) -> bool {
-        self.is_subtype_of_under(other, oracle, defs)
-            && other.is_subtype_of_under(self, oracle, defs)
+        // Both inclusion directions share one budget, so equivalence cannot spend
+        // twice the ceiling, and its verdict does not depend on which direction
+        // happened to allocate a fresh allowance first.
+        let budget = Cell::new(DECISION_BUDGET);
+        let cx = SubtypeCx {
+            oracle,
+            defs,
+            budget: &budget,
+        };
+        self.is_subtype_rec(other, cx, &mut Vec::new())
+            && other.is_subtype_rec(self, cx, &mut Vec::new())
     }
 }
 
@@ -632,7 +689,8 @@ fn linear_subtype(
     // oracle and definitions as the rest of the decision, so a tail empty only
     // under a refinement bound or an uninhabited recursive reference is
     // recognised here too, consistent with the context-aware recursion around it.
-    let ta = ta.filter(|element| !element.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new()));
+    let ta =
+        ta.filter(|element| !element.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget));
     // A's fixed prefix must align with B: against B's prefix where they overlap,
     // then against B's repeated tail past it (which B must therefore have).
     let prefix_aligns = pa.len() >= pb.len()

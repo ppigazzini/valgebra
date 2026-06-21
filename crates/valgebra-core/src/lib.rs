@@ -1680,6 +1680,39 @@ mod laws {
         assert!(!wide_list.is_subtype_of_under(&int_list, &oracle, &defs));
     }
 
+    /// The shared budget threads through the subtype-into-bottom path (which calls
+    /// the emptiness decision) and through both directions of equivalence without
+    /// changing a real verdict, including an uninhabited recursive reference
+    /// reached via `A ⊆ ∅`.
+    #[test]
+    fn the_shared_budget_decides_real_emptiness_and_equivalence() {
+        // `A ⊆ ∅` reaches the (now budgeted) emptiness check.
+        assert!(intersection(Schema::Int, Schema::Str).is_subtype_of(&Schema::Nothing));
+        assert!(!Schema::Int.is_subtype_of(&Schema::Nothing));
+        // Equivalence runs both directions against one budget and still decides.
+        assert!(union(Schema::Int, Schema::Str).is_equivalent(&union(Schema::Str, Schema::Int)));
+        assert!(!Schema::Int.is_equivalent(&Schema::Str));
+        // An uninhabited recursive reference is empty, decided through the
+        // subtype-into-bottom crossing under the shared budget.
+        let defs = vec![Schema::Ref(0)];
+        assert!(Schema::Ref(0).is_subtype_of_under(&Schema::Nothing, &NoLeafRelations, &defs));
+    }
+
+    /// Querying a deep schema against bottom routes through the emptiness check,
+    /// which shares the subtyping budget, so it stops promptly rather than running
+    /// the decision unbounded down a side door.
+    #[test]
+    fn deep_subtype_into_bottom_terminates() {
+        let deep = intersection_of_unions_tower(18, Schema::Int);
+        let start = std::time::Instant::now();
+        let _ = deep.is_subtype_of(&Schema::Nothing);
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed < std::time::Duration::from_secs(3),
+            "subtype-into-bottom on a depth-18 tower took {elapsed:?}"
+        );
+    }
+
     /// A structural-attribute schema with an uninhabited required attribute is
     /// empty: no value can carry that attribute, so the dataclass-style schema
     /// denotes nothing. The symmetric keyed-map rule already held; this closes the
