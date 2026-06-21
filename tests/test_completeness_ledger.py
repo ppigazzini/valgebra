@@ -125,6 +125,39 @@ _DECIDED = [
     # pool index, so nested bounds decide by syntactic containment).
     pytest.param("subtype", _GE0, int, id="refine:Ge(0)<=int"),
     pytest.param("subtype", _GE0_LE10, _GE0, id="refine:Ge(0)Le(10)<=Ge(0)"),
+    # Bound entailment: a tighter bound is a subtype of a looser one even when the
+    # bound values differ, decided through the ordering oracle rather than a
+    # verbatim constraint match.
+    pytest.param(
+        "subtype",
+        Annotated[int, at.Ge(5)],
+        Annotated[int, at.Ge(0)],
+        id="refine:Ge(5)<=Ge(0)",
+    ),
+    pytest.param(
+        "subtype",
+        Annotated[int, at.Gt(5)],
+        Annotated[int, at.Ge(0)],
+        id="refine:Gt(5)<=Ge(0)",
+    ),
+    pytest.param(
+        "subtype",
+        Annotated[int, at.Le(0)],
+        Annotated[int, at.Le(5)],
+        id="refine:Le(0)<=Le(5)",
+    ),
+    pytest.param(
+        "subtype",
+        Annotated[str, at.MinLen(5)],
+        Annotated[str, at.MinLen(2)],
+        id="refine:MinLen(5)<=MinLen(2)",
+    ),
+    pytest.param(
+        "subtype",
+        Annotated[str, at.MaxLen(2)],
+        Annotated[str, at.MaxLen(5)],
+        id="refine:MaxLen(2)<=MaxLen(5)",
+    ),
     # A bound conjunction whose lower bound exceeds its upper bound is empty,
     # whether the bounds sit on one refinement or across an intersection.
     pytest.param("empty", _GE10_LE0, None, id="empty:Ge(10)Le(0)"),

@@ -840,6 +840,48 @@ mod laws {
         );
     }
 
+    /// Refinement subtyping decides a supertype bound by *entailment* through the
+    /// ordering oracle, not only a verbatim constraint match: a tighter lower,
+    /// upper, or length bound is a subtype of a looser one. Soundness negatives
+    /// confirm a looser bound is not a subtype of a tighter one, and a non-strict
+    /// bound does not entail its strict form at the same value.
+    #[test]
+    fn refinement_subtyping_decides_bound_entailment() {
+        use core::cmp::Ordering;
+        struct ByIndex;
+        impl LeafRelations for ByIndex {
+            fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+                None
+            }
+            fn compare(&self, a: usize, b: usize) -> Option<Ordering> {
+                Some(a.cmp(&b))
+            }
+        }
+        let refine = |constraints: Vec<Constraint>| Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints,
+        };
+        let sub = |a: Vec<Constraint>, b: Vec<Constraint>| {
+            refine(a).is_subtype_of_under(&refine(b), &ByIndex, &[])
+        };
+        assert!(sub(vec![Constraint::Ge(5)], vec![Constraint::Ge(0)]));
+        assert!(sub(vec![Constraint::Gt(5)], vec![Constraint::Ge(0)]));
+        assert!(sub(vec![Constraint::Le(0)], vec![Constraint::Le(5)]));
+        assert!(sub(vec![Constraint::Lt(0)], vec![Constraint::Lt(5)]));
+        assert!(sub(
+            vec![Constraint::MinLen(5)],
+            vec![Constraint::MinLen(2)]
+        ));
+        assert!(sub(
+            vec![Constraint::MaxLen(2)],
+            vec![Constraint::MaxLen(5)]
+        ));
+        // Soundness negatives.
+        assert!(!sub(vec![Constraint::Ge(0)], vec![Constraint::Ge(5)]));
+        assert!(!sub(vec![Constraint::Le(5)], vec![Constraint::Le(0)]));
+        assert!(!sub(vec![Constraint::Ge(5)], vec![Constraint::Gt(5)]));
+    }
+
     #[test]
     fn decision_arms_are_pinned_independently_of_the_python_suite() {
         // Each assertion fails under a specific mutation of a decision arm, so the

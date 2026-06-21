@@ -580,10 +580,11 @@ impl Schema {
             // Complement is contravariant: ¬A ⊆ ¬B exactly when B ⊆ A.
             (Schema::Complement(a), Schema::Complement(b)) => b.is_subtype_rec(a, cx, assumptions),
             // A refinement is a subset of its base. Against another refinement the
-            // base must subtype and every constraint of the supertype must be
-            // present, since more constraints denote a smaller set; equal bounds
-            // share a pool index, so this decides nested bounds and lengths.
-            // Bound-value entailment beyond syntactic containment is conservative.
+            // base must subtype and every constraint of the supertype must hold of
+            // every subtype value: either it appears verbatim, or it is entailed by
+            // the subtype's bounds (a tighter lower/upper/length bound entails a
+            // looser one, decided through the ordering oracle). A bound the oracle
+            // cannot compare, and a non-order constraint, stay on the verbatim path.
             (
                 Schema::Refine {
                     base: narrow_base,
@@ -595,9 +596,10 @@ impl Schema {
                 },
             ) => {
                 narrow_base.is_subtype_rec(wide_base, cx, assumptions)
-                    && wide_cons
-                        .iter()
-                        .all(|constraint| narrow_cons.contains(constraint))
+                    && wide_cons.iter().all(|constraint| {
+                        narrow_cons.contains(constraint)
+                            || constraint_entailed(constraint, narrow_cons, cx.oracle)
+                    })
             }
             // Against a non-refinement, a refinement inherits its base's supertypes.
             (Schema::Refine { base, .. }, _) => base.is_subtype_rec(other, cx, assumptions),
@@ -726,6 +728,59 @@ fn bounds_unsatisfiable<'a>(
         };
     }
     false
+}
+
+/// Whether a single supertype refinement constraint is *entailed* by the subtype's
+/// constraint set: every value satisfying all of `narrow` also satisfies `wide`.
+/// Order and length bounds entail by value (a tighter lower bound entails a looser
+/// one, dually for upper and length), decided through the ordering `oracle`; the
+/// remaining kinds (`MultipleOf`, `Predicate`, `Regex`) have no sound value
+/// entailment and require the constraint to appear verbatim, handled by the
+/// caller's syntactic-containment check. A bound the oracle cannot compare is not
+/// entailed (conservative).
+fn constraint_entailed(
+    wide: &Constraint,
+    narrow: &[Constraint],
+    oracle: &dyn LeafRelations,
+) -> bool {
+    use core::cmp::Ordering;
+    let ge = |o: Option<Ordering>| matches!(o, Some(Ordering::Greater | Ordering::Equal));
+    let gt = |o: Option<Ordering>| matches!(o, Some(Ordering::Greater));
+    let le = |o: Option<Ordering>| matches!(o, Some(Ordering::Less | Ordering::Equal));
+    let lt = |o: Option<Ordering>| matches!(o, Some(Ordering::Less));
+    match wide {
+        // x >= w holds if the subtype forces a lower bound at value >= w.
+        Constraint::Ge(w) => narrow.iter().any(|c| match c {
+            Constraint::Ge(n) | Constraint::Gt(n) => ge(oracle.compare(*n, *w)),
+            _ => false,
+        }),
+        // x > w holds from Gt(n>=w), or Ge(n>w).
+        Constraint::Gt(w) => narrow.iter().any(|c| match c {
+            Constraint::Gt(n) => ge(oracle.compare(*n, *w)),
+            Constraint::Ge(n) => gt(oracle.compare(*n, *w)),
+            _ => false,
+        }),
+        // x <= w holds if the subtype forces an upper bound at value <= w.
+        Constraint::Le(w) => narrow.iter().any(|c| match c {
+            Constraint::Le(n) | Constraint::Lt(n) => le(oracle.compare(*n, *w)),
+            _ => false,
+        }),
+        // x < w holds from Lt(n<=w), or Le(n<w).
+        Constraint::Lt(w) => narrow.iter().any(|c| match c {
+            Constraint::Lt(n) => le(oracle.compare(*n, *w)),
+            Constraint::Le(n) => lt(oracle.compare(*n, *w)),
+            _ => false,
+        }),
+        // Length bounds compare by their raw counts.
+        Constraint::MinLen(w) => narrow
+            .iter()
+            .any(|c| matches!(c, Constraint::MinLen(n) if n >= w)),
+        Constraint::MaxLen(w) => narrow
+            .iter()
+            .any(|c| matches!(c, Constraint::MaxLen(n) if n <= w)),
+        // No sound value entailment without an exact match (handled by the caller).
+        Constraint::MultipleOf(_) | Constraint::Predicate(_) | Constraint::Regex(_) => false,
+    }
 }
 
 /// Keep the tighter of two one-sided bounds: the greater value for a lower bound,
