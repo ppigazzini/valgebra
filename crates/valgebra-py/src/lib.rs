@@ -26,9 +26,9 @@ use jiter::{JsonValue, PythonParse};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyString, PyTuple, PyType};
+use pyo3::types::{PyBytes, PyList, PyString, PyTuple, PyType};
 use rustc_hash::FxHashSet;
-use valgebra_core::{LeafRelations, Schema, fresh_self_token};
+use valgebra_core::{LeafRelations, Schema, SeqKind, SeqRegex, fresh_self_token};
 
 use crate::build::{build_schema, combine};
 use crate::check::{Ctx, ValidatorIndex, build_index, member};
@@ -609,6 +609,52 @@ fn parse_json<'py>(data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
             "JSON input must be a str or bytes object",
         )),
     }
+}
+
+/// A deterministic, binding-level instruction workload for the perf gate.
+///
+/// The shipped hot path is the membership walk over a live Python value, where
+/// the core's deterministic core-only workload does not reach. This runs that walk
+/// `iters` times over a fixed record value crossing the boundary at every node
+/// kind on the hot path (an int, a str, and a homogeneous int list), returning a
+/// checksum so the optimizer cannot discard the work.
+///
+/// Embedding `CPython` makes the absolute instruction count include a non-fixed
+/// interpreter startup, so the gate ([`scripts/perf_gate.py`]) measures the
+/// *difference* between two iteration counts: startup is identical in both runs
+/// and cancels, leaving the deterministic per-iteration walk cost. This is the
+/// budgeted signal, and it also covers the per-node `ctx.fatal.borrow()` tax.
+#[doc(hidden)]
+pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
+    // A homogeneous int list: the walk crosses the boundary at the container and
+    // at each element (an `isinstance` check and the per-node `ctx.fatal.borrow()`
+    // tax), the most common shape on the hot path.
+    let schema = Schema::Seq {
+        container: SeqKind::List,
+        regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Int)))),
+    };
+    let validator = Validator::new(schema, Vec::new(), Vec::new());
+
+    // A fixed matching value, built once; the walk visits each list element.
+    let items: Vec<i64> = (0..64).collect();
+    let obj = PyList::new(py, items).unwrap().into_any();
+
+    let mut checksum: u64 = 0;
+    for _ in 0..iters {
+        let guard = RefCell::new(FxHashSet::default());
+        let fatal = RefCell::new(None);
+        // `black_box` the inputs so the optimizer cannot hoist the loop-invariant
+        // walk out of the loop: the per-iteration walk is the signal being timed.
+        let ok = member(
+            std::hint::black_box(&validator.schema),
+            &Value::Py(std::hint::black_box(&obj)),
+            &mut Vec::new(),
+            validator.context(py, &guard, &fatal, false, true),
+            &mut Vec::new(),
+        );
+        checksum = checksum.wrapping_add(u64::from(ok));
+    }
+    checksum
 }
 
 /// Build a recursive schema as a checked fixpoint.

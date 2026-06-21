@@ -1,5 +1,8 @@
 {
   "_comment": "Instruction-count budget for the core schema-operation workload, measured with cachegrind. Deterministic for a given build; re-record with scripts/perf_gate.py --update after an intentional change to the workload or a large compiler codegen shift. The tolerance (tightened from 0.15 to 0.10) absorbs compiler-codegen drift across toolchain versions while still catching algorithmic regressions, which are far larger; the count is CPU-independent, so this is codegen headroom, not runner noise.",
   "core_workload_irefs": 252026154,
-  "tolerance": 0.10
+  "tolerance": 0.10,
+  "_binding_comment": "Binding hot-path budget: the per-iteration instruction cost of the membership walk over a live Python value, isolated as the difference between two iteration counts so the embedded interpreter's startup cancels out (scripts/perf_gate.py --binding). Recorded in the CI bench job's environment (CPython 3.12 standard build); re-record there with --binding --update if the bench interpreter changes. The wider tolerance absorbs FFI/codegen drift while still catching a per-node regression (e.g. the ctx.fatal.borrow tax), which is far larger. A local run on a different interpreter measures a different absolute count and is not authoritative.",
+  "binding_workload_irefs": 893274256,
+  "binding_tolerance": 0.20
 }
