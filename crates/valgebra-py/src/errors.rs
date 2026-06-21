@@ -58,18 +58,27 @@ pub(crate) fn json_invalid_error(py: Python<'_>, description: &str) -> PyErr {
 /// mirror the first item; `str(exc)` is a summary of every failure.
 pub(crate) fn into_pyerr(py: Python<'_>, violations: &[Violation]) -> PyErr {
     debug_assert!(!violations.is_empty(), "into_pyerr needs a failure");
+    // Populating the structured attributes is pure interpreter bookkeeping
+    // (attribute sets on a fresh exception, dict/tuple builds over owned data) and
+    // does not fail in practice. If it ever does, surface that failure (the `Err`)
+    // rather than shipping a `ValidationError` whose `.errors` is silently empty
+    // while `str(exc)` still summarizes real failures.
+    match build_validation_error(py, violations) {
+        Ok(err) | Err(err) => err,
+    }
+}
+
+fn build_validation_error(py: Python<'_>, violations: &[Violation]) -> PyResult<PyErr> {
     let err = ValidationError::new_err(summary_message(violations));
     let instance = err.value(py);
     let first = &violations[0];
-    let first_path = build_path(py, &first.path).unwrap_or_else(|_| PyTuple::empty(py));
-    let _ = instance.setattr("code", first.code);
-    let _ = instance.setattr("expected", first.expected.as_str());
-    let _ = instance.setattr("value", first.value_summary.as_str());
-    let _ = instance.setattr("message", first.to_string());
-    let _ = instance.setattr("path", &first_path);
-    let errors = error_items(py, violations).unwrap_or_else(|_| PyTuple::empty(py));
-    let _ = instance.setattr("errors", errors);
-    err
+    instance.setattr("code", first.code)?;
+    instance.setattr("expected", first.expected.as_str())?;
+    instance.setattr("value", first.value_summary.as_str())?;
+    instance.setattr("message", first.to_string())?;
+    instance.setattr("path", build_path(py, &first.path)?)?;
+    instance.setattr("errors", error_items(py, violations)?)?;
+    Ok(err)
 }
 
 /// The exception's `str()`: the single message for one failure, or a counted,
@@ -112,4 +121,61 @@ fn build_path<'py>(py: Python<'py>, path: &[PathSegment]) -> PyResult<Bound<'py,
         items.push(item);
     }
     PyTuple::new(py, items)
+}
+
+// Needs a live interpreter; compiled and run only under the `interpreter-tests`
+// feature, which links an embedded Python.
+#[cfg(all(test, feature = "interpreter-tests"))]
+mod tests {
+    use super::*;
+
+    fn violation(code: &'static str, path: Vec<PathSegment>) -> Violation {
+        Violation {
+            code,
+            path,
+            expected: "int".to_owned(),
+            value_summary: "'x'".to_owned(),
+        }
+    }
+
+    #[test]
+    fn into_pyerr_maps_violations_to_the_structured_attributes() {
+        Python::attach(|py| {
+            let violations = vec![
+                violation("int_type", vec![PathSegment::Key("a".to_owned())]),
+                violation("missing", vec![PathSegment::Index(2)]),
+            ];
+            let err = into_pyerr(py, &violations);
+            let value = err.value(py);
+
+            // The scalar attributes mirror the first violation; the path is the
+            // built tuple.
+            assert_eq!(
+                value.getattr("code").unwrap().extract::<String>().unwrap(),
+                "int_type"
+            );
+            assert_eq!(
+                value
+                    .getattr("expected")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "int"
+            );
+            let path: Vec<String> = value.getattr("path").unwrap().extract().unwrap();
+            assert_eq!(path, vec!["a".to_owned()]);
+
+            // `errors` carries one item per violation, in order, each with its code.
+            let errors = value.getattr("errors").unwrap();
+            assert_eq!(errors.len().unwrap(), 2);
+            let second_code: String = errors
+                .get_item(1)
+                .unwrap()
+                .get_item("code")
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert_eq!(second_code, "missing");
+        });
+    }
 }

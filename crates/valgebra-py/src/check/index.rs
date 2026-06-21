@@ -186,7 +186,10 @@ fn literal_union_plan(py: Python<'_>, members: &[Schema], pool: &[Py<PyAny>]) ->
         let Schema::Literal(idx) = member else {
             return None;
         };
-        let constant = pool[*idx].bind(py);
+        // Bounds-check rather than index directly: a corrupt pool index abandons
+        // the precompute (no fast path) instead of panicking across the FFI
+        // boundary, matching the defensive `.get` posture used elsewhere.
+        let constant = pool.get(*idx).map(|obj| obj.bind(py))?;
         if constant.is_exact_instance_of::<PyInt>() {
             if let Ok(i) = constant.extract::<i64>() {
                 ints.insert(i);
