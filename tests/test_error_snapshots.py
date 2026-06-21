@@ -4,6 +4,12 @@ Each case is a (schema, value) failure; the captured `errors` are snapshotted so
 any change to the machine-readable output is reviewed in the snapshot diff, never
 auto-accepted. Values are chosen with stable reprs so the snapshot is identical
 across Python versions and platforms.
+
+This is a change-detector for the message and value-summary shape, not the
+correctness oracle: the `code` and `path` each node kind must emit are pinned
+against hand-written expectations in ``tests/test_error_codes.py``, independent of
+the implementation's own output. The snapshot is recorded from the code, so read
+it alongside that suite rather than as a standalone correctness check.
 """
 
 from valgebra import ValidationError, Validator, union
