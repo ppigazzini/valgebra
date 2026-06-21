@@ -34,7 +34,7 @@ fn spend(budget: &Cell<u32>) -> bool {
 /// Intersect two region bitsets bottom-up. A missing region (an opaque, not
 /// scalar-decidable child) makes the combination opaque too, matching
 /// [`region_set`](Schema::region_set)'s `?` short-circuit.
-fn and_region(a: Option<u16>, b: Option<u16>) -> Option<u16> {
+fn and_region(a: Option<u8>, b: Option<u8>) -> Option<u8> {
     match (a, b) {
         (Some(a), Some(b)) => Some(a & b),
         _ => None,
@@ -43,7 +43,7 @@ fn and_region(a: Option<u16>, b: Option<u16>) -> Option<u16> {
 
 /// Union two region bitsets bottom-up, with the same opaque-propagation rule as
 /// [`and_region`].
-fn or_region(a: Option<u16>, b: Option<u16>) -> Option<u16> {
+fn or_region(a: Option<u8>, b: Option<u8>) -> Option<u8> {
     match (a, b) {
         (Some(a), Some(b)) => Some(a | b),
         _ => None,
@@ -170,7 +170,7 @@ impl Schema {
     /// elsewhere the caller stays conservative. The gradual `Any`, literals,
     /// instances, refinements, content-bearing containers, and references are
     /// not scalar-decidable, so any combination containing one yields `None`.
-    pub(crate) fn region_set(&self) -> Option<u16> {
+    pub(crate) fn region_set(&self) -> Option<u8> {
         Some(match self {
             Schema::Nothing => 0,
             Schema::Anything => REGION_ALL,
@@ -277,7 +277,7 @@ impl Schema {
         defs: &[Schema],
         visiting: &mut Vec<usize>,
         budget: &Cell<u32>,
-    ) -> (bool, Option<u16>) {
+    ) -> (bool, Option<u8>) {
         // Bound the work, sharing the budget with the caller (the subtyping
         // decision passes its own `cx.budget` in), so emptiness cannot escape the
         // ceiling subtyping advertises. Exhaustion returns "not proven empty".
@@ -564,11 +564,14 @@ impl Schema {
                     class_index: cb,
                     fields: fb,
                 },
-            ) if ca == cb => fb.iter().all(|b| {
-                fa.iter()
-                    .find(|a| a.name == b.name)
-                    .is_some_and(|a| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
-            }),
+            ) if ca == cb => {
+                let a_by_name = field_index(fa);
+                fb.iter().all(|b| {
+                    a_by_name
+                        .get(b.name.as_str())
+                        .is_some_and(|a| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
+                })
+            }
             // Complement is contravariant: ¬A ⊆ ¬B exactly when B ⊆ A.
             (Schema::Complement(a), Schema::Complement(b)) => b.is_subtype_rec(a, cx, assumptions),
             // A refinement is a subset of its base. Against another refinement the
@@ -750,9 +753,13 @@ fn tighter_bound(
     }
 }
 
-/// Whether the refinement constraints across the members of an intersection
-/// cannot hold together. A value in the intersection satisfies every member, so
-/// all their refinement constraints apply to it at once.
+/// Whether the refinement constraints of the intersection's **directly refined
+/// members** cannot hold together. A value in the intersection satisfies every
+/// member, so the constraints of each top-level `Refine` member apply to it at
+/// once. This gathers only those top-level constraints — a refinement nested
+/// inside a member (say under a union arm) is not collected here; the decision
+/// stays sound, since missing a contradiction only forgoes reporting emptiness,
+/// never reports a non-empty intersection empty.
 fn intersection_bounds_unsatisfiable(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
     let merged: Vec<Constraint> = members
         .iter()
@@ -828,6 +835,10 @@ fn keyed_map_subtype(
     cx: SubtypeCx<'_>,
     assumptions: &mut Vec<(Schema, Schema)>,
 ) -> bool {
+    // Index both field lists by name once, so the cross-list lookups below are O(1)
+    // each rather than a fresh linear scan per field (O(fields²) per comparison).
+    let a_by_name = field_index(fa);
+    let b_by_name = field_index(fb);
     if da.is_empty() {
         // A closed record carries only its declared fields, so it is a subtype
         // when every field maps into a like-named field of the supertype (width
@@ -835,14 +846,14 @@ fn keyed_map_subtype(
         // field the supertype does not declare would need the supertype's
         // catch-all to cover that exact key name, which stays conservative.
         let width_and_depth = fa.iter().all(|a| {
-            fb.iter()
-                .find(|b| b.name == a.name)
+            b_by_name
+                .get(a.name.as_str())
                 .is_some_and(|b| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
         });
         let required = fb
             .iter()
             .filter(|b| b.required)
-            .all(|b| fa.iter().any(|a| a.name == b.name && a.required));
+            .all(|b| a_by_name.get(b.name.as_str()).is_some_and(|a| a.required));
         width_and_depth && required
     } else if fa.is_empty() && fb.is_empty() {
         // Pure mappings: every key-pattern clause of the subtype must be subsumed
@@ -853,7 +864,7 @@ fn keyed_map_subtype(
                 ka.is_subtype_rec(kb, cx, assumptions) && va.is_subtype_rec(vb, cx, assumptions)
             })
         })
-    } else if fb.iter().all(|b| fa.iter().any(|a| a.name == b.name)) {
+    } else if fb.iter().all(|b| a_by_name.contains_key(b.name.as_str())) {
         // A record mixed with a catch-all whose fields include every field of the
         // supertype: a subtype when each shared field narrows, the supertype's
         // required fields are required here, every extra subtype field is covered
@@ -865,17 +876,17 @@ fn keyed_map_subtype(
         // field the subtype lacks -- needs the full comparison and stays
         // conservative.
         let shared = fb.iter().all(|b| {
-            fa.iter()
-                .find(|a| a.name == b.name)
+            a_by_name
+                .get(b.name.as_str())
                 .is_some_and(|a| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
         });
         let required = fb
             .iter()
             .filter(|b| b.required)
-            .all(|b| fa.iter().any(|a| a.name == b.name && a.required));
+            .all(|b| a_by_name.get(b.name.as_str()).is_some_and(|a| a.required));
         let extra_covered = fa
             .iter()
-            .filter(|a| !fb.iter().any(|b| b.name == a.name))
+            .filter(|a| !b_by_name.contains_key(a.name.as_str()))
             .all(|a| {
                 db.iter().any(|(kb, vb)| {
                     matches!(kb, Schema::Str | Schema::Anything)
@@ -893,24 +904,34 @@ fn keyed_map_subtype(
     }
 }
 
+/// Index a field list by name for O(1) cross-list lookup during subtyping. Field
+/// names are unique within a record (the frontend rejects duplicates), so a later
+/// entry never shadows an earlier one meaningfully.
+fn field_index(fields: &[Field]) -> std::collections::HashMap<&str, &Field> {
+    fields.iter().map(|f| (f.name.as_str(), f)).collect()
+}
+
 /// The value universe partitioned into mutually-disjoint regions, so a Boolean
 /// combination of scalar atoms denotes a set computed by bitset operations. The
 /// scalar atoms occupy `NONE`..`BYTES` (with `int` covering `BOOL | INT`); the
 /// container kinds and `OTHER` complete the partition so a complement of a
 /// scalar correctly includes every non-scalar value.
-const REGION_NONE: u16 = 1 << 0;
-const REGION_BOOL: u16 = 1 << 1;
-const REGION_INT: u16 = 1 << 2; // int values other than bool
-const REGION_FLOAT: u16 = 1 << 3;
-const REGION_STR: u16 = 1 << 4;
-const REGION_BYTES: u16 = 1 << 5;
+const REGION_NONE: u8 = 1 << 0;
+const REGION_BOOL: u8 = 1 << 1;
+const REGION_INT: u8 = 1 << 2; // int values other than bool
+const REGION_FLOAT: u8 = 1 << 3;
+const REGION_STR: u8 = 1 << 4;
+const REGION_BYTES: u8 = 1 << 5;
 // Bit 6 is the single non-scalar region: every value that is not one of the six
 // scalar kinds (containers, instances, callables, everything else) lumped
 // together. No atom ever names it on its own, so the non-scalar kinds need no
 // further bits; it exists so the complement of a scalar includes every non-scalar
 // value, which keeps emptiness sound (e.g. the meet of all six scalar complements
 // is the non-empty non-scalar region, not the empty set).
-pub(crate) const REGION_ALL: u16 = (1 << 7) - 1; // 6 scalar regions + the non-scalar region
+// 6 scalar regions + the non-scalar region: 7 of `u8`'s 8 bits. The bitset type
+// is sized to the partition, so adding an 8th region still fits but a 9th would
+// overflow `1 << 8` at compile time — the type is the guard against a silent wrap.
+pub(crate) const REGION_ALL: u8 = (1 << 7) - 1;
 
 /// A concrete runtime type, for the sound fragment of disjointness.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
