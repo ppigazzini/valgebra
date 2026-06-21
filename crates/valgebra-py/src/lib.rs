@@ -19,7 +19,7 @@ mod errors;
 mod input;
 mod render;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::sync::OnceLock;
 
 use jiter::{JsonValue, PythonParse};
@@ -95,6 +95,7 @@ impl Validator {
         py: Python<'_>,
         guard: &'a RefCell<FxHashSet<(usize, usize)>>,
         fatal: &'a RefCell<Option<PyErr>>,
+        fatal_seen: &'a Cell<bool>,
         explain: bool,
         fail_fast: bool,
     ) -> Ctx<'a> {
@@ -107,6 +108,7 @@ impl Validator {
             regexes: &index.regexes,
             guard,
             fatal,
+            fatal_seen,
             explain,
             fail_fast,
         }
@@ -142,11 +144,12 @@ impl Validator {
         };
         let guard = RefCell::new(FxHashSet::default());
         let fatal = RefCell::new(None);
+        let fatal_seen = Cell::new(false);
         let ok = member(
             &self.schema,
             &Value::Json(py, &json),
             &mut Vec::new(),
-            self.context(py, &guard, &fatal, false, true),
+            self.context(py, &guard, &fatal, &fatal_seen, false, true),
             &mut Vec::new(),
         );
         reraise_fatal(fatal, ok)
@@ -201,13 +204,14 @@ impl Validator {
     fn validate(&self, obj: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
         let guard = RefCell::new(FxHashSet::default());
         let fatal = RefCell::new(None);
+        let fatal_seen = Cell::new(false);
         let mut path = Vec::new();
         let mut violations = Vec::new();
         let ok = member(
             &self.schema,
             &Value::Py(obj),
             &mut path,
-            self.context(obj.py(), &guard, &fatal, true, fail_fast),
+            self.context(obj.py(), &guard, &fatal, &fatal_seen, true, fail_fast),
             &mut violations,
         );
         if let Some(err) = fatal.into_inner() {
@@ -240,11 +244,12 @@ impl Validator {
     fn is_valid(&self, obj: &Bound<'_, PyAny>) -> PyResult<bool> {
         let guard = RefCell::new(FxHashSet::default());
         let fatal = RefCell::new(None);
+        let fatal_seen = Cell::new(false);
         let ok = member(
             &self.schema,
             &Value::Py(obj),
             &mut Vec::new(),
-            self.context(obj.py(), &guard, &fatal, false, true),
+            self.context(obj.py(), &guard, &fatal, &fatal_seen, false, true),
             &mut Vec::new(),
         );
         reraise_fatal(fatal, ok)
@@ -359,6 +364,9 @@ impl Validator {
     /// length above a maximum), or a recursive schema with no base case (a
     /// mandatory self-reference that can never bottom out). It never reports a
     /// satisfiable schema as empty; for forms it cannot decide it returns `False`.
+    /// The decision is also bounded by a fixed work budget, so on a deeply nested
+    /// adversarial schema a `False` can mean "not proven empty within the bound"
+    /// rather than "non-empty"; a real schema decides far inside the bound.
     ///
     /// Returns:
     ///     `True` if the schema denotes the empty set, else `False`.
@@ -379,7 +387,10 @@ impl Validator {
     /// `int`, `list[bool]` of `list[int]`, a recursive schema of a wider one, a
     /// class of a base class). For the forms it cannot decide — an alternation of
     /// sequence shapes, or a leaf relation the oracle declines — it returns
-    /// `False` rather than a relation it cannot justify.
+    /// `False` rather than a relation it cannot justify. The decision is bounded by
+    /// a fixed work budget, so on a deeply nested adversarial schema a `False` can
+    /// mean "not proven a subtype within the bound"; a real schema decides far
+    /// inside the bound.
     ///
     /// Args:
     ///     other: The candidate supertype, as a schema spec or validator.
@@ -404,7 +415,9 @@ impl Validator {
     ///
     /// `other` is any schema spec or compiled validator. Sound, like
     /// `is_subtype_of`: `True` only when the two are provably equivalent,
-    /// whatever their syntax (`bool | int` is equivalent to `int`).
+    /// whatever their syntax (`bool | int` is equivalent to `int`). Bounded by the
+    /// same work budget as `is_subtype_of`, so on a deeply nested adversarial
+    /// schema a `False` can mean "not proven equivalent within the bound".
     ///
     /// Args:
     ///     other: The schema to compare, as a spec or validator.
@@ -643,13 +656,14 @@ pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
     for _ in 0..iters {
         let guard = RefCell::new(FxHashSet::default());
         let fatal = RefCell::new(None);
+        let fatal_seen = Cell::new(false);
         // `black_box` the inputs so the optimizer cannot hoist the loop-invariant
         // walk out of the loop: the per-iteration walk is the signal being timed.
         let ok = member(
             std::hint::black_box(&validator.schema),
             &Value::Py(std::hint::black_box(&obj)),
             &mut Vec::new(),
-            validator.context(py, &guard, &fatal, false, true),
+            validator.context(py, &guard, &fatal, &fatal_seen, false, true),
             &mut Vec::new(),
         );
         checksum = checksum.wrapping_add(u64::from(ok));
@@ -749,6 +763,7 @@ impl PoolRelations<'_, '_> {
         // fatal signal in a probe folds to non-membership here (the decision
         // procedure is not the interruptible hot path); the cell is local.
         let fatal = RefCell::new(None);
+        let fatal_seen = Cell::new(false);
         let index = ValidatorIndex::default();
         let ctx = Ctx {
             pool: self.literals,
@@ -758,6 +773,7 @@ impl PoolRelations<'_, '_> {
             regexes: &index.regexes,
             guard: &guard,
             fatal: &fatal,
+            fatal_seen: &fatal_seen,
             explain: false,
             fail_fast: false,
         };

@@ -70,6 +70,8 @@ fn record_fatal(err: PyErr, ctx: Ctx<'_>) {
     if slot.is_none() {
         *slot = Some(err);
     }
+    // Mirror into the cheap flag the per-node short-circuit reads.
+    ctx.fatal_seen.set(true);
 }
 
 /// Fold a membership probe's result into a boolean. An ordinary exception means
@@ -115,7 +117,7 @@ pub(crate) fn member(
     // A fatal interpreter signal recorded earlier in the walk unwinds the whole
     // traversal: every remaining node reports a non-member at once, so a large
     // value stops promptly instead of finishing the walk after a KeyboardInterrupt.
-    if ctx.fatal.borrow().is_some() {
+    if ctx.fatal_seen.get() {
         return false;
     }
     match schema {
@@ -899,11 +901,29 @@ fn check_refine(
     ok
 }
 
+/// Check one order bound (`Ge`/`Gt`/`Le`/`Lt`) against `value`: resolve the pool
+/// constant, run the rich comparison at the boundary (folding an ordinary error to
+/// a non-match), and label the violation. Returns `None` when the pool constant is
+/// unavailable, the signal the caller turns into a non-member.
+fn order_bound(
+    value: &Bound<'_, PyAny>,
+    index: usize,
+    ctx: Ctx<'_>,
+    py: Python<'_>,
+    compare: impl Fn(&Bound<'_, PyAny>, &Bound<'_, PyAny>) -> PyResult<bool>,
+    code: &'static str,
+    symbol: &str,
+) -> Option<(bool, &'static str, String)> {
+    let bound = pooled(ctx, index, py)?;
+    Some((
+        fold(compare(value, &bound), py, ctx),
+        code,
+        format!("{symbol} {}", summarize(&bound)),
+    ))
+}
+
 /// Whether `value` (already a base member, materialized once) satisfies one
 /// constraint, recording a violation on failure in explain mode.
-// A flat dispatch over every constraint kind; its length is the number of kinds,
-// not nested complexity, so the line lint does not apply.
-#[allow(clippy::too_many_lines)]
 fn check_constraint(
     constraint: &Constraint,
     value: &Bound<'_, PyAny>,
@@ -914,44 +934,38 @@ fn check_constraint(
     let py = value.py();
     let (ok, code, expected): (bool, &'static str, String) = match constraint {
         Constraint::Ge(i) => {
-            let Some(bound) = pooled(ctx, *i, py) else {
+            let Some(t) = order_bound(
+                value,
+                *i,
+                ctx,
+                py,
+                |v, b| v.ge(b),
+                "greater_than_equal",
+                ">=",
+            ) else {
                 return false;
             };
-            (
-                fold(value.ge(&bound), py, ctx),
-                "greater_than_equal",
-                format!(">= {}", summarize(&bound)),
-            )
+            t
         }
         Constraint::Gt(i) => {
-            let Some(bound) = pooled(ctx, *i, py) else {
+            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.gt(b), "greater_than", ">")
+            else {
                 return false;
             };
-            (
-                fold(value.gt(&bound), py, ctx),
-                "greater_than",
-                format!("> {}", summarize(&bound)),
-            )
+            t
         }
         Constraint::Le(i) => {
-            let Some(bound) = pooled(ctx, *i, py) else {
+            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.le(b), "less_than_equal", "<=")
+            else {
                 return false;
             };
-            (
-                fold(value.le(&bound), py, ctx),
-                "less_than_equal",
-                format!("<= {}", summarize(&bound)),
-            )
+            t
         }
         Constraint::Lt(i) => {
-            let Some(bound) = pooled(ctx, *i, py) else {
+            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.lt(b), "less_than", "<") else {
                 return false;
             };
-            (
-                fold(value.lt(&bound), py, ctx),
-                "less_than",
-                format!("< {}", summarize(&bound)),
-            )
+            t
         }
         Constraint::MinLen(n) => (
             fold(value.len().map(|len| len >= *n), py, ctx),

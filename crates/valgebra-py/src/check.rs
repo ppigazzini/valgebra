@@ -15,7 +15,7 @@
 //! `ctx.explain`, a flag constant for a whole walk, so the fast path pays nothing
 //! for it.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use pyo3::prelude::*;
 use rustc_hash::FxHashSet;
@@ -62,6 +62,10 @@ pub(crate) struct Ctx<'a> {
     /// silently reporting a non-member. An ordinary exception during a membership
     /// probe stays folded to non-membership and never lands here.
     pub(crate) fatal: &'a RefCell<Option<PyErr>>,
+    /// A `Cell` mirror of whether [`fatal`](Self::fatal) holds a signal yet, set
+    /// alongside it in `record_fatal`. The per-node short-circuit reads this with a
+    /// plain load instead of taking a `RefCell` borrow on every membership step.
+    pub(crate) fatal_seen: &'a Cell<bool>,
     /// Build violations into `out`. When false the walk is the membership fast
     /// path: it never touches `out`, never builds a path, and short-circuits.
     pub(crate) explain: bool,
