@@ -184,22 +184,40 @@ jobs:
           if [ "$built" != "${{ inputs.confirm_version }}" ]; then
             echo "::error::confirm_version '${{ inputs.confirm_version }}' != built version '$built'"; exit 1
           fi
-      - name: Refuse to publish a version already on the index
-        # The hardcoded baked-in version means an unbumped re-run would otherwise
-        # upload nothing and report success; assert the version is absent from the
-        # target index first, so a stale release fails loudly instead.
+      - name: Refuse to publish a stale or already-published version
+        # Fail closed. The baked-in version means an unbumped re-run must not slip
+        # through, and a flaky index must not be read as "absent". Proceed only on
+        # a definitive 404 (absent); a 200 (present) is a stale re-publish; any
+        # other response (5xx/429/network) leaves it unconfirmed, so abort rather
+        # than wave it through. Then also assert the version differs from the
+        # index's current latest, so an ungated re-run cannot publish even on a
+        # brief per-version inconsistency.
         if: inputs.publish_target != 'none'
         run: |
           set -euo pipefail
           wheel="$(ls dist/*.whl | head -n1)"
           built="$(basename "$wheel")"; built="${built#valgebra-}"; built="${built%%-*}"
           base="${{ inputs.publish_target == 'testpypi' && 'https://test.pypi.org' || 'https://pypi.org' }}"
-          code="$(curl -sS -o /dev/null -w '%{http_code}' "$base/pypi/valgebra/$built/json")"
-          if [ "$code" = "200" ]; then
-            echo "::error::version $built is already on $base; bump the version before publishing"
+          # --retry-all-errors retries transient 5xx/429 and connection failures;
+          # no --fail, so a 404 is read rather than collapsed into an exit code. A
+          # persistent failure yields 000, handled as unconfirmed below.
+          code="$(curl -sS --retry 5 --retry-all-errors --retry-delay 2 \
+            -o /dev/null -w '%{http_code}' "$base/pypi/valgebra/$built/json" || echo 000)"
+          case "$code" in
+            404) echo "version $built is absent from $base; proceeding" ;;
+            200) echo "::error::version $built is already on $base; bump the version before publishing"; exit 1 ;;
+            *) echo "::error::could not confirm version $built against $base (HTTP $code); refusing to publish"; exit 1 ;;
+          esac
+          # Belt and suspenders: refuse if the build matches the index's current
+          # latest. A project absent from the index (first publish) yields no
+          # latest, so this does not block the first release.
+          latest="$(curl -sS --retry 5 --retry-all-errors --retry-delay 2 "$base/pypi/valgebra/json" \
+            | python3 -c 'import sys, json; print(json.load(sys.stdin).get("info", {}).get("version", ""))' 2>/dev/null || true)"
+          if [ -n "$latest" ] && [ "$built" = "$latest" ]; then
+            echo "::error::version $built is already the latest release on $base; bump the version before publishing"
             exit 1
           fi
-          echo "version $built is not on $base (HTTP $code); proceeding"
+          echo "version $built differs from the latest on $base (${latest:-none}); proceeding"
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
           # The selected index. Trusted publishing needs no token; attestations

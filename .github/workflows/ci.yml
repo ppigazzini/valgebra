@@ -261,6 +261,17 @@ jobs:
       # of runner noise, so it blocks merges; a wall-clock budget could not.
       - name: Instruction-count regression gate
         run: uv run --no-sync python scripts/perf_gate.py
+      # The same gate for the binding hot path: the membership walk over a live
+      # Python value, which the pure-Rust core workload does not reach. The
+      # workload embeds the interpreter, so PYO3_PYTHON selects it at build time
+      # and its library directory goes on the loader path at run time; the gate
+      # subtracts two iteration counts so the interpreter startup cancels.
+      - name: Binding-path instruction-count regression gate
+        run: |
+          py="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
+          libdir="$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
+          PYO3_PYTHON="$py" LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}" \
+            uv run --no-sync python scripts/perf_gate.py --binding
       # Smoke-run the wall-clock benches once (timing disabled) so the suites
       # keep working; their numbers are recorded by hand in the performance
       # page. The files are named bench_*, so override the collection pattern.
@@ -459,14 +470,20 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
-          toolchain: nightly
+          # Pin nightly to a dated channel so a nightly regression cannot break
+          # this merge gate through no fault of the change. Bump this date
+          # periodically; Dependabot does not pin toolchains.
+          toolchain: nightly-2026-06-01
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: fuzz
-      - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked
+      # A prebuilt cargo-fuzz binary, not a from-source build: a slow compile no
+      # longer delays every change, and the installed version is reproducible.
+      - uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2.81.10
+        with:
+          tool: cargo-fuzz
       - name: Build the fuzz targets
-        run: cargo +nightly fuzz build
+        run: cargo +nightly-2026-06-01 fuzz build
 
   ci:
     name: ci
