@@ -13,6 +13,11 @@ rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
+# Held at 0.28: the jiter JSON dependency (latest 0.15) requires pyo3 ^0.28.2, and
+# two pyo3 versions cannot coexist in one extension module, so a bump to 0.29 is
+# blocked until jiter ships a 0.29-compatible release. pyo3 0.29 also carries the
+# free-threaded module-init fix the 3.14t CI lane needs; until then that lane fails
+# at import and is kept non-blocking (see .github/workflows/ci.yml).
 pyo3 = "0.28"
 valgebra-core = { path = "crates/valgebra-core" }
 
