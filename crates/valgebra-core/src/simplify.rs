@@ -197,7 +197,7 @@ fn finish_union(mut flat: Vec<Schema>) -> Schema {
     let covers_universe = flat
         .iter()
         .filter_map(Schema::region_set)
-        .fold(0u16, |acc, regions| acc | regions)
+        .fold(0u8, |acc, regions| acc | regions)
         == REGION_ALL;
     if has_complementary_pair(&flat) || has_disjoint_complement_pair(&flat) || covers_universe {
         return Schema::Anything;
