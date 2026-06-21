@@ -140,10 +140,25 @@ fn render_constraint(py: Python<'_>, constraint: &Constraint, pool: &[Py<PyAny>]
     }
 }
 
+// Bounds-check the pool rather than indexing directly: a corrupt pool index
+// degrades to a placeholder in the rendered string instead of panicking across
+// the FFI boundary, matching the defensive `.get` posture in the walk. The index
+// is pool-valid by construction, so the miss is an invariant break — loud in
+// debug, a recognisable placeholder in release.
 fn pool_repr(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> String {
-    summarize(pool[index].bind(py))
+    if let Some(constant) = pool.get(index) {
+        summarize(constant.bind(py))
+    } else {
+        debug_assert!(false, "pool index {index} out of range");
+        "<unknown>".to_owned()
+    }
 }
 
 fn pool_class_name(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> String {
-    class_label(pool[index].bind(py))
+    if let Some(class) = pool.get(index) {
+        class_label(class.bind(py))
+    } else {
+        debug_assert!(false, "pool index {index} out of range");
+        "<unknown>".to_owned()
+    }
 }
