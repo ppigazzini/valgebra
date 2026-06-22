@@ -104,7 +104,8 @@ and driving it with the Python suite against a line floor), a Python matrix from
 block — a differential lane that cross-checks membership against pydantic-core
 and jsonschema, the doc-example runner, a strict docs build, and a Linux wheel
 build. Scheduled lanes run the deep property suites, a libFuzzer soak over the
-core, and a mutation sweep.
+core, and a mutation report that flags surviving mutants as warnings rather than
+failing the lane.
 Performance is gated two ways: a **deterministic cachegrind instruction count**
 over the core engine compared to a committed budget, and a **competitive ratio**
 of per-call time against pydantic-core across a shape matrix. Both are

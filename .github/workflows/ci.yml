@@ -390,12 +390,13 @@ jobs:
           path: fuzz/artifacts
 
   nightly-mutants:
-    name: nightly mutation sweep
+    name: nightly mutation report
     # cargo-mutants over the core, auditing whether the Rust unit tests register
-    # an injected defect. Scheduled and manual only, never a merge gate: surviving
-    # mutants are an early-warning signal of a test gap, surfaced in the job
-    # summary rather than failing the lane. A broken baseline or a usage error
-    # still fails, because those are real breakage unrelated to test coverage.
+    # an injected defect. Scheduled and manual only, never a merge gate, and not a
+    # zero-survivor policy: surviving mutants are an early-warning signal of a test
+    # gap, reported in the job summary as warnings rather than failing the lane. A
+    # broken baseline or a usage error still fails, because those are real breakage
+    # unrelated to test coverage.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -409,7 +410,7 @@ jobs:
       - uses: taiki-e/install-action@9e1e5806d4a4822de933115878265be9aaa786d9 # v2.82.2
         with:
           tool: cargo-mutants
-      - name: Mutation sweep over the core
+      - name: Mutation report over the core
         run: |
           # cargo-mutants exit codes: 0 clean, 2 missed mutants, 3 timeouts,
           # 1 usage error, 4 baseline build/test failure. Missed mutants and
@@ -421,7 +422,7 @@ jobs:
           set -e
 
           report() {
-            echo "## Mutation sweep over the core"
+            echo "## Mutation report over the core"
             echo
             missed=0 caught=0 timeout=0 unviable=0
             [ -f mutants.out/missed.txt ] && missed=$(wc -l < mutants.out/missed.txt)
