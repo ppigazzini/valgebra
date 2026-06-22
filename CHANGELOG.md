@@ -39,7 +39,7 @@ will form the first release.
   (validate and return the parsed value), consistent with the object path and
   faster than parse-then-validate.
 - A stable `repr` that renders a schema back to its annotation form.
-- Thread-safe, immutable validators, usable on free-threaded CPython.
+- Thread-safe, immutable validators.
 - A performance program: criterion and pytest-benchmark suites, a recorded
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
