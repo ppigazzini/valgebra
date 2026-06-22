@@ -22,6 +22,13 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # The dated nightly for the merge-gated fuzz build, in one place so the
+  # toolchain install and both cargo invocations cannot drift apart. A fixed
+  # date keeps a nightly regression from breaking the merge gate; rotate it on
+  # the monthly maintenance pass (Dependabot does not pin toolchains). The
+  # scheduled libFuzzer soak stays on floating `nightly` so it still warns about
+  # future nightly/fuzzer breakage.
+  FUZZ_NIGHTLY: nightly-2026-06-01
 
 jobs:
   rust-lint:
@@ -489,10 +496,9 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
-          # Pin nightly to a dated channel so a nightly regression cannot break
-          # this merge gate through no fault of the change. Bump this date
-          # periodically; Dependabot does not pin toolchains.
-          toolchain: nightly-2026-06-01
+          # The dated nightly is centralized in the workflow `env` so the install
+          # and the cargo invocations below cannot drift apart.
+          toolchain: ${{ env.FUZZ_NIGHTLY }}
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: fuzz
@@ -505,14 +511,14 @@ jobs:
         # Force the host (gnu) target: the prebuilt cargo-fuzz is a musl-static
         # binary and defaults the fuzz target to its own musl triple, which is not
         # installed and is incompatible with the ASAN static-libc check.
-        run: cargo +nightly-2026-06-01 fuzz build --target x86_64-unknown-linux-gnu
+        run: cargo +${{ env.FUZZ_NIGHTLY }} fuzz build --target x86_64-unknown-linux-gnu
       - name: Test the fuzz harness
         # The generator's invariant laws (records carry unique field names, the
         # caller invariant the decision procedures assert) are unit-tested here so
         # a generator regression fails the merge instead of waiting for the
         # scheduled soak. `--lib` skips the `#![no_main]` libFuzzer binaries, which
         # link only under the fuzzer driver.
-        run: cargo +nightly-2026-06-01 test --manifest-path fuzz/Cargo.toml --lib
+        run: cargo +${{ env.FUZZ_NIGHTLY }} test --manifest-path fuzz/Cargo.toml --lib
 
   ci:
     name: ci
