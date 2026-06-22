@@ -505,6 +505,13 @@ jobs:
         # binary and defaults the fuzz target to its own musl triple, which is not
         # installed and is incompatible with the ASAN static-libc check.
         run: cargo +nightly-2026-06-01 fuzz build --target x86_64-unknown-linux-gnu
+      - name: Test the fuzz harness
+        # The generator's invariant laws (records carry unique field names, the
+        # caller invariant the decision procedures assert) are unit-tested here so
+        # a generator regression fails the merge instead of waiting for the
+        # scheduled soak. `--lib` skips the `#![no_main]` libFuzzer binaries, which
+        # link only under the fuzzer driver.
+        run: cargo +nightly-2026-06-01 test --manifest-path fuzz/Cargo.toml --lib
 
   ci:
     name: ci

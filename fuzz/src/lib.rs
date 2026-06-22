@@ -132,13 +132,24 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
             regex: build_regex(u, depth - 1)?,
         },
         _ => {
+            // Unique field names are a caller invariant the frontend guarantees
+            // (a record's fields come from a Python type-hints dict, keyed by
+            // name), and the decision procedures assert it. Drop a field whose
+            // name a sibling already took, while still consuming its schema bytes
+            // so the byte-to-IR mapping stays total and deterministic.
             let nf = count(u, 3)?;
-            let mut fields = Vec::with_capacity(nf);
+            let mut fields: Vec<Field> = Vec::with_capacity(nf);
             for _ in 0..nf {
+                let name = NAMES[usize::from(u.arbitrary::<u8>()?) % NAMES.len()];
+                let schema = build_schema(u, depth - 1)?;
+                let required = u.arbitrary()?;
+                if fields.iter().any(|f| f.name == name) {
+                    continue;
+                }
                 fields.push(Field {
-                    name: NAMES[usize::from(u.arbitrary::<u8>()?) % NAMES.len()].into(),
-                    schema: build_schema(u, depth - 1)?,
-                    required: u.arbitrary()?,
+                    name: name.into(),
+                    schema,
+                    required,
                 });
             }
             let nd = count(u, 3)?;
@@ -213,5 +224,72 @@ pub fn check_relations(a: &Schema, b: &Schema) {
             a.is_equivalent(b),
             "mutually included {a:?} and {b:?} are not equivalent"
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every record the generator emits has unique field names, the caller
+    /// invariant the decision procedures assert. Walking a wide range of byte
+    /// inputs covers nested records and the records nested inside catch-all
+    /// clauses, the shapes the live crash seed exercises.
+    fn assert_unique_field_names(schema: &Schema) {
+        match schema {
+            Schema::KeyedMap { fields, defaults } => {
+                let mut seen = std::collections::HashSet::new();
+                for field in fields {
+                    assert!(
+                        seen.insert(field.name.as_str()),
+                        "duplicate field name {:?} in {schema:?}",
+                        field.name
+                    );
+                    assert_unique_field_names(&field.schema);
+                }
+                for (key, value) in defaults {
+                    assert_unique_field_names(key);
+                    assert_unique_field_names(value);
+                }
+            }
+            Schema::Union(members) | Schema::Intersection(members) => {
+                members.iter().for_each(assert_unique_field_names);
+            }
+            Schema::Complement(inner)
+            | Schema::Set(inner)
+            | Schema::FrozenSet(inner)
+            | Schema::Refine { base: inner, .. } => assert_unique_field_names(inner),
+            Schema::Seq { regex, .. } => assert_unique_regex(regex),
+            _ => {}
+        }
+    }
+
+    fn assert_unique_regex(regex: &SeqRegex) {
+        match regex {
+            SeqRegex::Empty => {}
+            SeqRegex::Elem(schema) => assert_unique_field_names(schema),
+            SeqRegex::Star(inner) => assert_unique_regex(inner),
+            SeqRegex::Cat(parts) | SeqRegex::Or(parts) => {
+                parts.iter().for_each(assert_unique_regex);
+            }
+        }
+    }
+
+    #[test]
+    fn generator_records_have_unique_field_names() {
+        // A spread of byte fills drives the generator down different branches;
+        // 0xe3-heavy fills mirror the live crash seed that first tripped this.
+        for fill in [0x00u8, 0x01, 0x1f, 0x31, 0x9a, 0xb7, 0xe3, 0xff] {
+            for len in [4usize, 16, 64, 256, 1024] {
+                let bytes = vec![fill; len];
+                let mut u = Unstructured::new(&bytes);
+                while let Ok(schema) = build_schema(&mut u, 4) {
+                    assert_unique_field_names(&schema);
+                    if u.is_empty() {
+                        break;
+                    }
+                }
+            }
+        }
     }
 }
