@@ -18,6 +18,9 @@ license = "MIT OR Apache-2.0"
 # blocked until jiter ships a 0.29-compatible release. pyo3 0.29 also carries the
 # free-threaded module-init fix the 3.14t CI lane needs; until then that lane fails
 # at import and is kept non-blocking (see .github/workflows/ci.yml).
+# jiter main has merged the pyo3 0.29 bump but has not cut a release with it; bump
+# this pin, drop the free-threaded qualifications in the docs, and make the 3.14t
+# lane blocking once that release lands.
 pyo3 = "0.28"
 valgebra-core = { path = "crates/valgebra-core" }
 
