@@ -24,9 +24,11 @@ Over this fragment, valgebra returns the exact set-theoretic answer.
   is the universe.
 - **Class and literal inclusion.** A class is a subtype of its base classes
   (`issubclass`), and a literal is a subtype of any schema it is a member of.
-- **Refinements.** A refinement is a subtype of its base and of a looser
-  refinement; a bound conjunction that cannot be satisfied — a lower bound above an
-  upper bound, or a minimum length above a maximum — is empty.
+- **Refinements.** A refinement is a subtype of its base and of a refinement with
+  looser bounds — a tighter numeric or length bound entails a looser one, not only
+  a verbatim-contained constraint set; a bound conjunction that cannot be satisfied
+  — a lower bound above an upper bound, or a minimum length above a maximum — is
+  empty.
 - **Sequences.** Homogeneous, fixed-length, and prefix-plus-tail lists and tuples,
   with the container as part of the type (a list is never a tuple). Every sequence
   schema valgebra builds takes this linear shape, so sequence inclusion is decided
@@ -35,8 +37,9 @@ Over this fragment, valgebra returns the exact set-theoretic answer.
 - **Records and mappings.** Closed-record width, depth, and required-ness; pure
   mappings with several key-pattern clauses (each subtype clause subsumed by a
   supertype clause); and a record mixed with a catch-all when the subtype carries
-  at least the supertype's fields (each extra field covered by a catch-all over
-  all string keys).
+  at least the supertype's fields, or when a field the subtype lacks is optional
+  in the supertype and the subtype's catch-all covers its value type (each extra
+  or optional field covered by a catch-all over all string keys).
 - **Recursion.** Equirecursive schemas compare at their greatest fixpoint; the
   rule is sound and is witnessed by an independent reference denotation.
 
@@ -52,6 +55,7 @@ assert Validator(1).is_subtype_of(int)  # a literal is a member of int
 assert Validator(Annotated[int, at.Ge(0)]).is_subtype_of(int)  # refinement <= base
 assert Validator(Annotated[int, at.Ge(10), at.Le(0)]).is_empty()  # no such int
 assert Validator({str: int}).is_subtype_of({str: int, int: bool})  # mapping clauses
+assert Validator({str: int}).is_subtype_of({"b?": int, str: int})  # optional field, catch-all covers it
 assert union(bool, int).is_equivalent(int)  # bool | int is just int
 assert intersection(int, complement(int)).is_empty()  # the complement law
 
@@ -65,10 +69,11 @@ Here valgebra is correct but not complete: it may answer `False` or "not empty"
 for a relation that does in fact hold. These are decidable in principle and are
 tracked as future work.
 
-- **Mixed maps where the supertype declares a field the subtype lacks.** A
-  record-plus-catch-all is decided when the subtype carries at least the
-  supertype's fields; the reverse direction needs the full quasi-constant-function
-  comparison.
+- **Mixed maps where the supertype declares a _required_ field the subtype
+  lacks.** When the missing field is optional, the subtype's catch-all covers it
+  and the case is decided; a required field is not, because a catch-all over the
+  key space does not prove that field is present. Deciding it needs the full
+  quasi-constant-function comparison.
 - **Integer-only emptiness** of an open interval, such as a value strictly between
   two consecutive integers.
 

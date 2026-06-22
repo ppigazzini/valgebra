@@ -313,8 +313,9 @@ decisions are **sound**: a `True` is always correct, and a `False` (or a
 prove — never a wrong answer. They decide completely over a wide fragment — the
 scalar Boolean algebra, class and literal inclusion, refinements with bound and
 length constraints, prefix-and-tail sequences, sets and frozensets, records and
-mappings (including multi-clause and matching-field-name mixed maps), and
-recursion — and stay conservative on the rest. The
+mappings (including multi-clause mixed maps, and mixed maps where the supertype's
+extra field is optional and the subtype's catch-all covers it), and recursion —
+and stay conservative on the rest. The
 [decidability boundary](decidability.md) lists exactly what is decided, what is
 conservative, and what is undecidable at runtime; see the
 [foundations](foundations.md) for the theory.
