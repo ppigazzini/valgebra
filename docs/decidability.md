@@ -28,6 +28,9 @@ Over this fragment, valgebra returns the exact set-theoretic answer.
   looser bounds — a tighter numeric or length bound entails a looser one, not only
   a verbatim-contained constraint set; a bound conjunction that cannot be satisfied
   — a lower bound above an upper bound, or a minimum length above a maximum — is
+  empty. On an integer base the bounds count integers, so an interval that skips
+  every integer — `Annotated[int, Gt(0), Lt(1)]` — is empty even though its
+  endpoints are ordered; a `float` base stays dense, so the same bounds are not
   empty.
 - **Sequences.** Homogeneous, fixed-length, and prefix-plus-tail lists and tuples,
   with the container as part of the type (a list is never a tuple). Every sequence
@@ -54,6 +57,8 @@ assert Validator(bool).is_subtype_of(int)  # bool is a subtype of int
 assert Validator(1).is_subtype_of(int)  # a literal is a member of int
 assert Validator(Annotated[int, at.Ge(0)]).is_subtype_of(int)  # refinement <= base
 assert Validator(Annotated[int, at.Ge(10), at.Le(0)]).is_empty()  # no such int
+assert Validator(Annotated[int, at.Gt(0), at.Lt(1)]).is_empty()  # no int strictly between
+assert not Validator(Annotated[float, at.Gt(0), at.Lt(1)]).is_empty()  # floats are dense
 assert Validator({str: int}).is_subtype_of({str: int, int: bool})  # mapping clauses
 assert Validator({str: int}).is_subtype_of({"b?": int, str: int})  # optional field, catch-all covers it
 assert union(bool, int).is_equivalent(int)  # bool | int is just int
@@ -74,9 +79,6 @@ tracked as future work.
   and the case is decided; a required field is not, because a catch-all over the
   key space does not prove that field is present. Deciding it needs the full
   quasi-constant-function comparison.
-- **Integer-only emptiness** of an open interval, such as a value strictly between
-  two consecutive integers.
-
 General regular-expression-types inclusion of sequences (a union of sequence
 languages that splits across branches, or a repeated heterogeneous group) is not
 implemented, but no schema valgebra builds takes that shape — every sequence is
