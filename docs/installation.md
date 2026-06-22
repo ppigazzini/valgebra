@@ -38,4 +38,6 @@ pip install valgebra
 ```
 
 Wheels will be published for Linux (manylinux and musllinux, x86_64 and aarch64),
-macOS (Intel and Apple silicon), and Windows, including a free-threaded build.
+macOS (Intel and Apple silicon), and Windows. Free-threaded (no-GIL) CPython is a
+monitored target, not a supported platform yet, so no free-threaded wheel is
+published.

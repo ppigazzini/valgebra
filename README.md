@@ -132,7 +132,8 @@ comparison is not apples-to-apples and is gated against regression in CI; see th
   Rust; a comparison against a Python object — a literal, a refinement predicate,
   or an instance or attribute check — is the documented step into Python, never a
   silent fallback.
-- **Immutable and thread-safe**, including on free-threaded (no-GIL) CPython.
+- **Immutable and thread-safe** by design. Free-threaded (no-GIL) CPython is a
+  monitored target, not a supported platform yet.
 
 ## Project
 

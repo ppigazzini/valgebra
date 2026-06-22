@@ -132,8 +132,9 @@ trade-off.
 - **Pyo3-free core.** The core crate links no interpreter; Python-aware logic
   lives in the bindings, and the constants pool keeps the IR language-agnostic.
 - **Immutable validators.** A compiled validator never mutates after it is
-  built, so one validator is shared across threads, including on free-threaded
-  CPython.
+  built, so one validator is shared across threads. Free-threaded (no-GIL)
+  CPython is a monitored target, not a supported platform yet: the extension does
+  not import there under the current PyO3 line.
 
 ## Distribution
 
@@ -147,16 +148,21 @@ The extension ships as a **per-interpreter-version** module, not a stable-ABI
   recorded hot-path speedup is on the [performance page](docs/performance.md).
 - **The cost it imposes.** One wheel per supported CPython minor. The release
   matrix must therefore cover every minor in `requires-python` (`>=3.10`, so
-  3.10 through 3.14, matching the `classifiers` in `pyproject.toml`) plus the
-  free-threaded build; an uncovered minor would get no wheel.
+  3.10 through 3.14, matching the `classifiers` in `pyproject.toml`); an
+  uncovered minor would get no wheel.
 - **How the matrix covers it.** The release workflow builds with maturin
   `--find-interpreter`, which builds for every CPython the build image exposes
-  that satisfies `requires-python`, including the free-threaded build where
-  present, across manylinux and musllinux, macOS (Intel and Apple silicon), and
-  Windows. PGO applies on the hosts that run their own output; the musllinux
-  cross-builds and the Windows arm64 target ship plain release builds with the
-  same compatibility. A dispatch with no publish target builds the whole matrix
-  as a dry run, which is how matrix coverage is verified before a release.
+  that satisfies `requires-python`, across manylinux and musllinux, macOS (Intel
+  and Apple silicon), and Windows. PGO applies on the hosts that run their own
+  output; the musllinux cross-builds and the Windows arm64 target ship plain
+  release builds with the same compatibility. A dispatch with no publish target
+  builds the whole matrix as a dry run, which is how matrix coverage is verified
+  before a release.
+- **Free-threaded build is dropped before publish.** Where the image exposes a
+  free-threaded interpreter, `--find-interpreter` also builds a free-threaded
+  wheel. Free-threaded CPython is a monitored target, not a supported platform
+  yet, so the release deletes any free-threaded wheel before upload and fails
+  closed if one would otherwise reach the published set.
 
 The interpreter is never embedded in the shipped wheel: maturin builds the
 extension module, and the `pyo3` `extension-module` feature is injected at

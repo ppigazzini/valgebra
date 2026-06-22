@@ -87,6 +87,35 @@ jobs:
           before-script-linux: ${{ matrix.platform.pgo && 'rustup component add llvm-tools' || '' }}
           # A released wheel must never trust a cached compile.
           sccache: "false"
+      # Free-threaded CPython is a monitored target, not a supported platform:
+      # the extension does not import on a free-threaded interpreter under the
+      # current PyO3 line. --find-interpreter builds a free-threaded wheel where
+      # the image exposes one, so drop it here and fail closed if one survives,
+      # rather than letting an import-broken no-GIL wheel reach the published set.
+      - name: Drop free-threaded wheels until no-GIL support is verified
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          # nullglob expands a non-matching pattern to nothing, so collect matches
+          # into an array and test its length. Never run `ls` on the pattern: with
+          # no match it would receive no argument and list the whole directory,
+          # which reads as a false survivor and fails a clean build.
+          wheels=(dist/*cp3[0-9][0-9]t-*.whl)
+          if [ "${#wheels[@]}" -eq 0 ]; then
+            echo "no free-threaded wheel built for this target"
+          else
+            for wheel in "${wheels[@]}"; do
+              echo "::warning::dropping free-threaded wheel (no-GIL not supported yet): $wheel"
+              rm -f "$wheel"
+            done
+            # Fail closed only if a free-threaded wheel genuinely survived deletion.
+            remaining=(dist/*cp3[0-9][0-9]t-*.whl)
+            if [ "${#remaining[@]}" -ne 0 ]; then
+              echo "::error::free-threaded wheel survived the drop: ${remaining[*]}"
+              exit 1
+            fi
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}-${{ matrix.platform.manylinux || 'native' }}
