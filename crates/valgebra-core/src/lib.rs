@@ -882,6 +882,59 @@ mod laws {
         assert!(!sub(vec![Constraint::Ge(5)], vec![Constraint::Gt(5)]));
     }
 
+    /// An integer-discrete refinement is empty when its bounds leave no integer
+    /// between them, even though the endpoints themselves are ordered. The rule is
+    /// gated on the integer base and on the value oracle: a dense base, or a core
+    /// with no value oracle, keeps the interval conservatively non-empty.
+    #[test]
+    fn refinement_emptiness_decides_integer_adjacency() {
+        use core::cmp::Ordering;
+        // The pool index doubles as the integer bound value.
+        struct ByValue;
+        impl LeafRelations for ByValue {
+            fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+                None
+            }
+            fn compare(&self, a: usize, b: usize) -> Option<Ordering> {
+                Some(a.cmp(&b))
+            }
+            fn no_int_between(
+                &self,
+                lo: usize,
+                lo_strict: bool,
+                hi: usize,
+                hi_strict: bool,
+            ) -> Option<bool> {
+                let least = i64::try_from(lo).unwrap() + i64::from(lo_strict);
+                let greatest = i64::try_from(hi).unwrap() - i64::from(hi_strict);
+                Some(least > greatest)
+            }
+        }
+        let refine = |base, constraints: Vec<Constraint>| Schema::Refine {
+            base: Box::new(base),
+            constraints,
+        };
+        // Gt(0) & Lt(1): the open interval (0, 1) holds no integer, so it is empty.
+        assert!(
+            refine(Schema::Int, vec![Constraint::Gt(0), Constraint::Lt(1)])
+                .is_empty_with(&ByValue, &[])
+        );
+        // Gt(0) & Lt(2): the integer 1 fits, so it is not empty.
+        assert!(
+            !refine(Schema::Int, vec![Constraint::Gt(0), Constraint::Lt(2)])
+                .is_empty_with(&ByValue, &[])
+        );
+        // A dense (float) base is not integer-discrete: the discreteness rule must
+        // not fire, or it would unsoundly empty a populated interval.
+        assert!(
+            !refine(Schema::Float, vec![Constraint::Gt(0), Constraint::Lt(1)])
+                .is_empty_with(&ByValue, &[])
+        );
+        // With no value oracle the default `no_int_between` is `None`, so even an
+        // integer base stays conservative.
+        assert!(!refine(Schema::Int, vec![Constraint::Gt(0), Constraint::Lt(1)]).is_empty());
+    }
+
     #[test]
     fn decision_arms_are_pinned_independently_of_the_python_suite() {
         // Each assertion fails under a specific mutation of a decision arm, so the

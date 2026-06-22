@@ -320,8 +320,12 @@ impl Schema {
             // A refinement is a subset of its base: an empty base empties it, and
             // so does an unsatisfiable bound conjunction (decided by the oracle).
             Schema::Refine { base, constraints } => {
+                // The discreteness rule applies only when the base is exactly the
+                // integer atom: `bool` is excluded (its two values are already
+                // covered by the ordering check), and floats are dense.
+                let int_discrete = base.type_tag() == Some(TypeTag::Int);
                 let empty = base.is_empty_rec(oracle, defs, visiting, budget)
-                    || bounds_unsatisfiable(constraints.iter(), oracle);
+                    || bounds_unsatisfiable(constraints.iter(), oracle, int_discrete);
                 (empty, None)
             }
             // An intersection is empty if a member is, if the scalar regions cancel,
@@ -668,6 +672,22 @@ pub trait LeafRelations {
     fn compare(&self, _left: usize, _right: usize) -> Option<core::cmp::Ordering> {
         None
     }
+
+    /// Whether no integer lies between the pool values at `lo` and `hi`, under the
+    /// strictness of each bound (`lo_strict` excludes `lo`, `hi_strict` excludes
+    /// `hi`). The core asks this only for an integer-discrete refinement base, so a
+    /// `Some(true)` proves the interval admits no integer and the refinement is
+    /// empty. `None` leaves the discreteness rule conservative — the default, so a
+    /// core with no value oracle never decides on integer adjacency.
+    fn no_int_between(
+        &self,
+        _lo: usize,
+        _lo_strict: bool,
+        _hi: usize,
+        _hi_strict: bool,
+    ) -> Option<bool> {
+        None
+    }
 }
 
 /// The trivial [`LeafRelations`] that decides nothing — the core default, under
@@ -688,6 +708,7 @@ impl LeafRelations for NoLeafRelations {
 fn bounds_unsatisfiable<'a>(
     constraints: impl Iterator<Item = &'a Constraint> + Clone,
     oracle: &dyn LeafRelations,
+    int_discrete: bool,
 ) -> bool {
     use core::cmp::Ordering;
     let min_len = constraints
@@ -721,11 +742,20 @@ fn bounds_unsatisfiable<'a>(
         }
     }
     if let (Some((lo, lo_strict)), Some((hi, hi_strict))) = (lower, upper) {
-        return match oracle.compare(lo, hi) {
-            Some(Ordering::Greater) => true,
-            Some(Ordering::Equal) => lo_strict || hi_strict,
-            _ => false,
-        };
+        match oracle.compare(lo, hi) {
+            Some(Ordering::Greater) => return true,
+            Some(Ordering::Equal) => return lo_strict || hi_strict,
+            _ => {}
+        }
+        // An integer-discrete base bounds the integers in the interval, so the
+        // refinement is empty when no integer lies between the bounds even though
+        // the endpoints themselves are ordered `lo < hi` — `Annotated[int, Gt(0),
+        // Lt(1)]` admits no value. The oracle answers only for a real numeric
+        // pair and stays `None` otherwise, so floats and incomparable bounds keep
+        // the interval conservatively non-empty.
+        if int_discrete && oracle.no_int_between(lo, lo_strict, hi, hi_strict) == Some(true) {
+            return true;
+        }
     }
     false
 }
@@ -834,7 +864,11 @@ fn intersection_bounds_unsatisfiable(members: &[Schema], oracle: &dyn LeafRelati
         })
         .flatten()
         .collect();
-    !merged.is_empty() && bounds_unsatisfiable(merged.iter().copied(), oracle)
+    // The integer-discreteness rule stays off across an intersection: the base of
+    // the merged bounds is the members' meet, not a single declared atom, so the
+    // narrow single-`Refine` discreteness premise does not transfer here. Bound
+    // contradiction across members is still decided through the ordering oracle.
+    !merged.is_empty() && bounds_unsatisfiable(merged.iter().copied(), oracle, false)
 }
 
 /// Whether the linear language `pa · ta*` is included in `pb · tb*` — a fixed

@@ -823,6 +823,51 @@ impl LeafRelations for PoolRelations<'_, '_> {
         let right = self.literals.get(right)?.bind(self.py);
         left.compare(right).ok()
     }
+
+    fn no_int_between(
+        &self,
+        lo: usize,
+        lo_strict: bool,
+        hi: usize,
+        hi_strict: bool,
+    ) -> Option<bool> {
+        // Decide whether the open/half-open interval bounded by the pooled values
+        // admits no integer. The least admissible integer is `floor(lo) + 1` when
+        // `lo` is excluded and `ceil(lo)` when it is included; the greatest is
+        // `ceil(hi) - 1` when `hi` is excluded and `floor(hi)` when included. No
+        // integer fits exactly when the least exceeds the greatest. The bounds are
+        // compared as Python integers, so arbitrary-precision values stay exact.
+        let math = PyModule::import(self.py, "math").ok()?;
+        let lo = self.literals.get(lo)?.bind(self.py);
+        let hi = self.literals.get(hi)?.bind(self.py);
+        // A non-real bound (`math.floor` raises a `TypeError`) or a non-finite one
+        // (an `OverflowError`) leaves the rule undecided rather than guessing.
+        let floor = math.getattr("floor").ok()?;
+        let ceil = math.getattr("ceil").ok()?;
+        let one = 1i64;
+        let least = if lo_strict {
+            floor
+                .call1((&lo,))
+                .ok()?
+                .call_method1("__add__", (one,))
+                .ok()?
+        } else {
+            ceil.call1((&lo,)).ok()?
+        };
+        let greatest = if hi_strict {
+            ceil.call1((&hi,))
+                .ok()?
+                .call_method1("__sub__", (one,))
+                .ok()?
+        } else {
+            floor.call1((&hi,)).ok()?
+        };
+        // `least > greatest` means the interval skips every integer.
+        Some(matches!(
+            least.compare(&greatest).ok()?,
+            core::cmp::Ordering::Greater
+        ))
+    }
 }
 
 /// The `valgebra._valgebra` extension module.

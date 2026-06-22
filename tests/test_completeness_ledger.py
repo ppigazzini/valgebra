@@ -167,6 +167,25 @@ _DECIDED = [
         None,
         id="empty:Ge(0)&Lt(0)",
     ),
+    # An integer-discrete open interval whose endpoints are ordered but adjacent
+    # in the integers admits no value: there is no `int` strictly between 0 and 1.
+    pytest.param(
+        "empty", Annotated[int, at.Gt(0), at.Lt(1)], None, id="empty:int-open-(0,1)"
+    ),
+    # The endpoints need not be integers themselves; the interval still skips
+    # every integer, whether the bounds are strict (open) or inclusive (closed).
+    pytest.param(
+        "empty",
+        Annotated[int, at.Gt(0.5), at.Lt(0.9)],
+        None,
+        id="empty:int-open-(0.5,0.9)",
+    ),
+    pytest.param(
+        "empty",
+        Annotated[int, at.Ge(0.5), at.Le(0.9)],
+        None,
+        id="empty:int-closed-[0.5,0.9]",
+    ),
     # An intersection that mixes a recursive reference with a union is a subtype
     # of itself: reflexivity holds even when the meet contains its own supertype.
     pytest.param(
@@ -221,6 +240,28 @@ def test_decision_decides_true_relations(
     operation: str, left: object, right: object
 ) -> None:
     _check(operation, left, right)
+
+
+# The integer-discreteness rule must fire only where the base is integer-discrete
+# and an integer genuinely fails to fit. These controls keep it from over-firing:
+# a dense float base, an interval that still contains an integer, and an inclusive
+# bound that lands on one.
+_NON_EMPTY = [
+    pytest.param(Annotated[float, at.Gt(0), at.Lt(1)], id="float-open-(0,1)"),
+    pytest.param(Annotated[int, at.Gt(0), at.Lt(2)], id="int-open-(0,2)-has-1"),
+    pytest.param(Annotated[int, at.Gt(0.5), at.Lt(1.5)], id="int-open-(0.5,1.5)-has-1"),
+    pytest.param(Annotated[int, at.Ge(0), at.Le(0)], id="int-closed-[0,0]-has-0"),
+    pytest.param(Annotated[int, at.Ge(0), at.Lt(1)], id="int-half-[0,1)-has-0"),
+    pytest.param(Annotated[int, at.Gt(0), at.Le(1)], id="int-half-(0,1]-has-1"),
+]
+
+
+@pytest.mark.parametrize("spec", _NON_EMPTY)
+def test_integer_discreteness_rule_does_not_over_fire(spec: object) -> None:
+    # A false `is_empty` would be unsound: it would license dropping a value the
+    # schema in fact admits. The float case is the key guard — the rule generalizes
+    # to dense bases only at the cost of soundness.
+    assert not Validator(spec).is_empty()
 
 
 # --- Frontend integrity: non-value objects are rejected -----------------------
