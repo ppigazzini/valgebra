@@ -1,3 +1,7 @@
+---
+description: The full public surface, generated from the package docstrings.
+---
+
 # API reference
 
 The full public surface of the `valgebra` package. Every name is re-exported

@@ -1,3 +1,7 @@
+---
+description: The denotational frame and the sourced set-theoretic and lattice theory.
+---
+
 # Foundations
 
 This page records the theory valgebra rests on: what a schema *means*, why the

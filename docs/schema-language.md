@@ -1,3 +1,7 @@
+---
+description: Every schema form with its denotation as a set of Python values.
+---
+
 # Schema language
 
 A schema denotes a **set of Python values**. This page lists every form valgebra

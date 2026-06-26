@@ -1,3 +1,7 @@
+---
+description: Measured benchmarks, datasets, and compared versions.
+---
+
 # Performance
 
 valgebra compiles a schema once into a Rust validator tree and crosses into Rust

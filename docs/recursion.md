@@ -1,3 +1,7 @@
+---
+description: The recursive fixpoint for self-referential schemas.
+---
+
 # Recursive schemas
 
 `recursive` ties a fixpoint: the builder it receives is given a placeholder standing

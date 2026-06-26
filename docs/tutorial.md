@@ -1,3 +1,7 @@
+---
+description: Guided learning path from a scalar schema to an inspected failure.
+---
+
 # Tutorial
 
 This is a guided first session with valgebra. You will start from a single

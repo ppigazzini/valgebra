@@ -1,3 +1,7 @@
+---
+description: The Boolean lattice (union, intersection, complement) and the law-justified simplifier.
+---
+
 # The Boolean algebra
 
 Union, intersection, and complement compose any schema — annotations, native

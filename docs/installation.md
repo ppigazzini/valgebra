@@ -1,3 +1,7 @@
+---
+description: Install the package and its build toolchain.
+---
+
 # Installation
 
 valgebra is not yet published to PyPI. Until the first release, install it from

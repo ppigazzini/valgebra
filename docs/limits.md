@@ -1,3 +1,7 @@
+---
+description: Resource limits and the bounds the validator enforces.
+---
+
 # Resource limits
 
 A validator runs against untrusted values, so every recursive descent and every

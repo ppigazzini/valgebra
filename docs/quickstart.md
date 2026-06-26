@@ -1,3 +1,7 @@
+---
+description: Condensed feature tour for readers who know the domain.
+---
+
 # Quickstart
 
 This is the condensed tour — a one-line scalar check through a refined

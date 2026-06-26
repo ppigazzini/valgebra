@@ -1,3 +1,7 @@
+---
+description: What subtyping, equivalence, and emptiness decide exactly versus conservatively.
+---
+
 # The decidability boundary
 
 valgebra compares schemas as sets: `is_subtype_of` is set inclusion, `is_equivalent` is

@@ -1,3 +1,7 @@
+---
+description: Constraints and predicate refinements over a base schema.
+---
+
 # Refinements
 
 A refinement narrows a base type to the subset satisfying one or more

@@ -1,3 +1,7 @@
+---
+description: Why membership checking is sound on its own terms.
+---
+
 # Soundness argument
 
 This page argues, in a form a reader can check, why **an accept is never wrong**:

@@ -1,3 +1,7 @@
+---
+description: Parsing and validating JSON on the Rust path.
+---
+
 # JSON input
 
 A compiled validator validates JSON source directly, parsing on the Rust path:

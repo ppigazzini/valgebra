@@ -54,6 +54,9 @@ docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=1.0.4",
+    # Generates the /llms.txt manifest and /llms-full.txt full-content export so
+    # AI assistants and coding agents consume the docs as clean Markdown.
+    "mkdocs-llmstxt>=0.5",
 ]
 
 [tool.maturin]

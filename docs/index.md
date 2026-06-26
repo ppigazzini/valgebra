@@ -1,3 +1,7 @@
+---
+description: Overview, positioning against pydantic and msgspec, and a first example.
+---
+
 # valgebra
 
 **Fast runtime validation through a closed Boolean algebra of schemas.**

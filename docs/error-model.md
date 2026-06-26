@@ -1,3 +1,7 @@
+---
+description: Exception type, error codes, and the violation path format.
+---
+
 # Error model
 
 When a value does not satisfy a schema, `validate` raises `ValidationError`. The

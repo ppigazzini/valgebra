@@ -84,3 +84,36 @@ plugins:
             heading_level: 3
             show_symbol_type_heading: true
             show_symbol_type_toc: true
+  # Machine-readable view of the site: /llms.txt (curated manifest, mirrors the
+  # Diataxis nav) and /llms-full.txt (full content). Runs last so it captures the
+  # mkdocstrings-generated API reference from the rendered HTML.
+  - llmstxt:
+      markdown_description: >-
+        Fast runtime validation through a closed Boolean algebra of schemas.
+        A schema denotes a set of Python values; validation is membership,
+        with no copy and no coercion. Schemas compile once into a Rust
+        validator tree. Standard typing annotations are the primary notation;
+        union, intersection, complement, refinement, and fixpoints compose
+        them into a law-tested lattice.
+      full_output: llms-full.txt
+      sections:
+        Getting started:
+          - index.md: Overview, positioning against pydantic and msgspec, and a first example.
+          - installation.md: Install the package and its build toolchain.
+          - tutorial.md: Guided learning path from a scalar schema to an inspected failure.
+          - quickstart.md: Condensed feature tour for readers who know the domain.
+        Guides:
+          - schema-language.md: Every schema form with its denotation as a set of Python values.
+          - algebra.md: The Boolean lattice — union, intersection, complement — and the law-justified simplifier.
+          - refinements.md: Constraints and predicate refinements over a base schema.
+          - recursion.md: The recursive fixpoint for self-referential schemas.
+          - json.md: Parsing and validating JSON on the Rust path.
+          - error-model.md: Exception type, error codes, and the violation path format.
+          - limits.md: Resource limits and the bounds the validator enforces.
+          - performance.md: Measured benchmarks, datasets, and compared versions.
+        Explanation:
+          - foundations.md: The denotational frame and the sourced set-theoretic and lattice theory.
+          - soundness.md: Why membership checking is sound on its own terms.
+          - decidability.md: What subtyping, equivalence, and emptiness decide exactly versus conservatively.
+        API reference:
+          - api.md: The full public surface, generated from the package docstrings.
