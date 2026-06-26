@@ -6,6 +6,15 @@ rust-version.workspace = true
 license.workspace = true
 publish = false
 
+[dependencies]
+# Subtyping indexes record fields by name for O(1) cross-list lookup. The keys
+# are trusted, build-checked identifiers (the frontend rejects duplicates and
+# surrogate names), never attacker input, so the map needs no SipHash DoS
+# resistance; FxHash drops the per-call random-seed setup, matching the binding
+# crate and the hasher ty uses in its own semantic crates. Pure Rust, so the
+# core stays interpreter-free.
+rustc-hash = { workspace = true }
+
 [dev-dependencies]
 criterion = "0.8.2"
 insta = "1.48.0"

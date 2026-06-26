@@ -2,6 +2,7 @@
 //! disjointness, with the leaf-relation oracle and the scalar region partition.
 
 use crate::ir::{Constraint, Field, Schema, SeqKind, SeqRegex};
+use rustc_hash::FxHashMap;
 use std::cell::Cell;
 
 /// The most decision steps one top-level query may take before it stops and
@@ -1019,9 +1020,8 @@ fn keyed_map_subtype(
 /// and could make the `required`/width checks that consume this index unsound. The
 /// frontend rejects duplicates; the `debug_assert` makes that dependency explicit
 /// and catches a malformed IR in debug rather than deciding on a shadowed field.
-fn field_index(fields: &[Field]) -> std::collections::HashMap<&str, &Field> {
-    let index: std::collections::HashMap<&str, &Field> =
-        fields.iter().map(|f| (f.name.as_str(), f)).collect();
+fn field_index(fields: &[Field]) -> FxHashMap<&str, &Field> {
+    let index: FxHashMap<&str, &Field> = fields.iter().map(|f| (f.name.as_str(), f)).collect();
     debug_assert_eq!(
         index.len(),
         fields.len(),
@@ -1066,4 +1066,56 @@ enum TypeTag {
     Set,
     FrozenSet,
     Dict,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// A generator mixing the scalar-decidable atoms with opaque leaves (the
+    /// gradual `Any`, a literal, a content-bearing set) under the Boolean
+    /// combinators, so both the region-carrying and the region-`None` paths and
+    /// their propagation through every combinator are exercised.
+    fn schema() -> impl Strategy<Value = Schema> {
+        let leaf = prop_oneof![
+            Just(Schema::Anything),
+            Just(Schema::Nothing),
+            Just(Schema::NoneType),
+            Just(Schema::Bool),
+            Just(Schema::Int),
+            Just(Schema::Float),
+            Just(Schema::Str),
+            Just(Schema::Bytes),
+            Just(Schema::Dynamic),
+            Just(Schema::Literal(0)),
+            Just(Schema::Set(Box::new(Schema::Int))),
+        ];
+        leaf.prop_recursive(4, 24, 3, |inner| {
+            prop_oneof![
+                proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::Union),
+                proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::Intersection),
+                inner.prop_map(|s| Schema::Complement(Box::new(s))),
+            ]
+        })
+    }
+
+    proptest! {
+        /// The bottom-up region folded by `empty_and_region` is exactly the region
+        /// `region_set` recomputes from scratch, for every schema. This pins the two
+        /// region code paths together so a future change to one cannot silently
+        /// diverge from the other (the emptiness decision relies on their agreement).
+        #[test]
+        fn empty_and_region_folds_the_same_region_as_region_set(s in schema()) {
+            let folded = s
+                .empty_and_region(
+                    &NoLeafRelations,
+                    &[],
+                    &mut Vec::new(),
+                    &Cell::new(DECISION_BUDGET),
+                )
+                .1;
+            prop_assert_eq!(folded, s.region_set());
+        }
+    }
 }

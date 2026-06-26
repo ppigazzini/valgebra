@@ -22,6 +22,10 @@ license = "MIT OR Apache-2.0"
 # this pin, drop the free-threaded qualifications in the docs, and make the 3.14t
 # lane blocking once that release lands.
 pyo3 = "0.28"
+# FxHash for the internal maps keyed by trusted, build-checked data (field names,
+# pool ids), pinned once so both crates share one hasher version. Pure Rust, so
+# the core crate stays interpreter-free while using it.
+rustc-hash = "2"
 valgebra-core = { path = "crates/valgebra-core" }
 
 # Lints configured once for the whole workspace; each crate opts in with

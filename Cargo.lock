@@ -933,6 +933,7 @@ dependencies = [
  "criterion",
  "insta",
  "proptest",
+ "rustc-hash",
 ]
 
 [[package]]
