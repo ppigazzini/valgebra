@@ -50,9 +50,17 @@ bench = [
 ]
 # Documentation-site tools: the MkDocs Material site and the mkdocstrings API
 # reference generator. Never runtime dependencies.
+#
+# Upper bounds pin the renderer to the maintained MkDocs 1.x line: MkDocs core is
+# unmaintained and the unlicensed "MkDocs 2.0" drops the plugin system with no
+# migration path, so `<2` keeps the resolver off it, and `<10` holds Material on
+# its last MkDocs-based major. The content is renderer-independent (Markdown in a
+# Diataxis layout, examples tested by scripts/run_doc_examples.py, an llms.txt
+# manifest); the renderer is a replaceable backend. Drop the bounds when migrating
+# to Zensical, once it renders mkdocstrings cross-references and llms.txt.
 docs = [
-    "mkdocs>=1.6",
-    "mkdocs-material>=9.5",
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.5,<10",
     "mkdocstrings[python]>=1.0.4",
     # Generates the /llms.txt manifest and /llms-full.txt full-content export so
     # AI assistants and coding agents consume the docs as clean Markdown.

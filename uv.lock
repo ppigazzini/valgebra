@@ -1653,9 +1653,9 @@ dev = [
     { name = "ty", specifier = ">=0.0.48" },
 ]
 docs = [
-    { name = "mkdocs", specifier = ">=1.6" },
+    { name = "mkdocs", specifier = ">=1.6,<2" },
     { name = "mkdocs-llmstxt", specifier = ">=0.5" },
-    { name = "mkdocs-material", specifier = ">=9.5" },
+    { name = "mkdocs-material", specifier = ">=9.5,<10" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.4" },
 ]
 
