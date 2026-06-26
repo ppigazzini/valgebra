@@ -26,6 +26,12 @@ Over this fragment, valgebra returns the exact set-theoretic answer.
   scalar atoms (`None`, `bool`, `int`, `float`, `str`, `bytes`), with `bool` a
   subtype of `int`. The complement laws hold: `int & ~int` is empty, `int | ~int`
   is the universe.
+- **Complement and disjointness across kinds.** An intersection that carries a
+  schema together with its complement (`A & ~A`), or two members of provably
+  disjoint kinds (a list and a set, an `int` and a `str`), is empty — for the
+  structural kinds, not only the scalars. The gradual `Any` is exempt from the
+  complement law: `Any & ~Any` is *not* empty, because `Any` is the dynamic type,
+  not a set whose complement cancels it.
 - **Class and literal inclusion.** A class is a subtype of its base classes
   (`issubclass`), and a literal is a subtype of any schema it is a member of.
 - **Refinements.** A refinement is a subtype of its base and of a refinement with
@@ -51,7 +57,7 @@ Over this fragment, valgebra returns the exact set-theoretic answer.
   rule is sound and is witnessed by an independent reference denotation.
 
 ```python
-from typing import Annotated
+from typing import Annotated, Any
 
 import annotated_types as at
 
@@ -67,6 +73,9 @@ assert Validator({str: int}).is_subtype_of({str: int, int: bool})  # mapping cla
 assert Validator({str: int}).is_subtype_of({"b?": int, str: int})  # optional field, catch-all covers it
 assert union(bool, int).is_equivalent(int)  # bool | int is just int
 assert intersection(int, complement(int)).is_empty()  # the complement law
+assert intersection(list[int], complement(list[int])).is_empty()  # complement law, structurally
+assert intersection(list[int], set[int]).is_empty()  # disjoint kinds: a list is never a set
+assert not intersection(Any, complement(Any)).is_empty()  # Any is exempt from the complement law
 
 json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
 assert json_value.is_valid({"a": [1, "x", {"b": None}]})
