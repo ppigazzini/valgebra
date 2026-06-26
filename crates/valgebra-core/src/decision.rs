@@ -343,6 +343,8 @@ impl Schema {
                 }
                 let empty = any_empty
                     || region == Some(0)
+                    || has_complementary_pair(members)
+                    || has_disjoint_pair(members)
                     || intersection_bounds_unsatisfiable(members, oracle);
                 (empty, region)
             }
@@ -854,6 +856,36 @@ fn tighter_bound(
 /// inside a member (say under a union arm) is not collected here; the decision
 /// stays sound, since missing a contradiction only forgoes reporting emptiness,
 /// never reports a non-empty intersection empty.
+/// Whether the intersection contains a schema and its complement (`A ∩ ¬A = ∅`).
+/// The gradual `Any` is excluded: its complement is not its set complement, so
+/// `Any ∩ ¬Any` is not empty. This is the completeness law `simplify` applies,
+/// decided structurally on the (small) member list.
+fn has_complementary_pair(members: &[Schema]) -> bool {
+    members.iter().any(|member| match member {
+        Schema::Complement(inner) => {
+            !matches!(**inner, Schema::Dynamic) && members.iter().any(|other| other == &**inner)
+        }
+        _ => false,
+    })
+}
+
+/// Whether two members are provably disjoint (distinct concrete kinds, `bool ⊆
+/// int` aside), so the intersection is empty. This decides the structural-kind
+/// disjointness (a list is never a set) the scalar region bitset cannot see.
+fn has_disjoint_pair(members: &[Schema]) -> bool {
+    members
+        .iter()
+        .enumerate()
+        .any(|(i, a)| members[i + 1..].iter().any(|b| a.disjoint(b)))
+}
+
+/// Whether the refinement constraints of the intersection's **directly refined
+/// members** cannot hold together. A value in the intersection satisfies every
+/// member, so the constraints of each top-level `Refine` member apply to it at
+/// once. This gathers only those top-level constraints — a refinement nested
+/// inside a member (say under a union arm) is not collected here; the decision
+/// stays sound, since missing a contradiction only forgoes reporting emptiness,
+/// never reports a non-empty intersection empty.
 fn intersection_bounds_unsatisfiable(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
     // Gather the top-level refine members' constraints by reference — no clone, so
     // a `Regex` constraint's pattern string is not copied per intersection node.
@@ -1117,5 +1149,39 @@ mod tests {
                 .1;
             prop_assert_eq!(folded, s.region_set());
         }
+    }
+
+    #[test]
+    fn is_empty_decides_complement_and_disjoint_intersections() {
+        let list = |e| Schema::list(SeqRegex::homogeneous(e));
+        let not = |s| Schema::Complement(Box::new(s));
+
+        // A ∩ ¬A is empty for a structural A the scalar region bitset cannot see.
+        let a = list(Schema::Int);
+        assert!(Schema::Intersection(vec![a.clone(), not(a)]).is_empty());
+
+        // The gradual `Any` is exempt: `Any ∩ ¬Any` is not empty.
+        assert!(!Schema::Intersection(vec![Schema::Dynamic, not(Schema::Dynamic)]).is_empty());
+
+        // Disjoint structural kinds: a list is never a set.
+        assert!(
+            Schema::Intersection(vec![list(Schema::Int), Schema::Set(Box::new(Schema::Int))])
+                .is_empty()
+        );
+
+        // A refined int is still an int, disjoint from str.
+        assert!(
+            Schema::Intersection(vec![
+                Schema::Refine {
+                    base: Box::new(Schema::Int),
+                    constraints: vec![Constraint::Ge(0)],
+                },
+                Schema::Str,
+            ])
+            .is_empty()
+        );
+
+        // Sanity: two same-kind lists share the empty list, so not empty.
+        assert!(!Schema::Intersection(vec![list(Schema::Int), list(Schema::Bool)]).is_empty());
     }
 }
