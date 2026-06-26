@@ -7,6 +7,12 @@ the check is cheap enough to run on every request.
 
 📖 **Documentation: <https://ppigazzini.github.io/valgebra/>**
 
+🤖 **For AI assistants and coding agents:** the documentation is also published as
+[`llms.txt`](https://ppigazzini.github.io/valgebra/llms.txt) (a curated manifest)
+and [`llms-full.txt`](https://ppigazzini.github.io/valgebra/llms-full.txt) (the
+full text, including the API reference) per the [llmstxt.org](https://llmstxt.org)
+convention.
+
 > [!WARNING]
 > **Pre-alpha**, not yet on PyPI. The API works today but may change; build from
 > source for now.
