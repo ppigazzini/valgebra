@@ -17,8 +17,8 @@ full text, including the API reference) per the [llmstxt.org](https://llmstxt.or
 convention.
 
 > [!WARNING]
-> **Pre-alpha**, not yet on PyPI. The API works today but may change; build from
-> source for now.
+> **Pre-alpha** (`0.0.1`), the first published release. The API works today but
+> may change before `0.1.0`.
 
 ## Schemas are sets; the operators are *or*, *and*, *not*
 
@@ -181,12 +181,21 @@ comparison is not apples-to-apples and is gated against regression in CI; see th
 
 ## Install
 
-Not yet published to PyPI — build from source. Requires
-[`uv`](https://docs.astral.sh/uv/), Python ≥ 3.10, and stable Rust (edition 2024,
-MSRV 1.88):
+valgebra ships prebuilt wheels to PyPI, so installing it needs no Rust toolchain
+(Python ≥ 3.10):
 
 ```bash
-git clone <repository-url> valgebra && cd valgebra
+pip install valgebra
+# or
+uv add valgebra
+```
+
+To build from source instead — for development or an unsupported platform —
+requires [`uv`](https://docs.astral.sh/uv/) and stable Rust (edition 2024, MSRV
+1.88):
+
+```bash
+git clone https://github.com/ppigazzini/valgebra && cd valgebra
 uv sync                 # create .venv and install dev dependencies
 uv run maturin develop  # build the Rust extension into the venv
 ```

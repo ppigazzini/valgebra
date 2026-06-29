@@ -30,8 +30,9 @@ assert not users.is_valid({"name": "Ada", "age": -1})
 ```
 
 !!! warning "Pre-alpha"
-    valgebra is under active development and is not yet published to PyPI. The
-    APIs described here work today; see the
+    valgebra is under active development. The first release, `0.0.1`, is
+    published to PyPI; the APIs described here work today but may change before
+    `0.1.0`. See the
     [changelog](https://github.com/ppigazzini/valgebra/blob/main/CHANGELOG.md)
     for what is built.
 

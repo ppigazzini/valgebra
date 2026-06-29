@@ -6,8 +6,10 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
-No versions are published yet. The following is in place on the main branch and
-will form the first release.
+## [0.0.1] - 2026-06-29
+
+The first published release. valgebra ships to PyPI as prebuilt wheels across
+the support matrix.
 
 ### Added
 
@@ -44,4 +46,5 @@ will form the first release.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/commits/main
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/ppigazzini/valgebra/releases/tag/v0.0.1
