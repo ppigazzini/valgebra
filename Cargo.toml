@@ -13,15 +13,9 @@ rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-# Held at 0.28: the jiter JSON dependency (latest 0.15) requires pyo3 ^0.28.2, and
-# two pyo3 versions cannot coexist in one extension module, so a bump to 0.29 is
-# blocked until jiter ships a 0.29-compatible release. pyo3 0.29 also carries the
-# free-threaded module-init fix the 3.14t CI lane needs; until then that lane fails
-# at import and is kept non-blocking (see .github/workflows/ci.yml).
-# jiter main has merged the pyo3 0.29 bump but has not cut a release with it; bump
-# this pin, drop the free-threaded qualifications in the docs, and make the 3.14t
-# lane blocking once that release lands.
-pyo3 = "0.28"
+# Keep one PyO3 version across the extension: jiter's `python` feature also
+# depends on PyO3, and two PyO3 lines cannot coexist in one extension module.
+pyo3 = "0.29"
 # FxHash for the internal maps keyed by trusted, build-checked data (field names,
 # pool ids), pinned once so both crates share one hasher version. Pure Rust, so
 # the core crate stays interpreter-free while using it.

@@ -89,7 +89,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - uses: taiki-e/install-action@9e1e5806d4a4822de933115878265be9aaa786d9 # v2.82.2
+      - uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
         with:
           tool: cargo-nextest,cargo-llvm-cov
       # Run the workspace tests under nextest and report the coverage summary.
@@ -105,7 +105,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-      - uses: taiki-e/install-action@9e1e5806d4a4822de933115878265be9aaa786d9 # v2.82.2
+      - uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
         with:
           tool: cargo-llvm-cov
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
@@ -140,11 +140,8 @@ jobs:
     # 3.15 (prerelease) and 3.14t (free-threaded) are early-warning lanes: they
     # run but never block merges. Free-threaded CPython is a monitoring target
     # until the references audit calls PyO3 free-threading support stable. 3.14t
-    # currently fails at extension import ("init function of _valgebra returned
-    # uninitialized object"): PyO3 0.28's free-threaded module init does not satisfy
-    # the current 3.14t build. The fix is PyO3 0.29, which is pinned out by the
-    # jiter dependency (see the pyo3 note in the workspace Cargo.toml), so this lane
-    # stays red and non-blocking until that pin lifts.
+    # currently remains non-blocking until no-GIL import is verified on the
+    # runner image.
     continue-on-error: ${{ matrix.python-version == '3.15' || matrix.python-version == '3.14t' }}
     strategy:
       fail-fast: false
@@ -379,7 +376,7 @@ jobs:
           workspaces: fuzz
       # A prebuilt cargo-fuzz from a version-pinned action, not a from-source
       # `cargo install` (which `--locked` pins only the deps of, not the tool).
-      - uses: taiki-e/install-action@9e1e5806d4a4822de933115878265be9aaa786d9 # v2.82.2
+      - uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
         with:
           tool: cargo-fuzz
       # `--target` forces the host (gnu) triple: the prebuilt cargo-fuzz is a
@@ -414,7 +411,7 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       # A prebuilt cargo-mutants from a version-pinned action, not a from-source
       # `cargo install` (which `--locked` pins only the deps of, not the tool).
-      - uses: taiki-e/install-action@9e1e5806d4a4822de933115878265be9aaa786d9 # v2.82.2
+      - uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
         with:
           tool: cargo-mutants
       - name: Mutation report over the core
@@ -504,7 +501,7 @@ jobs:
           workspaces: fuzz
       # A prebuilt cargo-fuzz binary, not a from-source build: a slow compile no
       # longer delays every change, and the installed version is reproducible.
-      - uses: taiki-e/install-action@9e1e5806d4a4822de933115878265be9aaa786d9 # v2.82.2
+      - uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
         with:
           tool: cargo-fuzz
       - name: Build the fuzz targets
