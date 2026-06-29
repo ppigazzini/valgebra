@@ -100,8 +100,9 @@ check is green only when every job is. The jobs: Rust lint and test (Linux,
 macOS, Windows), an MSRV build at the manifest's `rust-version`, two coverage
 lanes (the core crate, and the bindings measured by instrumenting the extension
 and driving it with the Python suite against a line floor), a Python matrix from
-3.10 through 3.15 — the 3.15 prerelease and the free-threaded lane run but never
-block — a differential lane that cross-checks membership against pydantic-core
+3.10 through 3.15 — the 3.15 prerelease lane runs without blocking, while the
+free-threaded 3.14t lane blocks merges — a differential lane that cross-checks
+membership against pydantic-core
 and jsonschema, the doc-example runner, a strict docs build, and a Linux wheel
 build. Scheduled lanes run the deep property suites, a libFuzzer soak over the
 core, and a mutation report that flags surviving mutants as warnings rather than

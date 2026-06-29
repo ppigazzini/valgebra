@@ -66,8 +66,9 @@ schemas (union, intersection, complement, refinement, fixpoints) with
   silent fallback.
 - **JSON on the Rust path.** `validate_json` parses and validates JSON in Rust,
   consistent with the object path.
-- **Immutable and thread-safe** by design. Free-threaded CPython is a monitored
-  target, not a supported platform yet.
+- **Immutable and thread-safe** by design. Free-threaded CPython 3.14 is
+  supported with a dedicated `cp314t` wheel where the release image exposes that
+  interpreter.
 
 ## Where to go next
 

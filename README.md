@@ -205,8 +205,9 @@ uv run maturin develop  # build the Rust extension into the venv
   Rust; a comparison against a Python object — a literal, a refinement predicate,
   or an instance or attribute check — is the documented step into Python, never a
   silent fallback.
-- **Immutable and thread-safe** by design. Free-threaded (no-GIL) CPython is a
-  monitored target, not a supported platform yet.
+- **Immutable and thread-safe** by design. Free-threaded (no-GIL) CPython 3.14 is
+  supported with a dedicated `cp314t` wheel where the release image exposes that
+  interpreter.
 
 ## Project
 

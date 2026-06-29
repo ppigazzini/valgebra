@@ -137,12 +137,11 @@ jobs:
 
   python:
     name: python ${{ matrix.python-version }}
-    # 3.15 (prerelease) and 3.14t (free-threaded) are early-warning lanes: they
-    # run but never block merges. Free-threaded CPython is a monitoring target
-    # until the references audit calls PyO3 free-threading support stable. 3.14t
-    # currently remains non-blocking until no-GIL import is verified on the
-    # runner image.
-    continue-on-error: ${{ matrix.python-version == '3.15' || matrix.python-version == '3.14t' }}
+    # 3.15 is an early-warning prerelease lane. 3.14t (free-threaded) is a
+    # supported lane: the extension declares `gil_used = false`, imports without
+    # re-enabling the GIL, and the concurrency test exercises true parallel
+    # validation there.
+    continue-on-error: ${{ matrix.python-version == '3.15' }}
     strategy:
       fail-fast: false
       matrix:

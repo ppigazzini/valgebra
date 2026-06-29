@@ -133,8 +133,9 @@ trade-off.
   lives in the bindings, and the constants pool keeps the IR language-agnostic.
 - **Immutable validators.** A compiled validator never mutates after it is
   built, so one validator is shared across threads. Free-threaded (no-GIL)
-  CPython is a monitored target, not a supported platform yet: the extension does
-  not import there under the current PyO3 line.
+  CPython 3.14 is supported: the extension declares `gil_used = false`, imports
+  without re-enabling the GIL, and the concurrency suite exercises true parallel
+  validation there.
 
 ## Distribution
 
@@ -158,11 +159,9 @@ The extension ships as a **per-interpreter-version** module, not a stable-ABI
   release builds with the same compatibility. A dispatch with no publish target
   builds the whole matrix as a dry run, which is how matrix coverage is verified
   before a release.
-- **Free-threaded build is dropped before publish.** Where the image exposes a
+- **Free-threaded wheels ship where available.** Where the image exposes a
   free-threaded interpreter, `--find-interpreter` also builds a free-threaded
-  wheel. Free-threaded CPython is a monitored target, not a supported platform
-  yet, so the release deletes any free-threaded wheel before upload and fails
-  closed if one would otherwise reach the published set.
+  `cp314t` wheel. That wheel is part of the published set.
 
 The interpreter is never embedded in the shipped wheel: maturin builds the
 extension module, and the `pyo3` `extension-module` feature is injected at
