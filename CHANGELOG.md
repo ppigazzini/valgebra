@@ -6,6 +6,13 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-06-30
+
+### Added
+
+- `valgebra.__version__` exposes the installed distribution version, read from
+  the package metadata that maturin derives from the Cargo workspace manifest.
+
 ## [0.0.1] - 2026-06-29
 
 The first published release. valgebra ships to PyPI as prebuilt wheels across
@@ -46,5 +53,6 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/ppigazzini/valgebra/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/ppigazzini/valgebra/releases/tag/v0.0.1

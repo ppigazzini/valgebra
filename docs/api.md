@@ -41,3 +41,16 @@ the native `[A, B]` literal (see the [schema language](schema-language.md)).
 ## Errors
 
 ::: valgebra.ValidationError
+
+## Package version
+
+`valgebra.__version__` is the installed distribution version as a string. It is
+read from the package metadata maturin derives from the Cargo workspace
+manifest, so it always matches the built wheel and never drifts from a
+hand-maintained literal.
+
+```python
+import valgebra
+
+print(valgebra.__version__)
+```
