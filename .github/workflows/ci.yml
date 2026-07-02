@@ -153,6 +153,17 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          # The default cache key uses `github.job` ("python"), which is shared by
+          # every matrix leg. Because valgebra builds a per-version, abi3-
+          # incompatible module (not a stable-ABI wheel), the compiled extension
+          # is ABI-specific per interpreter. Sharing one `target/` lets a leg
+          # restore a `pyo3-ffi` build made for a different ABI — Cargo sees the
+          # sources unchanged and skips the rebuild — so the free-threaded (3.14t)
+          # leg can link against with-GIL FFI layout and fail at import with
+          # "init function of _valgebra returned uninitialized object". Key the
+          # cache on the interpreter so each ABI keeps its own build.
+          key: ${{ matrix.python-version }}
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           python-version: ${{ matrix.python-version }}
