@@ -100,8 +100,14 @@ jobs:
       - uses: taiki-e/install-action@9bcaee1dcae34154180f412e2fa69355a7cda9f6 # v2.82.6
         with:
           tool: cargo-nextest,cargo-llvm-cov
-      # Run the workspace tests under nextest and report the coverage summary.
-      - run: cargo llvm-cov nextest --workspace --summary-only
+      # Run the workspace tests under nextest and enforce a core line-coverage
+      # floor. The binding crate is measured by its own lane (which ignores the
+      # core), so scope this floor to the core and ignore valgebra-py here. The
+      # floor sits a few points below the current number so erosion fails the lane
+      # rather than eroding silently; ratchet it up as coverage improves.
+      - run: >
+          cargo llvm-cov nextest --workspace --summary-only
+          --ignore-filename-regex 'valgebra-py' --fail-under-lines 88
 
   binding-coverage:
     name: binding coverage
