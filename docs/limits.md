@@ -16,6 +16,13 @@ fields) is written by the developer and is trusted.
 - **Schema build depth.** A schema nested past a fixed depth is rejected when the
   validator is compiled, not at validation time. A self-referential class is the
   usual cause; model it with [`recursive`](recursion.md) instead.
+- **Schema composition depth.** Combining validators with the `|` operator,
+  `union`, `intersection`, or `complement` nests one level per call. Composing
+  past a fixed depth raises `ValueError` at construction, so a later check over
+  the schema cannot overflow the native stack. Only an unbounded composition loop
+  reaches this depth; a real schema, and the build-depth bound above, stay far
+  shallower. Structural recursion belongs in [`recursive`](recursion.md), whose
+  back edge does not count toward the depth.
 - **Value-walk depth.** A value nested past a fixed depth fails with
   `recursion_limit` rather than recursing into the native stack. This holds on
   both the object path and the JSON path; an over-deep JSON document is rejected
@@ -51,6 +58,20 @@ assert not schema.is_valid(cyclic)
 
 # An over-deep JSON document: rejected by the parser.
 assert not schema.is_valid_json("[" * 5000 + "1" + "]" * 5000)
+```
+
+Composing schemas in an unbounded loop is stopped at the depth bound, before the
+growing schema can overflow the stack on its next check:
+
+```python
+from valgebra import Validator
+
+composed = Validator(int)
+try:
+    for _ in range(10_000):
+        composed = composed | str
+except ValueError as error:
+    assert "too deep" in str(error)
 ```
 
 The worst-case timing of these shapes is measured by the adversarial benchmark

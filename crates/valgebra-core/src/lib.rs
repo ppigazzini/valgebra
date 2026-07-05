@@ -1783,6 +1783,31 @@ mod laws {
         );
     }
 
+    /// Structural depth counts one level per nested constructor, takes the max
+    /// over a node's children rather than the sum, and treats a `Ref` back edge
+    /// as a leaf so a recursive schema has finite depth. The composition guard
+    /// relies on this to bound the native stack every recursive walk descends.
+    #[test]
+    fn depth_counts_nesting_and_treats_refs_as_leaves() {
+        assert_eq!(Schema::Int.depth(), 1);
+        assert_eq!(Schema::Ref(0).depth(), 1);
+        assert_eq!(Schema::Complement(Box::new(Schema::Int)).depth(), 2);
+        assert_eq!(union(Schema::Int, Schema::Str).depth(), 2);
+        // The max over members, not their sum: one branch is two deep.
+        let branchy = union(Schema::Int, Schema::Complement(Box::new(Schema::Str)));
+        assert_eq!(branchy.depth(), 3);
+        // A left-nested tower grows by exactly one level per composition.
+        let mut tower = Schema::Int;
+        for _ in 0..10 {
+            tower = union(tower, Schema::Str);
+        }
+        assert_eq!(tower.depth(), 11);
+        // A list whose element is a recursive back edge is finite: the `Ref` is a
+        // leaf, so the depth does not follow it into the definitions table.
+        let recursive_list = Schema::list(SeqRegex::homogeneous(Schema::Ref(0)));
+        assert!(recursive_list.depth() < 10);
+    }
+
     /// The work budget must not change a verdict a real schema needs, including
     /// under recursion: a recursive list of ints is a subtype of itself and of a
     /// wider recursive list, and the wider one is not a subtype of the narrower.

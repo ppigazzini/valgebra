@@ -21,11 +21,21 @@ schema's declared size.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import pytest
 
-from valgebra import ValidationError, Validator, recursive, union
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+from valgebra import (
+    ValidationError,
+    Validator,
+    complement,
+    intersection,
+    recursive,
+    union,
+)
 
 
 def _nested_annotation(depth: int) -> object:
@@ -48,6 +58,44 @@ def test_build_depth_guard_rejects_an_overdeep_schema() -> None:
     assert Validator(_nested_annotation(50)).is_valid(_nested_value(50))
     with pytest.raises((NotImplementedError, ValidationError, ValueError)):
         Validator(_nested_annotation(1000))
+
+
+def _compose_in_a_loop(compose: Callable[[object], object]) -> None:
+    schema: object = Validator(int)
+    for _ in range(1000):
+        schema = compose(schema)
+
+
+@pytest.mark.parametrize(
+    "compose",
+    [
+        lambda s: s | str,
+        lambda s: union(s, str),
+        lambda s: intersection(s, str),
+        complement,
+    ],
+)
+def test_composition_depth_guard_rejects_unbounded_nesting(
+    compose: Callable[[object], object],
+) -> None:
+    # Each combinator call grows the schema by one nesting level. Past the
+    # composition-depth guard the call raises a clean ValueError instead of
+    # letting the next clone, decision, or render walk overflow the native stack.
+    # Every combinator family — the `|` operator, union, intersection, and
+    # complement — is bounded the same way.
+    with pytest.raises(ValueError, match="too deep"):
+        _compose_in_a_loop(compose)
+
+
+def test_a_schema_at_the_composition_limit_still_works() -> None:
+    # A schema right at the limit still builds, validates, decides emptiness, and
+    # reprs without a crash: the guard rejects only past the bound, not at it.
+    deep = Validator(int)
+    for _ in range(100):
+        deep = deep | str
+    assert deep.is_valid("x")
+    assert not deep.is_empty()
+    assert isinstance(repr(deep), str)
 
 
 def test_deeply_nested_object_hits_the_recursion_limit() -> None:

@@ -43,6 +43,18 @@ create_exception!(
     "Raised when a value is not a member of a schema's set."
 );
 
+/// The deepest schema nesting a combinator may build. A real schema is nowhere
+/// near this deep and the annotation frontend caps its own nesting lower, so a
+/// validator this deep is one composed in an unbounded loop. Every recursive
+/// walk over the tree — clone, drop, the decision procedure, the render to an
+/// annotation string — descends one native stack frame per level, so composing
+/// past this bound returns an error rather than overflowing the stack. It sits
+/// far enough below the smallest platform stack that even the render walk, the
+/// deepest per-level frame, keeps its margin. Structural recursion in a schema
+/// is written with `recursive`, whose back edge is a `Ref` leaf and does not
+/// count toward this depth.
+const MAX_SCHEMA_DEPTH: usize = 128;
+
 /// A compiled, immutable schema validator.
 ///
 /// Build one by calling `Validator(schema)`, or with a combinator such as
@@ -78,6 +90,29 @@ impl Validator {
             definitions,
             index: OnceLock::new(),
         }
+    }
+
+    /// Assemble a validator whose schema a combinator has grown by one level,
+    /// rejecting one nested past [`MAX_SCHEMA_DEPTH`] with a `ValueError`. Every
+    /// combinator's operands are already within the bound, so the grown schema is
+    /// at most one level past it — shallow enough that measuring its depth here
+    /// and dropping it when the bound is exceeded are themselves stack-safe.
+    pub(crate) fn composed(
+        schema: Schema,
+        literals: Vec<Py<PyAny>>,
+        definitions: Vec<Schema>,
+    ) -> PyResult<Self> {
+        let depth = schema.depth();
+        if depth > MAX_SCHEMA_DEPTH {
+            return Err(PyValueError::new_err(format!(
+                "schema nesting is too deep: composing this validator reaches {depth} \
+                 levels of nesting, past the limit of {MAX_SCHEMA_DEPTH}. A validator \
+                 this deep comes from composing in an unbounded loop; checking it \
+                 would risk a native stack overflow. Express structural recursion \
+                 with recursive(...) instead of nesting combinators."
+            )));
+        }
+        Ok(Validator::new(schema, literals, definitions))
     }
 
     /// The precompute, built once from this validator's schema, definitions, and
@@ -128,11 +163,7 @@ impl Validator {
         } else {
             vec![self.schema.clone(), other_schema]
         };
-        Ok(Validator::new(
-            Schema::Union(members),
-            literals,
-            definitions,
-        ))
+        Validator::composed(Schema::Union(members), literals, definitions)
     }
 
     /// Whether the JSON in `bytes` parses and belongs to the schema's set,
@@ -723,11 +754,7 @@ fn complement(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
     let mut literals = Vec::new();
     let mut definitions = Vec::new();
     let inner = build_schema(schema, &mut literals, &mut definitions)?;
-    Ok(Validator::new(
-        Schema::Complement(Box::new(inner)),
-        literals,
-        definitions,
-    ))
+    Validator::composed(Schema::Complement(Box::new(inner)), literals, definitions)
 }
 
 fn with_records_open(validator: &Validator, open: bool, py: Python<'_>) -> Validator {

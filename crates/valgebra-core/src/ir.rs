@@ -248,6 +248,21 @@ impl SeqRegex {
         self.any_elem(&|s| s.occurs_unguarded(target, true))
     }
 
+    /// The structural nesting depth this regex contributes: one level per regex
+    /// constructor plus the depth of the deepest element schema. The frontend's
+    /// linear shapes are shallow; the count still tracks every native stack frame
+    /// a recursive walk descends through the regex.
+    fn depth(&self) -> usize {
+        match self {
+            SeqRegex::Empty => 0,
+            SeqRegex::Elem(s) => s.depth(),
+            SeqRegex::Cat(parts) | SeqRegex::Or(parts) => {
+                1 + parts.iter().map(SeqRegex::depth).max().unwrap_or(0)
+            }
+            SeqRegex::Star(inner) => 1 + inner.depth(),
+        }
+    }
+
     /// If this regex is a *linear* sequence — a fixed prefix of element schemas
     /// followed by an optional repeated tail element — return `(prefix, tail)`.
     ///
@@ -527,6 +542,54 @@ impl Schema {
                 base: Box::new(base.shifted(pool, defs)),
                 constraints: constraints.iter().map(|c| c.shifted(pool)).collect(),
             },
+        }
+    }
+
+    /// The structural nesting depth of this schema: the longest chain of nested
+    /// constructors from here down to a leaf. Leaves — the scalars, `Literal`,
+    /// `Instance`, `Ref`, and `SelfRef` — have depth 1; every constructor is one
+    /// more than the deepest schema it contains.
+    ///
+    /// A `Ref` counts as a leaf even though it names a recursive definition: the
+    /// back edge is not followed, so the depth of a recursive schema is finite
+    /// and this terminates. The count mirrors the native stack a recursive walk
+    /// over the tree descends — one frame per level in clone, drop, the decision
+    /// procedure, and the render back to an annotation — so composition can be
+    /// bounded to a depth every such walk survives.
+    #[must_use]
+    pub fn depth(&self) -> usize {
+        match self {
+            Schema::Anything
+            | Schema::Dynamic
+            | Schema::Nothing
+            | Schema::NoneType
+            | Schema::Bool
+            | Schema::Int
+            | Schema::Float
+            | Schema::Str
+            | Schema::Bytes
+            | Schema::Literal(_)
+            | Schema::Instance(_)
+            | Schema::Ref(_)
+            | Schema::SelfRef(_) => 1,
+            Schema::Seq { regex, .. } => 1 + regex.depth(),
+            Schema::Set(e) | Schema::FrozenSet(e) | Schema::Complement(e) => 1 + e.depth(),
+            Schema::Union(es) | Schema::Intersection(es) => {
+                1 + es.iter().map(Schema::depth).max().unwrap_or(0)
+            }
+            Schema::KeyedMap { fields, defaults } => {
+                let fields_depth = fields.iter().map(|f| f.schema.depth()).max().unwrap_or(0);
+                let defaults_depth = defaults
+                    .iter()
+                    .map(|(k, v)| k.depth().max(v.depth()))
+                    .max()
+                    .unwrap_or(0);
+                1 + fields_depth.max(defaults_depth)
+            }
+            Schema::Attrs { fields, .. } => {
+                1 + fields.iter().map(|f| f.schema.depth()).max().unwrap_or(0)
+            }
+            Schema::Refine { base, .. } => 1 + base.depth(),
         }
     }
 
