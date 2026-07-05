@@ -28,7 +28,7 @@ and list what was checked instead.
 
 ```bash
 cargo fmt --check
-cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 maturin develop --uv                    # after any Rust change
 ruff check . && ruff format --check .
@@ -66,16 +66,17 @@ what to do instead.
 
 - **Keep the hot path allocation-free and Rust-only.** `validate` and
   `is_valid` check membership of the actual object; they do not copy or coerce.
-  When a value must be converted, use the explicit `cast` mode. User predicates
-  and custom types run as a documented Python-callback slow path — name it as
+  When a value must be returned after checking, use the explicit `ensure` (or
+  `load` for JSON) mode. User predicates and custom types run as a documented
+  Python-callback slow path — name it as
   such, never let it become a silent fallback on the default loop.
 
 - **Cross the Python/Rust boundary once per call.** Push tree walks, key
   lookups, and bound checks into the Rust validator tree. Do not add Python work
   inside the per-element validation loop.
 
-- **Prefer ecosystem crates over custom Rust.** Reach for PyO3, jiter,
-  speedate, and ahash first. If you write custom core Rust anyway, record why in
+- **Prefer ecosystem crates over custom Rust.** Reach for PyO3, jiter, and
+  rustc-hash first. If you write custom core Rust anyway, record why in
   the same change. Never add ruff or ty crates as dependencies — they are design
   references only.
 

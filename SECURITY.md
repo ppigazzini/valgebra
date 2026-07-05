@@ -1,14 +1,15 @@
 # Security policy
 
-valgebra is **pre-alpha** and not yet published to PyPI. It has not been
-independently audited. Treat it accordingly: do not place it on a trust boundary
-in production until it has a stable release and external review. This policy
-describes what a security issue is and how to report one.
+valgebra is **pre-alpha**. Pre-release `0.0.x` wheels are published to PyPI, but
+the code has not been independently audited. Treat it accordingly: do not place
+it on a trust boundary in production until it has a stable release and external
+review. This policy describes what a security issue is and how to report one.
 
 ## Supported versions
 
-Until a stable `1.0`, only the latest commit on `main` is supported. There are no
-backports.
+Until a stable `1.0`, only the latest published `0.0.x` release receives fixes,
+and a fix supersedes the release it patches rather than being backported to an
+earlier one.
 
 ## What is a security issue
 
@@ -61,6 +62,5 @@ This is a solo, pre-release project, so timelines are best-effort:
 - Acknowledgement within **7 days**.
 - An initial assessment (in scope, severity) within **30 days**.
 - Coordinated disclosure: a fix and an advisory published together, crediting the
-  reporter unless anonymity is requested. Because there is no published release
-  yet, a fix lands on `main`; once releases exist, a patched version ships with
-  the advisory.
+  reporter unless anonymity is requested. A patched `0.0.x` release ships to PyPI
+  alongside the advisory.

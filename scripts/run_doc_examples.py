@@ -1,10 +1,10 @@
 """Execute every runnable Python example in the documentation.
 
-Each fenced ```python block in README.md is run as its own process, so module
-semantics (class definitions, get_type_hints) behave exactly as they would for
-a reader who copies the snippet. Blocks marked PLANNED (target APIs that do not
-run yet) are skipped. Exit non-zero if any example fails, so CI catches a stale
-or broken example.
+Each fenced ```python block in README.md and every page under docs/ is run as
+its own process, so module semantics (class definitions, get_type_hints) behave
+exactly as they would for a reader who copies the snippet. Blocks marked PLANNED
+(target APIs that do not run yet) are skipped. Exit non-zero if any example
+fails, so CI catches a stale or broken example.
 """
 
 from __future__ import annotations
