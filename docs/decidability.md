@@ -18,9 +18,16 @@ This page states which queries valgebra decides completely, which stay
 conservative, and which are undecidable at runtime and so are rejected or treated
 opaquely by necessity.
 
-## Decided completely
+## Decided exactly
 
-Over this fragment, valgebra returns the exact set-theoretic answer.
+Over this fragment, valgebra returns the exact set-theoretic answer: on every
+case below it agrees with set inclusion in both directions, not only the sound
+one. This exactness is verified case by case against a completeness ledger — a
+curated set of relations the procedure is asserted to decide — and re-checked by
+a fuzzer that confirms the sound direction over a finite value universe; it is a
+gated, exercised guarantee, not a proved theorem over the whole fragment. Outside
+this fragment the procedure stays sound (see [Sound but
+conservative](#sound-but-conservative)).
 
 - **The scalar Boolean algebra.** Every union, intersection, and complement of the
   scalar atoms (`None`, `bool`, `int`, `float`, `str`, `bytes`), with `bool` a
@@ -142,3 +149,11 @@ proof. A negative answer is "no, or not yet proven". valgebra never reports a
 relation it cannot justify, so widening the decided fragment can only turn a
 conservative `False` into a `True` — it can never change a previously-correct
 answer.
+
+Every decision also runs under a fixed work budget. A schema deliberately built
+to be enormous or deeply nested — beyond what any real schema reaches — can
+exhaust that budget, and the decision then returns the conservative answer
+(`False`, "not proven") rather than running unbounded. This preserves soundness:
+a budget bail-out is never a wrong `True`. So even within the exactly-decided
+fragment above, an adversarially sized schema receives the conservative answer,
+not a guaranteed exact one.

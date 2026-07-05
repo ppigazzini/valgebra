@@ -96,9 +96,14 @@ fragment** and is honest about the rest:
   answer is sound: `is_empty` never reports a non-empty schema as empty, and a
   subtype is never claimed unless it provably holds.
 
-The decision realizes the set-theoretic emptiness test directly rather than via a
-full type-automaton construction; that construction would only widen the few
-conservative cases the boundary records, never change a membership decision.
+The relation is *defined* by the set-theoretic emptiness test (`s <: t` iff
+`[[s ∧ ¬t]]` is empty). It is *decided* by structural rules that are exact on the
+published fragment and conservative beyond it — not by the full type-automaton
+construction the general EXPTIME procedure would use. That construction would
+decide strictly more (the cases the boundary records as conservative, such as a
+value split across union branches), but it never changes a membership decision:
+the walk answers membership directly, and every structural rule the decision does
+apply is sound.
 
 ## References
 

@@ -52,10 +52,12 @@ assert (int | Validator(str)).is_equivalent(union(int, str))
 ## The laws hold
 
 Because membership is Boolean and the combinators are exactly *or*, *and*, and
-*not*, every Boolean-algebra law holds — commutativity, associativity,
+*not*, every Boolean-algebra law on schemas — commutativity, associativity,
 idempotence, absorption, identities, distributivity, De Morgan, and double
-negation. These are property-tested in both Rust and Python against the
-membership relation, not asserted.
+negation — reduces to the same law on the per-value membership verdicts, where it
+holds universally. That reduction is property-tested in both Rust and Python over
+generated schemas and values, exercising each law against the membership relation
+rather than asserting it.
 
 The model — schemas as value-sets, subtyping as set inclusion, full union,
 intersection, and complement — is *semantic subtyping*. The
