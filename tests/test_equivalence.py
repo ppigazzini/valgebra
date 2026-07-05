@@ -72,7 +72,9 @@ def _values() -> st.SearchStrategy[object]:
         st.none(),
         st.booleans(),
         st.integers(),
-        st.floats(allow_nan=False, allow_infinity=False),
+        # NaN and the infinities are included: the fast and explain paths must
+        # return the same verdict on them, whatever that verdict is.
+        st.floats(allow_nan=True, allow_infinity=True),
         st.text(max_size=5),
         st.binary(max_size=5),
     )

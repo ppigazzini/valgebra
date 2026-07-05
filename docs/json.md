@@ -88,8 +88,26 @@ assert Validator(float).is_valid_json("42.0")
 assert Validator(int).is_valid_json("true")
 ```
 
-`Infinity` and `NaN` are not valid JSON and are rejected as malformed; whole
-numbers too large for a machine integer still parse to a Python `int`.
+`Infinity`, `-Infinity`, and `NaN` are not valid JSON. The parser rejects these
+tokens as malformed, even though Python's own `json.loads` accepts them as an
+extension. This is deliberately stricter: a document is held to the JSON grammar,
+so a float special can only enter through the object path (where `float('inf')`
+is an ordinary member), never through `validate_json`. A number too large for a
+machine integer still parses to a Python `int`, and an overflowing float literal
+such as `1e400` is standard JSON and parses to `inf`.
+
+```python
+from valgebra import Validator
+
+is_float = Validator(float)
+# The non-standard tokens are rejected, though json.loads would accept them.
+assert not is_float.is_valid_json("Infinity")
+assert not is_float.is_valid_json("NaN")
+# The object path, in contrast, admits the corresponding float special.
+assert is_float.is_valid(float("inf"))
+# An overflowing literal is valid JSON and parses to infinity.
+assert is_float.is_valid_json("1e400")
+```
 
 ## Malformed JSON
 

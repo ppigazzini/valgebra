@@ -42,9 +42,10 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 import pytest
+from annotated_types import Ge, Gt, Le, Lt, MaxLen, MinLen, MultipleOf
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -180,6 +181,29 @@ OBJECT_CASES: tuple[ObjectCase, ...] = (
         ("a", "b", "c", 1),
         _literal_equality(("a", "b")),
     ),
+    # Refinement bounds. pydantic reads annotated-types constraints natively, so
+    # the same annotation is both the valgebra schema and the oracle. Values stay
+    # same-type (no bool/float traps) so the two must agree exactly.
+    ObjectCase("int>=3", Annotated[int, Ge(3)], Annotated[int, Ge(3)], (2, 3, 4, -1)),
+    ObjectCase(
+        "int>0,<10",
+        Annotated[int, Gt(0), Lt(10)],
+        Annotated[int, Gt(0), Lt(10)],
+        (0, 1, 9, 10, -5),
+    ),
+    ObjectCase("int<=3", Annotated[int, Le(3)], Annotated[int, Le(3)], (2, 3, 4)),
+    ObjectCase(
+        "int%3",
+        Annotated[int, MultipleOf(3)],
+        Annotated[int, MultipleOf(3)],
+        (0, 3, 4, 9, -3),
+    ),
+    ObjectCase(
+        "str len 2..4",
+        Annotated[str, MinLen(2), MaxLen(4)],
+        Annotated[str, MinLen(2), MaxLen(4)],
+        ("a", "ab", "abcd", "abcde", ""),
+    ),
 )
 
 _OBJECT_ORACLES = {case.name: TypeAdapter(case.oracle) for case in OBJECT_CASES}
@@ -275,6 +299,25 @@ JSON_CASES: tuple[JsonCase, ...] = (
         {"type": "object", "additionalProperties": {"type": "integer"}},
         ('{"a":1}', "{}", '{"a":"x"}', "[1]", '"x"'),
     ),
+    # Refinement bounds against JSON Schema's numeric and string keywords.
+    JsonCase(
+        "int>=3",
+        Annotated[int, Ge(3)],
+        {"type": "integer", "minimum": 3},
+        ("2", "3", "4"),
+    ),
+    JsonCase(
+        "int>0,<10",
+        Annotated[int, Gt(0), Lt(10)],
+        {"type": "integer", "exclusiveMinimum": 0, "exclusiveMaximum": 10},
+        ("0", "1", "9", "10"),
+    ),
+    JsonCase(
+        "str len 2..4",
+        Annotated[str, MinLen(2), MaxLen(4)],
+        {"type": "string", "minLength": 2, "maxLength": 4},
+        ('"a"', '"ab"', '"abcd"', '"abcde"'),
+    ),
 )
 
 _JSON_ORACLES = {case.name: Draft202012Validator(case.oracle) for case in JSON_CASES}
@@ -341,3 +384,37 @@ def test_string_dict_agrees_with_jsonschema(value: dict[str, object]) -> None:
     jsonschema_ok = Draft202012Validator(_STR_DICT_SCHEMA).is_valid(value)
     assert vg_obj == vg_json, f"object and JSON paths disagree on {value!r}"
     assert vg_obj == jsonschema_ok, f"valgebra vs jsonschema on {value!r}"
+
+
+@given(
+    bounds=st.tuples(st.integers(-20, 20), st.integers(-20, 20)),
+    x=st.integers(-30, 30),
+)
+def test_int_interval_agrees_with_both_oracles(bounds: tuple[int, int], x: int) -> None:
+    # A closed integer interval refinement, cross-checked against pydantic's
+    # annotated-types reading and JSON Schema's inclusive bounds. Bound entailment
+    # is where the decision procedure reasons hardest; here an independent engine
+    # judges the membership verdict it rests on.
+    lo, hi = sorted(bounds)
+    schema = Annotated[int, Ge(lo), Le(hi)]
+    vg = Validator(schema).is_valid(x)
+    pydantic_ok = _pydantic_accepts(TypeAdapter(schema), x)
+    jsonschema_ok = Draft202012Validator(
+        {"type": "integer", "minimum": lo, "maximum": hi}
+    ).is_valid(x)
+    assert vg == pydantic_ok, f"valgebra vs pydantic on int in [{lo},{hi}] for {x}"
+    assert vg == jsonschema_ok, f"valgebra vs jsonschema on int in [{lo},{hi}] for {x}"
+
+
+@given(n=st.integers(0, 6), value=_TEXT)
+def test_str_minlength_agrees_with_both_oracles(n: int, value: str) -> None:
+    # String length refinement over the trap-free BMP alphabet, where Python
+    # ``len``, JSON Schema ``minLength``, and pydantic all count code points alike.
+    schema = Annotated[str, MinLen(n)]
+    vg = Validator(schema).is_valid(value)
+    pydantic_ok = _pydantic_accepts(TypeAdapter(schema), value)
+    jsonschema_ok = Draft202012Validator({"type": "string", "minLength": n}).is_valid(
+        value
+    )
+    assert vg == pydantic_ok, f"valgebra vs pydantic on len>={n} for {value!r}"
+    assert vg == jsonschema_ok, f"valgebra vs jsonschema on len>={n} for {value!r}"
