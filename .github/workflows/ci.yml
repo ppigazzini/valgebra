@@ -136,7 +136,7 @@ jobs:
             --ignore-filename-regex 'valgebra-core' --fail-under-lines 95
 
   python:
-    name: python ${{ matrix.python-version }}
+    name: python ${{ matrix.python-version }} (${{ matrix.os }})
     # 3.15 is an early-warning prerelease lane. 3.14t (free-threaded) is a
     # supported lane: the extension declares `gil_used = false`, imports without
     # re-enabling the GIL, and the concurrency test exercises true parallel
@@ -145,8 +145,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t", "3.15"]
-    runs-on: ubuntu-latest
+        # One representative interpreter on macOS and Windows, so the binding, the
+        # membership walk, the JSON path, and the error model are exercised on
+        # every OS the release ships wheels for, not only Linux.
+        include:
+          - os: macos-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.14"
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
@@ -162,8 +171,8 @@ jobs:
           # sources unchanged and skips the rebuild — so the free-threaded (3.14t)
           # leg can link against with-GIL FFI layout and fail at import with
           # "init function of _valgebra returned uninitialized object". Key the
-          # cache on the interpreter so each ABI keeps its own build.
-          key: ${{ matrix.python-version }}
+          # cache on the interpreter (and OS) so each ABI keeps its own build.
+          key: ${{ matrix.os }}-${{ matrix.python-version }}
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           python-version: ${{ matrix.python-version }}

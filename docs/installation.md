@@ -21,7 +21,8 @@ uv add valgebra
 
 Wheels are published for Linux (manylinux and musllinux, x86_64 and aarch64),
 macOS (Intel and Apple silicon), Windows, and free-threaded CPython 3.14 where
-the release image exposes a `cp314t` interpreter.
+the release image exposes a `cp314t` interpreter. Free-threaded support starts at
+3.14t; the earlier 3.13 free-threaded build is not a target.
 
 ## From source
 

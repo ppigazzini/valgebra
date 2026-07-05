@@ -106,6 +106,46 @@ jobs:
           name: sdist
           path: dist
 
+  smoke:
+    name: smoke ${{ matrix.wheel.name }}
+    needs: [wheels]
+    # Install and import each built wheel on its own platform before anything is
+    # published, so a wheel that compiles but fails to load (the "init function of
+    # _valgebra returned uninitialized object" class of failure) is caught here
+    # rather than after it reaches an index.
+    strategy:
+      fail-fast: false
+      matrix:
+        wheel:
+          - { name: linux-x86_64, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-native }
+          - { name: linux-aarch64, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-native }
+          - { name: macos-x86_64, runner: macos-15-intel, artifact: wheels-macos-15-intel-x86_64-native }
+          - { name: macos-arm64, runner: macos-latest, artifact: wheels-macos-latest-aarch64-native }
+          - { name: windows-x64, runner: windows-latest, artifact: wheels-windows-latest-x64-native }
+          - { name: windows-arm64, runner: windows-11-arm, artifact: wheels-windows-11-arm-aarch64-native }
+    runs-on: ${{ matrix.wheel.runner }}
+    # The two musllinux wheels are not smoked here: running them needs a musl
+    # (Alpine) container with a musl interpreter, a separate lane. The glibc
+    # Linux, macOS, and Windows wheels — the platforms with no other functional
+    # coverage — are all exercised below.
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ matrix.wheel.artifact }}
+          path: dist
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          python-version: "3.14"
+      - name: Install the built wheel and import it
+        # Create a venv on the target interpreter, install the matching wheel from
+        # the downloaded set with no index, then import and validate across the
+        # object and JSON paths.
+        shell: bash
+        run: |
+          uv venv
+          uv pip install --no-index --find-links dist valgebra
+          uv run python -c "import valgebra as v; assert v.Validator(int).is_valid(1); assert not v.Validator(int).is_valid('x'); assert v.Validator(list[int]).is_valid([1, 2]); assert v.Validator(int).is_valid_json('1'); print('smoke ok', v.__version__)"
+
   github-release:
     name: attach wheels to a github pre-release
     needs: [wheels, sdist]
@@ -146,7 +186,9 @@ jobs:
 
   publish:
     name: publish to ${{ inputs.publish_target }}
-    needs: [wheels, sdist]
+    # The wheel smoke must pass before anything publishes: a broken wheel fails
+    # its import here and blocks the upload.
+    needs: [wheels, sdist, smoke]
     runs-on: ubuntu-latest
     # Publishing requires a deliberate dispatch that selects a real index. A
     # dry-run dispatch (target "none") uploads nothing, and no tag reaches here.
