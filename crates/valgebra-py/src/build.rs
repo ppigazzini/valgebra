@@ -116,7 +116,7 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
 /// are rejected: they duplicate `set[T]`/`tuple[...]`, which typing spells.
 pub(crate) fn build_schema(
     obj: &Bound<'_, PyAny>,
-    lits: &mut Vec<Py<PyAny>>,
+    lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
     let _guard = BuildGuard::enter()?;
@@ -214,7 +214,7 @@ pub(crate) fn build_schema(
         let lit_map: Vec<usize> = inner
             .literals
             .iter()
-            .map(|o| intern(lits, o.bind(py)))
+            .map(|o| lits.intern(o.bind(py)))
             .collect();
         defs.extend(
             inner
@@ -238,7 +238,7 @@ pub(crate) fn build_schema(
         )));
     }
 
-    Ok(Schema::Literal(intern(lits, obj)))
+    Ok(Schema::Literal(lits.intern(obj)))
 }
 
 /// True if `obj` is a type variable or a typing special form (`Final`,
@@ -261,20 +261,20 @@ pub(crate) fn combine(
     args: &Bound<'_, PyTuple>,
     make: impl FnOnce(Vec<Schema>) -> Schema,
 ) -> PyResult<Validator> {
-    let mut literals = Vec::new();
+    let mut literals = Pool::default();
     let mut definitions = Vec::new();
     let mut members = Vec::with_capacity(args.len());
     for arg in args.iter() {
         members.push(build_schema(&arg, &mut literals, &mut definitions)?);
     }
-    Validator::composed(make(members), literals, definitions)
+    Validator::composed(make(members), literals.into_items(), definitions)
 }
 
 /// Build the schema for a Python type object (a builtin, `TypedDict`, `Enum`,
 /// dataclass, `NamedTuple`, runtime-checkable `Protocol`, or `object`).
 fn build_type_object(
     ty: &Bound<'_, PyType>,
-    lits: &mut Vec<Py<PyAny>>,
+    lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
     let py = ty.py();
@@ -319,7 +319,7 @@ fn build_type_object(
     }
     // Enum: an instance of the enumeration class (any of its members).
     if ty.is_subclass(forms.enum_class.bind(py))? {
-        return Ok(Schema::Instance(intern(lits, ty.as_any())));
+        return Ok(Schema::Instance(lits.intern(ty.as_any())));
     }
     // dataclass / NamedTuple: isinstance plus a deep check of each field.
     let is_dataclass = py
@@ -332,7 +332,7 @@ fn build_type_object(
     // Protocol: a runtime-checkable protocol validates by isinstance.
     if is_truthy_attr(ty, "_is_protocol") {
         if is_truthy_attr(ty, "_is_runtime_protocol") {
-            return Ok(Schema::Instance(intern(lits, ty.as_any())));
+            return Ok(Schema::Instance(lits.intern(ty.as_any())));
         }
         return Err(not_implemented(
             "a Protocol must be @runtime_checkable to be used as a schema",
@@ -342,7 +342,7 @@ fn build_type_object(
     // This covers the remaining builtins (complex, bytearray, memoryview, range,
     // the `collections.abc` ABCs including Callable, ...) and arbitrary user
     // classes uniformly.
-    Ok(Schema::Instance(intern(lits, ty.as_any())))
+    Ok(Schema::Instance(lits.intern(ty.as_any())))
 }
 
 /// True if `obj.<name>` exists and is truthy; false on absence or error.
@@ -382,7 +382,7 @@ fn field_name(name: &Bound<'_, PyString>) -> PyResult<String> {
 /// Build a closed record from a `TypedDict`, reading its required keys.
 fn build_typed_dict(
     ty: &Bound<'_, PyType>,
-    lits: &mut Vec<Py<PyAny>>,
+    lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
     let hints = resolve_type_hints(ty)?;
@@ -403,12 +403,12 @@ fn build_typed_dict(
 /// whose fields come from its resolved type hints; all fields are required.
 fn build_object(
     ty: &Bound<'_, PyType>,
-    lits: &mut Vec<Py<PyAny>>,
+    lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
     let hints = resolve_type_hints(ty)?;
     let hints = hints.cast::<PyDict>()?;
-    let class_index = intern(lits, ty.as_any());
+    let class_index = lits.intern(ty.as_any());
     let mut fields = Vec::with_capacity(hints.len());
     for (name, hint) in hints.iter() {
         fields.push(Field {
@@ -427,7 +427,7 @@ fn build_object(
 fn build_parametrized(
     origin: &Bound<'_, PyAny>,
     args: &Bound<'_, PyTuple>,
-    lits: &mut Vec<Py<PyAny>>,
+    lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
     let py = origin.py();
@@ -529,7 +529,7 @@ fn build_parametrized(
         // Callable[...] checks only callability at runtime; the argument and
         // return types cannot be inspected, so the parameters are ignored and
         // the schema is the opaque `isinstance(x, Callable)` test.
-        return Ok(Schema::Instance(intern(lits, origin)));
+        return Ok(Schema::Instance(lits.intern(origin)));
     }
     Err(not_implemented(&format!(
         "unsupported typing form with origin {}; supported: list, set, dict, \
@@ -577,7 +577,7 @@ fn single_arg<'py>(args: &Bound<'py, PyTuple>) -> PyResult<Bound<'py, PyAny>> {
 
 fn build_sequence(
     list: &Bound<'_, PyList>,
-    lits: &mut Vec<Py<PyAny>>,
+    lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
     let len = list.len();
@@ -626,7 +626,7 @@ fn build_sequence(
 
 fn build_dict(
     dict: &Bound<'_, PyDict>,
-    lits: &mut Vec<Py<PyAny>>,
+    lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
     // A string key is a named field (with the `"key?"` optional convention); any
@@ -668,7 +668,7 @@ fn build_dict(
 fn build_refine(
     base: &Bound<'_, PyAny>,
     metadata: &Bound<'_, PyTuple>,
-    lits: &mut Vec<Py<PyAny>>,
+    lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
     let base_schema = build_schema(base, lits, defs)?;
@@ -689,7 +689,7 @@ fn build_refine(
 fn parse_constraint(
     marker: &Bound<'_, PyAny>,
     out: &mut Vec<Constraint>,
-    lits: &mut Vec<Py<PyAny>>,
+    lits: &mut Pool,
 ) -> PyResult<()> {
     // A string-pattern marker: valgebra's `Regex(...)` or a compiled
     // `re.Pattern`, both carrying the source pattern as `.pattern`. The pattern
@@ -714,7 +714,7 @@ fn parse_constraint(
         if let Ok(bound) = marker.getattr(attr)
             && !bound.is_none()
         {
-            out.push(make(intern(lits, &bound)));
+            out.push(make(lits.intern(&bound)));
         }
     }
     // Length bounds.
@@ -733,29 +733,67 @@ fn parse_constraint(
     if let Ok(multiple) = marker.getattr("multiple_of")
         && !multiple.is_none()
     {
-        out.push(Constraint::MultipleOf(intern(lits, &multiple)));
+        out.push(Constraint::MultipleOf(lits.intern(&multiple)));
     }
     // Predicate escape hatch: annotated_types.Predicate(.func) or a bare
     // callable used directly as metadata.
     if let Ok(func) = marker.getattr("func")
         && func.is_callable()
     {
-        out.push(Constraint::Predicate(intern(lits, &func)));
+        out.push(Constraint::Predicate(lits.intern(&func)));
     } else if marker.is_callable() {
-        out.push(Constraint::Predicate(intern(lits, marker)));
+        out.push(Constraint::Predicate(lits.intern(marker)));
     }
     Ok(())
 }
 
-/// Pool `obj` and return its index, deduplicating by object identity.
-fn intern(pool: &mut Vec<Py<PyAny>>, obj: &Bound<'_, PyAny>) -> usize {
-    let ptr = obj.as_ptr();
-    if let Some(index) = pool.iter().position(|existing| existing.as_ptr() == ptr) {
-        return index;
+/// The constants pool a compile builds, plus an identity index into it. Pooling
+/// deduplicates by object identity; the index makes each `intern` a hash lookup
+/// rather than a linear scan, so compiling a wide `Literal[...]` or merging many
+/// validators stays linear in the number of constants instead of quadratic.
+///
+/// The address key is stable for the pooled objects: every interned value is
+/// kept alive by `items`, so no live pool entry is freed and reallocated during a
+/// compile.
+#[derive(Default)]
+pub(crate) struct Pool {
+    items: Vec<Py<PyAny>>,
+    index: rustc_hash::FxHashMap<usize, usize>,
+}
+
+impl Pool {
+    /// Seed a pool with an existing validator's constants, rebuilding the identity
+    /// index, so a second schema interns into the same pool when validators merge.
+    pub(crate) fn seeded(items: Vec<Py<PyAny>>) -> Self {
+        let index = items
+            .iter()
+            .enumerate()
+            .map(|(i, obj)| (obj.as_ptr() as usize, i))
+            .collect();
+        Pool { items, index }
     }
-    let index = pool.len();
-    pool.push(obj.clone().unbind());
-    index
+
+    /// Pool `obj` and return its index, deduplicating by object identity.
+    fn intern(&mut self, obj: &Bound<'_, PyAny>) -> usize {
+        let ptr = obj.as_ptr() as usize;
+        if let Some(&index) = self.index.get(&ptr) {
+            return index;
+        }
+        let index = self.items.len();
+        self.items.push(obj.clone().unbind());
+        self.index.insert(ptr, index);
+        index
+    }
+
+    /// The pooled constants, for reading against a compiled schema.
+    pub(crate) fn items(&self) -> &[Py<PyAny>] {
+        &self.items
+    }
+
+    /// Consume the pool, yielding the constants a validator stores.
+    pub(crate) fn into_items(self) -> Vec<Py<PyAny>> {
+        self.items
+    }
 }
 
 fn is_ellipsis(obj: &Bound<'_, PyAny>) -> bool {
@@ -776,27 +814,27 @@ mod tests {
     #[test]
     fn intern_deduplicates_by_identity() {
         Python::attach(|py| {
-            let mut pool: Vec<Py<PyAny>> = Vec::new();
+            let mut pool = Pool::default();
             let a = PyString::new(py, "x").into_any();
 
             // The same object interns to one slot.
-            let first = intern(&mut pool, &a);
-            let again = intern(&mut pool, &a);
+            let first = pool.intern(&a);
+            let again = pool.intern(&a);
             assert_eq!(first, again);
-            assert_eq!(pool.len(), 1);
+            assert_eq!(pool.items().len(), 1);
 
             // A distinct object takes a new slot.
             let b = PyList::empty(py).into_any();
-            let second = intern(&mut pool, &b);
+            let second = pool.intern(&b);
             assert_ne!(first, second);
-            assert_eq!(pool.len(), 2);
+            assert_eq!(pool.items().len(), 2);
 
             // Dedup is by identity, not value: a fresh equal-but-distinct object
             // gets its own slot rather than collapsing onto the first.
             let c = PyList::empty(py).into_any();
-            let third = intern(&mut pool, &c);
+            let third = pool.intern(&c);
             assert_ne!(second, third);
-            assert_eq!(pool.len(), 3);
+            assert_eq!(pool.items().len(), 3);
         });
     }
 }

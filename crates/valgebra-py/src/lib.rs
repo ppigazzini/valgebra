@@ -30,7 +30,7 @@ use pyo3::types::{PyBytes, PyList, PyString, PyTuple, PyType};
 use rustc_hash::FxHashSet;
 use valgebra_core::{LeafRelations, Schema, SeqKind, SeqRegex, fresh_self_token};
 
-use crate::build::{build_schema, combine};
+use crate::build::{Pool, build_schema, combine};
 use crate::check::{Ctx, ValidatorIndex, build_index, member};
 use crate::errors::{into_pyerr, json_invalid_error};
 use crate::input::Value;
@@ -155,7 +155,7 @@ impl Validator {
     /// stay valid, then `other` interns into it.
     fn union_with(&self, other: &Bound<'_, PyAny>, other_first: bool) -> PyResult<Validator> {
         let py = other.py();
-        let mut literals: Vec<Py<PyAny>> = self.literals.iter().map(|o| o.clone_ref(py)).collect();
+        let mut literals = Pool::seeded(self.literals.iter().map(|o| o.clone_ref(py)).collect());
         let mut definitions = self.definitions.clone();
         let other_schema = build_schema(other, &mut literals, &mut definitions)?;
         let members = if other_first {
@@ -163,7 +163,7 @@ impl Validator {
         } else {
             vec![self.schema.clone(), other_schema]
         };
-        Validator::composed(Schema::Union(members), literals, definitions)
+        Validator::composed(Schema::Union(members), literals.into_items(), definitions)
     }
 
     /// Whether the JSON in `bytes` parses and belongs to the schema's set,
@@ -211,10 +211,10 @@ impl Validator {
     ///         example a recursive class, which must be written with `recursive`).
     #[new]
     fn py_new(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
-        let mut literals = Vec::new();
+        let mut literals = Pool::default();
         let mut definitions = Vec::new();
         let schema = build_schema(schema, &mut literals, &mut definitions)?;
-        Ok(Validator::new(schema, literals, definitions))
+        Ok(Validator::new(schema, literals.into_items(), definitions))
     }
 
     /// Validate `obj`, raising `ValidationError` if it is not a member of the
@@ -429,12 +429,12 @@ impl Validator {
     /// Returns:
     ///     `True` if this schema is a subtype of `other`, else `False`.
     fn is_subtype_of(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let mut literals: Vec<Py<PyAny>> = self.literals.iter().map(|o| o.clone_ref(py)).collect();
+        let mut literals = Pool::seeded(self.literals.iter().map(|o| o.clone_ref(py)).collect());
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations {
             py,
-            literals: &literals,
+            literals: literals.items(),
             definitions: &definitions,
         };
         Ok(self
@@ -456,12 +456,12 @@ impl Validator {
     /// Returns:
     ///     `True` if the two schemas are equivalent, else `False`.
     fn is_equivalent(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let mut literals: Vec<Py<PyAny>> = self.literals.iter().map(|o| o.clone_ref(py)).collect();
+        let mut literals = Pool::seeded(self.literals.iter().map(|o| o.clone_ref(py)).collect());
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations {
             py,
-            literals: &literals,
+            literals: literals.items(),
             definitions: &definitions,
         };
         Ok(self
@@ -681,7 +681,9 @@ pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
 
     // A fixed matching value, built once; the walk visits each list element.
     let items: Vec<i64> = (0..64).collect();
-    let obj = PyList::new(py, items).unwrap().into_any();
+    let obj = PyList::new(py, items)
+        .expect("a fresh list of i64 always builds")
+        .into_any();
 
     let mut checksum: u64 = 0;
     for _ in 0..iters {
@@ -717,7 +719,7 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
         Validator::new(Schema::SelfRef(token), Vec::new(), Vec::new()),
     )?;
     let body_obj = builder.call1((placeholder,))?;
-    let mut literals = Vec::new();
+    let mut literals = Pool::default();
     let mut definitions = Vec::new();
     let body = build_schema(&body_obj, &mut literals, &mut definitions)?;
     // The body becomes a definition; the self-reference resolves to it.
@@ -731,7 +733,11 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
         ));
     }
     definitions.push(resolved);
-    Ok(Validator::new(Schema::Ref(ref_id), literals, definitions))
+    Ok(Validator::new(
+        Schema::Ref(ref_id),
+        literals.into_items(),
+        definitions,
+    ))
 }
 
 /// The union of the given schemas: a value in at least one of their sets.
@@ -751,10 +757,14 @@ fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
 /// The complement of a schema: every value not in its set.
 #[pyfunction]
 fn complement(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
-    let mut literals = Vec::new();
+    let mut literals = Pool::default();
     let mut definitions = Vec::new();
     let inner = build_schema(schema, &mut literals, &mut definitions)?;
-    Validator::composed(Schema::Complement(Box::new(inner)), literals, definitions)
+    Validator::composed(
+        Schema::Complement(Box::new(inner)),
+        literals.into_items(),
+        definitions,
+    )
 }
 
 fn with_records_open(validator: &Validator, open: bool, py: Python<'_>) -> Validator {
