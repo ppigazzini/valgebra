@@ -10,12 +10,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Least privilege for the Actions Pages deployment: read the repo, write the
-# Pages deployment, and mint the OIDC token deploy-pages verifies.
+# Least privilege by default; the Pages-specific permissions are granted only to
+# the jobs that need them (below), not to every job in the workflow.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # One Pages deployment at a time; never cancel a publish already in flight.
 concurrency:
@@ -26,8 +24,14 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
+    # configure-pages and upload-pages-artifact need to write the Pages artifact.
+    permissions:
+      contents: read
+      pages: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
           toolchain: stable
@@ -50,6 +54,10 @@ jobs:
     name: deploy
     needs: build
     runs-on: ubuntu-latest
+    # deploy-pages publishes the artifact and mints the OIDC token Pages verifies.
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

@@ -67,6 +67,8 @@ jobs:
           - { runner: windows-11-arm, target: aarch64 }
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       # PGO merges profiles with llvm-profdata, from the llvm-tools component.
       # On the host-built targets (macOS, Windows) add it to the host toolchain;
       # the Linux builds add it inside the manylinux container via
@@ -97,6 +99,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           command: sdist
@@ -211,7 +215,10 @@ jobs:
           merge-multiple: true
       - name: Confirm the requested version matches the built artifacts
         # A publish must name the exact version it ships; an empty input or a
-        # mismatch aborts before anything is uploaded.
+        # mismatch aborts before anything is uploaded. The dispatch input is read
+        # through the environment, never expanded into the script text.
+        env:
+          CONFIRM_VERSION: ${{ inputs.confirm_version }}
         run: |
           set -euo pipefail
           wheel="$(ls dist/*.whl 2>/dev/null | head -n1 || true)"
@@ -220,11 +227,11 @@ jobs:
           fi
           built="$(basename "$wheel")"; built="${built#valgebra-}"; built="${built%%-*}"
           echo "built artifacts are version $built"
-          if [ -z "${{ inputs.confirm_version }}" ]; then
+          if [ -z "$CONFIRM_VERSION" ]; then
             echo "::error::confirm_version is required to publish"; exit 1
           fi
-          if [ "$built" != "${{ inputs.confirm_version }}" ]; then
-            echo "::error::confirm_version '${{ inputs.confirm_version }}' != built version '$built'"; exit 1
+          if [ "$built" != "$CONFIRM_VERSION" ]; then
+            echo "::error::confirm_version '$CONFIRM_VERSION' != built version '$built'"; exit 1
           fi
       - name: Refuse to publish a stale or already-published version
         # Fail closed. The baked-in version means an unbumped re-run must not slip

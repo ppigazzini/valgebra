@@ -1,0 +1,43 @@
+# cargo-deny configuration: advisories, licenses, sources, and duplicate bans for
+# the workspace dependency tree. The CI supply-chain lane runs
+# `cargo deny check` here and, separately, over the detached fuzz workspace.
+
+[advisories]
+# RustSec advisories and yanked crates fail the check. cargo-deny 0.18+ denies
+# vulnerabilities and unmaintained crates by default under this version.
+version = 2
+yanked = "deny"
+
+[licenses]
+# The workspace and its dependencies are permissively licensed; allow the
+# licenses the tree actually carries and fail on anything outside the set.
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    # libFuzzer's runtime (pulled in only by the fuzz workspace) is LLVM-licensed.
+    "NCSA",
+]
+confidence-threshold = 0.9
+# The workspace's own unpublished crates (the fuzz harness) carry no license
+# field; skip them rather than requiring one on an internal, never-published crate.
+private = { ignore = true }
+
+[bans]
+# A crate pulled in at several versions is a warning, not a hard failure: it is a
+# tree-hygiene signal, and a transitive duplicate is often out of our control.
+multiple-versions = "warn"
+# A registry crate pinned to `*` is a supply-chain risk and fails; the internal
+# workspace crates are path dependencies, exempt via allow-wildcard-paths.
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+# Every dependency must come from crates.io; an unknown registry or a git source
+# is a supply-chain risk and fails the check.
+unknown-registry = "deny"
+unknown-git = "deny"
