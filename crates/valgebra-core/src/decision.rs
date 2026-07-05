@@ -849,18 +849,12 @@ fn tighter_bound(
     }
 }
 
-/// Whether the refinement constraints of the intersection's **directly refined
-/// members** cannot hold together. A value in the intersection satisfies every
-/// member, so the constraints of each top-level `Refine` member apply to it at
-/// once. This gathers only those top-level constraints — a refinement nested
-/// inside a member (say under a union arm) is not collected here; the decision
-/// stays sound, since missing a contradiction only forgoes reporting emptiness,
-/// never reports a non-empty intersection empty.
 /// Whether the intersection contains a schema and its complement (`A ∩ ¬A = ∅`).
 /// The gradual `Any` is excluded: its complement is not its set complement, so
 /// `Any ∩ ¬Any` is not empty. This is the completeness law `simplify` applies,
-/// decided structurally on the (small) member list.
-fn has_complementary_pair(members: &[Schema]) -> bool {
+/// decided structurally on the (small) member list. Shared with the simplifier
+/// so both read the same lattice law.
+pub(crate) fn has_complementary_pair(members: &[Schema]) -> bool {
     members.iter().any(|member| match member {
         Schema::Complement(inner) => {
             !matches!(**inner, Schema::Dynamic) && members.iter().any(|other| other == &**inner)
@@ -872,7 +866,8 @@ fn has_complementary_pair(members: &[Schema]) -> bool {
 /// Whether two members are provably disjoint (distinct concrete kinds, `bool ⊆
 /// int` aside), so the intersection is empty. This decides the structural-kind
 /// disjointness (a list is never a set) the scalar region bitset cannot see.
-fn has_disjoint_pair(members: &[Schema]) -> bool {
+/// Shared with the simplifier so both read the same lattice law.
+pub(crate) fn has_disjoint_pair(members: &[Schema]) -> bool {
     members
         .iter()
         .enumerate()

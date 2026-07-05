@@ -58,6 +58,23 @@ pub(crate) fn json_invalid_error(py: Python<'_>, description: &str) -> PyErr {
 /// mirror the first item; `str(exc)` is a summary of every failure.
 pub(crate) fn into_pyerr(py: Python<'_>, violations: &[Violation]) -> PyErr {
     debug_assert!(!violations.is_empty(), "into_pyerr needs a failure");
+    // The caller always reports at least one failure. A debug build asserts it; a
+    // release build must not index into an empty slice below, so if the fast
+    // matcher and the explain pass ever disagreed and left no violation, stand in
+    // a generic one. The error stays well-formed instead of raising a panic from
+    // an out-of-bounds access on the error-reporting path.
+    let fallback;
+    let violations = if violations.is_empty() {
+        fallback = [Violation {
+            code: "validation_error",
+            path: Vec::new(),
+            expected: "a member of the schema's set".to_owned(),
+            value_summary: String::new(),
+        }];
+        &fallback[..]
+    } else {
+        violations
+    };
     // Populating the structured attributes is pure interpreter bookkeeping
     // (attribute sets on a fresh exception, dict/tuple builds over owned data) and
     // does not fail in practice. If it ever does, surface that failure (the `Err`)

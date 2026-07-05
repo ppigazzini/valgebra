@@ -1,7 +1,7 @@
 //! The membership-preserving simplifier: the lattice-law normalisation of the
 //! IR (flattening, identities, De Morgan, deduplication).
 
-use crate::decision::REGION_ALL;
+use crate::decision::{REGION_ALL, has_complementary_pair, has_disjoint_pair};
 use crate::ir::{Constraint, Field, Schema, SeqRegex};
 
 impl SeqRegex {
@@ -78,24 +78,6 @@ impl Schema {
             other => other.clone(),
         }
     }
-}
-
-fn has_complementary_pair(members: &[Schema]) -> bool {
-    members.iter().any(|member| {
-        if let Schema::Complement(inner) = member {
-            !matches!(**inner, Schema::Dynamic) && members.iter().any(|other| other == &**inner)
-        } else {
-            false
-        }
-    })
-}
-
-/// Whether two members are provably disjoint, so their intersection is empty.
-fn has_disjoint_pair(members: &[Schema]) -> bool {
-    members
-        .iter()
-        .enumerate()
-        .any(|(i, a)| members[i + 1..].iter().any(|b| a.disjoint(b)))
 }
 
 /// Whether two members are the complements of disjoint schemas, so the union is

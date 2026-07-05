@@ -308,10 +308,12 @@ fn seq_element(
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    let schema = prefix
-        .get(i)
-        .copied()
-        .unwrap_or_else(|| tail.expect("length already checked"));
+    let Some(schema) = prefix.get(i).copied().or(tail) else {
+        // Unreachable: the caller's length check guarantees `i` lands in the
+        // prefix, or a repeated tail covers the overflow. Fold to non-member
+        // rather than panic across the FFI boundary if that ever breaks.
+        return false;
+    };
     if ctx.explain {
         path.push(PathSegment::Index(i));
     }
