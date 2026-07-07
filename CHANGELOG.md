@@ -6,6 +6,25 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-07-07
+
+### Added
+
+- Schema composition bounds nesting depth: combining validators with `|`,
+  `union`, `intersection`, or `complement` past a fixed depth is rejected at
+  construction with a `ValueError`, so a schema grown in an unbounded loop cannot
+  overflow the native stack on its next check. A `recursive` back edge counts as
+  a leaf, so a recursive schema's depth stays finite (see `docs/limits.md`).
+- The type stub declares the `__copy__` and `__deepcopy__` methods a compiled
+  validator exposes.
+
+### Fixed
+
+- Release builds report a well-formed validation error instead of panicking
+  across the boundary when the error builder is handed no failures, and the
+  per-element sequence walk folds an impossible missing-schema case to a
+  non-member result rather than a panic.
+
 ## [0.0.2] - 2026-06-30
 
 ### Added
@@ -53,6 +72,7 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/ppigazzini/valgebra/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/ppigazzini/valgebra/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/ppigazzini/valgebra/releases/tag/v0.0.1
