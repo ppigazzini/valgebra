@@ -18,7 +18,7 @@ rustc-hash = { workspace = true }
 [dev-dependencies]
 criterion = "0.8.2"
 insta = "1.48.0"
-proptest = "1"
+proptest = "1.11"
 
 [lints]
 workspace = true

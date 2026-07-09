@@ -1,7 +1,7 @@
 [build-system]
 # >= 1.9.4 injects the pyo3 extension-module behavior at build time, so it is
 # not hard-coded as a Cargo feature (see crates/valgebra-py/Cargo.toml).
-requires = ["maturin>=1.9.4,<2"]
+requires = ["maturin>=1.14.1,<2"]
 build-backend = "maturin"
 
 [project]
@@ -33,21 +33,21 @@ classifiers = [
 [dependency-groups]
 dev = [
     "annotated-types>=0.7",
-    "hypothesis>=6",
-    "maturin>=1.9.4,<2",
+    "hypothesis>=6.156.4",
+    "maturin>=1.14.1,<2",
     "pre-commit>=4.6.0",
-    "pytest>=8",
-    "pytest-cov>=6",
-    "ruff>=0.15.16",
-    "syrupy>=5.3.4",
-    "ty>=0.0.55",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.20",
+    "syrupy>=5.5.2",
+    "ty>=0.0.57",
 ]
 # Benchmark-only tools: the wall-clock harness and the external comparison
 # points. They are never runtime dependencies of valgebra.
 bench = [
-    "pytest-benchmark>=5",
-    "pydantic>=2",
-    "jsonschema>=4",
+    "pytest-benchmark>=5.2.3",
+    "pydantic>=2.13.4",
+    "jsonschema>=4.26.0",
 ]
 # Documentation-site tools: the MkDocs Material site and the mkdocstrings API
 # reference generator. Never runtime dependencies.
@@ -60,8 +60,8 @@ bench = [
 # manifest); the renderer is a replaceable backend. Drop the bounds when migrating
 # to Zensical, once it renders mkdocstrings cross-references and llms.txt.
 docs = [
-    "mkdocs>=1.6,<2",
-    "mkdocs-material>=9.5,<10",
+    "mkdocs>=1.6.1,<2",
+    "mkdocs-material>=9.7.6,<10",
     "mkdocstrings[python]>=1.0.4",
     # Generates the /llms.txt manifest and /llms-full.txt full-content export so
     # AI assistants and coding agents consume the docs as clean Markdown.
@@ -81,7 +81,7 @@ strip = true
 pgo-command = "python scripts/pgo_workload.py"
 
 [tool.pytest.ini_options]
-minversion = "8.0"
+minversion = "9.0"
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers", "--strict-config"]
 xfail_strict = true

@@ -15,7 +15,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-arbitrary = { version = "1", features = ["derive"] }
+arbitrary = { version = "1.4", features = ["derive"] }
 
 [dependencies.valgebra-core]
 path = "../crates/valgebra-core"

@@ -35,7 +35,7 @@ rustc-hash = { workspace = true }
 # Its linear-time guarantee (no catastrophic backtracking) matches valgebra's
 # stance that constructed sequence regexes are linear, and pydantic-core uses it
 # for the same `pattern` constraint.
-regex = "1"
+regex = "1.13"
 
 [features]
 # Enables an embedded interpreter (pyo3 `auto-initialize`) so the binding-internal
