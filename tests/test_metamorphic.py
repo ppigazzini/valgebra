@@ -9,7 +9,7 @@ catches the reflexivity and pool-merge class of bug.
 from typing import Annotated
 
 import annotated_types as at
-from hypothesis import given
+from hypothesis import assume, given
 from hypothesis import strategies as st
 
 from valgebra import (
@@ -57,6 +57,9 @@ def _build(spec: object) -> Validator | None:
     try:
         return Validator(spec)
     except (ValueError, TypeError, NotImplementedError, RecursionError):
+        # Reject an unbuildable spec through assume so Hypothesis counts it toward
+        # the rejection rate rather than silently passing the example.
+        assume(False)
         return None
 
 

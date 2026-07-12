@@ -120,9 +120,14 @@ def main() -> int:
 
     shapes = _shapes()
     # Warm up so first-touch effects (lazy imports, allocator) do not skew the
-    # first shape measured.
-    for shape in shapes.values():
-        shape["valgebra"](shape["data"])
+    # first shape measured, and assert each payload is a member: a correctness
+    # regression that makes valgebra reject the data would take the fast reject
+    # path and read as a speed-up, so the gate must confirm it is measuring the
+    # accept path it claims to.
+    for name, shape in shapes.items():
+        if shape["valgebra"](shape["data"]) is not True:
+            print(f"payload for shape {name!r} is not accepted by valgebra")
+            return 1
         shape["pydantic"](shape["data"])
 
     measured: dict[str, float] = {}
@@ -157,6 +162,18 @@ def main() -> int:
         )
         print(f"\nrecorded {len(measured)} baseline ratios (tolerance {tolerance:.0%})")
         return 0
+
+    # Every measured shape must have a baseline and vice versa: a shape added
+    # without re-recording, or a stale baseline key, would otherwise pass the gate
+    # unchecked rather than being measured against a recorded ceiling.
+    if set(measured) != set(recorded):
+        missing = ", ".join(sorted(set(measured) - set(recorded))) or "none"
+        stale = ", ".join(sorted(set(recorded) - set(measured))) or "none"
+        print(
+            "\nbaseline shapes do not match measured shapes; re-record with "
+            f"--update (missing baseline: {missing}; stale baseline: {stale})"
+        )
+        return 1
 
     if failures:
         print(f"\nREGRESSION on: {', '.join(failures)}")

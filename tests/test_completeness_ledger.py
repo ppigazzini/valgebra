@@ -25,7 +25,7 @@ from typing import Annotated, ClassVar, Final, Literal, Optional, TypeVar, Union
 
 import annotated_types as at
 import pytest
-from hypothesis import given
+from hypothesis import assume, given
 from hypothesis import strategies as st
 
 from valgebra import (
@@ -339,6 +339,8 @@ def test_subtype_claims_hold_on_the_universe(left: object, right: object) -> Non
     try:
         compiled = Validator(left)
     except (ValueError, TypeError, NotImplementedError, RecursionError):
+        # Reject an unbuildable spec through assume so Hypothesis counts it.
+        assume(False)
         return
     if compiled.is_subtype_of(right):
         assert _accepted(left) <= _accepted(right)
@@ -351,6 +353,8 @@ def test_emptiness_claims_hold_on_the_universe(spec: object) -> None:
     try:
         compiled = Validator(spec)
     except (ValueError, TypeError, NotImplementedError, RecursionError):
+        # Reject an unbuildable spec through assume so Hypothesis counts it.
+        assume(False)
         return
     if compiled.is_empty():
         assert not _accepted(spec)

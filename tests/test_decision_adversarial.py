@@ -11,7 +11,7 @@ import json
 from typing import Annotated, Literal
 
 import annotated_types as at
-from hypothesis import given
+from hypothesis import assume, given
 from hypothesis import strategies as st
 
 from valgebra import (
@@ -116,7 +116,10 @@ def test_decision_is_sound_against_membership(
         a, b = _build(sa), _build(sb)
         left, right = Validator(a), Validator(b)
     except (ValueError, TypeError, NotImplementedError, RecursionError):
-        return  # an unbuildable combination is not under test
+        # An unbuildable combination is not under test; reject it through assume
+        # so Hypothesis counts it toward the rejection rate rather than passing.
+        assume(False)
+        return
     in_a = left.is_valid(v)
     if left.is_subtype_of(b) and in_a:
         assert right.is_valid(v)

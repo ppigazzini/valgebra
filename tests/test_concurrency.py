@@ -39,15 +39,25 @@ THREADS = 8
 ITERATIONS = 1000
 
 
-def _hammer(failures: list[str]) -> None:
+def _fresh_validators() -> tuple[Validator, Validator, Validator]:
+    """Build a fresh trio whose lazy precompute has not been built yet."""
+    record = Validator({"name": str, "age?": int, "tags": list[str]})
+    json_v = Validator(list[dict[str, int]])
+    tree = recursive(lambda t: {"value": int, "left?": t, "right?": t})
+    return record, json_v, tree
+
+
+def _hammer(
+    failures: list[str], record: Validator, json_v: Validator, tree: Validator
+) -> None:
     try:
         for _ in range(ITERATIONS):
-            assert _RECORD.is_valid(_GOOD_RECORD) is True
-            assert _RECORD.is_valid(_BAD_RECORD) is False
-            assert _JSON.is_valid_json('[{"a": 1}, {"b": 2}]') is True
-            assert _TREE.is_valid({"value": 1, "left": {"value": 2}}) is True
+            assert record.is_valid(_GOOD_RECORD) is True
+            assert record.is_valid(_BAD_RECORD) is False
+            assert json_v.is_valid_json('[{"a": 1}, {"b": 2}]') is True
+            assert tree.is_valid({"value": 1, "left": {"value": 2}}) is True
             try:
-                _RECORD.validate(_BAD_RECORD)
+                record.validate(_BAD_RECORD)
             except ValidationError:
                 pass
             else:
@@ -56,10 +66,13 @@ def _hammer(failures: list[str]) -> None:
         failures.append(repr(exc))
 
 
-def _run_hammer_threads() -> list[str]:
+def _run_hammer_threads(
+    record: Validator, json_v: Validator, tree: Validator
+) -> list[str]:
     failures: list[str] = []
     threads = [
-        threading.Thread(target=_hammer, args=(failures,)) for _ in range(THREADS)
+        threading.Thread(target=_hammer, args=(failures, record, json_v, tree))
+        for _ in range(THREADS)
     ]
     for thread in threads:
         thread.start()
@@ -72,7 +85,7 @@ def test_validators_are_thread_safe() -> None:
     # Always runs. Under the GIL this checks correctness under concurrency (threads
     # interleave but do not truly overlap); it is not, on its own, a data-race
     # detector — that is the free-threaded test below.
-    assert not _run_hammer_threads()
+    assert not _run_hammer_threads(_RECORD, _JSON, _TREE)
 
 
 @pytest.mark.skipif(
@@ -81,7 +94,9 @@ def test_validators_are_thread_safe() -> None:
     "the free-threaded interpreter is where a real data race would surface",
 )
 def test_validators_run_truly_parallel_without_the_gil() -> None:
-    # Honest about what is exercised: this body runs only when the GIL is disabled,
-    # so the shared lazy precompute is hit by genuinely parallel first use.
+    # Honest about what is exercised: this body runs only when the GIL is disabled.
+    # The validators are built fresh here, so their shared lazy precompute is hit
+    # for the first time by genuinely parallel threads rather than already warmed
+    # by an earlier test.
     assert not _gil_enabled()
-    assert not _run_hammer_threads()
+    assert not _run_hammer_threads(*_fresh_validators())

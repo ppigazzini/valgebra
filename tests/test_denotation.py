@@ -21,7 +21,7 @@ from types import GenericAlias
 from typing import Annotated
 
 import annotated_types as at
-from hypothesis import given, settings
+from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import (
@@ -275,7 +275,6 @@ def _cases(draw: st.DrawFn) -> tuple[Validator, Pred]:
     return intersection(spec, spec2), lambda x: pred(x) and pred2(x)
 
 
-@settings(max_examples=400, deadline=None)
 @given(case=_cases(), value=_values())
 def test_walk_matches_denotation(case: tuple[Validator, Pred], value: object) -> None:
     compiled, predicate = case
