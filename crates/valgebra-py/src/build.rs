@@ -267,7 +267,7 @@ pub(crate) fn combine(
     for arg in args.iter() {
         members.push(build_schema(&arg, &mut literals, &mut definitions)?);
     }
-    Validator::composed(make(members), literals.into_items(), definitions)
+    Validator::checked(make(members), literals.into_items(), definitions)
 }
 
 /// Build the schema for a Python type object (a builtin, `TypedDict`, `Enum`,

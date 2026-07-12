@@ -52,3 +52,7 @@ def recursive(
 
 anything: Validator
 nothing: Validator
+
+MAX_SCHEMA_DEPTH: int
+MAX_DEFINITIONS: int
+MAX_SCHEMA_NODES: int

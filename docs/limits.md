@@ -13,16 +13,25 @@ fields) is written by the developer and is trusted.
 
 ## The bounds
 
-- **Schema build depth.** A schema nested past a fixed depth is rejected when the
+- **Schema build depth.** A schema nested past 100 levels is rejected when the
   validator is compiled, not at validation time. A self-referential class is the
   usual cause; model it with [`recursive`](recursion.md) instead.
-- **Schema composition depth.** Combining validators with the `|` operator,
-  `union`, `intersection`, or `complement` nests one level per call. Composing
-  past a fixed depth raises `ValueError` at construction, so a later check over
-  the schema cannot overflow the native stack. Only an unbounded composition loop
-  reaches this depth; a real schema, and the build-depth bound above, stay far
-  shallower. Structural recursion belongs in [`recursive`](recursion.md), whose
-  back edge does not count toward the depth.
+- **Schema construction size.** Every way of growing a schema — the `Validator`
+  constructor, the `|` operator, `union`, `intersection`, `complement`,
+  `recursive`, and `simplify` — is bounded at construction, so no sequence of
+  calls can build a schema that overflows the stack or exhausts memory on a later
+  walk. Three bounds apply, and passing any one raises `ValueError`:
+    - **depth** — at most 128 levels of structural nesting (a chain built in a
+      loop, such as repeatedly wrapping a validator in a list);
+    - **definitions** — at most 128 recursive definitions (a chain of distinct
+      `recursive` schemas, which the depth measure alone cannot see because a
+      back edge counts as a leaf);
+    - **nodes** — at most 100,000 total schema nodes (a shallow but exponentially
+      wide schema, such as combining a validator with itself in a loop, which
+      doubles its node count each step).
+
+  A real schema stays far under all three. Structural recursion belongs in
+  [`recursive`](recursion.md), whose back edge does not count toward the depth.
 - **Value-walk depth.** A value nested past a fixed depth fails with
   `recursion_limit` rather than recursing into the native stack. This holds on
   both the object path and the JSON path; an over-deep JSON document is rejected
@@ -60,15 +69,15 @@ assert not schema.is_valid(cyclic)
 assert not schema.is_valid_json("[" * 5000 + "1" + "]" * 5000)
 ```
 
-Composing schemas in an unbounded loop is stopped at the depth bound, before the
-growing schema can overflow the stack on its next check:
+Growing a schema in an unbounded loop is stopped at construction, before the
+growing schema can overflow the stack or exhaust memory on its next check:
 
 ```python
 from valgebra import Validator
 
 composed = Validator(int)
 try:
-    for _ in range(10_000):
+    for _ in range(1000):
         composed = composed | str
 except ValueError as error:
     assert "too deep" in str(error)

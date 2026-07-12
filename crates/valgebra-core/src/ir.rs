@@ -263,6 +263,20 @@ impl SeqRegex {
         }
     }
 
+    /// The number of schema nodes this regex contributes, counting each element
+    /// schema's whole subtree. Mirrors [`Schema::node_count`] for the sequence
+    /// body; a regex constructor itself is not a schema node.
+    fn node_count(&self) -> usize {
+        match self {
+            SeqRegex::Empty => 0,
+            SeqRegex::Elem(s) => s.node_count(),
+            SeqRegex::Cat(parts) | SeqRegex::Or(parts) => {
+                parts.iter().map(SeqRegex::node_count).sum()
+            }
+            SeqRegex::Star(inner) => inner.node_count(),
+        }
+    }
+
     /// If this regex is a *linear* sequence — a fixed prefix of element schemas
     /// followed by an optional repeated tail element — return `(prefix, tail)`.
     ///
@@ -590,6 +604,49 @@ impl Schema {
                 1 + fields.iter().map(|f| f.schema.depth()).max().unwrap_or(0)
             }
             Schema::Refine { base, .. } => 1 + base.depth(),
+        }
+    }
+
+    /// The total number of schema nodes in this tree, counting this node plus
+    /// every node in its children. A `Ref` back edge is one node — the
+    /// definition it points at is counted where it lives in the definitions
+    /// table, not re-counted through the edge — so the count of a recursive
+    /// schema is finite. Combined with a per-tree depth bound, a total-node
+    /// bound rejects a schema that is shallow but exponentially wide (a doubling
+    /// union) without rejecting a legitimately deep or wide one.
+    #[must_use]
+    pub fn node_count(&self) -> usize {
+        match self {
+            Schema::Anything
+            | Schema::Dynamic
+            | Schema::Nothing
+            | Schema::NoneType
+            | Schema::Bool
+            | Schema::Int
+            | Schema::Float
+            | Schema::Str
+            | Schema::Bytes
+            | Schema::Literal(_)
+            | Schema::Instance(_)
+            | Schema::Ref(_)
+            | Schema::SelfRef(_) => 1,
+            Schema::Seq { regex, .. } => 1 + regex.node_count(),
+            Schema::Set(e) | Schema::FrozenSet(e) | Schema::Complement(e) => 1 + e.node_count(),
+            Schema::Union(es) | Schema::Intersection(es) => {
+                1 + es.iter().map(Schema::node_count).sum::<usize>()
+            }
+            Schema::KeyedMap { fields, defaults } => {
+                let fields_nodes: usize = fields.iter().map(|f| f.schema.node_count()).sum();
+                let defaults_nodes: usize = defaults
+                    .iter()
+                    .map(|(k, v)| k.node_count() + v.node_count())
+                    .sum();
+                1 + fields_nodes + defaults_nodes
+            }
+            Schema::Attrs { fields, .. } => {
+                1 + fields.iter().map(|f| f.schema.node_count()).sum::<usize>()
+            }
+            Schema::Refine { base, constraints } => 1 + base.node_count() + constraints.len(),
         }
     }
 

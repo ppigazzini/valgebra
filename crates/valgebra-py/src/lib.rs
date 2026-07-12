@@ -43,17 +43,31 @@ create_exception!(
     "Raised when a value is not a member of a schema's set."
 );
 
-/// The deepest schema nesting a combinator may build. A real schema is nowhere
-/// near this deep and the annotation frontend caps its own nesting lower, so a
-/// validator this deep is one composed in an unbounded loop. Every recursive
-/// walk over the tree — clone, drop, the decision procedure, the render to an
-/// annotation string — descends one native stack frame per level, so composing
-/// past this bound returns an error rather than overflowing the stack. It sits
-/// far enough below the smallest platform stack that even the render walk, the
-/// deepest per-level frame, keeps its margin. Structural recursion in a schema
-/// is written with `recursive`, whose back edge is a `Ref` leaf and does not
-/// count toward this depth.
+/// The deepest structural nesting a constructed schema may reach. A real schema
+/// is nowhere near this deep and the annotation frontend caps its own nesting
+/// lower, so a validator this deep is one built in an unbounded loop. Every
+/// recursive walk over the tree — clone, drop, the decision procedure — descends
+/// one native stack frame per level, so building past this bound returns an
+/// error rather than overflowing the stack. Structural recursion in a schema is
+/// written with `recursive`, whose back edge is a `Ref` leaf and does not count
+/// toward this depth.
 const MAX_SCHEMA_DEPTH: usize = 128;
+
+/// The most recursive definitions a constructed schema may hold. A recursive
+/// schema needs a mere handful; a validator with more is one whose definitions
+/// were chained in an unbounded loop, and the render and decision walks descend
+/// the chain one native stack frame per link (a chain of distinct definitions is
+/// invisible to the per-tree depth measure, which counts a `Ref` as a leaf).
+const MAX_DEFINITIONS: usize = 128;
+
+/// The most schema nodes a constructed schema may hold, across its tree and every
+/// definition. Bounds a schema that is shallow but exponentially wide — a
+/// doubling union grows its node count, not its depth — where the depth bound
+/// alone cannot. Set far above any real schema (a record with tens of thousands
+/// of fields still fits) so only a runaway loop trips it; combining two operands
+/// whose sizes already sum past it is rejected, so the doubling stops early
+/// rather than exhausting memory.
+const MAX_SCHEMA_NODES: usize = 100_000;
 
 /// A compiled, immutable schema validator.
 ///
@@ -92,24 +106,55 @@ impl Validator {
         }
     }
 
-    /// Assemble a validator whose schema a combinator has grown by one level,
-    /// rejecting one nested past [`MAX_SCHEMA_DEPTH`] with a `ValueError`. Every
-    /// combinator's operands are already within the bound, so the grown schema is
-    /// at most one level past it — shallow enough that measuring its depth here
-    /// and dropping it when the bound is exceeded are themselves stack-safe.
-    pub(crate) fn composed(
+    /// Assemble a validator, rejecting one whose schema is too deep, holds too
+    /// many recursive definitions, or spans too many nodes. Every growth path —
+    /// the `Validator(...)` constructor, the `|`/`union`/`intersection`/
+    /// `complement` combinators, `recursive`, and `simplify` — routes through
+    /// here, so no public call can build a schema that overflows the stack or
+    /// exhausts memory on a later walk. A schema reaching this point grew by one
+    /// step from operands already within the bounds, so it is at most one step
+    /// past them — shallow and small enough that measuring it and dropping it when
+    /// a bound is exceeded are themselves safe.
+    pub(crate) fn checked(
         schema: Schema,
         literals: Vec<Py<PyAny>>,
         definitions: Vec<Schema>,
     ) -> PyResult<Self> {
-        let depth = schema.depth();
+        let depth = definitions
+            .iter()
+            .map(Schema::depth)
+            .max()
+            .unwrap_or(0)
+            .max(schema.depth());
         if depth > MAX_SCHEMA_DEPTH {
             return Err(PyValueError::new_err(format!(
-                "schema nesting is too deep: composing this validator reaches {depth} \
-                 levels of nesting, past the limit of {MAX_SCHEMA_DEPTH}. A validator \
-                 this deep comes from composing in an unbounded loop; checking it \
-                 would risk a native stack overflow. Express structural recursion \
-                 with recursive(...) instead of nesting combinators."
+                "schema nesting is too deep: this validator reaches {depth} levels of \
+                 nesting, past the limit of {MAX_SCHEMA_DEPTH}. A validator this deep \
+                 comes from building in an unbounded loop; checking it would risk a \
+                 native stack overflow. Express structural recursion with recursive(...) \
+                 instead of nesting schemas."
+            )));
+        }
+        if definitions.len() > MAX_DEFINITIONS {
+            return Err(PyValueError::new_err(format!(
+                "schema holds too many recursive definitions: this validator has {} of \
+                 them, past the limit of {MAX_DEFINITIONS}. A validator with this many \
+                 comes from chaining recursive schemas in an unbounded loop; rendering \
+                 or deciding it would risk a native stack overflow.",
+                definitions.len()
+            )));
+        }
+        let nodes = definitions
+            .iter()
+            .map(Schema::node_count)
+            .sum::<usize>()
+            .saturating_add(schema.node_count());
+        if nodes > MAX_SCHEMA_NODES {
+            return Err(PyValueError::new_err(format!(
+                "schema is too large: this validator spans {nodes} nodes, past the limit \
+                 of {MAX_SCHEMA_NODES}. A schema this large comes from combining a \
+                 validator with itself in an unbounded loop, which doubles its size each \
+                 step; building it would exhaust memory."
             )));
         }
         Ok(Validator::new(schema, literals, definitions))
@@ -163,7 +208,7 @@ impl Validator {
         } else {
             vec![self.schema.clone(), other_schema]
         };
-        Validator::composed(Schema::Union(members), literals.into_items(), definitions)
+        Validator::checked(Schema::Union(members), literals.into_items(), definitions)
     }
 
     /// Whether the JSON in `bytes` parses and belongs to the schema's set,
@@ -214,7 +259,7 @@ impl Validator {
         let mut literals = Pool::default();
         let mut definitions = Vec::new();
         let schema = build_schema(schema, &mut literals, &mut definitions)?;
-        Ok(Validator::new(schema, literals.into_items(), definitions))
+        Validator::checked(schema, literals.into_items(), definitions)
     }
 
     /// Validate `obj`, raising `ValidationError` if it is not a member of the
@@ -473,7 +518,14 @@ impl Validator {
     /// produces it.
     fn __repr__(&self, py: Python<'_>) -> String {
         let active = RefCell::new(FxHashSet::default());
-        render(py, &self.schema, &self.literals, &self.definitions, &active)
+        render(
+            py,
+            &self.schema,
+            &self.literals,
+            &self.definitions,
+            &active,
+            0,
+        )
     }
 
     /// Return an equivalent validator. The validator is immutable, so the copy
@@ -523,8 +575,13 @@ impl Validator {
     ///
     /// Returns:
     ///     A validator denoting the same set in negation-normal form.
-    fn simplify(&self, py: Python<'_>) -> Validator {
-        Validator::new(
+    ///
+    /// Raises:
+    ///     ValueError: If negation-normal form expands the schema past the size
+    ///         bound (distributing a complement over a wide union can grow the
+    ///         node count); a schema built within the bounds does not hit this.
+    fn simplify(&self, py: Python<'_>) -> PyResult<Validator> {
+        Validator::checked(
             self.schema.simplify(),
             self.literals.iter().map(|o| o.clone_ref(py)).collect(),
             self.definitions.clone(),
@@ -733,11 +790,7 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
         ));
     }
     definitions.push(resolved);
-    Ok(Validator::new(
-        Schema::Ref(ref_id),
-        literals.into_items(),
-        definitions,
-    ))
+    Validator::checked(Schema::Ref(ref_id), literals.into_items(), definitions)
 }
 
 /// The union of the given schemas: a value in at least one of their sets.
@@ -760,7 +813,7 @@ fn complement(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
     let mut literals = Pool::default();
     let mut definitions = Vec::new();
     let inner = build_schema(schema, &mut literals, &mut definitions)?;
-    Validator::composed(
+    Validator::checked(
         Schema::Complement(Box::new(inner)),
         literals.into_items(),
         definitions,
@@ -930,5 +983,10 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     // The lattice bounds: top admits every value, bottom admits none.
     module.add("anything", atom(py, Schema::Anything)?)?;
     module.add("nothing", atom(py, Schema::Nothing)?)?;
+    // The construction bounds, published so a caller can size its schemas and a
+    // test can assert rejection at the exact edge rather than a hard-coded guess.
+    module.add("MAX_SCHEMA_DEPTH", MAX_SCHEMA_DEPTH)?;
+    module.add("MAX_DEFINITIONS", MAX_DEFINITIONS)?;
+    module.add("MAX_SCHEMA_NODES", MAX_SCHEMA_NODES)?;
     Ok(())
 }

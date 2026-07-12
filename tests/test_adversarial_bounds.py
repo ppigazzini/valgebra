@@ -21,6 +21,9 @@ schema's declared size.
 
 from __future__ import annotations
 
+import subprocess
+import sys
+import textwrap
 from typing import TYPE_CHECKING, Literal
 
 import pytest
@@ -36,6 +39,41 @@ from valgebra import (
     recursive,
     union,
 )
+from valgebra._valgebra import (
+    MAX_DEFINITIONS,
+    MAX_SCHEMA_DEPTH,
+    MAX_SCHEMA_NODES,
+)
+
+
+def _run_construction_loop(body: str) -> subprocess.CompletedProcess[str]:
+    """Run a schema-construction loop in a fresh interpreter.
+
+    The loop must raise ``ValueError`` once a construction bound trips. Running
+    it in a subprocess turns a native stack overflow or memory blow-up into a
+    non-zero exit code the caller can assert against, instead of taking the whole
+    test session down with it.
+    """
+    program = textwrap.dedent(
+        """
+        from valgebra import Validator, union, intersection, complement, recursive
+        _BOUND_MESSAGES = ("too deep", "too many", "too large")
+        try:
+        {body}
+        except ValueError as exc:
+            assert any(m in str(exc) for m in _BOUND_MESSAGES)
+            print("RAISED")
+        else:
+            print("NO ERROR")
+        """
+    ).format(body=textwrap.indent(textwrap.dedent(body), "    "))
+    return subprocess.run(  # noqa: S603 -- fixed interpreter, in-repo program
+        [sys.executable, "-c", program],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
 
 
 def _nested_annotation(depth: int) -> object:
@@ -79,23 +117,81 @@ def test_composition_depth_guard_rejects_unbounded_nesting(
     compose: Callable[[object], object],
 ) -> None:
     # Each combinator call grows the schema by one nesting level. Past the
-    # composition-depth guard the call raises a clean ValueError instead of
-    # letting the next clone, decision, or render walk overflow the native stack.
-    # Every combinator family — the `|` operator, union, intersection, and
-    # complement — is bounded the same way.
+    # depth guard the call raises a clean ValueError instead of letting the next
+    # clone, decision, or render walk overflow the native stack. Every combinator
+    # family — the `|` operator, union, intersection, and complement — is bounded
+    # the same way.
     with pytest.raises(ValueError, match="too deep"):
         _compose_in_a_loop(compose)
 
 
-def test_a_schema_at_the_composition_limit_still_works() -> None:
-    # A schema right at the limit still builds, validates, decides emptiness, and
-    # reprs without a crash: the guard rejects only past the bound, not at it.
+@pytest.mark.parametrize(
+    ("door", "loop"),
+    [
+        ("constructor list literal", "v = Validator([v])"),
+        ("constructor list[...]", "v = Validator(list[v])"),
+        ("union operator", "v = v | str"),
+        ("complement", "v = complement(v)"),
+        ("recursive body", "v = recursive(lambda s, prev=v: [prev, s])"),
+    ],
+)
+def test_every_construction_door_rejects_unbounded_depth(door: str, loop: str) -> None:
+    # The depth guard lives at schema construction, not only at the combinators,
+    # so no public way of growing a schema in a loop can overflow the stack. Each
+    # door is driven past the bound in a subprocess; a clean ValueError exits 0,
+    # a native stack overflow would exit with a signal.
+    result = _run_construction_loop(
+        f"v = Validator(int)\nfor _ in range(50_000):\n    {loop}"
+    )
+    assert result.returncode == 0, f"{door}: crashed with rc={result.returncode}"
+    assert "RAISED" in result.stdout, f"{door}: {result.stdout} {result.stderr}"
+
+
+def test_self_combination_rejects_before_exhausting_memory() -> None:
+    # Combining a validator with itself doubles its node count each step while its
+    # depth barely grows, so only the node-count bound catches it. The subprocess
+    # must reject cleanly, never OOM.
+    result = _run_construction_loop(
+        "v = Validator(int)\nfor _ in range(60):\n    v = union(v, v)"
+    )
+    assert result.returncode == 0, f"crashed with rc={result.returncode}"
+    assert "RAISED" in result.stdout, f"{result.stdout} {result.stderr}"
+
+
+def test_chained_definitions_reject_before_overflowing_render() -> None:
+    # A chain of distinct recursive definitions is invisible to the per-tree depth
+    # measure (a Ref is a leaf) but overflows the render/decision walk one frame
+    # per link, so the definition-count bound is what catches it.
+    result = _run_construction_loop(
+        "v = Validator(int)\n"
+        "for _ in range(50_000):\n"
+        "    v = recursive(lambda s, prev=v: [prev, s])"
+    )
+    assert result.returncode == 0, f"crashed with rc={result.returncode}"
+    assert "RAISED" in result.stdout, f"{result.stdout} {result.stderr}"
+
+
+def test_a_schema_at_the_depth_limit_still_works() -> None:
+    # A schema right at the depth limit still builds, validates, decides
+    # emptiness, and reprs without a crash: the guard rejects only past the bound,
+    # not at it. The limit is imported, not hard-coded, so it cannot silently
+    # drift away from the tested edge.
     deep = Validator(int)
-    for _ in range(100):
+    for _ in range(MAX_SCHEMA_DEPTH - 1):
         deep = deep | str
     assert deep.is_valid("x")
     assert not deep.is_empty()
     assert isinstance(repr(deep), str)
+    # One more step crosses the bound and is rejected.
+    with pytest.raises(ValueError, match="too deep"):
+        deep | str
+
+
+def test_the_published_bounds_are_positive() -> None:
+    # The bounds a caller sizes schemas against are exported and sane.
+    assert MAX_SCHEMA_DEPTH > 0
+    assert MAX_DEFINITIONS > 0
+    assert MAX_SCHEMA_NODES > MAX_SCHEMA_DEPTH
 
 
 def test_deeply_nested_object_hits_the_recursion_limit() -> None:
