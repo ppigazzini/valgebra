@@ -729,10 +729,18 @@ fn parse_constraint(
     {
         out.push(Constraint::MaxLen(n));
     }
-    // Numeric multiple-of bound.
+    // Numeric multiple-of bound. A zero divisor is rejected here: no value is a
+    // multiple of zero, and checking one would divide by zero at validation time,
+    // so the schema is unsatisfiable and the error belongs at construction.
     if let Ok(multiple) = marker.getattr("multiple_of")
         && !multiple.is_none()
     {
+        if multiple.eq(0).unwrap_or(false) {
+            return Err(PyValueError::new_err(
+                "MultipleOf(0) is not a valid constraint: no value is a multiple of \
+                 zero. Use a nonzero divisor.",
+            ));
+        }
         out.push(Constraint::MultipleOf(lits.intern(&multiple)));
     }
     // Predicate escape hatch: annotated_types.Predicate(.func) or a bare

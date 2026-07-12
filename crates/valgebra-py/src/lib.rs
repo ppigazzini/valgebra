@@ -26,6 +26,7 @@ use jiter::{JsonValue, PythonParse};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBytes, PyList, PyString, PyTuple, PyType};
 use rustc_hash::FxHashSet;
 use valgebra_core::{LeafRelations, Schema, SeqKind, SeqRegex, fresh_self_token};
@@ -68,6 +69,21 @@ const MAX_DEFINITIONS: usize = 128;
 /// whose sizes already sum past it is rejected, so the doubling stops early
 /// rather than exhausting memory.
 const MAX_SCHEMA_NODES: usize = 100_000;
+
+/// The `math.floor` and `math.ceil` callables, imported once per interpreter for
+/// the integer-interval emptiness rule rather than re-imported on every decision.
+/// `PyOnceLock` keeps the one-time initialization sound under free-threading.
+static MATH_FLOOR_CEIL: PyOnceLock<(Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
+
+fn math_floor_ceil(py: Python<'_>) -> PyResult<&'static (Py<PyAny>, Py<PyAny>)> {
+    MATH_FLOOR_CEIL.get_or_try_init(py, || {
+        let math = py.import("math")?;
+        Ok((
+            math.getattr("floor")?.unbind(),
+            math.getattr("ceil")?.unbind(),
+        ))
+    })
+}
 
 /// A compiled, immutable schema validator.
 ///
@@ -927,13 +943,13 @@ impl LeafRelations for PoolRelations<'_, '_> {
         // `ceil(hi) - 1` when `hi` is excluded and `floor(hi)` when included. No
         // integer fits exactly when the least exceeds the greatest. The bounds are
         // compared as Python integers, so arbitrary-precision values stay exact.
-        let math = PyModule::import(self.py, "math").ok()?;
+        let (floor, ceil) = math_floor_ceil(self.py).ok()?;
+        let floor = floor.bind(self.py);
+        let ceil = ceil.bind(self.py);
         let lo = self.literals.get(lo)?.bind(self.py);
         let hi = self.literals.get(hi)?.bind(self.py);
         // A non-real bound (`math.floor` raises a `TypeError`) or a non-finite one
         // (an `OverflowError`) leaves the rule undecided rather than guessing.
-        let floor = math.getattr("floor").ok()?;
-        let ceil = math.getattr("ceil").ok()?;
         let one = 1i64;
         let least = if lo_strict {
             floor

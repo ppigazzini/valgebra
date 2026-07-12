@@ -75,6 +75,16 @@ def test_multiple_of_on_a_non_number_is_not_a_multiple() -> None:
     assert not Validator(Annotated[str, at.MultipleOf(3)]).is_valid("abc")
 
 
+def test_multiple_of_zero_is_rejected_at_build() -> None:
+    # No value is a multiple of zero, and checking one divides by zero, so the
+    # unsatisfiable schema is rejected when compiled rather than swallowing a
+    # ZeroDivisionError as a non-match at validation time.
+    with pytest.raises(ValueError, match="MultipleOf"):
+        Validator(Annotated[int, at.MultipleOf(0)])
+    with pytest.raises(ValueError, match="MultipleOf"):
+        Validator(Annotated[float, at.MultipleOf(0.0)])
+
+
 def test_interval_marker_contributes_both_bounds() -> None:
     v = Validator(Annotated[int, at.Interval(ge=0, le=10)])
     assert v.is_valid(0)
