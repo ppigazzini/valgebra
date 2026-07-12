@@ -150,9 +150,37 @@ jobs:
           uv pip install --no-index --find-links dist valgebra
           uv run python -c "import valgebra as v; assert v.Validator(int).is_valid(1); assert not v.Validator(int).is_valid('x'); assert v.Validator(list[int]).is_valid([1, 2]); assert v.Validator(int).is_valid_json('1'); print('smoke ok', v.__version__)"
 
+  sdist-smoke:
+    name: smoke sdist
+    needs: [sdist]
+    runs-on: ubuntu-latest
+    # The source distribution is the fallback install for any platform without a
+    # wheel, so build it from source and import it before it can publish: a broken
+    # manifest or a missing crate file fails here rather than on a user's machine.
+    steps:
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: sdist
+          path: dist
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          python-version: "3.14"
+      - name: Build the sdist from source and import it
+        # Install the exact built sdist file so it is compiled from source here;
+        # the package index stays available only for the build backend, never for
+        # valgebra itself, which comes from the local artifact.
+        shell: bash
+        run: |
+          uv venv
+          uv pip install dist/valgebra-*.tar.gz
+          uv run python -c "import valgebra as v; assert v.Validator(int).is_valid(1); assert not v.Validator(int).is_valid('x'); assert v.Validator(list[int]).is_valid([1, 2]); assert v.Validator(int).is_valid_json('1'); print('sdist smoke ok', v.__version__)"
+
   github-release:
     name: attach wheels to a github pre-release
-    needs: [wheels, sdist]
+    needs: [wheels, sdist, smoke, sdist-smoke]
     runs-on: ubuntu-latest
     # A dispatch can attach the built artifacts to a deletable GitHub
     # pre-release so the exact wheels install by their asset URL with no package
@@ -190,9 +218,9 @@ jobs:
 
   publish:
     name: publish to ${{ inputs.publish_target }}
-    # The wheel smoke must pass before anything publishes: a broken wheel fails
+    # The wheel and sdist smoke must pass before anything publishes: a broken wheel fails
     # its import here and blocks the upload.
-    needs: [wheels, sdist, smoke]
+    needs: [wheels, sdist, smoke, sdist-smoke]
     runs-on: ubuntu-latest
     # Publishing requires a deliberate dispatch that selects a real index. A
     # dry-run dispatch (target "none") uploads nothing, and no tag reaches here.
