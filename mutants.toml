@@ -10,5 +10,14 @@
 # is instead measured by line coverage on the binding-coverage lane.
 exclude_globs = ["crates/valgebra-py/**"]
 
+# has_disjoint_complement_pair is redundant with the covers_universe region check
+# in finish_union, so its mutants are equivalent — they cannot change any result.
+# Two schemas being disjoint forces their complements' region sets to together
+# cover every region, so covers_universe already returns true whenever this helper
+# would; a value only leaves both complements by belonging to both inners, which
+# an empty intersection has none of. Excluding an unkillable equivalent mutant
+# keeps the sweep honest rather than chasing a target no test can hit.
+exclude_re = ["has_disjoint_complement_pair"]
+
 # A few mutants run longer than the baseline; give generous headroom over it.
 timeout_multiplier = 5.0

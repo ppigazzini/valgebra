@@ -1179,4 +1179,145 @@ mod tests {
         // Sanity: two same-kind lists share the empty list, so not empty.
         assert!(!Schema::Intersection(vec![list(Schema::Int), list(Schema::Bool)]).is_empty());
     }
+
+    /// An oracle treating each pool index as its own value, so comparing indices
+    /// orders the bound values they stand for.
+    struct ByIndex;
+    impl LeafRelations for ByIndex {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            None
+        }
+        fn compare(&self, a: usize, b: usize) -> Option<core::cmp::Ordering> {
+            Some(a.cmp(&b))
+        }
+    }
+
+    #[test]
+    fn constraint_entailment_covers_every_ordering_arm() {
+        let o = &ByIndex;
+        // Ge(w): a tighter-or-equal lower bound, from Ge or Gt, entails a looser one.
+        assert!(constraint_entailed(
+            &Constraint::Ge(3),
+            &[Constraint::Ge(5)],
+            o
+        ));
+        assert!(constraint_entailed(
+            &Constraint::Ge(3),
+            &[Constraint::Gt(5)],
+            o
+        ));
+        assert!(!constraint_entailed(
+            &Constraint::Ge(5),
+            &[Constraint::Ge(3)],
+            o
+        ));
+        // Gt(w): Gt(n) with n >= w, or Ge(n) with n > w.
+        assert!(constraint_entailed(
+            &Constraint::Gt(3),
+            &[Constraint::Gt(3)],
+            o
+        ));
+        assert!(constraint_entailed(
+            &Constraint::Gt(3),
+            &[Constraint::Ge(5)],
+            o
+        ));
+        assert!(!constraint_entailed(
+            &Constraint::Gt(5),
+            &[Constraint::Ge(5)],
+            o
+        ));
+        // Le(w): Le(n) or Lt(n) with n <= w.
+        assert!(constraint_entailed(
+            &Constraint::Le(5),
+            &[Constraint::Le(3)],
+            o
+        ));
+        assert!(constraint_entailed(
+            &Constraint::Le(5),
+            &[Constraint::Lt(3)],
+            o
+        ));
+        assert!(!constraint_entailed(
+            &Constraint::Le(3),
+            &[Constraint::Le(5)],
+            o
+        ));
+        // Lt(w): Lt(n) with n <= w, or Le(n) with n < w.
+        assert!(constraint_entailed(
+            &Constraint::Lt(5),
+            &[Constraint::Lt(5)],
+            o
+        ));
+        assert!(constraint_entailed(
+            &Constraint::Lt(5),
+            &[Constraint::Le(3)],
+            o
+        ));
+        assert!(!constraint_entailed(
+            &Constraint::Lt(5),
+            &[Constraint::Le(5)],
+            o
+        ));
+        // Length bounds compare by their raw counts, no oracle needed.
+        assert!(constraint_entailed(
+            &Constraint::MinLen(3),
+            &[Constraint::MinLen(5)],
+            o
+        ));
+        assert!(!constraint_entailed(
+            &Constraint::MinLen(5),
+            &[Constraint::MinLen(3)],
+            o
+        ));
+        assert!(constraint_entailed(
+            &Constraint::MaxLen(5),
+            &[Constraint::MaxLen(3)],
+            o
+        ));
+        assert!(!constraint_entailed(
+            &Constraint::MaxLen(3),
+            &[Constraint::MaxLen(5)],
+            o
+        ));
+        // A multiple-of or predicate bound has no order entailment.
+        assert!(!constraint_entailed(
+            &Constraint::MultipleOf(0),
+            &[Constraint::MultipleOf(0)],
+            o
+        ));
+    }
+
+    #[test]
+    fn tighter_refinement_bounds_subtype_looser_ones_through_the_oracle() {
+        // The entailment feeds the refinement subtype rule: a tighter bound makes a
+        // refinement a subtype of a refinement with a looser one, even when the
+        // constraints are not identical (so the verbatim path does not apply).
+        let refine = |constraints| Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints,
+        };
+        let tight = refine(vec![Constraint::Ge(5)]);
+        let loose = refine(vec![Constraint::Ge(3)]);
+        assert!(tight.is_subtype_of_under(&loose, &ByIndex, &[]));
+        assert!(!loose.is_subtype_of_under(&tight, &ByIndex, &[]));
+    }
+
+    #[test]
+    fn a_union_of_disjoint_complements_simplifies_to_the_top() {
+        // De Morgan: ¬A ∪ ¬B = ¬(A ∩ B), which is ⊤ when A and B are disjoint. int
+        // and str are disjoint, so their complements cover the universe.
+        let disjoint = Schema::Union(vec![
+            Schema::Complement(Box::new(Schema::Int)),
+            Schema::Complement(Box::new(Schema::Str)),
+        ]);
+        assert_eq!(disjoint.simplify(), Schema::Anything);
+        // bool is a subtype of int, so int and bool overlap and their complements
+        // do not cover the universe.
+        let overlapping = Schema::Union(vec![
+            Schema::Complement(Box::new(Schema::Int)),
+            Schema::Complement(Box::new(Schema::Bool)),
+        ]);
+        assert_ne!(overlapping.simplify(), Schema::Anything);
+    }
 }
