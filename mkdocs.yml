@@ -1,5 +1,5 @@
 site_name: valgebra
-site_description: Fast runtime validation through a complete Boolean algebra of schemas.
+site_description: Fast runtime validation through a closed Boolean algebra of schemas.
 site_url: https://ppigazzini.github.io/valgebra/
 repo_url: https://github.com/ppigazzini/valgebra
 repo_name: ppigazzini/valgebra

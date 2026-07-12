@@ -90,9 +90,9 @@ variants are the node set:
   clauses.
 - **Combinators** — `Union`, `Intersection`, `Complement`: the Boolean algebra.
 - **Classes and refinement** — `Instance` (an `isinstance` check, pooled),
-  `Object { fields }` (an instance whose attributes satisfy field schemas),
-  `Refine { base, constraint }` (a base narrowed by a bound, length, or
-  predicate constraint).
+  `Attrs { class_index, fields }` (an instance whose attributes satisfy field
+  schemas), `Refine { base, constraints }` (a base narrowed by bound, length, or
+  predicate constraints).
 - **Recursion** — `SelfRef` / `Ref` tie the `recursive` fixpoint; the body must
   be guarded by a structural constructor so membership stays decidable.
 

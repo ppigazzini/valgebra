@@ -8,7 +8,7 @@ build-backend = "maturin"
 name = "valgebra"
 requires-python = ">=3.10"
 dynamic = ["version"]
-description = "Fast runtime validation via a complete Boolean algebra of schemas on a compiled Rust core."
+description = "Fast runtime validation via a closed Boolean algebra of schemas on a compiled Rust core."
 readme = "README.md"
 # PEP 639 SPDX expression; the standard Rust-ecosystem dual license.
 license = "MIT OR Apache-2.0"
