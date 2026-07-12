@@ -102,9 +102,11 @@ assert not Validator(Annotated[int, at.MultipleOf(3)]).is_valid(5)
 
 ## Predicates: the slow path
 
-A `Predicate` runs an arbitrary Python callable. It is the one place validation
-leaves Rust, so it is a **documented slow path**, never a silent fallback. Use it
-for checks the markers cannot express:
+A `Predicate` runs an arbitrary Python callable. It is the one *refinement*
+constraint that leaves Rust for a caller's own code — literals, instance and
+attribute checks, and comparison bounds also compare against Python objects, but
+against fixed operators, not arbitrary callables — so it is a **documented slow
+path**, never a silent fallback. Use it for checks the markers cannot express:
 
 ```python
 from typing import Annotated

@@ -52,6 +52,9 @@ KeyedMap(f, d)   fields present-and-match, and   (named fields ∩ keyed
                  every other key matches a       default clauses)
                  default clause
 Instance(C)      isinstance(x, C)               (class extension)
+Attrs(C, f)      isinstance(x, C) and every      (class extension ∩ its
+                 field attribute present-        attribute record; the
+                 and-match                       dataclass/NamedTuple check)
 ```
 
 For the Boolean nodes the equivalence is the definition of the set operation, so

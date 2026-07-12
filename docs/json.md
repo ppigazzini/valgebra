@@ -41,9 +41,10 @@ object.
 
 ## Same decisions as the object path
 
-The JSON path parses the document into a Python value and runs the **same**
-validation walk as a native object. So validating a JSON document is exactly
-validating `json.loads` of that document — the same accept/reject decision, the
+The JSON path parses the document and runs the **same** validation walk as it
+would against the equivalent native object. So validating a JSON document is
+exactly validating `json.loads` of that document — the same accept/reject
+decision, the
 same error codes, and the same paths:
 
 ```python

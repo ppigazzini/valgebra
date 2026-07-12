@@ -824,6 +824,14 @@ fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
 }
 
 /// The complement of a schema: every value not in its set.
+///
+/// Membership is decided by the inner schema: a value belongs to the complement
+/// exactly when it is not a member of the inner. When deciding the inner raises
+/// an ordinary Python exception — a value whose comparison or `__eq__` throws —
+/// that value folds to a non-member of the inner, and therefore a **member** of
+/// the complement. A filter of the form `complement(P)` over values whose own
+/// methods can raise should not rely on the complement alone to exclude them;
+/// intersect with a positive type that pins the shape instead.
 #[pyfunction]
 fn complement(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
     let mut literals = Pool::default();

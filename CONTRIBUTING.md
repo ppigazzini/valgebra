@@ -64,7 +64,7 @@ one step.
 ## Testing
 
 Correctness is checked against the denotation, not against itself. The harness
-has four layers:
+has six layers:
 
 - **Denotation oracle.** Each node's denotation is written as a reference
   predicate over a value generator; the membership walk is property-tested to

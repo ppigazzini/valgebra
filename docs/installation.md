@@ -24,6 +24,13 @@ macOS (Intel and Apple silicon), Windows, and free-threaded CPython 3.14 where
 the release image exposes a `cp314t` interpreter. Free-threaded support starts at
 3.14t; the earlier 3.13 free-threaded build is not a target.
 
+On a free-threaded interpreter a validator is immutable and shares no mutable
+walk state, so object validation runs in parallel with the interpreter lock
+disabled. The JSON path is the one exception: its string parser draws on a
+process-wide interned-string cache guarded by a lock, so concurrent
+`validate_json`/`load` calls serialize briefly on that cache even though the walk
+itself does not.
+
 ## From source
 
 Building from source additionally requires:
