@@ -99,7 +99,7 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - uses: taiki-e/install-action@c7eb1735f09259a5035e8e5d44b1406b1cddc0fb # v2.83.0
         with:
-          tool: cargo-nextest,cargo-llvm-cov
+          tool: cargo-nextest,cargo-llvm-cov@0.8.7
       # Run the workspace tests under nextest and enforce a core line-coverage
       # floor. The binding crate is measured by its own lane (which ignores the
       # core), so scope this floor to the core and ignore valgebra-py here. The
@@ -123,7 +123,7 @@ jobs:
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - uses: taiki-e/install-action@c7eb1735f09259a5035e8e5d44b1406b1cddc0fb # v2.83.0
         with:
-          tool: cargo-llvm-cov
+          tool: cargo-llvm-cov@0.8.7
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           enable-cache: true
@@ -589,7 +589,7 @@ jobs:
           persist-credentials: false
       - uses: taiki-e/install-action@c7eb1735f09259a5035e8e5d44b1406b1cddc0fb # v2.83.0
         with:
-          tool: cargo-deny
+          tool: cargo-deny@0.19.9
       - name: Audit the workspace dependency tree
         run: cargo deny check
       - name: Audit the fuzz workspace dependency tree
@@ -610,7 +610,7 @@ jobs:
       - name: Audit the locked Python dependencies
         run: |
           uv export --locked --format requirements-txt --no-emit-project --all-groups > requirements-audit.txt
-          uvx pip-audit -r requirements-audit.txt
+          uvx pip-audit==2.10.1 -r requirements-audit.txt
 
   zizmor:
     name: zizmor
@@ -629,7 +629,7 @@ jobs:
         # addition to the static ones.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uvx zizmor .github/workflows/
+        run: uvx zizmor==1.26.1 .github/workflows/
 
   ci:
     name: ci

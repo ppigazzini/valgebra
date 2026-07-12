@@ -222,9 +222,11 @@ jobs:
     # its import here and blocks the upload.
     needs: [wheels, sdist, smoke, sdist-smoke]
     runs-on: ubuntu-latest
-    # Publishing requires a deliberate dispatch that selects a real index. A
-    # dry-run dispatch (target "none") uploads nothing, and no tag reaches here.
-    if: ${{ inputs.publish_target != 'none' }}
+    # Publishing requires a deliberate dispatch that selects a real index, from
+    # the main branch: a dry-run dispatch (target "none") uploads nothing, no tag
+    # reaches here, and a dispatch from a topic branch cannot publish a commit the
+    # merge gate never blessed.
+    if: ${{ inputs.publish_target != 'none' && github.ref == 'refs/heads/main' }}
     # The deployment environment that holds the trusted-publisher binding for
     # the selected index; create the pypi and testpypi environments in the
     # repository settings, with required reviewers, before the first release.
