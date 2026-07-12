@@ -1304,6 +1304,44 @@ mod tests {
     }
 
     #[test]
+    fn scalar_type_tags_decide_disjointness() {
+        // Distinct concrete scalars are provably disjoint; bool is a subtype of
+        // int, so the two overlap. This pins each scalar's own type tag: dropping
+        // one would make its disjointness with every other scalar undecidable.
+        assert!(Schema::Bool.disjoint(&Schema::Str));
+        assert!(Schema::Int.disjoint(&Schema::Str));
+        assert!(Schema::Float.disjoint(&Schema::Int));
+        assert!(Schema::Bytes.disjoint(&Schema::Str));
+        assert!(!Schema::Bool.disjoint(&Schema::Int));
+        assert!(!Schema::Int.disjoint(&Schema::Int));
+    }
+
+    #[test]
+    fn equal_bounds_keep_the_strict_end_when_narrowing() {
+        // Narrowing two equal lower bounds keeps the strict one: Ge(5) ∩ Gt(5) is
+        // Gt(5), so Ge(5) ∩ Gt(5) ∩ Le(5) is x > 5 ∧ x <= 5 — empty. If the strict
+        // ends were combined the other way (both-strict rather than either-strict)
+        // the lower bound would relax to Ge(5) and the range {5} would look
+        // inhabited, so this pins the strictness combination.
+        let refine = |constraints| Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints,
+        };
+        let empty = Schema::Intersection(vec![
+            refine(vec![Constraint::Ge(5)]),
+            refine(vec![Constraint::Gt(5)]),
+            refine(vec![Constraint::Le(5)]),
+        ]);
+        assert!(empty.is_empty_with(&ByIndex, &[]));
+        // Both bounds non-strict: the singleton {5} is inhabited.
+        let inhabited = Schema::Intersection(vec![
+            refine(vec![Constraint::Ge(5)]),
+            refine(vec![Constraint::Le(5)]),
+        ]);
+        assert!(!inhabited.is_empty_with(&ByIndex, &[]));
+    }
+
+    #[test]
     fn a_union_of_disjoint_complements_simplifies_to_the_top() {
         // De Morgan: ¬A ∪ ¬B = ¬(A ∩ B), which is ⊤ when A and B are disjoint. int
         // and str are disjoint, so their complements cover the universe.
