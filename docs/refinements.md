@@ -80,6 +80,10 @@ assert not oid.is_valid("0123")  # not the full 24 characters
 assert Validator(Annotated[str, re.compile(r"\d+")]).is_valid("123")
 ```
 
+`MultipleOf(n)` requires a nonzero divisor: no value is a multiple of zero, so
+`MultipleOf(0)` is an unsatisfiable constraint and is rejected with a `ValueError`
+when the validator is built, rather than rejecting every value at check time.
+
 The compound markers `Interval` and `Len` expand to the bounds they carry, so
 `Interval(ge=0, le=10)` contributes `Ge(0)` and `Le(10)`, and `Len(2, 4)`
 contributes `MinLen(2)` and `MaxLen(4)`:
