@@ -33,14 +33,14 @@ classifiers = [
 [dependency-groups]
 dev = [
     "annotated-types>=0.7",
-    "hypothesis>=6.156.4",
+    "hypothesis>=6.156.6",
     "maturin>=1.14.1,<2",
     "pre-commit>=4.6.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
-    "ruff>=0.15.20",
-    "syrupy>=5.5.2",
-    "ty>=0.0.57",
+    "ruff>=0.15.21",
+    "syrupy>=5.5.3",
+    "ty>=0.0.59",
 ]
 # Benchmark-only tools: the wall-clock harness and the external comparison
 # points. They are never runtime dependencies of valgebra.
@@ -62,7 +62,7 @@ bench = [
 docs = [
     "mkdocs>=1.6.1,<2",
     "mkdocs-material>=9.7.6,<10",
-    "mkdocstrings[python]>=1.0.4",
+    "mkdocstrings[python]>=1.0.6",
     # Generates the /llms.txt manifest and /llms-full.txt full-content export so
     # AI assistants and coding agents consume the docs as clean Markdown.
     "mkdocs-llmstxt>=0.5",
