@@ -140,6 +140,9 @@ jobs:
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           python-version: "3.14"
+          # This job installs from a downloaded artifact, not a checked-out
+          # dependency file, so there is nothing for the uv cache to key on.
+          enable-cache: false
       - name: Install the built wheel and import it
         # Create a venv on the target interpreter, install the matching wheel from
         # the downloaded set with no index, then import and validate across the
@@ -168,6 +171,9 @@ jobs:
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           python-version: "3.14"
+          # This job installs from a downloaded artifact, not a checked-out
+          # dependency file, so there is nothing for the uv cache to key on.
+          enable-cache: false
       - name: Build the sdist from source and import it
         # Install the exact built sdist file so it is compiled from source here;
         # the package index stays available only for the build backend, never for
