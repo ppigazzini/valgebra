@@ -6,6 +6,39 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-07-13
+
+### Added
+
+- The schema construction bounds are published as module constants —
+  `MAX_SCHEMA_DEPTH`, `MAX_DEFINITIONS`, and `MAX_SCHEMA_NODES` — so a caller can
+  size a schema against them.
+
+### Changed
+
+- Schema construction is bounded on every growth path, not only the combinator
+  operators: the `Validator` constructor, the `|` operator, `union`,
+  `intersection`, `complement`, `recursive`, and `simplify` all reject a schema
+  past a fixed nesting depth, recursive-definition count, or total node count
+  with a `ValueError`. `simplify` can therefore raise when negation-normal form
+  expands a schema past the size bound (see `docs/limits.md`).
+- The project describes its schema algebra as *closed* under its operations
+  rather than *complete*.
+
+### Fixed
+
+- No sequence of public calls can overflow the native stack or exhaust memory
+  while building a validator. A schema grown too deep through the `Validator`
+  constructor or `recursive`, or too large by combining a validator with itself
+  in a loop, is rejected at construction instead of crashing the interpreter on a
+  later clone, drop, decision, or render. This extends the 0.0.3 composition
+  bound, which rejected only the combinator operators and left the constructor
+  and `recursive` paths unbounded.
+- `Annotated[int, MultipleOf(0)]` is rejected when the validator is compiled: no
+  value is a multiple of zero, so the unsatisfiable schema raises a `ValueError`
+  at construction instead of rejecting every value through a swallowed
+  `ZeroDivisionError` at validation time.
+
 ## [0.0.3] - 2026-07-07
 
 ### Added
@@ -72,7 +105,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/ppigazzini/valgebra/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/ppigazzini/valgebra/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/ppigazzini/valgebra/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/ppigazzini/valgebra/releases/tag/v0.0.1
