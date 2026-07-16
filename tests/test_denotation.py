@@ -15,10 +15,11 @@ is caught here.
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable, Sequence
 from functools import reduce
 from types import GenericAlias
-from typing import Annotated
+from typing import Annotated, Any, NoReturn
 
 import annotated_types as at
 from hypothesis import given
@@ -29,12 +30,32 @@ from valgebra import (
     Validator,
     complement,
     intersection,
+    recursive,
+    union,
 )
 
 # A predicate deciding membership of a value in a schema's set.
 Pred = Callable[[object], bool]
 # A schema spec (what `validator` compiles) paired with its denotation predicate.
 Spec = tuple[object, Pred]
+
+
+@dataclasses.dataclass
+class _Point:
+    """A dataclass whose instances exercise the per-attribute `Attrs` node."""
+
+    x: int
+    y: str
+
+
+def _point_pred(value: object) -> bool:
+    """Membership for the `_Point` schema: an instance with well-typed fields."""
+    return (
+        isinstance(value, _Point)
+        and isinstance(value.x, int)
+        and isinstance(value.y, str)
+    )
+
 
 # Scalar type specs with their predicates. `bool` is a subset of `int` (an int
 # predicate admits booleans), and `float` excludes `int`.
@@ -96,6 +117,10 @@ def _dict_pred(key: Pred, val: Pred) -> Pred:
 
 def _set_pred(elem: Pred) -> Pred:
     return lambda x: isinstance(x, set) and all(elem(e) for e in x)
+
+
+def _frozenset_pred(elem: Pred) -> Pred:
+    return lambda x: isinstance(x, frozenset) and all(elem(e) for e in x)
 
 
 def _record_of(children: list[Spec]) -> Spec:
@@ -165,9 +190,26 @@ def _prefix_tail_pred(prefix: list[Pred], tail: Pred, container: type = list) ->
     return pred
 
 
+# Non-composable atoms: the lattice bounds, the gradual dynamic, an instance
+# check, and a per-attribute object schema. `object` is the top and `NoReturn`
+# the bottom -- the typing-native spelling of the empty type on every supported
+# Python (`Never` is 3.11+, so the cross-version spelling is used). `Any` is the
+# gradual dynamic, which admits every value like the top but is a distinct node.
+# `complex` is a plain class (an isinstance check), and the `_Point` dataclass is
+# checked field by field.
+_ATOMS: list[Spec] = [
+    (object, lambda _x: True),
+    (NoReturn, lambda _x: False),
+    (Any, lambda _x: True),
+    (complex, lambda x: isinstance(x, complex)),
+    (_Point, _point_pred),
+]
+
+
 def _leaf() -> st.SearchStrategy[Spec]:
     return st.one_of(
         st.sampled_from(_SCALARS),
+        st.sampled_from(_ATOMS),
         st.sampled_from(_CONSTS).map(_literal),
         st.integers(min_value=-5, max_value=5).map(
             lambda k: (Annotated[int, at.Ge(k)], _ge_pred(k))
@@ -203,6 +245,9 @@ def _specs() -> st.SearchStrategy[Spec]:
             ),
             st.sampled_from(_HASHABLE).map(
                 lambda sp: (GenericAlias(set, (sp[0],)), _set_pred(sp[1]))
+            ),
+            st.sampled_from(_HASHABLE).map(
+                lambda sp: (GenericAlias(frozenset, (sp[0],)), _frozenset_pred(sp[1]))
             ),
             # A native [A, B, ...] list: a fixed prefix then a repeated tail.
             st.tuples(child, child).map(
@@ -241,6 +286,13 @@ def _values() -> st.SearchStrategy[object]:
         st.sampled_from([0, 1, -1, 0.0, 1.0, 3.5]),
         st.text(max_size=3),
         st.binary(max_size=3),
+        # Values that live only in the new node kinds, so their accept paths are
+        # exercised rather than always rejected: complex numbers, frozensets, and
+        # dataclass instances (well-typed and mistyped).
+        st.builds(complex, st.integers(-3, 3), st.integers(-3, 3)),
+        st.frozensets(st.integers(-3, 3), max_size=3),
+        st.builds(_Point, st.integers(-3, 3), st.text(max_size=2)),
+        st.builds(_Point, st.text(max_size=2), st.integers(-3, 3)),
     )
     return st.recursive(
         leaf,
@@ -258,6 +310,23 @@ def _values() -> st.SearchStrategy[object]:
     )
 
 
+def _recursive_case(leaf: Spec) -> tuple[Validator, Pred]:
+    """Build a `recursive` schema `T = leaf | list[T]` and its predicate.
+
+    This is the only spelling that produces the `Ref`/`SelfRef` nodes: a fixpoint
+    whose body refers to itself under a structural `list`. The predicate mirrors
+    the fixpoint -- a value is a member iff it is a leaf value or a list whose
+    every element is itself a member.
+    """
+    leaf_spec, leaf_pred = leaf
+    schema = recursive(lambda t: union(leaf_spec, GenericAlias(list, (t,))))
+
+    def pred(x: object) -> bool:
+        return leaf_pred(x) or (isinstance(x, list) and all(pred(e) for e in x))
+
+    return Validator(schema), pred
+
+
 @st.composite
 def _cases(draw: st.DrawFn) -> tuple[Validator, Pred]:
     """Draw a compiled validator paired with its denotation predicate.
@@ -265,8 +334,10 @@ def _cases(draw: st.DrawFn) -> tuple[Validator, Pred]:
     The plain case compiles the spec directly; the wrapped cases exercise the
     top-level algebra: complement negates the predicate, intersection conjoins two.
     """
+    mode = draw(st.sampled_from(["plain", "complement", "intersection", "recursive"]))
+    if mode == "recursive":
+        return _recursive_case(draw(st.sampled_from(_SCALARS)))
     spec, pred = draw(_specs())
-    mode = draw(st.sampled_from(["plain", "complement", "intersection"]))
     if mode == "plain":
         return Validator(spec), pred
     if mode == "complement":
