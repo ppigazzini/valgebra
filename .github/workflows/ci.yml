@@ -553,6 +553,13 @@ jobs:
             0 | 2 | 3) exit 0 ;;
             *) exit "$status" ;;
           esac
+      # Ratchet: fail when a survivor appears that the committed baseline does
+      # not accept. The baseline is a floor, not a target -- equivalent mutants
+      # stay in it with a reason, and it only ever shrinks. A survivor the
+      # sweep step reported as a warning becomes a hard failure here unless it
+      # is already known.
+      - name: Ratchet survivors against the baseline
+        run: python3 scripts/mutation_gate.py
 
   fuzz-build:
     name: fuzz build

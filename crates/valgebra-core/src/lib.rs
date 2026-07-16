@@ -84,17 +84,30 @@ mod tests {
         );
         assert_eq!(Schema::list(SeqRegex::Empty).node_count(), 1);
         // A keyed map counts declared fields and both halves of every default.
+        // Distinct field and default totals so neither the sum of the two nor
+        // its factors coincide with a wrong operator.
         assert_eq!(
             Schema::KeyedMap {
-                fields: vec![Field {
-                    name: "a".into(),
-                    schema: Schema::Complement(Box::new(Schema::Int)),
-                    required: true,
-                }],
-                defaults: vec![(Schema::Str, Schema::Bytes)],
+                fields: vec![
+                    Field {
+                        name: "a".into(),
+                        schema: Schema::Complement(Box::new(Schema::Int)),
+                        required: true,
+                    },
+                    Field {
+                        name: "b".into(),
+                        schema: Schema::Str,
+                        required: false,
+                    },
+                ],
+                defaults: vec![
+                    (Schema::Str, Schema::Bytes),
+                    (Schema::Int, Schema::Complement(Box::new(Schema::Str))),
+                ],
             }
             .node_count(),
-            5
+            // 1 map + (2 + 1) fields + (2 + 3) defaults
+            9
         );
         assert_eq!(
             Schema::Attrs {
@@ -189,6 +202,7 @@ mod tests {
                 Constraint::Le(3),
                 Constraint::Lt(4),
                 Constraint::MultipleOf(5),
+                Constraint::Predicate(8),
                 Constraint::MinLen(6),
                 Constraint::MaxLen(7),
             ],
@@ -204,6 +218,8 @@ mod tests {
                 Constraint::Le(13),
                 Constraint::Lt(14),
                 Constraint::MultipleOf(15),
+                // A pooled predicate operand shifts like the numeric bounds.
+                Constraint::Predicate(18),
                 // Length bounds are counts, not pool indices: unmoved.
                 Constraint::MinLen(6),
                 Constraint::MaxLen(7),
@@ -213,6 +229,25 @@ mod tests {
         assert_eq!(Schema::Literal(1).shifted(10, 3), Schema::Literal(11));
         assert_eq!(Schema::Instance(1).shifted(10, 3), Schema::Instance(11));
         assert_eq!(Schema::Ref(1).shifted(10, 3), Schema::Ref(4));
+        // An Attrs class index is a pool index and shifts by the pool; its
+        // fields shift with it.
+        let attrs = Schema::Attrs {
+            class_index: 1,
+            fields: vec![Field {
+                name: "a".into(),
+                schema: Schema::Literal(2),
+                required: true,
+            }],
+        };
+        let Schema::Attrs {
+            class_index,
+            fields,
+        } = attrs.shifted(10, 3)
+        else {
+            panic!("shifted an Attrs into a non-Attrs");
+        };
+        assert_eq!(class_index, 11);
+        assert_eq!(fields[0].schema, Schema::Literal(12));
     }
 
     /// A recursive body is well-formed only if every self-reference sits under a
@@ -403,6 +438,31 @@ mod tests {
         // strict flips it back.
         let closed = schema.with_records_open(true).with_records_open(false);
         assert!(!record_is_open(homogeneous_elem(&closed)));
+    }
+
+    #[test]
+    fn with_records_open_leaves_a_pure_mapping_closed() {
+        // A KeyedMap with no declared fields is a mapping, not a record: opening
+        // it must not graft a catch-all clause. The `!fields.is_empty()` guard is
+        // what distinguishes the two, so an empty-field map keeps its own clauses
+        // and gains none.
+        let mapping = Schema::KeyedMap {
+            fields: Vec::new(),
+            defaults: vec![(Schema::Str, Schema::Int)],
+        };
+        let Schema::KeyedMap { fields, defaults } = mapping.with_records_open(true) else {
+            panic!("a mapping opened into a non-map");
+        };
+        assert!(fields.is_empty());
+        assert_eq!(defaults, vec![(Schema::Str, Schema::Int)]);
+    }
+
+    #[test]
+    fn fresh_self_token_is_unique_per_call() {
+        // Nested `recursive` definitions must not resolve each other's
+        // self-references, which holds only if successive tokens differ. A
+        // constant token would collide, so assert two calls disagree.
+        assert_ne!(fresh_self_token(), fresh_self_token());
     }
 
     #[test]

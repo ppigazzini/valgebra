@@ -1,0 +1,22 @@
+{
+  "_comment": "Mutation survivors accepted as a baseline for the core crate. The nightly ratchet fails when a survivor appears outside this set. Regenerate with `python scripts/mutation_gate.py --update` after a sweep, and only ever let this set shrink. Entries are the survivor line without its line:col position, so they survive unrelated code motion.",
+  "survivors": [
+    "crates/valgebra-core/src/decision.rs: delete match arm Schema::Set(_) | Schema::FrozenSet(_) in Schema::empty_and_region",
+    "crates/valgebra-core/src/decision.rs: replace && with || in linear_subtype",
+    "crates/valgebra-core/src/decision.rs: replace + with * in has_disjoint_pair",
+    "crates/valgebra-core/src/decision.rs: replace << with >>",
+    "crates/valgebra-core/src/decision.rs: replace <impl LeafRelations for NoLeafRelations>::leaf_subtype -> Option<bool> with Some(false)",
+    "crates/valgebra-core/src/decision.rs: replace LeafRelations::no_int_between -> Option<bool> with Some(false)",
+    "crates/valgebra-core/src/decision.rs: replace spend -> bool with true",
+    "crates/valgebra-core/src/decision.rs: replace | with ^ in Schema::empty_and_region",
+    "crates/valgebra-core/src/decision.rs: replace | with ^ in Schema::region_set",
+    "crates/valgebra-core/src/decision.rs: replace |= with &= in Schema::empty_and_region",
+    "crates/valgebra-core/src/ir.rs: delete match arm Schema::Attrs{fields, ..} in Schema::occurs_unguarded",
+    "crates/valgebra-core/src/ir.rs: delete match arm Schema::KeyedMap{fields, defaults} in Schema::occurs_unguarded",
+    "crates/valgebra-core/src/ir.rs: delete match arm Schema::Seq{regex, ..} in Schema::occurs_unguarded",
+    "crates/valgebra-core/src/ir.rs: delete match arm Schema::Set(e) | Schema::FrozenSet(e) in Schema::occurs_unguarded",
+    "crates/valgebra-core/src/ir.rs: replace SeqRegex::any_elem -> bool with false",
+    "crates/valgebra-core/src/ir.rs: replace SeqRegex::occurs_guarded -> bool with false",
+    "crates/valgebra-core/src/ir.rs: replace || with && in Schema::occurs_unguarded"
+  ]
+}
