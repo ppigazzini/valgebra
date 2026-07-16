@@ -34,6 +34,7 @@ jobs:
   rust-lint:
     name: rust lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -53,6 +54,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    # Property laws run deeper on the merge gate than the proptest default of
+    # 256 cases; the Python decision fuzzers already run 500 on CI.
+    env:
+      PROPTEST_CASES: "1024"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -69,6 +75,7 @@ jobs:
   rust-msrv:
     name: rust msrv
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -88,6 +95,7 @@ jobs:
   rust-coverage:
     name: rust coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -112,6 +120,7 @@ jobs:
   binding-coverage:
     name: binding coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -172,6 +181,7 @@ jobs:
           - os: windows-latest
             python-version: "3.14"
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -221,6 +231,7 @@ jobs:
   differential:
     name: differential
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -248,6 +259,7 @@ jobs:
   doc-examples:
     name: doc examples
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -268,6 +280,7 @@ jobs:
   docs:
     name: docs
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -288,6 +301,7 @@ jobs:
   bench:
     name: bench
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -346,6 +360,7 @@ jobs:
   wheel:
     name: wheel (linux)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -377,6 +392,7 @@ jobs:
     # manual only, and never a merge gate: it is an early-warning lane.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -418,6 +434,7 @@ jobs:
     # it asserts are mirrored on the merge gate by the structural property tests.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -457,6 +474,7 @@ jobs:
     # unrelated to test coverage.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -545,6 +563,7 @@ jobs:
     # instead. Runs unconditionally so the aggregate gate never sees it skipped;
     # the soak (nightly-libfuzzer) still runs the fuzzers.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -583,6 +602,7 @@ jobs:
     # so a newly published advisory against an unchanged tree surfaces without a
     # push.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -600,6 +620,7 @@ jobs:
     # Supply-chain audit of the locked Python dependencies (dev, bench, and docs
     # groups — everything CI installs) against the PyPI advisory database.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -617,6 +638,7 @@ jobs:
     # Static analysis of the workflows themselves: template injection, credential
     # persistence, over-broad permissions, and unpinned actions.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -653,6 +675,7 @@ jobs:
         zizmor,
       ]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       # Gate on every required job having *succeeded*, so a skipped or otherwise
       # non-successful job blocks the merge rather than slipping through a check

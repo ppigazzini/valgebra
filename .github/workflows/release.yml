@@ -38,6 +38,7 @@ jobs:
   wheels:
     name: wheels (${{ matrix.platform.runner }} ${{ matrix.platform.target }} ${{ matrix.platform.manylinux || 'native' }})
     runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -97,6 +98,7 @@ jobs:
   sdist:
     name: sdist
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -128,6 +130,7 @@ jobs:
           - { name: windows-x64, runner: windows-latest, artifact: wheels-windows-latest-x64-native }
           - { name: windows-arm64, runner: windows-11-arm, artifact: wheels-windows-11-arm-aarch64-native }
     runs-on: ${{ matrix.wheel.runner }}
+    timeout-minutes: 20
     # The two musllinux wheels are not smoked here: running them needs a musl
     # (Alpine) container with a musl interpreter, a separate lane. The glibc
     # Linux, macOS, and Windows wheels — the platforms with no other functional
@@ -157,6 +160,7 @@ jobs:
     name: smoke sdist
     needs: [sdist]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     # The source distribution is the fallback install for any platform without a
     # wheel, so build it from source and import it before it can publish: a broken
     # manifest or a missing crate file fails here rather than on a user's machine.
@@ -188,6 +192,7 @@ jobs:
     name: attach wheels to a github pre-release
     needs: [wheels, sdist, smoke, sdist-smoke]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # A dispatch can attach the built artifacts to a deletable GitHub
     # pre-release so the exact wheels install by their asset URL with no package
     # index. The pre-release tag is a build marker (build-<version>-<run>), not
@@ -228,6 +233,7 @@ jobs:
     # its import here and blocks the upload.
     needs: [wheels, sdist, smoke, sdist-smoke]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Publishing requires a deliberate dispatch that selects a real index, from
     # the main branch: a dry-run dispatch (target "none") uploads nothing, no tag
     # reaches here, and a dispatch from a topic branch cannot publish a commit the

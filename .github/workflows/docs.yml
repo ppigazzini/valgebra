@@ -24,6 +24,7 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     # configure-pages and upload-pages-artifact need to write the Pages artifact.
     permissions:
       contents: read
@@ -54,6 +55,7 @@ jobs:
     name: deploy
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # deploy-pages publishes the artifact and mints the OIDC token Pages verifies.
     permissions:
       pages: write
