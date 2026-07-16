@@ -36,6 +36,222 @@ pub fn fresh_self_token() -> u64 {
 mod tests {
     use super::*;
 
+    /// `node_count` sizes the whole tree, and the binding's schema-size limit is
+    /// the only consumer: an undercount admits a schema past the cap. Each arm
+    /// carries a distinct total so a wrong operator cannot coincide with a right
+    /// answer.
+    #[test]
+    fn node_count_totals_every_arm() {
+        assert_eq!(Schema::Int.node_count(), 1);
+        assert_eq!(Schema::Ref(0).node_count(), 1);
+        assert_eq!(Schema::Complement(Box::new(Schema::Int)).node_count(), 2);
+        assert_eq!(Schema::Set(Box::new(Schema::Str)).node_count(), 2);
+        assert_eq!(Schema::FrozenSet(Box::new(Schema::Str)).node_count(), 2);
+        // Union counts every member, not the deepest: three members, not one.
+        assert_eq!(
+            Schema::Union(vec![Schema::Int, Schema::Str, Schema::Bytes]).node_count(),
+            4
+        );
+        assert_eq!(
+            Schema::Intersection(vec![Schema::Int, Schema::Complement(Box::new(Schema::Str))])
+                .node_count(),
+            4
+        );
+        // A constraint is a node: base + one per constraint.
+        assert_eq!(
+            Schema::Refine {
+                base: Box::new(Schema::Str),
+                constraints: vec![Constraint::MinLen(1), Constraint::MaxLen(9)],
+            }
+            .node_count(),
+            4
+        );
+        // The regex constructor is not itself a node; its element subtree is.
+        assert_eq!(
+            Schema::list(SeqRegex::homogeneous(Schema::Complement(Box::new(
+                Schema::Int
+            ))))
+            .node_count(),
+            3
+        );
+        assert_eq!(
+            Schema::list(SeqRegex::Cat(vec![
+                SeqRegex::Elem(Box::new(Schema::Int)),
+                SeqRegex::Elem(Box::new(Schema::Str)),
+            ]))
+            .node_count(),
+            3
+        );
+        assert_eq!(Schema::list(SeqRegex::Empty).node_count(), 1);
+        // A keyed map counts declared fields and both halves of every default.
+        assert_eq!(
+            Schema::KeyedMap {
+                fields: vec![Field {
+                    name: "a".into(),
+                    schema: Schema::Complement(Box::new(Schema::Int)),
+                    required: true,
+                }],
+                defaults: vec![(Schema::Str, Schema::Bytes)],
+            }
+            .node_count(),
+            5
+        );
+        assert_eq!(
+            Schema::Attrs {
+                class_index: 0,
+                fields: vec![
+                    Field {
+                        name: "a".into(),
+                        schema: Schema::Int,
+                        required: true
+                    },
+                    Field {
+                        name: "b".into(),
+                        schema: Schema::Str,
+                        required: true
+                    },
+                ],
+            }
+            .node_count(),
+            3
+        );
+    }
+
+    /// `depth` bounds the native stack every recursive walk descends, so each
+    /// structural arm must add exactly one level. The scalar and combinator arms
+    /// are covered above; these are the container arms.
+    #[test]
+    fn depth_descends_every_container_arm() {
+        assert_eq!(Schema::Set(Box::new(Schema::Int)).depth(), 2);
+        assert_eq!(Schema::FrozenSet(Box::new(Schema::Int)).depth(), 2);
+        // Star and Elem each add a level under the Seq node.
+        assert_eq!(Schema::list(SeqRegex::Empty).depth(), 1);
+        assert_eq!(
+            Schema::list(SeqRegex::Elem(Box::new(Schema::Int))).depth(),
+            2
+        );
+        assert_eq!(Schema::list(SeqRegex::homogeneous(Schema::Int)).depth(), 3);
+        // Cat takes the max over parts, not the sum.
+        assert_eq!(
+            Schema::list(SeqRegex::Cat(vec![
+                SeqRegex::Elem(Box::new(Schema::Int)),
+                SeqRegex::Elem(Box::new(Schema::Complement(Box::new(Schema::Str)))),
+            ]))
+            .depth(),
+            4
+        );
+        assert_eq!(
+            Schema::Refine {
+                base: Box::new(Schema::Str),
+                constraints: vec![]
+            }
+            .depth(),
+            2
+        );
+        assert_eq!(
+            Schema::KeyedMap {
+                fields: vec![Field {
+                    name: "a".into(),
+                    schema: Schema::Complement(Box::new(Schema::Int)),
+                    required: true,
+                }],
+                defaults: vec![],
+            }
+            .depth(),
+            3
+        );
+        assert_eq!(
+            Schema::Attrs {
+                class_index: 0,
+                fields: vec![Field {
+                    name: "a".into(),
+                    schema: Schema::Int,
+                    required: true
+                }],
+            }
+            .depth(),
+            2
+        );
+    }
+
+    /// Combining two schemas concatenates their constant pools, so the right
+    /// operand's pooled indices shift by the left pool's length. A constraint
+    /// that fails to shift resolves to the WRONG pooled constant and silently
+    /// compares against the wrong value; a length bound is not a pool index and
+    /// must not move.
+    #[test]
+    fn shifted_remaps_pooled_constraint_operands_only() {
+        let refined = Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints: vec![
+                Constraint::Ge(1),
+                Constraint::Gt(2),
+                Constraint::Le(3),
+                Constraint::Lt(4),
+                Constraint::MultipleOf(5),
+                Constraint::MinLen(6),
+                Constraint::MaxLen(7),
+            ],
+        };
+        let Schema::Refine { constraints, .. } = refined.shifted(10, 0) else {
+            panic!("shifted a Refine into a non-Refine");
+        };
+        assert_eq!(
+            constraints,
+            vec![
+                Constraint::Ge(11),
+                Constraint::Gt(12),
+                Constraint::Le(13),
+                Constraint::Lt(14),
+                Constraint::MultipleOf(15),
+                // Length bounds are counts, not pool indices: unmoved.
+                Constraint::MinLen(6),
+                Constraint::MaxLen(7),
+            ]
+        );
+        // Pooled leaves shift by the pool; definition refs shift by defs.
+        assert_eq!(Schema::Literal(1).shifted(10, 3), Schema::Literal(11));
+        assert_eq!(Schema::Instance(1).shifted(10, 3), Schema::Instance(11));
+        assert_eq!(Schema::Ref(1).shifted(10, 3), Schema::Ref(4));
+    }
+
+    /// A recursive body is well-formed only if every self-reference sits under a
+    /// structural constructor; the algebraic combinators pass `guarded` through,
+    /// so a reference under only a complement or a refinement is UNGUARDED. If
+    /// this check misses one, an unguarded fixpoint is admitted and membership
+    /// stops being decidable.
+    #[test]
+    fn occurs_unguarded_sees_through_the_algebraic_combinators() {
+        // Bare: unguarded.
+        assert!(Schema::Ref(0).occurs_unguarded(0, false));
+        assert!(!Schema::Ref(1).occurs_unguarded(0, false));
+        // Complement and Refine do NOT guard: the reference stays exposed.
+        assert!(Schema::Complement(Box::new(Schema::Ref(0))).occurs_unguarded(0, false));
+        assert!(
+            Schema::Refine {
+                base: Box::new(Schema::Ref(0)),
+                constraints: vec![Constraint::MinLen(1)],
+            }
+            .occurs_unguarded(0, false)
+        );
+        assert!(Schema::Union(vec![Schema::Int, Schema::Ref(0)]).occurs_unguarded(0, false));
+        assert!(Schema::Intersection(vec![Schema::Int, Schema::Ref(0)]).occurs_unguarded(0, false));
+        // Nested combinators still pass it through.
+        assert!(
+            Schema::Complement(Box::new(Schema::Union(vec![Schema::Int, Schema::Ref(0)])))
+                .occurs_unguarded(0, false)
+        );
+        // Structural constructors guard.
+        assert!(!Schema::Set(Box::new(Schema::Ref(0))).occurs_unguarded(0, false));
+        assert!(!Schema::FrozenSet(Box::new(Schema::Ref(0))).occurs_unguarded(0, false));
+        assert!(!Schema::list(SeqRegex::homogeneous(Schema::Ref(0))).occurs_unguarded(0, false));
+        // A guarded reference under a combinator is still guarded.
+        assert!(
+            !Schema::Complement(Box::new(Schema::Set(Box::new(Schema::Ref(0)))))
+                .occurs_unguarded(0, false)
+        );
+    }
+
     /// The element schema of a homogeneous (`[T, ...]`) sequence node.
     fn homogeneous_elem(schema: &Schema) -> &Schema {
         match schema {
