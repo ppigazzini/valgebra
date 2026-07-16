@@ -212,7 +212,7 @@ _DECIDED = [
         id="map:mixed-extra-field-covered",
     ),
     # The supertype declares an *optional* field the subtype lacks; the subtype's
-    # catch-all value type fits it, so the relation now decides.
+    # catch-all value type fits it, so the relation decides.
     pytest.param(
         "subtype",
         {"a": int, str: int},

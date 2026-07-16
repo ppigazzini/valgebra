@@ -264,9 +264,9 @@ impl Schema {
     /// regions in O(1) each instead of re-deriving its region by re-walking the
     /// whole subtree with [`region_set`](Self::region_set). The returned bitset is
     /// exactly what `region_set` would return (`None` off the scalar-decidable
-    /// fragment), so emptiness on the scalar fragment is decided identically — but
-    /// a deeply nested intersection is now decided in time linear in its size
-    /// rather than quadratically (each level no longer re-walks the levels below).
+    /// fragment), so emptiness on the scalar fragment is decided identically, and
+    /// a deeply nested intersection is decided in time linear in its size: each
+    /// level folds its children's regions without re-walking the levels below.
     ///
     /// The work is bounded by the shared `budget`, so the region computation cannot
     /// run unbounded down a side door any more than the rest of the decision can;

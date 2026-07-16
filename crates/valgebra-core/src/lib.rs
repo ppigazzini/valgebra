@@ -2113,7 +2113,7 @@ mod laws {
     /// reached via `A ⊆ ∅`.
     #[test]
     fn the_shared_budget_decides_real_emptiness_and_equivalence() {
-        // `A ⊆ ∅` reaches the (now budgeted) emptiness check.
+        // `A ⊆ ∅` reaches the budgeted emptiness check.
         assert!(intersection(Schema::Int, Schema::Str).is_subtype_of(&Schema::Nothing));
         assert!(!Schema::Int.is_subtype_of(&Schema::Nothing));
         // Equivalence runs both directions against one budget and still decides.
@@ -2142,9 +2142,8 @@ mod laws {
 
     /// The bottom-up region the emptiness pass folds from a node's children
     /// detects a *collective* cancellation — one where no single member is empty
-    /// but their regions cancel — through nesting, exactly as the old whole-subtree
-    /// re-walk did. Two disjoint scalar unions cancel; wrapping the result deeper
-    /// must not lose that.
+    /// but their regions cancel — through nesting. Two disjoint scalar unions
+    /// cancel; wrapping the result deeper must not lose that.
     #[test]
     fn emptiness_folds_collective_region_cancellation_through_nesting() {
         // Neither member is empty alone; their regions are disjoint, so the

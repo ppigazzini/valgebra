@@ -60,7 +60,7 @@ def test_a_baselined_survivor_passes(tmp_path: Path) -> None:
 
 
 def test_a_killed_baseline_survivor_still_passes(tmp_path: Path) -> None:
-    # Improvement (a baseline survivor now caught) never fails the gate.
+    # A baseline survivor the tests catch is an improvement, not a failure.
     result = _run(
         tmp_path,
         missed=[],

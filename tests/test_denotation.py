@@ -286,7 +286,7 @@ def _values() -> st.SearchStrategy[object]:
         st.sampled_from([0, 1, -1, 0.0, 1.0, 3.5]),
         st.text(max_size=3),
         st.binary(max_size=3),
-        # Values that live only in the new node kinds, so their accept paths are
+        # Values that live only in these node kinds, so their accept paths are
         # exercised rather than always rejected: complex numbers, frozensets, and
         # dataclass instances (well-typed and mistyped).
         st.builds(complex, st.integers(-3, 3), st.integers(-3, 3)),
