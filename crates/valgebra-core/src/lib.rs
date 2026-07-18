@@ -697,6 +697,14 @@ mod tests {
             Schema::Union(vec![Schema::Int, not(Schema::Int)]).simplify(),
             Schema::Anything
         );
+        // The law is the complementary pair itself, not scalar-region coverage: an
+        // opaque member has no region, so `X ∪ ¬X` here is decided only by finding
+        // the pair, with the whole universe left unaccounted for by the bitset.
+        let opaque = Schema::list(SeqRegex::homogeneous(Schema::Int));
+        assert_eq!(
+            Schema::Union(vec![opaque.clone(), not(opaque)]).simplify(),
+            Schema::Anything
+        );
         // Disjoint basics and disjoint container kinds give an empty intersection.
         assert_eq!(
             Schema::Intersection(vec![Schema::Int, Schema::Str]).simplify(),
