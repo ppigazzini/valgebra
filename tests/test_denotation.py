@@ -98,7 +98,7 @@ def _minlen_pred(k: int) -> Pred:
     return lambda x: isinstance(x, str) and len(x) >= k
 
 
-def _union_of(types: Sequence[object]) -> Spec:
+def _union_of(types: Sequence[type]) -> Spec:
     """Build a PEP 604 union of scalar types and its any-arm predicate."""
     spec = reduce(lambda a, b: a | b, types)
     preds = [_SCALAR_PRED[t] for t in types]

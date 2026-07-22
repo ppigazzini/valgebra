@@ -33,14 +33,14 @@ classifiers = [
 [dependency-groups]
 dev = [
     "annotated-types>=0.7",
-    "hypothesis>=6.156.6",
+    "hypothesis>=6.158.1",
     "maturin>=1.14.1,<2",
-    "pre-commit>=4.6.0",
+    "pre-commit>=4.6.1",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
-    "ruff>=0.15.21",
+    "ruff>=0.15.22",
     "syrupy>=5.5.3",
-    "ty>=0.0.59",
+    "ty>=0.0.62",
 ]
 # Benchmark-only tools: the wall-clock harness and the external comparison
 # points. They are never runtime dependencies of valgebra.
@@ -61,7 +61,7 @@ bench = [
 # to Zensical, once it renders mkdocstrings cross-references and llms.txt.
 docs = [
     "mkdocs>=1.6.1,<2",
-    "mkdocs-material>=9.7.6,<10",
+    "mkdocs-material>=9.7.7,<10",
     "mkdocstrings[python]>=1.0.6",
     # Generates the /llms.txt manifest and /llms-full.txt full-content export so
     # AI assistants and coding agents consume the docs as clean Markdown.
