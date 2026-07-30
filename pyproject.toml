@@ -32,15 +32,15 @@ classifiers = [
 
 [dependency-groups]
 dev = [
-    "annotated-types>=0.7",
-    "hypothesis>=6.158.1",
+    "annotated-types>=0.8",
+    "hypothesis>=6.164.0",
     "maturin>=1.14.1,<2",
     "pre-commit>=4.6.1",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
-    "ruff>=0.15.22",
+    "ruff>=0.16.0",
     "syrupy>=5.5.3",
-    "ty>=0.0.62",
+    "ty>=0.0.65",
 ]
 # Benchmark-only tools: the wall-clock harness and the external comparison
 # points. They are never runtime dependencies of valgebra.
@@ -109,6 +109,9 @@ ignore = [
     "D213",
     # Public-surface annotations live in the .pyi stub, not the runtime module.
     "ANN",
+    # Licensing is declared once, in the PEP 639 SPDX expression and the two
+    # LICENSE files, not repeated as a per-file header.
+    "CPY001",
 ]
 
 [tool.ruff.lint.per-file-ignores]

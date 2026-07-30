@@ -90,11 +90,11 @@ to the typing spelling.
 ```python
 from valgebra import Validator
 
-assert Validator([int]).is_valid([1, 2])           # homogeneous list[int]
-assert Validator([int, str]).is_valid([1, "a"])    # fixed-length list
-assert not Validator([int, str]).is_valid([1])     # wrong length
-assert Validator({str: int}).is_valid({"a": 1})    # dict[str, int]
-assert Validator("active").is_valid("active")      # the literal "active"
+assert Validator([int]).is_valid([1, 2])  # homogeneous list[int]
+assert Validator([int, str]).is_valid([1, "a"])  # fixed-length list
+assert not Validator([int, str]).is_valid([1])  # wrong length
+assert Validator({str: int}).is_valid({"a": 1})  # dict[str, int]
+assert Validator("active").is_valid("active")  # the literal "active"
 ```
 
 A **fixed-length list** is matched positionally: element `i` must satisfy the
@@ -176,7 +176,7 @@ declared names.
 from valgebra import Validator
 
 user = Validator({"name": str, "age?": int})
-assert user.is_valid({"name": "Ada"})              # optional key absent
+assert user.is_valid({"name": "Ada"})  # optional key absent
 assert user.is_valid({"name": "Ada", "age": 36})
 assert not user.is_valid({"name": "Ada", "x": 1})  # closed: no extra keys
 ```
