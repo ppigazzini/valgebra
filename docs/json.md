@@ -11,9 +11,9 @@ from valgebra import Validator
 
 users = Validator({"name": str, "age?": int})
 
-users.validate_json('{"name": "Ada", "age": 36}')        # passes, returns None
-assert users.is_valid_json('{"name": "Ada"}')            # optional key absent
-assert not users.is_valid_json('{"name": 5}')            # name is not a str
+users.validate_json('{"name": "Ada", "age": 36}')  # passes, returns None
+assert users.is_valid_json('{"name": "Ada"}')  # optional key absent
+assert not users.is_valid_json('{"name": 5}')  # name is not a str
 
 # bytes input is accepted too
 assert Validator(list[int]).is_valid_json(b"[1, 2, 3]")

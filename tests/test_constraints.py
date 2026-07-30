@@ -48,7 +48,7 @@ CONSTRAINTS = [
     CONSTRAINTS,
     ids=[c[0] for c in CONSTRAINTS],
 )
-def test_constraint_accepts_rejects_codes_and_repr(  # noqa: PLR0913
+def test_constraint_accepts_rejects_codes_and_repr(  # noqa: PLR0913, PLR0917
     label: str,
     spec: object,
     good: object,

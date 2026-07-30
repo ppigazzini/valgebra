@@ -93,5 +93,7 @@ from valgebra import recursive, union, Validator
 json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
 assert Validator(json_value).is_subtype_of(json_value)  # reflexive across the fixpoint
 assert recursive(lambda t: {"value": int, "next": t}).is_empty()  # no base case
-assert not recursive(lambda t: union(None, {"next": t})).is_empty()  # a base case exists
+assert not recursive(
+    lambda t: union(None, {"next": t})
+).is_empty()  # a base case exists
 ```

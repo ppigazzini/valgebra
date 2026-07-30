@@ -14,12 +14,12 @@ equals `nothing`.
 ```python
 from valgebra import anything, complement, intersection, nothing, union
 
-assert union(int, str).is_valid("x")                  # a value in either set
-assert intersection(int, complement(bool)).is_valid(5)   # ints that are not bools
+assert union(int, str).is_valid("x")  # a value in either set
+assert intersection(int, complement(bool)).is_valid(5)  # ints that are not bools
 assert not intersection(int, complement(bool)).is_valid(True)
-assert complement(nothing).is_valid(5)                # the complement of bottom is top
-assert not nothing.is_valid(5)                        # bottom admits nothing
-assert anything.is_valid(object())                    # top admits everything
+assert complement(nothing).is_valid(5)  # the complement of bottom is top
+assert not nothing.is_valid(5)  # bottom admits nothing
+assert anything.is_valid(object())  # top admits everything
 ```
 
 The combinators accept any schema spec, so they nest and mix freely:
@@ -27,11 +27,11 @@ The combinators accept any schema spec, so they nest and mix freely:
 ```python
 from valgebra import complement, union, Validator
 
-color = union("red", "green", "blue")    # union of three literals
+color = union("red", "green", "blue")  # union of three literals
 assert color.is_valid("red")
 assert not color.is_valid("teal")
 
-not_empty_text = complement(union("", b""))   # not the empty str or bytes
+not_empty_text = complement(union("", b""))  # not the empty str or bytes
 assert not_empty_text.is_valid("x")
 assert not not_empty_text.is_valid("")
 ```
@@ -180,8 +180,8 @@ from valgebra import Validator
 
 pair = Validator([int, str])  # exactly two elements: an int then a str
 assert pair.is_valid([1, "a"])
-assert not pair.is_valid([1])           # wrong length
-assert not pair.is_valid((1, "a"))      # a tuple is not a member of the list form
+assert not pair.is_valid([1])  # wrong length
+assert not pair.is_valid((1, "a"))  # a tuple is not a member of the list form
 ```
 
 The single-element `[x]` is deliberately the **homogeneous** "list of x" (any
@@ -234,7 +234,9 @@ from annotated_types import Ge
 
 from valgebra import Validator
 
-assert repr(Validator(Annotated[int, Ge(0), Ge(0)]).simplify()) == "Annotated[int, Ge(0)]"
+assert (
+    repr(Validator(Annotated[int, Ge(0), Ge(0)]).simplify()) == "Annotated[int, Ge(0)]"
+)
 ```
 
 It also decides the **complement laws** and provable **disjointness**: a schema

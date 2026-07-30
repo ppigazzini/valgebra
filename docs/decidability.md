@@ -74,15 +74,27 @@ assert Validator(bool).is_subtype_of(int)  # bool is a subtype of int
 assert Validator(1).is_subtype_of(int)  # a literal is a member of int
 assert Validator(Annotated[int, at.Ge(0)]).is_subtype_of(int)  # refinement <= base
 assert Validator(Annotated[int, at.Ge(10), at.Le(0)]).is_empty()  # no such int
-assert Validator(Annotated[int, at.Gt(0), at.Lt(1)]).is_empty()  # no int strictly between
-assert not Validator(Annotated[float, at.Gt(0), at.Lt(1)]).is_empty()  # floats are dense
+assert Validator(
+    Annotated[int, at.Gt(0), at.Lt(1)]
+).is_empty()  # no int strictly between
+assert not Validator(
+    Annotated[float, at.Gt(0), at.Lt(1)]
+).is_empty()  # floats are dense
 assert Validator({str: int}).is_subtype_of({str: int, int: bool})  # mapping clauses
-assert Validator({str: int}).is_subtype_of({"b?": int, str: int})  # optional field, catch-all covers it
+assert Validator({str: int}).is_subtype_of(
+    {"b?": int, str: int}
+)  # optional field, catch-all covers it
 assert union(bool, int).is_equivalent(int)  # bool | int is just int
 assert intersection(int, complement(int)).is_empty()  # the complement law
-assert intersection(list[int], complement(list[int])).is_empty()  # complement law, structurally
-assert intersection(list[int], set[int]).is_empty()  # disjoint kinds: a list is never a set
-assert not intersection(Any, complement(Any)).is_empty()  # Any is exempt from the complement law
+assert intersection(
+    list[int], complement(list[int])
+).is_empty()  # complement law, structurally
+assert intersection(
+    list[int], set[int]
+).is_empty()  # disjoint kinds: a list is never a set
+assert not intersection(
+    Any, complement(Any)
+).is_empty()  # Any is exempt from the complement law
 
 json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
 assert json_value.is_valid({"a": [1, "x", {"b": None}]})

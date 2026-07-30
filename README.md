@@ -48,13 +48,13 @@ exactly *or*, *and*, and *not*, and they compose any schema into a lattice:
 ```python
 from valgebra import Validator, complement, intersection, union
 
-non_bool_int = intersection(int, complement(bool))   # an int that is not a bool
+non_bool_int = intersection(int, complement(bool))  # an int that is not a bool
 assert non_bool_int.is_valid(5)
 assert not non_bool_int.is_valid(True)
 
 # Schemas are first-class values you can compare as sets — soundly.
-assert Validator(bool).is_subtype_of(int)             # subtyping is set inclusion
-assert union(bool, int).is_equivalent(int)            # same set, different syntax
+assert Validator(bool).is_subtype_of(int)  # subtyping is set inclusion
+assert union(bool, int).is_equivalent(int)  # same set, different syntax
 assert intersection(int, complement(int)).is_empty()  # provably no value
 ```
 
@@ -96,12 +96,12 @@ from typing import Any
 from valgebra import Validator, anything, complement, union
 
 # A law-justified simplifier: a lattice normal form with the same value set.
-assert repr(complement(complement(int)).simplify()) == "int"   # double negation
-assert repr(union(int, int).simplify()) == "int"               # idempotence
+assert repr(complement(complement(int)).simplify()) == "int"  # double negation
+assert repr(union(int, int).simplify()) == "int"  # idempotence
 
 # `anything` is the lattice top; `Any` means "deliberately unchecked".
-assert repr(complement(anything).simplify()) == "nothing"      # top obeys the laws
-assert repr(Validator(Any).simplify()) == "Any"                # left untouched
+assert repr(complement(anything).simplify()) == "nothing"  # top obeys the laws
+assert repr(Validator(Any).simplify()) == "Any"  # left untouched
 
 # Union has typing's `|`; intersection and complement stay spelled out.
 assert (Validator(int) | str | None).is_equivalent(union(int, str, None))
@@ -149,7 +149,7 @@ materialized into an untyped object graph first:
 ```python
 from valgebra import Validator
 
-assert Validator(list[int]).is_valid_json(b"[1, 2, 3]")   # parse + check in Rust
+assert Validator(list[int]).is_valid_json(b"[1, 2, 3]")  # parse + check in Rust
 ```
 
 ## What it's for

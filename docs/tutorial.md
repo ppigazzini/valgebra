@@ -115,7 +115,7 @@ and the record is *closed* — an undeclared key is rejected.
 from valgebra import Validator
 
 profile = Validator({"name": str, "age?": int})
-assert profile.is_valid({"name": "Ada"})               # age omitted: fine
+assert profile.is_valid({"name": "Ada"})  # age omitted: fine
 assert profile.is_valid({"name": "Ada", "age": 36})
 assert not profile.is_valid({"name": "Ada", "extra": 1})  # closed: no extra keys
 ```
@@ -147,8 +147,8 @@ the Rust path and run the very same checks, so a document is judged exactly as
 from valgebra import Validator
 
 users = Validator({"name": str, "age?": int})
-users.validate_json('{"name": "Ada", "age": 36}')        # passes, raises nothing
-assert Validator(list[int]).is_valid_json("[1, 2, 3]")   # str or bytes
+users.validate_json('{"name": "Ada", "age": 36}')  # passes, raises nothing
+assert Validator(list[int]).is_valid_json("[1, 2, 3]")  # str or bytes
 ```
 
 ## Where to go next
