@@ -17,7 +17,32 @@ exclude_globs = ["crates/valgebra-py/**"]
 # would; a value only leaves both complements by belonging to both inners, which
 # an empty intersection has none of. Excluding an unkillable equivalent mutant
 # keeps the sweep honest rather than chasing a target no test can hit.
-exclude_re = ["has_disjoint_complement_pair"]
+#
+# The guardedness check's structural arms are equivalent for one reason, proved
+# as a property rather than argued here alone
+# (`structural_constructors_absorb_the_guard`): `Guarded::Yes` is absorbing. The
+# only arm of `occurs_unguarded` that can answer true demands `Guarded::No`, and
+# the algebraic combinators pass `guarded` through unchanged, so nothing below a
+# structural constructor is ever reported unguarded. Each structural arm
+# therefore answers false for every input — exactly what the match's default
+# answers — so deleting one cannot change a result, and neither can swapping the
+# `||` between two operands that are both always false. `occurs_guarded` is the
+# same statement one level down: it is `any_elem` over `occurs_unguarded(_,
+# Guarded::Yes)`, so it too is constantly false.
+#
+# `SeqRegex::any_elem` stays in the sweep deliberately. Its mutants are
+# equivalent only because `occurs_guarded` is its single caller, which is a fact
+# about the call graph rather than about the argument above; a second caller
+# would make the exclusion wrong without touching either function.
+exclude_re = [
+    "has_disjoint_complement_pair",
+    "delete match arm Schema::Seq.* in Schema::occurs_unguarded",
+    "delete match arm Schema::Set.* in Schema::occurs_unguarded",
+    "delete match arm Schema::KeyedMap.* in Schema::occurs_unguarded",
+    "delete match arm Schema::Attrs.* in Schema::occurs_unguarded",
+    "replace \\|\\| with && in Schema::occurs_unguarded",
+    "replace SeqRegex::occurs_guarded -> bool with false",
+]
 
 # A few mutants run longer than the baseline; give generous headroom over it.
 timeout_multiplier = 5.0

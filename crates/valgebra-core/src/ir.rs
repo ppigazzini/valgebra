@@ -977,6 +977,16 @@ impl Schema {
         match self {
             Schema::Ref(id) => *id == target && guarded == Guarded::No,
             // Structural constructors guard their children.
+            //
+            // `Guarded::Yes` is absorbing: the only arm that can answer true
+            // demands `Guarded::No`, and the algebraic combinators pass `guarded`
+            // through unchanged, so nothing below a structural constructor can
+            // report unguarded however deeply it nests. Each structural arm below
+            // therefore answers false for every input, and the walk it performs
+            // exists to state which constructors guard rather than to compute
+            // anything. `structural_constructors_absorb_the_guard` pins that, and
+            // it is why deleting one of these arms is an equivalent mutant --
+            // recorded with the argument in `.cargo/mutants.toml`.
             Schema::Seq { regex, .. } => regex.occurs_guarded(target),
             Schema::Set(e) | Schema::FrozenSet(e) => e.occurs_unguarded(target, Guarded::Yes),
             Schema::KeyedMap { fields, defaults } => {

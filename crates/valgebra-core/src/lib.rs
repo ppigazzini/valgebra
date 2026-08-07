@@ -2091,7 +2091,79 @@ mod laws {
         })
     }
 
+    /// A schema with a `Ref(0)` reachable somewhere inside it, for the
+    /// guardedness property below: the reference is what the check looks for, so
+    /// a generator that never produces one proves nothing.
+    fn schema_holding_a_ref() -> impl Strategy<Value = Schema> {
+        let leaf = prop_oneof![
+            Just(Schema::Ref(DefIx::new(0))),
+            Just(Schema::Int),
+            Just(Schema::Str),
+            Just(Schema::Anything),
+        ];
+        leaf.prop_recursive(4, 24, 3, |inner| {
+            prop_oneof![
+                prop::collection::vec(inner.clone(), 1..3).prop_map(Schema::Union),
+                prop::collection::vec(inner.clone(), 1..3).prop_map(Schema::Intersection),
+                inner.clone().prop_map(|s| Schema::Complement(Box::new(s))),
+                inner.clone().prop_map(|s| Schema::Refine {
+                    base: Box::new(s),
+                    constraints: vec![Constraint::MinLen(1)],
+                }),
+                inner.clone().prop_map(|s| Schema::Set(Box::new(s))),
+                inner
+                    .clone()
+                    .prop_map(|s| Schema::list(SeqRegex::homogeneous(s))),
+                inner.prop_map(|s| Schema::record(
+                    vec![Field {
+                        name: "f".to_owned(),
+                        schema: s,
+                        required: true,
+                    }],
+                    Openness::Closed,
+                )),
+            ]
+        })
+    }
+
     proptest! {
+        /// `Guarded::Yes` absorbs: once a structural constructor has been crossed,
+        /// no reference below it is ever reported unguarded, however the algebraic
+        /// combinators nest underneath.
+        ///
+        /// This is the argument that makes deleting one of `occurs_unguarded`'s
+        /// structural arms an *equivalent* mutant rather than an untested one:
+        /// every such arm answers false for every input, so the default answers
+        /// the same. Pinned as a property rather than asserted in a comment, so a
+        /// future arm that breaks the absorption fails here.
+        #[test]
+        fn structural_constructors_absorb_the_guard(s in schema_holding_a_ref()) {
+            prop_assert!(!s.occurs_unguarded(DefIx::new(0), Guarded::Yes));
+        }
+
+        /// The same schema read from the top is unguarded exactly when some
+        /// occurrence of the reference is reachable through algebraic combinators
+        /// alone -- the observable half of the check, and the one a recursive
+        /// definition's soundness rests on.
+        #[test]
+        fn a_reference_under_only_combinators_is_unguarded(s in schema_holding_a_ref()) {
+            fn reachable_through_combinators(s: &Schema) -> bool {
+                match s {
+                    Schema::Ref(id) => *id == DefIx::new(0),
+                    Schema::Union(es) | Schema::Intersection(es) => {
+                        es.iter().any(reachable_through_combinators)
+                    }
+                    Schema::Complement(e) => reachable_through_combinators(e),
+                    Schema::Refine { base, .. } => reachable_through_combinators(base),
+                    _ => false,
+                }
+            }
+            prop_assert_eq!(
+                s.occurs_unguarded(DefIx::new(0), Guarded::No),
+                reachable_through_combinators(&s)
+            );
+        }
+
         #[test]
         fn scalar_decision_matches_the_value_oracle(a in scalar_schema(), b in scalar_schema()) {
             let a_empty = SAMPLES.iter().all(|&v| !member(&a, v));
