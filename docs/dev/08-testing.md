@@ -24,7 +24,7 @@ frontend, so an agreement is evidence rather than a tautology.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Four of them:
+for and misses the other. Five of them:
 
 | Ledger | Holds |
 |---|---|
@@ -32,6 +32,7 @@ for and misses the other. Four of them:
 | `tests/test_mutation_scope.py` | every binding file is swept or excluded by name |
 | `tests/test_sweep_skips.py` | every `SWEEP-SKIP` mark is skipped; every skip is marked |
 | `tests/test_build_surfaces.py` | every manifest is a workspace member or a named detached surface |
+| `tests/test_harness_conditionals.py` | every `cfg(feature = ..)` site is test-only, or named |
 
 `tests/test_node_matrix.py` is the same shape one level in: it reads the `Schema`
 variants out of the IR and fails when one carries no row, so the universe is
@@ -53,9 +54,14 @@ the modes. A corpus driven only fast leaves half of every composite unobserved.
 That feature enables an embedded interpreter for the test binary and nothing
 else: all its sites are inside test modules and the shipped wheel is built
 without it. **An option that exists only because the project has a harness is a
-defect** — it makes the tested build differ from the shipped one — so a future
-`cfg(feature = ...)` on a production path is a change to argue for, not a
-convenience.
+defect** — it makes the tested build differ from the shipped one, and every gate
+passes on the difference because the tests run one build and the wheel is
+another.
+
+`tests/test_harness_conditionals.py` holds it: a `cfg(feature = ...)` on a
+production path fails, and a ledger entry naming a feature the manifest no
+longer declares fails. The ledger is empty, which is the claim. An option that
+is neither allowed nor banned is a decision nobody has made.
 
 ## Property depth
 
