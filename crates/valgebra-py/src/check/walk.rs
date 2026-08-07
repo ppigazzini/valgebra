@@ -1179,3 +1179,607 @@ fn is_multiple_of(value: &Bound<'_, PyAny>, operand: &Bound<'_, PyAny>) -> PyRes
 fn predicate_passes(predicate: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<bool> {
     predicate.call1((value,))?.is_truthy()
 }
+
+// Needs a live interpreter; compiled and run only under the `interpreter-tests`
+// feature, which links an embedded Python. This is the walk's own harness: it
+// drives real Python values through `member` so the membership decision — where
+// soundness is decided, and the one surface the Python suite covers from outside
+// but no `cargo test` reaches — carries evidence a mutation sweep can observe.
+#[cfg(all(test, feature = "interpreter-tests"))]
+mod interpreter {
+    use super::*;
+    use crate::check::{WalkMode, build_index};
+    use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyModule};
+    use std::cell::{Cell, RefCell};
+    use valgebra_core::{Field, Openness};
+
+    /// Decide membership of a Python value against a schema, through the real
+    /// walk, in the mode a validator's `is_valid` uses.
+    fn holds(
+        py: Python<'_>,
+        schema: &Schema,
+        value: &Bound<'_, PyAny>,
+        pool: &[Py<PyAny>],
+        defs: &[Schema],
+    ) -> bool {
+        let index = build_index(py, schema, defs, pool);
+        let guard = RefCell::new(FxHashSet::default());
+        let fatal = RefCell::new(None);
+        let fatal_seen = Cell::new(false);
+        let ctx = Ctx {
+            pool,
+            defs,
+            records: &index.records,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &guard,
+            fatal: &fatal,
+            fatal_seen: &fatal_seen,
+            mode: WalkMode::Fast,
+        };
+        member(
+            schema,
+            &Value::Py(value),
+            &mut Vec::new(),
+            ctx,
+            &mut Vec::new(),
+        )
+    }
+
+    /// The same decision in explain mode, returning the violations it aggregated
+    /// alongside the verdict. The two modes must agree on the verdict — the "one
+    /// walk" invariant — so every case below is driven through both.
+    fn explain(
+        py: Python<'_>,
+        schema: &Schema,
+        value: &Bound<'_, PyAny>,
+        pool: &[Py<PyAny>],
+        defs: &[Schema],
+    ) -> (bool, Vec<Violation>) {
+        let index = build_index(py, schema, defs, pool);
+        let guard = RefCell::new(FxHashSet::default());
+        let fatal = RefCell::new(None);
+        let fatal_seen = Cell::new(false);
+        let ctx = Ctx {
+            pool,
+            defs,
+            records: &index.records,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &guard,
+            fatal: &fatal,
+            fatal_seen: &fatal_seen,
+            mode: WalkMode::Explain,
+        };
+        let mut out = Vec::new();
+        let ok = member(schema, &Value::Py(value), &mut Vec::new(), ctx, &mut out);
+        (ok, out)
+    }
+
+    /// Drive one case through both modes and assert they agree, then return the
+    /// verdict. A case that only ran fast would leave the explain arms — half of
+    /// every composite in this file — unobserved.
+    fn decide(
+        py: Python<'_>,
+        schema: &Schema,
+        value: &Bound<'_, PyAny>,
+        pool: &[Py<PyAny>],
+        defs: &[Schema],
+    ) -> bool {
+        let fast = holds(py, schema, value, pool, defs);
+        let (explained, violations) = explain(py, schema, value, pool, defs);
+        assert_eq!(fast, explained, "fast and explain modes disagree");
+        assert_eq!(
+            violations.is_empty(),
+            fast,
+            "a rejected value must report at least one violation, an accepted one none"
+        );
+        fast
+    }
+
+    /// `(schema, value, expected)` over an empty pool and no definitions.
+    fn case(py: Python<'_>, schema: &Schema, value: &Bound<'_, PyAny>, expected: bool) {
+        assert_eq!(
+            decide(py, schema, value, &[], &[]),
+            expected,
+            "schema {schema:?} against {value}"
+        );
+    }
+
+    fn list_of(py: Python<'_>, items: Vec<i64>) -> Bound<'_, PyAny> {
+        PyList::new(py, items)
+            .expect("a list of i64 builds")
+            .into_any()
+    }
+
+    #[test]
+    fn the_scalar_atoms_admit_their_own_kind_and_no_other() {
+        Python::attach(|py| {
+            let none = py.None().into_bound(py);
+            let boolean = PyBool::new(py, true).to_owned().into_any();
+            let integer = PyInt::new(py, 7i64).into_any();
+            let float = PyFloat::new(py, 1.5).into_any();
+            let text = PyString::new(py, "x").into_any();
+            let raw = PyBytes::new(py, b"x").into_any();
+            let values = [&none, &boolean, &integer, &float, &text, &raw];
+
+            // Each atom admits exactly its own column, with one exception the
+            // typing spec forces: `bool` is a subclass of `int`, so a boolean is
+            // an integer and `Int` admits it.
+            let rows: [(Schema, [bool; 6]); 6] = [
+                (Schema::NoneType, [true, false, false, false, false, false]),
+                (Schema::Bool, [false, true, false, false, false, false]),
+                (Schema::Int, [false, true, true, false, false, false]),
+                (Schema::Float, [false, false, false, true, false, false]),
+                (Schema::Str, [false, false, false, false, true, false]),
+                (Schema::Bytes, [false, false, false, false, false, true]),
+            ];
+            for (schema, expected) in &rows {
+                for (value, want) in values.iter().zip(expected) {
+                    case(py, schema, value, *want);
+                }
+            }
+
+            // The lattice bounds and the gradual atom, over the same column set.
+            for value in values {
+                case(py, &Schema::Anything, value, true);
+                case(py, &Schema::Dynamic, value, true);
+                case(py, &Schema::Nothing, value, false);
+                // A self-reference never survives compilation, and is never a
+                // member if one is reached anyway.
+                case(py, &Schema::SelfRef(0), value, false);
+            }
+        });
+    }
+
+    #[test]
+    fn a_literal_admits_its_own_value_at_its_own_type() {
+        Python::attach(|py| {
+            let one = PyInt::new(py, 1i64).into_any();
+            let pool = vec![one.clone().unbind()];
+            let schema = Schema::Literal(ConstIx::new(0));
+
+            assert!(decide(
+                py,
+                &schema,
+                &PyInt::new(py, 1i64).into_any(),
+                &pool,
+                &[]
+            ));
+            assert!(!decide(
+                py,
+                &schema,
+                &PyInt::new(py, 2i64).into_any(),
+                &pool,
+                &[]
+            ));
+            // Python's `==` conflates across types (`1 == True == 1.0`), so the
+            // same-type test is what makes this a singleton rather than a class.
+            let truth = PyBool::new(py, true).to_owned().into_any();
+            assert!(!decide(py, &schema, &truth, &pool, &[]));
+            let float_one = PyFloat::new(py, 1.0).into_any();
+            assert!(!decide(py, &schema, &float_one, &pool, &[]));
+        });
+    }
+
+    #[test]
+    fn a_sequence_matches_its_regex_and_its_container_kind() {
+        Python::attach(|py| {
+            let homogeneous = Schema::list(SeqRegex::homogeneous(Schema::Int));
+            case(py, &homogeneous, &list_of(py, vec![]), true);
+            case(py, &homogeneous, &list_of(py, vec![1, 2, 3]), true);
+            let mixed = PyList::new(py, [1i64])
+                .expect("a one-element list builds")
+                .into_any();
+            mixed
+                .cast::<PyList>()
+                .expect("a list")
+                .append(PyString::new(py, "x"))
+                .expect("append");
+            case(py, &homogeneous, &mixed, false);
+
+            // The container kind is part of the denotation: a tuple is not a list.
+            let tuple = PyTuple::new(py, [1i64, 2])
+                .expect("a tuple builds")
+                .into_any();
+            case(py, &homogeneous, &tuple, false);
+            case(
+                py,
+                &Schema::tuple(SeqRegex::homogeneous(Schema::Int)),
+                &tuple,
+                true,
+            );
+
+            // Fixed arity: exactly the prefix length, no more and no fewer.
+            let fixed = Schema::list(SeqRegex::fixed([Schema::Int, Schema::Str]));
+            let ok = PyList::new(py, [1i64]).expect("builds").into_any();
+            ok.cast::<PyList>()
+                .expect("a list")
+                .append(PyString::new(py, "x"))
+                .expect("append");
+            case(py, &fixed, &ok, true);
+            case(py, &fixed, &list_of(py, vec![1]), false);
+            case(py, &fixed, &list_of(py, vec![1, 2, 3]), false);
+
+            // Prefix plus tail: at least the prefix length, and the tail repeats.
+            let prefixed = Schema::list(SeqRegex::prefix_tail([Schema::Int], Schema::Int));
+            case(py, &prefixed, &list_of(py, vec![]), false);
+            case(py, &prefixed, &list_of(py, vec![1]), true);
+            case(py, &prefixed, &list_of(py, vec![1, 2, 3]), true);
+        });
+    }
+
+    #[test]
+    fn a_set_and_a_frozenset_are_distinct_containers() {
+        Python::attach(|py| {
+            let set_of_int = Schema::Set(Box::new(Schema::Int));
+            let frozen_of_int = Schema::FrozenSet(Box::new(Schema::Int));
+            let set = PySet::new(py, [1i64, 2]).expect("a set builds").into_any();
+            let frozen = PyFrozenSet::new(py, [1i64, 2])
+                .expect("a frozenset builds")
+                .into_any();
+
+            case(py, &set_of_int, &set, true);
+            case(py, &set_of_int, &frozen, false);
+            case(py, &frozen_of_int, &frozen, true);
+            case(py, &frozen_of_int, &set, false);
+
+            let mixed = PySet::new(py, [1i64]).expect("a set builds").into_any();
+            mixed
+                .cast::<PySet>()
+                .expect("a set")
+                .add(PyString::new(py, "x"))
+                .expect("add");
+            case(py, &set_of_int, &mixed, false);
+        });
+    }
+
+    #[test]
+    fn a_keyed_map_separates_fields_from_the_catch_all() {
+        Python::attach(|py| {
+            let field = |name: &str, schema, required| Field {
+                name: name.to_owned(),
+                schema,
+                required,
+            };
+            let closed = Schema::record(
+                vec![
+                    field("x", Schema::Int, true),
+                    field("y", Schema::Str, false),
+                ],
+                Openness::Closed,
+            );
+            let open = Schema::record(vec![field("x", Schema::Int, true)], Openness::Open);
+            let mapping = Schema::mapping(Schema::Str, Schema::Int);
+
+            let build = |pairs: &[(&str, Bound<'_, PyAny>)]| {
+                let dict = PyDict::new(py);
+                for (key, value) in pairs {
+                    dict.set_item(key, value).expect("set_item");
+                }
+                dict.into_any()
+            };
+            let int = |n: i64| PyInt::new(py, n).into_any();
+            let text = |s: &str| PyString::new(py, s).into_any();
+
+            // The required field must be present and match; the optional one need
+            // not be present, but must match when it is.
+            case(py, &closed, &build(&[("x", int(1))]), true);
+            case(
+                py,
+                &closed,
+                &build(&[("x", int(1)), ("y", text("a"))]),
+                true,
+            );
+            case(py, &closed, &build(&[("x", int(1)), ("y", int(2))]), false);
+            case(py, &closed, &build(&[("y", text("a"))]), false);
+            case(py, &closed, &build(&[("x", text("a"))]), false);
+            // A closed record forbids an undeclared key; an open one admits it.
+            case(py, &closed, &build(&[("x", int(1)), ("z", int(2))]), false);
+            case(py, &open, &build(&[("x", int(1)), ("z", int(2))]), true);
+            // A pure mapping judges every key and value by the clause.
+            case(py, &mapping, &build(&[("k", int(1))]), true);
+            case(py, &mapping, &build(&[("k", text("a"))]), false);
+            case(py, &mapping, &build(&[]), true);
+            // Not a dict at all.
+            case(py, &closed, &list_of(py, vec![1]), false);
+        });
+    }
+
+    #[test]
+    fn the_boolean_combinators_compose_the_member_sets() {
+        Python::attach(|py| {
+            let int = PyInt::new(py, 1i64).into_any();
+            let text = PyString::new(py, "x").into_any();
+            let float = PyFloat::new(py, 1.5).into_any();
+
+            let union = Schema::Union(vec![Schema::Int, Schema::Str]);
+            case(py, &union, &int, true);
+            case(py, &union, &text, true);
+            case(py, &union, &float, false);
+
+            let intersection = Schema::Intersection(vec![
+                Schema::Int,
+                Schema::Complement(Box::new(Schema::Bool)),
+            ]);
+            case(py, &intersection, &int, true);
+            let truth = PyBool::new(py, true).to_owned().into_any();
+            case(py, &intersection, &truth, false);
+
+            let complement = Schema::Complement(Box::new(Schema::Int));
+            case(py, &complement, &int, false);
+            case(py, &complement, &text, true);
+            // Double negation returns the original set.
+            let doubled = Schema::Complement(Box::new(complement));
+            case(py, &doubled, &int, true);
+            case(py, &doubled, &text, false);
+        });
+    }
+
+    #[test]
+    fn a_refinement_narrows_its_base_by_every_constraint() {
+        Python::attach(|py| {
+            let five = PyInt::new(py, 5i64).into_any();
+            let pool = vec![five.clone().unbind()];
+            let refine = |constraints: Vec<Constraint>| Schema::Refine {
+                base: Box::new(Schema::Int),
+                constraints,
+            };
+            let int = |n: i64| PyInt::new(py, n).into_any();
+
+            // Each comparison arm, at and around its bound.
+            for (constraint, at, above, below) in [
+                (Constraint::Ge(OperandIx::new(0)), true, true, false),
+                (Constraint::Gt(OperandIx::new(0)), false, true, false),
+                (Constraint::Le(OperandIx::new(0)), true, false, true),
+                (Constraint::Lt(OperandIx::new(0)), false, false, true),
+            ] {
+                let schema = refine(vec![constraint]);
+                assert_eq!(decide(py, &schema, &int(5), &pool, &[]), at);
+                assert_eq!(decide(py, &schema, &int(6), &pool, &[]), above);
+                assert_eq!(decide(py, &schema, &int(4), &pool, &[]), below);
+            }
+
+            // The base is checked first: a bound on a non-int rejects rather than
+            // raising through the comparison.
+            let ge = refine(vec![Constraint::Ge(OperandIx::new(0))]);
+            let text = PyString::new(py, "x").into_any();
+            assert!(!decide(py, &ge, &text, &pool, &[]));
+
+            // A multiple-of divides; length bounds measure `len`.
+            let multiple = refine(vec![Constraint::MultipleOf(OperandIx::new(0))]);
+            assert!(decide(py, &multiple, &int(10), &pool, &[]));
+            assert!(!decide(py, &multiple, &int(11), &pool, &[]));
+
+            let sized = Schema::Refine {
+                base: Box::new(Schema::Str),
+                constraints: vec![Constraint::MinLen(2), Constraint::MaxLen(3)],
+            };
+            for (text, want) in [("a", false), ("ab", true), ("abc", true), ("abcd", false)] {
+                let value = PyString::new(py, text).into_any();
+                assert_eq!(decide(py, &sized, &value, &pool, &[]), want, "{text:?}");
+            }
+
+            // A pattern is anchored: `re.fullmatch` semantics, not a search.
+            let pattern = Schema::Refine {
+                base: Box::new(Schema::Str),
+                constraints: vec![Constraint::Regex("a+".to_owned())],
+            };
+            for (text, want) in [("a", true), ("aaa", true), ("ab", false), ("ba", false)] {
+                let value = PyString::new(py, text).into_any();
+                assert_eq!(decide(py, &pattern, &value, &pool, &[]), want, "{text:?}");
+            }
+
+            // Every constraint must hold, not merely one.
+            let both = refine(vec![
+                Constraint::Ge(OperandIx::new(0)),
+                Constraint::Le(OperandIx::new(0)),
+            ]);
+            assert!(decide(py, &both, &int(5), &pool, &[]));
+            assert!(!decide(py, &both, &int(6), &pool, &[]));
+        });
+    }
+
+    #[test]
+    fn a_reference_unfolds_its_definition_and_a_cycle_is_refused() {
+        Python::attach(|py| {
+            // `T = None | {"next": T}`: a finite chain is a member.
+            let defs = vec![Schema::Union(vec![
+                Schema::NoneType,
+                Schema::record(
+                    vec![Field {
+                        name: "next".to_owned(),
+                        schema: Schema::Ref(DefIx::new(0)),
+                        required: true,
+                    }],
+                    Openness::Closed,
+                ),
+            ])];
+            let schema = Schema::Ref(DefIx::new(0));
+
+            let none = py.None().into_bound(py);
+            assert!(decide(py, &schema, &none, &[], &defs));
+
+            let one = PyDict::new(py);
+            one.set_item("next", py.None()).expect("set_item");
+            assert!(decide(py, &schema, &one.clone().into_any(), &[], &defs));
+
+            let two = PyDict::new(py);
+            two.set_item("next", &one).expect("set_item");
+            assert!(decide(py, &schema, &two.into_any(), &[], &defs));
+
+            let wrong = PyDict::new(py);
+            wrong.set_item("next", 1i64).expect("set_item");
+            assert!(!decide(py, &schema, &wrong.into_any(), &[], &defs));
+
+            // A value that contains itself is refused rather than looped on.
+            let cyclic = PyDict::new(py);
+            cyclic.set_item("next", &cyclic).expect("set_item");
+            assert!(!decide(py, &schema, &cyclic.into_any(), &[], &defs));
+
+            // A reference past the definitions table is an internal invariant
+            // break, and degrades to a non-member rather than panicking. Checked
+            // in release only: the walk `debug_assert`s it.
+            #[cfg(not(debug_assertions))]
+            assert!(!decide(py, &Schema::Ref(DefIx::new(9)), &none, &[], &defs));
+        });
+    }
+
+    /// Define a small class hierarchy in the embedded interpreter, for the two
+    /// class-based arms. `Point` carries `x: int` and `y: int`; `Sub` is a
+    /// subclass of it; `Other` is unrelated.
+    fn classes(py: Python<'_>) -> Bound<'_, PyAny> {
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new(
+                "class Point:\n\
+                 \x20   def __init__(self, x, y):\n\
+                 \x20       self.x = x\n\
+                 \x20       self.y = y\n\
+                 class Sub(Point):\n\
+                 \x20   pass\n\
+                 class Other:\n\
+                 \x20   pass\n\
+                 class NoAttrs:\n\
+                 \x20   pass\n",
+            )
+            .expect("no interior nul")
+            .as_c_str(),
+            std::ffi::CString::new("classes.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("classes")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+        module.into_any()
+    }
+
+    #[test]
+    fn an_instance_atom_admits_the_class_and_its_subclasses() {
+        Python::attach(|py| {
+            let module = classes(py);
+            let point_class = module.getattr("Point").expect("Point");
+            let sub_class = module.getattr("Sub").expect("Sub");
+            let other_class = module.getattr("Other").expect("Other");
+            let pool = vec![point_class.clone().unbind()];
+            let schema = Schema::Instance(ClassIx::new(0));
+
+            let point = point_class.call1((1i64, 2i64)).expect("Point(1, 2)");
+            let sub = sub_class.call1((1i64, 2i64)).expect("Sub(1, 2)");
+            let other = other_class.call0().expect("Other()");
+
+            // `isinstance`, so a subclass instance is a member and an unrelated
+            // one is not. A non-object value is not a member either.
+            assert!(decide(py, &schema, &point, &pool, &[]));
+            assert!(decide(py, &schema, &sub, &pool, &[]));
+            assert!(!decide(py, &schema, &other, &pool, &[]));
+            assert!(!decide(
+                py,
+                &schema,
+                &PyInt::new(py, 1i64).into_any(),
+                &pool,
+                &[]
+            ));
+            // The class itself is not one of its instances.
+            assert!(!decide(py, &schema, &point_class, &pool, &[]));
+        });
+    }
+
+    #[test]
+    fn an_attribute_record_checks_the_class_then_every_attribute() {
+        Python::attach(|py| {
+            let module = classes(py);
+            let point_class = module.getattr("Point").expect("Point");
+            let other_class = module.getattr("Other").expect("Other");
+            let bare_class = module.getattr("NoAttrs").expect("NoAttrs");
+            let pool = vec![point_class.clone().unbind(), bare_class.clone().unbind()];
+            let field = |name: &str, schema| Field {
+                name: name.to_owned(),
+                schema,
+                required: true,
+            };
+            let schema = Schema::Attrs {
+                class_index: ClassIx::new(0),
+                fields: vec![field("x", Schema::Int), field("y", Schema::Int)],
+            };
+
+            let good = point_class.call1((1i64, 2i64)).expect("Point(1, 2)");
+            assert!(decide(py, &schema, &good, &pool, &[]));
+
+            // Every attribute must match: one wrong value rejects the whole.
+            let text = PyString::new(py, "x").into_any();
+            let wrong = point_class.call1((1i64, text)).expect("Point(1, \"x\")");
+            assert!(!decide(py, &schema, &wrong, &pool, &[]));
+
+            // The isinstance check is not rescued by the attributes matching: an
+            // unrelated object carrying x and y is still not a Point.
+            let impostor = other_class.call0().expect("Other()");
+            impostor.setattr("x", 1i64).expect("setattr x");
+            impostor.setattr("y", 2i64).expect("setattr y");
+            assert!(!decide(py, &schema, &impostor, &pool, &[]));
+
+            // A missing attribute is a rejection, not a raise.
+            let missing = Schema::Attrs {
+                class_index: ClassIx::new(1),
+                fields: vec![field("absent", Schema::Int)],
+            };
+            let bare = bare_class.call0().expect("NoAttrs()");
+            assert!(!decide(py, &missing, &bare, &pool, &[]));
+
+            // An attribute record with no fields is the isinstance atom alone.
+            let nominal = Schema::Attrs {
+                class_index: ClassIx::new(0),
+                fields: Vec::new(),
+            };
+            assert!(decide(py, &nominal, &good, &pool, &[]));
+            assert!(!decide(py, &nominal, &impostor, &pool, &[]));
+        });
+    }
+
+    #[test]
+    fn the_json_path_and_the_object_path_agree() {
+        Python::attach(|py| {
+            // The two input paths share one walk, so they must decide alike. This
+            // drives the `Value::Json` arms the object corpus above never reaches.
+            let schema = Schema::list(SeqRegex::homogeneous(Schema::Int));
+            let json = JsonValue::Array(std::sync::Arc::new(vec![
+                JsonValue::Int(1),
+                JsonValue::Int(2),
+            ]));
+            let index = build_index(py, &schema, &[], &[]);
+            let guard = RefCell::new(FxHashSet::default());
+            let fatal = RefCell::new(None);
+            let fatal_seen = Cell::new(false);
+            let ctx = Ctx {
+                pool: &[],
+                defs: &[],
+                records: &index.records,
+                unions: &index.unions,
+                regexes: &index.regexes,
+                guard: &guard,
+                fatal: &fatal,
+                fatal_seen: &fatal_seen,
+                mode: WalkMode::Fast,
+            };
+            assert!(member(
+                &schema,
+                &Value::Json(py, &json),
+                &mut Vec::new(),
+                ctx,
+                &mut Vec::new()
+            ));
+            assert!(holds(py, &schema, &list_of(py, vec![1, 2]), &[], &[]));
+
+            let bad = JsonValue::Array(std::sync::Arc::new(vec![JsonValue::Str("x".into())]));
+            assert!(!member(
+                &schema,
+                &Value::Json(py, &bad),
+                &mut Vec::new(),
+                ctx,
+                &mut Vec::new()
+            ));
+        });
+    }
+}

@@ -39,15 +39,13 @@ pub struct PoolShift(usize);
 impl PoolShift {
     /// A shift of `by` pool slots -- in practice the length of the pool the
     /// second validator's constants are appended to.
+    ///
+    /// There is no accessor: a shift is only ever *applied*, by the index types
+    /// that know which space they belong to, so nothing outside this module has
+    /// a use for the distance as a bare integer.
     #[must_use]
     pub const fn new(by: usize) -> Self {
         Self(by)
-    }
-
-    /// The underlying distance.
-    #[must_use]
-    pub const fn get(self) -> usize {
-        self.0
     }
 }
 
@@ -58,16 +56,11 @@ impl PoolShift {
 pub struct DefShift(usize);
 
 impl DefShift {
-    /// A shift of `by` definition slots.
+    /// A shift of `by` definition slots. No accessor, for the reason
+    /// [`PoolShift::new`] gives.
     #[must_use]
     pub const fn new(by: usize) -> Self {
         Self(by)
-    }
-
-    /// The underlying distance.
-    #[must_use]
-    pub const fn get(self) -> usize {
-        self.0
     }
 }
 

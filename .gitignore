@@ -51,3 +51,4 @@ htmlcov/
 # cargo-mutants run output
 /mutants.out/
 /mutants.out.old/
+/walk-mutants/

@@ -554,12 +554,44 @@ jobs:
             *) exit "$status" ;;
           esac
       # Ratchet: fail when a survivor appears that the committed baseline does
-      # not accept. The baseline is a floor, not a target -- equivalent mutants
-      # stay in it with a reason, and it only ever shrinks. A survivor the
-      # sweep step reported as a warning becomes a hard failure here unless it
-      # is already known.
-      - name: Ratchet survivors against the baseline
-        run: python3 scripts/mutation_gate.py
+      # not accept, and when a baseline entry is no longer a survivor. The
+      # baseline is an accepted hole, not a target -- equivalent mutants stay in
+      # it with a reason -- and it only ever shrinks. A survivor the sweep step
+      # reported as a warning becomes a hard failure here unless it is already
+      # known.
+      - name: Ratchet core survivors against the baseline
+        run: python3 scripts/mutation_gate.py --baseline core
+      # The membership walk is the product's hottest correctness surface and the
+      # one file of the binding worth a mutation number rather than a line count.
+      # It is reachable from `cargo test` only with an embedded interpreter, so
+      # the sweep runs with `interpreter-tests` and the interpreter on the loader
+      # path -- without them every mutant reads as unviable, which is a sweep that
+      # measured nothing rather than a clean one.
+      - name: Set up the Python toolchain for the walk sweep
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+      - name: Sweep the membership walk
+        run: |
+          uv sync --locked --no-install-project
+          export PYO3_PYTHON="$(uv run python -c 'import sys; print(sys.executable)')"
+          libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
+          export LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}"
+          set +e
+          cargo mutants --package valgebra-py \
+            --file crates/valgebra-py/src/check/walk.rs \
+            --features interpreter-tests -j 4 --output walk-mutants
+          status=$?
+          set -e
+          # Same exit-code policy as the core sweep: missed mutants and timeouts
+          # are the ratchet's business, a usage error or a broken baseline is not.
+          case "$status" in
+            0 | 2 | 3) ;;
+            *) exit "$status" ;;
+          esac
+      - name: Ratchet walk survivors against the baseline
+        run: |
+          python3 scripts/mutation_gate.py --baseline walk --out walk-mutants/mutants.out
 
   fuzz-build:
     name: fuzz build
