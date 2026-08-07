@@ -453,10 +453,47 @@ jobs:
       # `--target` forces the host (gnu) triple: the prebuilt cargo-fuzz is a
       # musl-static binary and otherwise defaults the fuzz target to musl, which
       # is not installed and is incompatible with the ASAN static-libc check.
+      # The corpus accumulates across runs instead of restarting cold from the
+      # committed seeds every night: a coverage-guided fuzzer's value is the
+      # inputs it has already learned reach new code, and discarding them makes
+      # every run re-derive the same shallow ones inside its budget. Keyed per
+      # target and per run, restored from the newest prior run; never committed,
+      # because a corpus is a cache and not a fixture.
+      - name: Restore the accumulated corpora
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            fuzz/corpus/simplify
+            fuzz/corpus/decision
+          key: fuzz-corpus-${{ github.run_id }}
+          restore-keys: fuzz-corpus-
+      # The persistent corpus is named first, so libFuzzer writes what it learns
+      # there; the committed seeds are read-only inputs beside it. Reversing the
+      # two would write new inputs into the tracked seed directory.
       - name: Fuzz the simplifier
-        run: cargo fuzz run --target x86_64-unknown-linux-gnu simplify fuzz/seeds/simplify -- -max_total_time=180
+        run: |
+          mkdir -p fuzz/corpus/simplify
+          cargo fuzz run --target x86_64-unknown-linux-gnu simplify \
+            fuzz/corpus/simplify fuzz/seeds/simplify -- -max_total_time=180
       - name: Fuzz the decision procedures
-        run: cargo fuzz run --target x86_64-unknown-linux-gnu decision fuzz/seeds/decision -- -max_total_time=180
+        run: |
+          mkdir -p fuzz/corpus/decision
+          cargo fuzz run --target x86_64-unknown-linux-gnu decision \
+            fuzz/corpus/decision fuzz/seeds/decision -- -max_total_time=180
+      # Minimize before saving, so the cache holds the smallest input set that
+      # keeps the coverage rather than growing without bound. A failure here is
+      # not a finding -- the soak above already reported one -- so it does not
+      # fail the lane.
+      - name: Minimize the corpora
+        continue-on-error: true
+        run: |
+          cargo fuzz cmin --target x86_64-unknown-linux-gnu simplify fuzz/corpus/simplify
+          cargo fuzz cmin --target x86_64-unknown-linux-gnu decision fuzz/corpus/decision
+      - name: Report the corpus sizes
+        run: |
+          for target in simplify decision; do
+            echo "$target: $(find "fuzz/corpus/$target" -type f | wc -l) input(s)"
+          done >> "$GITHUB_STEP_SUMMARY"
       - name: Upload crash artifacts
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
