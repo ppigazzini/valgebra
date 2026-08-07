@@ -31,10 +31,6 @@ import timeit
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
-from pydantic import TypeAdapter
-
-from valgebra import Validator
-
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -54,6 +50,14 @@ class Shape(TypedDict):
 
 
 def _shapes() -> dict[str, Shape]:
+    # Imported here, not at module scope: pydantic is a benchmark-only dependency
+    # and valgebra is the built extension, so a module-level import would make
+    # this file unimportable on every lane that has neither -- including the one
+    # that drives `judge` to prove this gate can fail.
+    from pydantic import TypeAdapter  # noqa: PLC0415
+
+    from valgebra import Validator  # noqa: PLC0415
+
     array_data = list(range(10_000))
     record_fields = {f"f{i}": int for i in range(50)}
     record_data = {f"f{i}": i for i in range(50)}
@@ -149,7 +153,7 @@ def main() -> int:
         status = ""
         if not update and base is not None:
             ceiling = base * (1 + tolerance)
-            if ratio > ceiling:
+            if name in judge({name: ratio}, {name: base}, tolerance)[0]:
                 status = f"  REGRESSION (> {ceiling:.3f})"
                 failures.append(name)
         row = f"{name:<{width}}  {vg:>10.1f}ns  {pyd:>10.1f}ns  {ratio:>7.3f}  {base_str:>9}{status}"  # noqa: E501
@@ -180,6 +184,24 @@ def main() -> int:
         return 1
     print(f"\nOK: all shapes within {tolerance:.0%} of the recorded ratio.")
     return 0
+
+
+def judge(
+    measured: dict[str, float], recorded: dict[str, float], tolerance: float
+) -> tuple[list[str], bool]:
+    """Decide the verdict from measured ratios alone, with no timing involved.
+
+    Returns the regressing shapes and whether the shape sets disagree. Extracted
+    from ``main`` so the gate's decision can be driven -- and shown to fail -- in
+    a test, without running pydantic or a timer.
+    """
+    shapes_disagree = set(measured) != set(recorded)
+    failures = [
+        name
+        for name, ratio in sorted(measured.items())
+        if name in recorded and ratio > recorded[name] * (1 + tolerance)
+    ]
+    return failures, shapes_disagree
 
 
 if __name__ == "__main__":

@@ -92,22 +92,28 @@ def main() -> int:
     new = sorted(measured - baseline)
     killed = sorted(baseline - measured)
 
-    for s in killed:
-        print(f"killed (was in baseline): {s}")
-    if killed:
-        print(
-            f"mutation_gate: {len(killed)} baseline survivor(s) now caught; "
-            "run --update to ratchet the baseline down"
-        )
-
     if new:
-        print()
         for s in new:
             print(f"NEW SURVIVOR: {s}")
         print(
             f"\nmutation_gate: {len(new)} mutation(s) survive that the baseline "
             "does not accept. Add a test that kills each, or, if it is an "
             "equivalent mutant, justify it and re-baseline with --update."
+        )
+        return 1
+
+    # The baseline is an accepted hole, and an accepted hole expires in its own
+    # direction: an entry the tests now catch, or one naming a mutation the sweep
+    # no longer generates, is a claim about a gap the tree does not have. Left
+    # standing it silently re-accepts a future survivor with the same identity,
+    # so it fails here and the fix is one `--update`.
+    if killed:
+        for s in killed:
+            print(f"STALE BASELINE ENTRY: {s}")
+        print(
+            f"\nmutation_gate: {len(killed)} baseline survivor(s) are no longer "
+            "survivors -- caught by a test, or no longer generated. Ratchet the "
+            "baseline down with --update; it must only ever shrink."
         )
         return 1
 

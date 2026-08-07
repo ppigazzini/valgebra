@@ -59,15 +59,19 @@ def test_a_baselined_survivor_passes(tmp_path: Path) -> None:
     assert "no new survivors" in result.stdout
 
 
-def test_a_killed_baseline_survivor_still_passes(tmp_path: Path) -> None:
-    # A baseline survivor the tests catch is an improvement, not a failure.
+def test_a_killed_baseline_survivor_fails_until_the_baseline_shrinks(
+    tmp_path: Path,
+) -> None:
+    # An improvement, and still a failure: the baseline is an accepted hole, and
+    # an accepted hole the tree no longer has must not stay standing. Left there
+    # it silently re-accepts a future survivor with the same identity.
     result = _run(
         tmp_path,
         missed=[],
         baseline=["crates/x/src/a.rs: replace + with - in f"],
     )
-    assert result.returncode == 0
-    assert "killed (was in baseline)" in result.stdout
+    assert result.returncode == 1
+    assert "STALE BASELINE ENTRY" in result.stdout
 
 
 def test_an_empty_output_dir_refuses_to_pass(tmp_path: Path) -> None:
@@ -85,3 +89,15 @@ def test_an_empty_output_dir_refuses_to_pass(tmp_path: Path) -> None:
     # A broken detector must not read as a clean tree.
     assert result.returncode != 0
     assert "did not run" in result.stderr
+
+
+def test_a_baseline_matching_the_sweep_exactly_passes(tmp_path: Path) -> None:
+    # The only shape that passes: every survivor accepted, and every accepted
+    # entry still a survivor.
+    result = _run(
+        tmp_path,
+        missed=["crates/x/src/a.rs:9:3: replace f -> bool with true"],
+        baseline=["crates/x/src/a.rs: replace f -> bool with true"],
+    )
+    assert result.returncode == 0
+    assert "no new survivors" in result.stdout
