@@ -9,7 +9,12 @@ expected to catch by eye:
 * **A named path that does not exist.** A ``crates/...``, ``scripts/...``,
   ``tests/...`` or ``.github/...`` path written in prose is a claim about this
   tree. A path holding a placeholder (``*``, ``<``, ``>``, ``...``) is skipped,
-  which is what lets ``crates/<name>/`` be written at all.
+  which is what lets ``crates/<name>/`` be written at all. A path ``.gitignore``
+  names is skipped too: the repository decided not to carry it, and a doc naming
+  one is usually documenting the tool that writes it. **The exemption is asked of
+  git, not of the filesystem**, so the answer does not depend on whether the
+  reader happens to have run that tool -- a check whose verdict changes with
+  local build output is measuring the machine rather than the tree.
 * **A reference into the internal surface.** ``__DEV/`` is gitignored, so a
   tracked file naming it leaves a reference that dangles for every reader but its
   author. The path check above cannot see this class: it exempts what
@@ -85,15 +90,43 @@ def check_links(path: Path, text: str) -> list[str]:
     return problems
 
 
-def check_named_paths(text: str) -> list[str]:
-    problems = []
-    for raw in NAMED_PATH.findall(text):
-        named = raw.rstrip(".,;:)`")
-        if PLACEHOLDER.search(named):
-            continue
-        if not (ROOT / named).exists():
-            problems.append(f"named path does not exist: {named}")
-    return problems
+def ignored_paths(candidates: list[str]) -> set[str]:
+    """Ask git which of these `.gitignore` names.
+
+    Asked of git rather than of the filesystem on purpose: a generated path is
+    absent from a fresh clone and present on a machine that has run the tool, and
+    a check whose verdict differs between the two is measuring the machine.
+    """
+    if not candidates:
+        return set()
+    result = subprocess.run(
+        ["git", "check-ignore", "--stdin"],
+        cwd=ROOT,
+        input="\n".join(candidates),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    # Exit 0 = some ignored, 1 = none ignored, anything else = it could not run.
+    if result.returncode not in (0, 1):
+        print(f"docs_lint: git check-ignore failed: {result.stderr.strip()}")
+        raise SystemExit(EXIT_CANNOT_RUN)
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+
+def check_named_paths(text: str, ignored: set[str] | None = None) -> list[str]:
+    named = [
+        raw.rstrip(".,;:)`")
+        for raw in NAMED_PATH.findall(text)
+        if not PLACEHOLDER.search(raw)
+    ]
+    if ignored is None:
+        ignored = ignored_paths(named)
+    return [
+        f"named path does not exist: {path}"
+        for path in named
+        if path not in ignored and not (ROOT / path).exists()
+    ]
 
 
 def check_internal_reference(text: str) -> list[str]:
@@ -163,6 +196,14 @@ def main() -> int:
         print(f"docs_lint: found only {len(files)} tracked Markdown files")
         return EXIT_CANNOT_RUN
     numbers = gate_numbers()
+    # One `git check-ignore` for the whole set rather than one per file.
+    every_named = [
+        raw.rstrip(".,;:)`")
+        for path in files
+        for raw in NAMED_PATH.findall(path.read_text(encoding="utf-8"))
+        if not PLACEHOLDER.search(raw)
+    ]
+    ignored = ignored_paths(every_named)
 
     failures: list[str] = []
     for path in files:
@@ -171,7 +212,7 @@ def main() -> int:
         failures += [
             f"{rel}: {problem}"
             for problem in check_links(path, text)
-            + check_named_paths(text)
+            + check_named_paths(text, ignored)
             + check_internal_reference(text)
             + check_pinned_numbers(text, numbers)
         ]

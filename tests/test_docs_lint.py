@@ -74,6 +74,24 @@ def test_a_named_path_that_does_not_exist_fails() -> None:
     assert lint.check_named_paths("see crates/valgebra-py/src/nope.rs")
 
 
+def test_a_gitignored_path_is_skipped() -> None:
+    # A generated path is absent from a fresh clone and present on a machine that
+    # has run the tool that writes it. Asking git rather than the filesystem is
+    # what makes the verdict the same on both -- a check that answers differently
+    # is measuring the machine, and this one did, and it broke a lane.
+    assert lint.check_named_paths("run it over fuzz/corpus/simplify") == []
+    # The exemption is not blanket: a path git does not ignore is still checked.
+    assert lint.check_named_paths("see fuzz/src/nope.rs")
+
+
+def test_the_ignore_question_is_asked_of_git_not_the_filesystem() -> None:
+    # Pinned directly, because the difference is invisible on a machine where the
+    # generated directory happens to exist.
+    assert "fuzz/corpus/simplify" in lint.ignored_paths(["fuzz/corpus/simplify"])
+    assert lint.ignored_paths(["scripts/docs_lint.py"]) == set()
+    assert lint.ignored_paths([]) == set()
+
+
 def test_a_placeholder_path_is_skipped() -> None:
     # Without this a page could not write a shape at all.
     assert lint.check_named_paths("crates/<name>/src/lib.rs") == []

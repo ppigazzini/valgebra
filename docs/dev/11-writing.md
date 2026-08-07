@@ -156,6 +156,19 @@ link, a named path that does not exist, a reference into the untracked surface,
 and a budget number quoted in prose. Read the script's own docstring for the
 exact rules — a second copy here would drift.
 
+A path `.gitignore` names is exempt from the second rule, because the repository
+decided not to carry it and a page naming one is usually documenting the tool
+that writes it. **The exemption is asked of git rather than of the filesystem**,
+so the answer is the same on a fresh clone and on a machine that has run that
+tool. It was not, once, and the lane that caught it is the only reason anyone
+knew: a check whose verdict changes with local build output is measuring the
+machine rather than the tree.
+
+That exemption is also what makes the third rule necessary. The untracked working
+area is gitignored, so every reference into it would be exempt from the path
+check by design; the rule that sweeps for it by name is what covers the class the
+exemption creates.
+
 **Three classes stay out of its reach, and they are the common ones:**
 
 - a real symbol attributed to the **wrong file**;
