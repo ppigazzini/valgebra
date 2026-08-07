@@ -1126,6 +1126,28 @@ mod laws {
             Schema::list(SeqRegex::fixed([Schema::Bool, Schema::Int]))
                 .is_subtype_of(&prefix_tail(Schema::Int, Schema::Int))
         );
+        // ...and is NOT one it is too short for. `[int]` does not fit
+        // `[int, int, int*]`: the supertype's fixed prefix is longer than the
+        // subtype's whole length, so no alignment exists. The two halves of the
+        // alignment test are a conjunction for exactly this case -- the element
+        // comparisons that DO happen all succeed, so a disjunction there reports
+        // a subtype relation that does not hold.
+        assert!(
+            !Schema::list(SeqRegex::fixed([Schema::Int])).is_subtype_of(&Schema::list(
+                SeqRegex::prefix_tail([Schema::Int, Schema::Int], Schema::Int)
+            ))
+        );
+        // Two fixed lists of the SAME length whose elements do not relate. Equal
+        // lengths are necessary and not sufficient, so the length test and the
+        // element test are a conjunction here too.
+        assert!(
+            !Schema::list(SeqRegex::fixed([Schema::Int]))
+                .is_subtype_of(&Schema::list(SeqRegex::fixed([Schema::Str])))
+        );
+        assert!(
+            Schema::list(SeqRegex::fixed([Schema::Bool]))
+                .is_subtype_of(&Schema::list(SeqRegex::fixed([Schema::Int])))
+        );
         // Alternation distributes: (bool* | int*) ⊆ int*, but int* ⊄ (bool* | str*).
         let alternation = |a, b| {
             Schema::list(SeqRegex::Or(vec![
