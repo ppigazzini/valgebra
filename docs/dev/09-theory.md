@@ -41,8 +41,17 @@ exact there ([02-decision.md](02-decision.md)).
 
 **Frisch, Castagna & Benzaken, "Semantic Subtyping" (JACM 2008).** The model
 valgebra *is*: value sets with union, intersection and negation, where subtyping
-is `[[s ∧ ¬t]] = ∅`. **[LOAD-BEARING]** — `is_subtype_of` is that reduction, and
-`is_empty` is the primitive it reduces to.
+is `[[s ∧ ¬t]] = ∅`. **[LOAD-BEARING]** — but read the qualifier, because the
+short version of this sentence was wrong for as long as it was written.
+`is_subtype_of` is **not** that reduction applied uniformly. It is a structural
+procedure whose arms decompose each pair by shape, and it calls `is_empty` at the
+three places where no shape is available to recurse into: the two lattice bounds,
+and a complement on the right. Everywhere else the arms decide directly.
+
+The distinction is not pedantry. A rule stated as the reduction and implemented
+structurally has a hole wherever an arm is missing, and the reduction's name over
+the top is what stops anyone looking: a complement on the right had no arm at all
+for months, and this page said the reduction covered it.
 
 It also carries the theorem that matters most for expectations: **a conservative
 simplifier cannot be complete once negation exists.** That is why
