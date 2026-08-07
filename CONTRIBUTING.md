@@ -79,6 +79,46 @@ builds it.
 `pre-commit run --all-files` runs the file-hygiene, ruff, and cargo gates in
 one step.
 
+## Contract inventory
+
+The gate above is the whole set. This is the other question: **what does this
+project promise, and how do I check just that one promise?** Every row names the
+file that owns the contract and the single command that reproduces its verdict.
+
+| Contract | Source of truth | First rerun command |
+|---|---|---|
+| Rust formatting | rustfmt defaults, unconfigured | `cargo fmt --check` |
+| Rust lint policy | `Cargo.toml` `[workspace.lints]` | `cargo clippy --all-targets --all-features -- -D warnings` |
+| Rust behaviour | `crates/` | `cargo test` |
+| the walk's own corpus | `crates/valgebra-py/src/check/walk.rs` | `cargo test -p valgebra-py --features interpreter-tests` |
+| the detached fuzz surface | `fuzz/Cargo.toml` | `cargo check --manifest-path fuzz/Cargo.toml` |
+| fuzz harness laws | `fuzz/src/lib.rs` | `cargo +nightly test --manifest-path fuzz/Cargo.toml --lib` |
+| Python behaviour | `tests/` | `uv run pytest` |
+| Python lint and format | `pyproject.toml` `[tool.ruff]` | `uv run ruff check . && uv run ruff format --check .` |
+| Python types | `pyproject.toml` | `uv run ty check` |
+| documentation claims | every tracked `*.md` | `uv run python scripts/docs_lint.py` |
+| doc examples run | `docs/` | `uv run python scripts/run_doc_examples.py` |
+| the rendered site builds | `mkdocs.yml` | `uv run --group docs mkdocs build --strict` |
+| core instruction budget | `scripts/perf_budget.json` | `uv run python scripts/perf_gate.py` |
+| binding instruction budget | `scripts/perf_budget.json` | `uv run python scripts/perf_gate.py --binding` |
+| competitive ratio | `scripts/perf_compare.json` | `uv run --group bench python scripts/compare_gate.py` |
+| core mutation adequacy | `scripts/mutation_baseline.json` | `cargo mutants --package valgebra-core` |
+| walk mutation adequacy | `scripts/mutation_baseline_walk.json` | `cargo mutants --package valgebra-py --file crates/valgebra-py/src/check/walk.rs --features interpreter-tests` |
+| a mutation verdict | either baseline | `python3 scripts/mutation_gate.py --baseline core` |
+| supply chain (Rust) | `deny.toml` | `cargo deny check` |
+| supply chain (Python) | `uv.lock` | `uv run pip-audit` |
+| workflow security | `.github/workflows/` | `uvx zizmor .github/workflows/` |
+| the profile-guided build's training run | `scripts/pgo_workload.py`, `pyproject.toml` `pgo-command` | `uv run --group bench maturin build --release --pgo --out dist` |
+
+The two mutation rows take a skip list; `docs/dev/07-tooling-ci.md` says which
+and why. Commands that need an embedded interpreter need its library directory
+on the loader path — the binding-coverage job in `.github/workflows/ci.yml` shows
+the two lines that set it.
+
+`tests/test_contract_inventory.py` holds this table to the tree in both
+directions: a gate script with no row fails, and a row naming a script that does
+not exist fails.
+
 ## Testing
 
 Correctness is checked against the denotation, not against itself. The harness

@@ -24,11 +24,24 @@ passed. `scripts/perf_gate.py` exits 2 on cachegrind output it cannot parse,
 `scripts/compare_gate.py` without its benchmark dependency,
 `scripts/docs_lint.py` on a tree it cannot read.
 
-## The local gate
+## The local gate, and the contract inventory
 
 A change is not done until every command exits 0. `CONTRIBUTING.md` holds the
 list; read it there rather than here, because a second copy drifts by one entry
 and reads exactly like one that has not.
+
+Beside it, the same file carries a **contract inventory**: one row per thing this
+project promises, naming the file that owns it and the single command that
+reproduces that one verdict. The gate answers "is my change ready"; the inventory
+answers "what does this project promise, and how do I check just that one?" —
+which is the question a reader has when a lane goes red and they want to
+reproduce one result rather than all of them.
+
+`tests/test_contract_inventory.py` holds the table to the tree in both
+directions: a gate script with no row fails, and a row naming a script or a
+source of truth that does not exist fails. A script can be a row's *subject*
+rather than its command — the profile-guided training workload is driven through
+the packaging config rather than typed — so the check reads the whole row.
 
 One line in it is easy to miss and is the reason a lane went red: **the fuzz
 crate is a detached workspace**. libFuzzer needs a nightly toolchain, and making
