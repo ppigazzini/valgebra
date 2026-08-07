@@ -1,10 +1,10 @@
 //! The validation walk: one membership test of a value against the IR.
 //!
 //! [`member`] is the single walk. It returns whether the value belongs to the
-//! schema's set, and in *explain* mode (`ctx.explain`) it also aggregates a
+//! schema's set, and in an *explain* mode (`ctx.mode`) it also aggregates a
 //! [`Violation`] for each independent failure into `out` (each record field,
-//! each sequence element, each mapping entry), unless `ctx.fail_fast` stops it at
-//! the first. In *fast* mode it allocates nothing and short-circuits as soon as
+//! each sequence element, each mapping entry), unless the fail-fast mode stops it
+//! at the first. In *fast* mode it allocates nothing and short-circuits as soon as
 //! membership is decided — the path it took before this module fused the two
 //! walks into one. There is no second walk to keep in sync.
 //!
@@ -12,8 +12,7 @@
 //! share one traversal. The explain side only ever sees a Python value (the JSON
 //! entry points materialize before explaining), so building a violation always
 //! has a Python object in hand. The per-child path bookkeeping is gated on
-//! `ctx.explain`, a flag constant for a whole walk, so the fast path pays nothing
-//! for it.
+//! `ctx.mode`, constant for a whole walk, so the fast path pays nothing for it.
 
 use std::cell::{Cell, RefCell};
 
@@ -32,7 +31,7 @@ pub(crate) use walk::member;
 
 /// The read-only context threaded through a validation walk: the constants pool,
 /// the recursion definitions, the precomputed record index, the active recursion
-/// guard, and the two mode flags. The guard records `(object id, definition
+/// guard, and the walk mode. The guard records `(object id, definition
 /// index)` pairs currently on the path so a value that contains itself fails with
 /// `recursion_loop` instead of looping.
 #[derive(Clone, Copy)]
@@ -66,9 +65,81 @@ pub(crate) struct Ctx<'a> {
     /// alongside it in `record_fatal`. The per-node short-circuit reads this with a
     /// plain load instead of taking a `RefCell` borrow on every membership step.
     pub(crate) fatal_seen: &'a Cell<bool>,
-    /// Build violations into `out`. When false the walk is the membership fast
-    /// path: it never touches `out`, never builds a path, and short-circuits.
-    pub(crate) explain: bool,
-    /// In explain mode, stop at the first failure instead of aggregating siblings.
-    pub(crate) fail_fast: bool,
+    /// What the walk is for. Constant for a whole walk, so the fast path pays
+    /// nothing for the explain bookkeeping.
+    pub(crate) mode: WalkMode,
+}
+
+/// What a membership walk is being run for.
+///
+/// Three modes, and the type says three: the pair of independent booleans this
+/// replaces admitted a fourth combination — fail-fast without explaining — that
+/// no caller produced and the walk read as plain [`Fast`](WalkMode::Fast). A
+/// state with no meaning is better unnameable than merely unused.
+/// The discriminants are ordered so both predicates below are one comparison
+/// rather than a two-way test: explaining is "at most `ExplainFailFast`",
+/// stopping at the first failure is "at least `ExplainFailFast`". The order is
+/// load-bearing for that reason and not alphabetical or by importance; both
+/// predicates are asserted over every variant in the tests.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[repr(u8)]
+pub(crate) enum WalkMode {
+    /// Membership plus a [`Violation`](valgebra_core::Violation) for each
+    /// independent failure: every record field, sequence element, and mapping
+    /// entry that fails is reported.
+    Explain = 0,
+    /// Membership plus the first violation only.
+    ExplainFailFast = 1,
+    /// Membership only. Nothing is allocated, `out` is never touched, no path is
+    /// built, and every composite short-circuits as soon as the answer is fixed.
+    Fast = 2,
+}
+
+impl WalkMode {
+    /// Whether this mode builds violations. The explain-side bookkeeping — the
+    /// path, the value summaries — is gated on this, once per node on the hot
+    /// path, so it is one comparison.
+    #[inline]
+    pub(crate) fn explains(self) -> bool {
+        self <= WalkMode::ExplainFailFast
+    }
+
+    /// Whether a composite stops at its first failing child rather than walking
+    /// the rest. The fast path stops for a different reason than fail-fast does —
+    /// it has nothing to aggregate — and both answer true here.
+    #[inline]
+    pub(crate) fn stops_at_first(self) -> bool {
+        self >= WalkMode::ExplainFailFast
+    }
+
+    /// The mode a caller asking to explain wants, given its fail-fast request.
+    pub(crate) fn explaining(fail_fast: bool) -> Self {
+        if fail_fast {
+            WalkMode::ExplainFailFast
+        } else {
+            WalkMode::Explain
+        }
+    }
+}
+
+#[cfg(test)]
+mod mode_tests {
+    use super::WalkMode;
+
+    /// Both predicates are single comparisons over an ordered discriminant, so
+    /// they are pinned over every variant: a reordering that changes what a mode
+    /// means fails here rather than silently switching the walk's behaviour.
+    #[test]
+    fn every_mode_answers_both_predicates() {
+        assert!(WalkMode::Explain.explains());
+        assert!(WalkMode::ExplainFailFast.explains());
+        assert!(!WalkMode::Fast.explains());
+
+        assert!(!WalkMode::Explain.stops_at_first());
+        assert!(WalkMode::ExplainFailFast.stops_at_first());
+        assert!(WalkMode::Fast.stops_at_first());
+
+        assert_eq!(WalkMode::explaining(true), WalkMode::ExplainFailFast);
+        assert_eq!(WalkMode::explaining(false), WalkMode::Explain);
+    }
 }

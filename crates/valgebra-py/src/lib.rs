@@ -32,7 +32,7 @@ use rustc_hash::FxHashSet;
 use valgebra_core::{DefIx, LeafRelations, OperandIx, Schema, SeqKind, SeqRegex, fresh_self_token};
 
 use crate::build::{Pool, build_schema, combine};
-use crate::check::{Ctx, ValidatorIndex, build_index, member};
+use crate::check::{Ctx, ValidatorIndex, WalkMode, build_index, member};
 use crate::errors::{into_pyerr, json_invalid_error};
 use crate::input::Value;
 use crate::render::render;
@@ -184,16 +184,14 @@ impl Validator {
     }
 
     /// The read-only walk context: the pool, the definitions, the precomputed
-    /// record and union indexes, a fresh recursion guard, the explain flag, and
-    /// the fail-fast flag.
+    /// record and union indexes, a fresh recursion guard, and the walk mode.
     fn context<'a>(
         &'a self,
         py: Python<'_>,
         guard: &'a RefCell<FxHashSet<(usize, usize)>>,
         fatal: &'a RefCell<Option<PyErr>>,
         fatal_seen: &'a Cell<bool>,
-        explain: bool,
-        fail_fast: bool,
+        mode: WalkMode,
     ) -> Ctx<'a> {
         let index = self.index(py);
         Ctx {
@@ -205,8 +203,7 @@ impl Validator {
             guard,
             fatal,
             fatal_seen,
-            explain,
-            fail_fast,
+            mode,
         }
     }
 
@@ -241,7 +238,7 @@ impl Validator {
             &self.schema,
             &Value::Json(py, &json),
             &mut Vec::new(),
-            self.context(py, &guard, &fatal, &fatal_seen, false, true),
+            self.context(py, &guard, &fatal, &fatal_seen, WalkMode::Fast),
             &mut Vec::new(),
         );
         reraise_fatal(fatal, ok)
@@ -303,7 +300,13 @@ impl Validator {
             &self.schema,
             &Value::Py(obj),
             &mut path,
-            self.context(obj.py(), &guard, &fatal, &fatal_seen, true, fail_fast),
+            self.context(
+                obj.py(),
+                &guard,
+                &fatal,
+                &fatal_seen,
+                WalkMode::explaining(fail_fast),
+            ),
             &mut violations,
         );
         if let Some(err) = fatal.into_inner() {
@@ -341,7 +344,7 @@ impl Validator {
             &self.schema,
             &Value::Py(obj),
             &mut Vec::new(),
-            self.context(obj.py(), &guard, &fatal, &fatal_seen, false, true),
+            self.context(obj.py(), &guard, &fatal, &fatal_seen, WalkMode::Fast),
             &mut Vec::new(),
         );
         reraise_fatal(fatal, ok)
@@ -769,7 +772,7 @@ pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
             std::hint::black_box(&validator.schema),
             &Value::Py(std::hint::black_box(&obj)),
             &mut Vec::new(),
-            validator.context(py, &guard, &fatal, &fatal_seen, false, true),
+            validator.context(py, &guard, &fatal, &fatal_seen, WalkMode::Fast),
             &mut Vec::new(),
         );
         checksum = checksum.wrapping_add(u64::from(ok));
@@ -888,8 +891,7 @@ impl PoolRelations<'_, '_> {
             guard: &guard,
             fatal: &fatal,
             fatal_seen: &fatal_seen,
-            explain: false,
-            fail_fast: false,
+            mode: WalkMode::Fast,
         };
         member(
             schema,

@@ -26,7 +26,7 @@ pub(crate) fn type_fail(
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    if ctx.explain {
+    if ctx.mode.explains() {
         out.push(type_mismatch(code, expected, value, path));
     }
     false

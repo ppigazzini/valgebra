@@ -1,11 +1,11 @@
 //! The validation walk: one membership test of a value against the IR.
 //!
 //! [`member`] is the single walk. It returns whether the value belongs to the
-//! schema's set, and in *explain* mode (`ctx.explain`) it also aggregates a
+//! schema's set, and in an *explain* mode (`ctx.mode`) it also aggregates a
 //! [`Violation`] for each independent failure into `out` (each record field,
-//! each sequence element, each mapping entry), unless `ctx.fail_fast` stops it at
-//! the first. In *fast* mode it allocates nothing and short-circuits as soon as
-//! membership is decided.
+//! each sequence element, each mapping entry), unless the fail-fast mode stops it
+//! at the first. In *fast* mode it allocates nothing and short-circuits as soon
+//! as membership is decided.
 //!
 //! ## Comparison-raises policy
 //!
@@ -41,16 +41,16 @@ use valgebra_core::{
     SeqRegex, Violation,
 };
 
-use crate::check::Ctx;
 use crate::check::index::compile_pattern;
 use crate::check::violation::{
     key_label, located, mismatch, summarize_value, type_fail, type_mismatch,
 };
+use crate::check::{Ctx, WalkMode};
 use crate::errors::{class_label, summarize};
 use crate::input::Value;
 
 fn stop(ctx: Ctx<'_>) -> bool {
-    !ctx.explain || ctx.fail_fast
+    ctx.mode.stops_at_first()
 }
 
 /// Whether a raised error is a *fatal* interpreter signal that must propagate
@@ -152,7 +152,7 @@ pub(crate) fn member(
         // Bottom admits nothing; an unresolved self-reference is never a member.
         Schema::Nothing => admit(false, schema, value, path, ctx, out),
         Schema::SelfRef(_) => {
-            if ctx.explain {
+            if ctx.mode.explains() {
                 out.push(Violation {
                     code: "unresolved_recursion",
                     path: path.clone(),
@@ -177,7 +177,7 @@ pub(crate) fn member(
             // Membership is the single-pass fast check; on failure the explain
             // pass re-walks in declared order to aggregate ordered violations.
             let ok = keyed_map_matches(fields, defaults, value, ctx);
-            if !ok && ctx.explain {
+            if !ok && ctx.mode.explains() {
                 keyed_map_explain(fields, defaults, value, path, ctx, out);
             }
             ok
@@ -207,7 +207,7 @@ fn admit(
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    if !ok && ctx.explain {
+    if !ok && ctx.mode.explains() {
         out.push(mismatch(schema, value, path));
     }
     ok
@@ -230,7 +230,7 @@ fn check_literal(
         value.py(),
         ctx,
     );
-    if !ok && ctx.explain {
+    if !ok && ctx.mode.explains() {
         out.push(Violation {
             code: "literal_error",
             path: path.to_vec(),
@@ -341,11 +341,11 @@ fn seq_element(
         // rather than panic across the FFI boundary if that ever breaks.
         return false;
     };
-    if ctx.explain {
+    if ctx.mode.explains() {
         path.push(PathSegment::Index(i));
     }
     let ok = member(schema, item, path, ctx, out);
-    if ctx.explain {
+    if ctx.mode.explains() {
         path.pop();
     }
     ok
@@ -364,7 +364,7 @@ fn seq_length_fail(
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    if ctx.explain {
+    if ctx.mode.explains() {
         let expected = if tail.is_some() {
             format!("{kind_word} of length at least {}", prefix.len())
         } else {
@@ -650,7 +650,7 @@ fn keyed_map_explain(
             Ok(None) => {}
             Err(_) => out.push(type_mismatch("dict_type", "dict", value, path)),
         }
-        if ctx.fail_fast && !out.is_empty() {
+        if ctx.mode.stops_at_first() && !out.is_empty() {
             return;
         }
     }
@@ -683,7 +683,7 @@ fn keyed_map_explain(
                 format!("{key_text:?}"),
             ));
         }
-        if ctx.fail_fast && !out.is_empty() {
+        if ctx.mode.stops_at_first() && !out.is_empty() {
             return;
         }
     }
@@ -708,7 +708,7 @@ fn check_union(
     // a single set lookup. Only the membership decision uses it; the explain walk
     // below, and every value type the plan does not cover, fall through to the
     // linear scan, which stays the one source of truth for behavior.
-    if !ctx.explain
+    if !ctx.mode.explains()
         && let Some(plan) = ctx.unions.get(&(members.as_ptr() as usize))
         && let Some(decided) = plan.decide(value)
     {
@@ -723,7 +723,7 @@ fn check_union(
     {
         return true;
     }
-    if !ctx.explain {
+    if !ctx.mode.explains() {
         return false;
     }
     // No branch matches. Explain the *closest* branch — the one that descended
@@ -735,8 +735,7 @@ fn check_union(
     // runs only on the error path.
     let base_depth = path.len();
     let probe = Ctx {
-        explain: true,
-        fail_fast: false,
+        mode: WalkMode::Explain,
         ..ctx
     };
     let mut best: Option<(usize, Vec<Violation>)> = None;
@@ -800,7 +799,7 @@ fn check_complement(
     // A value matches the complement iff it does not match the inner schema; the
     // inner explanation is irrelevant, so decide it on the fast path.
     if member(inner, value, &mut Vec::new(), fast(ctx), &mut Vec::new()) {
-        if ctx.explain {
+        if ctx.mode.explains() {
             out.push(Violation {
                 code: "unexpected_match",
                 path: path.to_vec(),
@@ -828,7 +827,7 @@ fn check_instance(
         value.py(),
         ctx,
     );
-    if !ok && ctx.explain {
+    if !ok && ctx.mode.explains() {
         out.push(type_mismatch(
             "instance_type",
             &class_label(&class),
@@ -856,7 +855,7 @@ fn check_object(
     };
     if !fold(obj.is_instance(&class), value.py(), ctx) {
         // Not an instance: the attribute checks below cannot be trusted.
-        if ctx.explain {
+        if ctx.mode.explains() {
             out.push(type_mismatch(
                 "instance_type",
                 &class_label(&class),
@@ -870,11 +869,11 @@ fn check_object(
     for field in fields {
         match obj.getattr(field.name.as_str()) {
             Ok(attr) => {
-                if ctx.explain {
+                if ctx.mode.explains() {
                     path.push(PathSegment::Key(field.name.clone()));
                 }
                 ok &= member(&field.schema, &Value::Py(&attr), path, ctx, out);
-                if ctx.explain {
+                if ctx.mode.explains() {
                     path.pop();
                 }
             }
@@ -885,7 +884,7 @@ fn check_object(
                 return false;
             }
             Err(_) => {
-                if ctx.explain {
+                if ctx.mode.explains() {
                     out.push(located(
                         path,
                         field.name.clone(),
@@ -1060,7 +1059,7 @@ fn check_constraint(
             )
         }
     };
-    if !ok && ctx.explain {
+    if !ok && ctx.mode.explains() {
         out.push(Violation {
             code,
             path: path.to_vec(),
@@ -1087,7 +1086,7 @@ fn check_ref(
     let depth = {
         let mut guard = ctx.guard.borrow_mut();
         if !guard.insert(key) {
-            if ctx.explain {
+            if ctx.mode.explains() {
                 out.push(Violation {
                     code: "recursion_loop",
                     path: path.clone(),
@@ -1101,7 +1100,7 @@ fn check_ref(
     };
     if depth > MAX_RECURSION_DEPTH {
         ctx.guard.borrow_mut().remove(&key);
-        if ctx.explain {
+        if ctx.mode.explains() {
             out.push(Violation {
                 code: "recursion_limit",
                 path: path.clone(),
@@ -1128,8 +1127,7 @@ fn check_ref(
 /// speculative sub-checks of union, complement, and the record fast walk.
 fn fast(ctx: Ctx<'_>) -> Ctx<'_> {
     Ctx {
-        explain: false,
-        fail_fast: true,
+        mode: WalkMode::Fast,
         ..ctx
     }
 }
