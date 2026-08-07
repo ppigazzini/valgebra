@@ -296,9 +296,9 @@ jobs:
       # mkdocstrings imports the package to read its docstrings.
       - run: uv run --group docs maturin develop --uv
       # --strict fails the build on a broken link or an unresolved reference.
-      # The mechanical half of documentation rot: dead links, named paths that do
-      # not exist, references into the untracked working area, and a budget
-      # number copied into prose. It cannot tell you a sentence is false.
+      # The mechanical half of documentation rot. Read the script's own docstring
+      # for the rules; restating them here is how this comment went stale once
+      # already. It cannot tell you a sentence is false.
       - run: uv run --no-sync python scripts/docs_lint.py
       - run: uv run --group docs mkdocs build --strict
 
