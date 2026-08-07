@@ -32,21 +32,21 @@ fn spend(budget: &Cell<u32>) -> bool {
     }
 }
 
-/// Intersect two region bitsets bottom-up. A missing region (an opaque, not
+/// Intersect two region sets bottom-up. A missing set (an opaque, not
 /// scalar-decidable child) makes the combination opaque too, matching
 /// [`region_set`](Schema::region_set)'s `?` short-circuit.
-fn and_region(a: Option<u8>, b: Option<u8>) -> Option<u8> {
+fn and_region(a: Option<Region>, b: Option<Region>) -> Option<Region> {
     match (a, b) {
-        (Some(a), Some(b)) => Some(a & b),
+        (Some(a), Some(b)) => Some(a.intersect(b)),
         _ => None,
     }
 }
 
-/// Union two region bitsets bottom-up, with the same opaque-propagation rule as
+/// Union two region sets bottom-up, with the same opaque-propagation rule as
 /// [`and_region`].
-fn or_region(a: Option<u8>, b: Option<u8>) -> Option<u8> {
+fn or_region(a: Option<Region>, b: Option<Region>) -> Option<Region> {
     match (a, b) {
-        (Some(a), Some(b)) => Some(a | b),
+        (Some(a), Some(b)) => Some(a.union(b)),
         _ => None,
     }
 }
@@ -171,31 +171,31 @@ impl Schema {
     /// elsewhere the caller stays conservative. The gradual `Any`, literals,
     /// instances, refinements, content-bearing containers, and references are
     /// not scalar-decidable, so any combination containing one yields `None`.
-    pub(crate) fn region_set(&self) -> Option<u8> {
+    pub(crate) fn region_set(&self) -> Option<Region> {
         Some(match self {
-            Schema::Nothing => 0,
-            Schema::Anything => REGION_ALL,
-            Schema::NoneType => REGION_NONE,
-            Schema::Bool => REGION_BOOL,
-            Schema::Int => REGION_BOOL | REGION_INT, // bool ⊆ int
-            Schema::Float => REGION_FLOAT,
-            Schema::Str => REGION_STR,
-            Schema::Bytes => REGION_BYTES,
+            Schema::Nothing => Region::EMPTY,
+            Schema::Anything => Region::ALL,
+            Schema::NoneType => Region::NONE_TYPE,
+            Schema::Bool => Region::BOOL,
+            Schema::Int => Region::BOOL.union(Region::INT), // bool ⊆ int
+            Schema::Float => Region::FLOAT,
+            Schema::Str => Region::STR,
+            Schema::Bytes => Region::BYTES,
             Schema::Union(members) => {
-                let mut acc = 0;
+                let mut acc = Region::EMPTY;
                 for member in members {
-                    acc |= member.region_set()?;
+                    acc = acc.union(member.region_set()?);
                 }
                 acc
             }
             Schema::Intersection(members) => {
-                let mut acc = REGION_ALL;
+                let mut acc = Region::ALL;
                 for member in members {
-                    acc &= member.region_set()?;
+                    acc = acc.intersect(member.region_set()?);
                 }
                 acc
             }
-            Schema::Complement(inner) => REGION_ALL & !inner.region_set()?,
+            Schema::Complement(inner) => inner.region_set()?.complement(),
             _ => return None,
         })
     }
@@ -278,7 +278,7 @@ impl Schema {
         defs: &[Schema],
         visiting: &mut Vec<DefIx>,
         budget: &Cell<u32>,
-    ) -> (bool, Option<u8>) {
+    ) -> (bool, Option<Region>) {
         // Bound the work, sharing the budget with the caller (the subtyping
         // decision passes its own `cx.budget` in), so emptiness cannot escape the
         // ceiling subtyping advertises. Exhaustion returns "not proven empty".
@@ -288,14 +288,14 @@ impl Schema {
         match self {
             // Scalar atoms and the lattice bounds carry a known region; their
             // emptiness is exactly "the region is empty".
-            Schema::Nothing => (true, Some(0)),
-            Schema::Anything => (false, Some(REGION_ALL)),
-            Schema::NoneType => (false, Some(REGION_NONE)),
-            Schema::Bool => (false, Some(REGION_BOOL)),
-            Schema::Int => (false, Some(REGION_BOOL | REGION_INT)), // bool ⊆ int
-            Schema::Float => (false, Some(REGION_FLOAT)),
-            Schema::Str => (false, Some(REGION_STR)),
-            Schema::Bytes => (false, Some(REGION_BYTES)),
+            Schema::Nothing => (true, Some(Region::EMPTY)),
+            Schema::Anything => (false, Some(Region::ALL)),
+            Schema::NoneType => (false, Some(Region::NONE_TYPE)),
+            Schema::Bool => (false, Some(Region::BOOL)),
+            Schema::Int => (false, Some(Region::BOOL.union(Region::INT))), // bool ⊆ int
+            Schema::Float => (false, Some(Region::FLOAT)),
+            Schema::Str => (false, Some(Region::STR)),
+            Schema::Bytes => (false, Some(Region::BYTES)),
             Schema::Ref(id) => {
                 // A reference reached again while resolving it is a cycle: this
                 // occurrence demands an infinite unfolding, so on its own it has
@@ -335,14 +335,14 @@ impl Schema {
             // the children's results, never by re-walking the subtree.
             Schema::Intersection(members) => {
                 let mut any_empty = false;
-                let mut region = Some(REGION_ALL);
+                let mut region = Some(Region::ALL);
                 for m in members {
                     let (empty, member_region) = m.empty_and_region(oracle, defs, visiting, budget);
                     any_empty |= empty;
                     region = and_region(region, member_region);
                 }
                 let empty = any_empty
-                    || region == Some(0)
+                    || region.is_some_and(Region::is_empty)
                     || has_complementary_pair(members)
                     || has_disjoint_pair(members)
                     || intersection_bounds_unsatisfiable(members, oracle);
@@ -373,7 +373,7 @@ impl Schema {
             // members' regions, again folded from the children.
             Schema::Union(members) => {
                 let mut all_empty = true;
-                let mut region = Some(0);
+                let mut region = Some(Region::EMPTY);
                 for m in members {
                     let (empty, member_region) = m.empty_and_region(oracle, defs, visiting, budget);
                     all_empty &= empty;
@@ -385,8 +385,8 @@ impl Schema {
             // empty exactly when that region is empty (`¬⊤ = ∅`).
             Schema::Complement(inner) => {
                 let (_, inner_region) = inner.empty_and_region(oracle, defs, visiting, budget);
-                let region = inner_region.map(|r| REGION_ALL & !r);
-                (region == Some(0), region)
+                let region = inner_region.map(Region::complement);
+                (region.is_some_and(Region::is_empty), region)
             }
             // The gradual `Any`, literals, and instances are not scalar-decidable:
             // an unknown region, never reported empty.
@@ -461,11 +461,10 @@ impl Schema {
         if assumptions.iter().any(|(a, b)| a == self && b == other) {
             return true;
         }
-        // Scalar fragment: exact via the region partition. `a` is already a
-        // subset of `REGION_ALL`, so `a & !b` needs no further mask: it holds
-        // exactly when every region of `self` is also a region of `other`.
+        // Scalar fragment: exact via the region partition. Subtyping there is
+        // set inclusion between the two region sets, and nothing else.
         if let (Some(a), Some(b)) = (self.region_set(), other.region_set()) {
-            return a & !b == 0;
+            return a.subset_of(b);
         }
         if self == other {
             return true;
@@ -1057,27 +1056,80 @@ fn field_index(fields: &[Field]) -> FxHashMap<&str, &Field> {
     index
 }
 
-/// The value universe partitioned into mutually-disjoint regions, so a Boolean
-/// combination of scalar atoms denotes a set computed by bitset operations. The
-/// scalar atoms occupy `NONE`..`BYTES` (with `int` covering `BOOL | INT`); the
-/// container kinds and `OTHER` complete the partition so a complement of a
-/// scalar correctly includes every non-scalar value.
-const REGION_NONE: u8 = 1 << 0;
-const REGION_BOOL: u8 = 1 << 1;
-const REGION_INT: u8 = 1 << 2; // int values other than bool
-const REGION_FLOAT: u8 = 1 << 3;
-const REGION_STR: u8 = 1 << 4;
-const REGION_BYTES: u8 = 1 << 5;
-// Bit 6 is the single non-scalar region: every value that is not one of the six
-// scalar kinds (containers, instances, callables, everything else) lumped
-// together. No atom ever names it on its own, so the non-scalar kinds need no
-// further bits; it exists so the complement of a scalar includes every non-scalar
-// value, which keeps emptiness sound (e.g. the meet of all six scalar complements
-// is the non-empty non-scalar region, not the empty set).
-// 6 scalar regions + the non-scalar region: 7 of `u8`'s 8 bits. The bitset type
-// is sized to the partition, so adding an 8th region still fits but a 9th would
-// overflow `1 << 8` at compile time — the type is the guard against a silent wrap.
-pub(crate) const REGION_ALL: u8 = (1 << 7) - 1;
+/// A set of value-universe regions: which of the mutually-disjoint parts the
+/// universe is cut into a schema's denotation can reach.
+///
+/// The value universe is partitioned so a Boolean combination of scalar atoms
+/// denotes a set the lattice operations compute exactly. The scalar atoms occupy
+/// `NONE_TYPE`..`BYTES` (with `int` covering `BOOL | INT`); one further region
+/// holds everything that is not one of the six scalar kinds — containers,
+/// instances, callables, and the rest — lumped together. No atom ever names that
+/// region alone, so the non-scalar kinds need no further bits; it exists so the
+/// complement of a scalar includes every non-scalar value, which keeps emptiness
+/// sound (the meet of all six scalar complements is the non-empty non-scalar
+/// region, not the empty set).
+///
+/// **It is a set, and its operations are the set's.** The bits were an
+/// `Option<u8>` combined at each call site with `|`, `&`, `!`, `|=`, and `<<`,
+/// where "did this schema's regions cancel" read as `== Some(0)` and "is every
+/// region of this one also a region of that" read as `a & !b == 0`. Naming the
+/// operations puts each of those decisions in one place with one test, and takes
+/// the raw operators out of the fold entirely.
+///
+/// 6 scalar regions plus the non-scalar region is 7 of `u8`'s 8 bits. The
+/// representation is sized to the partition, so an 8th region still fits and a
+/// 9th would overflow `1 << 8` at compile time — the width is the guard against
+/// a silent wrap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+pub(crate) struct Region(u8);
+
+impl Region {
+    /// No region: the empty set of values.
+    pub(crate) const EMPTY: Region = Region(0);
+    /// Every region: the whole value universe.
+    pub(crate) const ALL: Region = Region((1 << 7) - 1);
+
+    const NONE_TYPE: Region = Region(1 << 0);
+    const BOOL: Region = Region(1 << 1);
+    /// `int` values other than `bool`; `Schema::Int` denotes `BOOL | INT`.
+    const INT: Region = Region(1 << 2);
+    const FLOAT: Region = Region(1 << 3);
+    const STR: Region = Region(1 << 4);
+    const BYTES: Region = Region(1 << 5);
+
+    /// Every region in either set.
+    #[inline]
+    pub(crate) const fn union(self, other: Region) -> Region {
+        Region(self.0 | other.0)
+    }
+
+    /// Every region in both sets.
+    #[inline]
+    pub(crate) const fn intersect(self, other: Region) -> Region {
+        Region(self.0 & other.0)
+    }
+
+    /// Every region this set does not hold. Bounded to the partition, so the
+    /// unused eighth bit never appears in a result.
+    #[inline]
+    pub(crate) const fn complement(self) -> Region {
+        Region(Region::ALL.0 & !self.0)
+    }
+
+    /// Whether this set holds no region at all — the schema denotes no value.
+    #[inline]
+    pub(crate) const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Whether every region of `self` is also a region of `other`: set inclusion,
+    /// which on the scalar-decidable fragment *is* the subtyping relation.
+    #[inline]
+    pub(crate) const fn subset_of(self, other: Region) -> bool {
+        self.intersect(other.complement()).is_empty()
+    }
+}
 
 /// A concrete runtime type, for the sound fragment of disjointness.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1093,6 +1145,93 @@ enum TypeTag {
     Set,
     FrozenSet,
     Dict,
+}
+
+#[cfg(test)]
+mod region_tests {
+    use super::Region;
+
+    /// Every region operation is a set operation, and each is pinned here rather
+    /// than inside the folds that use it. The bits used to be combined at each
+    /// call site with a raw `|`, `&`, `!`, or `|=`, where the wrong operator is a
+    /// one-character defect no test in that fold could distinguish; concentrating
+    /// them into five methods is only worth it if the five are tested, so they
+    /// are, over the boundary cases the folds start and end at.
+    #[test]
+    fn the_region_operations_are_the_set_operations() {
+        let a = Region::BOOL.union(Region::INT);
+        let b = Region::BOOL.union(Region::STR);
+
+        // Union and intersection, distinguished: a wrong operator swaps these.
+        assert_eq!(
+            a.union(b),
+            Region::BOOL.union(Region::INT).union(Region::STR)
+        );
+        assert_eq!(a.intersect(b), Region::BOOL);
+        assert_ne!(a.union(b), a.intersect(b));
+
+        // The bounds are the identities of their operations, and absorb the other.
+        assert_eq!(a.union(Region::EMPTY), a);
+        assert_eq!(a.intersect(Region::ALL), a);
+        assert_eq!(a.union(Region::ALL), Region::ALL);
+        assert_eq!(a.intersect(Region::EMPTY), Region::EMPTY);
+
+        // The complement is bounded to the partition, so no result ever carries
+        // the unused eighth bit, and it is an involution.
+        assert_eq!(Region::EMPTY.complement(), Region::ALL);
+        assert_eq!(Region::ALL.complement(), Region::EMPTY);
+        assert_eq!(a.complement().complement(), a);
+        assert_eq!(a.intersect(a.complement()), Region::EMPTY);
+        assert_eq!(a.union(a.complement()), Region::ALL);
+
+        // Emptiness is the fold's own verdict, so it is pinned on both sides.
+        assert!(Region::EMPTY.is_empty());
+        assert!(!Region::ALL.is_empty());
+        assert!(!a.is_empty());
+        assert!(a.intersect(Region::STR).is_empty());
+
+        // Inclusion is the subtyping relation on the scalar fragment, and it is
+        // not symmetric: `bool` is below `int`, and `int` is not below `bool`.
+        assert!(Region::BOOL.subset_of(a));
+        assert!(!a.subset_of(Region::BOOL));
+        assert!(a.subset_of(a));
+        assert!(Region::EMPTY.subset_of(a));
+        assert!(a.subset_of(Region::ALL));
+        assert!(!Region::STR.subset_of(a));
+    }
+
+    /// The six scalar regions and the non-scalar remainder partition the
+    /// universe: they are pairwise disjoint and together cover it. Emptiness
+    /// soundness rests on the cover — the meet of all six scalar complements must
+    /// be the non-empty non-scalar region, not the empty set.
+    #[test]
+    fn the_scalar_regions_partition_the_universe() {
+        let scalars = [
+            Region::NONE_TYPE,
+            Region::BOOL,
+            Region::INT,
+            Region::FLOAT,
+            Region::STR,
+            Region::BYTES,
+        ];
+        // Non-empty and pairwise disjoint together force six distinct bits, which
+        // is what makes the partition a partition. Either half alone is satisfied
+        // by a region that collapsed to nothing.
+        for (i, one) in scalars.iter().enumerate() {
+            assert!(!one.is_empty());
+            for other in &scalars[i + 1..] {
+                assert!(one.intersect(*other).is_empty());
+            }
+        }
+        let union = scalars.iter().fold(Region::EMPTY, |acc, r| acc.union(*r));
+        assert_ne!(union, Region::ALL);
+        assert!(!union.complement().is_empty());
+        let all_complements = scalars
+            .iter()
+            .fold(Region::ALL, |acc, r| acc.intersect(r.complement()));
+        assert!(!all_complements.is_empty());
+        assert_eq!(all_complements, union.complement());
+    }
 }
 
 #[cfg(test)]
