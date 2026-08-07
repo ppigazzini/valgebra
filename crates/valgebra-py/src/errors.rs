@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use valgebra_core::{PathSegment, Violation};
 
-use crate::ValidationError;
+use crate::exception::ValidationError;
 
 /// The class name for an error label, falling back to its repr.
 pub(crate) fn class_label(class: &Bound<'_, PyAny>) -> String {

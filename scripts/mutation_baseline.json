@@ -2,7 +2,6 @@
   "_comment": "Mutation survivors accepted as a baseline for the core sweep. The nightly ratchet fails when a survivor appears outside this set, and when an entry is no longer a survivor. Regenerate with `python scripts/mutation_gate.py --baseline core --update` after a sweep, and only ever let this set shrink. Entries are the survivor line without its line:col position, so they survive unrelated code motion.",
   "survivors": [
     "crates/valgebra-core/src/decision.rs: delete match arm Schema::Set(_) | Schema::FrozenSet(_) in Schema::empty_and_region",
-    "crates/valgebra-core/src/decision.rs: replace && with || in linear_subtype",
     "crates/valgebra-core/src/decision.rs: replace + with * in has_disjoint_pair",
     "crates/valgebra-core/src/decision.rs: replace << with >>",
     "crates/valgebra-core/src/decision.rs: replace <impl LeafRelations for NoLeafRelations>::leaf_subtype -> Option<bool> with Some(false)",

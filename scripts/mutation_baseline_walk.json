@@ -1,9 +1,15 @@
 {
   "_comment": "Mutation survivors accepted as a baseline for the walk sweep. The nightly ratchet fails when a survivor appears outside this set, and when an entry is no longer a survivor. Regenerate with `python scripts/mutation_gate.py --baseline walk --update` after a sweep, and only ever let this set shrink. Entries are the survivor line without its line:col position, so they survive unrelated code motion.",
-  "_timeouts_comment": "All three entries are TIMEOUTS rather than judged survivors, and they share one cause: each deletes a short-circuit, so the recursion-depth case (a 130-level chain through a two-branch union) does exponential redundant work and the run never returns a verdict. A mutant whose experiment cannot finish is a rig fault, not a detection, so the ratchet counts it as a survivor -- the conservative direction. None of the three can change a verdict: each only removes an early return or lets a discarded sub-walk aggregate into a buffer nothing reads. Killing them would need a corpus that reaches the same arms without the deep case, which is work with no soundness behind it.",
   "survivors": [
-    "crates/valgebra-py/src/check/walk.rs: delete ! in check_union",
     "crates/valgebra-py/src/check/walk.rs: delete field mode from struct Ctx expression in fast",
-    "crates/valgebra-py/src/check/walk.rs: replace && with || in member"
-  ]
+    "crates/valgebra-py/src/check/walk.rs: replace && with || in member",
+    "crates/valgebra-py/src/check/walk.rs: replace > with == in check_ref",
+    "crates/valgebra-py/src/check/walk.rs: replace > with >= in check_ref"
+  ],
+  "_accepted": {
+    "check/walk.rs: replace > with == in check_ref": "The recursion depth bound. Killed by `recursion_deeper_than_the_bound_is_refused`, which the sweep skips: that case drives a 130-level chain through a two-branch union, so any mutation removing a short-circuit turns it exponential and the whole run returns no verdict. Skipping it buys a judged verdict for every other mutant at the cost of these two. The case still runs on every push in the ordinary test lane.",
+    "check/walk.rs: replace > with >= in check_ref": "As above.",
+    "check/walk.rs: replace && with || in member": "Cannot change a verdict. It makes the explain pass over a keyed map run when the map already matched (which reports nothing) and in fast mode (where the violations go to a buffer nothing reads). Only the cost moves, and cost is the instruction budget's business.",
+    "check/walk.rs: delete field mode from struct Ctx expression in fast": "Cannot change a verdict. The speculative sub-check inherits the caller's mode instead of the fast one, so a discarded branch walk aggregates into a throwaway buffer. Same answer, more work."
+  }
 }

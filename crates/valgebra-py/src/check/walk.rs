@@ -41,11 +41,11 @@ use valgebra_core::{
     SeqRegex, Violation,
 };
 
+use crate::check::ctx::{Ctx, WalkMode};
 use crate::check::index::compile_pattern;
 use crate::check::violation::{
     key_label, located, mismatch, summarize_value, type_fail, type_mismatch,
 };
-use crate::check::{Ctx, WalkMode};
 use crate::errors::{class_label, summarize};
 use crate::input::Value;
 

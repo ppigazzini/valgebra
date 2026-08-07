@@ -2,8 +2,9 @@
 #
 # The sweep covers the soundness-critical core crate and the membership walk.
 #
-# The walk is where membership is decided, so it is the binding's one file whose
-# arms are worth a mutation number rather than a line count. It is reachable from
+# The walk is where membership is decided, so it and the context it carries are
+# the binding's files whose arms are worth a mutation number rather than a line
+# count. Both are reachable from
 # `cargo test` because the `interpreter-tests` feature links an embedded Python
 # and `check/walk.rs`'s own corpus drives real values through `member`; the sweep
 # is run with that feature (see the workflow) or every mutant reads as unviable.
@@ -17,6 +18,8 @@ exclude_globs = [
     "crates/valgebra-py/examples/**",
     "crates/valgebra-py/src/build.rs",
     "crates/valgebra-py/src/check.rs",
+    "crates/valgebra-py/src/exception.rs",
+    "crates/valgebra-py/src/validator.rs",
     "crates/valgebra-py/src/check/index.rs",
     "crates/valgebra-py/src/check/violation.rs",
     "crates/valgebra-py/src/errors.rs",

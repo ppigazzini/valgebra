@@ -14,8 +14,8 @@ use valgebra_core::{
     ClassIx, ConstIx, Constraint, DefShift, Field, Openness, OperandIx, PredIx, Schema, SeqRegex,
 };
 
-use crate::Validator;
 use crate::errors::summarize;
+use crate::validator::Validator;
 
 thread_local! {
     /// Depth of the current `build_schema` recursion, bounding it so a

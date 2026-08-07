@@ -24,10 +24,15 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / ".cargo" / "mutants.toml"
 BINDING = ROOT / "crates" / "valgebra-py"
 
-# The one binding file inside the sweep: the membership walk, where soundness is
-# decided. It is reachable from `cargo test` because the `interpreter-tests`
-# feature links an embedded Python and the file carries its own value corpus.
-SWEPT = {"crates/valgebra-py/src/check/walk.rs"}
+# The binding files inside the sweep: the membership walk, where soundness is
+# decided, and the context it carries. Both are reachable from `cargo test`
+# because the `interpreter-tests` feature links an embedded Python and the walk
+# carries its own value corpus; the context's two predicates are asserted over
+# every mode by its own tests.
+SWEPT = {
+    "crates/valgebra-py/src/check/walk.rs",
+    "crates/valgebra-py/src/check/ctx.rs",
+}
 
 
 def _excluded_globs() -> list[str]:

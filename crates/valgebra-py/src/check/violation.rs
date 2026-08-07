@@ -3,7 +3,7 @@
 use pyo3::prelude::*;
 use valgebra_core::{PathSegment, Schema, Violation};
 
-use crate::check::Ctx;
+use crate::check::ctx::Ctx;
 use crate::errors::{summarize, truncate};
 use crate::input::Value;
 
