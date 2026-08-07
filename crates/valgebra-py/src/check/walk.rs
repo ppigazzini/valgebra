@@ -1738,6 +1738,783 @@ mod interpreter {
         });
     }
 
+    /// Decide membership and report whether a fatal interpreter signal was
+    /// recorded on the way. The signal is what the entry point re-raises, so a
+    /// corpus that only reads the verdict cannot tell a refused value from an
+    /// interrupted walk.
+    fn decide_with_fatal(
+        py: Python<'_>,
+        schema: &Schema,
+        value: &Bound<'_, PyAny>,
+        pool: &[Py<PyAny>],
+    ) -> (bool, bool) {
+        let index = build_index(py, schema, &[], pool);
+        let guard = RefCell::new(FxHashSet::default());
+        let fatal = RefCell::new(None);
+        let fatal_seen = Cell::new(false);
+        let ctx = Ctx {
+            pool,
+            defs: &[],
+            records: &index.records,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &guard,
+            fatal: &fatal,
+            fatal_seen: &fatal_seen,
+            mode: WalkMode::Fast,
+        };
+        let ok = member(
+            schema,
+            &Value::Py(value),
+            &mut Vec::new(),
+            ctx,
+            &mut Vec::new(),
+        );
+        (ok, fatal.borrow().is_some())
+    }
+
+    /// Decide membership of a parsed JSON value, in the mode `is_valid_json` uses.
+    fn holds_json(py: Python<'_>, schema: &Schema, json: &JsonValue<'_>) -> bool {
+        let index = build_index(py, schema, &[], &[]);
+        let guard = RefCell::new(FxHashSet::default());
+        let fatal = RefCell::new(None);
+        let fatal_seen = Cell::new(false);
+        let ctx = Ctx {
+            pool: &[],
+            defs: &[],
+            records: &index.records,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &guard,
+            fatal: &fatal,
+            fatal_seen: &fatal_seen,
+            mode: WalkMode::Fast,
+        };
+        member(
+            schema,
+            &Value::Json(py, json),
+            &mut Vec::new(),
+            ctx,
+            &mut Vec::new(),
+        )
+    }
+
+    fn json_object<'a>(pairs: Vec<(&'a str, JsonValue<'a>)>) -> JsonValue<'a> {
+        JsonValue::Object(std::sync::Arc::new(
+            pairs
+                .into_iter()
+                .map(|(k, v)| (Cow::Borrowed(k), v))
+                .collect(),
+        ))
+    }
+
+    fn field(name: &str, schema: Schema, required: bool) -> Field {
+        Field {
+            name: name.to_owned(),
+            schema,
+            required,
+        }
+    }
+
+    #[test]
+    fn a_json_keyed_map_decides_like_its_object_form() {
+        Python::attach(|py| {
+            // The JSON path has its own keyed-map walk -- it reads entries in
+            // document order rather than a dict -- so every rule the object path
+            // holds is asserted against it separately.
+            let closed = Schema::record(
+                vec![
+                    field("x", Schema::Int, true),
+                    field("y", Schema::Str, false),
+                ],
+                Openness::Closed,
+            );
+            let open = Schema::record(vec![field("x", Schema::Int, true)], Openness::Open);
+            let mapping = Schema::mapping(Schema::Str, Schema::Int);
+
+            for (schema, entries, want) in [
+                // The required field must be present and match.
+                (&closed, vec![("x", JsonValue::Int(1))], true),
+                (&closed, vec![("y", JsonValue::Str("a".into()))], false),
+                (&closed, vec![("x", JsonValue::Str("a".into()))], false),
+                // The optional one may be absent, and must match when present.
+                (
+                    &closed,
+                    vec![("x", JsonValue::Int(1)), ("y", JsonValue::Str("a".into()))],
+                    true,
+                ),
+                (
+                    &closed,
+                    vec![("x", JsonValue::Int(1)), ("y", JsonValue::Int(2))],
+                    false,
+                ),
+                // A closed record forbids an undeclared key; an open one admits it.
+                (
+                    &closed,
+                    vec![("x", JsonValue::Int(1)), ("z", JsonValue::Int(2))],
+                    false,
+                ),
+                (
+                    &open,
+                    vec![("x", JsonValue::Int(1)), ("z", JsonValue::Int(2))],
+                    true,
+                ),
+                // A pure mapping judges every key and value by the clause.
+                (&mapping, vec![("k", JsonValue::Int(1))], true),
+                (&mapping, vec![("k", JsonValue::Str("a".into()))], false),
+                (&mapping, vec![], true),
+            ] {
+                let json = json_object(entries.clone());
+                assert_eq!(holds_json(py, schema, &json), want, "{entries:?}");
+            }
+
+            // A duplicate key takes its LAST value, which is what `json.loads`
+            // would have produced, so the two input paths cannot disagree here.
+            let last_wins = json_object(vec![
+                ("x", JsonValue::Str("a".into())),
+                ("x", JsonValue::Int(1)),
+            ]);
+            assert!(holds_json(py, &closed, &last_wins));
+            let last_loses = json_object(vec![
+                ("x", JsonValue::Int(1)),
+                ("x", JsonValue::Str("a".into())),
+            ]);
+            assert!(!holds_json(py, &closed, &last_loses));
+            // The same rule for a key the default clause covers.
+            let default_last = json_object(vec![
+                ("k", JsonValue::Int(1)),
+                ("k", JsonValue::Str("a".into())),
+            ]);
+            assert!(!holds_json(py, &mapping, &default_last));
+        });
+    }
+
+    #[test]
+    fn a_composite_rejects_when_any_one_element_fails() {
+        Python::attach(|py| {
+            // Each container folds its element verdicts with a conjunction. A
+            // disjunction there accepts a container whose first element happens
+            // to match, which is the shape a single all-good case cannot see --
+            // so every container is driven with a value that is part-good.
+            let int_text = PyList::new(py, [1i64]).expect("builds");
+            int_text.append(PyString::new(py, "x")).expect("append");
+
+            let list_schema = Schema::list(SeqRegex::homogeneous(Schema::Int));
+            case(py, &list_schema, &int_text.clone().into_any(), false);
+
+            let tuple_schema = Schema::tuple(SeqRegex::homogeneous(Schema::Int));
+            let tuple = PyTuple::new(py, [1i64, 2]).expect("builds").into_any();
+            case(py, &tuple_schema, &tuple, true);
+            let mixed_tuple = int_text.to_tuple().into_any();
+            case(py, &tuple_schema, &mixed_tuple, false);
+
+            // Both container kinds on the JSON path too, where the fold is a
+            // separate arm.
+            let good = JsonValue::Array(std::sync::Arc::new(vec![
+                JsonValue::Int(1),
+                JsonValue::Int(2),
+            ]));
+            let part_good = JsonValue::Array(std::sync::Arc::new(vec![
+                JsonValue::Int(1),
+                JsonValue::Str("x".into()),
+            ]));
+            assert!(holds_json(py, &list_schema, &good));
+            assert!(!holds_json(py, &list_schema, &part_good));
+            // JSON has no tuple: `json.loads` produces a list, so the JSON path
+            // has no tuple arm at all and a tuple schema rejects an array
+            // whatever its elements are. Pinned here because it is the one place
+            // the two input paths deliberately decide differently.
+            assert!(!holds_json(py, &tuple_schema, &good));
+            assert!(!holds_json(py, &tuple_schema, &part_good));
+            assert!(holds(py, &tuple_schema, &tuple, &[], &[]));
+
+            // Sets and frozensets fold the same way.
+            let mixed_set = PySet::new(py, [1i64]).expect("builds");
+            mixed_set.add(PyString::new(py, "x")).expect("add");
+            case(
+                py,
+                &Schema::Set(Box::new(Schema::Int)),
+                &mixed_set.clone().into_any(),
+                false,
+            );
+            let mixed_frozen = PyFrozenSet::new(py, mixed_set.iter())
+                .expect("builds")
+                .into_any();
+            case(
+                py,
+                &Schema::FrozenSet(Box::new(Schema::Int)),
+                &mixed_frozen,
+                false,
+            );
+            let good_frozen = PyFrozenSet::new(py, [1i64, 2]).expect("builds").into_any();
+            case(
+                py,
+                &Schema::FrozenSet(Box::new(Schema::Int)),
+                &good_frozen,
+                true,
+            );
+        });
+    }
+
+    #[test]
+    fn a_union_explains_the_branch_that_descended_furthest() {
+        Python::attach(|py| {
+            // No branch matches, and the two fail at different depths: one is a
+            // flat type mismatch, the other descends into a field. The report is
+            // the deeper branch's, so a reader is shown the branch the value was
+            // closest to rather than every branch's noise.
+            let deep = Schema::record(vec![field("x", Schema::Int, true)], Openness::Closed);
+            let schema = Schema::Union(vec![Schema::Int, deep]);
+            let value = PyDict::new(py);
+            value.set_item("x", PyString::new(py, "a")).expect("set");
+            let (ok, violations) = explain(py, &schema, &value.into_any(), &[], &[]);
+            assert!(!ok);
+            assert_eq!(violations.len(), 1);
+            assert_eq!(violations[0].location(), "x");
+            assert_ne!(violations[0].code, "union_error");
+
+            // No branch makes any progress: a single union error, not two flat
+            // mismatches. This is the arm the depth comparison selects between.
+            let flat = Schema::Union(vec![Schema::Int, Schema::Str]);
+            let number = PyFloat::new(py, 1.5).into_any();
+            let (ok, violations) = explain(py, &flat, &number, &[], &[]);
+            assert!(!ok);
+            assert_eq!(violations.len(), 1);
+            assert_eq!(violations[0].code, "union_error");
+
+            // The probe runs with its own aggregating mode, so it measures how
+            // far each branch got even when the caller asked to stop at the
+            // first violation. Inheriting the caller's mode truncates a branch's
+            // report and can change which branch is judged closest.
+            let index = build_index(py, &schema, &[], &[]);
+            let deep_value = PyDict::new(py);
+            deep_value
+                .set_item("x", PyString::new(py, "a"))
+                .expect("set");
+            let deep_value = deep_value.into_any();
+            let guard = RefCell::new(FxHashSet::default());
+            let fatal = RefCell::new(None);
+            let fatal_seen = Cell::new(false);
+            let mut out = Vec::new();
+            let ok = member(
+                &schema,
+                &Value::Py(&deep_value),
+                &mut Vec::new(),
+                Ctx {
+                    pool: &[],
+                    defs: &[],
+                    records: &index.records,
+                    unions: &index.unions,
+                    regexes: &index.regexes,
+                    guard: &guard,
+                    fatal: &fatal,
+                    fatal_seen: &fatal_seen,
+                    mode: WalkMode::ExplainFailFast,
+                },
+                &mut out,
+            );
+            assert!(!ok);
+            assert_eq!(out.len(), 1);
+            assert_eq!(out[0].location(), "x");
+
+            // The probe aggregates a branch's violations even when the caller
+            // asked to stop at the first, so the whole of the closest branch is
+            // reported. A branch with two failing fields is what distinguishes
+            // that from a probe that inherited the caller's mode.
+            let wide = Schema::record(
+                vec![field("p", Schema::Int, true), field("q", Schema::Int, true)],
+                Openness::Closed,
+            );
+            let union_wide = Schema::Union(vec![Schema::Int, wide]);
+            let wide_value = PyDict::new(py);
+            for key in ["p", "q"] {
+                wide_value
+                    .set_item(key, PyString::new(py, "s"))
+                    .expect("set");
+            }
+            let wide_value = wide_value.into_any();
+            assert_eq!(
+                run_mode(py, &union_wide, &wide_value, WalkMode::ExplainFailFast),
+                (false, 2)
+            );
+
+            // A tie keeps the earliest branch, so the choice is deterministic.
+            let left = Schema::record(vec![field("a", Schema::Int, true)], Openness::Closed);
+            let right = Schema::record(vec![field("b", Schema::Int, true)], Openness::Closed);
+            let tied = Schema::Union(vec![left, right]);
+            let value = PyDict::new(py);
+            value.set_item("a", PyString::new(py, "s")).expect("set");
+            value.set_item("b", PyString::new(py, "s")).expect("set");
+            let (_, violations) = explain(py, &tied, &value.into_any(), &[], &[]);
+            assert_eq!(violations[0].location(), "a");
+        });
+    }
+
+    #[test]
+    fn an_explaining_walk_aggregates_every_independent_failure() {
+        Python::attach(|py| {
+            // Three fields fail independently. Explain mode reports all three;
+            // fail-fast reports the first; the fast path reports none and
+            // allocates nothing. All three modes agree on the verdict.
+            let schema = Schema::record(
+                vec![
+                    field("a", Schema::Int, true),
+                    field("b", Schema::Int, true),
+                    field("c", Schema::Int, true),
+                ],
+                Openness::Closed,
+            );
+            let value = PyDict::new(py);
+            for key in ["a", "b", "c"] {
+                value.set_item(key, PyString::new(py, "s")).expect("set");
+            }
+            let value = value.into_any();
+
+            let index = build_index(py, &schema, &[], &[]);
+            let run = |mode: WalkMode| {
+                let guard = RefCell::new(FxHashSet::default());
+                let fatal = RefCell::new(None);
+                let fatal_seen = Cell::new(false);
+                let ctx = Ctx {
+                    pool: &[],
+                    defs: &[],
+                    records: &index.records,
+                    unions: &index.unions,
+                    regexes: &index.regexes,
+                    guard: &guard,
+                    fatal: &fatal,
+                    fatal_seen: &fatal_seen,
+                    mode,
+                };
+                let mut out = Vec::new();
+                let ok = member(&schema, &Value::Py(&value), &mut Vec::new(), ctx, &mut out);
+                (ok, out.len())
+            };
+            assert_eq!(run(WalkMode::Explain), (false, 3));
+            assert_eq!(run(WalkMode::ExplainFailFast), (false, 1));
+            assert_eq!(run(WalkMode::Fast), (false, 0));
+        });
+    }
+
+    /// Run one membership walk in a given mode and report the verdict and how
+    /// many violations it aggregated.
+    fn run_mode(
+        py: Python<'_>,
+        schema: &Schema,
+        value: &Bound<'_, PyAny>,
+        mode: WalkMode,
+    ) -> (bool, usize) {
+        let index = build_index(py, schema, &[], &[]);
+        let guard = RefCell::new(FxHashSet::default());
+        let fatal = RefCell::new(None);
+        let fatal_seen = Cell::new(false);
+        let ctx = Ctx {
+            pool: &[],
+            defs: &[],
+            records: &index.records,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &guard,
+            fatal: &fatal,
+            fatal_seen: &fatal_seen,
+            mode,
+        };
+        let mut out = Vec::new();
+        let ok = member(schema, &Value::Py(value), &mut Vec::new(), ctx, &mut out);
+        (ok, out.len())
+    }
+
+    #[test]
+    fn a_composite_stops_at_its_first_failing_child_only_when_asked_to() {
+        Python::attach(|py| {
+            // Two elements fail independently. Aggregating mode reports both;
+            // fail-fast reports the first; the fast path reports none. Every
+            // composite consults one predicate for this, so a sequence pins it
+            // for the arms a record does not reach.
+            let schema = Schema::list(SeqRegex::homogeneous(Schema::Int));
+            let value = PyList::new(py, [1i64]).expect("builds");
+            value.append(PyString::new(py, "a")).expect("append");
+            value.append(PyString::new(py, "b")).expect("append");
+            let value = value.into_any();
+
+            assert_eq!(run_mode(py, &schema, &value, WalkMode::Explain), (false, 2));
+            assert_eq!(
+                run_mode(py, &schema, &value, WalkMode::ExplainFailFast),
+                (false, 1)
+            );
+            assert_eq!(run_mode(py, &schema, &value, WalkMode::Fast), (false, 0));
+
+            // The same for a set, whose fold is a separate arm.
+            let set_schema = Schema::Set(Box::new(Schema::Int));
+            let set = PySet::new(py, [1i64]).expect("builds");
+            set.add(PyString::new(py, "a")).expect("add");
+            set.add(PyString::new(py, "b")).expect("add");
+            let set = set.into_any();
+            assert_eq!(
+                run_mode(py, &set_schema, &set, WalkMode::Explain),
+                (false, 2)
+            );
+            assert_eq!(
+                run_mode(py, &set_schema, &set, WalkMode::ExplainFailFast),
+                (false, 1)
+            );
+        });
+    }
+
+    #[test]
+    fn a_raising_comparison_folds_and_a_fatal_signal_does_not() {
+        Python::attach(|py| {
+            // A value that cannot answer "are you in this set?" is not in it --
+            // unless the interpreter is unwinding, which is not an answer at all.
+            let module = PyModule::from_code(
+                py,
+                std::ffi::CString::new(
+                    "class Rude:\n\
+                     \x20   def __eq__(self, other):\n\
+                     \x20       raise ValueError('no')\n\
+                     class Stopping:\n\
+                     \x20   def __eq__(self, other):\n\
+                     \x20       raise KeyboardInterrupt\n\
+                     class NoLen:\n\
+                     \x20   def __len__(self):\n\
+                     \x20       raise TypeError('no')\n\
+                     class OutOfMemory:\n\
+                     \x20   def __eq__(self, other):\n\
+                     \x20       raise MemoryError\n\
+                     class TooDeep:\n\
+                     \x20   def __eq__(self, other):\n\
+                     \x20       raise RecursionError\n",
+                )
+                .expect("no interior nul")
+                .as_c_str(),
+                std::ffi::CString::new("raising.py")
+                    .expect("no interior nul")
+                    .as_c_str(),
+                std::ffi::CString::new("raising")
+                    .expect("no interior nul")
+                    .as_c_str(),
+            )
+            .expect("the module compiles");
+
+            let literal = Schema::Literal(ConstIx::new(0));
+            let instance = |name: &str| {
+                module
+                    .getattr(name)
+                    .expect("the class")
+                    .call0()
+                    .expect("the instance")
+            };
+
+            // A literal's same-type test runs BEFORE `==`, so a value of another
+            // type never reaches the comparison at all. Pinned first, because it
+            // is why the two cases below have to pool an instance of the raising
+            // class rather than an int.
+            let one = PyInt::new(py, 1i64).into_any();
+            let int_pool = vec![one.unbind()];
+            let rude = instance("Rude");
+            assert_eq!(
+                decide_with_fatal(py, &literal, &rude, &int_pool),
+                (false, false)
+            );
+
+            // An ordinary exception folds to a non-member, and records nothing.
+            let rude_pool = vec![instance("Rude").unbind()];
+            assert_eq!(
+                decide_with_fatal(py, &literal, &rude, &rude_pool),
+                (false, false)
+            );
+
+            // A fatal signal is recorded so the entry point re-raises it. The
+            // local answer is still a non-member so the frame returns.
+            let stopping = instance("Stopping");
+            let stopping_pool = vec![instance("Stopping").unbind()];
+            assert_eq!(
+                decide_with_fatal(py, &literal, &stopping, &stopping_pool),
+                (false, true)
+            );
+
+            // MemoryError and RecursionError ARE ordinary exceptions, so the
+            // base-exception test alone misses them -- and they still mean the
+            // interpreter cannot continue. Each is a separate disjunct of the
+            // classifier, so each needs its own case.
+            for name in ["OutOfMemory", "TooDeep"] {
+                let value = instance(name);
+                let pool = vec![instance(name).unbind()];
+                assert_eq!(
+                    decide_with_fatal(py, &literal, &value, &pool),
+                    (false, true),
+                    "{name}"
+                );
+            }
+
+            // The same split at a length bound, which reaches the value through
+            // `__len__` rather than `__eq__`.
+            let sized = Schema::Refine {
+                base: Box::new(Schema::Anything),
+                constraints: vec![Constraint::MinLen(1)],
+            };
+            let no_len = module.getattr("NoLen").expect("NoLen").call0().expect("()");
+            let (ok, fatal) = decide_with_fatal(py, &sized, &no_len, &[]);
+            assert!(
+                !ok,
+                "a value whose __len__ raises cannot satisfy a length bound"
+            );
+            assert!(!fatal, "a TypeError is an ordinary exception, not a signal");
+        });
+    }
+
+    #[test]
+    fn a_predicate_constraint_runs_the_pooled_callable() {
+        Python::attach(|py| {
+            let module = PyModule::from_code(
+                py,
+                std::ffi::CString::new("def is_even(x):\n\x20   return x % 2 == 0\n")
+                    .expect("no interior nul")
+                    .as_c_str(),
+                std::ffi::CString::new("pred.py")
+                    .expect("no interior nul")
+                    .as_c_str(),
+                std::ffi::CString::new("pred")
+                    .expect("no interior nul")
+                    .as_c_str(),
+            )
+            .expect("the module compiles");
+            let is_even = module.getattr("is_even").expect("is_even");
+            let pool = vec![is_even.unbind()];
+            let schema = Schema::Refine {
+                base: Box::new(Schema::Int),
+                constraints: vec![Constraint::Predicate(PredIx::new(0))],
+            };
+            assert!(decide(
+                py,
+                &schema,
+                &PyInt::new(py, 4i64).into_any(),
+                &pool,
+                &[]
+            ));
+            assert!(!decide(
+                py,
+                &schema,
+                &PyInt::new(py, 3i64).into_any(),
+                &pool,
+                &[]
+            ));
+        });
+    }
+
+    #[test]
+    fn a_literal_union_decides_alike_through_the_fast_plan_and_the_scan() {
+        Python::attach(|py| {
+            // A union whose members are all literals is decided by a precomputed
+            // set lookup on the membership path, and by the linear scan
+            // everywhere else. The two must agree, and the plan must not be
+            // consulted while explaining -- an early return there would report a
+            // rejection with no violation behind it.
+            let pool: Vec<Py<PyAny>> = (1i64..=3)
+                .map(|n| PyInt::new(py, n).into_any().unbind())
+                .collect();
+            let schema = Schema::Union((0..3).map(|i| Schema::Literal(ConstIx::new(i))).collect());
+            for n in 1i64..=3 {
+                assert!(decide(
+                    py,
+                    &schema,
+                    &PyInt::new(py, n).into_any(),
+                    &pool,
+                    &[]
+                ));
+            }
+            // Rejections, which are what an explain walk must produce a violation
+            // for. `decide` runs both modes and holds them to agreeing.
+            for n in [0i64, 4, 99] {
+                assert!(!decide(
+                    py,
+                    &schema,
+                    &PyInt::new(py, n).into_any(),
+                    &pool,
+                    &[]
+                ));
+            }
+            // A value of a type the plan does not cover falls to the scan.
+            let text = PyString::new(py, "1").into_any();
+            assert!(!decide(py, &schema, &text, &pool, &[]));
+        });
+    }
+
+    #[test]
+    fn the_explain_pass_reports_only_the_fields_that_actually_failed() {
+        Python::attach(|py| {
+            // The explain pass re-walks a record that already failed. An absent
+            // OPTIONAL field is not a failure, so it must not be reported -- and
+            // the only way to see that is a record that fails for another reason
+            // while an optional field is absent.
+            let schema = Schema::record(
+                vec![
+                    field("x", Schema::Int, true),
+                    field("y", Schema::Str, false),
+                ],
+                Openness::Closed,
+            );
+            let value = PyDict::new(py);
+            value.set_item("x", PyString::new(py, "s")).expect("set");
+            let (ok, violations) = explain(py, &schema, &value.into_any(), &[], &[]);
+            assert!(!ok);
+            assert_eq!(violations.len(), 1, "{violations:?}");
+            assert_eq!(violations[0].location(), "x");
+
+            // A required field that IS absent is reported, and only once.
+            let empty = PyDict::new(py);
+            let (ok, violations) = explain(py, &schema, &empty.into_any(), &[], &[]);
+            assert!(!ok);
+            assert_eq!(violations.len(), 1, "{violations:?}");
+            assert_eq!(violations[0].code, "missing_key");
+        });
+    }
+
+    #[test]
+    fn a_closed_record_reports_every_extra_key_unless_fail_fast_stops_it() {
+        Python::attach(|py| {
+            // Two undeclared keys, so the loop that reports them is driven past
+            // its first iteration: aggregating mode reports both, fail-fast the
+            // first only.
+            let schema = Schema::record(vec![field("x", Schema::Int, true)], Openness::Closed);
+            let value = PyDict::new(py);
+            value.set_item("x", 1i64).expect("set");
+            value.set_item("extra1", 1i64).expect("set");
+            value.set_item("extra2", 1i64).expect("set");
+            let value = value.into_any();
+
+            let index = build_index(py, &schema, &[], &[]);
+            let run = |mode: WalkMode| {
+                let guard = RefCell::new(FxHashSet::default());
+                let fatal = RefCell::new(None);
+                let fatal_seen = Cell::new(false);
+                let ctx = Ctx {
+                    pool: &[],
+                    defs: &[],
+                    records: &index.records,
+                    unions: &index.unions,
+                    regexes: &index.regexes,
+                    guard: &guard,
+                    fatal: &fatal,
+                    fatal_seen: &fatal_seen,
+                    mode,
+                };
+                let mut out = Vec::new();
+                let ok = member(&schema, &Value::Py(&value), &mut Vec::new(), ctx, &mut out);
+                (ok, out.len())
+            };
+            assert_eq!(run(WalkMode::Explain), (false, 2));
+            assert_eq!(run(WalkMode::ExplainFailFast), (false, 1));
+        });
+    }
+
+    #[test]
+    fn a_fatal_signal_propagates_from_an_attribute_and_from_a_predicate() {
+        Python::attach(|py| {
+            // The two sites the literal and length cases do not reach: attribute
+            // access on an object schema, and a user predicate. Both fold an
+            // ordinary exception to a non-member and record a fatal signal.
+            let module = PyModule::from_code(
+                py,
+                std::ffi::CString::new(
+                    "class Base:\n\
+                     \x20   pass\n\
+                     class RudeAttr(Base):\n\
+                     \x20   def __getattr__(self, name):\n\
+                     \x20       raise ValueError('no')\n\
+                     class StoppingAttr(Base):\n\
+                     \x20   def __getattr__(self, name):\n\
+                     \x20       raise KeyboardInterrupt\n\
+                     def rude(x):\n\
+                     \x20   raise ValueError('no')\n\
+                     def stopping(x):\n\
+                     \x20   raise KeyboardInterrupt\n",
+                )
+                .expect("no interior nul")
+                .as_c_str(),
+                std::ffi::CString::new("fatal.py")
+                    .expect("no interior nul")
+                    .as_c_str(),
+                std::ffi::CString::new("fatal")
+                    .expect("no interior nul")
+                    .as_c_str(),
+            )
+            .expect("the module compiles");
+            let base = module.getattr("Base").expect("Base");
+
+            let attrs = Schema::Attrs {
+                class_index: ClassIx::new(0),
+                fields: vec![field("missing", Schema::Int, true)],
+            };
+            let pool = vec![base.clone().unbind()];
+            for (name, want_fatal) in [("RudeAttr", false), ("StoppingAttr", true)] {
+                let value = module.getattr(name).expect("class").call0().expect("()");
+                assert_eq!(
+                    decide_with_fatal(py, &attrs, &value, &pool),
+                    (false, want_fatal),
+                    "{name}"
+                );
+            }
+
+            let one = PyInt::new(py, 1i64).into_any();
+            for (name, want_fatal) in [("rude", false), ("stopping", true)] {
+                let predicate = module.getattr(name).expect("callable");
+                let pool = vec![predicate.unbind()];
+                let schema = Schema::Refine {
+                    base: Box::new(Schema::Int),
+                    constraints: vec![Constraint::Predicate(PredIx::new(0))],
+                };
+                assert_eq!(
+                    decide_with_fatal(py, &schema, &one, &pool),
+                    (false, want_fatal),
+                    "{name}"
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn recursion_deeper_than_the_bound_is_refused() {
+        Python::attach(|py| {
+            // `T = None | {"next": T}`. A chain the walk can carry is a member; a
+            // chain past the guard's depth bound is refused rather than recursed
+            // into, because the walk descends one native frame per level.
+            let defs = vec![Schema::Union(vec![
+                Schema::NoneType,
+                Schema::record(
+                    vec![field("next", Schema::Ref(DefIx::new(0)), true)],
+                    Openness::Closed,
+                ),
+            ])];
+            let schema = Schema::Ref(DefIx::new(0));
+
+            let chain = |depth: usize| {
+                let mut node = py.None().into_bound(py);
+                for _ in 0..depth {
+                    let dict = PyDict::new(py);
+                    dict.set_item("next", &node).expect("set_item");
+                    node = dict.into_any();
+                }
+                node
+            };
+            assert!(decide(py, &schema, &chain(8), &[], &defs));
+            assert!(decide(
+                py,
+                &schema,
+                &chain(MAX_RECURSION_DEPTH - 1),
+                &[],
+                &defs
+            ));
+            assert!(!decide(
+                py,
+                &schema,
+                &chain(MAX_RECURSION_DEPTH + 2),
+                &[],
+                &defs
+            ));
+        });
+    }
+
     #[test]
     fn the_json_path_and_the_object_path_agree() {
         Python::attach(|py| {
