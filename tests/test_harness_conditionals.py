@@ -18,6 +18,8 @@ Held in both directions:
 
 An option that is neither allowed nor banned is a decision nobody has made, and
 that is what the ledger refuses.
+
+LEDGER: every cfg(feature = ..) site is test-only, or named
 """
 
 from __future__ import annotations

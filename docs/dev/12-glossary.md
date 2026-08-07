@@ -45,7 +45,7 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **rig fault** | a run that produced no verdict — a timeout, an empty corpus, a mutation whose experiment cannot finish. Neither a pass nor a failure, and reported as itself |
 | **ratchet** | a committed floor that may only move one way. The mutation baselines are ratchets; a budget is not |
 | **budget** (of instructions) | a committed two-sided band a measurement is held to, in `scripts/perf_budget.json` |
-| **ledger** (of a list) | an enumerated list held to the tree in both directions, so an entry that stops being true fails and a subject with no entry fails too. There are four ([08-testing.md](08-testing.md)) |
+| **ledger** (of a list) | an enumerated list held to the tree in both directions, so an entry that stops being true fails and a subject with no entry fails too. Each carries a `LEDGER:` marker; there are seven ([08-testing.md](08-testing.md)) |
 | **excused** | named on a ledger with the reason it is a hole. An excuse expires in its own direction: one that stops being true fails |
 | **detached surface** | a `Cargo.toml` outside the root workspace, which no workspace-wide command reaches ([07-tooling-ci.md](07-tooling-ci.md)) |
 

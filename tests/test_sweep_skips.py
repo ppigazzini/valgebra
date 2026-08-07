@@ -13,6 +13,8 @@ directions rather than living as three strings in a workflow:
   written and forgotten;
 * a ``--skip`` naming no marked test fails, so the list cannot outlive the test
   it excuses, or name one that never needed excusing.
+
+LEDGER: every SWEEP-SKIP mark is skipped; every skip is marked
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+CONTRIBUTING = ROOT / "CONTRIBUTING.md"
 MARKER = "SWEEP-SKIP"
 
 
@@ -81,6 +84,33 @@ def test_the_marker_carries_a_reason() -> None:
                 assert len(line.split(MARKER, 1)[1].strip(" :")) > 20, (
                     f"{path.relative_to(ROOT)}: a {MARKER} marker with no reason"
                 )
+
+
+def test_the_documented_rerun_command_carries_the_same_skips() -> None:
+    """The command a contributor is told to run must be the command CI runs.
+
+    The inventory in ``CONTRIBUTING.md`` names a rerun command per contract, and
+    its whole value is that following it reproduces that one verdict. A sweep
+    command without these skips does not: the skipped cases exist to prove a
+    bound, so a mutation removing the bound runs without end and the sweep
+    returns no verdict at all -- a rig fault the reader then reads as a finding.
+
+    Held here rather than beside the table because this is the same list
+    ``ci.yml`` carries, and a second copy of a list is how the first one drifts.
+    """
+    rows = [
+        line
+        for line in CONTRIBUTING.read_text(encoding="utf-8").splitlines()
+        if "cargo mutants" in line
+    ]
+    assert rows, "the contract inventory names no mutation sweep"
+
+    documented = set(re.findall(r"--skip ([a-z0-9_]+)", "\n".join(rows)))
+    missing = sorted(_skipped_tests() - documented)
+    assert not missing, (
+        f"the documented sweep command omits skips CI passes: {missing}. "
+        "Following it returns no verdict for those mutants."
+    )
 
 
 def test_the_skips_are_few() -> None:

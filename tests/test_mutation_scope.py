@@ -13,6 +13,8 @@ directions:
 
 The list is a hole in the coverage claim, so each entry carries the reason it is
 there -- stated once in the config's own comment, which this checks is present.
+
+LEDGER: every binding file is swept or excluded by name
 """
 
 from __future__ import annotations

@@ -194,6 +194,63 @@ def check_dev_index() -> list[str]:
     return problems
 
 
+def check_ledger_table() -> list[str]:
+    """Hold the table of ledgers to the ledgers, in both directions.
+
+    Every list in this repository that could rot is held to the tree both ways
+    -- except, until this rule, the list *of* those lists. It carried a spelled
+    count in two places and neither was held to anything, so both drifted: the
+    table said five, the glossary said four, and the tree had six.
+
+    A ledger declares itself with a ``LEDGER:`` marker in its own docstring, so
+    the universe is read from the tests rather than restated here. The marker is
+    explicit rather than inferred from prose: the phrasing varies between these
+    files ("held in both directions", "held to the tree in both directions"), and
+    a universe built by matching a sentence silently omits whichever file worded
+    it differently -- which is the failure this rule exists to stop.
+    """
+    page = ROOT / "docs" / "dev" / "08-testing.md"
+    tests = ROOT / "tests"
+    if not page.exists() or not tests.is_dir():
+        return []
+    declared = {
+        path.name
+        for path in sorted(tests.glob("test_*.py"))
+        if "LEDGER:" in path.read_text(encoding="utf-8")
+    }
+    text = page.read_text(encoding="utf-8")
+    problems = [
+        f"docs/dev/08-testing.md: tests/{name} is a ledger with no row"
+        for name in sorted(declared)
+        if name not in text
+    ]
+    listed = set(re.findall(r"`tests/(test_\w+\.py)`", text))
+    problems += [
+        f"docs/dev/08-testing.md: names tests/{name}, which does not exist"
+        for name in sorted(listed)
+        if not (tests / name).exists()
+    ]
+    # The count is prose beside the table, so it rots on its own schedule.
+    spelled = {4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
+    want = spelled.get(len(declared))
+    for doc in (page, ROOT / "docs" / "dev" / "12-glossary.md"):
+        if not doc.exists():
+            continue
+        for wrong, word in spelled.items():
+            if wrong == len(declared):
+                continue
+            spelling = rf"\b{word}\b of them|There are {word}\b"
+            if re.search(spelling, doc.read_text(encoding="utf-8"), re.IGNORECASE):
+                problems.append(
+                    f"{doc.relative_to(ROOT)}: says {word} ledgers; there are "
+                    f"{len(declared)} ({want})"
+                )
+    # The scan is the detector: no ledgers at all would pass having read nothing.
+    if not declared:
+        problems.append("no test declares itself a ledger")
+    return problems
+
+
 def main() -> int:
     files = tracked_markdown()
     if len(files) < MIN_TRACKED_PAGES:
@@ -221,6 +278,7 @@ def main() -> int:
             + check_pinned_numbers(text, numbers)
         ]
     failures += check_dev_index()
+    failures += check_ledger_table()
 
     if failures:
         for failure in failures:

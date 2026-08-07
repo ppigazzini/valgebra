@@ -59,7 +59,14 @@ conservative](#sound-but-conservative)).
   supertype clause); and a record mixed with a catch-all when the subtype carries
   at least the supertype's fields, or when a field the subtype lacks is optional
   in the supertype and the subtype's catch-all covers its value type (each extra
-  or optional field covered by a catch-all over all string keys).
+  or optional field covered by a catch-all over all string keys). A closed record
+  is compared against a catch-all mapping by the same rule, so `{"x": int}` is
+  decided below `dict[str, int]`.
+- **Inclusion in a complement.** `A` is below `~B` exactly when `A` and `B` share
+  no value, so the relation is decided wherever emptiness decides disjointness:
+  `list[int]` is below `~int`, and `dict[str, int]` below `~str`. This is the
+  semantic-subtyping reduction applied where no structural rule can help — a
+  complement has no shape on the right to recurse into.
 - **Recursion.** Equirecursive schemas compare at their greatest fixpoint; the
   rule is sound and is witnessed by an independent reference denotation.
 
@@ -119,6 +126,23 @@ tracked as future work.
   shape of the atom — a schema that denotes nothing without being spelled
   `nothing`, and one that covers the universe without being spelled `anything`,
   are both recognised.
+
+- **A catch-all keyed by literals covering a field name.** Whether a supertype's
+  catch-all clause governs a field the subtype declares is asked by matching the
+  clause's key against `str` and `object`, rather than by asking whether the
+  field's name belongs to the key's set. So `{"a": int}` is decided below
+  `dict[str, int]` but not below `dict[Literal["a"], int]`, which names exactly
+  that key. Deciding it needs the core to compare a field name against a pooled
+  constant, which is a question only the binding can answer today.
+
+- **A literal against the complement of a scalar.** `Literal["a"]` is not decided
+  below `~int`. The core gives a literal no type tag, so the disjointness rule
+  cannot place it in a region; the value oracle already answers the membership
+  this reduces to, and is not yet asked here.
+
+Both are found and held by `tests/test_completeness_probe.py`, which searches for
+relations answered `False` that no value refutes, and fails when one appears that
+is not written down.
 General regular-expression-types inclusion of sequences (a union of sequence
 languages that splits across branches, or a repeated heterogeneous group) is not
 implemented, but no schema valgebra builds takes that shape — every sequence is

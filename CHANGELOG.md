@@ -8,6 +8,29 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Fixed
 
+- `is_subtype_of` decides a **closed record against a catch-all mapping**:
+  `{"x": int}` is now recognised below `dict[str, int]`. The closed record had a
+  dispatch branch of its own that read a field the supertype covers through a
+  catch-all as undecided, though the general keyed-map rule beside it already
+  decided exactly that. One rule now serves every keyed-map shape.
+
+- `is_subtype_of` decides **inclusion in a complement**: `A` is below `~B` when
+  the two share no value, so `list[int]` is now recognised below `~int` and
+  `dict[str, int]` below `~str`. There was no rule for a complement on the right
+  at all, so the relation was decided only when the left side was itself a
+  complement.
+
+  Both change a public method's answer from `False` to `True`. No relation that
+  answered `True` can now answer `False`, and validation, `is_empty`, compilation
+  and every rendered form are unchanged.
+
+### Added
+
+- `tests/test_completeness_probe.py`, which searches for relations answered
+  `False` that no value in a wide universe refutes, and fails when one appears
+  that is not written down with a reason. Every other instrument could only
+  notice a completeness gap someone had already thought of; this one searches.
+
 - `is_subtype_of` and `is_equivalent` decide the lattice bounds by **emptiness**
   rather than by the shape of the atom. A schema that denotes the empty set
   without being spelled `nothing` — a record with an uninhabited required field,

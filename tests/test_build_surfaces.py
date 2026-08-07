@@ -14,6 +14,8 @@ appear in a workflow, or it is a build surface nothing drives.
 
 Held in both directions: a manifest that is neither a member nor detached fails,
 and a detached entry naming a manifest that is gone fails.
+
+LEDGER: every manifest is a workspace member or a named detached surface
 """
 
 from __future__ import annotations

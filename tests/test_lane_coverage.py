@@ -19,6 +19,8 @@ report coverage it does not have:
 The excused list expires in its own direction: an excused script that *is*
 driven is a stale excuse and fails, and an excuse naming a script that no longer
 exists fails too.
+
+LEDGER: every gate script runs in a lane; no excuse is stale
 """
 
 from __future__ import annotations

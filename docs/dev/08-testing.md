@@ -24,7 +24,7 @@ frontend, so an agreement is evidence rather than a tautology.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Five of them:
+for and misses the other. Seven of them:
 
 | Ledger | Holds |
 |---|---|
@@ -33,6 +33,13 @@ for and misses the other. Five of them:
 | `tests/test_sweep_skips.py` | every `SWEEP-SKIP` mark is skipped; every skip is marked |
 | `tests/test_build_surfaces.py` | every manifest is a workspace member or a named detached surface |
 | `tests/test_harness_conditionals.py` | every `cfg(feature = ..)` site is test-only, or named |
+| `tests/test_contract_inventory.py` | every gate script has a contract row; every row names a real source |
+| `tests/test_completeness_probe.py` | every suspected completeness gap is accepted with a reason |
+
+Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
+this table to those markers both ways. The list of lists was the one list nothing
+held, and it drifted: this table said five, the glossary said four, and there
+were seven.
 
 `tests/test_node_matrix.py` is the same shape one level in: it reads the `Schema`
 variants out of the IR and fails when one carries no row, so the universe is

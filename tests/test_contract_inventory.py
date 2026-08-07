@@ -16,6 +16,8 @@ The rows that are not script invocations -- `cargo test`, `cargo fmt --check` --
 are checked only for naming a real source of truth; whether the command still
 does what the row claims is the reader's half, as it is for every claim
 `scripts/docs_lint.py` cannot reach.
+
+LEDGER: every gate script has a contract row; every row names a real source
 """
 
 from __future__ import annotations
