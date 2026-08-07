@@ -393,10 +393,10 @@ jobs:
     # it. This runs the same sweep restricted to the lines the diff touches,
     # which is bounded by the change rather than by the tree, and so fits a push.
     #
-    # It checks the NEW-survivor direction only. An in-diff sweep never generates
-    # most of the baseline, so every accepted survivor the diff did not touch is
-    # absent by construction and would otherwise read as a whole baseline gone
-    # stale.
+    # It checks the NEW-survivor direction only. A partial sweep never generates
+    # most of the baseline, so every accepted survivor in a file the change did
+    # not touch is absent by construction and would otherwise read as a whole
+    # baseline gone stale.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -416,7 +416,7 @@ jobs:
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
-      - name: Take the diff against the merge base
+      - name: List the Rust files the diff touches
         id: diff
         # Both values reach the script through the environment rather than
         # through template expansion, so nothing from the event can be read as
@@ -432,24 +432,39 @@ jobs:
             git fetch --no-tags origin "$DEFAULT_BRANCH"
             base="$(git rev-parse FETCH_HEAD)"
           fi
-          git diff "$base"...HEAD -- '*.rs' > pr.diff
-          if [ -s pr.diff ]; then
-            echo "rust=yes" >> "$GITHUB_OUTPUT"
-            echo "Rust lines changed; sweeping them."
-          else
-            echo "rust=no" >> "$GITHUB_OUTPUT"
-            echo "No Rust changed; nothing for the sweep to mutate."
-          fi
-      - name: Sweep the core, restricted to the diff
-        if: steps.diff.outputs.rust == 'yes'
+          # WHOLE FILES, not the diff's lines. `--in-diff` would sweep only the
+          # lines the change touches, and the miss that matters is the other
+          # direction: an edit that stops an EXISTING test from killing a mutant
+          # somewhere else in the same file. That mutant is not in the diff, and
+          # sweeping the file finds it. Every such mutant lives in a file the
+          # change touched, because a Rust test and the code it covers are swept
+          # together here.
+          git diff --name-only --diff-filter=d "$base"...HEAD -- '*.rs' > changed.txt
+          core=$(grep '^crates/valgebra-core/' changed.txt || true)
+          walk=$(grep -E '^crates/valgebra-py/src/check/(walk|ctx)\.rs$' changed.txt || true)
+          {
+            echo "core<<EOF"; echo "$core"; echo "EOF"
+            echo "walk<<EOF"; echo "$walk"; echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "core files: ${core:-none}"
+          echo "walk files: ${walk:-none}"
+      - name: Sweep the core files the change touches
+        if: steps.diff.outputs.core != ''
+        env:
+          FILES: ${{ steps.diff.outputs.core }}
         run: |
+          args=""
+          for f in $FILES; do args="$args --file $f"; done
           set +e
-          cargo mutants --package valgebra-core --in-diff pr.diff -j 4 \
-            --output core-diff-mutants
+          # shellcheck disable=SC2086  # $args is a built flag list, not input
+          cargo mutants --package valgebra-core $args -j 4 \
+            --output core-diff-mutants \
+            -- -- --skip deep_subtype_into_bottom_terminates \
+            --skip subtyping_terminates_on_a_distributed_tower
           status=$?
           set -e
-          # A diff that touches no mutable core line generates nothing; that is a
-          # clean result, not a broken detector, so the ratchet is skipped for it.
+          # A change confined to excluded files generates nothing; that is a clean
+          # result, not a broken detector, so the ratchet is skipped for it.
           case "$status" in
             0 | 2 | 3) ;;
             *) exit "$status" ;;
@@ -459,10 +474,10 @@ jobs:
             python3 scripts/mutation_gate.py --baseline core --new-only \
               --out core-diff-mutants/mutants.out
           else
-            echo "no core mutants in this diff"
+            echo "no core mutants in the files this change touches"
           fi
-      - name: Sweep the walk, restricted to the diff
-        if: steps.diff.outputs.rust == 'yes'
+      - name: Sweep the walk when the change touches it
+        if: steps.diff.outputs.walk != ''
         run: |
           uv sync --locked --no-install-project
           export PYO3_PYTHON="$(uv run python -c 'import sys; print(sys.executable)')"
@@ -472,7 +487,7 @@ jobs:
           cargo mutants --package valgebra-py \
             --file crates/valgebra-py/src/check/walk.rs \
             --file crates/valgebra-py/src/check/ctx.rs \
-            --features interpreter-tests --in-diff pr.diff -j 4 \
+            --features interpreter-tests -j 4 \
             --output walk-diff-mutants \
             -- -- --skip recursion_deeper_than_the_bound_is_refused
           status=$?
@@ -486,7 +501,7 @@ jobs:
             python3 scripts/mutation_gate.py --baseline walk --new-only \
               --out walk-diff-mutants/mutants.out
           else
-            echo "no walk mutants in this diff"
+            echo "no walk mutants to judge"
           fi
 
   nightly-fuzz:
@@ -635,7 +650,13 @@ jobs:
           # timeouts are test-gap signals reported in the summary without
           # failing the lane; a usage error or a broken baseline fails it.
           set +e
-          cargo mutants --package valgebra-core -j 4
+          # The two SWEEP-SKIP cases leave the sweep, not the test lane. Each
+          # exists to prove the decision budget's bound, so a mutation removing
+          # that bound makes it run without end and the whole run returns no
+          # verdict. tests/test_sweep_skips.py holds this list to the sources.
+          cargo mutants --package valgebra-core -j 4 \
+            -- -- --skip deep_subtype_into_bottom_terminates \
+            --skip subtyping_terminates_on_a_distributed_tower
           status=$?
           set -e
 
