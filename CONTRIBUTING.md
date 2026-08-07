@@ -105,14 +105,44 @@ free-threaded 3.14t lane blocks merges — a differential lane that cross-checks
 membership against pydantic-core
 and jsonschema, the doc-example runner, a strict docs build, and a Linux wheel
 build. Scheduled lanes run the deep property suites, a libFuzzer soak over the
-core, and a mutation report that flags surviving mutants as warnings rather than
-failing the lane.
+core, and a mutation sweep whose survivors are ratcheted against a committed
+baseline: a survivor the baseline does not accept fails the lane, and so does a
+baseline entry that is no longer a survivor. The target is never zero —
+equivalent mutants exist and are undecidable — so an accepted survivor carries
+the argument for why no test can kill it.
 Performance is gated two ways: a **deterministic cachegrind instruction count**
 over the core engine compared to a committed budget, and a **competitive ratio**
 of per-call time against pydantic-core across a shape matrix. Both are
 independent of the runner's absolute speed — the instruction count by
 construction, the ratio by cancellation — so they block merges where a
 wall-clock budget could not.
+
+## Vocabulary
+
+These words carry weight in this repository and in its CI, and three of them
+collide with an unrelated sense used nearby. Say which one you mean.
+
+| term | here it means |
+| --- | --- |
+| **gate** | a step that **asserts** and exits non-zero when the assertion breaks. A step that only builds, measures, or records is not one |
+| **lane** | one independently driven run: a CI job in `ci.yml`, or one target inside a step that drives several |
+| **denotation** | the set of Python values a schema admits. Every node has one written down; membership is testing a value against it |
+| **oracle** | a judge of a claim that does not go through the code under test |
+| **survivor** | a mutation of the source that the tests did not notice. A signal about the tests, never about the mutation |
+| **equivalent mutant** | a mutation that provably cannot change any result, so no test can kill it. Excluded from the sweep with its argument, never counted as a gap |
+| **ratchet** | a committed floor that may only move one way. The mutation baseline is one; a budget is not |
+| **budget** | a committed ceiling a measurement is held to |
+| **ledger** | an enumerated list held to the tree in both directions, so an entry that stops being true fails and a subject with no entry fails too |
+| **region** | one part of the value universe in the partition the decision procedure computes over |
+| **pool** | the validator's table of Python objects: a literal's constant, a class, a comparison operand, a predicate |
+
+Three collisions, and both senses are live:
+
+| term | one sense | the other |
+| --- | --- | --- |
+| **gate** | a CI step that asserts | the local build-health command set above, which is a preview of the merge gate rather than a single check |
+| **oracle** | an independent denotation predicate, or an external library, judging the walk | `LeafRelations`, the trait through which the decision procedure asks the bindings about a class or a value |
+| **budget** | the committed instruction count a workload is held to | `DECISION_BUDGET`, the work ceiling one decision query may spend before returning the conservative answer |
 
 ## Working on changes
 
