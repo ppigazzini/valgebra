@@ -1,13 +1,11 @@
 {
   "_comment": "Mutation survivors accepted as a baseline for the core sweep. The nightly ratchet fails when a survivor appears outside this set, and when an entry is no longer a survivor. Regenerate with `python scripts/mutation_gate.py --baseline core --update` after a sweep, and only ever let this set shrink. Entries are the survivor line without its line:col position, so they survive unrelated code motion.",
   "survivors": [
-    "crates/valgebra-core/src/decision.rs: delete match arm Schema::Set(_) | Schema::FrozenSet(_) in Schema::empty_and_region",
-    "crates/valgebra-core/src/decision.rs: replace + with * in has_disjoint_pair",
     "crates/valgebra-core/src/decision.rs: replace << with >>",
-    "crates/valgebra-core/src/decision.rs: replace <impl LeafRelations for NoLeafRelations>::leaf_subtype -> Option<bool> with Some(false)",
-    "crates/valgebra-core/src/decision.rs: replace LeafRelations::no_int_between -> Option<bool> with Some(false)",
-    "crates/valgebra-core/src/decision.rs: replace spend -> bool with true",
-    "crates/valgebra-core/src/decision.rs: replace |= with &= in Schema::empty_and_region",
     "crates/valgebra-core/src/ir.rs: replace SeqRegex::any_elem -> bool with false"
-  ]
+  ],
+  "_accepted": {
+    "crates/valgebra-core/src/decision.rs: replace << with >>": "Region's NONE_TYPE is `1 << 0`, and `1 >> 0` is the same value. A genuinely equivalent mutant: the other six shift constants are killed by `the_scalar_regions_partition_the_universe`, which requires each region to be non-empty and pairwise disjoint.",
+    "crates/valgebra-core/src/ir.rs: replace SeqRegex::any_elem -> bool with false": "Equivalent only because the guardedness check is its single caller, and that check is constantly false under a crossed structural constructor (`structural_constructors_absorb_the_guard`). That is a fact about the call graph rather than about the argument, so this one stays IN the sweep on purpose: a second caller would make an exclusion wrong without touching either function, and this survivor is where that would surface."
+  }
 }

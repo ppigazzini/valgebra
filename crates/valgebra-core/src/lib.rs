@@ -1348,6 +1348,61 @@ mod laws {
     }
 
     #[test]
+    fn an_intersection_is_empty_when_any_member_is() {
+        // The member verdicts are folded with a disjunction, and the fold is the
+        // ONLY thing that sees this case: an empty member whose region is opaque
+        // (a sequence whose element language is empty) intersected with the top.
+        // No region cancels, no pair is complementary or disjoint, and no bound
+        // contradicts, so a fold that lost a member's verdict would report a
+        // non-empty intersection.
+        let empty_list = Schema::list(SeqRegex::Elem(Box::new(Schema::Nothing)));
+        assert!(empty_list.is_empty());
+        assert!(Schema::Intersection(vec![empty_list.clone(), Schema::Anything]).is_empty());
+        // Order does not matter: the fold runs over every member.
+        assert!(Schema::Intersection(vec![Schema::Anything, empty_list]).is_empty());
+        // And an intersection of two inhabited members with an opaque region is
+        // not reported empty, so the fold is not simply answering true.
+        let list_of_int = Schema::list(SeqRegex::homogeneous(Schema::Int));
+        assert!(!Schema::Intersection(vec![list_of_int, Schema::Anything]).is_empty());
+    }
+
+    #[test]
+    fn only_the_bottom_is_disjoint_from_itself() {
+        // `disjoint` compares two schemas, and the pairwise scan over an
+        // intersection's members deliberately skips the self-comparison. That
+        // skip is only observable for a schema disjoint from ITSELF, and bottom
+        // is the only one: every other kind carries a type tag equal to its own.
+        assert!(Schema::Nothing.disjoint(&Schema::Nothing));
+        for schema in [
+            Schema::NoneType,
+            Schema::Bool,
+            Schema::Int,
+            Schema::Float,
+            Schema::Str,
+            Schema::Bytes,
+            Schema::list(SeqRegex::homogeneous(Schema::Int)),
+            Schema::tuple(SeqRegex::fixed([Schema::Int])),
+            Schema::Set(Box::new(Schema::Int)),
+            Schema::FrozenSet(Box::new(Schema::Int)),
+            Schema::mapping(Schema::Str, Schema::Int),
+            Schema::Anything,
+            Schema::Dynamic,
+        ] {
+            assert!(
+                !schema.disjoint(&schema),
+                "{schema:?} is disjoint from itself"
+            );
+        }
+        // A refinement takes its base's disjointness, so it is not self-disjoint
+        // either -- unless its base is bottom, which is the same one case.
+        let refined = Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints: vec![Constraint::MinLen(1)],
+        };
+        assert!(!refined.disjoint(&refined));
+    }
+
+    #[test]
     fn decision_arms_are_pinned_independently_of_the_python_suite() {
         // Each assertion fails under a specific mutation of a decision arm, so the
         // core's own unit tests catch a defect without relying on the Python layer.
@@ -2364,6 +2419,9 @@ mod laws {
     /// rules re-explore the schema exponentially in its depth. The work budget
     /// stops the descent and returns the conservative answer instead of running
     /// for minutes; this guards against a regression that removes the bound.
+    // SWEEP-SKIP: this case exists to prove a bound, so a mutation that removes
+    // the bound makes it run without end. It stays in the test lane and leaves
+    // the mutation sweep, where a run that returns no verdict is a rig fault.
     #[test]
     fn subtyping_terminates_on_a_distributed_tower() {
         let narrow = intersection_of_unions_tower(18, Schema::Int);
@@ -2457,6 +2515,9 @@ mod laws {
     /// Querying a deep schema against bottom routes through the emptiness check,
     /// which shares the subtyping budget, so it stops promptly rather than running
     /// the decision unbounded down a side door.
+    // SWEEP-SKIP: this case exists to prove a bound, so a mutation that removes
+    // the bound makes it run without end. It stays in the test lane and leaves
+    // the mutation sweep, where a run that returns no verdict is a rig fault.
     #[test]
     fn deep_subtype_into_bottom_terminates() {
         let deep = intersection_of_unions_tower(18, Schema::Int);

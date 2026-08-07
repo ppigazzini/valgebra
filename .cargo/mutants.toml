@@ -60,6 +60,25 @@ exclude_re = [
     "delete match arm Schema::Attrs.* in Schema::occurs_unguarded",
     "replace \\|\\| with && in Schema::occurs_unguarded",
     "replace SeqRegex::occurs_guarded -> bool with false",
+    # The two `LeafRelations` defaults are read through call sites that collapse
+    # `None` and `Some(false)` to the same answer: `leaf_subtype(..)
+    # .unwrap_or(false)` and `no_int_between(..) == Some(true)`. Cannot-decide
+    # and decided-against are the same conservative verdict there, which is the
+    # point of the defaults, so no test can tell the two apart.
+    "replace <impl LeafRelations for NoLeafRelations>::leaf_subtype -> Option<bool> with Some\\(false\\)",
+    "replace LeafRelations::no_int_between -> Option<bool> with Some\\(false\\)",
+    # `has_disjoint_pair` scans pairs as `members[i + 1..]`; `i * 1` widens that
+    # to include the self-comparison. Only bottom is disjoint from itself
+    # (`only_the_bottom_is_disjoint_from_itself` pins that), and an intersection
+    # holding bottom is already reported empty by an earlier disjunct at both
+    # call sites, so the widened scan cannot change a verdict.
+    "replace \\+ with \\* in has_disjoint_pair",
+    # The `Set`/`FrozenSet` arm of `empty_and_region` returns exactly what the
+    # match's default returns. It is written out because the two answer the same
+    # thing for OPPOSITE reasons -- a collection is known non-empty, the default
+    # is non-empty only by conservatism -- and the source carries the
+    # `match_same_arms` allow that says so. Deleting it cannot change a result.
+    "delete match arm Schema::Set\\(_\\) \\| Schema::FrozenSet\\(_\\) in Schema::empty_and_region",
     # The walk's own interpreter-backed corpus lives in the file being swept, so
     # its helpers are mutated too. A mutation of a test helper says nothing about
     # the product's tests -- it makes the harness wrong, not the walk untested.

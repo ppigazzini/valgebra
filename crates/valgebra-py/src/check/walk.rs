@@ -2473,6 +2473,9 @@ mod interpreter {
         });
     }
 
+    // SWEEP-SKIP: this case exists to prove a bound, so a mutation that removes
+    // the bound makes it run without end. It stays in the test lane and leaves
+    // the mutation sweep, where a run that returns no verdict is a rig fault.
     #[test]
     fn recursion_deeper_than_the_bound_is_refused() {
         Python::attach(|py| {
