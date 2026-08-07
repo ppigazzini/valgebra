@@ -201,6 +201,11 @@ whose value type depends on which key schema matches, and named fields plus a
 schema key give a record with a **typed catch-all**. Named fields take
 precedence over the catch-all.
 
+Clauses are a disjunction, not a precedence list: a key that is not a named field
+is admitted when **some** clause matches both it and its value. So overlapping
+key schemas widen what the map admits rather than the earlier one winning, and
+writing them in a different order does not change the schema's meaning.
+
 ```python
 from valgebra import Validator
 

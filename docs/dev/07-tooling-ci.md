@@ -160,7 +160,16 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
 - **The walk sweep needs an embedded interpreter.** Without
   `--features interpreter-tests` every mutant reads as unviable, which is a sweep
   that measured nothing rather than a clean one.
+- **A mutation sweep cannot see a rule nobody wrote.** A mutant is a change to
+  code that *exists*; a missing match arm is not a mutation of anything. An
+  adequacy figure of any size says nothing about a rule that was never there,
+  which is the one defect the sweeps are most often assumed to cover.
 - **`scripts/docs_lint.py` cannot tell you a sentence is false.**
-  [11-writing.md](11-writing.md) names the three classes it cannot reach.
+  [11-writing.md](11-writing.md) names the classes it cannot reach.
 - **A fuzz run that finds nothing means "nothing failed inside that budget"**,
   never "there is nothing to find". That is why it is not a merge gate.
+- **A soundness property has nothing to say about a `False`.** A law shaped
+  `if a.is_subtype_of(&b) { ..check.. }` never examines the answers that are
+  wrong in the conservative direction, and those are the majority of them.
+  `tests/test_completeness_probe.py` is the instrument that faces that way, and
+  its own blind spot is a gap no value in its universe can expose.

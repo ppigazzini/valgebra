@@ -14,11 +14,41 @@ what a schema means.
 | Metamorphic | the JSON path against the object path; fast mode against explain mode | a defect both sides share |
 | Algebra laws | every claimed equivalence, against membership | a law nobody thought to claim |
 | Completeness ledger | that the procedure *decides* an enumerated relation | a relation nobody enumerated |
+| Completeness probe | that every `False` has a value witnessing it | a gap no value in its universe can expose |
 | Snapshots | error messages and `repr` | whether the message is *right* |
 | Fuzzing | panic-freedom, idempotence, the order laws | anything outside the budget |
 
 The denotation oracle is the load-bearing one: it shares none of the validator's
 frontend, so an agreement is evidence rather than a tautology.
+
+## Enumerating and searching are not the same instrument
+
+Read the "blind to" column of the ledger row again: *a relation nobody
+enumerated*. That is not a small gap. Every layer above it shares a version of
+it, and they shared it at once:
+
+- the algebra laws assert soundness, which inspects a `True` and has nothing to
+  say about a `False`, so a relation wrongly answered `False` is examined by
+  nothing;
+- the ledger holds what a human wrote down, so a rule nobody thought of has no
+  entry to fail;
+- a mutation sweep changes code that **exists**. A missing arm is not a mutation
+  of anything, so an adequacy figure of any size says nothing about it;
+- a fuzz law that hardcodes an atom where a property is meant confirms the rule
+  using the rule.
+
+So a missing rule was invisible to all of them together, and stayed invisible for
+months while every gate was green. `tests/test_completeness_probe.py` is the
+direction none of them face. It takes a wide value universe, and for each pair
+the procedure answers `False` it looks for a witness — a value in the subtype and
+outside the supertype. **No witness means the relation looks true and the
+procedure did not see it.** That is a suspected gap, and suspected is the honest
+word: the universe is finite, so the result is a ledger to read rather than a
+verdict to trust.
+
+The lesson generalises past this procedure. An enumerated list can only confirm
+the rules it was built from. When the failure you fear is *a rule nobody wrote*,
+no list will find it — only a search will.
 
 ## Two directions, always
 

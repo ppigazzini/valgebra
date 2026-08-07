@@ -77,10 +77,16 @@ prefix-plus-tail forms for exactly this reason
 ## Records and maps
 
 **Castagna, "Typing Records, Maps, and Structs" (ICFP 2023).** One node with
-named fields plus ordered default clauses subsumes the record, the homogeneous
-mapping, the heterogeneous mapping and their combination. **[LOAD-BEARING]** —
+named fields plus default clauses subsumes the record, the homogeneous mapping,
+the heterogeneous mapping and their combination. **[LOAD-BEARING]** —
 `Schema::KeyedMap`, where a closed record is no default clause and `dict[K, V]`
 is a single clause with no fields.
+
+The paper's clauses are *ordered*, with the first matching clause governing a
+key. valgebra's are not: a key belongs when **some** clause admits it and its
+value, in the walk and in subtyping alike. That is a deliberate narrowing, and
+the node's doc comment said "ordered" for a while, which is a semantics no code
+here implements.
 
 ## Recursion
 

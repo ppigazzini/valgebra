@@ -47,6 +47,9 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **budget** (of instructions) | a committed two-sided band a measurement is held to, in `scripts/perf_budget.json` |
 | **ledger** (of a list) | an enumerated list held to the tree in both directions, so an entry that stops being true fails and a subject with no entry fails too. Each carries a `LEDGER:` marker; there are seven ([08-testing.md](08-testing.md)) |
 | **excused** | named on a ledger with the reason it is a hole. An excuse expires in its own direction: one that stops being true fails |
+| **suspected gap** | a relation the procedure answers `False` that no value in the probe's universe refutes, so it looks true and was not seen. Suspected because the universe is finite ([08-testing.md](08-testing.md)) |
+| **probe** | an instrument that *searches* for a defect rather than checking an enumerated list of them. `tests/test_completeness_probe.py` is the one here, and it exists because a list can only confirm the rules it was built from |
+| **witness** | a value that settles a relation by example: one inside the subtype and outside the supertype disproves inclusion. A `False` with no witness is the probe's subject |
 | **detached surface** | a `Cargo.toml` outside the root workspace, which no workspace-wide command reaches ([07-tooling-ci.md](07-tooling-ci.md)) |
 
 ## Four collisions, and both senses are live

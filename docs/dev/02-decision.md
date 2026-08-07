@@ -18,6 +18,12 @@ relations the procedure is required to *decide* are
 a relation that regresses to conservatism fails, and a closed hole whose ledger
 entry survives fails too.
 
+The ledger only holds relations someone thought to write down, so it is one half.
+`tests/test_completeness_probe.py` is the other: it searches for pairs answered
+`false` that no value in a wide universe refutes, and fails when one appears that
+is not written down with a reason. An enumerated list can only confirm the rules
+it was built from; a search can report a rule nobody wrote.
+
 ## The scalar fragment is exact, through a region partition
 
 The value universe is cut into mutually disjoint regions, and a Boolean
@@ -109,10 +115,42 @@ unless the other side was a container, a record, an instance or the gradual atom
 Both laws are now stated over the property, in the fuzz targets and in the core
 property suite, and the enumerated cases are in the completeness ledger.
 
+## Two more places a shape stood in for the question
+
+The bounds were not the only ones, and the same search found the rest.
+
+**A complement on the right had no arm at all.** `A ⊆ ¬B` was decided only when
+`A` was itself a complement, by contraposition. There is no shape on the right to
+recurse into, so the structural arms had nothing to say and the answer fell
+through to `false` — a container was never seen inside the complement of a
+scalar. It is one question: `A ⊆ ¬B` exactly when `A ∩ B = ∅`, which emptiness
+already answers through kind disjointness and the scalar regions.
+
+**The closed record had a branch of its own.** The keyed-map rule dispatched on
+`defaults.is_empty()` into a rule that required every field to meet a like-named
+field of the supertype, so a field the supertype covers through a catch-all read
+as undecided — although the general branch beside it already decided exactly
+that. A second branch for the pure mapping computed what the general one
+computes. Both are gone; one rule serves every shape a keyed map takes.
+
+The pattern in all four: a branch keyed on a shape answers a narrower question
+than the general rule beside it, and reads as a deliberate special case because
+it has a comment. Prefer one rule that asks the question.
+
 ## The limit
 
-Read `docs/decidability.md` for the published fragment. The two structural things
-it does not decide, both honestly conservative: a mixed keyed map where the
-supertype declares a field the subtype lacks, and the split of a language across
-a union of branches. Both would be decided by the interning and automata engine
-the theory names ([09-theory.md](09-theory.md)); neither is a soundness question.
+Read `docs/decidability.md` for the published fragment. What it does not decide,
+all of it honestly conservative and none of it a soundness question:
+
+- a mixed keyed map where the supertype declares a **required** field the subtype
+  lacks in the general case;
+- the split of a language across a union of branches;
+- whether a catch-all keyed by literals covers a declared field name — the key is
+  matched against the `Str` and `Anything` atoms rather than asked whether it
+  admits the name, and the name is a bare `String` the core cannot pool;
+- a literal against the complement of a scalar, which wants the value oracle the
+  core already has but does not ask here.
+
+The first two would be decided by the interning and automata engine the theory
+names ([09-theory.md](09-theory.md)). The last two are ordinary work: each has a
+route, and each is on the probe's ledger so it cannot quietly become permanent.

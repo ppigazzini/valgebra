@@ -200,6 +200,8 @@ collide with an unrelated sense used nearby. Say which one you mean.
 | **ratchet** | a committed floor that may only move one way. The mutation baseline is one; a budget is not |
 | **budget** | a committed ceiling a measurement is held to |
 | **ledger** | an enumerated list held to the tree in both directions, so an entry that stops being true fails and a subject with no entry fails too |
+| **probe** | an instrument that *searches* for a defect rather than checking an enumerated list of them. A ledger confirms the rules it was built from; only a search reports a rule nobody wrote |
+| **suspected gap** | a relation the decision procedure answers `False` that no value refutes, so it looks true and was not seen. Accepted only with a reason and a route to deciding it |
 | **region** | one part of the value universe in the partition the decision procedure computes over |
 | **pool** | the validator's table of Python objects: a literal's constant, a class, a comparison operand, a predicate |
 

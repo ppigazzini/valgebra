@@ -20,7 +20,7 @@ it.
 | [05-errors.md](05-errors.md) | the violation model, the error codes, the annotation render |
 | [06-type-design.md](06-type-design.md) | the value domain: what each type denotes, why it has that shape, what it does not promise |
 | [07-tooling-ci.md](07-tooling-ci.md) | the gates, the lanes, the exit codes, and each instrument's blind spots |
-| [08-testing.md](08-testing.md) | the test layers, the two mutation sweeps, the four ledgers |
+| [08-testing.md](08-testing.md) | the test layers, the two mutation sweeps, the seven ledgers, the completeness probe |
 | [09-theory.md](09-theory.md) | the papers the design rests on, and which code each touches |
 | [10-references.md](10-references.md) | the reference implementations and the toolchain baseline |
 | [11-writing.md](11-writing.md) | how to write a page here, and a comment in the source |

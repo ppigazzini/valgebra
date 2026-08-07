@@ -91,6 +91,12 @@ assert Validator({str: int}).is_subtype_of({str: int, int: bool})  # mapping cla
 assert Validator({str: int}).is_subtype_of(
     {"b?": int, str: int}
 )  # optional field, catch-all covers it
+assert Validator({"x": int}).is_subtype_of(
+    {str: int}
+)  # a closed record below a catch-all mapping
+assert Validator(list[int]).is_subtype_of(
+    complement(int)
+)  # inside a complement: a list shares no value with an int
 assert union(bool, int).is_equivalent(int)  # bool | int is just int
 assert intersection(int, complement(int)).is_empty()  # the complement law
 assert intersection(
@@ -140,9 +146,11 @@ tracked as future work.
   cannot place it in a region; the value oracle already answers the membership
   this reduces to, and is not yet asked here.
 
-Both are found and held by `tests/test_completeness_probe.py`, which searches for
+The last two were found by `tests/test_completeness_probe.py`, which searches for
 relations answered `False` that no value refutes, and fails when one appears that
-is not written down.
+is not written down with a reason. Both are on its ledger, so neither can quietly
+become permanent, and closing either fails the ledger until the entry is removed.
+
 General regular-expression-types inclusion of sequences (a union of sequence
 languages that splits across branches, or a repeated heterogeneous group) is not
 implemented, but no schema valgebra builds takes that shape — every sequence is

@@ -95,7 +95,9 @@ are read off the decision procedures, never off simplified structure.
 
 `is_subtype_of` applies structural inclusion rules, each a valid set inclusion:
 `A ⊆ B₁ ∪ … ∪ Bₙ` when `A ⊆ some Bᵢ`, `A₁ ∩ … ∩ Aₙ ⊆ B` when some `Aᵢ ⊆ B`, the
-contrapositive for complement, componentwise inclusion for the structural forms,
+contrapositive between two complements (`¬A ⊆ ¬B` when `B ⊆ A`) and emptiness of
+the meet against one (`A ⊆ ¬B` when `A ∩ B` is empty), componentwise inclusion
+for the structural forms,
 and the coinductive rule for recursion (assume the goal on the current path —
 sound for inclusion at the greatest fixpoint). A leaf the rules cannot relate is
 handed to an oracle that returns `False` when it cannot prove the relation. Every

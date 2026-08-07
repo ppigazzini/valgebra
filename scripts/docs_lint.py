@@ -1,7 +1,7 @@
 """The mechanical half of documentation rot.
 
-Reads every tracked Markdown file and fails on four things a reader cannot be
-expected to catch by eye:
+Reads every tracked Markdown file and fails on six things a reader cannot be
+expected to catch by eye. Four are per-file claims:
 
 * **A dead internal link.** Any ``[text](target)`` that is not a URL, a
   ``mailto:`` or a bare ``#anchor`` must resolve, relative to the linking file or
@@ -25,11 +25,22 @@ expected to catch by eye:
   copied into a page is stale the next time it moves, and a stale number is worse
   than an absent one -- it tells a reader to hold the wrong invariant.
 
-Three classes stay out of its reach, and they are the common ones: a real symbol
-attributed to the wrong file, a list with the wrong count or order, and a
-behaviour described as absent from a build that has it. **It cannot tell you a
-sentence is false.** It buys the mechanical half so review can spend its
-attention on the half that needs a reader.
+Two more hold a specific list to the tree in **both** directions, because a
+hand-written index satisfies the direction it was written for and misses the
+other:
+
+* **The developer set's index.** A page in ``docs/dev/`` that no row of its
+  ``README.md`` names fails, and a row naming a page that does not exist fails.
+* **The table of ledgers.** A test carrying a ``LEDGER:`` marker with no row in
+  ``docs/dev/08-testing.md`` fails, a row naming a test that does not exist
+  fails, and a spelled count beside either the table or the glossary entry that
+  disagrees with the markers fails. The list *of* the lists was the one list
+  nothing held, and it drifted in both copies at once.
+
+Two classes stay out of its reach, and they are the common ones: a real symbol
+attributed to the wrong file, and a behaviour described as absent from a build
+that has it. **It cannot tell you a sentence is false.** It buys the mechanical
+half so review can spend its attention on the half that needs a reader.
 
 Usage:
     python scripts/docs_lint.py

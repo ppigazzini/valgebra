@@ -151,10 +151,12 @@ who has never seen it.
 python scripts/docs_lint.py
 ```
 
-It reads every tracked Markdown file and fails on four things: a dead internal
-link, a named path that does not exist, a reference into the untracked surface,
-and a budget number quoted in prose. Read the script's own docstring for the
-exact rules — a second copy here would drift.
+It reads every tracked Markdown file and fails on six things: a dead internal
+link, a named path that does not exist, a reference into the untracked surface, a
+budget number quoted in prose, a developer page missing from its index, and a
+ledger missing from the table of ledgers (or a spelled count that disagrees with
+it). Read the script's own docstring for the exact rules — a second copy here
+would drift.
 
 A path `.gitignore` names is exempt from the second rule, because the repository
 decided not to carry it and a page naming one is usually documenting the tool
