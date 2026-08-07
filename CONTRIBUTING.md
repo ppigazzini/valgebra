@@ -15,6 +15,14 @@ membership walk; and `python/valgebra/` is the public surface.
 from a typing annotation through the walk to a violation; read it before a
 non-trivial change.
 
+**The developer documentation set is [docs/dev/](docs/dev/README.md).** One page
+per zone of the source, each the live claim about it: what a node denotes, what
+is decidable, where soundness is decided, why each type has its shape, what every
+gate can and cannot see, and the words this project uses without stopping to
+define them. It is not published with the user guide — it describes what valgebra
+is made of rather than how to use it. Change a zone, fix its page in the same
+commit.
+
 A change to the schema language flows the same way each time: extend the IR or
 the frontend, **write the node's denotation** (the set of Python values it
 accepts) in the same change, **cover its algebra laws** with property tests, then
@@ -53,6 +61,7 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 cargo check --manifest-path fuzz/Cargo.toml
+uv run python scripts/docs_lint.py
 uv run maturin develop --uv
 uv run ruff check . && uv run ruff format --check .
 uv run ty check

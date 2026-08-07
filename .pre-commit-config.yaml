@@ -54,6 +54,12 @@ repos:
       # reach it and a change to the core's public types compiles cleanly here
       # while breaking the fuzz lane. Checked, not clippy-linted: its own lane
       # lints it under the nightly it needs.
+      - id: docs-lint
+        name: docs lint
+        entry: python3 scripts/docs_lint.py
+        language: system
+        types: [markdown]
+        pass_filenames: false
       - id: cargo-check-fuzz
         name: cargo check (detached fuzz workspace)
         entry: cargo check --manifest-path fuzz/Cargo.toml

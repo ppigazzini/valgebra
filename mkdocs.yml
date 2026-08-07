@@ -54,6 +54,13 @@ nav:
   - Reference:
       - API reference: api.md
 
+# The developer set lives beside the user docs and is NOT published: it describes
+# the codebase for a contributor and an agent reading it cold, which is a
+# different subject from the user guide this site renders. Excluding it keeps
+# --strict honest -- every remaining page is in the nav above.
+exclude_docs: |
+  dev/
+
 markdown_extensions:
   - admonition
   - pymdownx.details
