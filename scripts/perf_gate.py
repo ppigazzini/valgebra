@@ -18,6 +18,23 @@ Two workloads:
   absorb cross-interpreter FFI variance while still catching a per-node regression
   (the ``ctx.fatal.borrow`` tax), which is far larger.
 
+Three refusals, because a measurement that did not happen must not read as a
+verdict:
+
+* **An unreadable measurement is not a pass.** A cachegrind run whose instruction
+  count or checksum cannot be parsed exits 2 -- "could not measure", never "did
+  not regress".
+* **The workload must prove it did the work.** Each workload prints a checksum
+  folded through every result. The core workload's is a recorded constant; the
+  binding workload's is its iteration count by construction, so it is asserted as
+  an identity and needs no recording. A workload whose body collapsed prints a
+  different checksum and reddens *before* any count is compared.
+* **The budget is two-sided.** A count far *below* the budget is not a pass
+  either: a workload that stopped doing the work measures low, and a one-sided
+  ceiling publishes that as an improvement it never earned. An intentional
+  optimization past the floor is re-recorded with ``--update``, which is the
+  ledger discipline the budget exists for.
+
 Usage:
     python scripts/perf_gate.py                      # check the core budget
     python scripts/perf_gate.py --update             # re-record the core budget
@@ -46,6 +63,16 @@ BINDING_WORKLOAD = ROOT / "target" / "release" / "examples" / "binding_workload"
 BINDING_ITERS_LOW = 50_000
 BINDING_ITERS_HIGH = 150_000
 IREFS = re.compile(r"I\s+refs:\s*([\d,]+)")
+# Both workloads print one trailing line holding the checksum, bare or prefixed.
+CHECKSUM = re.compile(r"^(?:checksum=)?(\d+)$")
+
+
+class Measurement:
+    """One cachegrind run: what it executed, and what the workload computed."""
+
+    def __init__(self, irefs: int, checksum: int) -> None:
+        self.irefs = irefs
+        self.checksum = checksum
 
 
 def build_workload() -> None:
@@ -83,7 +110,34 @@ def build_binding_workload() -> None:
     )
 
 
-def measure_instructions(binary: Path, *args: str) -> int:
+def parse_measurement(stdout: str, stderr: str) -> Measurement:
+    """Read the instruction count and the workload's checksum, or refuse.
+
+    Both halves are required. A run whose count is unreadable measured nothing;
+    a run whose checksum is unreadable measured something that cannot be shown to
+    be the workload. Neither is a verdict, so both raise rather than return.
+    """
+    match = IREFS.search(stderr)
+    if match is None:
+        print("could not find an instruction count in cachegrind output:")
+        print(stderr)
+        raise SystemExit(2)
+    irefs = int(match.group(1).replace(",", ""))
+
+    checksum = None
+    for line in reversed(stdout.strip().splitlines()):
+        found = CHECKSUM.match(line.strip())
+        if found is not None:
+            checksum = int(found.group(1))
+            break
+    if checksum is None:
+        print("could not find a workload checksum in the output:")
+        print(stdout)
+        raise SystemExit(2)
+    return Measurement(irefs, checksum)
+
+
+def measure(binary: Path, *args: str) -> Measurement:
     result = subprocess.run(
         [
             "valgrind",
@@ -97,30 +151,41 @@ def measure_instructions(binary: Path, *args: str) -> int:
         capture_output=True,
         text=True,
     )
-    match = IREFS.search(result.stderr)
-    if match is None:
-        print("could not find an instruction count in cachegrind output:")
-        print(result.stderr)
-        raise SystemExit(2)
-    return int(match.group(1).replace(",", ""))
+    return parse_measurement(result.stdout, result.stderr)
 
 
-def measure_binding_difference() -> int:
-    # The walk's per-iteration cost, isolated by subtracting two runs so the
-    # embedded interpreter's (identical) startup cancels out.
-    high = measure_instructions(BINDING_WORKLOAD, str(BINDING_ITERS_HIGH))
-    low = measure_instructions(BINDING_WORKLOAD, str(BINDING_ITERS_LOW))
-    return high - low
+def check_checksum(measured: int, expected: int, subject: str) -> int:
+    """Refuse a measurement whose workload did not compute what it must.
+
+    A workload whose body collapsed still runs, still executes instructions, and
+    still reports a count the budget would accept from below. The checksum is the
+    only thing that says the count belongs to the work it claims to measure, so
+    it is compared first and a mismatch stops the run.
+    """
+    if measured != expected:
+        print(f"RIG FAULT: {subject} checksum {measured}, expected {expected}.")
+        print("The workload did not compute what it must; the count measures")
+        print("something other than the work this budget is for.")
+        return 1
+    print(f"checksum: {measured} ({subject}, as expected)")
+    return 0
 
 
 def check_against_budget(measured: int, recorded: int, tolerance: float) -> int:
+    """Hold a count inside a two-sided band around the recorded budget."""
     ceiling = int(recorded * (1 + tolerance))
+    floor = int(recorded * (1 - tolerance))
     delta = (measured - recorded) / recorded
     print(f"measured: {measured:,} instructions")
-    print(f"budget:   {recorded:,} (+{tolerance:.0%} -> ceiling {ceiling:,})")
+    print(f"budget:   {recorded:,} (+/-{tolerance:.0%} -> {floor:,} .. {ceiling:,})")
     print(f"delta:    {delta:+.2%}")
     if measured > ceiling:
         print("REGRESSION: instruction count exceeds the budget ceiling.")
+        return 1
+    if measured < floor:
+        print("UNDER-RUN: instruction count falls below the budget floor.")
+        print("Either the workload stopped doing the work it measures, or this is")
+        print("a real optimization -- re-record with --update and say which.")
         return 1
     print("OK: within budget.")
     return 0
@@ -128,20 +193,39 @@ def check_against_budget(measured: int, recorded: int, tolerance: float) -> int:
 
 def run_core(budget: dict, *, update: bool) -> int:
     build_workload()
-    measured = measure_instructions(WORKLOAD)
+    result = measure(WORKLOAD)
     if update:
-        budget["core_workload_irefs"] = measured
+        budget["core_workload_irefs"] = result.irefs
+        budget["core_workload_checksum"] = result.checksum
         BUDGET_FILE.write_text(json.dumps(budget, indent=2) + "\n", encoding="utf-8")
-        print(f"recorded core budget: {measured:,} instructions")
+        print(f"recorded core budget: {result.irefs:,} instructions")
+        print(f"recorded core checksum: {result.checksum}")
         return 0
+    failed = check_checksum(
+        result.checksum, int(budget["core_workload_checksum"]), "core workload"
+    )
+    if failed:
+        return failed
     return check_against_budget(
-        measured, int(budget["core_workload_irefs"]), float(budget["tolerance"])
+        result.irefs, int(budget["core_workload_irefs"]), float(budget["tolerance"])
     )
 
 
 def run_binding(budget: dict, *, update: bool) -> int:
     build_binding_workload()
-    measured = measure_binding_difference()
+    # The walk's per-iteration cost, isolated by subtracting two runs so the
+    # embedded interpreter's (identical) startup cancels out.
+    high = measure(BINDING_WORKLOAD, str(BINDING_ITERS_HIGH))
+    low = measure(BINDING_WORKLOAD, str(BINDING_ITERS_LOW))
+    # The workload folds one unit per successful walk, so its checksum IS its
+    # iteration count. That identity is what proves the argument was honoured:
+    # a workload that ignored it would report a difference near zero, which a
+    # ceiling-only budget accepts and this does not.
+    for result, iters in ((high, BINDING_ITERS_HIGH), (low, BINDING_ITERS_LOW)):
+        failed = check_checksum(result.checksum, iters, f"binding walk x{iters:,}")
+        if failed:
+            return failed
+    measured = high.irefs - low.irefs
     print(
         f"binding walk over {BINDING_ITERS_HIGH - BINDING_ITERS_LOW:,} iterations "
         f"(difference of {BINDING_ITERS_HIGH:,} and {BINDING_ITERS_LOW:,} runs)"
