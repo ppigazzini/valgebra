@@ -99,19 +99,23 @@ def ignored_paths(candidates: list[str]) -> set[str]:
     """
     if not candidates:
         return set()
+    # NUL-separated, in binary mode. Text mode translates "\n" to the platform
+    # line ending on write, so on Windows git received every path with a trailing
+    # carriage return, matched none of them, and the check reported paths as
+    # missing that `.gitignore` names. Bytes and `-z` remove both the newline
+    # translation and any question about a path containing whitespace.
     result = subprocess.run(
-        ["git", "check-ignore", "--stdin"],
+        ["git", "check-ignore", "--stdin", "-z"],
         cwd=ROOT,
-        input="\n".join(candidates),
+        input=b"\0".join(path.encode() for path in candidates),
         capture_output=True,
-        text=True,
         check=False,
     )
     # Exit 0 = some ignored, 1 = none ignored, anything else = it could not run.
     if result.returncode not in (0, 1):
-        print(f"docs_lint: git check-ignore failed: {result.stderr.strip()}")
+        print(f"docs_lint: git check-ignore failed: {result.stderr.decode().strip()}")
         raise SystemExit(EXIT_CANNOT_RUN)
-    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+    return {chunk.decode() for chunk in result.stdout.split(b"\0") if chunk.strip()}
 
 
 def check_named_paths(text: str, ignored: set[str] | None = None) -> list[str]:

@@ -84,6 +84,22 @@ def test_a_gitignored_path_is_skipped() -> None:
     assert lint.check_named_paths("see fuzz/src/nope.rs")
 
 
+def test_the_ignore_question_survives_a_platform_line_ending() -> None:
+    # The paths reach git over a pipe. Text mode translates "\n" to the platform
+    # line ending on write, so on Windows git received every path with a
+    # trailing carriage return and matched none of them -- the check reported
+    # paths as missing that `.gitignore` names, and only the Windows lane saw it.
+    # Binary mode with NUL separators removes the translation.
+    many = ["fuzz/corpus/simplify", "fuzz/corpus/decision", "scripts/docs_lint.py"]
+    ignored = lint.ignored_paths(many)
+    assert "fuzz/corpus/simplify" in ignored
+    assert "fuzz/corpus/decision" in ignored
+    assert "scripts/docs_lint.py" not in ignored
+    # No result may carry stray whitespace, which is what a translated newline
+    # would leave behind.
+    assert all(path == path.strip() for path in ignored)
+
+
 def test_the_ignore_question_is_asked_of_git_not_the_filesystem() -> None:
     # Pinned directly, because the difference is invisible on a machine where the
     # generated directory happens to exist.
