@@ -498,22 +498,11 @@ impl Schema {
         assumptions: &mut Vec<(Schema, Schema)>,
     ) -> bool {
         match (self, other) {
-            // ∅ ⊆ B for every B, and A ⊆ U for every A. Both bounds are decided
-            // by EMPTINESS rather than by the shape of the atom, so a schema that
-            // denotes the empty set without being spelled `Nothing` -- a record
-            // with an uninhabited required field, a cancelling intersection -- is
-            // recognised, and so is a union that covers the universe without being
-            // spelled `Anything`.
-            //
-            // Reaching for the atom alone is the shape this arm had, and it made
-            // the two bounds disagree with the `(_, Nothing)` arm below, which has
-            // always asked the semantic question. On a scalar right-hand side the
-            // region check upstream masked the difference, so the gap was only
-            // visible against a container, a record, an instance or the gradual
-            // atom.
-            (_, Schema::Nothing) => {
-                self.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget)
-            }
+            // Every lattice bound, in one arm: `∅ ⊆ B`, `A ⊆ U`, and `A ⊆ ∅`
+            // when A is empty. All three are the same question asked of
+            // emptiness, so one guard answers them and a per-atom arm beside it
+            // would be dead code -- the mutation sweep says so, by surviving its
+            // deletion.
             _ if self.bounds_the_pair(other, cx) => true,
             // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z; A ⊆ (Y ∩ Z) iff A ⊆ Y and A ⊆ Z.
             (Schema::Union(members), _) => members
