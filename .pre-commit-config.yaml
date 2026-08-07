@@ -50,3 +50,13 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+      # The fuzz crate is a detached workspace, so the clippy hook above does not
+      # reach it and a change to the core's public types compiles cleanly here
+      # while breaking the fuzz lane. Checked, not clippy-linted: its own lane
+      # lints it under the nightly it needs.
+      - id: cargo-check-fuzz
+        name: cargo check (detached fuzz workspace)
+        entry: cargo check --manifest-path fuzz/Cargo.toml
+        language: system
+        types: [rust]
+        pass_filenames: false

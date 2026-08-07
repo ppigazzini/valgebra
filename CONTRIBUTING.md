@@ -52,11 +52,20 @@ Linux, macOS, and Windows; local runs are previews of that source of truth.
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
+cargo check --manifest-path fuzz/Cargo.toml
 uv run maturin develop --uv
 uv run ruff check . && uv run ruff format --check .
 uv run ty check
 uv run pytest
 ```
+
+The fuzz crate is a **detached workspace** -- libFuzzer needs a nightly
+toolchain, and making it a member would put nightly on every stable gate's path
+-- so `cargo check --workspace` does not reach it and it needs its own line. A
+change to the core's public types compiles cleanly without it and turns the fuzz
+lane red. `tests/test_build_surfaces.py` holds every manifest in the tree to
+being a workspace member or a detached surface named here with the command that
+builds it.
 
 `pre-commit run --all-files` runs the file-hygiene, ruff, and cargo gates in
 one step.

@@ -16,13 +16,26 @@
 //! generator is built to exceed, so the split is intentional, not a gap.
 
 use arbitrary::{Arbitrary, Result, Unstructured};
-use valgebra_core::{Constraint, Field, Schema, SeqKind, SeqRegex};
+use valgebra_core::{
+    ClassIx, ConstIx, Constraint, Field, OperandIx, PredIx, Schema, SeqKind, SeqRegex,
+};
 
 const NAMES: [&str; 4] = ["a", "b", "c", "d"];
 const PATTERNS: [&str; 3] = ["a+", "[0-9]*", "x"];
 
+/// A small pool slot. Deliberately narrow so distinct atoms collide often enough
+/// for the relational checks to bite.
+///
+/// The four index spaces are minted through their own constructors here, exactly
+/// as the frontend does: a fuzzer that produced bare integers would be building
+/// schemas the frontend cannot, and the laws under test are about the schemas it
+/// can.
 fn small(u: &mut Unstructured) -> Result<usize> {
     Ok(usize::from(u.arbitrary::<u8>()?) % 3)
+}
+
+fn operand(u: &mut Unstructured) -> Result<OperandIx> {
+    Ok(OperandIx::new(small(u)?))
 }
 
 fn count(u: &mut Unstructured, max: usize) -> Result<usize> {
@@ -31,14 +44,14 @@ fn count(u: &mut Unstructured, max: usize) -> Result<usize> {
 
 fn build_constraint(u: &mut Unstructured) -> Result<Constraint> {
     Ok(match u.arbitrary::<u8>()? % 9 {
-        0 => Constraint::Ge(small(u)?),
-        1 => Constraint::Gt(small(u)?),
-        2 => Constraint::Le(small(u)?),
-        3 => Constraint::Lt(small(u)?),
+        0 => Constraint::Ge(operand(u)?),
+        1 => Constraint::Gt(operand(u)?),
+        2 => Constraint::Le(operand(u)?),
+        3 => Constraint::Lt(operand(u)?),
         4 => Constraint::MinLen(count(u, 8)?),
         5 => Constraint::MaxLen(count(u, 8)?),
-        6 => Constraint::MultipleOf(small(u)?),
-        7 => Constraint::Predicate(small(u)?),
+        6 => Constraint::MultipleOf(operand(u)?),
+        7 => Constraint::Predicate(PredIx::new(small(u)?)),
         _ => Constraint::Regex(PATTERNS[usize::from(u.arbitrary::<u8>()?) % PATTERNS.len()].into()),
     })
 }
@@ -93,8 +106,8 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
         6 => Schema::Float,
         7 => Schema::Str,
         8 => Schema::Bytes,
-        9 => Schema::Literal(small(u)?),
-        10 => Schema::Instance(small(u)?),
+        9 => Schema::Literal(ConstIx::new(small(u)?)),
+        10 => Schema::Instance(ClassIx::new(small(u)?)),
         11 => {
             let n = 1 + count(u, 3)?;
             let mut members = Vec::with_capacity(n);
