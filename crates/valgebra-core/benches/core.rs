@@ -9,7 +9,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use valgebra_core::{ConstIx, DefShift, Field, PoolShift, Schema, SeqRegex};
+use valgebra_core::{ConstIx, DefShift, Field, Openness, PoolShift, Schema, SeqRegex};
 
 /// A redundant Boolean expression that exercises every simplifier rewrite:
 /// nested unions and intersections, duplicate members, top/bottom identities,
@@ -40,7 +40,7 @@ fn wide_record(width: usize) -> Schema {
             required: i % 2 == 0,
         })
         .collect();
-    Schema::record(fields, false)
+    Schema::record(fields, Openness::Closed)
 }
 
 /// A record nested `depth` levels deep, each level holding a small record, so
@@ -52,7 +52,7 @@ fn nested_records(depth: usize) -> Schema {
             schema: Schema::Int,
             required: true,
         }],
-        false,
+        Openness::Closed,
     );
     for _ in 0..depth {
         inner = Schema::record(
@@ -68,7 +68,7 @@ fn nested_records(depth: usize) -> Schema {
                     required: false,
                 },
             ],
-            false,
+            Openness::Closed,
         );
     }
     inner
@@ -91,7 +91,7 @@ fn bench_shifted(c: &mut Criterion) {
 fn bench_with_records_open(c: &mut Criterion) {
     let schema = nested_records(32);
     c.bench_function("with_records_open_depth32", |b| {
-        b.iter(|| black_box(&schema).with_records_open(true));
+        b.iter(|| black_box(&schema).with_records_open(Openness::Open));
     });
 }
 

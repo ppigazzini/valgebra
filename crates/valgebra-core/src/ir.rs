@@ -170,6 +170,49 @@ impl DefIx {
     }
 }
 
+/// Whether a record admits keys it does not declare.
+///
+/// A name rather than a positional `bool`: `Schema::record(fields, Openness::Closed)` reads
+/// as a flag whose polarity a caller has to remember, and the two openness
+/// senses -- "closed to extra keys" and "open to them" -- are exactly the pair a
+/// reader gets backwards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Openness {
+    /// Only the declared keys are admitted.
+    Closed,
+    /// Any further key is admitted, with any value.
+    Open,
+}
+
+impl Openness {
+    /// The openness a boolean flag denotes, for a caller that has one in hand
+    /// (the Python surface takes `open=True`/`False`).
+    #[must_use]
+    pub const fn from_flag(open: bool) -> Self {
+        if open {
+            Openness::Open
+        } else {
+            Openness::Closed
+        }
+    }
+}
+
+/// Whether a structural constructor has been crossed on the way to a recursive
+/// reference.
+///
+/// A `recursive` definition is contractive only when every occurrence of its
+/// self-reference sits under one. The condition travelled as a positional
+/// `bool`, where `occurs_unguarded(id, false)` reads as neither "no guard yet"
+/// nor "not guarded" without checking the callee.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Guarded {
+    /// No structural constructor has been crossed yet.
+    No,
+    /// A structural constructor has been crossed, so anything below it is
+    /// productive.
+    Yes,
+}
+
 /// A single step in the location of a value inside a composite structure.
 ///
 /// Scalar schemas never produce a path; structural schemas (records, sequences,
@@ -394,14 +437,14 @@ impl SeqRegex {
         self.map_elems(&|s| s.resolve_self(token, ref_id))
     }
 
-    fn with_records_open(&self, open: bool) -> SeqRegex {
+    fn with_records_open(&self, open: Openness) -> SeqRegex {
         self.map_elems(&|s| s.with_records_open(open))
     }
 
     /// A `Seq` guards its element schemas, so a recursive reference inside one is
     /// guarded; report whether `target` occurs (necessarily guarded here).
     fn occurs_guarded(&self, target: DefIx) -> bool {
-        self.any_elem(&|s| s.occurs_unguarded(target, true))
+        self.any_elem(&|s| s.occurs_unguarded(target, Guarded::Yes))
     }
 
     /// The structural nesting depth this regex contributes: one level per regex
@@ -501,8 +544,8 @@ impl Schema {
     /// A record of named fields, closed (`open` false) or open (`open` true). An
     /// open record admits any other key; a closed one admits none.
     #[must_use]
-    pub fn record(fields: Vec<Field>, open: bool) -> Schema {
-        let defaults = if open {
+    pub fn record(fields: Vec<Field>, open: Openness) -> Schema {
+        let defaults = if open == Openness::Open {
             vec![(Schema::Anything, Schema::Anything)]
         } else {
             Vec::new()
@@ -930,23 +973,24 @@ impl Schema {
     /// occurrence of its self-reference sits under a structural constructor;
     /// `guarded` records whether such a constructor has been crossed.
     #[must_use]
-    pub fn occurs_unguarded(&self, target: DefIx, guarded: bool) -> bool {
+    pub fn occurs_unguarded(&self, target: DefIx, guarded: Guarded) -> bool {
         match self {
-            Schema::Ref(id) => *id == target && !guarded,
+            Schema::Ref(id) => *id == target && guarded == Guarded::No,
             // Structural constructors guard their children.
             Schema::Seq { regex, .. } => regex.occurs_guarded(target),
-            Schema::Set(e) | Schema::FrozenSet(e) => e.occurs_unguarded(target, true),
+            Schema::Set(e) | Schema::FrozenSet(e) => e.occurs_unguarded(target, Guarded::Yes),
             Schema::KeyedMap { fields, defaults } => {
                 fields
                     .iter()
-                    .any(|f| f.schema.occurs_unguarded(target, true))
+                    .any(|f| f.schema.occurs_unguarded(target, Guarded::Yes))
                     || defaults.iter().any(|(k, v)| {
-                        k.occurs_unguarded(target, true) || v.occurs_unguarded(target, true)
+                        k.occurs_unguarded(target, Guarded::Yes)
+                            || v.occurs_unguarded(target, Guarded::Yes)
                     })
             }
             Schema::Attrs { fields, .. } => fields
                 .iter()
-                .any(|f| f.schema.occurs_unguarded(target, true)),
+                .any(|f| f.schema.occurs_unguarded(target, Guarded::Yes)),
             // Algebraic combinators do not guard: they pass `guarded` through.
             Schema::Union(es) | Schema::Intersection(es) => {
                 es.iter().any(|s| s.occurs_unguarded(target, guarded))
@@ -965,7 +1009,7 @@ impl Schema {
     /// closes them. A pure mapping (no named fields) is not a record and keeps
     /// its clauses.
     #[must_use]
-    pub fn with_records_open(&self, open: bool) -> Schema {
+    pub fn with_records_open(&self, open: Openness) -> Schema {
         let recur = |s: &Schema| s.with_records_open(open);
         let fields_open = |fields: &[Field]| -> Vec<Field> {
             fields
@@ -983,7 +1027,7 @@ impl Schema {
             // recursed.
             Schema::KeyedMap { fields, .. } if !fields.is_empty() => Schema::KeyedMap {
                 fields: fields_open(fields),
-                defaults: if open {
+                defaults: if open == Openness::Open {
                     vec![(Schema::Anything, Schema::Anything)]
                 } else {
                     Vec::new()

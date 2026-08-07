@@ -268,7 +268,7 @@ fn check_seq(
             let Ok(list) = v.cast::<PyList>() else {
                 return type_fail(type_code, kind_word, value, path, ctx, out);
             };
-            if !seq_len_ok(list.len(), prefix.len(), tail.is_some()) {
+            if !SeqArity::of(prefix.len(), tail.as_ref()).admits(list.len()) {
                 return seq_length_fail(len_code, kind_word, &prefix, tail, value, path, ctx, out);
             }
             let mut ok = true;
@@ -281,7 +281,7 @@ fn check_seq(
             ok
         }
         (SeqKind::List, Value::Json(py, JsonValue::Array(items))) => {
-            if !seq_len_ok(items.len(), prefix.len(), tail.is_some()) {
+            if !SeqArity::of(prefix.len(), tail.as_ref()).admits(items.len()) {
                 return seq_length_fail(len_code, kind_word, &prefix, tail, value, path, ctx, out);
             }
             let mut ok = true;
@@ -297,7 +297,7 @@ fn check_seq(
             let Ok(tuple) = v.cast::<PyTuple>() else {
                 return type_fail(type_code, kind_word, value, path, ctx, out);
             };
-            if !seq_len_ok(tuple.len(), prefix.len(), tail.is_some()) {
+            if !SeqArity::of(prefix.len(), tail.as_ref()).admits(tuple.len()) {
                 return seq_length_fail(len_code, kind_word, &prefix, tail, value, path, ctx, out);
             }
             let mut ok = true;
@@ -314,13 +314,37 @@ fn check_seq(
     }
 }
 
-/// Whether the element count fits the regex: exactly the prefix length with no
-/// tail, or at least the prefix length when a repeated tail follows.
-fn seq_len_ok(len: usize, prefix_len: usize, has_tail: bool) -> bool {
-    if has_tail {
-        len >= prefix_len
-    } else {
-        len == prefix_len
+/// The element counts a linear sequence regex admits: exactly the prefix length
+/// with no tail, or at least it when a repeated tail follows.
+///
+/// One argument rather than a length and a flag beside the value's own length.
+/// The two lengths were adjacent and the same type, and transposing them turns
+/// "this list is too short" into "this schema wants fewer elements" without
+/// failing.
+#[derive(Clone, Copy)]
+enum SeqArity {
+    /// A fixed-length regex: the count must equal this.
+    Exactly(usize),
+    /// A prefix followed by a repeated tail: the count must be at least this.
+    AtLeast(usize),
+}
+
+impl SeqArity {
+    /// The arity of a prefix-and-optional-tail regex.
+    fn of(prefix_len: usize, tail: Option<&&Schema>) -> Self {
+        if tail.is_some() {
+            SeqArity::AtLeast(prefix_len)
+        } else {
+            SeqArity::Exactly(prefix_len)
+        }
+    }
+
+    /// Whether a value of this element count fits.
+    fn admits(self, len: usize) -> bool {
+        match self {
+            SeqArity::Exactly(n) => len == n,
+            SeqArity::AtLeast(n) => len >= n,
+        }
     }
 }
 

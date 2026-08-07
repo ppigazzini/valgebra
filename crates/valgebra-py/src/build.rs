@@ -11,7 +11,7 @@ use pyo3::types::{
     PyTuple, PyType,
 };
 use valgebra_core::{
-    ClassIx, ConstIx, Constraint, DefShift, Field, OperandIx, PredIx, Schema, SeqRegex,
+    ClassIx, ConstIx, Constraint, DefShift, Field, Openness, OperandIx, PredIx, Schema, SeqRegex,
 };
 
 use crate::Validator;
@@ -398,7 +398,7 @@ fn build_typed_dict(
             required: required.contains(&name)?,
         });
     }
-    Ok(Schema::record(fields, false))
+    Ok(Schema::record(fields, Openness::Closed))
 }
 
 /// Build an Object node (isinstance plus per-attribute checks) for a class

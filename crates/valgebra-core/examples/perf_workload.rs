@@ -11,7 +11,7 @@
 //! iteration count is large. Keep the corpus and `ITERATIONS` fixed; changing
 //! either moves the budget and requires re-recording it.
 
-use valgebra_core::{ConstIx, DefShift, Field, PoolShift, Schema, SeqRegex};
+use valgebra_core::{ConstIx, DefShift, Field, Openness, PoolShift, Schema, SeqRegex};
 
 /// Iterations per operation. Large enough that startup is a rounding error.
 const ITERATIONS: usize = 2_000;
@@ -42,7 +42,7 @@ fn wide_record(width: usize) -> Schema {
             required: i % 2 == 0,
         })
         .collect();
-    Schema::record(fields, false)
+    Schema::record(fields, Openness::Closed)
 }
 
 /// A record nested `depth` levels deep.
@@ -53,7 +53,7 @@ fn nested_records(depth: usize) -> Schema {
             schema: Schema::Int,
             required: true,
         }],
-        false,
+        Openness::Closed,
     );
     for _ in 0..depth {
         inner = Schema::record(
@@ -62,7 +62,7 @@ fn nested_records(depth: usize) -> Schema {
                 schema: Schema::list(SeqRegex::homogeneous(inner)),
                 required: true,
             }],
-            false,
+            Openness::Closed,
         );
     }
     inner
@@ -84,7 +84,7 @@ fn main() {
         );
         checksum = checksum.wrapping_add(
             std::hint::black_box(&nested)
-                .with_records_open(true)
+                .with_records_open(Openness::Open)
                 .depth_marker(),
         );
     }

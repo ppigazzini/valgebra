@@ -29,7 +29,9 @@ use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBytes, PyList, PyString, PyTuple, PyType};
 use rustc_hash::FxHashSet;
-use valgebra_core::{DefIx, LeafRelations, OperandIx, Schema, SeqKind, SeqRegex, fresh_self_token};
+use valgebra_core::{
+    DefIx, Guarded, LeafRelations, Openness, OperandIx, Schema, SeqKind, SeqRegex, fresh_self_token,
+};
 
 use crate::build::{Pool, build_schema, combine};
 use crate::check::{Ctx, ValidatorIndex, WalkMode, build_index, member};
@@ -801,7 +803,7 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
     // The body becomes a definition; the self-reference resolves to it.
     let ref_id = DefIx::new(definitions.len());
     let resolved = body.resolve_self(token, ref_id);
-    if resolved.occurs_unguarded(ref_id, false) {
+    if resolved.occurs_unguarded(ref_id, Guarded::No) {
         return Err(PyValueError::new_err(
             "recursive schema is not contractive: the recursive reference must \
              occur under a structural constructor (a list, tuple, set, dict, \
@@ -847,9 +849,13 @@ fn complement(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
     )
 }
 
+/// The Python surface takes `open=True`/`False`, so the flag becomes an
+/// [`Openness`] at the boundary and travels as one from there down.
 fn with_records_open(validator: &Validator, open: bool, py: Python<'_>) -> Validator {
     Validator::new(
-        validator.schema.with_records_open(open),
+        validator
+            .schema
+            .with_records_open(Openness::from_flag(open)),
         validator.literals.iter().map(|o| o.clone_ref(py)).collect(),
         validator.definitions.clone(),
     )

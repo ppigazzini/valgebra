@@ -20,8 +20,8 @@ mod violation;
 
 pub use decision::{LeafRelations, NoLeafRelations};
 pub use ir::{
-    ClassIx, ConstIx, Constraint, DefIx, DefShift, Field, OperandIx, PathSegment, PoolShift,
-    PredIx, Schema, SeqKind, SeqRegex,
+    ClassIx, ConstIx, Constraint, DefIx, DefShift, Field, Guarded, Openness, OperandIx,
+    PathSegment, PoolShift, PredIx, Schema, SeqKind, SeqRegex,
 };
 pub use violation::Violation;
 
@@ -272,27 +272,27 @@ mod tests {
     #[test]
     fn occurs_unguarded_sees_through_the_algebraic_combinators() {
         // Bare: unguarded.
-        assert!(Schema::Ref(DefIx::new(0)).occurs_unguarded(DefIx::new(0), false));
-        assert!(!Schema::Ref(DefIx::new(1)).occurs_unguarded(DefIx::new(0), false));
+        assert!(Schema::Ref(DefIx::new(0)).occurs_unguarded(DefIx::new(0), Guarded::No));
+        assert!(!Schema::Ref(DefIx::new(1)).occurs_unguarded(DefIx::new(0), Guarded::No));
         // Complement and Refine do NOT guard: the reference stays exposed.
         assert!(
             Schema::Complement(Box::new(Schema::Ref(DefIx::new(0))))
-                .occurs_unguarded(DefIx::new(0), false)
+                .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         assert!(
             Schema::Refine {
                 base: Box::new(Schema::Ref(DefIx::new(0))),
                 constraints: vec![Constraint::MinLen(1)],
             }
-            .occurs_unguarded(DefIx::new(0), false)
+            .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         assert!(
             Schema::Union(vec![Schema::Int, Schema::Ref(DefIx::new(0))])
-                .occurs_unguarded(DefIx::new(0), false)
+                .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         assert!(
             Schema::Intersection(vec![Schema::Int, Schema::Ref(DefIx::new(0))])
-                .occurs_unguarded(DefIx::new(0), false)
+                .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         // Nested combinators still pass it through.
         assert!(
@@ -300,25 +300,25 @@ mod tests {
                 Schema::Int,
                 Schema::Ref(DefIx::new(0))
             ])))
-            .occurs_unguarded(DefIx::new(0), false)
+            .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         // Structural constructors guard.
         assert!(
             !Schema::Set(Box::new(Schema::Ref(DefIx::new(0))))
-                .occurs_unguarded(DefIx::new(0), false)
+                .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         assert!(
             !Schema::FrozenSet(Box::new(Schema::Ref(DefIx::new(0))))
-                .occurs_unguarded(DefIx::new(0), false)
+                .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         assert!(
             !Schema::list(SeqRegex::homogeneous(Schema::Ref(DefIx::new(0))))
-                .occurs_unguarded(DefIx::new(0), false)
+                .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         // A guarded reference under a combinator is still guarded.
         assert!(
             !Schema::Complement(Box::new(Schema::Set(Box::new(Schema::Ref(DefIx::new(0))))))
-                .occurs_unguarded(DefIx::new(0), false)
+                .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
     }
 
@@ -391,7 +391,7 @@ mod tests {
                         schema: Schema::Int,
                         required: true,
                     }],
-                    false,
+                    Openness::Closed,
                 ),
                 "dict",
                 "dict_type",
@@ -444,7 +444,7 @@ mod tests {
     #[test]
     fn mapping_and_record_share_the_dict_label() {
         let mapping = Schema::mapping(Schema::Str, Schema::Int);
-        let record = Schema::record(Vec::new(), false);
+        let record = Schema::record(Vec::new(), Openness::Closed);
         assert_eq!(mapping.expected(), record.expected());
         assert_eq!(mapping.error_code(), record.error_code());
     }
@@ -465,13 +465,15 @@ mod tests {
                 schema: Schema::Int,
                 required: true,
             }],
-            false,
+            Openness::Closed,
         );
         let schema = Schema::list(SeqRegex::homogeneous(record));
-        let opened = schema.with_records_open(true);
+        let opened = schema.with_records_open(Openness::Open);
         assert!(record_is_open(homogeneous_elem(&opened)));
         // strict flips it back.
-        let closed = schema.with_records_open(true).with_records_open(false);
+        let closed = schema
+            .with_records_open(Openness::Open)
+            .with_records_open(Openness::Closed);
         assert!(!record_is_open(homogeneous_elem(&closed)));
     }
 
@@ -485,7 +487,8 @@ mod tests {
             fields: Vec::new(),
             defaults: vec![(Schema::Str, Schema::Int)],
         };
-        let Schema::KeyedMap { fields, defaults } = mapping.with_records_open(true) else {
+        let Schema::KeyedMap { fields, defaults } = mapping.with_records_open(Openness::Open)
+        else {
             panic!("a mapping opened into a non-map");
         };
         assert!(fields.is_empty());
@@ -531,19 +534,19 @@ mod tests {
     fn contractivity_requires_a_structural_guard() {
         assert!(
             !Schema::list(SeqRegex::homogeneous(Schema::Ref(DefIx::new(0))))
-                .occurs_unguarded(DefIx::new(0), false)
+                .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
-        assert!(Schema::Ref(DefIx::new(0)).occurs_unguarded(DefIx::new(0), false));
+        assert!(Schema::Ref(DefIx::new(0)).occurs_unguarded(DefIx::new(0), Guarded::No));
         assert!(
             Schema::Union(vec![Schema::Int, Schema::Ref(DefIx::new(0))])
-                .occurs_unguarded(DefIx::new(0), false)
+                .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         assert!(
             !Schema::list(SeqRegex::homogeneous(Schema::Union(vec![
                 Schema::Int,
                 Schema::Ref(DefIx::new(0))
             ])))
-            .occurs_unguarded(DefIx::new(0), false)
+            .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
     }
 
@@ -662,10 +665,13 @@ mod tests {
         let seq = Schema::list(regex);
 
         // The Ref sits under the sequence guard, so it is not unguarded.
-        assert!(!seq.occurs_unguarded(DefIx::new(0), false));
+        assert!(!seq.occurs_unguarded(DefIx::new(0), Guarded::No));
         // simplify and with_records_open preserve the sequence shape.
         assert!(matches!(seq.simplify(), Schema::Seq { .. }));
-        assert!(matches!(seq.with_records_open(true), Schema::Seq { .. }));
+        assert!(matches!(
+            seq.with_records_open(Openness::Open),
+            Schema::Seq { .. }
+        ));
 
         // shifted moves the Ref element by the definitions offset.
         let Schema::Seq {
@@ -714,7 +720,7 @@ mod tests {
             defaults: vec![(Schema::Str, Schema::SelfRef(7))],
         };
         // Both the field's Ref and the default's SelfRef sit under the map guard.
-        assert!(!schema.occurs_unguarded(DefIx::new(0), false));
+        assert!(!schema.occurs_unguarded(DefIx::new(0), Guarded::No));
         // shifted moves the field's Ref by the definitions offset.
         let Schema::KeyedMap { fields, .. } = schema.shifted(PoolShift::new(0), DefShift::new(5))
         else {
@@ -1396,7 +1402,7 @@ mod laws {
             schema,
             required,
         };
-        let closed = |fields| Schema::record(fields, false);
+        let closed = |fields| Schema::record(fields, Openness::Closed);
         // Closed record: a depth failure is not rescued by required-coverage.
         assert!(
             !closed(vec![field("x", Schema::Int, true)]).is_subtype_of(&closed(vec![field(
@@ -1719,15 +1725,17 @@ mod laws {
                 .is_subtype_of(&map(vec![(Schema::Str, Schema::Bool)]))
         );
         // A closed record is a subtype of an open one that declares its fields.
-        let closed = |fields| Schema::record(fields, false);
+        let closed = |fields| Schema::record(fields, Openness::Closed);
         let field = |name: &str, schema, required| Field {
             name: name.to_owned(),
             schema,
             required,
         };
         assert!(
-            closed(vec![field("x", Schema::Int, true)])
-                .is_subtype_of(&Schema::record(vec![field("x", Schema::Int, true)], true))
+            closed(vec![field("x", Schema::Int, true)]).is_subtype_of(&Schema::record(
+                vec![field("x", Schema::Int, true)],
+                Openness::Open
+            ))
         );
 
         // A record mixed with a catch-all narrows field-wise and clause-wise when
