@@ -1360,6 +1360,16 @@ mod laws {
     }
 
     #[test]
+    #[should_panic(expected = "attempt to add with overflow")]
+    fn the_test_profile_traps_an_overflowing_add() {
+        // The policy, driven rather than read off the manifest: `overflow-checks`
+        // is on in dev and test, so a bare `+` that wraps is a defect these
+        // profiles catch. Every intended saturation in this tree is spelled, so
+        // nothing legitimate trips it.
+        let _ = std::hint::black_box(usize::MAX) + std::hint::black_box(1);
+    }
+
+    #[test]
     fn an_intersection_is_empty_when_any_member_is() {
         // The member verdicts are folded with a disjunction, and the fold is the
         // ONLY thing that sees this case: an empty member whose region is opaque

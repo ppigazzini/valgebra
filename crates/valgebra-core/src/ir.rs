@@ -95,8 +95,20 @@ macro_rules! pool_index {
             }
 
             /// This index in a pool that has been appended to another.
+            ///
+            /// The sum cannot overflow: both terms are bounded by a live pool's
+            /// length, so their sum is bounded by the length of the pool they
+            /// are being combined into. Asserted rather than assumed, because
+            /// the release profile wraps and a wrapped index would read a real
+            /// object of the wrong kind.
             #[must_use]
             fn shifted(self, by: PoolShift) -> Self {
+                debug_assert!(
+                    self.0.checked_add(by.0).is_some(),
+                    "pool index {} shifted by {} overflows",
+                    self.0,
+                    by.0
+                );
                 Self(self.0 + by.0)
             }
 
@@ -157,8 +169,17 @@ impl DefIx {
     }
 
     /// This index in a definitions table that has been appended to another.
+    ///
+    /// Cannot overflow, for the reason [`ConstIx::shifted`] gives: both terms
+    /// are bounded by a live definitions table's length.
     #[must_use]
     fn shifted(self, by: DefShift) -> Self {
+        debug_assert!(
+            self.0.checked_add(by.0).is_some(),
+            "definition index {} shifted by {} overflows",
+            self.0,
+            by.0
+        );
         Self(self.0 + by.0)
     }
 }

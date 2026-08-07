@@ -39,12 +39,25 @@ pedantic = { level = "warn", priority = -1 }
 # is unaffected; for a native debugging session, build under `profiling`.
 [profile.dev]
 debug = 0
+# Overflow is a program error, and which behaviour a build gets is a per-profile
+# choice rather than something to inherit. Trapping in dev and test is what makes
+# the discipline pay: every intended saturation in this tree is spelled --
+# `saturating_add` on the node-count sum, `saturating_sub` on the required-field
+# counter and the union probe's depth, `checked_sub` in the decision budget -- so
+# a bare `+` that wraps is a defect these profiles catch rather than a shape
+# somebody meant.
+overflow-checks = true
 
 [profile.release]
 lto = "fat"
 codegen-units = 1
 strip = true
 panic = "unwind"
+# Wrapping, stated rather than inherited. The shipped wheel is a validation hot
+# path and every arithmetic site that could overflow is either bounded by a
+# collection length or spelled as a saturating operation, so the check buys
+# nothing here that the dev and test profiles do not already catch.
+overflow-checks = false
 
 # Release-grade optimization with symbols retained, for profiling the hot path.
 [profile.profiling]

@@ -155,13 +155,17 @@ Note also that the last three take the value in **different positions**. All
 three are `&Bound<'_, PyAny>`, so a reader who has just read two of them has the
 wrong prior for the third.
 
-**Overflow.** The index shifts are a bare `+`. A pool index plus a pool length
-cannot realistically overflow a `usize`, but nothing states that intent and
-`Cargo.toml` sets no `overflow-checks`, so release inherits wrapping by accident
-rather than by decision. The intended saturations elsewhere **are** spelled —
-`saturating_add` on the node-count sum, `saturating_sub` on the required-field
-counter and the union probe's depth, `checked_sub` in the decision budget — which
-is the discipline; what is missing is the profile that makes it pay.
+**Overflow, though the policy makes the shape safe.** Overflow is a program
+error and which behaviour a build gets is a per-profile choice, so `Cargo.toml`
+states it: dev and test trap, release wraps. That is what makes the discipline
+pay — every intended saturation in this tree is spelled, so a bare `+` that
+wraps is a defect the test profile catches rather than a shape somebody meant,
+and a test drives that rather than reading it off the manifest.
+
+The index shifts are a bare `+` and cannot overflow: both terms are bounded by a
+live pool's length, so their sum is bounded by the length of the pool they are
+combined into. A `debug_assert` states it, because a wrapped index would read a
+real object of the wrong kind and the release profile wraps.
 
 **Cost.** A newtype is free in *layout* and not always free in *codegen*. The one
 place it was not free here was a branch the walk takes per node, which is why
