@@ -91,6 +91,24 @@ full procedure, which is why `is_empty` on a structural schema can be true where
 the compile path and the decision procedure is not, so a rule that costs is
 allowed in one and not the other.
 
+## The bounds are decided by emptiness, not by the atom
+
+`∅ ⊆ B` for every `B`, and `A ⊆ U` for every `A`. Both are decided by asking
+whether a schema **denotes** the empty set — not by matching the `Nothing` or
+`Anything` atom — so a record with an uninhabited required field, a cancelling
+intersection, and a union that covers the universe are all recognised.
+
+Stating a bound over the atom is a rule that confirms itself: the pattern matches
+only the shape the rule is written for, so nothing else is ever the subject. That
+is how this held a gap for months while every instrument stayed green — the
+fuzzer asserted `Nothing ≤ b` with the atom hardcoded on the left, the property
+suite examined only the consequences of a `true`, and the region check upstream
+decides a scalar right-hand side correctly, so the difference was invisible
+unless the other side was a container, a record, an instance or the gradual atom.
+
+Both laws are now stated over the property, in the fuzz targets and in the core
+property suite, and the enumerated cases are in the completeness ledger.
+
 ## The limit
 
 Read `docs/decidability.md` for the published fragment. The two structural things

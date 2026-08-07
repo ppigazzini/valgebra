@@ -6,6 +6,23 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `is_subtype_of` and `is_equivalent` decide the lattice bounds by **emptiness**
+  rather than by the shape of the atom. A schema that denotes the empty set
+  without being spelled `nothing` — a record with an uninhabited required field,
+  a cancelling intersection — is now recognised as a subtype of every schema, and
+  one that covers the universe without being spelled `anything` is recognised as
+  a supertype of every schema. Both previously answered `False`, which was sound
+  but incomplete.
+
+  This changes the answer of a public method from `False` to `True` for those
+  schemas. Nothing else moves: `is_empty`, validation, compilation and every
+  rendered form are unchanged, and no relation that answered `True` can now
+  answer `False`. The gap was masked whenever the other side was scalar, because
+  the region check decides that case correctly, so it was only visible against a
+  container, a record, an instance or `typing.Any`.
+
 ## [0.0.4] - 2026-07-13
 
 ### Added

@@ -2276,6 +2276,29 @@ mod laws {
             prop_assert_eq!(a.is_equivalent(&b), a_sub_b && b_sub_a);
         }
 
+        /// The lattice bounds, stated over the PROPERTY rather than over the
+        /// atoms. `Nothing ≤ b` and `a ≤ Anything` are the cases everything
+        /// else already asserted, and asserting only those is a rule confirming
+        /// itself: a schema that denotes the empty set without being spelled
+        /// `Nothing` was never the subject. This generator produces such schemas
+        /// constantly -- a cancelling intersection is two leaves away.
+        ///
+        /// This is a COMPLETENESS assertion, which the procedure does not make
+        /// in general; it is assertable here because emptiness is decided on
+        /// this fragment, so the premise is a proof rather than a guess.
+        #[test]
+        fn the_lattice_bounds_hold_over_emptiness_not_over_the_atoms(
+            a in scalar_or_set_schema(),
+            b in scalar_or_set_schema(),
+        ) {
+            if a.is_empty() {
+                prop_assert!(a.is_subtype_of(&b), "empty {a:?} not below {b:?}");
+            }
+            if Schema::Complement(Box::new(b.clone())).is_empty() {
+                prop_assert!(a.is_subtype_of(&b), "{a:?} not below universal {b:?}");
+            }
+        }
+
         #[test]
         fn structural_subtyping_is_sound(a in scalar_or_set_schema(), b in scalar_or_set_schema()) {
             prop_assert!(a.is_subtype_of(&a)); // reflexivity holds everywhere

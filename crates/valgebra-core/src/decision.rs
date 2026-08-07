@@ -475,6 +475,22 @@ impl Schema {
     /// The structural subtyping decision: the lattice, recursion, and
     /// constructor-matching rules. Reached from [`is_subtype_rec`] after the
     /// coinductive, scalar, identity, and memo fast paths.
+    /// Whether one of the lattice bounds settles `self ⊆ other`: `self` denotes
+    /// the empty set, or `other` denotes the whole universe.
+    ///
+    /// Decided by emptiness rather than by matching the `Nothing` or `Anything`
+    /// atom, so a record with an uninhabited required field and a union covering
+    /// the universe are both recognised. Asking the atom alone is a rule that
+    /// confirms itself: the pattern matches only the shape it is written for.
+    ///
+    /// The universe side asks whether the complement is empty, which is the same
+    /// question one De Morgan step away and needs no separate procedure.
+    fn bounds_the_pair(&self, other: &Schema, cx: SubtypeCx<'_>) -> bool {
+        let empty =
+            |schema: &Schema| schema.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget);
+        empty(self) || empty(&Schema::Complement(Box::new(other.clone())))
+    }
+
     fn subtype_decide(
         &self,
         other: &Schema,
@@ -482,13 +498,23 @@ impl Schema {
         assumptions: &mut Vec<(Schema, Schema)>,
     ) -> bool {
         match (self, other) {
-            // ∅ is a subset of every set, and every set is a subset of the top.
-            (Schema::Nothing, _) | (_, Schema::Anything) => true,
-            // A ⊆ ∅ exactly when A is empty, decided with the same oracle so a
-            // refinement with unsatisfiable bounds is recognised here too.
+            // ∅ ⊆ B for every B, and A ⊆ U for every A. Both bounds are decided
+            // by EMPTINESS rather than by the shape of the atom, so a schema that
+            // denotes the empty set without being spelled `Nothing` -- a record
+            // with an uninhabited required field, a cancelling intersection -- is
+            // recognised, and so is a union that covers the universe without being
+            // spelled `Anything`.
+            //
+            // Reaching for the atom alone is the shape this arm had, and it made
+            // the two bounds disagree with the `(_, Nothing)` arm below, which has
+            // always asked the semantic question. On a scalar right-hand side the
+            // region check upstream masked the difference, so the gap was only
+            // visible against a container, a record, an instance or the gradual
+            // atom.
             (_, Schema::Nothing) => {
                 self.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget)
             }
+            _ if self.bounds_the_pair(other, cx) => true,
             // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z; A ⊆ (Y ∩ Z) iff A ⊆ Y and A ⊆ Z.
             (Schema::Union(members), _) => members
                 .iter()

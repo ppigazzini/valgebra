@@ -217,12 +217,32 @@ pub fn check_relations(a: &Schema, b: &Schema) {
     // Reflexivity of the order and the equivalence it induces.
     assert!(a.is_subtype_of(a), "subtyping not reflexive on {a:?}");
     assert!(a.is_equivalent(a), "equivalence not reflexive on {a:?}");
-    // Top and bottom bound every schema.
+    // Top and bottom bound every schema. Stated over the ATOMS...
     assert!(
         a.is_subtype_of(&Schema::Anything),
         "{a:?} not below the top"
     );
     assert!(Schema::Nothing.is_subtype_of(a), "bottom not below {a:?}");
+    // ...and over the PROPERTY, which is the law the atoms are only one case of.
+    //
+    // Written over the atoms alone this pair confirms the syntactic rule using
+    // the syntactic rule: `Nothing` is hardcoded on the left, so a schema that
+    // denotes the empty set without being spelled `Nothing` is never the
+    // subject, however long the fuzzer runs. Both sides are generated below, so
+    // a cancelling intersection and an uninhabited record are reached -- and
+    // they are common in this generator's space, not rare.
+    if a.is_empty() {
+        assert!(
+            a.is_subtype_of(b),
+            "empty {a:?} not below {b:?}: the empty set is a subset of every set"
+        );
+    }
+    if Schema::Complement(Box::new(b.clone())).is_empty() {
+        assert!(
+            a.is_subtype_of(b),
+            "{a:?} not below universal {b:?}: every set is a subset of the universe"
+        );
+    }
     // Equivalence is exactly mutual inclusion.
     let sub_ab = a.is_subtype_of(b);
     let sub_ba = b.is_subtype_of(a);

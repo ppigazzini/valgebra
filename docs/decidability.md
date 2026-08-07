@@ -109,8 +109,16 @@ tracked as future work.
 - **Mixed maps where the supertype declares a _required_ field the subtype
   lacks.** When the missing field is optional, the subtype's catch-all covers it
   and the case is decided; a required field is not, because a catch-all over the
-  key space does not prove that field is present. Deciding it needs the full
-  quasi-constant-function comparison.
+  key space does not prove that field is present. Deciding it in general needs
+  the full quasi-constant-function comparison.
+
+  The reachable half of this is decided: a subtype that denotes the **empty set**
+  is below every schema, including one declaring a field it lacks, because the
+  empty set is a subset of every set. That case does not need the comparison
+  above, and both lattice bounds are decided by emptiness rather than by the
+  shape of the atom — a schema that denotes nothing without being spelled
+  `nothing`, and one that covers the universe without being spelled `anything`,
+  are both recognised.
 General regular-expression-types inclusion of sequences (a union of sequence
 languages that splits across branches, or a repeated heterogeneous group) is not
 implemented, but no schema valgebra builds takes that shape — every sequence is

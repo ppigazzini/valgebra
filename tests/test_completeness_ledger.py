@@ -21,7 +21,16 @@ report; the count pytest prints as "xfailed" is the live conservatism counter.
 """
 
 import enum
-from typing import Annotated, ClassVar, Final, Literal, Optional, TypeVar, Union
+from typing import (
+    Annotated,
+    ClassVar,
+    Final,
+    Literal,
+    NoReturn,
+    Optional,
+    TypeVar,
+    Union,
+)
 
 import annotated_types as at
 import pytest
@@ -32,6 +41,7 @@ from valgebra import (
     Validator,
     complement,
     intersection,
+    nothing,
     recursive,
     union,
 )
@@ -118,6 +128,32 @@ _DECIDED = [
         "subtype", [bool, int, ...], [int, int, ...], id="[bool,int,...]<=[int,int,...]"
     ),
     pytest.param("empty", intersection(int, str), None, id="empty:int&str"),
+    # The lattice bounds, decided by EMPTINESS rather than by the shape of the
+    # atom. A schema that denotes the empty set without being spelled `nothing`
+    # is below everything; one that covers the universe without being spelled
+    # `anything` is above everything. Both were enumerated only for the atoms,
+    # which is a rule confirming itself -- and the region check upstream decides
+    # a scalar right-hand side correctly, so these want a container, a record or
+    # the gradual atom on the other side to reach the arm at all.
+    pytest.param(
+        "subtype", intersection(int, complement(int)), list[int], id="empty<=list[int]"
+    ),
+    pytest.param(
+        "subtype", intersection(int, complement(int)), {"a": int}, id="empty<={a:int}"
+    ),
+    pytest.param("subtype", {"a": NoReturn}, list[int], id="{a:Never}<=list[int]"),
+    pytest.param(
+        "subtype", list[int], union(int, complement(int)), id="list[int]<=universal"
+    ),
+    pytest.param(
+        "subtype", {"a": int}, union(int, complement(int)), id="{a:int}<=universal"
+    ),
+    pytest.param(
+        "equivalent",
+        intersection(int, complement(int)),
+        nothing,
+        id="int&~int==nothing",
+    ),
     pytest.param("equivalent", union(bool, int), int, id="bool|int==int"),
     pytest.param("equivalent", intersection(int, int), int, id="int&int==int"),
     # A refinement is a subtype of its base, and a refinement with more bound or
