@@ -20,7 +20,7 @@ mod violation;
 
 pub use decision::{LeafRelations, NoLeafRelations};
 pub use ir::{
-    ClassIx, ConstIx, Constraint, DefIx, DefShift, Field, Guarded, Openness, OperandIx,
+    ClassIx, ConstIx, Constraint, DefIx, DefShift, Field, Guarded, MapClause, Openness, OperandIx,
     PathSegment, PoolShift, PredIx, Schema, SeqKind, SeqRegex,
 };
 pub use violation::Violation;
@@ -380,7 +380,10 @@ mod tests {
             ),
             (Schema::Set(Box::new(Schema::Int)), "set", "set_type"),
             (
-                Schema::mapping(Schema::Str, Schema::Int),
+                Schema::mapping(MapClause {
+                    key: Schema::Str,
+                    value: Schema::Int,
+                }),
                 "dict",
                 "dict_type",
             ),
@@ -443,7 +446,10 @@ mod tests {
 
     #[test]
     fn mapping_and_record_share_the_dict_label() {
-        let mapping = Schema::mapping(Schema::Str, Schema::Int);
+        let mapping = Schema::mapping(MapClause {
+            key: Schema::Str,
+            value: Schema::Int,
+        });
         let record = Schema::record(Vec::new(), Openness::Closed);
         assert_eq!(mapping.expected(), record.expected());
         assert_eq!(mapping.error_code(), record.error_code());
@@ -803,7 +809,13 @@ mod tests {
         assert!(
             Schema::FrozenSet(Box::new(Schema::Int)).disjoint(&Schema::Set(Box::new(Schema::Int)))
         );
-        assert!(Schema::mapping(Schema::Str, Schema::Int).disjoint(&Schema::Int)); // dict vs int
+        assert!(
+            Schema::mapping(MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            })
+            .disjoint(&Schema::Int)
+        ); // dict vs int
         // Nothing is disjoint from everything.
         assert!(Schema::Nothing.disjoint(&Schema::Int));
         assert!(Schema::Int.disjoint(&Schema::Nothing));
@@ -1384,7 +1396,10 @@ mod laws {
             Schema::tuple(SeqRegex::fixed([Schema::Int])),
             Schema::Set(Box::new(Schema::Int)),
             Schema::FrozenSet(Box::new(Schema::Int)),
-            Schema::mapping(Schema::Str, Schema::Int),
+            Schema::mapping(MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }),
             Schema::Anything,
             Schema::Dynamic,
         ] {
@@ -1417,6 +1432,8 @@ mod laws {
             }
         }
         let list = |element| Schema::list(SeqRegex::homogeneous(element));
+        // A mapping in one call, so an assertion still reads as one line.
+        let map = |key, value| Schema::mapping(MapClause { key, value });
         // Short spellings of the pooled bounds, so an assertion still reads as
         // one line: the operand index names its space at the constructor.
         let ge = |n: usize| Constraint::Ge(OperandIx::new(n));
@@ -1499,10 +1516,7 @@ mod laws {
         );
         // Pure mapping: a clause is subsumed only when both key and value narrow;
         // a key mismatch is not rescued by the value matching.
-        assert!(
-            !Schema::mapping(Schema::Str, Schema::Int)
-                .is_subtype_of(&Schema::mapping(Schema::Bytes, Schema::Int))
-        );
+        assert!(!map(Schema::Str, Schema::Int).is_subtype_of(&map(Schema::Bytes, Schema::Int)));
         // Mixed record-and-catch-all: required-coverage must hold there too.
         let mixed = |required| Schema::KeyedMap {
             fields: vec![field("x", Schema::Int, required)],
@@ -1512,7 +1526,7 @@ mod laws {
         // A pure mapping is not a subtype of a mixed map that requires a field it
         // lacks: the pure-mapping branch must need both sides field-free.
         assert!(
-            !Schema::mapping(Schema::Str, Schema::Int).is_subtype_of(&Schema::KeyedMap {
+            !map(Schema::Str, Schema::Int).is_subtype_of(&Schema::KeyedMap {
                 fields: vec![field("x", Schema::Int, true)],
                 defaults: vec![(Schema::Str, Schema::Int)],
             })

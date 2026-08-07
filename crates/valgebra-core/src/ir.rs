@@ -527,10 +527,10 @@ impl Schema {
     /// A homogeneous mapping `dict[K, V]`: every key in `key`, every value in
     /// `value`.
     #[must_use]
-    pub fn mapping(key: Schema, value: Schema) -> Schema {
+    pub fn mapping(clause: MapClause) -> Schema {
         Schema::KeyedMap {
             fields: Vec::new(),
-            defaults: vec![(key, value)],
+            defaults: vec![(clause.key, clause.value)],
         }
     }
 
@@ -606,6 +606,22 @@ pub enum Constraint {
     /// leaf the decision procedure treats opaquely: two regex constraints relate
     /// only when their patterns are identical.
     Regex(String),
+}
+
+/// The key and value schemas of a homogeneous mapping, as one argument.
+///
+/// Two positional `Schema` arguments are the shape a type cannot distinguish: a
+/// caller writing `dict[K, V]` with them transposed builds `dict[V, K]`, which
+/// typechecks and validates real values. A struct literal names each at the call
+/// site and cannot be transposed, which is the only remedy that applies here --
+/// a key schema and a value schema are genuinely two schemas, and neither
+/// carries which position it is in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MapClause {
+    /// Every key of the mapping must belong to this set.
+    pub key: Schema,
+    /// Every value of the mapping must belong to this set.
+    pub value: Schema,
 }
 
 /// A named field of a [`Schema::KeyedMap`] or [`Schema::Attrs`].

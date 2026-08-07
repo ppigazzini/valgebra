@@ -11,7 +11,8 @@ use pyo3::types::{
     PyTuple, PyType,
 };
 use valgebra_core::{
-    ClassIx, ConstIx, Constraint, DefShift, Field, Openness, OperandIx, PredIx, Schema, SeqRegex,
+    ClassIx, ConstIx, Constraint, DefShift, Field, MapClause, Openness, OperandIx, PredIx, Schema,
+    SeqRegex,
 };
 
 use crate::errors::summarize;
@@ -460,10 +461,12 @@ fn build_parametrized(
                 "dict[...] needs a key type and a value type",
             ));
         }
-        return Ok(Schema::mapping(
-            build_schema(&args.get_item(0)?, lits, defs)?,
-            build_schema(&args.get_item(1)?, lits, defs)?,
-        ));
+        // Named rather than positional: `dict[K, V]` compiled with the two
+        // transposed is `dict[V, K]`, which typechecks and validates real values.
+        return Ok(Schema::mapping(MapClause {
+            key: build_schema(&args.get_item(0)?, lits, defs)?,
+            value: build_schema(&args.get_item(1)?, lits, defs)?,
+        }));
     }
     if origin.is(py.get_type::<PyTuple>()) {
         // tuple[A, ..., Z, ...]: a trailing `...` repeats the element before it

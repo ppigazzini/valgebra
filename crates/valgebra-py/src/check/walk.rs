@@ -1046,7 +1046,7 @@ fn check_constraint(
             let Some(predicate) = predicate_at(ctx, *i, py) else {
                 return false;
             };
-            match predicate_passes(&predicate, value) {
+            match predicate_passes(value, &predicate) {
                 Ok(passed) => (passed, "predicate_failed", "a passing predicate".to_owned()),
                 // A fatal signal raised inside the predicate is the interpreter
                 // unwinding, not a predicate that merely errored: propagate it.
@@ -1160,6 +1160,10 @@ fn fast(ctx: Ctx<'_>) -> Ctx<'_> {
 /// equal. The same-type guard rules out Python's cross-type equality
 /// (`1 == True == 1.0`), so `Literal[1]` denotes `{1}`, not `{1, True, 1.0}`.
 /// Returns the comparison result so a raising `__eq__` is folded by the caller.
+/// The three probe helpers below take the **value first** and the pooled object
+/// second. All three arguments are `&Bound<'_, PyAny>`, so every transposition
+/// typechecks, and a reader who has just read two of them carries a prior into
+/// the third -- which is the condition under which a transposition gets written.
 pub(crate) fn literal_matches(
     value: &Bound<'_, PyAny>,
     literal: &Bound<'_, PyAny>,
@@ -1176,7 +1180,7 @@ fn is_multiple_of(value: &Bound<'_, PyAny>, operand: &Bound<'_, PyAny>) -> PyRes
 }
 
 /// Run a user predicate and report whether it returned a truthy result.
-fn predicate_passes(predicate: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<bool> {
+fn predicate_passes(value: &Bound<'_, PyAny>, predicate: &Bound<'_, PyAny>) -> PyResult<bool> {
     predicate.call1((value,))?.is_truthy()
 }
 
@@ -1191,7 +1195,7 @@ mod interpreter {
     use crate::check::{WalkMode, build_index};
     use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyModule};
     use std::cell::{Cell, RefCell};
-    use valgebra_core::{Field, Openness};
+    use valgebra_core::{Field, MapClause, Openness};
 
     /// Decide membership of a Python value against a schema, through the real
     /// walk, in the mode a validator's `is_valid` uses.
@@ -1450,7 +1454,10 @@ mod interpreter {
                 Openness::Closed,
             );
             let open = Schema::record(vec![field("x", Schema::Int, true)], Openness::Open);
-            let mapping = Schema::mapping(Schema::Str, Schema::Int);
+            let mapping = Schema::mapping(MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            });
 
             let build = |pairs: &[(&str, Bound<'_, PyAny>)]| {
                 let dict = PyDict::new(py);
@@ -1830,7 +1837,10 @@ mod interpreter {
                 Openness::Closed,
             );
             let open = Schema::record(vec![field("x", Schema::Int, true)], Openness::Open);
-            let mapping = Schema::mapping(Schema::Str, Schema::Int);
+            let mapping = Schema::mapping(MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            });
 
             for (schema, entries, want) in [
                 // The required field must be present and match.
