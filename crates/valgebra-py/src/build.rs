@@ -10,7 +10,9 @@ use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyModule, PySet, PyString,
     PyTuple, PyType,
 };
-use valgebra_core::{Constraint, Field, Schema, SeqRegex};
+use valgebra_core::{
+    ClassIx, ConstIx, Constraint, DefShift, Field, OperandIx, PredIx, Schema, SeqRegex,
+};
 
 use crate::Validator;
 use crate::errors::summarize;
@@ -210,7 +212,7 @@ pub(crate) fn build_schema(
     // merge), append its definitions, and remap its schema's indices.
     if let Ok(compiled) = obj.cast::<Validator>() {
         let inner = compiled.get();
-        let def_offset = defs.len();
+        let def_offset = DefShift::new(defs.len());
         let lit_map: Vec<usize> = inner
             .literals
             .iter()
@@ -238,7 +240,7 @@ pub(crate) fn build_schema(
         )));
     }
 
-    Ok(Schema::Literal(lits.intern(obj)))
+    Ok(Schema::Literal(lits.intern_const(obj)))
 }
 
 /// True if `obj` is a type variable or a typing special form (`Final`,
@@ -319,7 +321,7 @@ fn build_type_object(
     }
     // Enum: an instance of the enumeration class (any of its members).
     if ty.is_subclass(forms.enum_class.bind(py))? {
-        return Ok(Schema::Instance(lits.intern(ty.as_any())));
+        return Ok(Schema::Instance(lits.intern_class(ty.as_any())));
     }
     // dataclass / NamedTuple: isinstance plus a deep check of each field.
     let is_dataclass = py
@@ -332,7 +334,7 @@ fn build_type_object(
     // Protocol: a runtime-checkable protocol validates by isinstance.
     if is_truthy_attr(ty, "_is_protocol") {
         if is_truthy_attr(ty, "_is_runtime_protocol") {
-            return Ok(Schema::Instance(lits.intern(ty.as_any())));
+            return Ok(Schema::Instance(lits.intern_class(ty.as_any())));
         }
         return Err(not_implemented(
             "a Protocol must be @runtime_checkable to be used as a schema",
@@ -342,7 +344,7 @@ fn build_type_object(
     // This covers the remaining builtins (complex, bytearray, memoryview, range,
     // the `collections.abc` ABCs including Callable, ...) and arbitrary user
     // classes uniformly.
-    Ok(Schema::Instance(lits.intern(ty.as_any())))
+    Ok(Schema::Instance(lits.intern_class(ty.as_any())))
 }
 
 /// True if `obj.<name>` exists and is truthy; false on absence or error.
@@ -408,7 +410,7 @@ fn build_object(
 ) -> PyResult<Schema> {
     let hints = resolve_type_hints(ty)?;
     let hints = hints.cast::<PyDict>()?;
-    let class_index = lits.intern(ty.as_any());
+    let class_index = lits.intern_class(ty.as_any());
     let mut fields = Vec::with_capacity(hints.len());
     for (name, hint) in hints.iter() {
         fields.push(Field {
@@ -529,7 +531,7 @@ fn build_parametrized(
         // Callable[...] checks only callability at runtime; the argument and
         // return types cannot be inspected, so the parameters are ignored and
         // the schema is the opaque `isinstance(x, Callable)` test.
-        return Ok(Schema::Instance(lits.intern(origin)));
+        return Ok(Schema::Instance(lits.intern_class(origin)));
     }
     Err(not_implemented(&format!(
         "unsupported typing form with origin {}; supported: list, set, dict, \
@@ -706,7 +708,7 @@ fn parse_constraint(
     }
     // Comparison bounds. One marker may carry several (e.g. an interval).
     for (attr, make) in [
-        ("ge", Constraint::Ge as fn(usize) -> Constraint),
+        ("ge", Constraint::Ge as fn(OperandIx) -> Constraint),
         ("gt", Constraint::Gt),
         ("le", Constraint::Le),
         ("lt", Constraint::Lt),
@@ -714,7 +716,7 @@ fn parse_constraint(
         if let Ok(bound) = marker.getattr(attr)
             && !bound.is_none()
         {
-            out.push(make(lits.intern(&bound)));
+            out.push(make(lits.intern_operand(&bound)));
         }
     }
     // Length bounds.
@@ -741,16 +743,16 @@ fn parse_constraint(
                  zero. Use a nonzero divisor.",
             ));
         }
-        out.push(Constraint::MultipleOf(lits.intern(&multiple)));
+        out.push(Constraint::MultipleOf(lits.intern_operand(&multiple)));
     }
     // Predicate escape hatch: annotated_types.Predicate(.func) or a bare
     // callable used directly as metadata.
     if let Ok(func) = marker.getattr("func")
         && func.is_callable()
     {
-        out.push(Constraint::Predicate(lits.intern(&func)));
+        out.push(Constraint::Predicate(lits.intern_predicate(&func)));
     } else if marker.is_callable() {
-        out.push(Constraint::Predicate(lits.intern(marker)));
+        out.push(Constraint::Predicate(lits.intern_predicate(marker)));
     }
     Ok(())
 }
@@ -781,7 +783,11 @@ impl Pool {
         Pool { items, index }
     }
 
-    /// Pool `obj` and return its index, deduplicating by object identity.
+    /// Pool `obj` and return its slot, deduplicating by object identity.
+    ///
+    /// Private, and reached only through the four typed forms below. One pool
+    /// serves four index spaces, so the slot acquires its meaning here, at the
+    /// line that decides what the object is being pooled *as*.
     fn intern(&mut self, obj: &Bound<'_, PyAny>) -> usize {
         let ptr = obj.as_ptr() as usize;
         if let Some(&index) = self.index.get(&ptr) {
@@ -791,6 +797,26 @@ impl Pool {
         self.items.push(obj.clone().unbind());
         self.index.insert(ptr, index);
         index
+    }
+
+    /// Pool `obj` as the constant of a typed singleton.
+    fn intern_const(&mut self, obj: &Bound<'_, PyAny>) -> ConstIx {
+        ConstIx::new(self.intern(obj))
+    }
+
+    /// Pool `obj` as the class of an `isinstance` atom or an attribute record.
+    fn intern_class(&mut self, obj: &Bound<'_, PyAny>) -> ClassIx {
+        ClassIx::new(self.intern(obj))
+    }
+
+    /// Pool `obj` as a comparison or multiple-of operand.
+    fn intern_operand(&mut self, obj: &Bound<'_, PyAny>) -> OperandIx {
+        OperandIx::new(self.intern(obj))
+    }
+
+    /// Pool `obj` as a user predicate's callable.
+    fn intern_predicate(&mut self, obj: &Bound<'_, PyAny>) -> PredIx {
+        PredIx::new(self.intern(obj))
     }
 
     /// The pooled constants, for reading against a compiled schema.

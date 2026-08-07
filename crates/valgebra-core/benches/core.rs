@@ -9,7 +9,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use valgebra_core::{Field, Schema, SeqRegex};
+use valgebra_core::{ConstIx, DefShift, Field, PoolShift, Schema, SeqRegex};
 
 /// A redundant Boolean expression that exercises every simplifier rewrite:
 /// nested unions and intersections, duplicate members, top/bottom identities,
@@ -36,7 +36,7 @@ fn wide_record(width: usize) -> Schema {
     let fields = (0..width)
         .map(|i| Field {
             name: format!("f{i}"),
-            schema: Schema::Literal(i),
+            schema: Schema::Literal(ConstIx::new(i)),
             required: i % 2 == 0,
         })
         .collect();
@@ -84,7 +84,7 @@ fn bench_simplify(c: &mut Criterion) {
 fn bench_shifted(c: &mut Criterion) {
     let schema = wide_record(64);
     c.bench_function("shifted_record_width64", |b| {
-        b.iter(|| black_box(&schema).shifted(100, 0));
+        b.iter(|| black_box(&schema).shifted(PoolShift::new(100), DefShift::new(0)));
     });
 }
 

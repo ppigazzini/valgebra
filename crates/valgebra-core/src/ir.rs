@@ -1,6 +1,21 @@
 //! The schema intermediate representation: the IR node definitions and the
 //! pure structural operations over them (construction, index shifting,
 //! self-reference resolution, and the structural guardedness check).
+//!
+//! ## The index spaces
+//!
+//! Five payloads in this module are integers that address something the
+//! validator holds, and four of them address the *same* constants pool: a
+//! literal's constant, a class, a comparison operand, and a user predicate. A
+//! bare index used against the wrong one of those retrieves a real object of the
+//! wrong kind, so the failure is a plausible wrong verdict rather than a panic.
+//! Each therefore has its own type, minted by one named constructor and opened
+//! by [`get`](ConstIx::get), which is the line a reviewer reads. The fifth,
+//! [`DefIx`], addresses the definitions table instead.
+//!
+//! The two *shifts* applied when two validators are composed are typed for the
+//! same reason: [`Schema::shifted`] takes one per space, and they used to be two
+//! adjacent `usize` arguments a caller could transpose in silence.
 
 /// Remap a pool index through the reindexing map built when two validators merge.
 /// Every index is in range by construction, so a miss is an internal invariant
@@ -12,6 +27,147 @@ fn remap(lit_map: &[usize], index: usize) -> usize {
         "literal index {index} out of remap range"
     );
     lit_map.get(index).copied().unwrap_or(index)
+}
+
+/// How far every constants-pool index moves when a second validator's pool is
+/// appended to a first. Distinct from [`DefShift`] so the two cannot be
+/// transposed at [`Schema::shifted`], which takes one of each.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct PoolShift(usize);
+
+impl PoolShift {
+    /// A shift of `by` pool slots -- in practice the length of the pool the
+    /// second validator's constants are appended to.
+    #[must_use]
+    pub const fn new(by: usize) -> Self {
+        Self(by)
+    }
+
+    /// The underlying distance.
+    #[must_use]
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+/// How far every definitions-table index moves when a second validator's
+/// definitions are appended to a first. See [`PoolShift`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct DefShift(usize);
+
+impl DefShift {
+    /// A shift of `by` definition slots.
+    #[must_use]
+    pub const fn new(by: usize) -> Self {
+        Self(by)
+    }
+
+    /// The underlying distance.
+    #[must_use]
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+/// Define one index space over the constants pool.
+///
+/// Every such type is a `usize` in layout and a distinct set of values to the
+/// compiler. `new` is the only way in and `get` the only way out, so a
+/// conversion is always a place a reader can see; there is deliberately no
+/// `From<usize>`.
+macro_rules! pool_index {
+    ($(#[$meta:meta])* $name:ident, $what:literal) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[repr(transparent)]
+        pub struct $name(usize);
+
+        impl $name {
+            #[doc = concat!("The pool slot holding ", $what, ".")]
+            ///
+            /// The caller is the code that put the object in the pool, so this
+            /// is where the index acquires its meaning.
+            #[must_use]
+            pub const fn new(index: usize) -> Self {
+                Self(index)
+            }
+
+            /// The underlying pool slot. Every call is a place the index stops
+            /// carrying which space it belongs to, so there should be few.
+            #[must_use]
+            pub const fn get(self) -> usize {
+                self.0
+            }
+
+            /// This index in a pool that has been appended to another.
+            #[must_use]
+            fn shifted(self, by: PoolShift) -> Self {
+                Self(self.0 + by.0)
+            }
+
+            /// This index after the pool was interned into another, collapsing
+            /// identity-shared constants.
+            #[must_use]
+            fn remapped(self, lit_map: &[usize]) -> Self {
+                Self(remap(lit_map, self.0))
+            }
+        }
+    };
+}
+
+pool_index!(
+    /// The pool slot holding a [`Schema::Literal`]'s constant.
+    ConstIx,
+    "a literal's constant"
+);
+pool_index!(
+    /// The pool slot holding the class of a [`Schema::Instance`] or a
+    /// [`Schema::Attrs`]. One type for both: they address the same kind of
+    /// object and no call site carries one of each, so a second type would be a
+    /// distinction with no swap behind it.
+    ClassIx,
+    "a class"
+);
+pool_index!(
+    /// The pool slot holding a comparison constraint's operand.
+    OperandIx,
+    "a comparison operand"
+);
+pool_index!(
+    /// The pool slot holding a [`Constraint::Predicate`]'s callable.
+    PredIx,
+    "a user predicate"
+);
+
+/// A slot in the validator's definitions table: the target of a
+/// [`Schema::Ref`] back edge.
+///
+/// A different table from the constants pool, and therefore a different type:
+/// before the split both travelled as `usize`, so either reached either.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct DefIx(usize);
+
+impl DefIx {
+    /// The definition at this slot of the validator's definitions table.
+    #[must_use]
+    pub const fn new(index: usize) -> Self {
+        Self(index)
+    }
+
+    /// The underlying slot.
+    #[must_use]
+    pub const fn get(self) -> usize {
+        self.0
+    }
+
+    /// This index in a definitions table that has been appended to another.
+    #[must_use]
+    fn shifted(self, by: DefShift) -> Self {
+        Self(self.0 + by.0)
+    }
 }
 
 /// A single step in the location of a value inside a composite structure.
@@ -87,7 +243,7 @@ pub enum Schema {
     /// objects. The payload is an index into a constants pool held alongside the
     /// compiled validator. The same-type test is applied in the bindings, where
     /// the Python value is in hand.
-    Literal(usize),
+    Literal(ConstIx),
     /// Denotes lists or tuples whose element sequence matches a regular
     /// expression over element schemas.
     ///
@@ -139,7 +295,7 @@ pub enum Schema {
     Complement(Box<Schema>),
     /// Denotes instances of a class, by `isinstance`. The class is held in the
     /// validator's object pool; the payload is its index.
-    Instance(usize),
+    Instance(ClassIx),
     /// An instance of a class whose attributes satisfy the given fields — an
     /// `isinstance` atom intersected with an attribute record (`Instance ∧
     /// attrs`). Named `Attrs` so it does not collide with `object`, the lattice
@@ -150,7 +306,7 @@ pub enum Schema {
     /// check for dataclasses and named tuples.
     Attrs {
         /// Index of the class in the validator's object pool.
-        class_index: usize,
+        class_index: ClassIx,
         /// Per-attribute field schemas; all required.
         fields: Vec<Field>,
     },
@@ -165,7 +321,7 @@ pub enum Schema {
     /// A reference to a recursive definition: denotes the same set as the
     /// definition at this index in the validator's definitions table. The back
     /// edge of a fixpoint, produced by `recursive`.
-    Ref(usize),
+    Ref(DefIx),
     /// A transient self-reference marker used only while a `recursive` definition is
     /// being built; it is resolved to a [`Schema::Ref`] before the validator is
     /// returned and never appears in a finished schema.
@@ -226,15 +382,15 @@ impl SeqRegex {
         }
     }
 
-    fn shifted(&self, pool: usize, defs: usize) -> SeqRegex {
+    fn shifted(&self, pool: PoolShift, defs: DefShift) -> SeqRegex {
         self.map_elems(&|s| s.shifted(pool, defs))
     }
 
-    fn reindexed(&self, lit_map: &[usize], def_offset: usize) -> SeqRegex {
+    fn reindexed(&self, lit_map: &[usize], def_offset: DefShift) -> SeqRegex {
         self.map_elems(&|s| s.reindexed(lit_map, def_offset))
     }
 
-    fn resolve_self(&self, token: u64, ref_id: usize) -> SeqRegex {
+    fn resolve_self(&self, token: u64, ref_id: DefIx) -> SeqRegex {
         self.map_elems(&|s| s.resolve_self(token, ref_id))
     }
 
@@ -244,7 +400,7 @@ impl SeqRegex {
 
     /// A `Seq` guards its element schemas, so a recursive reference inside one is
     /// guarded; report whether `target` occurs (necessarily guarded here).
-    fn occurs_guarded(&self, target: usize) -> bool {
+    fn occurs_guarded(&self, target: DefIx) -> bool {
         self.any_elem(&|s| s.occurs_unguarded(target, true))
     }
 
@@ -393,21 +549,21 @@ impl SeqRegex {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Constraint {
     /// `value >= pool[i]`.
-    Ge(usize),
+    Ge(OperandIx),
     /// `value > pool[i]`.
-    Gt(usize),
+    Gt(OperandIx),
     /// `value <= pool[i]`.
-    Le(usize),
+    Le(OperandIx),
     /// `value < pool[i]`.
-    Lt(usize),
+    Lt(OperandIx),
     /// `len(value) >= n`.
     MinLen(usize),
     /// `len(value) <= n`.
     MaxLen(usize),
     /// `value % pool[i] == 0`: a numeric multiple of the operand.
-    MultipleOf(usize),
+    MultipleOf(OperandIx),
     /// `pool[i](value)` is truthy. The documented Python-callback slow path.
-    Predicate(usize),
+    Predicate(PredIx),
     /// The string fully matches this regular expression (anchored, `re.fullmatch`
     /// semantics). The pattern is held inline rather than pooled; the bindings
     /// compile it once and match natively. Like [`Constraint::Predicate`] it is a
@@ -512,7 +668,7 @@ impl Schema {
     /// `Literal`/`Instance`/`Attrs`/`Refine` indices move past the first
     /// pool's length and its `Ref` indices past the first definitions' length.
     #[must_use]
-    pub fn shifted(&self, pool: usize, defs: usize) -> Schema {
+    pub fn shifted(&self, pool: PoolShift, defs: DefShift) -> Schema {
         match self {
             Schema::Anything
             | Schema::Dynamic
@@ -524,9 +680,9 @@ impl Schema {
             | Schema::Str
             | Schema::Bytes
             | Schema::SelfRef(_) => self.clone(),
-            Schema::Literal(i) => Schema::Literal(i + pool),
-            Schema::Instance(i) => Schema::Instance(i + pool),
-            Schema::Ref(i) => Schema::Ref(i + defs),
+            Schema::Literal(i) => Schema::Literal(i.shifted(pool)),
+            Schema::Instance(i) => Schema::Instance(i.shifted(pool)),
+            Schema::Ref(i) => Schema::Ref(i.shifted(defs)),
             Schema::Seq { container, regex } => Schema::Seq {
                 container: *container,
                 regex: regex.shifted(pool, defs),
@@ -549,7 +705,7 @@ impl Schema {
                 class_index,
                 fields,
             } => Schema::Attrs {
-                class_index: class_index + pool,
+                class_index: class_index.shifted(pool),
                 fields: fields.iter().map(|f| f.shifted(pool, defs)).collect(),
             },
             Schema::Refine { base, constraints } => Schema::Refine {
@@ -655,7 +811,7 @@ impl Schema {
     /// identity-shared constants collapse to one index) while still offsetting
     /// definition indices by `def_offset`.
     #[must_use]
-    pub fn reindexed(&self, lit_map: &[usize], def_offset: usize) -> Schema {
+    pub fn reindexed(&self, lit_map: &[usize], def_offset: DefShift) -> Schema {
         match self {
             Schema::Anything
             | Schema::Dynamic
@@ -667,9 +823,9 @@ impl Schema {
             | Schema::Str
             | Schema::Bytes
             | Schema::SelfRef(_) => self.clone(),
-            Schema::Literal(i) => Schema::Literal(remap(lit_map, *i)),
-            Schema::Instance(i) => Schema::Instance(remap(lit_map, *i)),
-            Schema::Ref(i) => Schema::Ref(i + def_offset),
+            Schema::Literal(i) => Schema::Literal(i.remapped(lit_map)),
+            Schema::Instance(i) => Schema::Instance(i.remapped(lit_map)),
+            Schema::Ref(i) => Schema::Ref(i.shifted(def_offset)),
             Schema::Seq { container, regex } => Schema::Seq {
                 container: *container,
                 regex: regex.reindexed(lit_map, def_offset),
@@ -706,7 +862,7 @@ impl Schema {
                 class_index,
                 fields,
             } => Schema::Attrs {
-                class_index: remap(lit_map, *class_index),
+                class_index: class_index.remapped(lit_map),
                 fields: fields
                     .iter()
                     .map(|f| f.reindexed(lit_map, def_offset))
@@ -722,7 +878,7 @@ impl Schema {
     /// Replace each `SelfRef(token)` with `Ref(ref_id)`, leaving other tokens
     /// (from enclosing `recursive` definitions) untouched.
     #[must_use]
-    pub fn resolve_self(&self, token: u64, ref_id: usize) -> Schema {
+    pub fn resolve_self(&self, token: u64, ref_id: DefIx) -> Schema {
         let recur = |s: &Schema| s.resolve_self(token, ref_id);
         match self {
             Schema::SelfRef(t) if *t == token => Schema::Ref(ref_id),
@@ -774,7 +930,7 @@ impl Schema {
     /// occurrence of its self-reference sits under a structural constructor;
     /// `guarded` records whether such a constructor has been crossed.
     #[must_use]
-    pub fn occurs_unguarded(&self, target: usize, guarded: bool) -> bool {
+    pub fn occurs_unguarded(&self, target: DefIx, guarded: bool) -> bool {
         match self {
             Schema::Ref(id) => *id == target && !guarded,
             // Structural constructors guard their children.
@@ -863,7 +1019,7 @@ impl Schema {
 }
 
 impl Field {
-    fn shifted(&self, pool: usize, defs: usize) -> Field {
+    fn shifted(&self, pool: PoolShift, defs: DefShift) -> Field {
         Field {
             name: self.name.clone(),
             schema: self.schema.shifted(pool, defs),
@@ -871,7 +1027,7 @@ impl Field {
         }
     }
 
-    fn reindexed(&self, lit_map: &[usize], def_offset: usize) -> Field {
+    fn reindexed(&self, lit_map: &[usize], def_offset: DefShift) -> Field {
         Field {
             name: self.name.clone(),
             schema: self.schema.reindexed(lit_map, def_offset),
@@ -881,30 +1037,32 @@ impl Field {
 }
 
 impl Constraint {
-    fn shifted(&self, pool: usize) -> Constraint {
+    fn shifted(&self, pool: PoolShift) -> Constraint {
         match self {
-            Constraint::Ge(i) => Constraint::Ge(i + pool),
-            Constraint::Gt(i) => Constraint::Gt(i + pool),
-            Constraint::Le(i) => Constraint::Le(i + pool),
-            Constraint::Lt(i) => Constraint::Lt(i + pool),
+            Constraint::Ge(i) => Constraint::Ge(i.shifted(pool)),
+            Constraint::Gt(i) => Constraint::Gt(i.shifted(pool)),
+            Constraint::Le(i) => Constraint::Le(i.shifted(pool)),
+            Constraint::Lt(i) => Constraint::Lt(i.shifted(pool)),
+            // A length is not a pool index and takes no pool shift. The type
+            // says so: a usize has no `shifted(PoolShift)`.
             Constraint::MinLen(n) => Constraint::MinLen(*n),
             Constraint::MaxLen(n) => Constraint::MaxLen(*n),
-            Constraint::MultipleOf(i) => Constraint::MultipleOf(i + pool),
-            Constraint::Predicate(i) => Constraint::Predicate(i + pool),
+            Constraint::MultipleOf(i) => Constraint::MultipleOf(i.shifted(pool)),
+            Constraint::Predicate(i) => Constraint::Predicate(i.shifted(pool)),
             Constraint::Regex(p) => Constraint::Regex(p.clone()),
         }
     }
 
     fn reindexed(&self, lit_map: &[usize]) -> Constraint {
         match self {
-            Constraint::Ge(i) => Constraint::Ge(remap(lit_map, *i)),
-            Constraint::Gt(i) => Constraint::Gt(remap(lit_map, *i)),
-            Constraint::Le(i) => Constraint::Le(remap(lit_map, *i)),
-            Constraint::Lt(i) => Constraint::Lt(remap(lit_map, *i)),
+            Constraint::Ge(i) => Constraint::Ge(i.remapped(lit_map)),
+            Constraint::Gt(i) => Constraint::Gt(i.remapped(lit_map)),
+            Constraint::Le(i) => Constraint::Le(i.remapped(lit_map)),
+            Constraint::Lt(i) => Constraint::Lt(i.remapped(lit_map)),
             Constraint::MinLen(n) => Constraint::MinLen(*n),
             Constraint::MaxLen(n) => Constraint::MaxLen(*n),
-            Constraint::MultipleOf(i) => Constraint::MultipleOf(remap(lit_map, *i)),
-            Constraint::Predicate(i) => Constraint::Predicate(remap(lit_map, *i)),
+            Constraint::MultipleOf(i) => Constraint::MultipleOf(i.remapped(lit_map)),
+            Constraint::Predicate(i) => Constraint::Predicate(i.remapped(lit_map)),
             Constraint::Regex(p) => Constraint::Regex(p.clone()),
         }
     }

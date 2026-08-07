@@ -4,7 +4,7 @@ use std::cell::RefCell;
 
 use pyo3::prelude::*;
 use rustc_hash::FxHashSet;
-use valgebra_core::{Constraint, Field, Schema, SeqKind};
+use valgebra_core::{Constraint, DefIx, Field, Schema, SeqKind};
 
 use crate::errors::{class_label, summarize};
 
@@ -29,7 +29,7 @@ pub(crate) fn render(
     schema: &Schema,
     pool: &[Py<PyAny>],
     defs: &[Schema],
-    active: &RefCell<FxHashSet<usize>>,
+    active: &RefCell<FxHashSet<DefIx>>,
     depth: usize,
 ) -> String {
     if depth > MAX_RENDER_DEPTH {
@@ -47,7 +47,7 @@ pub(crate) fn render(
         Schema::Float => "float".to_owned(),
         Schema::Str => "str".to_owned(),
         Schema::Bytes => "bytes".to_owned(),
-        Schema::Literal(i) => format!("Literal[{}]", pool_repr(py, pool, *i)),
+        Schema::Literal(i) => format!("Literal[{}]", pool_repr(py, pool, i.get())),
         Schema::Seq { container, regex } => {
             let list = matches!(container, SeqKind::List);
             let Some((prefix, tail)) = regex.linear() else {
@@ -89,7 +89,9 @@ pub(crate) fn render(
         Schema::Union(members) => members.iter().map(&r).collect::<Vec<_>>().join(" | "),
         Schema::Intersection(members) => format!("intersection({})", kids(members)),
         Schema::Complement(inner) => format!("complement({})", r(inner)),
-        Schema::Instance(i) | Schema::Attrs { class_index: i, .. } => pool_class_name(py, pool, *i),
+        Schema::Instance(i) | Schema::Attrs { class_index: i, .. } => {
+            pool_class_name(py, pool, i.get())
+        }
         Schema::Refine { base, constraints } => {
             let mut parts = vec![r(base)];
             parts.extend(constraints.iter().map(|c| render_constraint(py, c, pool)));
@@ -101,7 +103,7 @@ pub(crate) fn render(
             if !active.borrow_mut().insert(*id) {
                 return "...".to_owned();
             }
-            let body = defs.get(*id).map_or_else(|| "...".to_owned(), &r);
+            let body = defs.get(id.get()).map_or_else(|| "...".to_owned(), &r);
             active.borrow_mut().remove(id);
             body
         }
@@ -115,7 +117,7 @@ fn render_keyed_map(
     defaults: &[(Schema, Schema)],
     pool: &[Py<PyAny>],
     defs: &[Schema],
-    active: &RefCell<FxHashSet<usize>>,
+    active: &RefCell<FxHashSet<DefIx>>,
     depth: usize,
 ) -> String {
     let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
@@ -146,13 +148,13 @@ fn render_keyed_map(
 
 fn render_constraint(py: Python<'_>, constraint: &Constraint, pool: &[Py<PyAny>]) -> String {
     match constraint {
-        Constraint::Ge(i) => format!("Ge({})", pool_repr(py, pool, *i)),
-        Constraint::Gt(i) => format!("Gt({})", pool_repr(py, pool, *i)),
-        Constraint::Le(i) => format!("Le({})", pool_repr(py, pool, *i)),
-        Constraint::Lt(i) => format!("Lt({})", pool_repr(py, pool, *i)),
+        Constraint::Ge(i) => format!("Ge({})", pool_repr(py, pool, i.get())),
+        Constraint::Gt(i) => format!("Gt({})", pool_repr(py, pool, i.get())),
+        Constraint::Le(i) => format!("Le({})", pool_repr(py, pool, i.get())),
+        Constraint::Lt(i) => format!("Lt({})", pool_repr(py, pool, i.get())),
         Constraint::MinLen(n) => format!("MinLen({n})"),
         Constraint::MaxLen(n) => format!("MaxLen({n})"),
-        Constraint::MultipleOf(i) => format!("MultipleOf({})", pool_repr(py, pool, *i)),
+        Constraint::MultipleOf(i) => format!("MultipleOf({})", pool_repr(py, pool, i.get())),
         Constraint::Predicate(_) => "Predicate(...)".to_owned(),
         Constraint::Regex(pattern) => format!("Regex({pattern:?})"),
     }

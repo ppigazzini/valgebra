@@ -19,7 +19,10 @@ mod simplify;
 mod violation;
 
 pub use decision::{LeafRelations, NoLeafRelations};
-pub use ir::{Constraint, Field, PathSegment, Schema, SeqKind, SeqRegex};
+pub use ir::{
+    ClassIx, ConstIx, Constraint, DefIx, DefShift, Field, OperandIx, PathSegment, PoolShift,
+    PredIx, Schema, SeqKind, SeqRegex,
+};
 pub use violation::Violation;
 
 /// Fresh, process-unique tokens for the transient [`Schema::SelfRef`] marker, so
@@ -43,7 +46,7 @@ mod tests {
     #[test]
     fn node_count_totals_every_arm() {
         assert_eq!(Schema::Int.node_count(), 1);
-        assert_eq!(Schema::Ref(0).node_count(), 1);
+        assert_eq!(Schema::Ref(DefIx::new(0)).node_count(), 1);
         assert_eq!(Schema::Complement(Box::new(Schema::Int)).node_count(), 2);
         assert_eq!(Schema::Set(Box::new(Schema::Str)).node_count(), 2);
         assert_eq!(Schema::FrozenSet(Box::new(Schema::Str)).node_count(), 2);
@@ -111,7 +114,7 @@ mod tests {
         );
         assert_eq!(
             Schema::Attrs {
-                class_index: 0,
+                class_index: ClassIx::new(0),
                 fields: vec![
                     Field {
                         name: "a".into(),
@@ -175,7 +178,7 @@ mod tests {
         );
         assert_eq!(
             Schema::Attrs {
-                class_index: 0,
+                class_index: ClassIx::new(0),
                 fields: vec![Field {
                     name: "a".into(),
                     schema: Schema::Int,
@@ -197,57 +200,68 @@ mod tests {
         let refined = Schema::Refine {
             base: Box::new(Schema::Int),
             constraints: vec![
-                Constraint::Ge(1),
-                Constraint::Gt(2),
-                Constraint::Le(3),
-                Constraint::Lt(4),
-                Constraint::MultipleOf(5),
-                Constraint::Predicate(8),
+                Constraint::Ge(OperandIx::new(1)),
+                Constraint::Gt(OperandIx::new(2)),
+                Constraint::Le(OperandIx::new(3)),
+                Constraint::Lt(OperandIx::new(4)),
+                Constraint::MultipleOf(OperandIx::new(5)),
+                Constraint::Predicate(PredIx::new(8)),
                 Constraint::MinLen(6),
                 Constraint::MaxLen(7),
             ],
         };
-        let Schema::Refine { constraints, .. } = refined.shifted(10, 0) else {
+        let Schema::Refine { constraints, .. } =
+            refined.shifted(PoolShift::new(10), DefShift::new(0))
+        else {
             panic!("shifted a Refine into a non-Refine");
         };
         assert_eq!(
             constraints,
             vec![
-                Constraint::Ge(11),
-                Constraint::Gt(12),
-                Constraint::Le(13),
-                Constraint::Lt(14),
-                Constraint::MultipleOf(15),
+                Constraint::Ge(OperandIx::new(11)),
+                Constraint::Gt(OperandIx::new(12)),
+                Constraint::Le(OperandIx::new(13)),
+                Constraint::Lt(OperandIx::new(14)),
+                Constraint::MultipleOf(OperandIx::new(15)),
                 // A pooled predicate operand shifts like the numeric bounds.
-                Constraint::Predicate(18),
+                Constraint::Predicate(PredIx::new(18)),
                 // Length bounds are counts, not pool indices: unmoved.
                 Constraint::MinLen(6),
                 Constraint::MaxLen(7),
             ]
         );
         // Pooled leaves shift by the pool; definition refs shift by defs.
-        assert_eq!(Schema::Literal(1).shifted(10, 3), Schema::Literal(11));
-        assert_eq!(Schema::Instance(1).shifted(10, 3), Schema::Instance(11));
-        assert_eq!(Schema::Ref(1).shifted(10, 3), Schema::Ref(4));
+        assert_eq!(
+            Schema::Literal(ConstIx::new(1)).shifted(PoolShift::new(10), DefShift::new(3)),
+            Schema::Literal(ConstIx::new(11))
+        );
+        assert_eq!(
+            Schema::Instance(ClassIx::new(1)).shifted(PoolShift::new(10), DefShift::new(3)),
+            Schema::Instance(ClassIx::new(11))
+        );
+        assert_eq!(
+            Schema::Ref(DefIx::new(1)).shifted(PoolShift::new(10), DefShift::new(3)),
+            Schema::Ref(DefIx::new(4))
+        );
         // An Attrs class index is a pool index and shifts by the pool; its
         // fields shift with it.
         let attrs = Schema::Attrs {
-            class_index: 1,
+            class_index: ClassIx::new(1),
             fields: vec![Field {
                 name: "a".into(),
-                schema: Schema::Literal(2),
+                schema: Schema::Literal(ConstIx::new(2)),
                 required: true,
             }],
         };
         let Schema::Attrs {
             class_index,
             fields,
-        } = attrs.shifted(10, 3)
+        } = attrs.shifted(PoolShift::new(10), DefShift::new(3))
         else {
             panic!("shifted an Attrs into a non-Attrs");
         };
-        assert_eq!(class_index, 11);
-        assert_eq!(fields[0].schema, Schema::Literal(12));
+        assert_eq!(class_index, ClassIx::new(11));
+        assert_eq!(fields[0].schema, Schema::Literal(ConstIx::new(12)));
     }
 
     /// A recursive body is well-formed only if every self-reference sits under a
@@ -258,32 +272,53 @@ mod tests {
     #[test]
     fn occurs_unguarded_sees_through_the_algebraic_combinators() {
         // Bare: unguarded.
-        assert!(Schema::Ref(0).occurs_unguarded(0, false));
-        assert!(!Schema::Ref(1).occurs_unguarded(0, false));
+        assert!(Schema::Ref(DefIx::new(0)).occurs_unguarded(DefIx::new(0), false));
+        assert!(!Schema::Ref(DefIx::new(1)).occurs_unguarded(DefIx::new(0), false));
         // Complement and Refine do NOT guard: the reference stays exposed.
-        assert!(Schema::Complement(Box::new(Schema::Ref(0))).occurs_unguarded(0, false));
+        assert!(
+            Schema::Complement(Box::new(Schema::Ref(DefIx::new(0))))
+                .occurs_unguarded(DefIx::new(0), false)
+        );
         assert!(
             Schema::Refine {
-                base: Box::new(Schema::Ref(0)),
+                base: Box::new(Schema::Ref(DefIx::new(0))),
                 constraints: vec![Constraint::MinLen(1)],
             }
-            .occurs_unguarded(0, false)
+            .occurs_unguarded(DefIx::new(0), false)
         );
-        assert!(Schema::Union(vec![Schema::Int, Schema::Ref(0)]).occurs_unguarded(0, false));
-        assert!(Schema::Intersection(vec![Schema::Int, Schema::Ref(0)]).occurs_unguarded(0, false));
+        assert!(
+            Schema::Union(vec![Schema::Int, Schema::Ref(DefIx::new(0))])
+                .occurs_unguarded(DefIx::new(0), false)
+        );
+        assert!(
+            Schema::Intersection(vec![Schema::Int, Schema::Ref(DefIx::new(0))])
+                .occurs_unguarded(DefIx::new(0), false)
+        );
         // Nested combinators still pass it through.
         assert!(
-            Schema::Complement(Box::new(Schema::Union(vec![Schema::Int, Schema::Ref(0)])))
-                .occurs_unguarded(0, false)
+            Schema::Complement(Box::new(Schema::Union(vec![
+                Schema::Int,
+                Schema::Ref(DefIx::new(0))
+            ])))
+            .occurs_unguarded(DefIx::new(0), false)
         );
         // Structural constructors guard.
-        assert!(!Schema::Set(Box::new(Schema::Ref(0))).occurs_unguarded(0, false));
-        assert!(!Schema::FrozenSet(Box::new(Schema::Ref(0))).occurs_unguarded(0, false));
-        assert!(!Schema::list(SeqRegex::homogeneous(Schema::Ref(0))).occurs_unguarded(0, false));
+        assert!(
+            !Schema::Set(Box::new(Schema::Ref(DefIx::new(0))))
+                .occurs_unguarded(DefIx::new(0), false)
+        );
+        assert!(
+            !Schema::FrozenSet(Box::new(Schema::Ref(DefIx::new(0))))
+                .occurs_unguarded(DefIx::new(0), false)
+        );
+        assert!(
+            !Schema::list(SeqRegex::homogeneous(Schema::Ref(DefIx::new(0))))
+                .occurs_unguarded(DefIx::new(0), false)
+        );
         // A guarded reference under a combinator is still guarded.
         assert!(
-            !Schema::Complement(Box::new(Schema::Set(Box::new(Schema::Ref(0)))))
-                .occurs_unguarded(0, false)
+            !Schema::Complement(Box::new(Schema::Set(Box::new(Schema::Ref(DefIx::new(0))))))
+                .occurs_unguarded(DefIx::new(0), false)
         );
     }
 
@@ -332,7 +367,7 @@ mod tests {
             (Schema::Float, "float", "float_type"),
             (Schema::Str, "str", "string_type"),
             (Schema::Bytes, "bytes", "bytes_type"),
-            (Schema::Literal(0), "literal", "literal_error"),
+            (Schema::Literal(ConstIx::new(0)), "literal", "literal_error"),
             (
                 Schema::list(SeqRegex::homogeneous(Schema::Int)),
                 "list",
@@ -475,40 +510,50 @@ mod tests {
             Schema::list(SeqRegex::homogeneous(Schema::Int)),
             Schema::list(SeqRegex::homogeneous(Schema::Str))
         );
-        assert_ne!(Schema::Literal(0), Schema::Literal(1));
+        assert_ne!(
+            Schema::Literal(ConstIx::new(0)),
+            Schema::Literal(ConstIx::new(1))
+        );
     }
 
     #[test]
     fn resolve_self_replaces_only_the_matching_token() {
         let body = Schema::list(SeqRegex::homogeneous(Schema::SelfRef(1)));
-        let resolved = body.resolve_self(1, 3);
-        assert!(matches!(homogeneous_elem(&resolved), Schema::Ref(3)));
+        let resolved = body.resolve_self(1, DefIx::new(3));
+        assert_eq!(homogeneous_elem(&resolved), &Schema::Ref(DefIx::new(3)));
         assert!(matches!(
-            Schema::SelfRef(2).resolve_self(1, 3),
+            Schema::SelfRef(2).resolve_self(1, DefIx::new(3)),
             Schema::SelfRef(2)
         ));
     }
 
     #[test]
     fn contractivity_requires_a_structural_guard() {
-        assert!(!Schema::list(SeqRegex::homogeneous(Schema::Ref(0))).occurs_unguarded(0, false));
-        assert!(Schema::Ref(0).occurs_unguarded(0, false));
-        assert!(Schema::Union(vec![Schema::Int, Schema::Ref(0)]).occurs_unguarded(0, false));
+        assert!(
+            !Schema::list(SeqRegex::homogeneous(Schema::Ref(DefIx::new(0))))
+                .occurs_unguarded(DefIx::new(0), false)
+        );
+        assert!(Schema::Ref(DefIx::new(0)).occurs_unguarded(DefIx::new(0), false));
+        assert!(
+            Schema::Union(vec![Schema::Int, Schema::Ref(DefIx::new(0))])
+                .occurs_unguarded(DefIx::new(0), false)
+        );
         assert!(
             !Schema::list(SeqRegex::homogeneous(Schema::Union(vec![
                 Schema::Int,
-                Schema::Ref(0)
+                Schema::Ref(DefIx::new(0))
             ])))
-            .occurs_unguarded(0, false)
+            .occurs_unguarded(DefIx::new(0), false)
         );
     }
 
     #[test]
     fn shifted_remaps_ref_by_the_definition_offset() {
-        let shifted = Schema::list(SeqRegex::homogeneous(Schema::Ref(0))).shifted(7, 4);
-        assert!(matches!(homogeneous_elem(&shifted), Schema::Ref(4)));
+        let shifted = Schema::list(SeqRegex::homogeneous(Schema::Ref(DefIx::new(0))))
+            .shifted(PoolShift::new(7), DefShift::new(4));
+        assert_eq!(homogeneous_elem(&shifted), &Schema::Ref(DefIx::new(4)));
         assert!(matches!(
-            Schema::SelfRef(9).shifted(1, 1),
+            Schema::SelfRef(9).shifted(PoolShift::new(1), DefShift::new(1)),
             Schema::SelfRef(9)
         ));
     }
@@ -516,26 +561,26 @@ mod tests {
     #[test]
     fn reindexed_maps_pool_indices_through_the_table() {
         let schema = Schema::Union(vec![
-            Schema::Literal(0),
-            Schema::Instance(1),
+            Schema::Literal(ConstIx::new(0)),
+            Schema::Instance(ClassIx::new(1)),
             Schema::Refine {
                 base: Box::new(Schema::Int),
-                constraints: vec![Constraint::Ge(0), Constraint::MinLen(2)],
+                constraints: vec![Constraint::Ge(OperandIx::new(0)), Constraint::MinLen(2)],
             },
-            Schema::Ref(0),
+            Schema::Ref(DefIx::new(0)),
         ]);
-        let reindexed = schema.reindexed(&[10, 11], 5);
+        let reindexed = schema.reindexed(&[10, 11], DefShift::new(5));
         assert_eq!(
             reindexed,
             Schema::Union(vec![
-                Schema::Literal(10),  // 0 -> table[0] = 10
-                Schema::Instance(11), // 1 -> table[1] = 11
+                Schema::Literal(ConstIx::new(10)),  // 0 -> table[0] = 10
+                Schema::Instance(ClassIx::new(11)), // 1 -> table[1] = 11
                 Schema::Refine {
                     base: Box::new(Schema::Int),
                     // Ge index remaps through the table; MinLen is a length, untouched.
-                    constraints: vec![Constraint::Ge(10), Constraint::MinLen(2)],
+                    constraints: vec![Constraint::Ge(OperandIx::new(10)), Constraint::MinLen(2)],
                 },
-                Schema::Ref(5), // ref offset by def_offset = 5
+                Schema::Ref(DefIx::new(5)), // ref offset by def_offset = 5
             ])
         );
     }
@@ -609,7 +654,7 @@ mod tests {
         // SelfRef under a repetition, so every arm of the transforms is walked.
         let regex = SeqRegex::Or(vec![
             SeqRegex::Cat(vec![
-                SeqRegex::Elem(Box::new(Schema::Ref(0))),
+                SeqRegex::Elem(Box::new(Schema::Ref(DefIx::new(0)))),
                 SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::SelfRef(7))))),
             ]),
             SeqRegex::Empty,
@@ -617,7 +662,7 @@ mod tests {
         let seq = Schema::list(regex);
 
         // The Ref sits under the sequence guard, so it is not unguarded.
-        assert!(!seq.occurs_unguarded(0, false));
+        assert!(!seq.occurs_unguarded(DefIx::new(0), false));
         // simplify and with_records_open preserve the sequence shape.
         assert!(matches!(seq.simplify(), Schema::Seq { .. }));
         assert!(matches!(seq.with_records_open(true), Schema::Seq { .. }));
@@ -626,7 +671,7 @@ mod tests {
         let Schema::Seq {
             regex: SeqRegex::Or(branches),
             ..
-        } = seq.shifted(0, 5)
+        } = seq.shifted(PoolShift::new(0), DefShift::new(5))
         else {
             panic!("shape preserved")
         };
@@ -636,13 +681,13 @@ mod tests {
         let SeqRegex::Elem(head) = &parts[0] else {
             panic!("first part is an element")
         };
-        assert!(matches!(**head, Schema::Ref(5)));
+        assert_eq!(**head, Schema::Ref(DefIx::new(5)));
 
         // resolve_self rewrites the SelfRef under the repetition into a Ref.
         let Schema::Seq {
             regex: SeqRegex::Or(branches),
             ..
-        } = seq.resolve_self(7, 3)
+        } = seq.resolve_self(7, DefIx::new(3))
         else {
             panic!("shape preserved")
         };
@@ -655,7 +700,7 @@ mod tests {
         let SeqRegex::Elem(tail) = inner.as_ref() else {
             panic!("repetition wraps an element")
         };
-        assert!(matches!(**tail, Schema::Ref(3)));
+        assert_eq!(**tail, Schema::Ref(DefIx::new(3)));
     }
 
     #[test]
@@ -663,23 +708,24 @@ mod tests {
         let schema = Schema::KeyedMap {
             fields: vec![Field {
                 name: "f".to_owned(),
-                schema: Schema::Ref(0),
+                schema: Schema::Ref(DefIx::new(0)),
                 required: true,
             }],
             defaults: vec![(Schema::Str, Schema::SelfRef(7))],
         };
         // Both the field's Ref and the default's SelfRef sit under the map guard.
-        assert!(!schema.occurs_unguarded(0, false));
+        assert!(!schema.occurs_unguarded(DefIx::new(0), false));
         // shifted moves the field's Ref by the definitions offset.
-        let Schema::KeyedMap { fields, .. } = schema.shifted(0, 5) else {
+        let Schema::KeyedMap { fields, .. } = schema.shifted(PoolShift::new(0), DefShift::new(5))
+        else {
             panic!("shape preserved")
         };
-        assert!(matches!(fields[0].schema, Schema::Ref(5)));
+        assert_eq!(fields[0].schema, Schema::Ref(DefIx::new(5)));
         // resolve_self rewrites the default clause's SelfRef into a Ref.
-        let Schema::KeyedMap { defaults, .. } = schema.resolve_self(7, 3) else {
+        let Schema::KeyedMap { defaults, .. } = schema.resolve_self(7, DefIx::new(3)) else {
             panic!("shape preserved")
         };
-        assert!(matches!(defaults[0].1, Schema::Ref(3)));
+        assert_eq!(defaults[0].1, Schema::Ref(DefIx::new(3)));
     }
 
     fn not(s: Schema) -> Schema {
@@ -760,13 +806,13 @@ mod tests {
         assert!(!Schema::Bool.disjoint(&Schema::Int)); // bool is a subtype of int
         assert!(!Schema::Int.disjoint(&Schema::Int));
         // Conservative where the core cannot decide soundly.
-        assert!(!Schema::Literal(0).disjoint(&Schema::Int));
-        assert!(!Schema::Instance(0).disjoint(&Schema::Int));
+        assert!(!Schema::Literal(ConstIx::new(0)).disjoint(&Schema::Int));
+        assert!(!Schema::Instance(ClassIx::new(0)).disjoint(&Schema::Int));
         assert!(!Schema::Dynamic.disjoint(&Schema::Int));
         // A refinement is disjoint exactly when its base is.
         let refined = Schema::Refine {
             base: Box::new(Schema::Int),
-            constraints: vec![Constraint::Ge(0)],
+            constraints: vec![Constraint::Ge(OperandIx::new(0))],
         };
         assert!(refined.disjoint(&Schema::Str));
         assert!(!refined.disjoint(&Schema::Int));
@@ -791,8 +837,8 @@ mod laws {
             Just(Schema::Float),
             Just(Schema::Str),
             Just(Schema::Bytes),
-            Just(Schema::Literal(0)),
-            Just(Schema::Instance(1)),
+            Just(Schema::Literal(ConstIx::new(0))),
+            Just(Schema::Instance(ClassIx::new(1))),
         ];
         atom.prop_recursive(4, 24, 3, |inner| {
             prop_oneof![
@@ -906,18 +952,24 @@ mod laws {
     fn is_empty_and_subtype_are_sound_off_the_scalar_fragment() {
         // Non-scalar leaves are never decided empty.
         assert!(!Schema::Dynamic.is_empty());
-        assert!(!Schema::Literal(0).is_empty());
-        assert!(!Schema::Instance(0).is_empty());
+        assert!(!Schema::Literal(ConstIx::new(0)).is_empty());
+        assert!(!Schema::Instance(ClassIx::new(0)).is_empty());
         assert!(!Schema::Set(Box::new(Schema::Int)).is_empty());
         assert!(!Schema::list(SeqRegex::homogeneous(Schema::Int)).is_empty());
         // A scalar mixed with a non-scalar leaf is undecidable here, so it is
         // never claimed empty (an instance could subclass the scalar's type).
-        assert!(!Schema::Intersection(vec![Schema::Int, Schema::Instance(0)]).is_empty());
+        assert!(
+            !Schema::Intersection(vec![Schema::Int, Schema::Instance(ClassIx::new(0))]).is_empty()
+        );
         // The gradual `Any` is never collapsed.
         assert!(!Schema::Intersection(vec![Schema::Dynamic, not(Schema::Dynamic)]).is_empty());
         // Subtyping off the fragment is reflexive only.
-        assert!(Schema::Instance(0).is_subtype_of(&Schema::Instance(0)));
-        assert!(!Schema::Instance(0).is_subtype_of(&Schema::Instance(1)));
+        assert!(
+            Schema::Instance(ClassIx::new(0)).is_subtype_of(&Schema::Instance(ClassIx::new(0)))
+        );
+        assert!(
+            !Schema::Instance(ClassIx::new(0)).is_subtype_of(&Schema::Instance(ClassIx::new(1)))
+        );
     }
 
     #[test]
@@ -1137,8 +1189,8 @@ mod laws {
             fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
                 None
             }
-            fn compare(&self, a: usize, b: usize) -> Option<Ordering> {
-                Some(a.cmp(&b))
+            fn compare(&self, a: OperandIx, b: OperandIx) -> Option<Ordering> {
+                Some(a.get().cmp(&b.get()))
             }
         }
         let refine = |constraints: Vec<Constraint>| Schema::Refine {
@@ -1148,10 +1200,22 @@ mod laws {
         let sub = |a: Vec<Constraint>, b: Vec<Constraint>| {
             refine(a).is_subtype_of_under(&refine(b), &ByIndex, &[])
         };
-        assert!(sub(vec![Constraint::Ge(5)], vec![Constraint::Ge(0)]));
-        assert!(sub(vec![Constraint::Gt(5)], vec![Constraint::Ge(0)]));
-        assert!(sub(vec![Constraint::Le(0)], vec![Constraint::Le(5)]));
-        assert!(sub(vec![Constraint::Lt(0)], vec![Constraint::Lt(5)]));
+        assert!(sub(
+            vec![Constraint::Ge(OperandIx::new(5))],
+            vec![Constraint::Ge(OperandIx::new(0))]
+        ));
+        assert!(sub(
+            vec![Constraint::Gt(OperandIx::new(5))],
+            vec![Constraint::Ge(OperandIx::new(0))]
+        ));
+        assert!(sub(
+            vec![Constraint::Le(OperandIx::new(0))],
+            vec![Constraint::Le(OperandIx::new(5))]
+        ));
+        assert!(sub(
+            vec![Constraint::Lt(OperandIx::new(0))],
+            vec![Constraint::Lt(OperandIx::new(5))]
+        ));
         assert!(sub(
             vec![Constraint::MinLen(5)],
             vec![Constraint::MinLen(2)]
@@ -1161,9 +1225,18 @@ mod laws {
             vec![Constraint::MaxLen(5)]
         ));
         // Soundness negatives.
-        assert!(!sub(vec![Constraint::Ge(0)], vec![Constraint::Ge(5)]));
-        assert!(!sub(vec![Constraint::Le(5)], vec![Constraint::Le(0)]));
-        assert!(!sub(vec![Constraint::Ge(5)], vec![Constraint::Gt(5)]));
+        assert!(!sub(
+            vec![Constraint::Ge(OperandIx::new(0))],
+            vec![Constraint::Ge(OperandIx::new(5))]
+        ));
+        assert!(!sub(
+            vec![Constraint::Le(OperandIx::new(5))],
+            vec![Constraint::Le(OperandIx::new(0))]
+        ));
+        assert!(!sub(
+            vec![Constraint::Ge(OperandIx::new(5))],
+            vec![Constraint::Gt(OperandIx::new(5))]
+        ));
     }
 
     /// An integer-discrete refinement is empty when its bounds leave no integer
@@ -1179,18 +1252,18 @@ mod laws {
             fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
                 None
             }
-            fn compare(&self, a: usize, b: usize) -> Option<Ordering> {
-                Some(a.cmp(&b))
+            fn compare(&self, a: OperandIx, b: OperandIx) -> Option<Ordering> {
+                Some(a.get().cmp(&b.get()))
             }
             fn no_int_between(
                 &self,
-                lo: usize,
+                lo: OperandIx,
                 lo_strict: bool,
-                hi: usize,
+                hi: OperandIx,
                 hi_strict: bool,
             ) -> Option<bool> {
-                let least = i64::try_from(lo).unwrap() + i64::from(lo_strict);
-                let greatest = i64::try_from(hi).unwrap() - i64::from(hi_strict);
+                let least = i64::try_from(lo.get()).unwrap() + i64::from(lo_strict);
+                let greatest = i64::try_from(hi.get()).unwrap() - i64::from(hi_strict);
                 Some(least > greatest)
             }
         }
@@ -1200,23 +1273,50 @@ mod laws {
         };
         // Gt(0) & Lt(1): the open interval (0, 1) holds no integer, so it is empty.
         assert!(
-            refine(Schema::Int, vec![Constraint::Gt(0), Constraint::Lt(1)])
-                .is_empty_with(&ByValue, &[])
+            refine(
+                Schema::Int,
+                vec![
+                    Constraint::Gt(OperandIx::new(0)),
+                    Constraint::Lt(OperandIx::new(1))
+                ]
+            )
+            .is_empty_with(&ByValue, &[])
         );
         // Gt(0) & Lt(2): the integer 1 fits, so it is not empty.
         assert!(
-            !refine(Schema::Int, vec![Constraint::Gt(0), Constraint::Lt(2)])
-                .is_empty_with(&ByValue, &[])
+            !refine(
+                Schema::Int,
+                vec![
+                    Constraint::Gt(OperandIx::new(0)),
+                    Constraint::Lt(OperandIx::new(2))
+                ]
+            )
+            .is_empty_with(&ByValue, &[])
         );
         // A dense (float) base is not integer-discrete: the discreteness rule must
         // not fire, or it would unsoundly empty a populated interval.
         assert!(
-            !refine(Schema::Float, vec![Constraint::Gt(0), Constraint::Lt(1)])
-                .is_empty_with(&ByValue, &[])
+            !refine(
+                Schema::Float,
+                vec![
+                    Constraint::Gt(OperandIx::new(0)),
+                    Constraint::Lt(OperandIx::new(1))
+                ]
+            )
+            .is_empty_with(&ByValue, &[])
         );
         // With no value oracle the default `no_int_between` is `None`, so even an
         // integer base stays conservative.
-        assert!(!refine(Schema::Int, vec![Constraint::Gt(0), Constraint::Lt(1)]).is_empty());
+        assert!(
+            !refine(
+                Schema::Int,
+                vec![
+                    Constraint::Gt(OperandIx::new(0)),
+                    Constraint::Lt(OperandIx::new(1))
+                ]
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -1229,11 +1329,17 @@ mod laws {
             fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
                 None
             }
-            fn compare(&self, a: usize, b: usize) -> Option<Ordering> {
-                Some(a.cmp(&b))
+            fn compare(&self, a: OperandIx, b: OperandIx) -> Option<Ordering> {
+                Some(a.get().cmp(&b.get()))
             }
         }
         let list = |element| Schema::list(SeqRegex::homogeneous(element));
+        // Short spellings of the pooled bounds, so an assertion still reads as
+        // one line: the operand index names its space at the constructor.
+        let ge = |n: usize| Constraint::Ge(OperandIx::new(n));
+        let gt = |n: usize| Constraint::Gt(OperandIx::new(n));
+        let le = |n: usize| Constraint::Le(OperandIx::new(n));
+        let lt = |n: usize| Constraint::Lt(OperandIx::new(n));
 
         // Bottom-below and top-above on a non-scalar (region_set is None there, so
         // the dedicated arms decide it).
@@ -1258,7 +1364,7 @@ mod laws {
         assert!(
             Schema::Refine {
                 base: Box::new(Schema::Int),
-                constraints: vec![Constraint::Ge(10), Constraint::Le(0)],
+                constraints: vec![ge(10), le(0)],
             }
             .is_subtype_of_under(&Schema::Nothing, &ByIndex, &[])
         );
@@ -1270,23 +1376,17 @@ mod laws {
             base: Box::new(Schema::Int),
             constraints,
         };
-        assert!(!refine(vec![Constraint::Ge(5), Constraint::Le(5)]).is_empty_with(&ByIndex, &[]));
-        assert!(refine(vec![Constraint::Gt(5), Constraint::Lt(5)]).is_empty_with(&ByIndex, &[]));
+        assert!(!refine(vec![ge(5), le(5)]).is_empty_with(&ByIndex, &[]));
+        assert!(refine(vec![gt(5), lt(5)]).is_empty_with(&ByIndex, &[]));
         assert!(!refine(vec![Constraint::MinLen(5), Constraint::MaxLen(5)]).is_empty());
         // An intersection's refinement bounds are joined: both sides are needed.
         assert!(
-            Schema::Intersection(vec![
-                refine(vec![Constraint::Ge(5)]),
-                refine(vec![Constraint::Le(0)]),
-            ])
-            .is_empty_with(&ByIndex, &[])
+            Schema::Intersection(vec![refine(vec![ge(5)]), refine(vec![le(0)]),])
+                .is_empty_with(&ByIndex, &[])
         );
         assert!(
-            !Schema::Intersection(vec![
-                refine(vec![Constraint::Ge(0)]),
-                refine(vec![Constraint::Le(5)]),
-            ])
-            .is_empty_with(&ByIndex, &[])
+            !Schema::Intersection(vec![refine(vec![ge(0)]), refine(vec![le(5)]),])
+                .is_empty_with(&ByIndex, &[])
         );
 
         // Keyed maps: each branch's conjunction is needed -- a depth failure is not
@@ -1391,26 +1491,53 @@ mod laws {
         };
 
         // A refinement is a subtype of its base, and of anything its base subtypes.
-        assert!(refine(Schema::Bool, vec![Constraint::Ge(0)]).is_subtype_of(&Schema::Int));
+        assert!(
+            refine(Schema::Bool, vec![Constraint::Ge(OperandIx::new(0))])
+                .is_subtype_of(&Schema::Int)
+        );
         // More constraints denote a smaller set: a superset of constraints (with
         // the supertype's constraints all present) is a subtype.
         assert!(
-            refine(Schema::Int, vec![Constraint::Ge(0), Constraint::Le(1)])
-                .is_subtype_of(&refine(Schema::Int, vec![Constraint::Ge(0)]))
+            refine(
+                Schema::Int,
+                vec![
+                    Constraint::Ge(OperandIx::new(0)),
+                    Constraint::Le(OperandIx::new(1))
+                ]
+            )
+            .is_subtype_of(&refine(
+                Schema::Int,
+                vec![Constraint::Ge(OperandIx::new(0))]
+            ))
         );
         // The looser refinement is not a subtype of the tighter one.
         assert!(
-            !refine(Schema::Int, vec![Constraint::Ge(0)]).is_subtype_of(&refine(
+            !refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(0))]).is_subtype_of(&refine(
                 Schema::Int,
-                vec![Constraint::Ge(0), Constraint::Le(1)]
+                vec![
+                    Constraint::Ge(OperandIx::new(0)),
+                    Constraint::Le(OperandIx::new(1))
+                ]
             ))
         );
         // The base must still subtype: a refined int is not a str.
-        assert!(!refine(Schema::Int, vec![Constraint::Ge(0)]).is_subtype_of(&Schema::Str));
+        assert!(
+            !refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(0))])
+                .is_subtype_of(&Schema::Str)
+        );
         // An empty base empties the refinement; an inhabited base does not (bound
         // contradictions need value comparison and stay conservative here).
-        assert!(refine(Schema::Nothing, vec![Constraint::Ge(0)]).is_empty());
-        assert!(!refine(Schema::Int, vec![Constraint::Ge(0), Constraint::Le(0)]).is_empty());
+        assert!(refine(Schema::Nothing, vec![Constraint::Ge(OperandIx::new(0))]).is_empty());
+        assert!(
+            !refine(
+                Schema::Int,
+                vec![
+                    Constraint::Ge(OperandIx::new(0)),
+                    Constraint::Le(OperandIx::new(0))
+                ]
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -1418,45 +1545,45 @@ mod laws {
         // Composing a validator concatenates pools and definitions: `reindexed`
         // remaps each pooled index through the intern map and offsets each `Ref`.
         let schema = Schema::Union(vec![
-            Schema::Literal(0),
-            Schema::Instance(1),
-            Schema::Ref(0),
-            Schema::Set(Box::new(Schema::Literal(1))),
+            Schema::Literal(ConstIx::new(0)),
+            Schema::Instance(ClassIx::new(1)),
+            Schema::Ref(DefIx::new(0)),
+            Schema::Set(Box::new(Schema::Literal(ConstIx::new(1)))),
         ]);
         // The second pool interned into the first: old 0 -> 5, old 1 -> 6.
         let lit_map = [5, 6];
-        let remapped = schema.reindexed(&lit_map, 3);
+        let remapped = schema.reindexed(&lit_map, DefShift::new(3));
         assert_eq!(
             remapped,
             Schema::Union(vec![
-                Schema::Literal(5),
-                Schema::Instance(6),
-                Schema::Ref(3),
-                Schema::Set(Box::new(Schema::Literal(6))),
+                Schema::Literal(ConstIx::new(5)),
+                Schema::Instance(ClassIx::new(6)),
+                Schema::Ref(DefIx::new(3)),
+                Schema::Set(Box::new(Schema::Literal(ConstIx::new(6)))),
             ])
         );
 
         // `shifted` is the identity-map case: every index moves by a fixed offset.
-        let shifted = schema.shifted(5, 3);
+        let shifted = schema.shifted(PoolShift::new(5), DefShift::new(3));
         assert_eq!(
             shifted,
             Schema::Union(vec![
-                Schema::Literal(5),
-                Schema::Instance(6),
-                Schema::Ref(3),
-                Schema::Set(Box::new(Schema::Literal(6))),
+                Schema::Literal(ConstIx::new(5)),
+                Schema::Instance(ClassIx::new(6)),
+                Schema::Ref(DefIx::new(3)),
+                Schema::Set(Box::new(Schema::Literal(ConstIx::new(6)))),
             ])
         );
         // A constraint operand index is remapped too.
         let refined = Schema::Refine {
             base: Box::new(Schema::Int),
-            constraints: vec![Constraint::Ge(0)],
+            constraints: vec![Constraint::Ge(OperandIx::new(0))],
         };
         assert_eq!(
-            refined.reindexed(&lit_map, 0),
+            refined.reindexed(&lit_map, DefShift::new(0)),
             Schema::Refine {
                 base: Box::new(Schema::Int),
-                constraints: vec![Constraint::Ge(5)],
+                constraints: vec![Constraint::Ge(OperandIx::new(5))],
             }
         );
     }
@@ -1469,36 +1596,67 @@ mod laws {
         };
         // A repeated constraint collapses (idempotence over the conjunction).
         assert_eq!(
-            refine(Schema::Int, vec![Constraint::Ge(0), Constraint::Ge(0)]).simplify(),
-            refine(Schema::Int, vec![Constraint::Ge(0)])
+            refine(
+                Schema::Int,
+                vec![
+                    Constraint::Ge(OperandIx::new(0)),
+                    Constraint::Ge(OperandIx::new(0))
+                ]
+            )
+            .simplify(),
+            refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(0))])
         );
         // Constraint order does not matter: both spellings share one normal form.
         assert_eq!(
-            refine(Schema::Int, vec![Constraint::Le(1), Constraint::Ge(0)]).simplify(),
-            refine(Schema::Int, vec![Constraint::Ge(0), Constraint::Le(1)]).simplify()
+            refine(
+                Schema::Int,
+                vec![
+                    Constraint::Le(OperandIx::new(1)),
+                    Constraint::Ge(OperandIx::new(0))
+                ]
+            )
+            .simplify(),
+            refine(
+                Schema::Int,
+                vec![
+                    Constraint::Ge(OperandIx::new(0)),
+                    Constraint::Le(OperandIx::new(1))
+                ]
+            )
+            .simplify()
         );
         // A refinement of a refinement flattens into one refinement over the base.
         assert_eq!(
             refine(
-                refine(Schema::Int, vec![Constraint::Ge(0)]),
-                vec![Constraint::Le(1)],
+                refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(0))]),
+                vec![Constraint::Le(OperandIx::new(1))],
             )
             .simplify(),
-            refine(Schema::Int, vec![Constraint::Ge(0), Constraint::Le(1)])
+            refine(
+                Schema::Int,
+                vec![
+                    Constraint::Ge(OperandIx::new(0)),
+                    Constraint::Le(OperandIx::new(1))
+                ]
+            )
         );
         // The base is simplified before the refinement is rebuilt.
         assert_eq!(
             refine(
                 Schema::Union(vec![Schema::Int, Schema::Int]),
-                vec![Constraint::Ge(0)],
+                vec![Constraint::Ge(OperandIx::new(0))],
             )
             .simplify(),
-            refine(Schema::Int, vec![Constraint::Ge(0)])
+            refine(Schema::Int, vec![Constraint::Ge(OperandIx::new(0))])
         );
         // Canonicalization is idempotent.
         let once = refine(
             Schema::Int,
-            vec![Constraint::Le(1), Constraint::Ge(0), Constraint::Ge(0)],
+            vec![
+                Constraint::Le(OperandIx::new(1)),
+                Constraint::Ge(OperandIx::new(0)),
+                Constraint::Ge(OperandIx::new(0)),
+            ],
         )
         .simplify();
         assert_eq!(once.clone(), once.simplify());
@@ -1642,8 +1800,8 @@ mod laws {
             fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
                 None
             }
-            fn compare(&self, a: usize, b: usize) -> Option<Ordering> {
-                Some(a.cmp(&b))
+            fn compare(&self, a: OperandIx, b: OperandIx) -> Option<Ordering> {
+                Some(a.get().cmp(&b.get()))
             }
         }
         let refine = |constraints| Schema::Refine {
@@ -1651,22 +1809,52 @@ mod laws {
             constraints,
         };
         // A lower bound above the upper bound is empty.
-        assert!(refine(vec![Constraint::Ge(10), Constraint::Le(0)]).is_empty_with(&ByIndex, &[]));
+        assert!(
+            refine(vec![
+                Constraint::Ge(OperandIx::new(10)),
+                Constraint::Le(OperandIx::new(0))
+            ])
+            .is_empty_with(&ByIndex, &[])
+        );
         // Equal bounds with one strict end are empty; both closed is a singleton.
-        assert!(refine(vec![Constraint::Ge(5), Constraint::Lt(5)]).is_empty_with(&ByIndex, &[]));
-        assert!(!refine(vec![Constraint::Ge(5), Constraint::Le(5)]).is_empty_with(&ByIndex, &[]));
+        assert!(
+            refine(vec![
+                Constraint::Ge(OperandIx::new(5)),
+                Constraint::Lt(OperandIx::new(5))
+            ])
+            .is_empty_with(&ByIndex, &[])
+        );
+        assert!(
+            !refine(vec![
+                Constraint::Ge(OperandIx::new(5)),
+                Constraint::Le(OperandIx::new(5))
+            ])
+            .is_empty_with(&ByIndex, &[])
+        );
         // A satisfiable range is not empty.
-        assert!(!refine(vec![Constraint::Ge(0), Constraint::Le(10)]).is_empty_with(&ByIndex, &[]));
+        assert!(
+            !refine(vec![
+                Constraint::Ge(OperandIx::new(0)),
+                Constraint::Le(OperandIx::new(10))
+            ])
+            .is_empty_with(&ByIndex, &[])
+        );
         // A length contradiction needs no value comparison.
         assert!(refine(vec![Constraint::MinLen(5), Constraint::MaxLen(3)]).is_empty());
         // Refinements with contradictory bounds across an intersection are empty.
         let intersection = Schema::Intersection(vec![
-            refine(vec![Constraint::Ge(5)]),
-            refine(vec![Constraint::Lt(5)]),
+            refine(vec![Constraint::Ge(OperandIx::new(5))]),
+            refine(vec![Constraint::Lt(OperandIx::new(5))]),
         ]);
         assert!(intersection.is_empty_with(&ByIndex, &[]));
         // Without an ordering oracle the numeric bounds stay conservative.
-        assert!(!refine(vec![Constraint::Ge(10), Constraint::Le(0)]).is_empty());
+        assert!(
+            !refine(vec![
+                Constraint::Ge(OperandIx::new(10)),
+                Constraint::Le(OperandIx::new(0))
+            ])
+            .is_empty()
+        );
     }
 
     #[test]
@@ -1681,33 +1869,35 @@ mod laws {
         let uninhabited = [Schema::KeyedMap {
             fields: vec![
                 field("value", Schema::Int, true),
-                field("next", Schema::Ref(0), true),
+                field("next", Schema::Ref(DefIx::new(0)), true),
             ],
             defaults: Vec::new(),
         }];
-        assert!(Schema::Ref(0).is_empty_under(&uninhabited));
+        assert!(Schema::Ref(DefIx::new(0)).is_empty_under(&uninhabited));
         // t = None | {next: t} — a base case makes it inhabited.
         let inhabited = [Schema::Union(vec![
             Schema::NoneType,
             Schema::KeyedMap {
-                fields: vec![field("next", Schema::Ref(0), true)],
+                fields: vec![field("next", Schema::Ref(DefIx::new(0)), true)],
                 defaults: Vec::new(),
             },
         ])];
-        assert!(!Schema::Ref(0).is_empty_under(&inhabited));
+        assert!(!Schema::Ref(DefIx::new(0)).is_empty_under(&inhabited));
         // t = {next?: t} — an optional self-reference is inhabited by the empty map.
         let optional = [Schema::KeyedMap {
-            fields: vec![field("next", Schema::Ref(0), false)],
+            fields: vec![field("next", Schema::Ref(DefIx::new(0)), false)],
             defaults: Vec::new(),
         }];
-        assert!(!Schema::Ref(0).is_empty_under(&optional));
+        assert!(!Schema::Ref(DefIx::new(0)).is_empty_under(&optional));
         // t = [t] — a list of itself is inhabited by the empty list.
-        let list_of_self = [Schema::list(SeqRegex::homogeneous(Schema::Ref(0)))];
-        assert!(!Schema::Ref(0).is_empty_under(&list_of_self));
+        let list_of_self = [Schema::list(SeqRegex::homogeneous(Schema::Ref(
+            DefIx::new(0),
+        )))];
+        assert!(!Schema::Ref(DefIx::new(0)).is_empty_under(&list_of_self));
         // An unresolved reference stays conservative.
-        assert!(!Schema::Ref(9).is_empty_under(&uninhabited));
+        assert!(!Schema::Ref(DefIx::new(9)).is_empty_under(&uninhabited));
         // Without the definitions, recursion is not resolved (no-arg is_empty).
-        assert!(!Schema::Ref(0).is_empty());
+        assert!(!Schema::Ref(DefIx::new(0)).is_empty());
     }
 
     #[test]
@@ -1719,7 +1909,10 @@ mod laws {
         // Reflexivity holds for a complement (regression: it failed before this
         // rule existed).
         assert!(not(Schema::Int).is_subtype_of(&not(Schema::Int)));
-        assert!(not(Schema::Literal(0)).is_subtype_of(&not(Schema::Literal(0))));
+        assert!(
+            not(Schema::Literal(ConstIx::new(0)))
+                .is_subtype_of(&not(Schema::Literal(ConstIx::new(0))))
+        );
     }
 
     #[test]
@@ -1742,13 +1935,31 @@ mod laws {
             ])
         };
         // Two structurally identical recursive linked-list types are equivalent.
-        let identical = [list_of(Schema::Int, 0), list_of(Schema::Int, 1)];
-        assert!(Schema::Ref(0).is_equivalent_under(&Schema::Ref(1), &NoLeafRelations, &identical));
+        let identical = [
+            list_of(Schema::Int, DefIx::new(0)),
+            list_of(Schema::Int, DefIx::new(1)),
+        ];
+        assert!(Schema::Ref(DefIx::new(0)).is_equivalent_under(
+            &Schema::Ref(DefIx::new(1)),
+            &NoLeafRelations,
+            &identical
+        ));
         // Depth covariance through the recursion: a bool-valued list is a subtype
         // of an int-valued one (bool ⊆ int), but not the reverse.
-        let covary = [list_of(Schema::Bool, 0), list_of(Schema::Int, 1)];
-        assert!(Schema::Ref(0).is_subtype_of_under(&Schema::Ref(1), &NoLeafRelations, &covary));
-        assert!(!Schema::Ref(1).is_subtype_of_under(&Schema::Ref(0), &NoLeafRelations, &covary));
+        let covary = [
+            list_of(Schema::Bool, DefIx::new(0)),
+            list_of(Schema::Int, DefIx::new(1)),
+        ];
+        assert!(Schema::Ref(DefIx::new(0)).is_subtype_of_under(
+            &Schema::Ref(DefIx::new(1)),
+            &NoLeafRelations,
+            &covary
+        ));
+        assert!(!Schema::Ref(DefIx::new(1)).is_subtype_of_under(
+            &Schema::Ref(DefIx::new(0)),
+            &NoLeafRelations,
+            &covary
+        ));
     }
 
     /// A sample value for the subtyping oracle: a scalar, or a set whose element
@@ -1815,8 +2026,8 @@ mod laws {
 
     fn constraint() -> impl Strategy<Value = Constraint> {
         prop_oneof![
-            (0usize..3).prop_map(Constraint::Ge),
-            (0usize..3).prop_map(Constraint::Le),
+            (0usize..3).prop_map(|i| Constraint::Ge(OperandIx::new(i))),
+            (0usize..3).prop_map(|i| Constraint::Le(OperandIx::new(i))),
             (0usize..8).prop_map(Constraint::MinLen),
             (0usize..8).prop_map(Constraint::MaxLen),
             Just(Constraint::Regex("a+".into())),
@@ -1840,8 +2051,8 @@ mod laws {
             Just(Schema::Float),
             Just(Schema::Str),
             Just(Schema::Bytes),
-            (0usize..3).prop_map(Schema::Literal),
-            (0usize..3).prop_map(Schema::Instance),
+            (0usize..3).prop_map(|i| Schema::Literal(ConstIx::new(i))),
+            (0usize..3).prop_map(|i| Schema::Instance(ClassIx::new(i))),
         ];
         leaf.prop_recursive(4, 32, 3, |inner| {
             prop_oneof![
@@ -2074,7 +2285,7 @@ mod laws {
     #[test]
     fn depth_counts_nesting_and_treats_refs_as_leaves() {
         assert_eq!(Schema::Int.depth(), 1);
-        assert_eq!(Schema::Ref(0).depth(), 1);
+        assert_eq!(Schema::Ref(DefIx::new(0)).depth(), 1);
         assert_eq!(Schema::Complement(Box::new(Schema::Int)).depth(), 2);
         assert_eq!(union(Schema::Int, Schema::Str).depth(), 2);
         // The max over members, not their sum: one branch is two deep.
@@ -2088,7 +2299,7 @@ mod laws {
         assert_eq!(tower.depth(), 11);
         // A list whose element is a recursive back edge is finite: the `Ref` is a
         // leaf, so the depth does not follow it into the definitions table.
-        let recursive_list = Schema::list(SeqRegex::homogeneous(Schema::Ref(0)));
+        let recursive_list = Schema::list(SeqRegex::homogeneous(Schema::Ref(DefIx::new(0))));
         assert!(recursive_list.depth() < 10);
     }
 
@@ -2099,11 +2310,15 @@ mod laws {
     fn budgeted_subtyping_decides_recursive_relations() {
         let int_list = Schema::Seq {
             container: SeqKind::List,
-            regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Ref(0))))),
+            regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Ref(DefIx::new(
+                0,
+            )))))),
         };
         let wide_list = Schema::Seq {
             container: SeqKind::List,
-            regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Ref(1))))),
+            regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Ref(DefIx::new(
+                1,
+            )))))),
         };
         let defs = vec![
             union(Schema::Int, int_list.clone()),
@@ -2129,8 +2344,12 @@ mod laws {
         assert!(!Schema::Int.is_equivalent(&Schema::Str));
         // An uninhabited recursive reference is empty, decided through the
         // subtype-into-bottom crossing under the shared budget.
-        let defs = vec![Schema::Ref(0)];
-        assert!(Schema::Ref(0).is_subtype_of_under(&Schema::Nothing, &NoLeafRelations, &defs));
+        let defs = vec![Schema::Ref(DefIx::new(0))];
+        assert!(Schema::Ref(DefIx::new(0)).is_subtype_of_under(
+            &Schema::Nothing,
+            &NoLeafRelations,
+            &defs
+        ));
     }
 
     /// Querying a deep schema against bottom routes through the emptiness check,
@@ -2214,7 +2433,7 @@ mod laws {
     #[test]
     fn an_uninhabited_required_attribute_empties_the_schema() {
         let empty_field = Schema::Attrs {
-            class_index: 0,
+            class_index: ClassIx::new(0),
             fields: vec![Field {
                 name: "x".into(),
                 schema: intersection(Schema::Int, Schema::Str),
@@ -2223,7 +2442,7 @@ mod laws {
         };
         assert!(empty_field.is_empty());
         let live_field = Schema::Attrs {
-            class_index: 0,
+            class_index: ClassIx::new(0),
             fields: vec![Field {
                 name: "x".into(),
                 schema: Schema::Int,
@@ -2240,7 +2459,7 @@ mod laws {
     #[test]
     fn attribute_schemas_subtype_by_width_and_depth() {
         let narrow = Schema::Attrs {
-            class_index: 0,
+            class_index: ClassIx::new(0),
             fields: vec![
                 Field {
                     name: "x".into(),
@@ -2255,7 +2474,7 @@ mod laws {
             ],
         };
         let wide = Schema::Attrs {
-            class_index: 0,
+            class_index: ClassIx::new(0),
             fields: vec![Field {
                 name: "x".into(),
                 schema: Schema::Int, // bool ⊆ int, and x is narrower; y is extra
@@ -2265,7 +2484,7 @@ mod laws {
         assert!(narrow.is_subtype_of(&wide));
         assert!(!wide.is_subtype_of(&narrow)); // wide lacks y
         let other_class = Schema::Attrs {
-            class_index: 1,
+            class_index: ClassIx::new(1),
             fields: narrow_fields_clone(&narrow),
         };
         // Same fields, different class: conservative (not decided in the core).
@@ -2286,12 +2505,14 @@ mod laws {
     #[test]
     fn a_tail_empty_under_defs_reduces_to_the_prefix() {
         // def 0 references only itself: an uninhabited recursive schema.
-        let defs = vec![Schema::Ref(0)];
+        let defs = vec![Schema::Ref(DefIx::new(0))];
         let with_phantom_tail = Schema::Seq {
             container: SeqKind::List,
             regex: SeqRegex::Cat(vec![
                 SeqRegex::Elem(Box::new(Schema::Int)),
-                SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Ref(0))))),
+                SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Ref(DefIx::new(
+                    0,
+                )))))),
             ]),
         };
         let just_int = Schema::Seq {
@@ -2389,8 +2610,8 @@ mod laws {
 
     fn bound_holds(constraint: &Constraint, value: &Obj, pool: &[Obj]) -> bool {
         use core::cmp::Ordering;
-        let cmp_to = |index: &usize, ok: fn(Ordering) -> bool| {
-            match (as_num(value), as_num(&pool[*index])) {
+        let cmp_to = |index: &OperandIx, ok: fn(Ordering) -> bool| {
+            match (as_num(value), as_num(&pool[index.get()])) {
                 (Some(lhs), Some(rhs)) => lhs.partial_cmp(&rhs).is_some_and(ok),
                 _ => false, // a numeric bound on a non-numeric value raises: non-member
             }
@@ -2402,7 +2623,7 @@ mod laws {
             Constraint::Lt(index) => cmp_to(index, |ord| ord == Ordering::Less),
             Constraint::MinLen(min) => val_len(value).is_some_and(|len| len >= *min),
             Constraint::MaxLen(max) => val_len(value).is_some_and(|len| len <= *max),
-            Constraint::MultipleOf(index) => match (as_num(value), as_num(&pool[*index])) {
+            Constraint::MultipleOf(index) => match (as_num(value), as_num(&pool[index.get()])) {
                 (Some(lhs), Some(rhs)) if rhs != 0.0 => lhs % rhs == 0.0,
                 _ => false,
             },
@@ -2449,7 +2670,7 @@ mod laws {
             Schema::Float => matches!(value, Obj::Float(_)),
             Schema::Str => matches!(value, Obj::Str(_)),
             Schema::Bytes => matches!(value, Obj::Bytes),
-            Schema::Literal(index) => typed_eq(&pool[*index], value),
+            Schema::Literal(index) => typed_eq(&pool[index.get()], value),
             Schema::Set(element) => match value {
                 Obj::Set(items) => items.iter().all(|item| member_full(element, item, pool)),
                 _ => false,
@@ -2542,13 +2763,13 @@ mod laws {
     /// numeric entries, `MultipleOf` at a nonzero one, lengths at small counts.
     fn constraint_strategy() -> impl Strategy<Value = Constraint> {
         prop_oneof![
-            (0usize..3).prop_map(Constraint::Ge),
-            (0usize..3).prop_map(Constraint::Gt),
-            (0usize..3).prop_map(Constraint::Le),
-            (0usize..3).prop_map(Constraint::Lt),
+            (0usize..3).prop_map(|i| Constraint::Ge(OperandIx::new(i))),
+            (0usize..3).prop_map(|i| Constraint::Gt(OperandIx::new(i))),
+            (0usize..3).prop_map(|i| Constraint::Le(OperandIx::new(i))),
+            (0usize..3).prop_map(|i| Constraint::Lt(OperandIx::new(i))),
             (0usize..4usize).prop_map(Constraint::MinLen),
             (0usize..4usize).prop_map(Constraint::MaxLen),
-            (1usize..3).prop_map(Constraint::MultipleOf),
+            (1usize..3).prop_map(|i| Constraint::MultipleOf(OperandIx::new(i))),
         ]
     }
 
@@ -2566,7 +2787,7 @@ mod laws {
             Just(Schema::Float),
             Just(Schema::Str),
             Just(Schema::Bytes),
-            (0usize..POOL_LEN).prop_map(Schema::Literal),
+            (0usize..POOL_LEN).prop_map(|i| Schema::Literal(ConstIx::new(i))),
         ];
         leaf.prop_recursive(3, 48, 4, |inner| {
             let field =

@@ -29,7 +29,7 @@ use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBytes, PyList, PyString, PyTuple, PyType};
 use rustc_hash::FxHashSet;
-use valgebra_core::{LeafRelations, Schema, SeqKind, SeqRegex, fresh_self_token};
+use valgebra_core::{DefIx, LeafRelations, OperandIx, Schema, SeqKind, SeqRegex, fresh_self_token};
 
 use crate::build::{Pool, build_schema, combine};
 use crate::check::{Ctx, ValidatorIndex, build_index, member};
@@ -796,7 +796,7 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
     let mut definitions = Vec::new();
     let body = build_schema(&body_obj, &mut literals, &mut definitions)?;
     // The body becomes a definition; the self-reference resolves to it.
-    let ref_id = definitions.len();
+    let ref_id = DefIx::new(definitions.len());
     let resolved = body.resolve_self(token, ref_id);
     if resolved.occurs_unguarded(ref_id, false) {
         return Err(PyValueError::new_err(
@@ -907,15 +907,15 @@ impl LeafRelations for PoolRelations<'_, '_> {
             // A literal denotes a singleton: `{v}` is a subtype of `sup` exactly
             // when `v` is a member of `sup`.
             Schema::Literal(index) => {
-                let value = self.literals.get(*index)?.bind(self.py);
+                let value = self.literals.get(index.get())?.bind(self.py);
                 Some(self.is_member(sup, value))
             }
             // The `isinstance(., C)` values are a subset of the `isinstance(., D)`
             // values exactly when `C` is a subclass of `D`.
             Schema::Instance(index) => match sup {
                 Schema::Instance(superindex) => {
-                    let class = self.literals.get(*index)?.bind(self.py);
-                    let superclass = self.literals.get(*superindex)?.bind(self.py);
+                    let class = self.literals.get(index.get())?.bind(self.py);
+                    let superclass = self.literals.get(superindex.get())?.bind(self.py);
                     let decided = class
                         .cast::<PyType>()
                         .ok()
@@ -929,20 +929,20 @@ impl LeafRelations for PoolRelations<'_, '_> {
         }
     }
 
-    fn compare(&self, left: usize, right: usize) -> Option<core::cmp::Ordering> {
+    fn compare(&self, left: OperandIx, right: OperandIx) -> Option<core::cmp::Ordering> {
         // Order two refinement-bound values by Python's own comparison, so the
         // core can decide an unsatisfiable bound conjunction. An incomparable
         // pair (a TypeError) leaves the bound undecided.
-        let left = self.literals.get(left)?.bind(self.py);
-        let right = self.literals.get(right)?.bind(self.py);
+        let left = self.literals.get(left.get())?.bind(self.py);
+        let right = self.literals.get(right.get())?.bind(self.py);
         left.compare(right).ok()
     }
 
     fn no_int_between(
         &self,
-        lo: usize,
+        lo: OperandIx,
         lo_strict: bool,
-        hi: usize,
+        hi: OperandIx,
         hi_strict: bool,
     ) -> Option<bool> {
         // Decide whether the open/half-open interval bounded by the pooled values
@@ -954,8 +954,8 @@ impl LeafRelations for PoolRelations<'_, '_> {
         let (floor, ceil) = math_floor_ceil(self.py).ok()?;
         let floor = floor.bind(self.py);
         let ceil = ceil.bind(self.py);
-        let lo = self.literals.get(lo)?.bind(self.py);
-        let hi = self.literals.get(hi)?.bind(self.py);
+        let lo = self.literals.get(lo.get())?.bind(self.py);
+        let hi = self.literals.get(hi.get())?.bind(self.py);
         // A non-real bound (`math.floor` raises a `TypeError`) or a non-finite one
         // (an `OverflowError`) leaves the rule undecided rather than guessing.
         let one = 1i64;

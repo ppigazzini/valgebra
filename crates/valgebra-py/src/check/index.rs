@@ -189,7 +189,7 @@ fn literal_union_plan(py: Python<'_>, members: &[Schema], pool: &[Py<PyAny>]) ->
         // Bounds-check rather than index directly: a corrupt pool index abandons
         // the precompute (no fast path) instead of panicking across the FFI
         // boundary, matching the defensive `.get` posture used elsewhere.
-        let constant = pool.get(*idx).map(|obj| obj.bind(py))?;
+        let constant = pool.get(idx.get()).map(|obj| obj.bind(py))?;
         if constant.is_exact_instance_of::<PyInt>() {
             if let Ok(i) = constant.extract::<i64>() {
                 ints.insert(i);
@@ -237,6 +237,7 @@ mod tests {
         use super::super::*;
         use crate::check::walk::literal_matches;
         use pyo3::types::{PyBool, PyString};
+        use valgebra_core::ConstIx;
 
         #[test]
         fn union_plan_decide_agrees_with_the_linear_scan() {
@@ -251,7 +252,9 @@ mod tests {
                     PyString::new(py, "ok").into_any().unbind(),
                     PyString::new(py, "yes").into_any().unbind(),
                 ];
-                let members: Vec<Schema> = (0..pool.len()).map(Schema::Literal).collect();
+                let members: Vec<Schema> = (0..pool.len())
+                    .map(|i| Schema::Literal(ConstIx::new(i)))
+                    .collect();
                 let plan =
                     literal_union_plan(py, &members, &pool).expect("every member is a literal");
 

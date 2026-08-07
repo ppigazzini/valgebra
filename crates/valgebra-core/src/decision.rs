@@ -1,7 +1,7 @@
 //! The decision procedures over the IR: emptiness, subtyping, equivalence, and
 //! disjointness, with the leaf-relation oracle and the scalar region partition.
 
-use crate::ir::{Constraint, Field, Schema, SeqKind, SeqRegex};
+use crate::ir::{Constraint, DefIx, Field, OperandIx, Schema, SeqKind, SeqRegex};
 use rustc_hash::FxHashMap;
 use std::cell::Cell;
 
@@ -61,7 +61,7 @@ impl SeqRegex {
         &self,
         oracle: &dyn LeafRelations,
         defs: &[Schema],
-        visiting: &mut Vec<usize>,
+        visiting: &mut Vec<DefIx>,
         budget: &Cell<u32>,
     ) -> bool {
         match self {
@@ -253,7 +253,7 @@ impl Schema {
         &self,
         oracle: &dyn LeafRelations,
         defs: &[Schema],
-        visiting: &mut Vec<usize>,
+        visiting: &mut Vec<DefIx>,
         budget: &Cell<u32>,
     ) -> bool {
         self.empty_and_region(oracle, defs, visiting, budget).0
@@ -276,7 +276,7 @@ impl Schema {
         &self,
         oracle: &dyn LeafRelations,
         defs: &[Schema],
-        visiting: &mut Vec<usize>,
+        visiting: &mut Vec<DefIx>,
         budget: &Cell<u32>,
     ) -> (bool, Option<u8>) {
         // Bound the work, sharing the budget with the caller (the subtyping
@@ -304,7 +304,7 @@ impl Schema {
                 if visiting.contains(id) {
                     return (true, None);
                 }
-                match defs.get(*id) {
+                match defs.get(id.get()) {
                     Some(def) => {
                         visiting.push(*id);
                         let empty = def.is_empty_rec(oracle, defs, visiting, budget);
@@ -518,7 +518,7 @@ impl Schema {
             // lets a recursive member be compared against the reference rather
             // than the reference being unfolded past it). The goal is recorded so
             // a cycle back to it is caught by the coinductive hypothesis above.
-            (Schema::Ref(id), _) => match cx.defs.get(*id) {
+            (Schema::Ref(id), _) => match cx.defs.get(id.get()) {
                 Some(def) => {
                     assumptions.push((self.clone(), other.clone()));
                     let holds = def.is_subtype_rec(other, cx, assumptions);
@@ -527,7 +527,7 @@ impl Schema {
                 }
                 None => false,
             },
-            (_, Schema::Ref(id)) => match cx.defs.get(*id) {
+            (_, Schema::Ref(id)) => match cx.defs.get(id.get()) {
                 Some(def) => {
                     assumptions.push((self.clone(), other.clone()));
                     let holds = self.is_subtype_rec(def, cx, assumptions);
@@ -672,7 +672,7 @@ pub trait LeafRelations {
     /// Order the two pool values behind refinement bounds at indices `left` and
     /// `right`, or `None` when the core cannot or the values are not comparable.
     /// The default decides nothing, so bound satisfiability stays conservative.
-    fn compare(&self, _left: usize, _right: usize) -> Option<core::cmp::Ordering> {
+    fn compare(&self, _left: OperandIx, _right: OperandIx) -> Option<core::cmp::Ordering> {
         None
     }
 
@@ -684,9 +684,9 @@ pub trait LeafRelations {
     /// core with no value oracle never decides on integer adjacency.
     fn no_int_between(
         &self,
-        _lo: usize,
+        _lo: OperandIx,
         _lo_strict: bool,
-        _hi: usize,
+        _hi: OperandIx,
         _hi_strict: bool,
     ) -> Option<bool> {
         None
@@ -733,8 +733,8 @@ fn bounds_unsatisfiable<'a>(
     {
         return true;
     }
-    let mut lower: Option<(usize, bool)> = None;
-    let mut upper: Option<(usize, bool)> = None;
+    let mut lower: Option<(OperandIx, bool)> = None;
+    let mut upper: Option<(OperandIx, bool)> = None;
     for constraint in constraints {
         match constraint {
             Constraint::Ge(i) => lower = Some(tighter_bound(lower, (*i, false), oracle, true)),
@@ -820,11 +820,11 @@ fn constraint_entailed(
 /// the lesser for an upper bound; on equal values the strict end wins, and on an
 /// incomparable pair the current bound is kept (conservative).
 fn tighter_bound(
-    current: Option<(usize, bool)>,
-    candidate: (usize, bool),
+    current: Option<(OperandIx, bool)>,
+    candidate: (OperandIx, bool),
     oracle: &dyn LeafRelations,
     is_lower: bool,
-) -> (usize, bool) {
+) -> (OperandIx, bool) {
     use core::cmp::Ordering;
     let Some(current) = current else {
         return candidate;
@@ -1098,6 +1098,7 @@ enum TypeTag {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ir::ConstIx;
     use proptest::prelude::*;
 
     /// A generator mixing the scalar-decidable atoms with opaque leaves (the
@@ -1115,7 +1116,7 @@ mod tests {
             Just(Schema::Str),
             Just(Schema::Bytes),
             Just(Schema::Dynamic),
-            Just(Schema::Literal(0)),
+            Just(Schema::Literal(ConstIx::new(0))),
             Just(Schema::Set(Box::new(Schema::Int))),
         ];
         leaf.prop_recursive(4, 24, 3, |inner| {
@@ -1169,7 +1170,7 @@ mod tests {
             Schema::Intersection(vec![
                 Schema::Refine {
                     base: Box::new(Schema::Int),
-                    constraints: vec![Constraint::Ge(0)],
+                    constraints: vec![Constraint::Ge(OperandIx::new(0))],
                 },
                 Schema::Str,
             ])
@@ -1187,8 +1188,8 @@ mod tests {
         fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
             None
         }
-        fn compare(&self, a: usize, b: usize) -> Option<core::cmp::Ordering> {
-            Some(a.cmp(&b))
+        fn compare(&self, a: OperandIx, b: OperandIx) -> Option<core::cmp::Ordering> {
+            Some(a.get().cmp(&b.get()))
         }
     }
 
@@ -1197,66 +1198,66 @@ mod tests {
         let o = &ByIndex;
         // Ge(w): a tighter-or-equal lower bound, from Ge or Gt, entails a looser one.
         assert!(constraint_entailed(
-            &Constraint::Ge(3),
-            &[Constraint::Ge(5)],
+            &Constraint::Ge(OperandIx::new(3)),
+            &[Constraint::Ge(OperandIx::new(5))],
             o
         ));
         assert!(constraint_entailed(
-            &Constraint::Ge(3),
-            &[Constraint::Gt(5)],
+            &Constraint::Ge(OperandIx::new(3)),
+            &[Constraint::Gt(OperandIx::new(5))],
             o
         ));
         assert!(!constraint_entailed(
-            &Constraint::Ge(5),
-            &[Constraint::Ge(3)],
+            &Constraint::Ge(OperandIx::new(5)),
+            &[Constraint::Ge(OperandIx::new(3))],
             o
         ));
         // Gt(w): Gt(n) with n >= w, or Ge(n) with n > w.
         assert!(constraint_entailed(
-            &Constraint::Gt(3),
-            &[Constraint::Gt(3)],
+            &Constraint::Gt(OperandIx::new(3)),
+            &[Constraint::Gt(OperandIx::new(3))],
             o
         ));
         assert!(constraint_entailed(
-            &Constraint::Gt(3),
-            &[Constraint::Ge(5)],
+            &Constraint::Gt(OperandIx::new(3)),
+            &[Constraint::Ge(OperandIx::new(5))],
             o
         ));
         assert!(!constraint_entailed(
-            &Constraint::Gt(5),
-            &[Constraint::Ge(5)],
+            &Constraint::Gt(OperandIx::new(5)),
+            &[Constraint::Ge(OperandIx::new(5))],
             o
         ));
         // Le(w): Le(n) or Lt(n) with n <= w.
         assert!(constraint_entailed(
-            &Constraint::Le(5),
-            &[Constraint::Le(3)],
+            &Constraint::Le(OperandIx::new(5)),
+            &[Constraint::Le(OperandIx::new(3))],
             o
         ));
         assert!(constraint_entailed(
-            &Constraint::Le(5),
-            &[Constraint::Lt(3)],
+            &Constraint::Le(OperandIx::new(5)),
+            &[Constraint::Lt(OperandIx::new(3))],
             o
         ));
         assert!(!constraint_entailed(
-            &Constraint::Le(3),
-            &[Constraint::Le(5)],
+            &Constraint::Le(OperandIx::new(3)),
+            &[Constraint::Le(OperandIx::new(5))],
             o
         ));
         // Lt(w): Lt(n) with n <= w, or Le(n) with n < w.
         assert!(constraint_entailed(
-            &Constraint::Lt(5),
-            &[Constraint::Lt(5)],
+            &Constraint::Lt(OperandIx::new(5)),
+            &[Constraint::Lt(OperandIx::new(5))],
             o
         ));
         assert!(constraint_entailed(
-            &Constraint::Lt(5),
-            &[Constraint::Le(3)],
+            &Constraint::Lt(OperandIx::new(5)),
+            &[Constraint::Le(OperandIx::new(3))],
             o
         ));
         assert!(!constraint_entailed(
-            &Constraint::Lt(5),
-            &[Constraint::Le(5)],
+            &Constraint::Lt(OperandIx::new(5)),
+            &[Constraint::Le(OperandIx::new(5))],
             o
         ));
         // Length bounds compare by their raw counts, no oracle needed.
@@ -1282,8 +1283,8 @@ mod tests {
         ));
         // A multiple-of or predicate bound has no order entailment.
         assert!(!constraint_entailed(
-            &Constraint::MultipleOf(0),
-            &[Constraint::MultipleOf(0)],
+            &Constraint::MultipleOf(OperandIx::new(0)),
+            &[Constraint::MultipleOf(OperandIx::new(0))],
             o
         ));
     }
@@ -1297,8 +1298,8 @@ mod tests {
             base: Box::new(Schema::Int),
             constraints,
         };
-        let tight = refine(vec![Constraint::Ge(5)]);
-        let loose = refine(vec![Constraint::Ge(3)]);
+        let tight = refine(vec![Constraint::Ge(OperandIx::new(5))]);
+        let loose = refine(vec![Constraint::Ge(OperandIx::new(3))]);
         assert!(tight.is_subtype_of_under(&loose, &ByIndex, &[]));
         assert!(!loose.is_subtype_of_under(&tight, &ByIndex, &[]));
     }
@@ -1328,15 +1329,15 @@ mod tests {
             constraints,
         };
         let empty = Schema::Intersection(vec![
-            refine(vec![Constraint::Ge(5)]),
-            refine(vec![Constraint::Gt(5)]),
-            refine(vec![Constraint::Le(5)]),
+            refine(vec![Constraint::Ge(OperandIx::new(5))]),
+            refine(vec![Constraint::Gt(OperandIx::new(5))]),
+            refine(vec![Constraint::Le(OperandIx::new(5))]),
         ]);
         assert!(empty.is_empty_with(&ByIndex, &[]));
         // Both bounds non-strict: the singleton {5} is inhabited.
         let inhabited = Schema::Intersection(vec![
-            refine(vec![Constraint::Ge(5)]),
-            refine(vec![Constraint::Le(5)]),
+            refine(vec![Constraint::Ge(OperandIx::new(5))]),
+            refine(vec![Constraint::Le(OperandIx::new(5))]),
         ]);
         assert!(!inhabited.is_empty_with(&ByIndex, &[]));
     }

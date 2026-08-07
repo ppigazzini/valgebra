@@ -36,7 +36,10 @@ use pyo3::exceptions::{PyException, PyMemoryError, PyRecursionError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
 use rustc_hash::{FxHashMap, FxHashSet};
-use valgebra_core::{Constraint, Field, PathSegment, Schema, SeqKind, SeqRegex, Violation};
+use valgebra_core::{
+    ClassIx, ConstIx, Constraint, DefIx, Field, OperandIx, PathSegment, PredIx, Schema, SeqKind,
+    SeqRegex, Violation,
+};
 
 use crate::check::Ctx;
 use crate::check::index::compile_pattern;
@@ -91,14 +94,38 @@ fn fold(result: PyResult<bool>, py: Python<'_>, ctx: Ctx<'_>) -> bool {
     }
 }
 
-/// Bind a pooled object by index, or `None` when the index is out of range. Every
+/// Bind a pooled object by slot, or `None` when the slot is out of range. Every
 /// IR index is in range by construction (the builder fills the pool), so a miss is
 /// an internal invariant break unreachable from user input; the walk degrades to a
 /// non-member rather than panicking across the language boundary.
-fn pooled<'py>(ctx: Ctx<'_>, index: usize, py: Python<'py>) -> Option<Bound<'py, PyAny>> {
-    let obj = ctx.pool.get(index);
-    debug_assert!(obj.is_some(), "pool index {index} out of range");
+///
+/// Private, and reached only through the four typed accessors below: this is the
+/// one place an index space stops being tracked, so the pool's four uses each
+/// name themselves at the call site.
+fn pool_slot<'py>(ctx: Ctx<'_>, slot: usize, py: Python<'py>) -> Option<Bound<'py, PyAny>> {
+    let obj = ctx.pool.get(slot);
+    debug_assert!(obj.is_some(), "pool index {slot} out of range");
     obj.map(|object| object.bind(py).clone())
+}
+
+/// The constant behind a [`Schema::Literal`].
+fn const_at<'py>(ctx: Ctx<'_>, index: ConstIx, py: Python<'py>) -> Option<Bound<'py, PyAny>> {
+    pool_slot(ctx, index.get(), py)
+}
+
+/// The class behind a [`Schema::Instance`] or a [`Schema::Attrs`].
+fn class_at<'py>(ctx: Ctx<'_>, index: ClassIx, py: Python<'py>) -> Option<Bound<'py, PyAny>> {
+    pool_slot(ctx, index.get(), py)
+}
+
+/// The operand behind a comparison or multiple-of constraint.
+fn operand_at<'py>(ctx: Ctx<'_>, index: OperandIx, py: Python<'py>) -> Option<Bound<'py, PyAny>> {
+    pool_slot(ctx, index.get(), py)
+}
+
+/// The callable behind a [`Constraint::Predicate`].
+fn predicate_at<'py>(ctx: Ctx<'_>, index: PredIx, py: Python<'py>) -> Option<Bound<'py, PyAny>> {
+    pool_slot(ctx, index.get(), py)
 }
 
 /// Decide whether `value` is a member of `schema`'s set.
@@ -187,13 +214,13 @@ fn admit(
 }
 
 fn check_literal(
-    index: usize,
+    index: ConstIx,
     value: &Value<'_, '_>,
     path: &[PathSegment],
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    let Some(literal) = pooled(ctx, index, value.py()) else {
+    let Some(literal) = const_at(ctx, index, value.py()) else {
         return false;
     };
     let ok = fold(
@@ -787,13 +814,13 @@ fn check_complement(
 }
 
 fn check_instance(
-    index: usize,
+    index: ClassIx,
     value: &Value<'_, '_>,
     path: &[PathSegment],
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    let Some(class) = pooled(ctx, index, value.py()) else {
+    let Some(class) = class_at(ctx, index, value.py()) else {
         return false;
     };
     let ok = fold(
@@ -813,7 +840,7 @@ fn check_instance(
 }
 
 fn check_object(
-    class_index: usize,
+    class_index: ClassIx,
     fields: &[Field],
     value: &Value<'_, '_>,
     path: &mut Vec<PathSegment>,
@@ -824,7 +851,7 @@ fn check_object(
     let Ok(obj) = value.to_python() else {
         return false;
     };
-    let Some(class) = pooled(ctx, class_index, value.py()) else {
+    let Some(class) = class_at(ctx, class_index, value.py()) else {
         return false;
     };
     if !fold(obj.is_instance(&class), value.py(), ctx) {
@@ -909,14 +936,14 @@ fn check_refine(
 /// unavailable, the signal the caller turns into a non-member.
 fn order_bound(
     value: &Bound<'_, PyAny>,
-    index: usize,
+    index: OperandIx,
     ctx: Ctx<'_>,
     py: Python<'_>,
     compare: impl Fn(&Bound<'_, PyAny>, &Bound<'_, PyAny>) -> PyResult<bool>,
     code: &'static str,
     symbol: &str,
 ) -> Option<(bool, &'static str, String)> {
-    let bound = pooled(ctx, index, py)?;
+    let bound = operand_at(ctx, index, py)?;
     Some((
         fold(compare(value, &bound), py, ctx),
         code,
@@ -980,7 +1007,7 @@ fn check_constraint(
             format!("length <= {n}"),
         ),
         Constraint::MultipleOf(i) => {
-            let Some(operand) = pooled(ctx, *i, py) else {
+            let Some(operand) = operand_at(ctx, *i, py) else {
                 return false;
             };
             (
@@ -993,7 +1020,7 @@ fn check_constraint(
             // Slow path: the user's Python callable runs at the boundary. A
             // raising predicate is surfaced as a distinct `predicate_error`
             // rather than masked as an ordinary failed match.
-            let Some(predicate) = pooled(ctx, *i, py) else {
+            let Some(predicate) = predicate_at(ctx, *i, py) else {
                 return false;
             };
             match predicate_passes(&predicate, value) {
@@ -1050,13 +1077,13 @@ fn check_constraint(
 const MAX_RECURSION_DEPTH: usize = 128;
 
 fn check_ref(
-    id: usize,
+    id: DefIx,
     value: &Value<'_, '_>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    let key = (value.id(), id);
+    let key = (value.id(), id.get());
     let depth = {
         let mut guard = ctx.guard.borrow_mut();
         if !guard.insert(key) {
@@ -1084,11 +1111,11 @@ fn check_ref(
         }
         return false;
     }
-    let Some(def) = ctx.defs.get(id) else {
+    let Some(def) = ctx.defs.get(id.get()) else {
         // A reference past the definitions table is an internal invariant break,
         // not reachable from user input; release builds degrade to a non-member
         // rather than panicking across the language boundary.
-        debug_assert!(false, "definition index {id} out of range");
+        debug_assert!(false, "definition index {} out of range", id.get());
         ctx.guard.borrow_mut().remove(&key);
         return false;
     };

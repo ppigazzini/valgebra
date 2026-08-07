@@ -11,7 +11,7 @@
 //! iteration count is large. Keep the corpus and `ITERATIONS` fixed; changing
 //! either moves the budget and requires re-recording it.
 
-use valgebra_core::{Field, Schema, SeqRegex};
+use valgebra_core::{ConstIx, DefShift, Field, PoolShift, Schema, SeqRegex};
 
 /// Iterations per operation. Large enough that startup is a rounding error.
 const ITERATIONS: usize = 2_000;
@@ -38,7 +38,7 @@ fn wide_record(width: usize) -> Schema {
     let fields = (0..width)
         .map(|i| Field {
             name: format!("f{i}"),
-            schema: Schema::Literal(i),
+            schema: Schema::Literal(ConstIx::new(i)),
             required: i % 2 == 0,
         })
         .collect();
@@ -77,8 +77,11 @@ fn main() {
     let mut checksum: usize = 0;
     for _ in 0..ITERATIONS {
         checksum = checksum.wrapping_add(std::hint::black_box(&boolean).simplify().depth_marker());
-        checksum =
-            checksum.wrapping_add(std::hint::black_box(&record).shifted(100, 0).depth_marker());
+        checksum = checksum.wrapping_add(
+            std::hint::black_box(&record)
+                .shifted(PoolShift::new(100), DefShift::new(0))
+                .depth_marker(),
+        );
         checksum = checksum.wrapping_add(
             std::hint::black_box(&nested)
                 .with_records_open(true)
