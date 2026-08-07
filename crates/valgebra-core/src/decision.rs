@@ -491,6 +491,23 @@ impl Schema {
         empty(self) || empty(&Schema::Complement(Box::new(other.clone())))
     }
 
+    /// Whether `self` and `other` share no value, which is what decides `self ⊆
+    /// ¬other`.
+    ///
+    /// This is the semantic subtyping reduction `[[s ∧ ¬t]] = ∅` applied where
+    /// the structural arms have nothing to say: a complement offers no shape on
+    /// the right to recurse into, so the question goes to emptiness, which
+    /// already decides kind disjointness and the scalar regions. Without it a
+    /// container is never seen below the complement of a scalar.
+    fn shares_no_value_with(&self, other: &Schema, cx: SubtypeCx<'_>) -> bool {
+        Schema::Intersection(vec![self.clone(), other.clone()]).is_empty_rec(
+            cx.oracle,
+            cx.defs,
+            &mut Vec::new(),
+            cx.budget,
+        )
+    }
+
     fn subtype_decide(
         &self,
         other: &Schema,
@@ -600,6 +617,7 @@ impl Schema {
             }
             // Complement is contravariant: ¬A ⊆ ¬B exactly when B ⊆ A.
             (Schema::Complement(a), Schema::Complement(b)) => b.is_subtype_rec(a, cx, assumptions),
+            (_, Schema::Complement(inner)) => self.shares_no_value_with(inner, cx),
             // A refinement is a subset of its base. Against another refinement the
             // base must subtype and every constraint of the supertype must hold of
             // every subtype value: either it appears verbatim, or it is entailed by
@@ -980,36 +998,16 @@ fn keyed_map_subtype(
     // each rather than a fresh linear scan per field (O(fields²) per comparison).
     let a_by_name = field_index(fa);
     let b_by_name = field_index(fb);
-    if da.is_empty() {
-        // A closed record carries only its declared fields, so it is a subtype
-        // when every field maps into a like-named field of the supertype (width
-        // and depth) and the supertype's required fields are required here too. A
-        // field the supertype does not declare would need the supertype's
-        // catch-all to cover that exact key name, which stays conservative.
-        let width_and_depth = fa.iter().all(|a| {
-            b_by_name
-                .get(a.name.as_str())
-                .is_some_and(|b| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
-        });
-        let required = fb
-            .iter()
-            .filter(|b| b.required)
-            .all(|b| a_by_name.get(b.name.as_str()).is_some_and(|a| a.required));
-        width_and_depth && required
-    } else if fa.is_empty() && fb.is_empty() {
-        // Pure mappings: every key-pattern clause of the subtype must be subsumed
-        // by a clause of the supertype, with both its keys and its values
-        // narrower, so every entry the subtype admits the supertype admits too.
-        da.iter().all(|(ka, va)| {
-            db.iter().any(|(kb, vb)| {
-                ka.is_subtype_rec(kb, cx, assumptions) && va.is_subtype_rec(vb, cx, assumptions)
-            })
-        })
-    } else {
-        // General mixed record-and-catch-all subtyping (`a` carries a catch-all and
-        // is not the pure-mapping case). Every supertype field is checked against
-        // `a`: a field `a` declares is matched field-wise; a field `a` lacks is
-        // governed by `a`'s catch-all.
+    {
+        // One rule for every shape a keyed map takes. The closed record and the
+        // pure mapping are not special cases needing a branch of their own: each
+        // is this rule with one of the two lists empty, and a dedicated branch
+        // for either can only answer the same question less well. The closed
+        // record did -- it read a field the supertype covered through a catch-all
+        // as undecided, so `{"x": int}` was not seen below `dict[str, int]`.
+        //
+        // Every supertype field is checked against `a`: a field `a` declares is
+        // matched field-wise; a field `a` lacks is governed by `a`'s catch-all.
         let fields_ok = fb.iter().all(|b_field| {
             match a_by_name.get(b_field.name.as_str()) {
                 // Shared field: it must narrow in depth, and a field `b` requires

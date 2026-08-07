@@ -263,6 +263,23 @@ _DECIDED = [
         {"b?": int, str: int},
         id="map:pure<=mixed-optional",
     ),
+    # A closed record against a catch-all mapping. One rule serves every keyed-map
+    # shape: a branch of its own for the closed record read a field the supertype
+    # covered through a catch-all as undecided, though the general rule beside it
+    # already decided exactly that.
+    pytest.param("subtype", {"x": int}, {str: int}, id="map:closed-record<=mapping"),
+    pytest.param(
+        "subtype", {"x": int}, {str: object}, id="map:closed-record<=wide-mapping"
+    ),
+    # Inclusion in a complement, which is `A ∩ B = ∅` and nothing structural: a
+    # complement offers no shape on the right to recurse into.
+    pytest.param(
+        "subtype", list[int], complement(int), id="complement:list[int]<=~int"
+    ),
+    pytest.param(
+        "subtype", dict[str, int], complement(str), id="complement:dict<=~str"
+    ),
+    pytest.param("subtype", int, complement(str), id="complement:int<=~str"),
 ]
 
 # Known decision-completeness misses. None remain: each relation the procedure

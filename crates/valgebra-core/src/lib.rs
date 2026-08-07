@@ -1111,8 +1111,11 @@ mod laws {
         assert!(
             !mapping(Schema::Str, Schema::Int).is_subtype_of(&mapping(Schema::Str, Schema::Bool))
         );
-        // A record and a mapping are not compared — conservative.
-        assert!(!narrow.is_subtype_of(&mapping(Schema::Str, Schema::Int)));
+        // A closed record is below a mapping whose catch-all covers each of its
+        // keys: `{"x": int}` places an `int` at a `str` key and nothing else.
+        assert!(narrow.is_subtype_of(&mapping(Schema::Str, Schema::Int)));
+        // ...and the value type still has to hold.
+        assert!(!narrow.is_subtype_of(&mapping(Schema::Str, Schema::Str)));
     }
 
     #[test]
@@ -1455,6 +1458,16 @@ mod laws {
         // the dedicated arms decide it).
         assert!(Schema::Nothing.is_subtype_of(&list(Schema::Int)));
         assert!(list(Schema::Int).is_subtype_of(&Schema::Anything));
+        // Below a complement, which is the emptiness reduction rather than a
+        // structural arm: a list shares no value with an int, so it lies inside
+        // the complement of int. Nothing structural can see this -- there is no
+        // shape on the right to recurse into.
+        let not = |s| Schema::Complement(Box::new(s));
+        assert!(list(Schema::Int).is_subtype_of(&not(Schema::Int)));
+        assert!(map(Schema::Str, Schema::Int).is_subtype_of(&not(Schema::Str)));
+        // ...and it stays sound where the two do share values.
+        assert!(!list(Schema::Int).is_subtype_of(&not(list(Schema::Bool))));
+        assert!(!Schema::Bool.is_subtype_of(&not(Schema::Int)));
         // A meet is below a member of a join, and a conjunct decides a meet's
         // supertype.
         assert!(list(Schema::Bool).is_subtype_of(&Schema::Intersection(vec![
