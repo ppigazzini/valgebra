@@ -386,6 +386,107 @@ jobs:
 
   # Single required check for branch protection: green only if every job above
   # succeeds. Mirrors the ruff required-checks and pydantic check aggregators.
+  mutants-diff:
+    name: mutation signal on the diff
+    # The full sweeps are minutes of rebuilds and run nightly, so a regression
+    # they would catch is visible the night after the pull request that caused
+    # it. This runs the same sweep restricted to the lines the diff touches,
+    # which is bounded by the change rather than by the tree, and so fits a push.
+    #
+    # It checks the NEW-survivor direction only. An in-diff sweep never generates
+    # most of the baseline, so every accepted survivor the diff did not touch is
+    # absent by construction and would otherwise read as a whole baseline gone
+    # stale.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge base is what the diff is taken against, so the shallow
+          # default clone is not enough.
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: taiki-e/install-action@065d6a08a14e61e89fb0a4c10eecdbdef39c7d8e # v2.85.4
+        with:
+          tool: cargo-mutants
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+      - name: Take the diff against the merge base
+        id: diff
+        # Both values reach the script through the environment rather than
+        # through template expansion, so nothing from the event can be read as
+        # shell.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          base="$BASE_SHA"
+          # A first push to a branch, or a force-push, can leave no usable base;
+          # fall back to the default branch rather than sweeping the whole tree.
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "$DEFAULT_BRANCH"
+            base="$(git rev-parse FETCH_HEAD)"
+          fi
+          git diff "$base"...HEAD -- '*.rs' > pr.diff
+          if [ -s pr.diff ]; then
+            echo "rust=yes" >> "$GITHUB_OUTPUT"
+            echo "Rust lines changed; sweeping them."
+          else
+            echo "rust=no" >> "$GITHUB_OUTPUT"
+            echo "No Rust changed; nothing for the sweep to mutate."
+          fi
+      - name: Sweep the core, restricted to the diff
+        if: steps.diff.outputs.rust == 'yes'
+        run: |
+          set +e
+          cargo mutants --package valgebra-core --in-diff pr.diff -j 4 \
+            --output core-diff-mutants
+          status=$?
+          set -e
+          # A diff that touches no mutable core line generates nothing; that is a
+          # clean result, not a broken detector, so the ratchet is skipped for it.
+          case "$status" in
+            0 | 2 | 3) ;;
+            *) exit "$status" ;;
+          esac
+          if [ -f core-diff-mutants/mutants.out/caught.txt ] \
+            || [ -f core-diff-mutants/mutants.out/missed.txt ]; then
+            python3 scripts/mutation_gate.py --baseline core --new-only \
+              --out core-diff-mutants/mutants.out
+          else
+            echo "no core mutants in this diff"
+          fi
+      - name: Sweep the walk, restricted to the diff
+        if: steps.diff.outputs.rust == 'yes'
+        run: |
+          uv sync --locked --no-install-project
+          export PYO3_PYTHON="$(uv run python -c 'import sys; print(sys.executable)')"
+          libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
+          export LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}"
+          set +e
+          cargo mutants --package valgebra-py \
+            --file crates/valgebra-py/src/check/walk.rs \
+            --features interpreter-tests --in-diff pr.diff -j 4 \
+            --output walk-diff-mutants
+          status=$?
+          set -e
+          case "$status" in
+            0 | 2 | 3) ;;
+            *) exit "$status" ;;
+          esac
+          if [ -f walk-diff-mutants/mutants.out/caught.txt ] \
+            || [ -f walk-diff-mutants/mutants.out/missed.txt ]; then
+            python3 scripts/mutation_gate.py --baseline walk --new-only \
+              --out walk-diff-mutants/mutants.out
+          else
+            echo "no walk mutants in this diff"
+          fi
+
   nightly-fuzz:
     name: nightly deep fuzz
     # The hole-hunting property suites at the deep example budget. Scheduled and
@@ -746,6 +847,7 @@ jobs:
         bench,
         wheel,
         fuzz-build,
+        mutants-diff,
         cargo-deny,
         pip-audit,
         zizmor,
@@ -771,6 +873,7 @@ jobs:
           needs.bench.result != 'success' ||
           needs.wheel.result != 'success' ||
           needs.fuzz-build.result != 'success' ||
+          needs.mutants-diff.result != 'success' ||
           needs.cargo-deny.result != 'success' ||
           needs.pip-audit.result != 'success' ||
           needs.zizmor.result != 'success'

@@ -20,7 +20,12 @@ Usage:
     python scripts/compare_gate.py            # check ratios against the baseline
     python scripts/compare_gate.py --update   # re-record the baseline ratios
 
-Requires the ``bench`` dependency group (pydantic).
+Requires the ``bench`` dependency group (pydantic) and the built extension.
+
+Three outcomes, three exit codes: **0** every shape is within tolerance, **1** a
+shape regressed or the shape sets disagree, **2** the gate **could not run** --
+a missing dependency, an unreadable baseline. A gate that could not run has
+proven nothing and must not read as one that passed.
 """
 
 from __future__ import annotations
@@ -33,6 +38,11 @@ from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+# Three outcomes, three exit codes; see the module docstring.
+EXIT_OK = 0
+EXIT_FAIL = 1
+EXIT_CANNOT_RUN = 2
 
 ROOT = Path(__file__).resolve().parent.parent
 BASELINE_FILE = ROOT / "scripts" / "perf_compare.json"
@@ -116,23 +126,58 @@ def _per_call_ns(call: Callable[[object], object], data: object, number: int) ->
     return best / number * 1e9
 
 
-def main() -> int:
-    update = "--update" in sys.argv[1:]
-    baseline = json.loads(BASELINE_FILE.read_text(encoding="utf-8"))
-    tolerance = float(baseline["tolerance"])
-    recorded: dict[str, float] = baseline.get("ratios", {})
+def _prepare() -> tuple[dict, float, dict[str, Shape]] | None:
+    """Read the baseline and build the shapes, or report why neither happened.
 
-    shapes = _shapes()
-    # Warm up so first-touch effects (lazy imports, allocator) do not skew the
-    # first shape measured, and assert each payload is a member: a correctness
-    # regression that makes valgebra reject the data would take the fast reject
-    # path and read as a speed-up, so the gate must confirm it is measuring the
-    # accept path it claims to.
+    Both are preconditions rather than verdicts: an unreadable baseline and a
+    missing benchmark dependency each mean the comparison did not take place,
+    which must not read as "did not regress". `None` is the caller's signal to
+    exit 2.
+    """
+    try:
+        baseline = json.loads(BASELINE_FILE.read_text(encoding="utf-8"))
+        tolerance = float(baseline["tolerance"])
+    except (OSError, ValueError, KeyError) as err:
+        print(f"compare_gate: cannot read the baseline: {err}")
+        return None
+    try:
+        shapes = _shapes()
+    except ImportError as err:
+        # No pydantic, or no built extension: there is nothing to compare
+        # against.
+        print(f"compare_gate: cannot build the comparison shapes: {err}")
+        return None
+    return baseline, tolerance, shapes
+
+
+def warm_up(shapes: dict[str, Shape]) -> bool:
+    """Warm each shape, and confirm the gate is timing the ACCEPT path.
+
+    Public because it is a refusal, and a refusal that cannot be driven from a
+    test is not evidence.
+
+    First-touch effects (lazy imports, the allocator) would otherwise skew the
+    first shape measured. The membership assertion is the rig check: a
+    correctness regression that made valgebra reject the data would take the
+    fast reject path and read as a speed-up.
+    """
     for name, shape in shapes.items():
         if shape["valgebra"](shape["data"]) is not True:
             print(f"payload for shape {name!r} is not accepted by valgebra")
-            return 1
+            return False
         shape["pydantic"](shape["data"])
+    return True
+
+
+def main() -> int:
+    update = "--update" in sys.argv[1:]
+    prepared = _prepare()
+    if prepared is None:
+        return EXIT_CANNOT_RUN
+    baseline, tolerance, shapes = prepared
+    recorded: dict[str, float] = baseline.get("ratios", {})
+    if not warm_up(shapes):
+        return EXIT_FAIL
 
     measured: dict[str, float] = {}
     rows: list[tuple[str, float, float, float]] = []
@@ -165,7 +210,7 @@ def main() -> int:
             json.dumps(baseline, indent=2) + "\n", encoding="utf-8"
         )
         print(f"\nrecorded {len(measured)} baseline ratios (tolerance {tolerance:.0%})")
-        return 0
+        return EXIT_OK
 
     # Every measured shape must have a baseline and vice versa: a shape added
     # without re-recording, or a stale baseline key, would otherwise pass the gate
@@ -177,13 +222,13 @@ def main() -> int:
             "\nbaseline shapes do not match measured shapes; re-record with "
             f"--update (missing baseline: {missing}; stale baseline: {stale})"
         )
-        return 1
+        return EXIT_FAIL
 
     if failures:
         print(f"\nREGRESSION on: {', '.join(failures)}")
-        return 1
+        return EXIT_FAIL
     print(f"\nOK: all shapes within {tolerance:.0%} of the recorded ratio.")
-    return 0
+    return EXIT_OK
 
 
 def judge(

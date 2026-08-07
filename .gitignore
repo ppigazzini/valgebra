@@ -52,3 +52,5 @@ htmlcov/
 /mutants.out/
 /mutants.out.old/
 /walk-mutants/
+/core-diff-mutants/
+/walk-diff-mutants/

@@ -54,6 +54,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Three outcomes, three exit codes: 0 within budget, 1 outside it or the wrong
+# workload, 2 could not measure.
+EXIT_OK = 0
+EXIT_FAIL = 1
+EXIT_CANNOT_RUN = 2
+
 ROOT = Path(__file__).resolve().parent.parent
 BUDGET_FILE = ROOT / "scripts" / "perf_budget.json"
 WORKLOAD = ROOT / "target" / "release" / "examples" / "perf_workload"
@@ -121,7 +127,7 @@ def parse_measurement(stdout: str, stderr: str) -> Measurement:
     if match is None:
         print("could not find an instruction count in cachegrind output:")
         print(stderr)
-        raise SystemExit(2)
+        raise SystemExit(EXIT_CANNOT_RUN)
     irefs = int(match.group(1).replace(",", ""))
 
     checksum = None
@@ -133,7 +139,7 @@ def parse_measurement(stdout: str, stderr: str) -> Measurement:
     if checksum is None:
         print("could not find a workload checksum in the output:")
         print(stdout)
-        raise SystemExit(2)
+        raise SystemExit(EXIT_CANNOT_RUN)
     return Measurement(irefs, checksum)
 
 

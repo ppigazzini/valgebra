@@ -109,11 +109,16 @@ free-threaded 3.14t lane blocks merges — a differential lane that cross-checks
 membership against pydantic-core
 and jsonschema, the doc-example runner, a strict docs build, and a Linux wheel
 build. Scheduled lanes run the deep property suites, a libFuzzer soak over the
-core, and a mutation sweep whose survivors are ratcheted against a committed
-baseline: a survivor the baseline does not accept fails the lane, and so does a
+core, and two mutation sweeps — the core crate, and the membership walk under an
+embedded interpreter — whose survivors are ratcheted against their own committed
+baselines: a survivor the baseline does not accept fails the lane, and so does a
 baseline entry that is no longer a survivor. The target is never zero —
 equivalent mutants exist and are undecidable — so an accepted survivor carries
 the argument for why no test can kill it.
+Every push also runs the same sweeps **restricted to the lines the diff
+touches**, which is bounded by the change rather than by the tree and so blocks
+merges; it checks the new-survivor direction alone, because a partial sweep never
+generates most of the baseline and the expiry direction is not its to judge.
 Performance is gated two ways: a **deterministic cachegrind instruction count**
 over the core engine compared to a committed budget, and a **competitive ratio**
 of per-call time against pydantic-core across a shape matrix. Both are
@@ -139,6 +144,20 @@ collide with an unrelated sense used nearby. Say which one you mean.
 | **ledger** | an enumerated list held to the tree in both directions, so an entry that stops being true fails and a subject with no entry fails too |
 | **region** | one part of the value universe in the partition the decision procedure computes over |
 | **pool** | the validator's table of Python objects: a literal's constant, a class, a comparison operand, a predicate |
+
+Every gate script reports one of **three** outcomes, and the exit code says
+which, so a caller can dispatch on it rather than parse the output:
+
+| exit | meaning |
+| --- | --- |
+| **0** | the gate ran and the property holds |
+| **1** | the gate ran and the property does not hold |
+| **2** | the gate **could not run** — no measurement, no baseline, a missing dependency |
+
+A gate that could not run has proven nothing, and must never read as one that
+passed. `perf_gate.py` exits 2 on cachegrind output it cannot parse,
+`mutation_gate.py` on a missing sweep result or baseline, and `compare_gate.py`
+without its benchmark dependency.
 
 Three collisions, and both senses are live:
 
