@@ -337,8 +337,13 @@ pub enum Schema {
     KeyedMap {
         /// The declared string-named fields, in order.
         fields: Vec<Field>,
-        /// Ordered `(key-schema, value-schema)` clauses governing every key that
-        /// is not a declared field name.
+        /// `(key-schema, value-schema)` clauses governing every key that is not
+        /// a declared field name. A key belongs when **some** clause admits both
+        /// it and its value, so the clauses are a disjunction and not a
+        /// precedence list: the order is the order they are rendered in, and
+        /// carries no meaning to membership or to subtyping. Both consumers ask
+        /// `any`, and this comment once said "ordered", which is a semantics no
+        /// code here implements.
         defaults: Vec<(Schema, Schema)>,
     },
     /// Denotes the union of the member sets: a value is a member iff it belongs

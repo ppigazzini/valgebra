@@ -1597,7 +1597,10 @@ mod laws {
         };
         // Optional extra field whose type the catch-all value (int) fits.
         assert!(base().is_subtype_of(&plus_y(Schema::Int, false)));
-        // Required extra field: undecided, a catch-all does not force presence.
+        // Required extra field: decided FALSE, and correctly -- the subtype admits
+        // a value with no such key, so a catch-all over the key space cannot stand
+        // in for the field's presence. Not a gap; naming it one hides where the
+        // real gap is.
         assert!(!base().is_subtype_of(&plus_y(Schema::Int, true)));
         // Optional extra field the catch-all value type does not fit.
         assert!(!base().is_subtype_of(&plus_y(Schema::Str, false)));
@@ -1907,8 +1910,9 @@ mod laws {
             defaults: vec![(Schema::Int, Schema::Anything)],
         };
         assert!(!extra_str.is_subtype_of(&int_catch_all));
-        // The reverse direction -- the supertype declaring a field the subtype
-        // lacks -- stays conservative.
+        // The reverse direction -- the supertype declaring a *required* field the
+        // subtype lacks -- is decided FALSE, and correctly: the subtype admits a
+        // value without that key.
         assert!(!covering.is_subtype_of(&with_extra));
     }
 
