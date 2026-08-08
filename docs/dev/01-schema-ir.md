@@ -64,6 +64,24 @@ into the first rather than appended, so identity-shared constants collapse to on
 slot. It is the one the binding actually calls; `shifted` is reached from the
 tests and the fuzz targets.
 
+Being the same operation, it is one walk: `Remap` names the difference — append
+by a distance, or intern through a table — and the walk asks each index space how
+it moves. A definitions index moves the same way under both, which is what makes
+one walk enough. The two were separate walks, identical but for the leaf action,
+and a payload site reached by one and missed by the other was a wrong index that
+neither the types nor an exhaustive `match` could see: the compiler forces an arm
+per variant and cannot check that the arm moved anything. `Schema::map_children`
+holds the other half of that argument — it is the single place each variant's
+child schemas are written down, so a walk that only descends inherits the child
+set instead of restating it. `Schema::remapped_by` takes no wildcard on purpose:
+a future variant carrying a pooled index must be a compile error there rather
+than a node that silently keeps an index into the wrong pool.
+
+The laws in `crates/valgebra-core/src/lib.rs` hold both entry points to moving
+every payload by its own space's distance, counted through an enumeration written
+in the test module rather than reached for in the IR — a check that judges the
+walk against something other than itself.
+
 ## Recursion, and why the guardedness check answers what it does
 
 `recursive` builds a fixpoint. The body is compiled with a `SelfRef` marker,

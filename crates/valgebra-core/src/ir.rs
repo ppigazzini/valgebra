@@ -16,6 +16,11 @@
 //! The two *shifts* applied when two validators are composed are typed for the
 //! same reason: [`Schema::shifted`] takes one per space, and they used to be two
 //! adjacent `usize` arguments a caller could transpose in silence.
+//!
+//! The types stop a shift reaching the wrong space. They say nothing about
+//! whether a payload was shifted at all, which is why one walk serves both ways
+//! of combining two pools ([`Remap`]) and why the child set of each variant is
+//! declared in one place ([`Schema::map_children`]).
 
 /// Remap a pool index through the reindexing map built when two validators merge.
 /// Every index is in range by construction, so a miss is an internal invariant
@@ -118,6 +123,18 @@ macro_rules! pool_index {
             fn remapped(self, lit_map: &[usize]) -> Self {
                 Self(remap(lit_map, self.0))
             }
+
+            /// This index under either way of combining two pools. The single
+            /// entry point the schema walk calls, so a payload is remapped by
+            /// asking *this* space how it moves rather than by the walk knowing
+            /// which combination it is performing.
+            #[must_use]
+            fn remapped_by(self, remap: Remap<'_>) -> Self {
+                match remap {
+                    Remap::Append { pool, .. } => self.shifted(pool),
+                    Remap::Intern { lit_map, .. } => self.remapped(lit_map),
+                }
+            }
         }
     };
 }
@@ -181,6 +198,46 @@ impl DefIx {
             by.0
         );
         Self(self.0 + by.0)
+    }
+
+    /// This index under either way of combining two validators. A definitions
+    /// table is only ever appended to, never interned, so both combinations move
+    /// a definition index the same way -- which is the fact that makes one
+    /// `Remap` enough for both.
+    #[must_use]
+    fn remapped_by(self, remap: Remap<'_>) -> Self {
+        self.shifted(remap.defs())
+    }
+}
+
+/// How the two index spaces move when one validator's schema is rebuilt against
+/// another's pools.
+///
+/// The constants pool combines in two ways -- appended, or interned so
+/// identity-shared constants collapse -- and the definitions table in one. The
+/// two ways were two whole structural walks over the IR, identical but for the
+/// leaf action, so a payload site reached by one and missed by the other was a
+/// wrong index the compiler could not see. Naming the difference leaves one walk
+/// and puts the difference at the leaf.
+#[derive(Debug, Clone, Copy)]
+enum Remap<'a> {
+    /// The second pool is appended to the first: every pool index moves along by
+    /// the first pool's length.
+    Append { pool: PoolShift, defs: DefShift },
+    /// The second pool is interned into the first: every pool index moves to the
+    /// slot `lit_map` records for it.
+    Intern {
+        lit_map: &'a [usize],
+        defs: DefShift,
+    },
+}
+
+impl Remap<'_> {
+    /// How far the definitions table moves, which both combinations carry.
+    fn defs(self) -> DefShift {
+        match self {
+            Remap::Append { defs, .. } | Remap::Intern { defs, .. } => defs,
+        }
     }
 }
 
@@ -247,12 +304,19 @@ pub enum PathSegment {
 ///
 /// Adding a variant means handling it in every walk over the IR; the compiler
 /// forces the exhaustive `match`es. Checklist:
-/// - core: [`Schema::expected`], [`Schema::error_code`], [`Schema::shifted`],
-///   [`Schema::resolve_self`], [`Schema::occurs_unguarded`],
+/// - core: [`Schema::map_children`], which is where the variant's child schemas
+///   are declared and which every purely structural walk reads them from;
+///   [`Schema::remapped_by`], if it carries a pooled or definitions index;
+///   [`Schema::expected`], [`Schema::error_code`], [`Schema::depth`],
+///   [`Schema::node_count`], [`Schema::occurs_unguarded`],
 ///   [`Schema::simplify`];
 /// - bindings (`valgebra-py`): the single `member` membership walk (which
 ///   decides membership and, in explain mode, aggregates the violation) plus
 ///   `render`.
+///
+/// The compiler forces an arm; it cannot check the arm recursed into every child.
+/// That is why the child set is declared once, in `map_children`, rather than per
+/// walk.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Schema {
     /// Top. Denotes every Python value; membership always holds.
@@ -442,18 +506,6 @@ impl SeqRegex {
             SeqRegex::Cat(parts) | SeqRegex::Or(parts) => parts.iter().any(|p| p.any_elem(pred)),
             SeqRegex::Star(inner) => inner.any_elem(pred),
         }
-    }
-
-    fn shifted(&self, pool: PoolShift, defs: DefShift) -> SeqRegex {
-        self.map_elems(&|s| s.shifted(pool, defs))
-    }
-
-    fn reindexed(&self, lit_map: &[usize], def_offset: DefShift) -> SeqRegex {
-        self.map_elems(&|s| s.reindexed(lit_map, def_offset))
-    }
-
-    fn resolve_self(&self, token: u64, ref_id: DefIx) -> SeqRegex {
-        self.map_elems(&|s| s.resolve_self(token, ref_id))
     }
 
     fn with_records_open(&self, open: Openness) -> SeqRegex {
@@ -738,15 +790,27 @@ impl Schema {
         }
     }
 
-    /// Return a copy with pool indices shifted by `pool` and definition
-    /// references shifted by `defs`.
+    /// Rebuild this node with every child schema mapped through `f`, leaving the
+    /// node's own payloads -- the container kind, a field's name and
+    /// required-ness, a pooled index, a constraint -- exactly as they are.
     ///
-    /// Used when composing two compiled validators: their constants pools and
-    /// definitions tables are concatenated, so the second schema's
-    /// `Literal`/`Instance`/`Attrs`/`Refine` indices move past the first
-    /// pool's length and its `Ref` indices past the first definitions' length.
-    #[must_use]
-    pub fn shifted(&self, pool: PoolShift, defs: DefShift) -> Schema {
+    /// **This is the one place the child set of each variant is written down.** A
+    /// walk that only descends -- moving indices, resolving a self-reference --
+    /// used to spell the whole descent out per pass, and the compiler forced an
+    /// arm without being able to check the arm recursed into everything: a
+    /// forgotten child was a silent stale subtree. Written once, every such pass
+    /// inherits the child set.
+    ///
+    /// A new variant carrying a child schema must map it here, or every pass
+    /// built on this drops it. A new variant carrying a *pooled index* must also
+    /// be handled in [`remapped_by`](Self::remapped_by), which is why that match
+    /// takes no wildcard.
+    fn map_children(&self, f: &impl Fn(&Schema) -> Schema) -> Schema {
+        let field = |field: &Field| Field {
+            name: field.name.clone(),
+            schema: f(&field.schema),
+            required: field.required,
+        };
         match self {
             Schema::Anything
             | Schema::Dynamic
@@ -757,40 +821,106 @@ impl Schema {
             | Schema::Float
             | Schema::Str
             | Schema::Bytes
+            | Schema::Literal(_)
+            | Schema::Instance(_)
+            | Schema::Ref(_)
             | Schema::SelfRef(_) => self.clone(),
-            Schema::Literal(i) => Schema::Literal(i.shifted(pool)),
-            Schema::Instance(i) => Schema::Instance(i.shifted(pool)),
-            Schema::Ref(i) => Schema::Ref(i.shifted(defs)),
             Schema::Seq { container, regex } => Schema::Seq {
                 container: *container,
-                regex: regex.shifted(pool, defs),
+                regex: regex.map_elems(f),
             },
-            Schema::Set(e) => Schema::Set(Box::new(e.shifted(pool, defs))),
-            Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.shifted(pool, defs))),
-            Schema::Complement(e) => Schema::Complement(Box::new(e.shifted(pool, defs))),
-            Schema::Union(es) => Schema::Union(es.iter().map(|s| s.shifted(pool, defs)).collect()),
-            Schema::Intersection(es) => {
-                Schema::Intersection(es.iter().map(|s| s.shifted(pool, defs)).collect())
-            }
+            Schema::Set(inner) => Schema::Set(Box::new(f(inner))),
+            Schema::FrozenSet(inner) => Schema::FrozenSet(Box::new(f(inner))),
+            Schema::Complement(inner) => Schema::Complement(Box::new(f(inner))),
+            Schema::Union(members) => Schema::Union(members.iter().map(f).collect()),
+            Schema::Intersection(members) => Schema::Intersection(members.iter().map(f).collect()),
             Schema::KeyedMap { fields, defaults } => Schema::KeyedMap {
-                fields: fields.iter().map(|f| f.shifted(pool, defs)).collect(),
-                defaults: defaults
-                    .iter()
-                    .map(|(k, v)| (k.shifted(pool, defs), v.shifted(pool, defs)))
-                    .collect(),
+                fields: fields.iter().map(field).collect(),
+                defaults: defaults.iter().map(|(k, v)| (f(k), f(v))).collect(),
             },
             Schema::Attrs {
                 class_index,
                 fields,
             } => Schema::Attrs {
-                class_index: class_index.shifted(pool),
-                fields: fields.iter().map(|f| f.shifted(pool, defs)).collect(),
+                class_index: *class_index,
+                fields: fields.iter().map(field).collect(),
             },
             Schema::Refine { base, constraints } => Schema::Refine {
-                base: Box::new(base.shifted(pool, defs)),
-                constraints: constraints.iter().map(|c| c.shifted(pool)).collect(),
+                base: Box::new(f(base)),
+                constraints: constraints.clone(),
             },
         }
+    }
+
+    /// Rebuild this schema against another validator's pools, moving every
+    /// payload the way `remap` moves its index space.
+    ///
+    /// The arms here are exactly the nodes that *carry* an index; the structural
+    /// descent is [`map_children`](Self::map_children). The match deliberately
+    /// takes **no wildcard**: a variant that carries a pooled index and reaches
+    /// this by a catch-all would keep its index and read a real object of the
+    /// wrong kind, which is a plausible wrong verdict rather than a crash. Listing
+    /// the structural variants costs a line each and makes a new variant a
+    /// compile error here, where the decision belongs.
+    fn remapped_by(&self, remap: Remap<'_>) -> Schema {
+        match self {
+            Schema::Literal(index) => Schema::Literal(index.remapped_by(remap)),
+            Schema::Instance(index) => Schema::Instance(index.remapped_by(remap)),
+            Schema::Ref(index) => Schema::Ref(index.remapped_by(remap)),
+            Schema::Attrs {
+                class_index,
+                fields,
+            } => Schema::Attrs {
+                class_index: class_index.remapped_by(remap),
+                fields: fields
+                    .iter()
+                    .map(|field| Field {
+                        name: field.name.clone(),
+                        schema: field.schema.remapped_by(remap),
+                        required: field.required,
+                    })
+                    .collect(),
+            },
+            Schema::Refine { base, constraints } => Schema::Refine {
+                base: Box::new(base.remapped_by(remap)),
+                constraints: constraints
+                    .iter()
+                    .map(|constraint| constraint.remapped_by(remap))
+                    .collect(),
+            },
+            // No payload of its own: descend, and let the child set live in one
+            // place. Spelled out rather than caught by `_` so a new variant with
+            // an index cannot arrive here silently.
+            Schema::Anything
+            | Schema::Dynamic
+            | Schema::Nothing
+            | Schema::NoneType
+            | Schema::Bool
+            | Schema::Int
+            | Schema::Float
+            | Schema::Str
+            | Schema::Bytes
+            | Schema::SelfRef(_)
+            | Schema::Seq { .. }
+            | Schema::Set(_)
+            | Schema::FrozenSet(_)
+            | Schema::Complement(_)
+            | Schema::Union(_)
+            | Schema::Intersection(_)
+            | Schema::KeyedMap { .. } => self.map_children(&|s| s.remapped_by(remap)),
+        }
+    }
+
+    /// Return a copy with pool indices shifted by `pool` and definition
+    /// references shifted by `defs`.
+    ///
+    /// Used when composing two compiled validators: their constants pools and
+    /// definitions tables are concatenated, so the second schema's
+    /// `Literal`/`Instance`/`Attrs`/`Refine` indices move past the first
+    /// pool's length and its `Ref` indices past the first definitions' length.
+    #[must_use]
+    pub fn shifted(&self, pool: PoolShift, defs: DefShift) -> Schema {
+        self.remapped_by(Remap::Append { pool, defs })
     }
 
     /// The structural nesting depth of this schema: the longest chain of nested
@@ -885,120 +1015,32 @@ impl Schema {
     }
 
     /// Like [`shifted`](Self::shifted), but remapping pool indices through
-    /// `lit_map` (an old→new table from interning one pool into another, so
+    /// `lit_map` (an old->new table from interning one pool into another, so
     /// identity-shared constants collapse to one index) while still offsetting
     /// definition indices by `def_offset`.
+    ///
+    /// The same walk as `shifted`, over the same payload sites: the two differ
+    /// only in how a pool index moves, which is what [`Remap`] names.
     #[must_use]
     pub fn reindexed(&self, lit_map: &[usize], def_offset: DefShift) -> Schema {
-        match self {
-            Schema::Anything
-            | Schema::Dynamic
-            | Schema::Nothing
-            | Schema::NoneType
-            | Schema::Bool
-            | Schema::Int
-            | Schema::Float
-            | Schema::Str
-            | Schema::Bytes
-            | Schema::SelfRef(_) => self.clone(),
-            Schema::Literal(i) => Schema::Literal(i.remapped(lit_map)),
-            Schema::Instance(i) => Schema::Instance(i.remapped(lit_map)),
-            Schema::Ref(i) => Schema::Ref(i.shifted(def_offset)),
-            Schema::Seq { container, regex } => Schema::Seq {
-                container: *container,
-                regex: regex.reindexed(lit_map, def_offset),
-            },
-            Schema::Set(e) => Schema::Set(Box::new(e.reindexed(lit_map, def_offset))),
-            Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.reindexed(lit_map, def_offset))),
-            Schema::Complement(e) => Schema::Complement(Box::new(e.reindexed(lit_map, def_offset))),
-            Schema::Union(es) => Schema::Union(
-                es.iter()
-                    .map(|s| s.reindexed(lit_map, def_offset))
-                    .collect(),
-            ),
-            Schema::Intersection(es) => Schema::Intersection(
-                es.iter()
-                    .map(|s| s.reindexed(lit_map, def_offset))
-                    .collect(),
-            ),
-            Schema::KeyedMap { fields, defaults } => Schema::KeyedMap {
-                fields: fields
-                    .iter()
-                    .map(|f| f.reindexed(lit_map, def_offset))
-                    .collect(),
-                defaults: defaults
-                    .iter()
-                    .map(|(k, v)| {
-                        (
-                            k.reindexed(lit_map, def_offset),
-                            v.reindexed(lit_map, def_offset),
-                        )
-                    })
-                    .collect(),
-            },
-            Schema::Attrs {
-                class_index,
-                fields,
-            } => Schema::Attrs {
-                class_index: class_index.remapped(lit_map),
-                fields: fields
-                    .iter()
-                    .map(|f| f.reindexed(lit_map, def_offset))
-                    .collect(),
-            },
-            Schema::Refine { base, constraints } => Schema::Refine {
-                base: Box::new(base.reindexed(lit_map, def_offset)),
-                constraints: constraints.iter().map(|c| c.reindexed(lit_map)).collect(),
-            },
-        }
+        self.remapped_by(Remap::Intern {
+            lit_map,
+            defs: def_offset,
+        })
     }
 
     /// Replace each `SelfRef(token)` with `Ref(ref_id)`, leaving other tokens
     /// (from enclosing `recursive` definitions) untouched.
     #[must_use]
     pub fn resolve_self(&self, token: u64, ref_id: DefIx) -> Schema {
-        let recur = |s: &Schema| s.resolve_self(token, ref_id);
         match self {
             Schema::SelfRef(t) if *t == token => Schema::Ref(ref_id),
-            Schema::Seq { container, regex } => Schema::Seq {
-                container: *container,
-                regex: regex.resolve_self(token, ref_id),
-            },
-            Schema::Set(e) => Schema::Set(Box::new(recur(e))),
-            Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(recur(e))),
-            Schema::Complement(e) => Schema::Complement(Box::new(recur(e))),
-            Schema::Union(es) => Schema::Union(es.iter().map(recur).collect()),
-            Schema::Intersection(es) => Schema::Intersection(es.iter().map(recur).collect()),
-            Schema::KeyedMap { fields, defaults } => Schema::KeyedMap {
-                fields: fields
-                    .iter()
-                    .map(|f| Field {
-                        name: f.name.clone(),
-                        schema: recur(&f.schema),
-                        required: f.required,
-                    })
-                    .collect(),
-                defaults: defaults.iter().map(|(k, v)| (recur(k), recur(v))).collect(),
-            },
-            Schema::Attrs {
-                class_index,
-                fields,
-            } => Schema::Attrs {
-                class_index: *class_index,
-                fields: fields
-                    .iter()
-                    .map(|f| Field {
-                        name: f.name.clone(),
-                        schema: recur(&f.schema),
-                        required: f.required,
-                    })
-                    .collect(),
-            },
-            Schema::Refine { base, constraints } => Schema::Refine {
-                base: Box::new(recur(base)),
-                constraints: constraints.clone(),
-            },
-            other => other.clone(),
+            // Every other node keeps its payloads and passes the rewrite down. A
+            // wildcard is right here, unlike in `remapped_by`: this pass rewrites
+            // one marker and touches nothing else, so it is already correct for a
+            // variant that does not exist yet -- provided that variant's children
+            // are mapped in `map_children`, which is the one place to add them.
+            other => other.map_children(&|s| s.resolve_self(token, ref_id)),
         }
     }
 
@@ -1107,52 +1149,23 @@ impl Schema {
     }
 }
 
-impl Field {
-    fn shifted(&self, pool: PoolShift, defs: DefShift) -> Field {
-        Field {
-            name: self.name.clone(),
-            schema: self.schema.shifted(pool, defs),
-            required: self.required,
-        }
-    }
-
-    fn reindexed(&self, lit_map: &[usize], def_offset: DefShift) -> Field {
-        Field {
-            name: self.name.clone(),
-            schema: self.schema.reindexed(lit_map, def_offset),
-            required: self.required,
-        }
-    }
-}
-
 impl Constraint {
-    fn shifted(&self, pool: PoolShift) -> Constraint {
+    /// This constraint against another validator's pool.
+    ///
+    /// A length bound and a regex pattern are not pool indices and are carried
+    /// through untouched. The type says so for the length: a `usize` has no
+    /// `remapped_by`, so an arm that must not move an index cannot.
+    fn remapped_by(&self, remap: Remap<'_>) -> Constraint {
         match self {
-            Constraint::Ge(i) => Constraint::Ge(i.shifted(pool)),
-            Constraint::Gt(i) => Constraint::Gt(i.shifted(pool)),
-            Constraint::Le(i) => Constraint::Le(i.shifted(pool)),
-            Constraint::Lt(i) => Constraint::Lt(i.shifted(pool)),
-            // A length is not a pool index and takes no pool shift. The type
-            // says so: a usize has no `shifted(PoolShift)`.
+            Constraint::Ge(index) => Constraint::Ge(index.remapped_by(remap)),
+            Constraint::Gt(index) => Constraint::Gt(index.remapped_by(remap)),
+            Constraint::Le(index) => Constraint::Le(index.remapped_by(remap)),
+            Constraint::Lt(index) => Constraint::Lt(index.remapped_by(remap)),
             Constraint::MinLen(n) => Constraint::MinLen(*n),
             Constraint::MaxLen(n) => Constraint::MaxLen(*n),
-            Constraint::MultipleOf(i) => Constraint::MultipleOf(i.shifted(pool)),
-            Constraint::Predicate(i) => Constraint::Predicate(i.shifted(pool)),
-            Constraint::Regex(p) => Constraint::Regex(p.clone()),
-        }
-    }
-
-    fn reindexed(&self, lit_map: &[usize]) -> Constraint {
-        match self {
-            Constraint::Ge(i) => Constraint::Ge(i.remapped(lit_map)),
-            Constraint::Gt(i) => Constraint::Gt(i.remapped(lit_map)),
-            Constraint::Le(i) => Constraint::Le(i.remapped(lit_map)),
-            Constraint::Lt(i) => Constraint::Lt(i.remapped(lit_map)),
-            Constraint::MinLen(n) => Constraint::MinLen(*n),
-            Constraint::MaxLen(n) => Constraint::MaxLen(*n),
-            Constraint::MultipleOf(i) => Constraint::MultipleOf(i.remapped(lit_map)),
-            Constraint::Predicate(i) => Constraint::Predicate(i.remapped(lit_map)),
-            Constraint::Regex(p) => Constraint::Regex(p.clone()),
+            Constraint::MultipleOf(index) => Constraint::MultipleOf(index.remapped_by(remap)),
+            Constraint::Predicate(index) => Constraint::Predicate(index.remapped_by(remap)),
+            Constraint::Regex(pattern) => Constraint::Regex(pattern.clone()),
         }
     }
 }
