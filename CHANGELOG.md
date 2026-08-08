@@ -6,6 +6,22 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-08-08
+
+### Changed
+
+- Internal only, with no change to what any schema admits or answers: the schema
+  IR's purely structural walks share one declaration of each node's child
+  schemas, and the two index remappings applied when validators compose —
+  appending a constants pool, or interning one into another — share one walk over
+  one set of payload sites. Every public method returns what it returned in
+  0.0.5, and validation, `is_empty`, the error model, `repr`, and every compiled
+  form are unchanged.
+
+  Nothing to do on upgrade. The version exists so the reorganisation ships under
+  a release of its own rather than inside one whose entries describe something
+  else.
+
 ## [0.0.5] - 2026-08-08
 
 ### Added
@@ -147,7 +163,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/ppigazzini/valgebra/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/ppigazzini/valgebra/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/ppigazzini/valgebra/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/ppigazzini/valgebra/compare/v0.0.2...v0.0.3
