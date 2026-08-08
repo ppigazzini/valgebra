@@ -165,7 +165,7 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
   adequacy figure of any size says nothing about a rule that was never there,
   which is the one defect the sweeps are most often assumed to cover.
 - **`scripts/docs_lint.py` cannot tell you a sentence is false.**
-  [11-writing.md](11-writing.md) names the classes it cannot reach.
+  [12-writing.md](12-writing.md) names the classes it cannot reach.
 - **A fuzz run that finds nothing means "nothing failed inside that budget"**,
   never "there is nothing to find". That is why it is not a merge gate.
 - **A soundness property has nothing to say about a `False`.** A law shaped

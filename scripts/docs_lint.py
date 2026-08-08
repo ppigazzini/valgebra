@@ -244,7 +244,7 @@ def check_ledger_table() -> list[str]:
     # The count is prose beside the table, so it rots on its own schedule.
     spelled = {4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
     want = spelled.get(len(declared))
-    for doc in (page, ROOT / "docs" / "dev" / "12-glossary.md"):
+    for doc in (page, ROOT / "docs" / "dev" / "13-glossary.md"):
         if not doc.exists():
             continue
         for wrong, word in spelled.items():

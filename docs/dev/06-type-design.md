@@ -12,7 +12,7 @@ something, the place to put it is where the compiler can see it: a doc comment
 saying "this index is always in the pool" is a proof that has evaporated, and a
 `ConstIx` is the same proof still there at every call site.
 
-The papers this rests on are in [09-theory.md](09-theory.md).
+The papers this rests on are in [10-theory.md](10-theory.md).
 
 ## What it buys
 

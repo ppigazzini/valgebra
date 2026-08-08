@@ -82,7 +82,7 @@ alternative.** "Do not pin the budget" leaves a reader stuck; "do not pin the
 budget — name `scripts/perf_budget.json`, which owns it" does not.
 
 **Cut anything that does not help implement or verify.** Background a reader
-could get from the typing spec belongs in [10-references.md](10-references.md) as
+could get from the typing spec belongs in [11-references.md](11-references.md) as
 a link. Length is not thoroughness; it is where rot hides. This binds a generated
 page exactly as it binds a hand-written one: add no section that exists to look
 complete — a summary restating the section above it, a recap of what a gate
@@ -109,10 +109,11 @@ who broke it.
 | [06-type-design.md](06-type-design.md) | warm — a type added without a row makes the page wrong |
 | [07-tooling-ci.md](07-tooling-ci.md) | hot — a gate added here is a page edit there |
 | [08-testing.md](08-testing.md) | warm |
-| [09-theory.md](09-theory.md) | cold — a theorem does not expire |
-| [10-references.md](10-references.md) | cold |
+| [09-releasing.md](09-releasing.md) | warm — a change to the release workflow's inputs makes the page wrong |
+| [10-theory.md](10-theory.md) | cold — a theorem does not expire |
+| [11-references.md](11-references.md) | cold |
 | this page | cold |
-| [12-glossary.md](12-glossary.md) | warm — every entry names an owner, and a rename dates it |
+| [13-glossary.md](13-glossary.md) | warm — every entry names an owner, and a rename dates it |
 
 Cold does not mean unowned. It means the claim outlives a release, so when it
 *is* wrong it has usually been wrong for a long time.

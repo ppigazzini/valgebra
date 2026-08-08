@@ -3,7 +3,7 @@
 What this project is checked against. A claim in this set is expected to be
 traceable to something here or to the live tree.
 
-Papers are [09-theory.md](09-theory.md). This page is implementations and
+Papers are [10-theory.md](10-theory.md). This page is implementations and
 toolchain.
 
 ## Reference implementations

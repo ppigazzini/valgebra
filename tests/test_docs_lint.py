@@ -5,7 +5,7 @@ driven against a synthetic tree here -- no repository state is edited -- so the
 lint's own behaviour is tested rather than assumed, and the index rule is driven
 in both of its directions.
 
-The rules it cannot check are named in `docs/dev/11-writing.md`, not here: a
+The rules it cannot check are named in `docs/dev/12-writing.md`, not here: a
 real symbol attributed to the wrong file, a list with the wrong count, and a
 behaviour described as absent from a build that has it.
 """

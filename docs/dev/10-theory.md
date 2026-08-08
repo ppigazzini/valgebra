@@ -148,5 +148,5 @@ procedure is a sound, budget-bounded structural one that is exact on a published
 fragment; it is not the interning automata engine. Where a page here says
 otherwise, the page is wrong.
 
-Tooling and toolchain facts are [10-references.md](10-references.md), not this
+Tooling and toolchain facts are [11-references.md](11-references.md), not this
 page.

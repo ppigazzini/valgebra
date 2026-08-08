@@ -152,5 +152,5 @@ all of it honestly conservative and none of it a soundness question:
   core already has but does not ask here.
 
 The first two would be decided by the interning and automata engine the theory
-names ([09-theory.md](09-theory.md)). The last two are ordinary work: each has a
+names ([10-theory.md](10-theory.md)). The last two are ordinary work: each has a
 route, and each is on the probe's ledger so it cannot quietly become permanent.

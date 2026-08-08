@@ -21,10 +21,11 @@ it.
 | [06-type-design.md](06-type-design.md) | the value domain: what each type denotes, why it has that shape, what it does not promise |
 | [07-tooling-ci.md](07-tooling-ci.md) | the gates, the lanes, the exit codes, and each instrument's blind spots |
 | [08-testing.md](08-testing.md) | the test layers, the two mutation sweeps, the seven ledgers, the completeness probe |
-| [09-theory.md](09-theory.md) | the papers the design rests on, and which code each touches |
-| [10-references.md](10-references.md) | the reference implementations and the toolchain baseline |
-| [11-writing.md](11-writing.md) | how to write a page here, and a comment in the source |
-| [12-glossary.md](12-glossary.md) | the words this set uses without stopping to define them |
+| [09-releasing.md](09-releasing.md) | `.github/workflows/release.yml` and the version surfaces — the order a release is cut in |
+| [10-theory.md](10-theory.md) | the papers the design rests on, and which code each touches |
+| [11-references.md](11-references.md) | the reference implementations and the toolchain baseline |
+| [12-writing.md](12-writing.md) | how to write a page here, and a comment in the source |
+| [13-glossary.md](13-glossary.md) | the words this set uses without stopping to define them |
 
 ## Docs are part of the change, not after it
 
@@ -39,7 +40,7 @@ python scripts/docs_lint.py
 catches a dead link, a named path that does not exist, a reference into the
 untracked working area, and a budget number copied into prose. It **cannot** tell
 you a sentence has become false. That part is yours, and
-[11-writing.md](11-writing.md) names the three classes it cannot reach.
+[12-writing.md](12-writing.md) names the three classes it cannot reach.
 
 ## Two documentation surfaces
 

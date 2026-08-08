@@ -23,9 +23,9 @@ zone you are changing before changing it, and fix that page in the same commit.
 | what a value matches | [docs/dev/04-walk.md](docs/dev/04-walk.md) |
 | an error or a code | [docs/dev/05-errors.md](docs/dev/05-errors.md) |
 | a gate or a lane | [docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md), [docs/dev/08-testing.md](docs/dev/08-testing.md) |
-| any prose at all | [docs/dev/11-writing.md](docs/dev/11-writing.md) |
+| any prose at all | [docs/dev/12-writing.md](docs/dev/12-writing.md) |
 
-[docs/dev/12-glossary.md](docs/dev/12-glossary.md) defines the words this project
+[docs/dev/13-glossary.md](docs/dev/13-glossary.md) defines the words this project
 uses without stopping to define them, and names four where both senses are live.
 
 ## Setup
