@@ -104,6 +104,22 @@ dependency-confusion guard, working as designed. valgebra has no runtime
 dependencies, so the TestPyPI index alone resolves it; a package that needs PyPI
 for its own dependencies passes `--index-strategy unsafe-best-match` instead.
 
+**`--refresh-package valgebra` is not optional on a same-day second release.** uv
+caches an index's responses, and a cached listing from before the upload resolves
+`==X.Y.Z` to *no such version* — the same message an index that never received the
+upload gives. Confirm against the index itself before believing it:
+
+```bash
+curl -sS https://test.pypi.org/simple/valgebra/ \
+  -H "Accept: application/vnd.pypi.simple.v1+json" | python3 -c \
+  "import json,sys; print(json.load(sys.stdin)['versions'])"
+```
+
+The per-version JSON endpoint (`/pypi/valgebra/X.Y.Z/json`) also answers with the
+file list before the aggregate `/pypi/valgebra/json` stops naming the previous
+release as the latest, so disagreement between those two is propagation and not a
+failure.
+
 The interpreter is part of what is being checked, not a detail of the check. The
 extension module is built per interpreter version rather than against the stable
 ABI, so a release ships many wheels and one install exercises exactly one of them
