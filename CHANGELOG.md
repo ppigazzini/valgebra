@@ -6,23 +6,7 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `is_subtype_of` decides a **closed record against a catch-all mapping**:
-  `{"x": int}` is now recognised below `dict[str, int]`. The closed record had a
-  dispatch branch of its own that read a field the supertype covers through a
-  catch-all as undecided, though the general keyed-map rule beside it already
-  decided exactly that. One rule now serves every keyed-map shape.
-
-- `is_subtype_of` decides **inclusion in a complement**: `A` is below `~B` when
-  the two share no value, so `list[int]` is now recognised below `~int` and
-  `dict[str, int]` below `~str`. There was no rule for a complement on the right
-  at all, so the relation was decided only when the left side was itself a
-  complement.
-
-  Both change a public method's answer from `False` to `True`. No relation that
-  answered `True` can now answer `False`, and validation, `is_empty`, compilation
-  and every rendered form are unchanged.
+## [0.0.5] - 2026-08-08
 
 ### Added
 
@@ -31,19 +15,37 @@ All notable changes to valgebra are recorded here. The format follows
   that is not written down with a reason. Every other instrument could only
   notice a completeness gap someone had already thought of; this one searches.
 
+### Fixed
+
+- `is_subtype_of` decides a **closed record against a catch-all mapping**:
+  `{"x": int}` is recognised below `dict[str, int]`. The closed record had a
+  dispatch branch of its own that read a field the supertype covers through a
+  catch-all as undecided, though the general keyed-map rule beside it already
+  decided exactly that. One rule serves every keyed-map shape.
+
+- `is_subtype_of` decides **inclusion in a complement**: `A` is below `~B` when
+  the two share no value, so `list[int]` is recognised below `~int` and
+  `dict[str, int]` below `~str`. There was no rule for a complement on the right
+  at all, so the relation was decided only when the left side was itself a
+  complement.
+
+  Both change a public method's answer from `False` to `True`. No relation that
+  answered `True` can answer `False`, and validation, `is_empty`, compilation and
+  every rendered form are unchanged.
+
 - `is_subtype_of` and `is_equivalent` decide the lattice bounds by **emptiness**
   rather than by the shape of the atom. A schema that denotes the empty set
   without being spelled `nothing` — a record with an uninhabited required field,
-  a cancelling intersection — is now recognised as a subtype of every schema, and
-  one that covers the universe without being spelled `anything` is recognised as
-  a supertype of every schema. Both previously answered `False`, which was sound
+  a cancelling intersection — is recognised as a subtype of every schema, and one
+  that covers the universe without being spelled `anything` is recognised as a
+  supertype of every schema. Both previously answered `False`, which was sound
   but incomplete.
 
   This changes the answer of a public method from `False` to `True` for those
   schemas. Nothing else moves: `is_empty`, validation, compilation and every
-  rendered form are unchanged, and no relation that answered `True` can now
-  answer `False`. The gap was masked whenever the other side was scalar, because
-  the region check decides that case correctly, so it was only visible against a
+  rendered form are unchanged, and no relation that answered `True` can answer
+  `False`. The gap was masked whenever the other side was scalar, because the
+  region check decides that case correctly, so it was only visible against a
   container, a record, an instance or `typing.Any`.
 
 ## [0.0.4] - 2026-07-13
@@ -145,7 +147,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/ppigazzini/valgebra/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/ppigazzini/valgebra/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/ppigazzini/valgebra/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/ppigazzini/valgebra/compare/v0.0.1...v0.0.2
