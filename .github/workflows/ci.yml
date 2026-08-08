@@ -387,6 +387,10 @@ jobs:
         with:
           name: wheel-linux
           path: dist
+          # A build that produced no wheel must not upload nothing and pass: the
+          # default warns, which reads as a green lane that shipped an empty
+          # artifact.
+          if-no-files-found: error
 
   # Single required check for branch protection: green only if every job above
   # succeeds. Mirrors the ruff required-checks and pydantic check aggregators.
@@ -414,9 +418,11 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # Pinned for the reason the nightly sweep gives: the mutant set is compared
+      # against a committed baseline.
       - uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
         with:
-          tool: cargo-mutants
+          tool: cargo-mutants@27.1.0
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           enable-cache: true
@@ -567,11 +573,12 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: fuzz
-      # A prebuilt cargo-fuzz from a version-pinned action, not a from-source
-      # `cargo install` (which `--locked` pins only the deps of, not the tool).
+      # A prebuilt cargo-fuzz, pinned: the action has no cargo-fuzz of its own and
+      # falls back to cargo-binstall, so the version is what makes the fetch
+      # reproducible. See the fuzz-build lane for the whole argument.
       - uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
         with:
-          tool: cargo-fuzz
+          tool: cargo-fuzz@0.13.2
       # `--target` forces the host (gnu) triple: the prebuilt cargo-fuzz is a
       # musl-static binary and otherwise defaults the fuzz target to musl, which
       # is not installed and is incompatible with the ASAN static-libc check.
@@ -642,11 +649,13 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      # A prebuilt cargo-mutants from a version-pinned action, not a from-source
-      # `cargo install` (which `--locked` pins only the deps of, not the tool).
+      # A prebuilt cargo-mutants rather than a from-source `cargo install` (which
+      # `--locked` pins only the deps of, not the tool). Pinned by version: the
+      # sweep's survivors are compared against a committed baseline, so a mutant
+      # set that moves with the tool moves the baseline under the ratchet.
       - uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
         with:
-          tool: cargo-mutants
+          tool: cargo-mutants@27.1.0
       - name: Mutation report over the core
         run: |
           # cargo-mutants exit codes: 0 clean, 2 missed mutants, 3 timeouts,
@@ -790,11 +799,15 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: fuzz
-      # A prebuilt cargo-fuzz binary, not a from-source build: a slow compile no
-      # longer delays every change, and the installed version is reproducible.
+      # A prebuilt cargo-fuzz binary rather than a from-source build, which is a
+      # slow compile no lane needs. The version is pinned here because the action
+      # carries no cargo-fuzz of its own: it reports the tool as unsupported and
+      # falls back to cargo-binstall, which fetches a GitHub release and says so.
+      # Unpinned, that fallback installs whatever is newest, and the toolchain
+      # pinned in FUZZ_NIGHTLY buys nothing while the fuzzer driving it floats.
       - uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
         with:
-          tool: cargo-fuzz
+          tool: cargo-fuzz@0.13.2
       - name: Build the fuzz targets
         # Force the host (gnu) target: the prebuilt cargo-fuzz is a musl-static
         # binary and defaults the fuzz target to its own musl triple, which is not

@@ -23,6 +23,14 @@ allow = [
     "NCSA",
 ]
 confidence-threshold = 0.9
+# One config audits two dependency trees -- the workspace and the detached fuzz
+# workspace -- so each audit necessarily sees the allowances the *other* tree
+# needs as unmatched: NCSA appears only under fuzz, and the fuzz tree does not
+# reach most of the rest. Warning on an unmatched allowance therefore reports the
+# shape of the arrangement rather than a stale entry, on every run of both lanes,
+# which is how a real warning gets lost. The set stays the vetted list of what
+# either tree may carry; anything outside it still fails.
+unused-allowed-license = "allow"
 # The workspace's own unpublished crates (the fuzz harness) carry no license
 # field; skip them rather than requiring one on an internal, never-published crate.
 private = { ignore = true }

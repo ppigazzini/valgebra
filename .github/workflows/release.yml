@@ -94,6 +94,10 @@ jobs:
         with:
           name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}-${{ matrix.platform.manylinux || 'native' }}
           path: dist
+          # An empty upload must fail here rather than downstream: the smoke job
+          # installs "the matching wheel from the downloaded set", and a set with
+          # no wheel in it is the one shape that check cannot report on.
+          if-no-files-found: error
 
   sdist:
     name: sdist
@@ -111,6 +115,7 @@ jobs:
         with:
           name: sdist
           path: dist
+          if-no-files-found: error
 
   smoke:
     name: smoke ${{ matrix.wheel.name }}
