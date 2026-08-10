@@ -1,0 +1,48 @@
+name: Set up uv
+description: Install the pinned uv, retrying once so a slow manifest cannot fail the job.
+
+inputs:
+  uv-version:
+    description: >-
+      The uv release every lane installs. Pinning it also settles the resolver
+      each lane runs under, instead of whatever `latest` resolves to that
+      morning. Dependabot bumps the action SHA below but not this pin: rotate it
+      on the monthly maintenance pass, in step with the uv-pre-commit rev.
+    required: false
+    default: "0.12.3"
+  python-version:
+    description: >-
+      Interpreter for uv to install and put on the path. Left empty, uv picks
+      one itself.
+    required: false
+    default: ""
+  enable-cache:
+    description: Whether uv's download cache is restored and saved across runs.
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    # setup-uv reads its version manifest from raw.githubusercontent.com under a
+    # hard five-second timeout and never retries, so a slow response there does
+    # not slow the job down -- it fails it. That took the pip-audit lane out on
+    # 2026-08-10 while the twelve other lanes in the same run installed uv fine.
+    # A second attempt turns that failure back into the delay it should have
+    # been. The first attempt is allowed to fail, so keep its `with` block and
+    # the retry's identical: the retry is the same install, not a fallback to
+    # some laxer one.
+    - id: install
+      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      continue-on-error: true
+      with:
+        version: ${{ inputs.uv-version }}
+        python-version: ${{ inputs.python-version }}
+        enable-cache: ${{ inputs.enable-cache }}
+    - name: Retry the uv install
+      if: steps.install.outcome == 'failure'
+      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      with:
+        version: ${{ inputs.uv-version }}
+        python-version: ${{ inputs.python-version }}
+        enable-cache: ${{ inputs.enable-cache }}

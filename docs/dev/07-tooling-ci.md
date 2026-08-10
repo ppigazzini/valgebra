@@ -127,7 +127,7 @@ standard: a detector that cannot be shown to fail is not evidence.
 
 ## The lanes
 
-`.github/workflows/ci.yml` runs them; read the job set there. Three properties of
+`.github/workflows/ci.yml` runs them; read the job set there. Four properties of
 the arrangement are worth stating because they are decisions rather than
 mechanism:
 
@@ -145,6 +145,17 @@ a partial sweep never generates most of the baseline.
 Whole files, not the diff's lines: the miss that matters is an edit that stops an
 **existing** test from killing a mutant elsewhere in the same file, and that
 mutant is not in the diff.
+
+**A slow network is not a red lane.** `astral-sh/setup-uv` reads its version
+manifest from `raw.githubusercontent.com` under a hard five-second timeout and
+never retries, so a slow response there does not make a job slow — it fails it.
+That took the pip-audit lane down on 2026-08-10 while the twelve other lanes in
+the same run installed uv fine. Every lane installs through
+`.github/actions/setup-uv` instead: it pins the uv release, which is one fewer
+thing resolved over the network, and makes a second attempt when the first one
+fails. The release workflow's two smoke jobs stay on the upstream action, because
+they deliberately never check the repository out and a local action needs its own
+files on disk.
 
 **Every gate script runs in a lane.** `tests/test_lane_coverage.py` holds each
 executable under `scripts/` to being driven by a workflow, by the packaging

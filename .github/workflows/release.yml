@@ -145,6 +145,9 @@ jobs:
         with:
           name: ${{ matrix.wheel.artifact }}
           path: dist
+      # Not the local ./.github/actions/setup-uv wrapper the CI lanes use: this
+      # job deliberately never checks the repository out, so the wrapper's own
+      # files are not on disk to run from.
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           python-version: "3.14"
@@ -177,6 +180,9 @@ jobs:
         with:
           name: sdist
           path: dist
+      # Not the local ./.github/actions/setup-uv wrapper the CI lanes use: this
+      # job deliberately never checks the repository out, so the wrapper's own
+      # files are not on disk to run from.
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           python-version: "3.14"

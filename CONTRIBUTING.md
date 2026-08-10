@@ -107,7 +107,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | a mutation verdict | either baseline | `python3 scripts/mutation_gate.py --baseline core` |
 | supply chain (Rust) | `deny.toml` | `cargo deny check` |
 | supply chain (Python) | `uv.lock` | `uv run pip-audit` |
-| workflow security | `.github/workflows/` | `uvx zizmor .github/workflows/` |
+| workflow security | `.github/workflows/`, `.github/actions/` | `uvx zizmor .github/workflows/ .github/actions/` |
 | the profile-guided build's training run | `scripts/pgo_workload.py`, `pyproject.toml` `pgo-command` | `uv run --group bench maturin build --release --pgo --out dist` |
 
 The two mutation rows take a skip list; `docs/dev/07-tooling-ci.md` says which

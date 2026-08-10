@@ -133,9 +133,7 @@ jobs:
       - uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
         with:
           tool: cargo-llvm-cov@0.8.7
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          enable-cache: true
+      - uses: ./.github/actions/setup-uv
       # Binding coverage combines two drivers under one instrumentation
       # environment: the Python suite exercising the extension, and the
       # binding-internal Rust unit tests (interner, index remap, fast-path
@@ -201,10 +199,9 @@ jobs:
           # "init function of _valgebra returned uninitialized object". Key the
           # cache on the interpreter (and OS) so each ABI keeps its own build.
           key: ${{ matrix.os }}-${{ matrix.python-version }}
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: ./.github/actions/setup-uv
         with:
           python-version: ${{ matrix.python-version }}
-          enable-cache: true
       - name: Install dev dependencies
         run: uv sync --locked --no-install-project
       - name: Build the extension into the venv
@@ -240,9 +237,7 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          enable-cache: true
+      - uses: ./.github/actions/setup-uv
       - name: Install the differential oracles
         run: uv sync --locked --group bench
       - name: Build the extension into the venv
@@ -268,9 +263,7 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          enable-cache: true
+      - uses: ./.github/actions/setup-uv
       - run: uv sync --locked
       - run: uv run maturin develop --uv
       # Execute every runnable example in the README and the docs site; fail on
@@ -289,9 +282,7 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          enable-cache: true
+      - uses: ./.github/actions/setup-uv
       - run: uv sync --locked --group docs
       # mkdocstrings imports the package to read its docstrings.
       - run: uv run --group docs maturin develop --uv
@@ -318,9 +309,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Install valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          enable-cache: true
+      - uses: ./.github/actions/setup-uv
       - run: uv sync --locked --no-install-project --group bench
       # The wall-clock benches must measure the shipped artifact, not a debug
       # build, so build the release wheel with LTO and profile-guided
@@ -423,9 +412,7 @@ jobs:
       - uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
         with:
           tool: cargo-mutants@27.1.0
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          enable-cache: true
+      - uses: ./.github/actions/setup-uv
       - name: List the Rust files the diff touches
         id: diff
         # Both values reach the script through the environment rather than
@@ -529,10 +516,9 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: ./.github/actions/setup-uv
         with:
           python-version: "3.13"
-          enable-cache: true
       - name: Install dev dependencies
         run: uv sync --locked --no-install-project
       - name: Build the extension into the venv
@@ -742,9 +728,7 @@ jobs:
       # path -- without them every mutant reads as unviable, which is a sweep that
       # measured nothing rather than a clean one.
       - name: Set up the Python toolchain for the walk sweep
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          enable-cache: true
+        uses: ./.github/actions/setup-uv
       # The recursion-depth case leaves the SWEEP -- not the test lane, where it
       # runs on every push. It drives a 130-level chain through a two-branch
       # union, so any mutation that removes a short-circuit turns it exponential
@@ -852,9 +836,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          enable-cache: true
+      - uses: ./.github/actions/setup-uv
       - name: Audit the locked Python dependencies
         run: |
           uv export --locked --format requirements-txt --no-emit-project --all-groups > requirements-audit.txt
@@ -870,15 +852,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-        with:
-          enable-cache: true
+      - uses: ./.github/actions/setup-uv
       - name: Audit the workflows
         # GH_TOKEN lets zizmor run its online audits (action ref resolution) in
         # addition to the static ones.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uvx zizmor==1.29.0 .github/workflows/
+        run: uvx zizmor==1.29.0 .github/workflows/ .github/actions/
 
   ci:
     name: ci
