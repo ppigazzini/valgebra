@@ -9,7 +9,7 @@ inputs:
       morning. Dependabot bumps the action SHA below but not this pin: rotate it
       on the monthly maintenance pass, in step with the uv-pre-commit rev.
     required: false
-    default: "0.12.3"
+    default: "0.12.5"
   python-version:
     description: >-
       Interpreter for uv to install and put on the path. Left empty, uv picks
@@ -33,7 +33,7 @@ runs:
     # the retry's identical: the retry is the same install, not a fallback to
     # some laxer one.
     - id: install
-      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       continue-on-error: true
       with:
         version: ${{ inputs.uv-version }}
@@ -41,7 +41,7 @@ runs:
         enable-cache: ${{ inputs.enable-cache }}
     - name: Retry the uv install
       if: steps.install.outcome == 'failure'
-      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       with:
         version: ${{ inputs.uv-version }}
         python-version: ${{ inputs.python-version }}

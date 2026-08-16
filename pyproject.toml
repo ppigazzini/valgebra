@@ -33,14 +33,14 @@ classifiers = [
 [dependency-groups]
 dev = [
     "annotated-types>=0.8",
-    "hypothesis>=6.165.2",
+    "hypothesis>=6.165.9",
     "maturin>=1.14.1,<2",
-    "pre-commit>=4.6.1",
+    "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
-    "ruff>=0.16.2",
+    "ruff>=0.16.3",
     "syrupy>=5.5.3",
-    "ty>=0.0.69",
+    "ty>=0.0.72",
 ]
 # Benchmark-only tools: the wall-clock harness and the external comparison
 # points. They are never runtime dependencies of valgebra.

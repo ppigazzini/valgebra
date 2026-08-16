@@ -148,7 +148,7 @@ jobs:
       # Not the local ./.github/actions/setup-uv wrapper the CI lanes use: this
       # job deliberately never checks the repository out, so the wrapper's own
       # files are not on disk to run from.
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: "3.14"
           # This job installs from a downloaded artifact, not a checked-out
@@ -183,7 +183,7 @@ jobs:
       # Not the local ./.github/actions/setup-uv wrapper the CI lanes use: this
       # job deliberately never checks the repository out, so the wrapper's own
       # files are not on disk to run from.
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: "3.14"
           # This job installs from a downloaded artifact, not a checked-out
