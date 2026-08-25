@@ -120,7 +120,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with:
           tool: cargo-nextest,cargo-llvm-cov@0.8.7
       # Run the workspace tests under nextest and enforce a core line-coverage
@@ -145,7 +145,7 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with:
           tool: cargo-llvm-cov@0.8.7
       - uses: ./.github/actions/setup-uv
@@ -424,7 +424,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # Pinned for the reason the nightly sweep gives: the mutant set is compared
       # against a committed baseline.
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with:
           tool: cargo-mutants@27.1.0
       - uses: ./.github/actions/setup-uv
@@ -577,7 +577,7 @@ jobs:
       # A prebuilt cargo-fuzz, pinned: the action has no cargo-fuzz of its own and
       # falls back to cargo-binstall, so the version is what makes the fetch
       # reproducible. See the fuzz-build lane for the whole argument.
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with:
           tool: cargo-fuzz@0.13.2
       # `--target` forces the host (gnu) triple: the prebuilt cargo-fuzz is a
@@ -654,7 +654,7 @@ jobs:
       # `--locked` pins only the deps of, not the tool). Pinned by version: the
       # sweep's survivors are compared against a committed baseline, so a mutant
       # set that moves with the tool moves the baseline under the ratchet.
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with:
           tool: cargo-mutants@27.1.0
       - name: Mutation report over the core
@@ -804,7 +804,7 @@ jobs:
       # falls back to cargo-binstall, which fetches a GitHub release and says so.
       # Unpinned, that fallback installs whatever is newest, and the toolchain
       # pinned in FUZZ_NIGHTLY buys nothing while the fuzzer driving it floats.
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with:
           tool: cargo-fuzz@0.13.2
       - name: Build the fuzz targets
@@ -833,7 +833,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with:
           tool: cargo-deny@0.20.2
       - name: Audit the workspace dependency tree
