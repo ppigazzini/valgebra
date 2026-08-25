@@ -41,8 +41,12 @@ assert Validator(Annotated[int, at.Ge(0), at.Le(10)]).is_subtype_of(
 assert Validator(Annotated[int, at.Ge(10), at.Le(0)]).is_empty()  # no such int
 ```
 
-A predicate marker is checked at validation time but stays opaque to subtyping
-and emptiness — its satisfiability is undecidable in general.
+A predicate marker is checked at validation time, and nothing is inferred from it
+— its satisfiability is undecidable in general, so two refinements relate through
+a predicate only when they carry the same one. A decision query may still call it:
+asking whether a literal is a subtype of a refinement asks whether that literal's
+value belongs to it, which runs the predicate. A slow or side-effecting predicate
+is one `is_subtype_of` pays for.
 
 ## Supported markers
 

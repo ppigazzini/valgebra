@@ -40,15 +40,20 @@ conservative](#sound-but-conservative)).
   complement law: `Any & ~Any` is *not* empty, because `Any` is the dynamic type,
   not a set whose complement cancels it.
 - **Class and literal inclusion.** A class is a subtype of its base classes
-  (`issubclass`), and a literal is a subtype of any schema it is a member of.
+  (`issubclass`), and a literal is a subtype of any schema it is a member of. A
+  dataclass or named tuple relates the same way: its schema is below one over a
+  base class it carries every attribute of, each with a narrower schema, and below
+  the bare class it is an instance of.
 - **Refinements.** A refinement is a subtype of its base and of a refinement with
   looser bounds — a tighter numeric or length bound entails a looser one, not only
   a verbatim-contained constraint set; a bound conjunction that cannot be satisfied
   — a lower bound above an upper bound, or a minimum length above a maximum — is
-  empty. On an integer base the bounds count integers, so an interval that skips
-  every integer — `Annotated[int, Gt(0), Lt(1)]` — is empty even though its
-  endpoints are ordered; a `float` base stays dense, so the same bounds are not
-  empty.
+  empty. Where the values are bounded to the integers the bounds count them, so an
+  interval that skips every integer — `Annotated[int, Gt(0), Lt(1)]` — is empty
+  even though its endpoints are ordered. That holds however the meet is spelled:
+  on one refinement, or across an intersection whose members bound it, since an
+  intersection is a subset of every member. A `bool` base counts too, because it
+  subclasses `int`; a `float` base stays dense, so the same bounds are not empty.
 - **Sequences.** Homogeneous, fixed-length, and prefix-plus-tail lists and tuples,
   with the container as part of the type (a list is never a tuple). Every sequence
   schema valgebra builds takes this linear shape, so sequence inclusion is decided
@@ -173,8 +178,16 @@ message or treats them opaquely — it never guesses.
 - **Callable signatures.** `Callable[[int], str]` checks only that the value is
   callable; a function does not expose its argument and return types at runtime.
 - **Predicates.** An `Annotated[T, predicate]` runs the predicate at validation
-  time; its satisfiability cannot be reasoned about (Rice's theorem), so it is
-  opaque to subtyping and emptiness.
+  time; its satisfiability cannot be reasoned about (Rice's theorem), so nothing
+  is inferred from it and two refinements relate through a predicate only when
+  they carry the same one.
+
+    A decision query may nonetheless **call** it. Deciding whether a literal is a
+    subtype of a refinement is deciding whether that literal's value belongs to
+    it, and belonging runs the predicate — so `is_subtype_of` and `is_equivalent`
+    execute user code, as `is_empty` executes a rich comparison when it orders two
+    refinement bounds. A predicate with side effects, or one that is slow, is one
+    a type query pays for.
 - **Typing qualifiers.** `Final` and `ClassVar` are rejected; they qualify a
   declaration and carry no value-membership meaning.
 

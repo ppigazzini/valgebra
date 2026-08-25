@@ -647,6 +647,9 @@ impl Validator {
     /// adversarial schema a `False` can mean "not proven empty within the bound"
     /// rather than "non-empty"; a real schema decides far inside the bound.
     ///
+    /// Deciding a refinement's bounds orders the two operands, which runs their
+    /// rich comparison, so this can call back into Python.
+    ///
     /// Returns:
     ///     `True` if the schema denotes the empty set, else `False`.
     fn is_empty(&self, py: Python<'_>) -> bool {
@@ -670,6 +673,11 @@ impl Validator {
     /// a fixed work budget, so on a deeply nested adversarial schema a `False` can
     /// mean "not proven a subtype within the bound"; a real schema decides far
     /// inside the bound.
+    ///
+    /// Nothing is inferred from a predicate refinement, but one may be **called**:
+    /// deciding whether a literal is a subtype of a refinement decides whether the
+    /// literal's value belongs to it, and belonging runs the predicate. A slow or
+    /// side-effecting predicate is one this query pays for.
     ///
     /// Args:
     ///     other: The candidate supertype, as a schema spec or validator.
@@ -697,6 +705,9 @@ impl Validator {
     /// whatever their syntax (`bool | int` is equivalent to `int`). Bounded by the
     /// same work budget as `is_subtype_of`, so on a deeply nested adversarial
     /// schema a `False` can mean "not proven equivalent within the bound".
+    ///
+    /// Mutual inclusion, so it calls back into Python wherever `is_subtype_of`
+    /// does.
     ///
     /// Args:
     ///     other: The schema to compare, as a spec or validator.

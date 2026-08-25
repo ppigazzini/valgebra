@@ -38,6 +38,7 @@ and the walk's accept condition coincide at every one:
 S                accepts x  ⟺  x ∈ ⟦S⟧, by:
 ---------------  -----------------------------------------------------------
 Anything         always                         (⟦Anything⟧ = all values)
+Any (gradual)    always                         (⟦Any⟧ = all values at runtime)
 Nothing          never                          (⟦Nothing⟧ = ∅)
 Bool/Int/...     isinstance(x, T)               (the scalar region)
 Literal(c)       type(x) is type(c) and x == c  (typed singleton)
@@ -56,6 +57,13 @@ Attrs(C, f)      isinstance(x, C) and every      (class extension ∩ its
                  field attribute present-        attribute record; the
                  and-match                       dataclass/NamedTuple check)
 ```
+
+`Any` admits every value, exactly as the top does — that is its *runtime*
+denotation, and it is what the walk decides. The algebra treats it as a distinct
+atom all the same, so the simplifier does not rewrite it by the lattice laws and
+the decision procedures do not relate it: see [the gradual `Any` versus the
+lattice top](foundations.md#gradual-any-versus-the-lattice-top). Membership is the
+claim this page makes, and on membership the two coincide.
 
 For the Boolean nodes the equivalence is the definition of the set operation, so
 the step is immediate given the hypothesis on the children. For the structural
@@ -102,9 +110,15 @@ and the coinductive rule for recursion (assume the goal on the current path —
 sound for inclusion at the greatest fixpoint). A leaf the rules cannot relate is
 handed to an oracle that returns `False` when it cannot prove the relation. Every
 rule preserves "the conclusion holds whenever the premises do", so a `True` is a
-proof. `is_empty` and `is_equivalent` are derived (`is_empty(S)` is
-`S ⊆ Nothing` via the same rules; `is_equivalent` is mutual inclusion), so they
-inherit the soundness.
+proof.
+
+`is_empty` is the **primitive**, not a derived relation: it decides the value
+regions, the complement and disjointness laws, and the refinement bounds
+directly, and the subtyping rules call *into* it — the lattice bounds `∅ ⊆ B` and
+`A ⊆ U` are asked of emptiness, and `A ⊆ ¬B` reduces to `A ∩ B` being empty. So
+emptiness carries its own soundness and lends it upward, which is the direction to
+check the argument in. `is_equivalent` is mutual inclusion and inherits from
+subtyping.
 
 The conservatism is the price: when a rule does not fire and the oracle declines,
 the answer is `False` — "not proven", not "disproven". This is why the

@@ -79,13 +79,22 @@ the current path — so a recursive schema is a subtype of itself and two
 structurally identical recursive schemas are equivalent, and a recursive schema
 with no base case is detected as uninhabited.
 
-These are two views of one definition, not two definitions. *Membership* unfolds
+These are views of one definition, not separate definitions. *Membership* unfolds
 the unique guarded (contractive) fixpoint against a finite value — a value is in
-the set when its finite unfolding matches. *Comparison* uses the greatest
-fixpoint coinductively, which is the sound way to relate two such definitions
-without unfolding forever. On the inhabitants the two agree: the greatest
-fixpoint admits exactly the values the guarded unfolding accepts, so a subtype
-result never contradicts membership.
+the set when its finite unfolding matches. *Inclusion* uses the greatest fixpoint
+coinductively, which is the sound way to relate two such definitions without
+unfolding forever. On the inhabitants the two agree: the greatest fixpoint admits
+exactly the values the guarded unfolding accepts, so a subtype result never
+contradicts membership.
+
+*Emptiness* asks the opposite question and takes the **least** fixpoint: a
+reference reached again while resolving it demands an infinite unfolding, and no
+finite value supplies one, so that occurrence is uninhabited. This is why a
+mandatory self-reference with no base case is empty — under the greatest fixpoint
+it would be inhabited by infinite trees, and valgebra validates finite Python
+values. Contractivity is what keeps the two consistent: a guarded definition has
+one fixpoint, so what inclusion relates and what emptiness counts are the same
+set.
 
 ```python
 from valgebra import recursive, union, Validator

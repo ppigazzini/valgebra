@@ -385,10 +385,16 @@ pub enum Schema {
     /// expression over element schemas.
     ///
     /// One node subsumes the homogeneous `list[T]`/`tuple[T, ...]`, the fixed
-    /// `[A, B]`/`tuple[A, B]`, and the prefix-plus-tail forms. Regular languages
-    /// are closed under union, intersection, and complement, so a sequence type
-    /// is a first-class member of the Boolean algebra rather than four ad-hoc,
-    /// non-composable nodes.
+    /// `[A, B]`/`tuple[A, B]`, and the prefix-plus-tail forms: one shape to walk
+    /// and one to relate, rather than four ad-hoc nodes.
+    ///
+    /// A sequence composes in the Boolean algebra the way every other node does,
+    /// through [`Schema::Union`], [`Schema::Intersection`] and
+    /// [`Schema::Complement`] over the sequence node. The regex itself is *not*
+    /// closed under those operations here -- it has no complement or intersection
+    /// constructor -- so the closure is at the schema level and the regular
+    /// languages the shape is drawn from are the model, not a computation this
+    /// crate performs.
     Seq {
         /// Whether the value is a list or a tuple.
         container: SeqKind,
@@ -485,9 +491,16 @@ pub enum SeqKind {
 /// expression denotes, where a single element symbol "matches" `Elem(s)` when the
 /// element belongs to `s`. The homogeneous form is `Star(Elem(t))`, the fixed
 /// form is `Cat([Elem(a), Elem(b), ...])`, and the prefix-plus-tail form appends a
-/// trailing `Star`. `Or` and nesting are produced only by the decision procedure
-/// (closure under the Boolean operations); the frontend emits linear shapes only,
-/// which [`SeqRegex::linear`] recognizes for the membership walk.
+/// trailing `Star`. Those three are every shape anything here builds:
+/// [`SeqRegex::linear`] recognizes them and the membership walk needs no
+/// automaton.
+///
+/// [`Or`](SeqRegex::Or) and nesting have **no producer** in this crate or the
+/// bindings -- only the tests and the fuzz target construct one. The arms that
+/// handle them (in `linear`, in language emptiness, and in regex inclusion) are
+/// what would make a produced one sound, and until something produces one they
+/// decide nothing that is reachable. Deciding sequence inclusion in general wants
+/// the automaton construction `docs/decidability.md` records as unbuilt.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SeqRegex {
     /// The empty sequence.
