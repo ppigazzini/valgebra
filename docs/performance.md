@@ -64,36 +64,69 @@ three check the same set of named fields.
 ## Baseline matrix
 
 Machine class: AMD Ryzen 7 PRO 7840U (Zen 4, 8c/16t, up to 5.1 GHz, a 2023-era
-mobile part) under WSL2 on Linux 6.18. Toolchain: rustc 1.96.0 (the build these
-numbers were measured on; the supported minimum is the lower `rust-version` in
-the manifest), CPython 3.14.6,
-pydantic 2.13.4, jsonschema 4.26.0, criterion 0.8.2, pytest-benchmark 5.2.3. The
-extension is the **PGO** release build — the profile-guided, fat-LTO wheel the
-release ships (`maturin build --release --pgo`); a plain `--release` build is a
-few tens of percent slower on these shapes, and a debug build is not
-representative. pydantic's PyPI wheels are likewise PGO-built, so this is a
-release-to-release comparison. Figures are the per-call median; re-run on your
-own hardware for absolute numbers. They are measured on the wheel carrying
-valgebra's full feature set — the per-validator precompute (record-field
-lookups, literal-union dispatch) and native string patterns — which leaves these
-shapes unchanged: the features earn their keep elsewhere, not by regressing the
-core.
+mobile part) under WSL2 on Linux 6.18. Toolchain: rustc 1.98.0 (the build these
+numbers are measured on; the supported minimum is the lower `rust-version` in
+the manifest), CPython 3.14.7, pydantic 2.13.4, jsonschema 4.26.0, criterion
+0.8.2, pytest-benchmark 5.2.3.
 
-End-to-end validation of a value that passes (median time per call, lower is
-better):
+The extension is the **PGO** release build — the profile-guided, fat-LTO wheel
+the release ships:
+
+```bash
+uv run maturin build --release --pgo -i .venv/bin/python
+```
+
+pydantic's PyPI wheels are likewise PGO-built, so this is a release-to-release
+comparison. The build matters more than it reads: on these shapes a plain
+`--release` build is **1.3x to 1.9x slower** than the PGO one — 1.9x on the large
+array, 1.8x on deep nesting, 1.3x on the record and the scalar — and a debug
+build is not representative of either.
+
+The figures are measured on the wheel carrying valgebra's full feature set — the
+per-validator precompute (record-field lookups, literal-union dispatch) and
+native string patterns — which leaves these shapes unchanged: the features earn
+their keep elsewhere, not by regressing the core.
+
+### Method
+
+Each cell is the **median of five independent runs**, and each run reports the
+minimum of five timing repeats over a fixed iteration count — the minimum being
+the stable estimator, which scheduling jitter inflates but never deflates. The
+`+/-` is the half-range across the five runs, not a standard deviation: it states
+the observed spread rather than modelling one. Iteration counts are sized per
+shape so a run lasts long enough to clear timer resolution (200 for the large
+array, 5,000 for the record, 20,000 for the nesting).
+
+Re-run the competitive ratios on your own hardware with:
+
+```bash
+uv run --group bench python scripts/compare_gate.py
+```
+
+That script owns the recorded ratio baseline (`scripts/perf_compare.json`) and
+compares against it; the table below is the absolute record.
+
+### Results
+
+End-to-end validation of a value that passes (lower is better):
 
 | Shape | valgebra | pydantic (strict) | jsonschema |
 | --- | --- | --- | --- |
-| `list[int]`, 10,000 elements | 47 us | 88 us | 26,000 us |
-| Closed record, 50 int fields | 0.97 us | 1.9 us | 134 us |
-| Nested `list[...]`, depth 25 | 0.25 us | 1.9 us | 77 us |
+| `list[int]`, 10,000 elements | 41.8 +/- 9.4 us | 73.4 +/- 1.7 us | 24,000 +/- 500 us |
+| Closed record, 50 int fields | 0.824 +/- 0.034 us | 1.69 +/- 0.09 us | 128 +/- 4.4 us |
+| Nested `list[...]`, depth 25 | 0.229 +/- 0.009 us | 1.74 +/- 0.045 us | — |
 
-valgebra relative to pydantic on this machine: ~7x faster on deep nesting, ~2x
-faster on the wide record, and ~1.9x faster on the large flat array. It is
-consistently far ahead of pure-Python jsonschema — by two to three orders of
-magnitude on every shape. pydantic does strictly more work on the record (it
+valgebra relative to pydantic on this machine: **7.6x** faster on deep nesting,
+**2.1x** on the wide record, **1.8x** on the large flat array. It is consistently
+far ahead of pure-Python jsonschema — by two to three orders of magnitude on
+every shape it covers. pydantic does strictly more work on the record (it
 constructs output), so read that shape as a margin over a heavier operation, not
 a like-for-like loss for pydantic.
+
+The scalar shape is absent from the table because it sits near timer resolution:
+at a 31.8 ns median its observed spread reaches a quarter of that, so the ratio
+it reports — around 5.8x — carries noise the other three shapes do not. The
+competitive gate measures it; this record does not.
 
 Core micro-benchmarks (criterion, release+LTO, indicative single run):
 
