@@ -6,6 +6,47 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-08-25
+
+Membership costs less on a refined schema, and no decision or message changes.
+
+### Changed
+
+- A violation's message is built when a violation is recorded rather than on
+  every check. Naming a bound takes the bound's `repr`, and a value that belongs
+  produces no violation to name it in, so accepting a value used to cost the
+  size of the schema's *operand* rather than the size of the value.
+
+  Per-check cost over the bare type, release build, median of eleven runs of
+  fifty thousand: a single comparison bound about 16 ns where it was about 123,
+  and two about 29 where they were about 258. A comparison bound therefore costs
+  less than a call into a Python predicate, which is the ordering
+  [the refinements page](https://ppigazzini.github.io/valgebra/refinements/)
+  describes. The absolute figures are one machine's and move by around a tenth
+  between runs; the ratio and the ordering are what travel.
+
+  The operand's size no longer enters into it. A passing check against
+  `Annotated[str, Ge(s)]` measures about 51 ns for a one-character `s` and about
+  52 ns for a two-hundred-thousand-character one, against 143 ns and 303 us.
+
+  Every violation carries the message it carried, and every decision is
+  unchanged.
+
+- The pages carry four things a reader could otherwise only find by experiment.
+  The `Regex` dialect is the Rust engine's, not `re`'s, and a pattern **both**
+  engines accept can match different strings — POSIX bracket expressions,
+  Unicode case folding of the Turkish dotless i, and `\p{...}` property escapes,
+  so compiling successfully is not a test of which language a pattern is in.
+  The depth budget accounts for refinements: a refinement is a node, so it costs
+  a level on top of whatever it narrows, and the marker it carries makes no
+  difference. A map can constrain some keys and leave the rest free by giving
+  the permissive clause the **complement** of the claimed keys, where `open`
+  admits a clause matching every key and so subsumes a narrower one. And the
+  decidability boundary records that a meet of two distinct literals is not
+  decided empty, with no sound rule to close it: a literal's equality is the
+  value's own, so two literals can share a member while neither contains the
+  other.
+
 ## [0.0.7] - 2026-08-25
 
 ### Fixed
@@ -222,7 +263,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.7...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.8...HEAD
+[0.0.8]: https://github.com/ppigazzini/valgebra/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/ppigazzini/valgebra/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/ppigazzini/valgebra/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/ppigazzini/valgebra/compare/v0.0.4...v0.0.5
