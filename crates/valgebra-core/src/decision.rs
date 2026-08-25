@@ -1,7 +1,7 @@
 //! The decision procedures over the IR: emptiness, subtyping, equivalence, and
 //! disjointness, with the leaf-relation oracle and the scalar region partition.
 
-use crate::ir::{Constraint, DefIx, Field, OperandIx, Schema, SeqKind, SeqRegex};
+use crate::ir::{ClassIx, Constraint, DefIx, Field, OperandIx, Schema, SeqKind, SeqRegex};
 use rustc_hash::FxHashMap;
 use std::cell::Cell;
 
@@ -321,10 +321,7 @@ impl Schema {
             // A refinement is a subset of its base: an empty base empties it, and
             // so does an unsatisfiable bound conjunction (decided by the oracle).
             Schema::Refine { base, constraints } => {
-                // The discreteness rule applies only when the base is exactly the
-                // integer atom: `bool` is excluded (its two values are already
-                // covered by the ordering check), and floats are dense.
-                let int_discrete = base.type_tag() == Some(TypeTag::Int);
+                let int_discrete = bounded_to_the_integers([base.as_ref()]);
                 let empty = base.is_empty_rec(oracle, defs, visiting, budget)
                     || bounds_unsatisfiable(constraints.iter(), oracle, int_discrete);
                 (empty, None)
@@ -593,11 +590,7 @@ impl Schema {
                     defaults: db,
                 },
             ) => keyed_map_subtype(fa, da, fb, db, cx, assumptions),
-            // Two structural-attribute schemas over the same class: a subtype when
-            // it carries every attribute the supertype requires with a narrower
-            // schema (width and depth; all attributes are required). Across
-            // different classes the relation needs the nominal class hierarchy,
-            // which the core cannot decide, so it stays conservative.
+            // Two structural-attribute schemas relate nominally and by attribute.
             (
                 Schema::Attrs {
                     class_index: ca,
@@ -607,13 +600,12 @@ impl Schema {
                     class_index: cb,
                     fields: fb,
                 },
-            ) if ca == cb => {
-                let a_by_name = field_index(fa);
-                fb.iter().all(|b| {
-                    a_by_name
-                        .get(b.name.as_str())
-                        .is_some_and(|a| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
-                })
+            ) => attrs_subtype(*ca, fa, *cb, fb, cx, assumptions),
+            // An attribute schema is its class's isinstance atom narrowed by an
+            // attribute record, so it is below that atom and below any atom the
+            // atom is below.
+            (Schema::Attrs { class_index, .. }, Schema::Instance(_)) => {
+                Schema::Instance(*class_index).is_subtype_rec(other, cx, assumptions)
             }
             // Complement is contravariant: ¬A ⊆ ¬B exactly when B ⊆ A.
             (Schema::Complement(a), Schema::Complement(b)) => b.is_subtype_rec(a, cx, assumptions),
@@ -733,6 +725,25 @@ impl LeafRelations for NoLeafRelations {
     fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
         None
     }
+}
+
+/// Whether the values a meet admits are bounded to the integers, so a bound
+/// conjunction over it may count them.
+///
+/// Asked by both meets the IR carries -- a refinement's constraint conjunction and
+/// an [`Schema::Intersection`] of refinements -- so a rule that fires for one
+/// fires for the other. An intersection is a subset of every member, so one
+/// member bounded to the integers bounds the whole meet; a lone base bounds it by
+/// being one. `bool` counts because it subclasses `int`, and a float base does
+/// not because the reals between two bounds are dense.
+///
+/// Sound and not complete for `bool`: the rule counts the integers in the
+/// interval rather than the two values a boolean has, so an interval holding an
+/// integer that is neither zero nor one stays conservatively inhabited.
+fn bounded_to_the_integers<'a>(bases: impl IntoIterator<Item = &'a Schema>) -> bool {
+    bases
+        .into_iter()
+        .any(|base| matches!(base.type_tag(), Some(TypeTag::Int | TypeTag::Bool)))
 }
 
 /// Whether a refinement's bound and length constraints cannot hold together: a
@@ -924,11 +935,8 @@ fn intersection_bounds_unsatisfiable(members: &[Schema], oracle: &dyn LeafRelati
         })
         .flatten()
         .collect();
-    // The integer-discreteness rule stays off across an intersection: the base of
-    // the merged bounds is the members' meet, not a single declared atom, so the
-    // narrow single-`Refine` discreteness premise does not transfer here. Bound
-    // contradiction across members is still decided through the ordering oracle.
-    !merged.is_empty() && bounds_unsatisfiable(merged.iter().copied(), oracle, false)
+    let int_discrete = bounded_to_the_integers(members);
+    !merged.is_empty() && bounds_unsatisfiable(merged.iter().copied(), oracle, int_discrete)
 }
 
 /// Whether the linear language `pa · ta*` is included in `pb · tb*` — a fixed
@@ -1050,6 +1058,41 @@ fn keyed_map_subtype(
         });
         fields_ok && extra_covered && defaults
     }
+}
+
+/// Whether attribute schema `(ca, fa)` is a subtype of `(cb, fb)`.
+///
+/// Two halves. **Nominally**, the subtype's class must be the supertype's or below
+/// it -- the question the leaf oracle already answers for an isinstance atom, so
+/// it is asked rather than left to a fallthrough that cannot match this variant.
+/// **By attribute**, every attribute the supertype declares must be carried by the
+/// subtype with a narrower schema; all attributes of an attribute schema are
+/// required, so width and depth are the whole of it.
+///
+/// Sound on the same assumption the isinstance atom already makes: that a
+/// subclass's instances are instances of the base.
+fn attrs_subtype(
+    ca: ClassIx,
+    fa: &[Field],
+    cb: ClassIx,
+    fb: &[Field],
+    cx: SubtypeCx<'_>,
+    assumptions: &mut Vec<(Schema, Schema)>,
+) -> bool {
+    let nominal = ca == cb
+        || cx
+            .oracle
+            .leaf_subtype(&Schema::Instance(ca), &Schema::Instance(cb))
+            == Some(true);
+    if !nominal {
+        return false;
+    }
+    let a_by_name = field_index(fa);
+    fb.iter().all(|b| {
+        a_by_name
+            .get(b.name.as_str())
+            .is_some_and(|a| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
+    })
 }
 
 /// Index a field list by name for O(1) cross-list lookup during subtyping.
@@ -1476,6 +1519,96 @@ mod tests {
             &[Constraint::MultipleOf(OperandIx::new(0))],
             o
         ));
+    }
+
+    /// An oracle that orders pool indices as the values they stand for and reports
+    /// integer adjacency by the same arithmetic the binding uses, so the
+    /// discreteness rule can be driven without an interpreter.
+    struct Adjacent;
+    impl LeafRelations for Adjacent {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            None
+        }
+        fn compare(&self, a: OperandIx, b: OperandIx) -> Option<core::cmp::Ordering> {
+            Some(a.get().cmp(&b.get()))
+        }
+        fn no_int_between(
+            &self,
+            lo: OperandIx,
+            lo_strict: bool,
+            hi: OperandIx,
+            hi_strict: bool,
+        ) -> Option<bool> {
+            let least = lo.get() + usize::from(lo_strict);
+            let greatest = hi.get().checked_sub(usize::from(hi_strict))?;
+            Some(least > greatest)
+        }
+    }
+
+    /// One set spelled two ways gets one verdict. The bounds of a refinement and
+    /// the bounds gathered across an intersection are the same conjunction, so a
+    /// rule that fires for one fires for the other: an intersection is a subset of
+    /// every member, and a member bounded to the integers bounds the meet.
+    #[test]
+    fn both_meets_ask_the_same_question_of_their_base() {
+        let refine = |constraints| Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints,
+        };
+        let (gt0, lt1) = (
+            Constraint::Gt(OperandIx::new(0)),
+            Constraint::Lt(OperandIx::new(1)),
+        );
+        let on_one = refine(vec![gt0.clone(), lt1.clone()]);
+        let across = Schema::meet([refine(vec![gt0]), refine(vec![lt1])]);
+        assert!(on_one.is_empty_with(&Adjacent, &[]));
+        assert_eq!(
+            on_one.is_empty_with(&Adjacent, &[]),
+            across.is_empty_with(&Adjacent, &[])
+        );
+    }
+
+    /// An attribute schema is its class's isinstance atom narrowed by an attribute
+    /// record, so it is below that atom. Without the rule the pair reaches the
+    /// leaf oracle, which matches a literal and an instance on the subtype side
+    /// and cannot answer for this variant.
+    #[test]
+    fn an_attribute_schema_is_below_its_own_class() {
+        let attrs = Schema::Attrs {
+            class_index: ClassIx::new(0),
+            fields: vec![Field {
+                name: "a".to_owned(),
+                schema: Schema::Int,
+                required: true,
+            }],
+        };
+        assert!(attrs.is_subtype_of(&Schema::Instance(ClassIx::new(0))));
+        // A different class is a nominal question, and the core's default oracle
+        // decides nothing, so it stays conservative.
+        assert!(!attrs.is_subtype_of(&Schema::Instance(ClassIx::new(1))));
+    }
+
+    /// A boolean base is bounded to the integers, so it counts them too. Sound but
+    /// not complete: the rule sees the integers in the interval, not the two
+    /// values `bool` actually has, so an interval holding an integer that is
+    /// neither 0 nor 1 stays conservatively non-empty.
+    #[test]
+    fn a_boolean_base_counts_integers() {
+        let refine = |base, constraints| Schema::Refine {
+            base: Box::new(base),
+            constraints,
+        };
+        let open_unit = vec![
+            Constraint::Gt(OperandIx::new(0)),
+            Constraint::Lt(OperandIx::new(1)),
+        ];
+        assert!(refine(Schema::Bool, open_unit).is_empty_with(&Adjacent, &[]));
+        // A dense base is not bounded to the integers and stays inhabited.
+        let dense = vec![
+            Constraint::Gt(OperandIx::new(0)),
+            Constraint::Lt(OperandIx::new(1)),
+        ];
+        assert!(!refine(Schema::Float, dense).is_empty_with(&Adjacent, &[]));
     }
 
     #[test]

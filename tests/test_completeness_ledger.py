@@ -20,6 +20,7 @@ The ledger entries marked xfail are the known holes recorded in the completeness
 report; the count pytest prints as "xfailed" is the live conservatism counter.
 """
 
+import dataclasses
 import enum
 from typing import (
     Annotated,
@@ -103,6 +104,18 @@ def _accepted(spec: object) -> frozenset[int]:
 _GE0 = Annotated[int, at.Ge(0)]
 _GE0_LE10 = Annotated[int, at.Ge(0), at.Le(10)]
 _GE10_LE0 = Annotated[int, at.Ge(10), at.Le(0)]
+_GT0 = Annotated[int, at.Gt(0)]
+_LT1 = Annotated[int, at.Lt(1)]
+
+
+@dataclasses.dataclass
+class _Animal:
+    name: str
+
+
+@dataclasses.dataclass
+class _Dog(_Animal):
+    breed: str
 
 
 def _check(operation: str, left: object, right: object) -> None:
@@ -222,6 +235,22 @@ _DECIDED = [
         None,
         id="empty:int-closed-[0.5,0.9]",
     ),
+    # An interval that skips every integer is empty whichever way its bounds are
+    # spelled: on one refinement, or across an intersection whose members bound
+    # the meet to the integers. `bool` is bounded to the integers too.
+    pytest.param(
+        "empty", intersection(_GT0, _LT1), None, id="empty:int-open-(0,1)-across-a-meet"
+    ),
+    pytest.param(
+        "empty", Annotated[bool, at.Gt(0), at.Lt(1)], None, id="empty:bool-open-(0,1)"
+    ),
+    # An attribute schema is a subtype of one over a base class it carries every
+    # attribute of: the nominal question is the one the leaf oracle answers for an
+    # isinstance atom.
+    pytest.param("subtype", _Dog, _Animal, id="attrs:Dog<=Animal"),
+    # An attribute schema is its class's isinstance atom narrowed by an attribute
+    # record, so it is below the atom a bare class compiles to.
+    pytest.param("subtype", _Dog, complement(complement(_Dog)), id="attrs:Dog<=~~Dog"),
     # An intersection that mixes a recursive reference with a union is a subtype
     # of itself: reflexivity holds even when the meet contains its own supertype.
     pytest.param(
@@ -301,6 +330,17 @@ def test_decision_decides_true_relations(
 # bound that lands on one.
 _NON_EMPTY = [
     pytest.param(Annotated[float, at.Gt(0), at.Lt(1)], id="float-open-(0,1)"),
+    # Across a meet, and on a boolean base, the rule must still fire only where an
+    # integer genuinely fails to fit.
+    pytest.param(
+        intersection(_GT0, Annotated[int, at.Lt(2)]),
+        id="int-open-(0,2)-across-a-meet-has-1",
+    ),
+    pytest.param(
+        intersection(Annotated[float, at.Gt(0)], Annotated[float, at.Lt(1)]),
+        id="float-open-(0,1)-across-a-meet",
+    ),
+    pytest.param(Annotated[bool, at.Ge(0), at.Le(1)], id="bool-closed-[0,1]-has-both"),
     pytest.param(Annotated[int, at.Gt(0), at.Lt(2)], id="int-open-(0,2)-has-1"),
     pytest.param(Annotated[int, at.Gt(0.5), at.Lt(1.5)], id="int-open-(0.5,1.5)-has-1"),
     pytest.param(Annotated[int, at.Ge(0), at.Le(0)], id="int-closed-[0,0]-has-0"),
