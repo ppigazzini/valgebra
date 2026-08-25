@@ -6,6 +6,65 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-08-25
+
+### Fixed
+
+- `open`, `close`, and `simplify` rewrite a validator's recursive definitions as
+  well as its root. A recursive validator's root is a single back edge and every
+  record, union, and refinement it declares lives in the definitions table, so
+  all three were no-ops on exactly the schemas that carry the most structure:
+  `recursive(lambda n: {"a": int, "next": n}).open()` admitted no undeclared key,
+  and `simplify` left a recursive body unreduced.
+
+- The frontend descends as far as the construction bounds publish, so a schema
+  those bounds accept is no longer rejected while being compiled. Sets, dicts,
+  and records nest to the documented limit rather than to 100 levels, and the
+  message a rejection carries reports how far the frontend descended rather than
+  naming a cause it cannot know.
+
+### Added
+
+- `is_empty` decides an interval that skips every integer however the meet is
+  spelled. `intersection(Annotated[int, Gt(0)], Annotated[int, Lt(1)])` is empty,
+  as `Annotated[int, Gt(0), Lt(1)]` already was: an intersection is a subset of
+  each of its members, so a member bounded to the integers bounds the whole meet.
+  A `bool` base counts integers for the same reason, since it subclasses `int`.
+
+- `is_subtype_of` decides attribute schemas across a class hierarchy. A dataclass
+  or named tuple is below one over a base class whose every attribute it carries
+  with a narrower schema, and below the bare class it is an instance of.
+
+  Both are conservative-to-decided moves: every relation that held in 0.0.6 still
+  holds, and each carries the counter-direction that keeps it from over-firing.
+
+### Changed
+
+- `open` and `close` may raise `ValueError`. Opening a record adds a catch-all
+  clause, so it grows the schema and the construction bounds apply to what it
+  produces; a validator near the node limit can cross it.
+
+- A union of no members reprs as `nothing` and a meet of none as `anything`,
+  because each constructor owns the identity of its own arity. `repr(union())`
+  was the empty string, which is not an expression that rebuilds the validator.
+
+- A widening between two eight-member literal unions costs 619 ns where it cost
+  1.66 us, and a union of opaque members decides up to about eight hundred
+  members where it decided up to four hundred. The lattice bound asking whether a
+  supertype covers the universe reads that supertype's region set instead of
+  building the complement of a deep clone of it, and the emptiness folds stop
+  once no later member can change the verdict.
+
+- Membership costs what it cost. The competitive baseline in
+  [the performance page](https://ppigazzini.github.io/valgebra/performance/) is re-measured with its spread and
+  the method that produced it: against pydantic in strict mode, 7.6x on a schema
+  nested twenty-five deep, 2.1x on a fifty-field closed record, and 1.8x on a
+  flat array of ten thousand integers.
+
+  On upgrade, handle `ValueError` from `open` and `close` where a schema is built
+  in a loop, and expect a recursive validator to answer as the recursion says it
+  should rather than as its root alone did. Nothing else changes.
+
 ## [0.0.6] - 2026-08-08
 
 ### Changed
@@ -163,7 +222,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.6...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.7...HEAD
+[0.0.7]: https://github.com/ppigazzini/valgebra/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/ppigazzini/valgebra/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/ppigazzini/valgebra/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/ppigazzini/valgebra/compare/v0.0.3...v0.0.4

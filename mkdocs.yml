@@ -48,6 +48,7 @@ nav:
       - Inspecting a codebase: inspection.md
       - Resource limits: limits.md
       - Performance: performance.md
+  - Release notes: changelog.md
   - Explanation:
       - Foundations: foundations.md
       - Soundness argument: soundness.md
@@ -69,6 +70,12 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
+  # Include a file from outside docs/ verbatim, so the release notes the site
+  # serves are the changelog the repository keeps rather than a second list
+  # nothing holds to the first.
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
   - toc:
       permalink: true
 
@@ -124,5 +131,7 @@ plugins:
           - foundations.md: The denotational frame and the sourced set-theoretic and lattice theory.
           - soundness.md: Why membership checking is sound on its own terms.
           - decidability.md: What subtyping, equivalence, and emptiness decide exactly versus conservatively.
+        Release notes:
+          - changelog.md: Every released version, what it changed, and what to do on upgrade.
         API reference:
           - api.md: The full public surface, generated from the package docstrings.
