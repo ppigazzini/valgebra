@@ -949,6 +949,22 @@ fn tighter_bound(
     }
 }
 
+/// Every unordered pair of distinct elements, each once.
+///
+/// The pairwise-disjointness law is asked of an intersection's members and of the
+/// inners of a union's complements, and the scan was written out at both. One
+/// function decides where the pairs come from, and it reads the tail through
+/// `get`, so the law needs no panicking index.
+pub(crate) fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> {
+    items.iter().enumerate().flat_map(|(i, a)| {
+        items
+            .get(i + 1..)
+            .unwrap_or_default()
+            .iter()
+            .map(move |b| (a, b))
+    })
+}
+
 /// Whether the intersection contains a schema and its complement (`A ∩ ¬A = ∅`).
 /// The gradual `Any` is excluded: its complement is not its set complement, so
 /// `Any ∩ ¬Any` is not empty. This is the completeness law `simplify` applies,
@@ -968,10 +984,7 @@ pub(crate) fn has_complementary_pair(members: &[Schema]) -> bool {
 /// disjointness (a list is never a set) the scalar region bitset cannot see.
 /// Shared with the simplifier so both read the same lattice law.
 pub(crate) fn has_disjoint_pair(members: &[Schema]) -> bool {
-    members
-        .iter()
-        .enumerate()
-        .any(|(i, a)| members[i + 1..].iter().any(|b| a.disjoint(b)))
+    unordered_pairs(members).any(|(a, b)| a.disjoint(b))
 }
 
 /// Whether the refinement constraints of the intersection's **directly refined
@@ -1482,6 +1495,21 @@ mod tests {
     /// with an uninhabited required field -- followed by an inhabited one, because
     /// a member that is empty with a *known* region cannot make the accumulator
     /// absorbing on its own.
+    /// The unordered pairs of a slice: every distinct pair once, in neither order
+    /// twice, and none of an element with itself. Both disjointness laws scan them
+    /// -- over members, and over the inners of complements -- so the scan is one
+    /// function and the law it serves is decided in one place.
+    #[test]
+    fn unordered_pairs_yields_each_distinct_pair_once() {
+        let pairs: Vec<(i32, i32)> = unordered_pairs(&[1, 2, 3]).map(|(a, b)| (*a, *b)).collect();
+        assert_eq!(pairs, [(1, 2), (1, 3), (2, 3)]);
+        // The degenerate lengths a member list can reach: no pair to compare.
+        assert_eq!(unordered_pairs::<i32>(&[]).count(), 0);
+        assert_eq!(unordered_pairs(&[1]).count(), 0);
+        // n elements give n*(n-1)/2 pairs, so nothing is visited twice.
+        assert_eq!(unordered_pairs(&[1, 2, 3, 4, 5]).count(), 10);
+    }
+
     #[test]
     fn a_union_fold_stops_only_once_a_member_is_inhabited() {
         let uninhabited = Schema::record(

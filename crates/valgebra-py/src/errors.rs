@@ -58,54 +58,52 @@ pub(crate) fn json_invalid_error(py: Python<'_>, description: &str) -> PyErr {
 /// mirror the first item; `str(exc)` is a summary of every failure.
 pub(crate) fn into_pyerr(py: Python<'_>, violations: &[Violation]) -> PyErr {
     debug_assert!(!violations.is_empty(), "into_pyerr needs a failure");
-    // The caller always reports at least one failure. A debug build asserts it; a
-    // release build must not index into an empty slice below, so if the fast
-    // matcher and the explain pass ever disagreed and left no violation, stand in
-    // a generic one. The error stays well-formed instead of raising a panic from
-    // an out-of-bounds access on the error-reporting path.
-    let fallback;
-    let violations = if violations.is_empty() {
-        fallback = [Violation {
-            code: "validation_error",
-            path: Vec::new(),
-            expected: "a member of the schema's set".to_owned(),
-            value_summary: String::new(),
-        }];
-        &fallback[..]
-    } else {
-        violations
+    // The caller always reports at least one failure, and the builders below read
+    // the first one. Splitting here is what makes that a fact they are handed
+    // rather than an invariant they trust: a walk arm that reports a non-member
+    // without a violation is an internal invariant break, and every producer of
+    // that state degrades rather than panicking, so the boundary does too.
+    let generic = Violation {
+        code: "validation_error",
+        path: Vec::new(),
+        expected: "a member of the schema's set".to_owned(),
+        value_summary: String::new(),
     };
+    let (first, rest) = violations.split_first().unwrap_or((&generic, &[]));
     // Populating the structured attributes is pure interpreter bookkeeping
     // (attribute sets on a fresh exception, dict/tuple builds over owned data) and
     // does not fail in practice. If it ever does, surface that failure (the `Err`)
     // rather than shipping a `ValidationError` whose `.errors` is silently empty
     // while `str(exc)` still summarizes real failures.
-    match build_validation_error(py, violations) {
+    match build_validation_error(py, first, rest) {
         Ok(err) | Err(err) => err,
     }
 }
 
-fn build_validation_error(py: Python<'_>, violations: &[Violation]) -> PyResult<PyErr> {
-    let err = ValidationError::new_err(summary_message(violations));
+fn build_validation_error(
+    py: Python<'_>,
+    first: &Violation,
+    rest: &[Violation],
+) -> PyResult<PyErr> {
+    let err = ValidationError::new_err(summary_message(first, rest));
     let instance = err.value(py);
-    let first = &violations[0];
     instance.setattr("code", first.code)?;
     instance.setattr("expected", first.expected.as_str())?;
     instance.setattr("value", first.value_summary.as_str())?;
     instance.setattr("message", first.to_string())?;
     instance.setattr("path", build_path(py, &first.path)?)?;
-    instance.setattr("errors", error_items(py, violations)?)?;
+    instance.setattr("errors", error_items(py, first, rest)?)?;
     Ok(err)
 }
 
 /// The exception's `str()`: the single message for one failure, or a counted,
 /// newline-joined summary for several.
-fn summary_message(violations: &[Violation]) -> String {
-    if violations.len() == 1 {
-        return violations[0].to_string();
+fn summary_message(first: &Violation, rest: &[Violation]) -> String {
+    if rest.is_empty() {
+        return first.to_string();
     }
-    let mut summary = format!("{} validation errors:", violations.len());
-    for violation in violations {
+    let mut summary = format!("{} validation errors:", rest.len() + 1);
+    for violation in core::iter::once(first).chain(rest) {
         summary.push('\n');
         summary.push_str(&violation.to_string());
     }
@@ -114,9 +112,13 @@ fn summary_message(violations: &[Violation]) -> String {
 
 /// Build the `errors` tuple: one JSON-serializable item per failure, in walk
 /// order.
-fn error_items<'py>(py: Python<'py>, violations: &[Violation]) -> PyResult<Bound<'py, PyTuple>> {
-    let mut items = Vec::with_capacity(violations.len());
-    for violation in violations {
+fn error_items<'py>(
+    py: Python<'py>,
+    first: &Violation,
+    rest: &[Violation],
+) -> PyResult<Bound<'py, PyTuple>> {
+    let mut items = Vec::with_capacity(rest.len() + 1);
+    for violation in core::iter::once(first).chain(rest) {
         let item = PyDict::new(py);
         item.set_item("code", violation.code)?;
         item.set_item("path", build_path(py, &violation.path)?)?;
@@ -153,6 +155,23 @@ mod tests {
             expected: "int".to_owned(),
             value_summary: "'x'".to_owned(),
         }
+    }
+
+    /// A walk that reports a non-member without a violation is an internal
+    /// invariant break, and the two profiles answer it differently on purpose: a
+    /// debug build traps so the break is found, and a release build degrades to a
+    /// well-formed error rather than panicking across the language boundary.
+    ///
+    /// This pins the debug half, which is the one a test profile can observe. The
+    /// release half needs no case of its own any more: the boundary reads the
+    /// first violation through `split_first`, so there is no index to be wrong --
+    /// the degradation is what the `Option` already means.
+    #[test]
+    #[should_panic(expected = "into_pyerr needs a failure")]
+    fn an_empty_violation_list_trips_the_debug_assert() {
+        Python::attach(|py| {
+            let _ = into_pyerr(py, &[]);
+        });
     }
 
     #[test]

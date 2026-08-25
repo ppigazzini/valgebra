@@ -1,7 +1,9 @@
 //! The membership-preserving simplifier: the lattice-law normalisation of the
 //! IR (flattening, identities, De Morgan, deduplication).
 
-use crate::decision::{Region, Regions, has_complementary_pair, has_disjoint_pair};
+use crate::decision::{
+    Region, Regions, has_complementary_pair, has_disjoint_pair, unordered_pairs,
+};
 use crate::ir::{Constraint, Field, Schema, SeqRegex};
 
 impl SeqRegex {
@@ -92,10 +94,7 @@ fn has_disjoint_complement_pair(members: &[Schema]) -> bool {
             _ => None,
         })
         .collect();
-    inners
-        .iter()
-        .enumerate()
-        .any(|(i, a)| inners[i + 1..].iter().any(|b| a.disjoint(b)))
+    unordered_pairs(&inners).any(|(a, b)| a.disjoint(b))
 }
 
 /// Build a refinement in canonical form from an already-simplified `base`.

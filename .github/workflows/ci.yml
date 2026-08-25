@@ -46,6 +46,21 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo fmt --all --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      # Two restriction lints over the library targets only. The clippy book warns
+      # against enabling the restriction *group*, whose members conflict with each
+      # other and with idiomatic Rust; two named members chosen against a stated
+      # invariant are a different thing. The invariant is the crates' own: the walk
+      # degrades to a non-member rather than panicking across the language
+      # boundary, so a panicking index or unwrap on a shipped library path is a
+      # defect. Tests and benches legitimately use both and are out of scope.
+      #
+      # `expect_used` is deliberately not here. Its three sites are each guarded by
+      # a check one branch above -- an ellipsis that may only be last, a list of one
+      # -- so the lint would buy an unreachable error arm rather than a fix.
+      - name: no panicking index or unwrap in the library targets
+        run: |
+          cargo clippy --locked --lib --all-features -- \
+            -D clippy::indexing_slicing -D clippy::unwrap_used
 
   rust-test:
     name: rust test (${{ matrix.os }})
