@@ -123,14 +123,14 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
 #[pyfunction]
 #[pyo3(signature = (*schemas))]
 fn union(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
-    combine(schemas, Schema::Union)
+    combine(schemas, Schema::union)
 }
 
 /// The intersection of the given schemas: a value in every one of their sets.
 #[pyfunction]
 #[pyo3(signature = (*schemas))]
 fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
-    combine(schemas, Schema::Intersection)
+    combine(schemas, Schema::meet)
 }
 
 /// The complement of a schema: every value not in its set.
@@ -147,11 +147,7 @@ fn complement(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
     let mut literals = Pool::default();
     let mut definitions = Vec::new();
     let inner = build_schema(schema, &mut literals, &mut definitions)?;
-    Validator::checked(
-        Schema::Complement(Box::new(inner)),
-        literals.into_items(),
-        definitions,
-    )
+    Validator::checked(inner.complement(), literals.into_items(), definitions)
 }
 
 /// A pool-free validator wrapping a single atom (the `anything`/`nothing`

@@ -518,32 +518,39 @@ impl SeqRegex {
         self.any_elem(&|s| s.occurs_unguarded(target, Guarded::Yes))
     }
 
-    /// The structural nesting depth this regex contributes: one level per regex
-    /// constructor plus the depth of the deepest element schema. The frontend's
-    /// linear shapes are shallow; the count still tracks every native stack frame
-    /// a recursive walk descends through the regex.
-    fn depth(&self) -> usize {
+    /// Every element schema this regex holds, in order.
+    ///
+    /// The sequence half of [`Schema::children`]: a measure over a sequence reads
+    /// its elements from here rather than restating which regex constructors hold
+    /// one.
+    fn elements(&self) -> Box<dyn Iterator<Item = &Schema> + '_> {
         match self {
-            SeqRegex::Empty => 0,
-            SeqRegex::Elem(s) => s.depth(),
+            SeqRegex::Empty => Box::new(core::iter::empty()),
+            SeqRegex::Elem(s) => Box::new(core::iter::once(s.as_ref())),
             SeqRegex::Cat(parts) | SeqRegex::Or(parts) => {
-                1 + parts.iter().map(SeqRegex::depth).max().unwrap_or(0)
+                Box::new(parts.iter().flat_map(SeqRegex::elements))
             }
-            SeqRegex::Star(inner) => 1 + inner.depth(),
+            SeqRegex::Star(inner) => inner.elements(),
         }
     }
 
-    /// The number of schema nodes this regex contributes, counting each element
-    /// schema's whole subtree. Mirrors [`Schema::node_count`] for the sequence
-    /// body; a regex constructor itself is not a schema node.
-    fn node_count(&self) -> usize {
+    /// The regex constructors above the deepest element schema.
+    ///
+    /// A constructor is a level a recursive walk descends -- through `Box`es the
+    /// regex owns -- so the sequence's depth counts it. It is not a schema node,
+    /// so the node count does not; that is the whole difference between the two
+    /// measures over a sequence.
+    fn constructor_depth(&self) -> usize {
         match self {
-            SeqRegex::Empty => 0,
-            SeqRegex::Elem(s) => s.node_count(),
+            SeqRegex::Empty | SeqRegex::Elem(_) => 0,
             SeqRegex::Cat(parts) | SeqRegex::Or(parts) => {
-                parts.iter().map(SeqRegex::node_count).sum()
+                1 + parts
+                    .iter()
+                    .map(SeqRegex::constructor_depth)
+                    .max()
+                    .unwrap_or(0)
             }
-            SeqRegex::Star(inner) => inner.node_count(),
+            SeqRegex::Star(inner) => 1 + inner.constructor_depth(),
         }
     }
 
@@ -612,8 +619,51 @@ impl Schema {
         }
     }
 
-    /// A record of named fields, closed (`open` false) or open (`open` true). An
-    /// open record admits any other key; a closed one admits none.
+    /// The union of `members`: a value belongs when it belongs to at least one.
+    ///
+    /// A union of no members is the bottom, which is this operation's identity.
+    /// The constructor owns that, so a caller folding an empty collection gets an
+    /// atom every consumer already reads rather than a node each must special-case
+    /// -- the render printed the empty join of no members as an empty string.
+    ///
+    /// Members are kept in the order given and are not deduplicated: the order is
+    /// observable through the render and through structural equality, and
+    /// [`simplify`](Self::simplify) is where the lattice laws apply.
+    #[must_use]
+    pub fn union(members: impl IntoIterator<Item = Schema>) -> Schema {
+        let members: Vec<Schema> = members.into_iter().collect();
+        if members.is_empty() {
+            Schema::Nothing
+        } else {
+            Schema::Union(members)
+        }
+    }
+
+    /// The meet of `members`: a value belongs when it belongs to every one.
+    ///
+    /// A meet of no members is the top, dually to [`union`](Self::union).
+    #[must_use]
+    pub fn meet(members: impl IntoIterator<Item = Schema>) -> Schema {
+        let members: Vec<Schema> = members.into_iter().collect();
+        if members.is_empty() {
+            Schema::Anything
+        } else {
+            Schema::Intersection(members)
+        }
+    }
+
+    /// The complement: every value this schema does not admit.
+    ///
+    /// Named for the operation rather than spelled as `!`, matching `Region` and
+    /// the Python surface: a one-character operator in a fold is a one-character
+    /// defect, and typing has no operator for this one.
+    #[must_use]
+    pub fn complement(self) -> Schema {
+        Schema::Complement(Box::new(self))
+    }
+
+    /// A record of named fields. An open record admits any other key with any
+    /// value; a closed one admits none.
     #[must_use]
     pub fn record(fields: Vec<Field>, open: Openness) -> Schema {
         let defaults = if open == Openness::Open {
@@ -805,7 +855,7 @@ impl Schema {
     /// built on this drops it. A new variant carrying a *pooled index* must also
     /// be handled in [`remapped_by`](Self::remapped_by), which is why that match
     /// takes no wildcard.
-    fn map_children(&self, f: &impl Fn(&Schema) -> Schema) -> Schema {
+    pub(crate) fn map_children(&self, f: &impl Fn(&Schema) -> Schema) -> Schema {
         let field = |field: &Field| Field {
             name: field.name.clone(),
             schema: f(&field.schema),
@@ -923,19 +973,14 @@ impl Schema {
         self.remapped_by(Remap::Append { pool, defs })
     }
 
-    /// The structural nesting depth of this schema: the longest chain of nested
-    /// constructors from here down to a leaf. Leaves — the scalars, `Literal`,
-    /// `Instance`, `Ref`, and `SelfRef` — have depth 1; every constructor is one
-    /// more than the deepest schema it contains.
+    /// Every child schema of this node, in declaration order.
     ///
-    /// A `Ref` counts as a leaf even though it names a recursive definition: the
-    /// back edge is not followed, so the depth of a recursive schema is finite
-    /// and this terminates. The count mirrors the native stack a recursive walk
-    /// over the tree descends — one frame per level in clone, drop, the decision
-    /// procedure, and the render back to an annotation — so composition can be
-    /// bounded to a depth every such walk survives.
-    #[must_use]
-    pub fn depth(&self) -> usize {
+    /// The one place a *reading* walk learns what a node contains, as
+    /// [`map_children`](Self::map_children) is the one place a *rebuilding* walk
+    /// does. A measure that restates the child set can read a different set than
+    /// the map writes, and neither the types nor an exhaustive `match` sees the
+    /// difference; a test holds the two together.
+    pub(crate) fn children(&self) -> Box<dyn Iterator<Item = &Schema> + '_> {
         match self {
             Schema::Anything
             | Schema::Dynamic
@@ -949,69 +994,70 @@ impl Schema {
             | Schema::Literal(_)
             | Schema::Instance(_)
             | Schema::Ref(_)
-            | Schema::SelfRef(_) => 1,
-            Schema::Seq { regex, .. } => 1 + regex.depth(),
-            Schema::Set(e) | Schema::FrozenSet(e) | Schema::Complement(e) => 1 + e.depth(),
-            Schema::Union(es) | Schema::Intersection(es) => {
-                1 + es.iter().map(Schema::depth).max().unwrap_or(0)
+            | Schema::SelfRef(_) => Box::new(core::iter::empty()),
+            Schema::Seq { regex, .. } => regex.elements(),
+            Schema::Set(inner) | Schema::FrozenSet(inner) | Schema::Complement(inner) => {
+                Box::new(core::iter::once(inner.as_ref()))
             }
-            Schema::KeyedMap { fields, defaults } => {
-                let fields_depth = fields.iter().map(|f| f.schema.depth()).max().unwrap_or(0);
-                let defaults_depth = defaults
-                    .iter()
-                    .map(|(k, v)| k.depth().max(v.depth()))
-                    .max()
-                    .unwrap_or(0);
-                1 + fields_depth.max(defaults_depth)
-            }
-            Schema::Attrs { fields, .. } => {
-                1 + fields.iter().map(|f| f.schema.depth()).max().unwrap_or(0)
-            }
-            Schema::Refine { base, .. } => 1 + base.depth(),
+            Schema::Union(members) | Schema::Intersection(members) => Box::new(members.iter()),
+            Schema::KeyedMap { fields, defaults } => Box::new(
+                fields.iter().map(|field| &field.schema).chain(
+                    defaults
+                        .iter()
+                        .flat_map(|(key, value)| [key, value].into_iter()),
+                ),
+            ),
+            Schema::Attrs { fields, .. } => Box::new(fields.iter().map(|field| &field.schema)),
+            Schema::Refine { base, .. } => Box::new(core::iter::once(base.as_ref())),
         }
     }
 
+    /// The structural levels this node contributes above its children: one for
+    /// the node, plus a sequence's regex constructors, which a recursive walk
+    /// descends.
+    pub(crate) fn own_depth(&self) -> usize {
+        match self {
+            Schema::Seq { regex, .. } => 1 + regex.constructor_depth(),
+            _ => 1,
+        }
+    }
+
+    /// The nodes this node contributes besides its children: itself, plus a
+    /// refinement's constraints, which are payloads rather than child schemas.
+    pub(crate) fn own_nodes(&self) -> usize {
+        match self {
+            Schema::Refine { constraints, .. } => 1 + constraints.len(),
+            _ => 1,
+        }
+    }
+
+    /// The structural nesting depth of this schema: the longest chain of nested
+    /// constructors from here down to a leaf.
+    ///
+    /// A `Ref` counts as a leaf even though it names a recursive definition: the
+    /// back edge is not followed, so the depth of a recursive schema is finite and
+    /// this terminates. The count mirrors the native stack a recursive walk over
+    /// the tree descends -- one frame per level in clone, drop, the decision
+    /// procedure, and the render back to an annotation -- so composition can be
+    /// bounded to a depth every such walk survives. A sequence therefore counts
+    /// its regex constructors: they are levels those walks descend.
+    #[must_use]
+    pub fn depth(&self) -> usize {
+        self.own_depth() + self.children().map(Schema::depth).max().unwrap_or(0)
+    }
+
     /// The total number of schema nodes in this tree, counting this node plus
-    /// every node in its children. A `Ref` back edge is one node — the
-    /// definition it points at is counted where it lives in the definitions
-    /// table, not re-counted through the edge — so the count of a recursive
-    /// schema is finite. Combined with a per-tree depth bound, a total-node
-    /// bound rejects a schema that is shallow but exponentially wide (a doubling
-    /// union) without rejecting a legitimately deep or wide one.
+    /// every node in its children.
+    ///
+    /// A `Ref` back edge is one node -- the definition it points at is counted
+    /// where it lives in the definitions table, not re-counted through the edge --
+    /// so the count of a recursive schema is finite. Combined with a per-tree
+    /// depth bound, a total-node bound rejects a schema that is shallow but
+    /// exponentially wide (a doubling union) without rejecting a legitimately deep
+    /// or wide one. A regex constructor is not a schema node and is not counted.
     #[must_use]
     pub fn node_count(&self) -> usize {
-        match self {
-            Schema::Anything
-            | Schema::Dynamic
-            | Schema::Nothing
-            | Schema::NoneType
-            | Schema::Bool
-            | Schema::Int
-            | Schema::Float
-            | Schema::Str
-            | Schema::Bytes
-            | Schema::Literal(_)
-            | Schema::Instance(_)
-            | Schema::Ref(_)
-            | Schema::SelfRef(_) => 1,
-            Schema::Seq { regex, .. } => 1 + regex.node_count(),
-            Schema::Set(e) | Schema::FrozenSet(e) | Schema::Complement(e) => 1 + e.node_count(),
-            Schema::Union(es) | Schema::Intersection(es) => {
-                1 + es.iter().map(Schema::node_count).sum::<usize>()
-            }
-            Schema::KeyedMap { fields, defaults } => {
-                let fields_nodes: usize = fields.iter().map(|f| f.schema.node_count()).sum();
-                let defaults_nodes: usize = defaults
-                    .iter()
-                    .map(|(k, v)| k.node_count() + v.node_count())
-                    .sum();
-                1 + fields_nodes + defaults_nodes
-            }
-            Schema::Attrs { fields, .. } => {
-                1 + fields.iter().map(|f| f.schema.node_count()).sum::<usize>()
-            }
-            Schema::Refine { base, constraints } => 1 + base.node_count() + constraints.len(),
-        }
+        self.own_nodes() + self.children().map(Schema::node_count).sum::<usize>()
     }
 
     /// Like [`shifted`](Self::shifted), but remapping pool indices through

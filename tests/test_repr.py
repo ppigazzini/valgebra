@@ -162,3 +162,25 @@ def test_repr_round_trips_through_eval(schema: object) -> None:
     original = Validator(schema)
     for value in _WITNESS_VALUES:
         assert rebuilt.is_valid(value) == original.is_valid(value)
+
+
+# --- The nullary combinators repr as their identities -------------------------
+#
+# A union of no members denotes the bottom and a meet of none denotes the top.
+# The repr is the annotation that rebuilds the validator, so it names the
+# identity rather than printing the empty join of no members.
+
+
+@pytest.mark.parametrize(
+    ("built", "expected"),
+    [(union(), "nothing"), (intersection(), "anything")],
+)
+def test_a_nullary_combinator_reprs_as_its_identity(
+    built: Validator, expected: str
+) -> None:
+    assert repr(built) == expected
+
+
+def test_a_nullary_combinator_denotes_its_identity() -> None:
+    assert not union().is_valid(1)
+    assert intersection().is_valid(1)

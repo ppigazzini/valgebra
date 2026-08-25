@@ -405,7 +405,7 @@ impl Validator {
         } else {
             vec![self.schema.clone(), other_schema]
         };
-        Validator::checked(Schema::Union(members), literals.into_items(), definitions)
+        Validator::checked(Schema::union(members), literals.into_items(), definitions)
     }
 
     /// Whether the JSON in `bytes` parses and belongs to the schema's set,

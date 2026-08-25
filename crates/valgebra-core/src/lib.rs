@@ -38,6 +38,60 @@ pub fn fresh_self_token() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+
+    /// One representative of every `Schema` variant, each carrying a child where
+    /// the variant can hold one.
+    ///
+    /// The traversal and the functor are held to each other over this list, so a
+    /// variant missing here is a variant the agreement is not checked for.
+    /// `tests/test_node_matrix.py` reads the variant list out of the IR and fails
+    /// when one carries no row, which is what stops this list going stale.
+    fn every_variant() -> Vec<Schema> {
+        let field = |name: &str| Field {
+            name: name.to_owned(),
+            schema: Schema::Int,
+            required: true,
+        };
+        vec![
+            Schema::Anything,
+            Schema::Dynamic,
+            Schema::Nothing,
+            Schema::NoneType,
+            Schema::Bool,
+            Schema::Int,
+            Schema::Float,
+            Schema::Str,
+            Schema::Bytes,
+            Schema::Literal(ConstIx::new(0)),
+            Schema::Instance(ClassIx::new(0)),
+            Schema::Ref(DefIx::new(0)),
+            Schema::SelfRef(0),
+            Schema::list(SeqRegex::homogeneous(Schema::Int)),
+            Schema::tuple(SeqRegex::fixed([Schema::Int, Schema::Str])),
+            Schema::list(SeqRegex::prefix_tail([Schema::Int], Schema::Str)),
+            Schema::list(SeqRegex::Or(vec![SeqRegex::Elem(Box::new(Schema::Int))])),
+            Schema::list(SeqRegex::Empty),
+            Schema::Set(Box::new(Schema::Int)),
+            Schema::FrozenSet(Box::new(Schema::Int)),
+            Schema::Complement(Box::new(Schema::Int)),
+            Schema::Union(vec![Schema::Int, Schema::Str]),
+            Schema::Intersection(vec![Schema::Int, Schema::Str]),
+            Schema::record(vec![field("a")], Openness::Open),
+            Schema::mapping(MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }),
+            Schema::Attrs {
+                class_index: ClassIx::new(0),
+                fields: vec![field("a")],
+            },
+            Schema::Refine {
+                base: Box::new(Schema::Int),
+                constraints: vec![Constraint::MinLen(1)],
+            },
+        ]
+    }
 
     /// `node_count` sizes the whole tree, and the binding's schema-size limit is
     /// the only consumer: an undercount admits a schema past the cap. Each arm
@@ -147,6 +201,22 @@ mod tests {
             2
         );
         assert_eq!(Schema::list(SeqRegex::homogeneous(Schema::Int)).depth(), 3);
+        // A regex constructor nested under another: the prefix-and-tail form puts
+        // a `Star` inside a `Cat`, so the sequence contributes two levels rather
+        // than one. Only a nested shape separates counting the constructors from
+        // counting the outermost one -- above, every inner regex is an element, so
+        // the arithmetic that combines them is unobservable.
+        assert_eq!(
+            Schema::list(SeqRegex::prefix_tail([Schema::Int], Schema::Str)).depth(),
+            4
+        );
+        assert_eq!(
+            Schema::list(SeqRegex::Star(Box::new(SeqRegex::Star(Box::new(
+                SeqRegex::Elem(Box::new(Schema::Int))
+            )))))
+            .depth(),
+            4
+        );
         // Cat takes the max over parts, not the sum.
         assert_eq!(
             Schema::list(SeqRegex::Cat(vec![
@@ -507,6 +577,68 @@ mod tests {
         // self-references, which holds only if successive tokens differ. A
         // constant token would collide, so assert two calls disagree.
         assert_ne!(fresh_self_token(), fresh_self_token());
+    }
+
+    /// The three algebraic constructors own the identity of their own arity. A
+    /// nullary union is the bottom and a nullary meet is the top, so no consumer
+    /// of a member list receives a node it has to special-case -- which is what
+    /// the render did not do.
+    #[test]
+    fn the_nullary_operations_are_their_identities() {
+        assert_eq!(Schema::union([]), Schema::Nothing);
+        assert_eq!(Schema::meet([]), Schema::Anything);
+        // A non-empty list is kept as given: order and repeats are observable
+        // through the render and structural equality, and the lattice laws are
+        // `simplify`'s job.
+        assert_eq!(
+            Schema::union([Schema::Int, Schema::Int]),
+            Schema::Union(vec![Schema::Int, Schema::Int])
+        );
+        assert_eq!(
+            Schema::meet([Schema::Int]),
+            Schema::Intersection(vec![Schema::Int])
+        );
+        assert_eq!(
+            Schema::Int.complement(),
+            Schema::Complement(Box::new(Schema::Int))
+        );
+    }
+
+    /// The rebuilding walk and the reading traversal describe the same child set.
+    /// `map_children` reconstructs a node and `children` reads it, so nothing but
+    /// this holds one to the other when a variant gains a child schema -- and a
+    /// measure that reads a different child set than the map writes is how two
+    /// size measures came to disagree about a sequence.
+    #[test]
+    fn the_functor_and_the_traversal_describe_the_same_children() {
+        for schema in every_variant() {
+            let mapped = Cell::new(0usize);
+            schema.map_children(&|child| {
+                mapped.set(mapped.get() + 1);
+                child.clone()
+            });
+            assert_eq!(
+                mapped.get(),
+                schema.children().count(),
+                "map_children and children disagree on {schema:?}"
+            );
+        }
+    }
+
+    /// Both size measures read the same child set and differ only in what each
+    /// node contributes on its own: the depth counts a sequence's regex
+    /// constructors because a walk descends them, the node count does not because
+    /// a constructor is not a schema node. Neither can read a child the other
+    /// misses.
+    #[test]
+    fn both_size_measures_read_the_shared_traversal() {
+        for schema in every_variant() {
+            let children: Vec<&Schema> = schema.children().collect();
+            let deepest = children.iter().map(|c| c.depth()).max().unwrap_or(0);
+            let total: usize = children.iter().map(|c| c.node_count()).sum();
+            assert_eq!(schema.depth(), schema.own_depth() + deepest);
+            assert_eq!(schema.node_count(), schema.own_nodes() + total);
+        }
     }
 
     #[test]

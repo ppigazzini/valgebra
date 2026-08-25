@@ -25,10 +25,14 @@ thread_local! {
     static BUILD_DEPTH: Cell<usize> = const { Cell::new(0) };
 }
 
-/// The most levels of schema nesting allowed while compiling. A real schema is
-/// nowhere near this deep; the bound exists so a recursive class — which must be
-/// expressed with `recursive` — is rejected with a message instead of a crash.
-const MAX_BUILD_DEPTH: usize = 100;
+/// The most levels of schema nesting the frontend descends while compiling.
+///
+/// Set to the published construction depth so the frontend never rejects a schema
+/// the construction bounds would accept: below this, `Validator::checked` owns the
+/// verdict and reports which bound tripped. A self-referential class is the shape
+/// that reaches it, because its field type names the class and the descent does
+/// not terminate.
+const MAX_BUILD_DEPTH: usize = crate::validator::MAX_SCHEMA_DEPTH;
 
 /// RAII guard that bounds `build_schema` recursion. Entering past the bound is an
 /// error; leaving (including on an early `?`) restores the depth.
@@ -44,9 +48,14 @@ impl BuildGuard {
         if depth > MAX_BUILD_DEPTH {
             BUILD_DEPTH.with(|cell| cell.set(cell.get() - 1));
             return Err(not_implemented(
-                "schema nesting is too deep to compile; a class whose own type \
-                 appears in its fields is recursive and must be written with \
-                 recursive(...), which ties the fixpoint explicitly",
+                format!(
+                    "schema nesting is too deep to compile: the frontend descended \
+                 {MAX_BUILD_DEPTH} levels without reaching a leaf. A class whose \
+                 own type appears in its fields is recursive and never bottoms \
+                 out; write it with recursive(...), which ties the fixpoint \
+                 explicitly."
+                )
+                .as_str(),
             ));
         }
         Ok(BuildGuard)
@@ -515,7 +524,7 @@ fn build_parametrized(
         for arg in args.iter() {
             members.push(build_schema(&arg, lits, defs)?);
         }
-        return Ok(Schema::Union(members));
+        return Ok(Schema::union(members));
     }
     if is_literal_origin(origin)? {
         // Literal args are constant values; each becomes a literal, unioned when
@@ -524,11 +533,7 @@ fn build_parametrized(
         for arg in args.iter() {
             members.push(build_schema(&arg, lits, defs)?);
         }
-        return Ok(if members.len() == 1 {
-            members.into_iter().next().expect("one member")
-        } else {
-            Schema::Union(members)
-        });
+        return Ok(Schema::union(members));
     }
     if origin.is(forms(py)?.callable.bind(py)) {
         // Callable[...] checks only callability at runtime; the argument and
