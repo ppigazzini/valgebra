@@ -151,10 +151,22 @@ tracked as future work.
   cannot place it in a region; the value oracle already answers the membership
   this reduces to, and is not yet asked here.
 
-The last two were found by `tests/test_completeness_probe.py`, which searches for
-relations answered `False` that no value refutes, and fails when one appears that
-is not written down with a reason. Both are on its ledger, so neither can quietly
-become permanent, and closing either fails the ledger until the entry is removed.
+- **A meet of two distinct literals.** `Literal["a"] & Literal["b"]` denotes no
+  value and is not decided empty. Unlike the entries above this one has no route
+  to being decided: a literal denotes `{v : type(v) is type(c) and v == c}`, and
+  `==` is the value's own, so two literals can share a value while neither
+  contains the other. Restricting a rule to the types `Literal[...]` admits does
+  not help either — an enum member is one of them and carries user equality.
+  Deciding by the constant's type would answer from how a value was spelled
+  rather than from what the schema denotes.
+
+The two catch-all entries were found by `tests/test_completeness_probe.py`, which
+searches for relations answered `False` that no value refutes, and fails when one
+appears that is not written down with a reason. Both are on its ledger, so
+neither can quietly become permanent, and closing either fails the ledger until
+the entry is removed. The literal-meet entry is held the same way by
+`tests/test_completeness_ledger.py`, with the two counterexamples that rule out
+each rule that would close it.
 
 General regular-expression-types inclusion of sequences (a union of sequence
 languages that splits across branches, or a repeated heterogeneous group) is not

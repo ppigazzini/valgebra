@@ -481,3 +481,91 @@ def test_emptiness_claims_hold_on_the_universe(spec: object) -> None:
         return
     if compiled.is_empty():
         assert not _accepted(spec)
+
+
+# A meet of two distinct same-type literals denotes no value, and `is_empty`
+# does not report it. `has_disjoint_pair` decides through `Schema::type_tag`,
+# which is `None` for a literal: the core holds the constant as a pool index it
+# cannot read.
+#
+# There is no sound rule to close it with, which is why this entry is permanent
+# rather than a task. A literal denotes `{v : type(v) is type(c) and v == c}`,
+# and `==` is the value's own, so:
+#
+#   - "not mutually subtypes" does not imply "disjoint" -- two literals can
+#     overlap while neither contains the other
+#     (`test_a_literal_is_not_always_a_singleton`); and
+#   - restricting the rule to the types `Literal[...]` admits does not rescue it,
+#     because an enum member is one of those and carries user equality
+#     (`test_a_spec_literal_type_is_not_a_singleton_either`).
+#
+# A rule keyed on the constant's *type* would also decide by how a value was
+# spelled rather than by what the schema denotes, which is not a rule this
+# algebra can hold. Strict, so the entry fails the day it stops being true.
+@pytest.mark.xfail(strict=True, reason="a literal carries no type tag in the core")
+def test_a_meet_of_distinct_literals_is_not_decided_empty() -> None:
+    assert intersection(Validator(Literal["a"]), Validator(Literal["b"])).is_empty()
+
+
+class _Partial:
+    """A value whose equality admits some others of its own class."""
+
+    __slots__ = ("accepts", "tag")
+
+    def __init__(self, tag: str, accepts: frozenset[str]) -> None:
+        self.tag, self.accepts = tag, accepts
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _Partial) and other.tag in self.accepts
+
+    def __hash__(self) -> int:
+        return 0
+
+
+def test_a_literal_is_not_always_a_singleton() -> None:
+    """Why the entry above cannot be closed by comparing the two constants.
+
+    `Literal` admits any constant, not only the types the typing spec allows in
+    `Literal[...]`, and equality is the value's own. Two such literals can share
+    a member while neither contains the other, so "not mutually subtypes" does
+    not imply "disjoint" — and a rule reading it that way would report a meet
+    empty that a value belongs to, which `is_empty` must never do.
+    """
+    left = Validator(_Partial("a", frozenset({"a"})))
+    right = Validator(_Partial("b", frozenset({"b"})))
+    shared = _Partial("s", frozenset({"a", "b"}))
+
+    assert left.is_valid(shared)
+    assert right.is_valid(shared)
+    assert not left.is_subtype_of(right)
+    assert not right.is_subtype_of(left)
+
+    # Sound today, and the reason the narrow rule must be gated on the
+    # constant's type rather than on the subtype relation.
+    assert not intersection(left, right).is_empty()
+
+
+def test_a_spec_literal_type_is_not_a_singleton_either() -> None:
+    """Why narrowing the rule to `Literal[...]`'s own types does not rescue it.
+
+    An enum member is a constant the typing spec admits in `Literal[...]`, and
+    its equality is ordinary user code. A rule that fired on "both constants
+    have a type `Literal[...]` admits, and they are distinct" would report this
+    meet empty, and a value belongs to it.
+    """
+
+    class Loose(enum.Enum):
+        A = "a"
+        B = "b"
+
+        def __eq__(self, other: object) -> bool:
+            return isinstance(other, Loose)
+
+        def __hash__(self) -> int:
+            return 0
+
+    left, right = Validator(Loose.A), Validator(Loose.B)
+    assert Loose.A is not Loose.B
+    assert left.is_valid(Loose.B)
+    assert right.is_valid(Loose.A)
+    assert not intersection(left, right).is_empty()
