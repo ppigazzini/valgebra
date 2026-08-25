@@ -84,6 +84,47 @@ assert not oid.is_valid("0123")  # not the full 24 characters
 assert Validator(Annotated[str, re.compile(r"\d+")]).is_valid("123")
 ```
 
+### The dialect is Rust's, not `re`'s
+
+Running natively is what buys the linear-time guarantee, and it is also what
+makes the dialect the Rust engine's. The two languages are close but not equal,
+and **a pattern both engines accept can denote different sets**. Compiling
+successfully is therefore not a test of which language a pattern is in; port a
+pattern from `re` by checking these three, which are where they part:
+
+```python
+import re
+from typing import Annotated
+
+from valgebra import Regex, Validator
+
+
+def admits(pattern: str, text: str) -> bool:
+    return Validator(Annotated[str, Regex(pattern)]).is_valid(text)
+
+
+# POSIX bracket expressions. Python has no such class, so it reads a character
+# class followed by a literal `]` and needs two characters.
+assert admits(r"[[:alpha:]]", "a")
+assert re.fullmatch(r"[[:alpha:]]", "a") is None
+assert re.fullmatch(r"[[:alpha:]]", "a]") is not None
+
+# Case folding. Both fold the ASCII pair; only Python folds the Turkish one.
+assert admits("(?i)i", "I")
+assert not admits("(?i)i", "\u0131")  # dotless i
+assert re.fullmatch("(?i)i", "\u0131") is not None
+
+# Property escapes. `\p{...}` is a pattern only this engine accepts.
+assert admits(r"\p{L}+", "ab")
+```
+
+The third is the loud case: `re.compile(r"\p{L}+")` raises, so a pattern that
+works here fails there and a reader finds out at once. The first two are the
+quiet ones — both engines build the pattern and answer differently — and they
+are the reason a library holding itself to `re`'s decisions cannot adopt `Regex`
+behind a fallback that triggers on compile failure.
+
+
 `MultipleOf(n)` requires a nonzero divisor: no value is a multiple of zero, so
 `MultipleOf(0)` is an unsatisfiable constraint and is rejected with a `ValueError`
 when the validator is built, rather than rejecting every value at check time.
