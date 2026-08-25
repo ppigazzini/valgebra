@@ -45,6 +45,7 @@ nav:
       - Recursive schemas: recursion.md
       - JSON input: json.md
       - Error model: error-model.md
+      - Inspecting a codebase: inspection.md
       - Resource limits: limits.md
       - Performance: performance.md
   - Explanation:
@@ -116,6 +117,7 @@ plugins:
           - recursion.md: The recursive fixpoint for self-referential schemas.
           - json.md: Parsing and validating JSON on the Rust path.
           - error-model.md: Exception type, error codes, and the violation path format.
+          - inspection.md: Recipes for interrogating a codebase that has no schemas of its own.
           - limits.md: Resource limits and the bounds the validator enforces.
           - performance.md: Measured benchmarks, datasets, and compared versions.
         Explanation:

@@ -262,6 +262,36 @@ def check_ledger_table() -> list[str]:
     return problems
 
 
+def check_llms_manifest() -> list[str]:
+    """Hold the machine-readable manifest to the nav, in both directions.
+
+    ``mkdocs.yml`` names every user page twice: once in ``nav``, which builds the
+    site, and once in the ``llmstxt`` sections, which build ``/llms.txt`` for a
+    reader that is not a browser. Nothing else compares them, so a page added to
+    one is silently absent from the other -- and the half that goes missing is the
+    half no human opens.
+    """
+    config = ROOT / "mkdocs.yml"
+    if not config.exists():
+        return []
+    text = config.read_text(encoding="utf-8")
+    body = text.partition("  - llmstxt:")
+    if not body[1]:
+        return []
+    nav = set(re.findall(r"^ +- [^:\n]+: ([a-z0-9-]+\.md)$", body[0], re.MULTILINE))
+    manifest = set(re.findall(r"^ +- ([a-z0-9-]+\.md):", body[2], re.MULTILINE))
+    if not nav or not manifest:
+        return ["mkdocs.yml: the nav or the llms.txt manifest reads as empty"]
+    return [
+        f"mkdocs.yml: {page} is in the {here} but not the {there}"
+        for pages, here, there in (
+            (nav - manifest, "nav", "llms.txt manifest"),
+            (manifest - nav, "llms.txt manifest", "nav"),
+        )
+        for page in sorted(pages)
+    ]
+
+
 def main() -> int:
     files = tracked_markdown()
     if len(files) < MIN_TRACKED_PAGES:
@@ -290,6 +320,7 @@ def main() -> int:
         ]
     failures += check_dev_index()
     failures += check_ledger_table()
+    failures += check_llms_manifest()
 
     if failures:
         for failure in failures:

@@ -79,6 +79,9 @@ schemas (union, intersection, complement, refinement, fixpoints) with
   every form with its denotation; [refinements](refinements.md) covers
   constraints, and [recursive schemas](recursion.md) the `recursive` fixpoint.
 - Composing them? See the [Boolean algebra](algebra.md).
+- Studying a codebase that has no schemas? [Inspecting a
+  codebase](inspection.md) asks what its annotations imply, and what nothing
+  enforces.
 - What does it decide? The [decidability boundary](decidability.md) maps what
   subtyping, equivalence, and emptiness answer exactly and what stays
   conservative; the [foundations](foundations.md) record the theory.

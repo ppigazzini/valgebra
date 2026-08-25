@@ -152,7 +152,9 @@ from valgebra import Validator
 assert Validator(list[int]).is_valid_json(b"[1, 2, 3]")  # parse + check in Rust
 ```
 
-## What it's for
+## Two ways to use it
+
+### As a contract in your codebase
 
 Reach for valgebra when you **already hold a Python object** — a parsed request
 body, a config dict, an LLM tool-call argument, a function input — and need to
@@ -161,6 +163,62 @@ enough to run on every request or every agent turn. Because the algebra is
 closed, a subsystem's contract is the *intersection* of its parts' contracts, an
 exclusion is a *complement*, and a migration is "old schema *or* new" — contracts
 refactor like code instead of decaying into opaque predicate functions.
+
+Start at the [tutorial](docs/tutorial.md); the [algebra guide](docs/algebra.md)
+covers composition.
+
+### As a harness over a codebase that has none
+
+A schema is an ordinary annotation, so valgebra reads the annotations a codebase
+**already has** and answers questions about them the interpreter cannot. Nothing
+is added to the code under study: the schemas live in the script asking the
+question, and valgebra stays a development dependency. This is the mode that
+suits an agent working on a codebase it did not write.
+
+The sharpest question it can settle is whether a contract the code *implies* is
+one anything *enforces*. A parameter used as a divisor must not be zero; one
+whose attribute is read must not be `None`. The body states that by using the
+value that way, and `declared ∧ ¬implied` is exactly the set of values that pass
+the type check and break the function:
+
+```python
+from valgebra import Validator, complement, intersection
+
+
+def unenforced(declared: object, implied: object) -> list[object]:
+    """Values the declaration admits and the body cannot survive."""
+    breaking = intersection(Validator(declared), complement(Validator(implied)))
+    return [p for p in (None, 0, "", []) if breaking.is_valid(p)]
+
+
+# `def make_grid(columns: int)` whose body computes `idx // columns`:
+# the annotation is correct, the code typechecks, and zero breaks it.
+assert unenforced(int, complement(Validator(0))) == [0]
+```
+
+Others in the same shape — a branch its own annotation makes unreachable, a union
+arm another already covers, an annotation that admits nothing, an override that
+narrows its base, and which arms of a union a test run never reached:
+
+```python
+from valgebra import Validator, intersection, union
+
+# `if isinstance(key, bytes)` inside `def __setitem__(self, key: str, ...)`.
+# The branch is dead, so the code and its annotation disagree about what arrives.
+assert intersection(Validator(str), Validator(bytes)).is_empty()
+
+# `bool | int` is `int`: bool is a subclass, so the arm adds nothing.
+assert union(bool, int).is_equivalent(int)
+
+# `except (OSError, TimeoutError)` names one class that contains the other.
+assert Validator(TimeoutError).is_subtype_of(OSError)
+```
+
+**[Inspecting a codebase](docs/inspection.md)** is the full set of recipes, with
+what each cannot see.
+
+Neither mode requires the other. A codebase can adopt valgebra as a runtime
+contract, or never import it in its own source and still be studied with it.
 
 ## How it compares
 
