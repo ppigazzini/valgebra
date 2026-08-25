@@ -102,3 +102,40 @@ def test_deeply_nested_value_fails_cleanly() -> None:
 def test_recursive_schema_renders_finitely() -> None:
     tree = recursive(lambda t: {"value": int, "left?": t})
     assert repr(tree) == "{'value': int, 'left?': ...}"
+
+
+# --- Whole-schema transforms reach the definitions table ----------------------
+#
+# A recursive validator's root is a single back edge and every record, union and
+# refinement it declares lives in the definitions table. A transform that rewrites
+# only the root is a no-op on exactly the schemas that carry the most structure,
+# and a property asserting that a transform *preserves* membership passes
+# vacuously against one. Each case below asserts the change, not its absence.
+
+
+def test_open_admits_undeclared_keys_inside_a_recursive_definition() -> None:
+    node = recursive(lambda n: Validator({"a": int, "next": union(None, n)}))
+    extra = {"a": 1, "next": None, "undeclared": 9}
+    assert not node.is_valid(extra)
+    assert node.open().is_valid(extra)
+
+
+def test_open_reaches_a_record_nested_under_the_back_edge() -> None:
+    node = recursive(lambda n: Validator({"a": int, "next": union(None, n)}))
+    nested = {"a": 1, "next": {"a": 2, "next": None, "undeclared": 9}}
+    assert not node.is_valid(nested)
+    assert node.open().is_valid(nested)
+
+
+def test_close_removes_the_catch_all_from_a_recursive_definition() -> None:
+    node = recursive(lambda n: Validator({"a": int, "next": union(None, n)})).open()
+    extra = {"a": 1, "next": None, "undeclared": 9}
+    assert node.is_valid(extra)
+    assert not node.close().is_valid(extra)
+
+
+def test_simplify_reduces_a_recursive_definition() -> None:
+    node = recursive(
+        lambda n: Validator({"a": union(int, int, int), "n": union(None, n)})
+    )
+    assert repr(node.simplify()).count("int") == 1

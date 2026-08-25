@@ -244,3 +244,37 @@ def test_hostile_dict_keys_are_handled() -> None:
     assert mapping.is_valid({str(i): i for i in range(100_000)})
     assert mapping.is_valid({"k" * 1_000_000: 1})
     assert not mapping.is_valid({"bad": "not an int"})
+
+
+# --- Every whole-schema transform is bounded ----------------------------------
+#
+# The construction bounds are enforced at one choke point, and a transform that
+# rebuilds a validator without reaching it hands the next caller a schema already
+# past the ceiling. Opening a closed record adds a catch-all clause, so `open` is
+# a growth path and not a size-preserving rebuild.
+
+_TRANSFORMS = ["open", "close", "simplify", "__copy__"]
+
+
+@pytest.mark.parametrize("transform", _TRANSFORMS)
+def test_no_whole_schema_transform_escapes_the_node_bound(transform: str) -> None:
+    # A union of closed records, sized so the schema is within the node ceiling
+    # and opening it is not: a record is two nodes and a catch-all clause adds two
+    # more, so `n` records span `2n + 1` nodes closed and `4n + 1` open, and
+    # `MAX_SCHEMA_NODES // 3` sits between the two. Rejecting is as correct as
+    # staying within the bound; handing back an oversized validator is not.
+    records = MAX_SCHEMA_NODES // 3
+    within = union(*[Validator({f"f{i}": int}) for i in range(records)])
+    try:
+        rebuilt = getattr(within, transform)()
+    except ValueError:
+        return
+    # Composing the result reports its size, so a validator past the ceiling is
+    # visible here even though the transform accepted it.
+    try:
+        union(rebuilt, Validator(int))
+    except ValueError as error:
+        message = str(error)
+        assert "too large" not in message, (
+            f"{transform}() returned a validator already past the node bound: {message}"
+        )

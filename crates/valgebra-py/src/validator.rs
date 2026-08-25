@@ -59,18 +59,6 @@ fn math_floor_ceil(py: Python<'_>) -> PyResult<&'static (Py<PyAny>, Py<PyAny>)> 
         ))
     })
 }
-/// The Python surface takes `open=True`/`False`, so the flag becomes an
-/// [`Openness`] at the boundary and travels as one from there down.
-pub(crate) fn with_records_open(validator: &Validator, open: bool, py: Python<'_>) -> Validator {
-    Validator::new(
-        validator
-            .schema
-            .with_records_open(Openness::from_flag(open)),
-        validator.literals.iter().map(|o| o.clone_ref(py)).collect(),
-        validator.definitions.clone(),
-    )
-}
-
 /// Turn a membership walk's outcome into a Python result: re-raise a fatal
 /// interpreter signal the walk recorded, otherwise report the membership verdict.
 fn reraise_fatal(fatal: RefCell<Option<PyErr>>, ok: bool) -> PyResult<bool> {
@@ -351,6 +339,25 @@ impl Validator {
             )));
         }
         Ok(Validator::new(schema, literals, definitions))
+    }
+
+    /// Rebuild this validator with `f` applied to the root schema and to every
+    /// recursive definition.
+    ///
+    /// Both fields hold the carrier. A recursive validator's root is a single
+    /// [`Schema::Ref`] leaf and every record, union and refinement it declares
+    /// lives in the definitions table, so a rewrite reaching only the root is a
+    /// no-op on exactly the schemas with the most to rewrite.
+    ///
+    /// The result goes through [`checked`](Self::checked) because a rewrite is a
+    /// growth path: opening a closed record adds a catch-all clause, and
+    /// negation-normal form distributes a complement over a union.
+    fn map_schemas(&self, py: Python<'_>, f: impl Fn(&Schema) -> Schema) -> PyResult<Validator> {
+        Validator::checked(
+            f(&self.schema),
+            self.literals.iter().map(|o| o.clone_ref(py)).collect(),
+            self.definitions.iter().map(&f).collect(),
+        )
     }
 
     /// The precompute, built once from this validator's schema, definitions, and
@@ -741,33 +748,43 @@ impl Validator {
         self.__copy__(py)
     }
 
-    /// Open every record in the schema: undeclared keys are admitted throughout.
+    /// Open every record in the schema: undeclared keys are admitted throughout,
+    /// including inside recursive definitions.
     ///
-    /// Returns a new validator; this one is unchanged.
+    /// Returns a new validator; this one is unchanged. A record that already
+    /// carries a typed catch-all clause has it widened to admit any key with any
+    /// value, so `open` and `close` are idempotent projections rather than
+    /// inverses.
     ///
     /// Returns:
     ///     A validator whose every record admits keys beyond those declared.
-    fn open(&self, py: Python<'_>) -> Validator {
-        with_records_open(self, true, py)
+    ///
+    /// Raises:
+    ///     ValueError: If admitting undeclared keys expands the schema past the
+    ///         size bound; opening a record adds a catch-all clause, so a
+    ///         validator near the limit can cross it.
+    fn open(&self, py: Python<'_>) -> PyResult<Validator> {
+        self.map_schemas(py, |schema| schema.with_records_open(Openness::Open))
     }
 
     /// Close every record in the schema: only declared keys are admitted
-    /// throughout. The inverse of `open`.
+    /// throughout, including inside recursive definitions.
     ///
-    /// Returns a new validator; this one is unchanged.
+    /// Returns a new validator; this one is unchanged. Closing drops a record's
+    /// catch-all clause, typed or not, so it admits only its declared keys.
     ///
     /// Returns:
     ///     A validator whose every record admits only its declared keys.
-    fn close(&self, py: Python<'_>) -> Validator {
-        with_records_open(self, false, py)
+    fn close(&self, py: Python<'_>) -> PyResult<Validator> {
+        self.map_schemas(py, |schema| schema.with_records_open(Openness::Closed))
     }
 
     /// An equivalent validator reduced by the lattice laws.
     ///
     /// The result admits exactly the same values in a simpler form (flattened
     /// and deduplicated unions and intersections, identities applied,
-    /// complements in negation-normal form). Returns a new validator; this one
-    /// is unchanged.
+    /// complements in negation-normal form), throughout the schema and every
+    /// recursive definition. Returns a new validator; this one is unchanged.
     ///
     /// Returns:
     ///     A validator denoting the same set in negation-normal form.
@@ -777,11 +794,7 @@ impl Validator {
     ///         bound (distributing a complement over a wide union can grow the
     ///         node count); a schema built within the bounds does not hit this.
     fn simplify(&self, py: Python<'_>) -> PyResult<Validator> {
-        Validator::checked(
-            self.schema.simplify(),
-            self.literals.iter().map(|o| o.clone_ref(py)).collect(),
-            self.definitions.clone(),
-        )
+        self.map_schemas(py, Schema::simplify)
     }
 
     /// Whether `obj` is a member of the schema's set: the operator form of
@@ -839,5 +852,72 @@ impl Validator {
         self.schema.hash(&mut hasher);
         self.definitions.hash(&mut hasher);
         hasher.finish()
+    }
+}
+
+// Needs a live interpreter; compiled and run only under the `interpreter-tests`
+// feature, which links an embedded Python.
+#[cfg(all(test, feature = "interpreter-tests"))]
+mod tests {
+    use super::*;
+    use valgebra_core::{DefIx, Field};
+
+    /// A validator whose root is a bare back edge, so every schema it declares
+    /// sits in the definitions table. This is the shape a rewrite reaching only
+    /// the root leaves untouched, and it is what `recursive` builds.
+    fn recursive_record() -> Validator {
+        Validator::new(
+            Schema::Ref(DefIx::new(0)),
+            Vec::new(),
+            vec![Schema::record(
+                vec![Field {
+                    name: "a".to_owned(),
+                    schema: Schema::Int,
+                    required: true,
+                }],
+                Openness::Closed,
+            )],
+        )
+    }
+
+    #[test]
+    fn map_schemas_rewrites_the_definitions_table() {
+        Python::attach(|py| {
+            let mapped = recursive_record()
+                .map_schemas(py, |schema| schema.with_records_open(Openness::Open))
+                .expect("opening one record stays within the construction bounds");
+            // The root is a leaf, so the rewrite has to land in the definitions
+            // table for the record to have been opened at all.
+            assert_eq!(mapped.schema, Schema::Ref(DefIx::new(0)));
+            let Schema::KeyedMap { defaults, .. } = &mapped.definitions[0] else {
+                panic!("the definition is a record");
+            };
+            assert_eq!(
+                defaults.as_slice(),
+                [(Schema::Anything, Schema::Anything)],
+                "the record in the definitions table gained its catch-all clause"
+            );
+        });
+    }
+
+    #[test]
+    fn map_schemas_measures_what_the_rewrite_produced() {
+        Python::attach(|py| {
+            // Routing through `checked` rather than `new` is what rejects a
+            // rewrite that grows the schema past the node bound.
+            let wide = Validator::new(
+                Schema::Union(vec![Schema::Int; MAX_SCHEMA_NODES / 2]),
+                Vec::new(),
+                Vec::new(),
+            );
+            assert!(wide.map_schemas(py, Schema::clone).is_ok());
+            let doubled = wide.map_schemas(py, |schema| {
+                Schema::Union(vec![schema.clone(), schema.clone()])
+            });
+            assert!(
+                doubled.is_err(),
+                "a rewrite that doubles the node count is past the bound"
+            );
+        });
     }
 }
