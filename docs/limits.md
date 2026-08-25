@@ -27,7 +27,11 @@ fields) is written by the developer and is trusted.
       loop, such as repeatedly wrapping a validator in a set or a union). A list
       or tuple counts two levels per wrapping, because the element regex is a
       level every recursive walk descends, so a chain of them reaches the bound
-      at half the nesting;
+      at half the nesting; a refinement counts one more on top of whatever it
+      narrows, since the set it denotes is a node of its own, so pinning a
+      length on each list of such a chain reaches the bound sooner again. Which
+      marker the refinement carries makes no difference — the level belongs to
+      the node;
     - **definitions** — at most 128 recursive definitions (a chain of distinct
       `recursive` schemas, which the depth measure alone cannot see because a
       back edge counts as a leaf);

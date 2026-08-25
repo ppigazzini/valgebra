@@ -220,6 +220,30 @@ assert extensible.is_valid({"name": "Ada", "age": 36})
 assert not extensible.is_valid({"name": "Ada", "age": "old"})
 ```
 
+### Constraining some keys and freeing the rest
+
+Because the clauses are a disjunction, a clause that matches every key subsumes
+every narrower one. That is what [`open`](#records) does, and it is why opening
+a map with a typed catch-all frees the keys that catch-all was constraining.
+
+To leave *only* the unclaimed keys free, give the permissive clause the
+**complement** of the keys the others claim. Disjoint clauses cannot widen each
+other:
+
+```python
+from valgebra import Validator, anything, complement
+
+# str keys must be ints; any key that is not a str is unconstrained.
+partly_open = Validator({"name": str, str: int, complement(Validator(str)): anything})
+assert partly_open.is_valid({"name": "Ada", "age": 36})
+assert partly_open.is_valid({"name": "Ada", 7: object()})  # no clause claims it
+assert not partly_open.is_valid({"name": "Ada", "age": "old"})
+
+# `open` is the other thing: every key becomes free, the typed clause included.
+fully_open = Validator({"name": str, str: int}).open()
+assert fully_open.is_valid({"name": "Ada", "age": "old"})
+```
+
 ## Classes
 
 | Form | How it validates |
