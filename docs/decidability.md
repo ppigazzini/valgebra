@@ -202,10 +202,17 @@ relation it cannot justify, so widening the decided fragment can only turn a
 conservative `False` into a `True` — it can never change a previously-correct
 answer.
 
-Every decision also runs under a fixed work budget. A schema deliberately built
-to be enormous or deeply nested — beyond what any real schema reaches — can
-exhaust that budget, and the decision then returns the conservative answer
-(`False`, "not proven") rather than running unbounded. This preserves soundness:
-a budget bail-out is never a wrong `True`. So even within the exactly-decided
-fragment above, an adversarially sized schema receives the conservative answer,
-not a guaranteed exact one.
+Every decision also runs under a fixed work budget, and exhausting it returns the
+conservative answer (`False`, "not proven") rather than running unbounded. This
+preserves soundness: a bail-out is never a wrong `True`.
+
+The budget binds where the work is a **product** rather than a sum. Subtyping
+distributes over both sides of a union, so relating two unions costs the product
+of their member counts, and a union of about a thousand literals — an error-code
+table, a currency list — reaches the ceiling. Below that the relation decides.
+Depth reaches it sooner: a Boolean combination nested past a handful of levels
+demands work exponential in its depth. Everything else stays far inside.
+
+So a `False` on a wide literal union or a deep Boolean tower may mean "not proven
+within the bound" rather than "not a subtype"; on anything else it means the
+relation is outside the decided fragment above.

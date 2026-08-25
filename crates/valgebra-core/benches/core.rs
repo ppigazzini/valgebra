@@ -2,7 +2,8 @@
 //!
 //! These cover the transformations the compiler and combinators lean on:
 //! `simplify` (the law-justified reducer), `shifted` (validator composition),
-//! and `with_records_open` (the `lax`/`strict` recursive transform). The walk
+//! `with_records_open` (the `lax`/`strict` recursive transform), and the
+//! decision procedures over the shapes a real annotation produces. The walk
 //! over Python values lives in the bindings crate and is benchmarked from
 //! Python; this harness isolates the work that is independent of `PyO3`.
 
@@ -95,10 +96,49 @@ fn bench_with_records_open(c: &mut Criterion) {
     });
 }
 
+/// The shapes a real annotation produces, which is the population any change to
+/// the decision procedure has to be measured against.
+///
+/// A decision on these costs tens of nanoseconds, so per-call setup a wider
+/// schema would amortize is paid here in full and repays nothing. That is the
+/// finding a previous effort recorded after building five commits of
+/// memoization and reverting all of it, and this harness is what holds a future
+/// one to it.
+fn bench_decision(c: &mut Criterion) {
+    let scalar = Schema::Bool;
+    let scalar_sup = Schema::union([Schema::Int, Schema::Str]);
+    c.bench_function("subtype_bool_below_int_or_str", |b| {
+        b.iter(|| black_box(&scalar).is_subtype_of(black_box(&scalar_sup)));
+    });
+
+    let record = wide_record(8);
+    c.bench_function("subtype_record_width8_reflexive", |b| {
+        b.iter(|| black_box(&record).is_subtype_of(black_box(&record)));
+    });
+
+    let small_enum = |n: usize| Schema::union((0..n).map(|i| Schema::Literal(ConstIx::new(i))));
+    let narrow = small_enum(8);
+    let wide = small_enum(9);
+    c.bench_function("subtype_enum8_below_enum9", |b| {
+        b.iter(|| black_box(&narrow).is_subtype_of(black_box(&wide)));
+    });
+
+    let empty_meet = Schema::meet([Schema::Int, Schema::Str]);
+    c.bench_function("is_empty_disjoint_meet", |b| {
+        b.iter(|| black_box(&empty_meet).is_empty());
+    });
+
+    let nested = nested_records(8);
+    c.bench_function("is_empty_nested_record_depth8", |b| {
+        b.iter(|| black_box(&nested).is_empty());
+    });
+}
+
 criterion_group!(
     benches,
     bench_simplify,
     bench_shifted,
-    bench_with_records_open
+    bench_with_records_open,
+    bench_decision
 );
 criterion_main!(benches);

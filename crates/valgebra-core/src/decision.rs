@@ -540,9 +540,16 @@ impl Schema {
     /// The universe side asks whether the complement is empty, which is the same
     /// question one De Morgan step away and needs no separate procedure.
     fn bounds_the_pair(&self, other: &Schema, cx: SubtypeCx<'_>) -> bool {
-        let empty =
-            |schema: &Schema| schema.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget);
-        empty(self) || empty(&Schema::Complement(Box::new(other.clone())))
+        if self.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget) {
+            return true;
+        }
+        // `other` covers the universe exactly when its region set is the whole
+        // partition, which is what asking whether its complement is empty comes
+        // down to. Reading the region directly is the same question without
+        // building a complement around a deep clone of `other` on every step of
+        // a decision that distributes over its members.
+        let (_, regions) = other.empty_and_region(cx.oracle, cx.defs, &mut Vec::new(), cx.budget);
+        regions == Regions::Known(Region::ALL)
     }
 
     /// Whether `self` and `other` share no value, which is what decides `self ⊆
@@ -1468,6 +1475,23 @@ mod tests {
     }
 
     proptest! {
+        /// Asking whether a schema covers the universe by reading its region is the
+        /// same question as asking whether its complement is empty. The lattice
+        /// bound `A subset-of U` is decided the second way in principle and the
+        /// first way in the code, because the first builds nothing; this holds the
+        /// two together so the cheaper one cannot drift from the rule it stands in
+        /// for.
+        #[test]
+        fn covering_the_universe_is_the_complement_being_empty(s in schema()) {
+            let budget = Cell::new(DECISION_BUDGET);
+            let via_complement = Schema::Complement(Box::new(s.clone()))
+                .is_empty_rec(&NoLeafRelations, &[], &mut Vec::new(), &budget);
+            let budget = Cell::new(DECISION_BUDGET);
+            let (_, regions) =
+                s.empty_and_region(&NoLeafRelations, &[], &mut Vec::new(), &budget);
+            prop_assert_eq!(via_complement, regions == Regions::Known(Region::ALL));
+        }
+
         /// The bottom-up region folded by `empty_and_region` is exactly the region
         /// `region_set` recomputes from scratch, for every schema. This pins the two
         /// region code paths together so a future change to one cannot silently
