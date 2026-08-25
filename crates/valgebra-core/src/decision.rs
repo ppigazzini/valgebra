@@ -32,22 +32,56 @@ fn spend(budget: &Cell<u32>) -> bool {
     }
 }
 
-/// Intersect two region sets bottom-up. A missing set (an opaque, not
-/// scalar-decidable child) makes the combination opaque too, matching
-/// [`region_set`](Schema::region_set)'s `?` short-circuit.
-fn and_region(a: Option<Region>, b: Option<Region>) -> Option<Region> {
-    match (a, b) {
-        (Some(a), Some(b)) => Some(a.intersect(b)),
-        _ => None,
-    }
+/// The region set a schema denotes, or `Unknown` where it is not
+/// scalar-decidable.
+///
+/// A monoid under each lattice operation, with `Unknown` **absorbing** both: an
+/// opaque member makes the whole combination opaque, whatever the others say.
+/// Naming the absorbing element is what lets a fold over members stop at it --
+/// past that point no later member can change the result, and a walk that
+/// continues spends the decision budget on an answer already fixed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Regions {
+    /// The exact set of regions, on the scalar-decidable fragment.
+    Known(Region),
+    /// Not scalar-decidable, so the regions are unknown rather than empty.
+    Unknown,
 }
 
-/// Union two region sets bottom-up, with the same opaque-propagation rule as
-/// [`and_region`].
-fn or_region(a: Option<Region>, b: Option<Region>) -> Option<Region> {
-    match (a, b) {
-        (Some(a), Some(b)) => Some(a.union(b)),
-        _ => None,
+impl Regions {
+    /// The identity of [`union`](Self::union): the empty region set.
+    pub(crate) const UNION_UNIT: Regions = Regions::Known(Region::EMPTY);
+    /// The identity of [`intersect`](Self::intersect): every region.
+    pub(crate) const MEET_UNIT: Regions = Regions::Known(Region::ALL);
+
+    /// Every region in either set, opaque if either side is.
+    pub(crate) fn union(self, other: Regions) -> Regions {
+        match (self, other) {
+            (Regions::Known(a), Regions::Known(b)) => Regions::Known(a.union(b)),
+            _ => Regions::Unknown,
+        }
+    }
+
+    /// Every region in both sets, opaque if either side is.
+    pub(crate) fn intersect(self, other: Regions) -> Regions {
+        match (self, other) {
+            (Regions::Known(a), Regions::Known(b)) => Regions::Known(a.intersect(b)),
+            _ => Regions::Unknown,
+        }
+    }
+
+    /// Whether this value absorbs both operations, so no further member can
+    /// change the result and a fold over them may stop here.
+    pub(crate) const fn is_absorbing(self) -> bool {
+        matches!(self, Regions::Unknown)
+    }
+
+    /// The regions, where they are known.
+    pub(crate) const fn known(self) -> Option<Region> {
+        match self {
+            Regions::Known(regions) => Some(regions),
+            Regions::Unknown => None,
+        }
     }
 }
 
@@ -171,8 +205,8 @@ impl Schema {
     /// elsewhere the caller stays conservative. The gradual `Any`, literals,
     /// instances, refinements, content-bearing containers, and references are
     /// not scalar-decidable, so any combination containing one yields `None`.
-    pub(crate) fn region_set(&self) -> Option<Region> {
-        Some(match self {
+    pub(crate) fn region_set(&self) -> Regions {
+        Regions::Known(match self {
             Schema::Nothing => Region::EMPTY,
             Schema::Anything => Region::ALL,
             Schema::NoneType => Region::NONE_TYPE,
@@ -182,21 +216,30 @@ impl Schema {
             Schema::Str => Region::STR,
             Schema::Bytes => Region::BYTES,
             Schema::Union(members) => {
-                let mut acc = Region::EMPTY;
+                let mut acc = Regions::UNION_UNIT;
                 for member in members {
-                    acc = acc.union(member.region_set()?);
+                    acc = acc.union(member.region_set());
+                    if acc.is_absorbing() {
+                        return acc;
+                    }
                 }
-                acc
+                return acc;
             }
             Schema::Intersection(members) => {
-                let mut acc = Region::ALL;
+                let mut acc = Regions::MEET_UNIT;
                 for member in members {
-                    acc = acc.intersect(member.region_set()?);
+                    acc = acc.intersect(member.region_set());
+                    if acc.is_absorbing() {
+                        return acc;
+                    }
                 }
-                acc
+                return acc;
             }
-            Schema::Complement(inner) => inner.region_set()?.complement(),
-            _ => return None,
+            Schema::Complement(inner) => match inner.region_set() {
+                Regions::Known(regions) => regions.complement(),
+                Regions::Unknown => return Regions::Unknown,
+            },
+            _ => return Regions::Unknown,
         })
     }
 
@@ -278,45 +321,45 @@ impl Schema {
         defs: &[Schema],
         visiting: &mut Vec<DefIx>,
         budget: &Cell<u32>,
-    ) -> (bool, Option<Region>) {
+    ) -> (bool, Regions) {
         // Bound the work, sharing the budget with the caller (the subtyping
         // decision passes its own `cx.budget` in), so emptiness cannot escape the
         // ceiling subtyping advertises. Exhaustion returns "not proven empty".
         if !spend(budget) {
-            return (false, None);
+            return (false, Regions::Unknown);
         }
         match self {
             // Scalar atoms and the lattice bounds carry a known region; their
             // emptiness is exactly "the region is empty".
-            Schema::Nothing => (true, Some(Region::EMPTY)),
-            Schema::Anything => (false, Some(Region::ALL)),
-            Schema::NoneType => (false, Some(Region::NONE_TYPE)),
-            Schema::Bool => (false, Some(Region::BOOL)),
-            Schema::Int => (false, Some(Region::BOOL.union(Region::INT))), // bool ⊆ int
-            Schema::Float => (false, Some(Region::FLOAT)),
-            Schema::Str => (false, Some(Region::STR)),
-            Schema::Bytes => (false, Some(Region::BYTES)),
+            Schema::Nothing => (true, Regions::Known(Region::EMPTY)),
+            Schema::Anything => (false, Regions::Known(Region::ALL)),
+            Schema::NoneType => (false, Regions::Known(Region::NONE_TYPE)),
+            Schema::Bool => (false, Regions::Known(Region::BOOL)),
+            Schema::Int => (false, Regions::Known(Region::BOOL.union(Region::INT))), // bool ⊆ int
+            Schema::Float => (false, Regions::Known(Region::FLOAT)),
+            Schema::Str => (false, Regions::Known(Region::STR)),
+            Schema::Bytes => (false, Regions::Known(Region::BYTES)),
             Schema::Ref(id) => {
                 // A reference reached again while resolving it is a cycle: this
                 // occurrence demands an infinite unfolding, so on its own it has
                 // no finite inhabitant. A union base case or an optional or
                 // starred position escapes before reaching here.
                 if visiting.contains(id) {
-                    return (true, None);
+                    return (true, Regions::Unknown);
                 }
                 match defs.get(id.get()) {
                     Some(def) => {
                         visiting.push(*id);
                         let empty = def.is_empty_rec(oracle, defs, visiting, budget);
                         visiting.pop();
-                        (empty, None)
+                        (empty, Regions::Unknown)
                     }
-                    None => (false, None),
+                    None => (false, Regions::Unknown),
                 }
             }
             Schema::Seq { regex, .. } => (
                 regex.language_is_empty(oracle, defs, visiting, budget),
-                None,
+                Regions::Unknown,
             ),
             // A refinement is a subset of its base: an empty base empties it, and
             // so does an unsatisfiable bound conjunction (decided by the oracle).
@@ -324,7 +367,7 @@ impl Schema {
                 let int_discrete = bounded_to_the_integers([base.as_ref()]);
                 let empty = base.is_empty_rec(oracle, defs, visiting, budget)
                     || bounds_unsatisfiable(constraints.iter(), oracle, int_discrete);
-                (empty, None)
+                (empty, Regions::Unknown)
             }
             // An intersection is empty if a member is, if the scalar regions cancel,
             // or if the refinement bounds across its members cannot hold together.
@@ -332,14 +375,21 @@ impl Schema {
             // the children's results, never by re-walking the subtree.
             Schema::Intersection(members) => {
                 let mut any_empty = false;
-                let mut region = Some(Region::ALL);
+                let mut region = Regions::MEET_UNIT;
                 for m in members {
                     let (empty, member_region) = m.empty_and_region(oracle, defs, visiting, budget);
                     any_empty |= empty;
-                    region = and_region(region, member_region);
+                    region = region.intersect(member_region);
+                    // Both accumulators absorb: an empty member empties the meet
+                    // whatever the rest are, and an opaque region stays opaque. No
+                    // later member can change either, so the walk stops rather than
+                    // spending the budget on a fixed answer.
+                    if any_empty && region.is_absorbing() {
+                        break;
+                    }
                 }
                 let empty = any_empty
-                    || region.is_some_and(Region::is_empty)
+                    || region.known().is_some_and(Region::is_empty)
                     || has_complementary_pair(members)
                     || has_disjoint_pair(members)
                     || intersection_bounds_unsatisfiable(members, oracle);
@@ -349,12 +399,12 @@ impl Schema {
             // always a member — so it is never empty for a different reason than the
             // opaque wildcard below (which is non-empty only by conservatism).
             #[allow(clippy::match_same_arms)]
-            Schema::Set(_) | Schema::FrozenSet(_) => (false, None),
+            Schema::Set(_) | Schema::FrozenSet(_) => (false, Regions::Unknown),
             Schema::KeyedMap { fields, .. } => {
                 let empty = fields.iter().any(|field| {
                     field.required && field.schema.is_empty_rec(oracle, defs, visiting, budget)
                 });
-                (empty, None)
+                (empty, Regions::Unknown)
             }
             // A structural-attribute schema requires every field, so an empty
             // required field's schema empties it — the same rule as a keyed map.
@@ -364,17 +414,21 @@ impl Schema {
                 let empty = fields.iter().any(|field| {
                     field.required && field.schema.is_empty_rec(oracle, defs, visiting, budget)
                 });
-                (empty, None)
+                (empty, Regions::Unknown)
             }
             // A union is empty when every member is; its region is the union of the
             // members' regions, again folded from the children.
             Schema::Union(members) => {
                 let mut all_empty = true;
-                let mut region = Some(Region::EMPTY);
+                let mut region = Regions::UNION_UNIT;
                 for m in members {
                     let (empty, member_region) = m.empty_and_region(oracle, defs, visiting, budget);
                     all_empty &= empty;
-                    region = or_region(region, member_region);
+                    region = region.union(member_region);
+                    // An inhabited member and an opaque region are both absorbing.
+                    if !all_empty && region.is_absorbing() {
+                        break;
+                    }
                 }
                 (all_empty, region)
             }
@@ -382,12 +436,15 @@ impl Schema {
             // empty exactly when that region is empty (`¬⊤ = ∅`).
             Schema::Complement(inner) => {
                 let (_, inner_region) = inner.empty_and_region(oracle, defs, visiting, budget);
-                let region = inner_region.map(Region::complement);
-                (region.is_some_and(Region::is_empty), region)
+                let region = match inner_region {
+                    Regions::Known(regions) => Regions::Known(regions.complement()),
+                    Regions::Unknown => Regions::Unknown,
+                };
+                (region.known().is_some_and(Region::is_empty), region)
             }
             // The gradual `Any`, literals, and instances are not scalar-decidable:
             // an unknown region, never reported empty.
-            _ => (false, None),
+            _ => (false, Regions::Unknown),
         }
     }
 
@@ -460,7 +517,7 @@ impl Schema {
         }
         // Scalar fragment: exact via the region partition. Subtyping there is
         // set inclusion between the two region sets, and nothing else.
-        if let (Some(a), Some(b)) = (self.region_set(), other.region_set()) {
+        if let (Regions::Known(a), Regions::Known(b)) = (self.region_set(), other.region_set()) {
             return a.subset_of(b);
         }
         if self == other {
@@ -1242,7 +1299,7 @@ mod budget_tests {
 
 #[cfg(test)]
 mod region_tests {
-    use super::Region;
+    use super::{Region, Regions};
 
     /// Every region operation is a set operation, and each is pinned here rather
     /// than inside the folds that use it. The bits used to be combined at each
@@ -1291,6 +1348,43 @@ mod region_tests {
         assert!(Region::EMPTY.subset_of(a));
         assert!(a.subset_of(Region::ALL));
         assert!(!Region::STR.subset_of(a));
+    }
+
+    /// The region set an emptiness fold accumulates is a monoid under each lattice
+    /// operation, and `Unknown` absorbs both. The absorbing element is what lets a
+    /// fold over members stop: once it appears, no later member can change the
+    /// result, and the walk that continues spends the decision budget on an answer
+    /// already fixed.
+    #[test]
+    fn the_region_set_is_a_monoid_with_an_absorbing_element() {
+        let known = |r| Regions::Known(r);
+        let unknown = Regions::Unknown;
+        let bool_int = known(Region::BOOL.union(Region::INT));
+
+        // Each operation has its identity.
+        assert_eq!(bool_int.union(Regions::UNION_UNIT), bool_int);
+        assert_eq!(bool_int.intersect(Regions::MEET_UNIT), bool_int);
+
+        // Unknown absorbs both operations, from either side.
+        for combine in [Regions::union, Regions::intersect] {
+            assert_eq!(combine(unknown, bool_int), unknown);
+            assert_eq!(combine(bool_int, unknown), unknown);
+            assert_eq!(combine(unknown, unknown), unknown);
+        }
+
+        // Only the absorbing element reports itself as one, so a fold cannot stop
+        // on a known region it still has to combine.
+        assert!(unknown.is_absorbing());
+        assert!(!Regions::UNION_UNIT.is_absorbing());
+        assert!(!Regions::MEET_UNIT.is_absorbing());
+        assert!(!bool_int.is_absorbing());
+
+        // The operations are the region's own where both sides are known.
+        assert_eq!(
+            known(Region::BOOL).union(known(Region::STR)),
+            known(Region::BOOL.union(Region::STR))
+        );
+        assert_eq!(bool_int.intersect(known(Region::BOOL)), known(Region::BOOL));
     }
 
     /// The six scalar regions and the non-scalar remainder partition the
@@ -1377,6 +1471,36 @@ mod tests {
                 .1;
             prop_assert_eq!(folded, s.region_set());
         }
+    }
+
+    /// A union fold stops only once a member is known inhabited. The stopping rule
+    /// reads the *inhabited* accumulator, not the empty one: a member that is
+    /// empty and opaque leaves the verdict open, and breaking there would report a
+    /// union empty on the strength of the members walked so far.
+    ///
+    /// The witness needs a member that is empty with an unknown region -- a record
+    /// with an uninhabited required field -- followed by an inhabited one, because
+    /// a member that is empty with a *known* region cannot make the accumulator
+    /// absorbing on its own.
+    #[test]
+    fn a_union_fold_stops_only_once_a_member_is_inhabited() {
+        let uninhabited = Schema::record(
+            vec![Field {
+                name: "a".to_owned(),
+                schema: Schema::Nothing,
+                required: true,
+            }],
+            crate::ir::Openness::Closed,
+        );
+        assert!(uninhabited.is_empty());
+        assert_eq!(uninhabited.region_set(), Regions::Unknown);
+
+        // The union is inhabited by its second member, which the fold reaches only
+        // by not stopping at the first.
+        let union = Schema::union([uninhabited.clone(), Schema::Int]);
+        assert!(!union.is_empty());
+        // Every member uninhabited is still empty, so the stop does not hide that.
+        assert!(Schema::union([uninhabited.clone(), uninhabited]).is_empty());
     }
 
     #[test]

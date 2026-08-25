@@ -284,6 +284,22 @@ pub enum Guarded {
     Yes,
 }
 
+impl Guarded {
+    /// The join, in which [`Yes`](Guarded::Yes) **absorbs**: crossing a structural
+    /// constructor guards everything below it, however deeply it nests.
+    ///
+    /// The absorbing element is why the guardedness check answers what it does --
+    /// only the arm demanding [`No`](Guarded::No) can report an unguarded
+    /// occurrence -- and it was threaded by hand through every structural arm.
+    #[must_use]
+    pub const fn join(self, other: Guarded) -> Guarded {
+        match (self, other) {
+            (Guarded::No, Guarded::No) => Guarded::No,
+            _ => Guarded::Yes,
+        }
+    }
+}
+
 /// A single step in the location of a value inside a composite structure.
 ///
 /// Scalar schemas never produce a path; structural schemas (records, sequences,
@@ -498,24 +514,8 @@ impl SeqRegex {
         }
     }
 
-    /// Whether any element schema satisfies `pred`.
-    fn any_elem(&self, pred: &impl Fn(&Schema) -> bool) -> bool {
-        match self {
-            SeqRegex::Empty => false,
-            SeqRegex::Elem(s) => pred(s),
-            SeqRegex::Cat(parts) | SeqRegex::Or(parts) => parts.iter().any(|p| p.any_elem(pred)),
-            SeqRegex::Star(inner) => inner.any_elem(pred),
-        }
-    }
-
     fn with_records_open(&self, open: Openness) -> SeqRegex {
         self.map_elems(&|s| s.with_records_open(open))
-    }
-
-    /// A `Seq` guards its element schemas, so a recursive reference inside one is
-    /// guarded; report whether `target` occurs (necessarily guarded here).
-    fn occurs_guarded(&self, target: DefIx) -> bool {
-        self.any_elem(&|s| s.occurs_unguarded(target, Guarded::Yes))
     }
 
     /// Every element schema this regex holds, in order.
@@ -1090,48 +1090,60 @@ impl Schema {
         }
     }
 
+    /// Whether this constructor guards its children.
+    ///
+    /// A structural constructor does: a fixpoint unfolds one of them per step, so
+    /// a self-reference below one is productive. An algebraic combinator does not:
+    /// it consumes no unfolding, so a reference below it is as unguarded as the
+    /// combinator itself. The match takes no wildcard, so a new variant is a
+    /// compile error here, which is where the decision belongs.
+    #[must_use]
+    pub(crate) fn guards_children(&self) -> Guarded {
+        match self {
+            Schema::Seq { .. }
+            | Schema::Set(_)
+            | Schema::FrozenSet(_)
+            | Schema::KeyedMap { .. }
+            | Schema::Attrs { .. } => Guarded::Yes,
+            Schema::Anything
+            | Schema::Dynamic
+            | Schema::Nothing
+            | Schema::NoneType
+            | Schema::Bool
+            | Schema::Int
+            | Schema::Float
+            | Schema::Str
+            | Schema::Bytes
+            | Schema::Literal(_)
+            | Schema::Instance(_)
+            | Schema::Ref(_)
+            | Schema::SelfRef(_)
+            | Schema::Union(_)
+            | Schema::Intersection(_)
+            | Schema::Complement(_)
+            | Schema::Refine { .. } => Guarded::No,
+        }
+    }
+
     /// Whether `Ref(target)` occurs without a structural guard above it.
     ///
     /// A `recursive` definition is contractive (productive) only when every
     /// occurrence of its self-reference sits under a structural constructor;
     /// `guarded` records whether such a constructor has been crossed.
+    ///
+    /// One rule over the shared child traversal: a node joins its own guard onto
+    /// the one it inherited and asks its children under the result. Because
+    /// [`Guarded::Yes`] absorbs, nothing below a structural constructor is ever
+    /// reported unguarded however deeply it nests -- which is the whole of the
+    /// check, rather than an arm per constructor stating it again.
     #[must_use]
     pub fn occurs_unguarded(&self, target: DefIx, guarded: Guarded) -> bool {
-        match self {
-            Schema::Ref(id) => *id == target && guarded == Guarded::No,
-            // Structural constructors guard their children.
-            //
-            // `Guarded::Yes` is absorbing: the only arm that can answer true
-            // demands `Guarded::No`, and the algebraic combinators pass `guarded`
-            // through unchanged, so nothing below a structural constructor can
-            // report unguarded however deeply it nests. Each structural arm below
-            // therefore answers false for every input, and the walk it performs
-            // exists to state which constructors guard rather than to compute
-            // anything. `structural_constructors_absorb_the_guard` pins that, and
-            // it is why deleting one of these arms is an equivalent mutant --
-            // recorded with the argument in `.cargo/mutants.toml`.
-            Schema::Seq { regex, .. } => regex.occurs_guarded(target),
-            Schema::Set(e) | Schema::FrozenSet(e) => e.occurs_unguarded(target, Guarded::Yes),
-            Schema::KeyedMap { fields, defaults } => {
-                fields
-                    .iter()
-                    .any(|f| f.schema.occurs_unguarded(target, Guarded::Yes))
-                    || defaults.iter().any(|(k, v)| {
-                        k.occurs_unguarded(target, Guarded::Yes)
-                            || v.occurs_unguarded(target, Guarded::Yes)
-                    })
-            }
-            Schema::Attrs { fields, .. } => fields
-                .iter()
-                .any(|f| f.schema.occurs_unguarded(target, Guarded::Yes)),
-            // Algebraic combinators do not guard: they pass `guarded` through.
-            Schema::Union(es) | Schema::Intersection(es) => {
-                es.iter().any(|s| s.occurs_unguarded(target, guarded))
-            }
-            Schema::Complement(e) => e.occurs_unguarded(target, guarded),
-            Schema::Refine { base, .. } => base.occurs_unguarded(target, guarded),
-            _ => false,
+        if let Schema::Ref(id) = self {
+            return *id == target && guarded == Guarded::No;
         }
+        let below = guarded.join(self.guards_children());
+        self.children()
+            .any(|child| child.occurs_unguarded(target, below))
     }
 
     /// Return a copy with every record-shaped [`Schema::KeyedMap`] in the tree

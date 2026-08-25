@@ -1,7 +1,7 @@
 //! The membership-preserving simplifier: the lattice-law normalisation of the
 //! IR (flattening, identities, De Morgan, deduplication).
 
-use crate::decision::{Region, has_complementary_pair, has_disjoint_pair};
+use crate::decision::{Region, Regions, has_complementary_pair, has_disjoint_pair};
 use crate::ir::{Constraint, Field, Schema, SeqRegex};
 
 impl SeqRegex {
@@ -178,7 +178,8 @@ fn finish_union(mut flat: Vec<Schema>) -> Schema {
     // collapses to an atom under the laws here before it can accumulate depth.
     let covers_universe = flat
         .iter()
-        .filter_map(Schema::region_set)
+        .map(Schema::region_set)
+        .filter_map(Regions::known)
         .fold(Region::EMPTY, Region::union)
         == Region::ALL;
     if has_complementary_pair(&flat) || has_disjoint_complement_pair(&flat) || covers_universe {
@@ -237,7 +238,8 @@ fn finish_intersection(mut flat: Vec<Schema>) -> Schema {
     // in the flattened breadth.
     let region_empty = flat
         .iter()
-        .filter_map(Schema::region_set)
+        .map(Schema::region_set)
+        .filter_map(Regions::known)
         .fold(Region::ALL, Region::intersect)
         .is_empty();
     if has_complementary_pair(&flat) || has_disjoint_pair(&flat) || region_empty {

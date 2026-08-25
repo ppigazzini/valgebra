@@ -641,6 +641,41 @@ mod tests {
         }
     }
 
+    /// The guard is a two-element lattice in which crossing a structural
+    /// constructor absorbs: nothing below one is unguarded, however deeply it
+    /// nests. The absorbing element was stated in a doc comment and threaded by
+    /// hand through every structural arm.
+    #[test]
+    fn the_guard_join_absorbs_at_yes() {
+        assert_eq!(Guarded::No.join(Guarded::No), Guarded::No);
+        for other in [Guarded::No, Guarded::Yes] {
+            assert_eq!(Guarded::Yes.join(other), Guarded::Yes);
+            assert_eq!(other.join(Guarded::Yes), Guarded::Yes);
+        }
+    }
+
+    /// Which constructors guard is a property of the node, stated once. A
+    /// reference below a structural constructor is productive; below an algebraic
+    /// one it is not, because the combinator does not consume an unfolding step.
+    #[test]
+    fn only_the_structural_constructors_guard_their_children() {
+        for schema in every_variant() {
+            let guards = matches!(
+                schema,
+                Schema::Seq { .. }
+                    | Schema::Set(_)
+                    | Schema::FrozenSet(_)
+                    | Schema::KeyedMap { .. }
+                    | Schema::Attrs { .. }
+            );
+            assert_eq!(
+                schema.guards_children(),
+                if guards { Guarded::Yes } else { Guarded::No },
+                "{schema:?}"
+            );
+        }
+    }
+
     #[test]
     fn schema_equality_is_structural() {
         assert_eq!(
