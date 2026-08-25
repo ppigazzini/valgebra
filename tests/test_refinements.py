@@ -129,3 +129,37 @@ def test_an_emptiness_query_runs_a_bound_comparison() -> None:
 
     assert Validator(spec).is_empty()
     assert compared, "deciding the bound conjunction ordered the two operands"
+
+
+class _CountedBound(str):
+    """A bound that records every time its repr is taken."""
+
+    __slots__ = ()
+    reprs = 0
+
+    def __repr__(self) -> str:
+        type(self).reprs += 1
+        return "<bound>"
+
+
+def test_a_passing_check_builds_no_violation_message() -> None:
+    """A membership answer costs nothing to explain until there is a failure.
+
+    A violation names the bound it was measured against, and naming it takes the
+    bound's `repr`. A value that *belongs* produces no violation, so that repr is
+    never read — and building it anyway makes the cost of accepting a value scale
+    with the size of the schema's operand rather than with the value.
+    """
+    bound = _CountedBound("m")
+    schema = Validator(Annotated[str, at.Ge(bound)])
+
+    _CountedBound.reprs = 0
+    with pytest.raises(ValidationError, match="<bound>"):
+        schema.validate("a")
+    explained = _CountedBound.reprs
+    assert explained, "the failure must name the bound, or the probe measures nothing"
+
+    _CountedBound.reprs = 0
+    for _ in range(100):
+        assert schema.is_valid("z")
+    assert _CountedBound.reprs == 0

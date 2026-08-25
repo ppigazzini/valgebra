@@ -953,38 +953,72 @@ fn check_refine(
     ok
 }
 
+/// What a violation would say, carried unrendered until one is recorded.
+///
+/// Naming a bound takes the bound's `repr`, and a value that belongs produces no
+/// violation to name it in. Rendering eagerly therefore makes accepting a value
+/// cost the size of the schema's *operand* rather than the size of the value.
+enum Expected<'py> {
+    /// A comparison against a pool operand, as `symbol operand`.
+    Order(&'static str, Bound<'py, PyAny>),
+    /// A length bound, as `length symbol n`.
+    Length(&'static str, usize),
+    /// A divisibility operand from the pool.
+    Multiple(Bound<'py, PyAny>),
+    /// A pattern the whole string must match.
+    Pattern(&'py str),
+    /// A message with nothing to render into it.
+    Fixed(&'static str),
+    /// A predicate that raised, carrying the error it raised. Only ever built on
+    /// the failing path, so it renders no sooner than the rest.
+    Raised(String),
+}
+
+impl Expected<'_> {
+    /// Render the message. Called once per recorded violation, never per check.
+    fn render(&self) -> String {
+        match self {
+            Self::Order(symbol, operand) => format!("{symbol} {}", summarize(operand)),
+            Self::Length(symbol, n) => format!("length {symbol} {n}"),
+            Self::Multiple(operand) => format!("a multiple of {}", summarize(operand)),
+            Self::Pattern(pattern) => format!("a string matching {pattern:?}"),
+            Self::Fixed(text) => (*text).to_owned(),
+            Self::Raised(error) => {
+                format!("a predicate that does not raise (raised {error})")
+            }
+        }
+    }
+}
+
 /// Check one order bound (`Ge`/`Gt`/`Le`/`Lt`) against `value`: resolve the pool
-/// constant, run the rich comparison at the boundary (folding an ordinary error to
-/// a non-match), and label the violation. Returns `None` when the pool constant is
-/// unavailable, the signal the caller turns into a non-member.
-fn order_bound(
-    value: &Bound<'_, PyAny>,
+/// constant and run the rich comparison at the boundary, folding an ordinary
+/// error to a non-match. Returns `None` when the pool constant is unavailable,
+/// the signal the caller turns into a non-member.
+fn order_bound<'py>(
+    value: &Bound<'py, PyAny>,
     index: OperandIx,
     ctx: Ctx<'_>,
-    py: Python<'_>,
-    compare: impl Fn(&Bound<'_, PyAny>, &Bound<'_, PyAny>) -> PyResult<bool>,
+    py: Python<'py>,
+    compare: impl Fn(&Bound<'py, PyAny>, &Bound<'py, PyAny>) -> PyResult<bool>,
     code: &'static str,
-    symbol: &str,
-) -> Option<(bool, &'static str, String)> {
+    symbol: &'static str,
+) -> Option<(bool, &'static str, Expected<'py>)> {
     let bound = operand_at(ctx, index, py)?;
-    Some((
-        fold(compare(value, &bound), py, ctx),
-        code,
-        format!("{symbol} {}", summarize(&bound)),
-    ))
+    let ok = fold(compare(value, &bound), py, ctx);
+    Some((ok, code, Expected::Order(symbol, bound)))
 }
 
 /// Whether `value` (already a base member, materialized once) satisfies one
 /// constraint, recording a violation on failure in explain mode.
-fn check_constraint(
-    constraint: &Constraint,
-    value: &Bound<'_, PyAny>,
+fn check_constraint<'py>(
+    constraint: &'py Constraint,
+    value: &Bound<'py, PyAny>,
     path: &[PathSegment],
-    ctx: Ctx<'_>,
+    ctx: Ctx<'py>,
     out: &mut Vec<Violation>,
 ) -> bool {
     let py = value.py();
-    let (ok, code, expected): (bool, &'static str, String) = match constraint {
+    let (ok, code, expected): (bool, &'static str, Expected<'py>) = match constraint {
         Constraint::Ge(i) => {
             let Some(t) = order_bound(
                 value,
@@ -1022,22 +1056,19 @@ fn check_constraint(
         Constraint::MinLen(n) => (
             fold(value.len().map(|len| len >= *n), py, ctx),
             "too_short",
-            format!("length >= {n}"),
+            Expected::Length(">=", *n),
         ),
         Constraint::MaxLen(n) => (
             fold(value.len().map(|len| len <= *n), py, ctx),
             "too_long",
-            format!("length <= {n}"),
+            Expected::Length("<=", *n),
         ),
         Constraint::MultipleOf(i) => {
             let Some(operand) = operand_at(ctx, *i, py) else {
                 return false;
             };
-            (
-                fold(is_multiple_of(value, &operand), py, ctx),
-                "multiple_of",
-                format!("a multiple of {}", summarize(&operand)),
-            )
+            let ok = fold(is_multiple_of(value, &operand), py, ctx);
+            (ok, "multiple_of", Expected::Multiple(operand))
         }
         Constraint::Predicate(i) => {
             // Slow path: the user's Python callable runs at the boundary. A
@@ -1047,18 +1078,18 @@ fn check_constraint(
                 return false;
             };
             match predicate_passes(value, &predicate) {
-                Ok(passed) => (passed, "predicate_failed", "a passing predicate".to_owned()),
+                Ok(passed) => (
+                    passed,
+                    "predicate_failed",
+                    Expected::Fixed("a passing predicate"),
+                ),
                 // A fatal signal raised inside the predicate is the interpreter
                 // unwinding, not a predicate that merely errored: propagate it.
                 Err(err) if is_fatal(&err, py) => {
                     record_fatal(err, ctx);
                     return false;
                 }
-                Err(err) => (
-                    false,
-                    "predicate_error",
-                    format!("a predicate that does not raise (raised {err})"),
-                ),
+                Err(err) => (false, "predicate_error", Expected::Raised(err.to_string())),
             }
         }
         Constraint::Regex(pattern) => {
@@ -1079,15 +1110,17 @@ fn check_constraint(
             (
                 matched,
                 "string_pattern_mismatch",
-                format!("a string matching {pattern:?}"),
+                Expected::Pattern(pattern),
             )
         }
     };
+    // The message is rendered here and nowhere else: a check that passes never
+    // reads the operand it would have named.
     if !ok && ctx.mode.explains() {
         out.push(Violation {
             code,
             path: path.to_vec(),
-            expected,
+            expected: expected.render(),
             value_summary: summarize(value),
         });
     }
@@ -1490,6 +1523,60 @@ mod interpreter {
             case(py, &mapping, &build(&[]), true);
             // Not a dict at all.
             case(py, &closed, &list_of(py, vec![1]), false);
+        });
+    }
+
+    /// A violation says what the value was measured against, for every kind of
+    /// constraint. The message is built only on the failing path, so nothing
+    /// else pins its text: a `render` returning a constant would satisfy every
+    /// other test in this file.
+    #[test]
+    fn a_violation_names_the_constraint_the_value_failed() {
+        Python::attach(|py| {
+            let pool = vec![PyInt::new(py, 10).into_any().unbind()];
+            let ten = OperandIx::new(0);
+            let refine = |base: Schema, constraint: Constraint| Schema::Refine {
+                base: Box::new(base),
+                constraints: vec![constraint],
+            };
+            let int = |n: i64| PyInt::new(py, n).into_any();
+            let text = |s: &str| PyString::new(py, s).into_any();
+
+            // Each row is a constraint, a value that fails it, and the whole of
+            // the message that failure must carry.
+            for (schema, value, want) in [
+                (refine(Schema::Int, Constraint::Ge(ten)), int(1), ">= 10"),
+                (refine(Schema::Int, Constraint::Gt(ten)), int(1), "> 10"),
+                (refine(Schema::Int, Constraint::Le(ten)), int(11), "<= 10"),
+                (refine(Schema::Int, Constraint::Lt(ten)), int(11), "< 10"),
+                (
+                    refine(Schema::Int, Constraint::MultipleOf(ten)),
+                    int(3),
+                    "a multiple of 10",
+                ),
+                (
+                    refine(Schema::Str, Constraint::MinLen(2)),
+                    text("a"),
+                    "length >= 2",
+                ),
+                (
+                    refine(Schema::Str, Constraint::MaxLen(1)),
+                    text("abc"),
+                    "length <= 1",
+                ),
+                (
+                    refine(Schema::Str, Constraint::Regex("[0-9]+".to_owned())),
+                    text("x"),
+                    "a string matching \"[0-9]+\"",
+                ),
+            ] {
+                let (ok, violations) = explain(py, &schema, &value, &pool, &[]);
+                assert!(!ok, "{want}: the value must fail for a message to exist");
+                let [violation] = violations.as_slice() else {
+                    panic!("{want}: expected exactly one violation, got {violations:?}")
+                };
+                assert_eq!(violation.expected, want);
+            }
         });
     }
 
