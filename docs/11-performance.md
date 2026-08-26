@@ -66,7 +66,11 @@ three check the same set of named fields.
 Machine class: AMD Ryzen 7 PRO 7840U (Zen 4, 8c/16t, up to 5.1 GHz, a 2023-era
 mobile part) under WSL2 on Linux 6.18. Toolchain: rustc 1.98.0 (the build these
 numbers are measured on; the supported minimum is the lower `rust-version` in
-the manifest), CPython 3.14.7, pydantic 2.13.4, jsonschema 4.26.0, criterion
+the manifest), CPython 3.14.7 built with `--enable-optimizations --with-lto` and
+**the GIL enabled** (`sysconfig.get_config_var("Py_GIL_DISABLED")` is `0`; the
+free-threaded build of the same version runs this work about twice as slow, so a
+figure measured on one is not comparable with the other), pydantic 2.13.4,
+jsonschema 4.26.0, criterion
 0.8.2, pytest-benchmark 5.2.3.
 
 The extension is the **PGO** release build — the profile-guided, fat-LTO wheel
@@ -89,22 +93,27 @@ their keep elsewhere, not by regressing the core.
 
 ### Method
 
-Each cell is the **median of five independent runs**, and each run reports the
-minimum of five timing repeats over a fixed iteration count — the minimum being
-the stable estimator, which scheduling jitter inflates but never deflates. The
+Each cell is the **median of five independent runs** of the comparison
+benchmark, each run reporting pytest-benchmark's own median over its rounds. The
 `+/-` is the half-range across the five runs, not a standard deviation: it states
-the observed spread rather than modelling one. Iteration counts are sized per
-shape so a run lasts long enough to clear timer resolution (200 for the large
-array, 5,000 for the record, 20,000 for the nesting).
+the observed spread rather than modelling one.
 
-Re-run the competitive ratios on your own hardware with:
+```bash
+uv run --group bench pytest benches/bench_compare.py --benchmark-json=run.json
+```
+
+The **ratios** have their own gate, which measures only valgebra against
+pydantic and takes the minimum over many repeats rather than a median:
 
 ```bash
 uv run --group bench python scripts/compare_gate.py
 ```
 
 That script owns the recorded ratio baseline (`scripts/perf_compare.json`) and
-compares against it; the table below is the absolute record.
+compares against it; the table below is the absolute record. The two estimators
+do not agree to the last digit — a minimum sits below a median by however much
+the run was disturbed — so read a cell here against the same cell, not against
+the gate's output.
 
 ### Results
 
@@ -112,29 +121,29 @@ End-to-end validation of a value that passes (lower is better):
 
 | Shape | valgebra | pydantic (strict) | jsonschema |
 | --- | --- | --- | --- |
-| `list[int]`, 10,000 elements | 41.8 +/- 9.4 us | 73.4 +/- 1.7 us | 24,000 +/- 500 us |
-| Closed record, 50 int fields | 0.824 +/- 0.034 us | 1.69 +/- 0.09 us | 128 +/- 4.4 us |
-| Nested `list[...]`, depth 25 | 0.229 +/- 0.009 us | 1.74 +/- 0.045 us | — |
+| `list[int]`, 10,000 elements | 48.4 +/- 1.3 us | 85.4 +/- 1.3 us | 25,035 +/- 604 us |
+| Closed record, 50 int fields | 0.927 +/- 0.006 us | 1.90 +/- 0.072 us | 129 +/- 2.2 us |
+| Nested `list[...]`, depth 25 | 0.254 +/- 0.005 us | 1.93 +/- 0.042 us | 73.8 +/- 1.4 us |
 
 valgebra relative to pydantic on this machine: **7.6x** faster on deep nesting,
-**2.1x** on the wide record, **1.8x** on the large flat array. It is consistently
-far ahead of pure-Python jsonschema — by two to three orders of magnitude on
-every shape it covers. pydantic does strictly more work on the record (it
+**2.0x** on the wide record, **1.8x** on the large flat array. It is consistently
+far ahead of pure-Python jsonschema — 517x on the array, 291x on the nesting and
+139x on the record. pydantic does strictly more work on the record (it
 constructs output), so read that shape as a margin over a heavier operation, not
 a like-for-like loss for pydantic.
 
 The scalar shape is absent from the table because it sits near timer resolution:
-at a 31.8 ns median its observed spread reaches a quarter of that, so the ratio
-it reports — around 5.8x — carries noise the other three shapes do not. The
-competitive gate measures it; this record does not.
+the competitive gate measures it at a 32.1 ns median with a spread reaching a
+fifteenth of that, and the ratio it reports — around 5.8x — carries noise the
+other three shapes do not. That gate measures it; this record does not.
 
 Core micro-benchmarks (criterion, release+LTO, indicative single run):
 
 | Operation | Corpus | Median |
 | --- | --- | --- |
-| `simplify` | redundant Boolean expression, depth 8 | ~1.3 us |
+| `simplify` | redundant Boolean expression, depth 8 | ~1.1 us |
 | `shifted` | 64-field pool-indexed record | ~2.0 us |
-| `with_records_open` | record spine, depth 32 | ~4.8 us |
+| `with_records_open` | record spine, depth 32 | ~4.6 us |
 
 ## Honest limits
 
