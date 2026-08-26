@@ -767,14 +767,20 @@ fn parse_constraint(
         }
         out.push(Constraint::MultipleOf(lits.intern_operand(&multiple)));
     }
-    // Predicate escape hatch: annotated_types.Predicate(.func) or a bare
-    // callable used directly as metadata.
-    if let Ok(func) = marker.getattr("func")
+    // Predicate escape hatch: a callable marker, or `annotated_types.Predicate`,
+    // which carries its callable on `.func` and is not callable itself.
+    //
+    // Callability is how `annotated_types` tells its two marker shapes apart:
+    // `Not` defines `__call__` so a consumer calls it, and calling is what
+    // applies the negation, while `Predicate` deliberately does not. Reading
+    // `.func` from whichever marker has one drops `Not`'s negation and strips a
+    // `functools.partial` of its bound arguments — both carry a `.func` too.
+    if marker.is_callable() {
+        out.push(Constraint::Predicate(lits.intern_predicate(marker)));
+    } else if let Ok(func) = marker.getattr("func")
         && func.is_callable()
     {
         out.push(Constraint::Predicate(lits.intern_predicate(&func)));
-    } else if marker.is_callable() {
-        out.push(Constraint::Predicate(lits.intern_predicate(marker)));
     }
     Ok(())
 }

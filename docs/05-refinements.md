@@ -189,6 +189,25 @@ assert not positive.is_valid(-1)
 read — so prefer it in an annotation other tools also consume. The bare form is
 valgebra's own convenience, and it excludes a class for the reason above.
 
+`annotated_types.Not` wraps a predicate and denotes the values it rejects:
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import Validator
+
+odd = Validator(Annotated[int, at.Not(lambda value: value % 2 == 0)])
+assert odd.is_valid(3)
+assert not odd.is_valid(2)
+```
+
+A marker that is itself callable is **called**, which is what applies `Not`'s
+negation and what keeps a `functools.partial`'s bound arguments. Only a marker
+that is not callable is taken apart by its `.func`, which is the shape
+`Predicate` has.
+
 ## On classes
 
 Refinements declared on a `TypedDict`, dataclass, or `NamedTuple` field are

@@ -1,4 +1,6 @@
 import enum
+import functools
+import operator
 from typing import Annotated
 
 import annotated_types as at
@@ -43,6 +45,43 @@ def test_predicate_marker() -> None:
 
 def test_bare_callable_metadata_is_a_predicate() -> None:
     positive = Validator(Annotated[int, lambda x: x > 0])
+    assert positive.is_valid(1)
+    assert not positive.is_valid(-1)
+
+
+def test_a_callable_marker_is_asked_rather_than_taken_apart() -> None:
+    """`annotated_types` tells the two marker shapes apart by callability.
+
+    `Not` defines `__call__` so a consumer calls it, and calling is what applies
+    the negation. `Predicate` deliberately does not, and carries its callable on
+    `.func`. Reading `.func` from whichever marker has one drops `Not`'s
+    negation, so every value gets the opposite verdict.
+    """
+    is_even = at.Not(lambda value: value % 2 == 0)
+
+    odd = Validator(Annotated[int, is_even])
+    assert odd.is_valid(3)
+    assert not odd.is_valid(2)
+
+
+def test_a_partial_keeps_the_arguments_bound_to_it() -> None:
+    """A `partial` is asked, so its bound arguments are part of the question.
+
+    It carries a `.func` too, and unwrapping that loses them: `partial(eq, 1)`
+    becomes `eq`, which raises when called with one value, so the schema would
+    admit nothing at all.
+    """
+    is_one = functools.partial(operator.eq, 1)
+    assert is_one(1)
+
+    schema = Validator(Annotated[object, is_one])
+    assert schema.is_valid(1)
+    assert not schema.is_valid(2)
+
+
+def test_a_marker_carrying_its_callable_is_still_taken_apart() -> None:
+    """`Predicate` is not callable, so `.func` is how it is read."""
+    positive = Validator(Annotated[int, at.Predicate(lambda value: value > 0)])
     assert positive.is_valid(1)
     assert not positive.is_valid(-1)
 

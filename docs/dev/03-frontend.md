@@ -22,12 +22,19 @@ denoting nothing, so a class is metadata this frontend does not recognise.
 
 The rest are read in this order:
 
-1. a marker carrying a callable `func` — its `.func` becomes the predicate;
-2. otherwise, a marker that is itself callable — the marker becomes the
+1. a marker that is itself callable — the marker becomes the predicate;
+2. otherwise, a marker carrying a callable `func` — its `.func` becomes the
    predicate.
 
 Metadata matching neither is ignored, which the typing spec requires of any
 consumer for metadata it does not recognise.
+
+**Callability is how `annotated_types` tells its two marker shapes apart**, so
+the order is its rule rather than a heuristic. `Not` defines `__call__` because
+calling is what applies the negation; `Predicate` deliberately does not, and
+carries its callable on `.func`. Both carry a `.func`, so reading that attribute
+first would strip `Not` of its negation — and a `functools.partial` of its bound
+arguments, since it has one too.
 
 A class is excluded from the second arm although it is callable, because calling
 one **constructs** rather than asks. `Kilograms(1.5)` builds a unit marker; it
@@ -41,47 +48,19 @@ pydantic requires `AfterValidator`, beartype `Is[...]`, msgspec `Meta(...)`, and
 consumer, so this arm is a deviation rather than a defect — and the class
 exclusion is where the deviation stops being ergonomic and starts being a trap.
 
-### What that order costs
+### What the order buys
 
-The order is wrong for every marker that is *both* callable and carrying
-`.func`, and two common ones are:
+Three markers turn on it, and the wrong order is wrong for two:
 
-| marker | means | read as | verdict |
+| marker | callable | `.func` | read as |
 |---|---|---|---|
-| `annotated_types.Not(f)` | the values where `f` is false | `f` | **every verdict inverted** |
-| `functools.partial(eq, 1)` | equals 1 | `operator.eq` | raises on one argument, so the schema denotes **∅** |
+| `annotated_types.Not(f)` | yes | yes | the marker — calling it applies the negation |
+| `functools.partial(eq, 1)` | yes | yes | the marker — calling it supplies the bound arguments |
+| `annotated_types.Predicate(f)` | no | yes | `.func` — the marker raises if called |
 
-`annotated_types` distinguishes the two cases itself: `Not` defines `__call__`
-so a consumer calls it, and `Predicate` deliberately does not and carries its
-callable on `.func`. Reading `.func` first therefore inverts `Not` and empties
-`partial`, and is correct only for `Predicate`.
-
-**Swapping the two arms does not go in**, and not because the swap looks wrong:
-it addresses both rows, by the discriminator `annotated_types` encodes. It stays
-out because it rests on an open question:
-
-> Is a bare callable in metadata *meant* to be a constraint?
-
-No shipped page says it is, and a downstream package builds every one of its
-predicates on it. The swap promotes that unstated rule to the frontend's
-**first** test, so the swap and the question are one decision. Landing the swap
-alone answers the question by accident, and an accident that ships is a
-contract.
-
-Check the first row against a build of the current source — `True False`, where
-`Not` means `False True`:
-
-```bash
-maturin develop --uv
-uv run python -c "import annotated_types as at; from typing import Annotated; \
-from valgebra import Validator; v = Validator(Annotated[int, at.Not(lambda x: x % 2 == 0)]); \
-print(v.is_valid(2), v.is_valid(3))"
-```
-
-Nothing in the suite covers it. The tests reach for `Ge`, `Gt`, `Le`, `Lt`,
-`Interval`, `Len`, `MinLen`, `MaxLen`, `MultipleOf` and `Predicate`, and the
-whole suite passes with `Not` inverted — the gap is in the markers the suite is
-given, not in what it checks.
+`tests/test_refinements.py` holds one row each, because a marker of a shape the
+suite never receives is a defect nothing reports: `Not` inverted every verdict
+under it while the whole suite passed.
 
 ## The dispatch order is load-bearing
 
