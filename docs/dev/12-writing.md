@@ -47,6 +47,24 @@ it carefully" — `grep -n` for the symbol, `python scripts/perf_gate.py` for a
 count, `uv run pytest -k` for a behaviour. Claims that took seconds to disprove
 have shipped in documentation sets.
 
+**A claim about *meaning* is not behavioural, and running it does not check it.**
+What a schema denotes is stated by the variant's doc comment in
+`crates/valgebra-core/src/ir.rs`. A `Validator` probe shows what the walk does,
+and the walk can agree with the denotation by accident — a node that refuses a
+value because its carrier is wrong looks exactly like one that refuses it because
+the structure is wrong. So:
+
+| the claim is about | check it against |
+|---|---|
+| what a schema admits, in this build | a probe, a test |
+| what a node *denotes* | the doc comment in `ir.rs` |
+| whether a set is expressible at all | the node set, and [01-schema-ir.md](01-schema-ir.md)'s admission test |
+
+The failure this prevents has a shape: arguing from **behaviour** or from **what
+the implementation computes internally** to **what the algebra denotes**. Three
+false claims in this project's own analysis had that shape, and each survived a
+REPL check because a REPL cannot see a denotation.
+
 **Never pin a number a gate computes.** The instruction budgets, a mutation
 score, a test count, a line count. Quote the file or the gate that owns it.
 `scripts/docs_lint.py` fails on a budget number copied into prose, because a

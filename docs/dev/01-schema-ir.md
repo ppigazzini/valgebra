@@ -25,6 +25,69 @@ typing spec's distinction between `Literal[1]`, `Literal[True]` and
 type never reaches the comparison — which is why a raising `__eq__` is only
 observable from an object of the pooled constant's own type.
 
+## What fixes a node's carrier, and why it differs per node
+
+A structural node denotes values of a *shape* held by some *carrier* — a Python
+class. The three structural nodes fix their carrier three different ways, and
+the difference decides how large a change is that widens one:
+
+| node | how the carrier is fixed | widening it means |
+|---|---|---|
+| `Seq { container: SeqKind, regex }` | a **parameter** — `SeqKind` is `List \| Tuple` | another variant in an existing enum |
+| `KeyedMap { fields, defaults }` | **the denotation** — the doc comment reads "Denotes dicts…", and there is no carrier field | giving the node a carrier it does not have |
+| `Attrs { class_index, fields }` | a **required field** | making a required field optional, so the node denotes a set it currently cannot |
+
+Read that table before answering "can valgebra express `Mapping[K, V]`" or "can
+it express *any object* whose `.a` is an `int`". The answer is no in both cases,
+and the three nodes are not one mechanism seen three times.
+
+## Whether to add a variant
+
+Before the mechanics below, the admission test. **valgebra is the smallest set
+of schema nodes whose Boolean closure is consistent and complete for its
+domain** — that is the definition, not a preference, and it is what makes
+"the algebra" a claim rather than a collection.
+
+So a proposed node is one of exactly two things:
+
+1. **Its set is already in the closure of the existing atoms.** Then it is
+   redundant: write it as a combination and add nothing.
+2. **Its set is not.** Then it is an extension, and the case for it has to be
+   that the algebra is *incomplete for its domain* without it — not that it
+   would be convenient, and not that the code already computes something like it
+   internally.
+
+There is no third case. "It would be convenient", "a downstream user wants it",
+and "the machinery is nearly there" are all case 2 arguing under another name,
+and the only honest way to make them is to say which part of the domain is
+unreachable without the node.
+
+**The domain is the second half of the test**, and it is a real question rather
+than a formality: valgebra exposes its algebra through standard Python typing
+syntax, so a set that syntax can express and valgebra cannot is a completeness
+gap, while a set only a bespoke combinator could name is not. Whoever owns the
+algebra decides where that line sits; a page here records the decision, and
+[10-theory.md](10-theory.md) already shows the form such a decision takes — the
+map clauses are unordered where the paper's are ordered, written down as "a
+deliberate narrowing".
+
+### What does not count as evidence
+
+Three arguments look like they settle case 1 and do not. Each has been made in
+this project's own analysis and each was wrong:
+
+- **"The behaviour already looks right."** A `Validator` probe shows what the
+  walk does. The walk can agree with a denotation by accident, and a node's
+  denotation is what the doc comment in this file says.
+- **"The implementation already computes it."** `build_object` computes
+  per-attribute checks on its way to an `Attrs`. That does not put "any object
+  with these attributes" in the closure, because the node it builds denotes
+  instances of a class.
+- **"It only changes which values a constructor sees, not the algebra."**
+  Subtyping is defined from the denotation (`[[s ∧ ¬t]] = ∅`), so changing which
+  values inhabit a constructor changes the subtyping relation. There is no lever
+  that separates the two.
+
 ## Adding a variant
 
 The compiler forces the exhaustive matches; the doc comment on `Schema` carries

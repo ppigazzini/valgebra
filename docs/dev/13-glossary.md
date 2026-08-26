@@ -12,6 +12,9 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **check-only** | valgebra's semantics: it decides membership on the object the caller already holds. A validator that returns a *new* value is doing something else |
 | **the algebra** | union, intersection, complement, refinement and fixpoints over value sets, closed under all of them |
 | **atom** | a node with no schema inside it: the scalars, `Literal`, `Instance`, the lattice bounds |
+| **the closure** | the sets reachable by combining the atoms with union, intersection and complement. A proposed node either denotes a set already in it — and is redundant — or extends the algebra; [01-schema-ir.md](01-schema-ir.md) owns the test |
+| **carrier** | the Python class holding a structural node's shape: `list` for a `Seq`, `dict` for a `KeyedMap`, the `class_index` for an `Attrs`. Fixed three different ways, which is why widening one is a different size of change per node |
+| **minimality** | the property that makes "the algebra" a claim: the smallest node set whose closure is consistent and complete for the domain. A node is admitted because the domain is unreachable without it, never because it is convenient |
 | **the lattice bounds** | `Anything` (top, every value) and `Nothing` (bottom, no value) |
 | **the gradual atom** | `Dynamic`, which the user spells `typing.Any`. It admits every value at runtime and is a *distinct* atom to the algebra, so the simplifier does not rewrite it by the lattice laws |
 | **region** | one part of the mutually disjoint partition of the value universe that `Region` computes over. Six scalar regions plus one non-scalar remainder |
