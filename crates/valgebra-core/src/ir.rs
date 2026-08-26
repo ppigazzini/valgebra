@@ -500,7 +500,7 @@ pub enum SeqKind {
 /// handle them (in `linear`, in language emptiness, and in regex inclusion) are
 /// what would make a produced one sound, and until something produces one they
 /// decide nothing that is reachable. Deciding sequence inclusion in general wants
-/// the automaton construction `docs/decidability.md` records as unbuilt.
+/// the automaton construction `docs/15-decidability.md` records as unbuilt.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SeqRegex {
     /// The empty sequence.

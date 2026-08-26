@@ -7,7 +7,7 @@ description: What subtyping, equivalence, and emptiness decide exactly versus co
 valgebra compares schemas as sets: `is_subtype_of` is set inclusion, `is_equivalent` is
 mutual inclusion, and `is_empty` reports an unsatisfiable schema. The relation is
 `s <= t` exactly when `s` and `not t` share no value, so every comparison reduces
-to an emptiness test (see [foundations](foundations.md)).
+to an emptiness test (see [foundations](13-foundations.md)).
 
 Every answer is **sound**. A `True` from `is_subtype_of`/`is_equivalent`, or a `True`
 from `is_empty`, is always correct. Where valgebra cannot yet prove a relation it

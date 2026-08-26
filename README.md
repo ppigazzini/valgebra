@@ -138,7 +138,7 @@ assert non_negative_if_int.is_valid("not an int")  # not an int: admitted
 The same handful of operators derives first-matching-case dispatch, key
 cardinality ("at least one of these keys", "exactly one", "not both"),
 length-bounded lists, and conditional records. The recipes — each runnable and
-explained — live in the **[Boolean algebra guide](docs/algebra.md#composition-recipes)**.
+explained — live in the **[Boolean algebra guide](docs/04-algebra.md#composition-recipes)**.
 
 ## Recursive schemas and JSON
 
@@ -164,7 +164,7 @@ closed, a subsystem's contract is the *intersection* of its parts' contracts, an
 exclusion is a *complement*, and a migration is "old schema *or* new" — contracts
 refactor like code instead of decaying into opaque predicate functions.
 
-Start at the [tutorial](docs/tutorial.md); the [algebra guide](docs/algebra.md)
+Start at the [tutorial](docs/01-tutorial.md); the [algebra guide](docs/04-algebra.md)
 covers composition.
 
 ### As a harness over a codebase that has none
@@ -214,7 +214,7 @@ assert union(bool, int).is_equivalent(int)
 assert Validator(TimeoutError).is_subtype_of(OSError)
 ```
 
-**[Inspecting a codebase](docs/inspection.md)** is the full set of recipes, with
+**[Inspecting a codebase](docs/09-inspection.md)** is the full set of recipes, with
 what each cannot see.
 
 Neither mode requires the other. A codebase can adopt valgebra as a runtime
@@ -235,7 +235,7 @@ On a synthetic benchmark (the PGO release wheel) a passing check is faster than 
 strict pydantic `TypeAdapter` — roughly 2× on a 50-field record and a large
 `list[int]`, ~7× on deep nesting — and far faster than pure-Python jsonschema. The
 comparison is not apples-to-apples and is gated against regression in CI; see the
-[performance page](docs/performance.md) for the method, the matrix, and the limits.
+[performance page](docs/11-performance.md) for the method, the matrix, and the limits.
 
 ## Install
 
@@ -262,8 +262,8 @@ uv run maturin develop  # build the Rust extension into the venv
 
 - **Schemas are sets; validation is membership.** Subtyping is set inclusion and
   equivalence is mutual inclusion — sound, deciding a wide fragment and staying
-  deliberately conservative beyond it ([foundations](docs/foundations.md),
-  [decidability](docs/decidability.md), [soundness argument](docs/soundness.md)).
+  deliberately conservative beyond it ([foundations](docs/13-foundations.md),
+  [decidability](docs/15-decidability.md), [soundness argument](docs/14-soundness.md)).
 - **A closed, irreducible algebra.** Five primitives generate everything; the
   laws are property-tested and a law-justified simplifier exploits them.
 - **Check, don't parse.** `validate`/`is_valid` never copy or coerce; `ensure` is

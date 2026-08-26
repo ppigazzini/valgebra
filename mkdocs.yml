@@ -33,28 +33,28 @@ theme:
         name: Switch to light mode
 
 nav:
-  - Home: index.md
+  - Home: README.md
   - Getting started:
-      - Installation: installation.md
-      - Tutorial: tutorial.md
-      - Quickstart: quickstart.md
+      - Installation: 00-installation.md
+      - Tutorial: 01-tutorial.md
+      - Quickstart: 02-quickstart.md
   - Guides:
-      - Schema language: schema-language.md
-      - The Boolean algebra: algebra.md
-      - Refinements: refinements.md
-      - Recursive schemas: recursion.md
-      - JSON input: json.md
-      - Error model: error-model.md
-      - Inspecting a codebase: inspection.md
-      - Resource limits: limits.md
-      - Performance: performance.md
-  - Release notes: changelog.md
+      - Schema language: 03-schema-language.md
+      - The Boolean algebra: 04-algebra.md
+      - Refinements: 05-refinements.md
+      - Recursive schemas: 06-recursion.md
+      - JSON input: 07-json.md
+      - Error model: 08-error-model.md
+      - Inspecting a codebase: 09-inspection.md
+      - Resource limits: 10-limits.md
+      - Performance: 11-performance.md
+  - Release notes: 12-changelog.md
   - Explanation:
-      - Foundations: foundations.md
-      - Soundness argument: soundness.md
-      - Decidability boundary: decidability.md
+      - Foundations: 13-foundations.md
+      - Soundness argument: 14-soundness.md
+      - Decidability boundary: 15-decidability.md
   - Reference:
-      - API reference: api.md
+      - API reference: 16-api.md
 
 # The developer set lives beside the user docs and is NOT published: it describes
 # the codebase for a contributor and an agent reading it cold, which is a
@@ -113,25 +113,25 @@ plugins:
       full_output: llms-full.txt
       sections:
         Getting started:
-          - index.md: Overview, positioning against pydantic and msgspec, and a first example.
-          - installation.md: Install the package and its build toolchain.
-          - tutorial.md: Guided learning path from a scalar schema to an inspected failure.
-          - quickstart.md: Condensed feature tour for readers who know the domain.
+          - README.md: Overview, positioning against pydantic and msgspec, and a first example.
+          - 00-installation.md: Install the package and its build toolchain.
+          - 01-tutorial.md: Guided learning path from a scalar schema to an inspected failure.
+          - 02-quickstart.md: Condensed feature tour for readers who know the domain.
         Guides:
-          - schema-language.md: Every schema form with its denotation as a set of Python values.
-          - algebra.md: The Boolean lattice — union, intersection, complement — and the law-justified simplifier.
-          - refinements.md: Constraints and predicate refinements over a base schema.
-          - recursion.md: The recursive fixpoint for self-referential schemas.
-          - json.md: Parsing and validating JSON on the Rust path.
-          - error-model.md: Exception type, error codes, and the violation path format.
-          - inspection.md: Recipes for interrogating a codebase that has no schemas of its own.
-          - limits.md: Resource limits and the bounds the validator enforces.
-          - performance.md: Measured benchmarks, datasets, and compared versions.
+          - 03-schema-language.md: Every schema form with its denotation as a set of Python values.
+          - 04-algebra.md: The Boolean lattice — union, intersection, complement — and the law-justified simplifier.
+          - 05-refinements.md: Constraints and predicate refinements over a base schema.
+          - 06-recursion.md: The recursive fixpoint for self-referential schemas.
+          - 07-json.md: Parsing and validating JSON on the Rust path.
+          - 08-error-model.md: Exception type, error codes, and the violation path format.
+          - 09-inspection.md: Recipes for interrogating a codebase that has no schemas of its own.
+          - 10-limits.md: Resource limits and the bounds the validator enforces.
+          - 11-performance.md: Measured benchmarks, datasets, and compared versions.
         Explanation:
-          - foundations.md: The denotational frame and the sourced set-theoretic and lattice theory.
-          - soundness.md: Why membership checking is sound on its own terms.
-          - decidability.md: What subtyping, equivalence, and emptiness decide exactly versus conservatively.
+          - 13-foundations.md: The denotational frame and the sourced set-theoretic and lattice theory.
+          - 14-soundness.md: Why membership checking is sound on its own terms.
+          - 15-decidability.md: What subtyping, equivalence, and emptiness decide exactly versus conservatively.
         Release notes:
-          - changelog.md: Every released version, what it changed, and what to do on upgrade.
+          - 12-changelog.md: Every released version, what it changed, and what to do on upgrade.
         API reference:
-          - api.md: The full public surface, generated from the package docstrings.
+          - 16-api.md: The full public surface, generated from the package docstrings.

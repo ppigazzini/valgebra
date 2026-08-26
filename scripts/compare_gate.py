@@ -14,7 +14,7 @@ by more than the tolerance -- valgebra became materially slower relative to
 pydantic-core, whether through its own regression or by ceding ground. The
 tolerance is generous so only a gross regression trips the merge gate; the
 recorded numbers, not the gate, are the fine-grained record (see
-``docs/performance.md``).
+``docs/11-performance.md``).
 
 Usage:
     python scripts/compare_gate.py            # check ratios against the baseline

@@ -21,7 +21,7 @@ reads `path`. Formatting is the last step and never the record.
 
 **The code, the exception type and the path format are part of the documented
 API.** They are pinned by snapshot tests, so a wording change is a reviewed diff
-rather than a silent break in someone's error handling. `docs/error-model.md`
+rather than a silent break in someone's error handling. `docs/08-error-model.md`
 is the user-facing statement of the same thing.
 
 ## The path is segments, not a string

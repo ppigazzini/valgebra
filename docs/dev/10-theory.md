@@ -113,7 +113,7 @@ type is an atom with its own rules, not the top of the lattice.
 **[LOAD-BEARING]** — `Schema::Dynamic` is distinct from `Schema::Anything`
 precisely so the simplifier does not rewrite it by the lattice laws. At runtime
 both admit everything; they are not interchangeable to the algebra, and
-`docs/decidability.md` states where the gradual atom is deliberately never
+`docs/15-decidability.md` states where the gradual atom is deliberately never
 decided.
 
 ## Refinement types

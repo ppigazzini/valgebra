@@ -58,9 +58,9 @@ def test_a_refinement_spends_a_level_of_the_depth_budget() -> None:
 
 def test_the_limits_page_names_the_refinement() -> None:
     """A budget a reader can exhaust is one the page accounts for."""
-    page = (_DOCS / "limits.md").read_text(encoding="utf-8")
+    page = (_DOCS / "10-limits.md").read_text(encoding="utf-8")
     assert "refinement" in page.lower(), (
-        "docs/limits.md explains the list and tuple multiplier but not the "
+        "docs/10-limits.md explains the list and tuple multiplier but not the "
         "refinement, so a reader who pins a length has nothing to attribute "
         "the lost depth to"
     )
@@ -89,9 +89,9 @@ def test_a_map_can_constrain_some_keys_and_free_the_rest() -> None:
 
 def test_the_schema_language_page_shows_the_idiom() -> None:
     """The composition is worth a page only if the page carries it."""
-    page = (_DOCS / "schema-language.md").read_text(encoding="utf-8")
+    page = (_DOCS / "03-schema-language.md").read_text(encoding="utf-8")
     assert "complement" in page, (
-        "docs/schema-language.md states that clauses are a disjunction and that "
+        "docs/03-schema-language.md states that clauses are a disjunction and that "
         "named fields take precedence, but never shows how to constrain some "
         "keys and leave the rest free"
     )

@@ -12,7 +12,7 @@ a written argument backed by adversarial tests, not a machine-checked proof; the
 ## The claim
 
 Write `⟦S⟧` for the set of Python values a schema `S` denotes (its
-[denotation](foundations.md)). valgebra rests on three soundness statements:
+[denotation](13-foundations.md)). valgebra rests on three soundness statements:
 
 1. **Membership is exact.** For every schema `S` and value `x`, the walk accepts
    `x` if and only if `x ∈ ⟦S⟧`. The "only if" half is *soundness of acceptance*
@@ -62,7 +62,7 @@ Attrs(C, f)      isinstance(x, C) and every      (class extension ∩ its
 denotation, and it is what the walk decides. The algebra treats it as a distinct
 atom all the same, so the simplifier does not rewrite it by the lattice laws and
 the decision procedures do not relate it: see [the gradual `Any` versus the
-lattice top](foundations.md#gradual-any-versus-the-lattice-top). Membership is the
+lattice top](13-foundations.md#gradual-any-versus-the-lattice-top). Membership is the
 claim this page makes, and on membership the two coincide.
 
 For the Boolean nodes the equivalence is the definition of the set operation, so
@@ -83,11 +83,11 @@ finite, and two guards keep it so:
 - an object-identity guard rejects a value that contains itself
   (`recursion_loop`) rather than looping, and
 - a depth bound rejects a value nested past the limit (`recursion_limit`) rather
-  than overflowing the stack (see [resource limits](limits.md)).
+  than overflowing the stack (see [resource limits](10-limits.md)).
 
 On the inhabitants — the finite values — the guarded unfolding accepts exactly
 the members, which is why a coinductive *comparison* at the greatest fixpoint
-never contradicts a membership answer (see [recursion](recursion.md)).
+never contradicts a membership answer (see [recursion](06-recursion.md)).
 
 ## Why simplification preserves meaning
 
@@ -122,7 +122,7 @@ subtyping.
 
 The conservatism is the price: when a rule does not fire and the oracle declines,
 the answer is `False` — "not proven", not "disproven". This is why the
-[decidability boundary](decidability.md) maps where `False` is exact and where it
+[decidability boundary](15-decidability.md) maps where `False` is exact and where it
 is conservative, and why the docs say *closed algebra, conservative decision*.
 
 ## How the argument is mechanized

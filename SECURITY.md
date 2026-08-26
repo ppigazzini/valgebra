@@ -24,7 +24,7 @@ Please report, privately:
   accepted — `is_valid` returns `True`, or `validate` does not raise, for a value
   the schema's denotation excludes.
 - **A crash or unbounded resource use** on an input that is *within* the
-  documented [resource limits](docs/limits.md): a native stack overflow, an abort,
+  documented [resource limits](docs/10-limits.md): a native stack overflow, an abort,
   a hang, or memory growth unbounded by the value's size.
 - **Memory unsafety.** The crates forbid `unsafe`, so any memory-safety defect is
   in scope.
@@ -34,7 +34,7 @@ Please report, privately:
 - **Conservatism of the decision procedure.** `is_subtype_of`, `is_equivalent`,
   and `is_empty` are deliberately conservative: a `False` (or "not empty") may be
   a relation valgebra cannot prove. This is documented in the
-  [decidability boundary](docs/decidability.md) and is not a vulnerability.
+  [decidability boundary](docs/15-decidability.md) and is not a vulnerability.
 - **Rejecting malformed or hostile input.** A value meeting a documented limit —
   an over-deep nesting, a self-referential value — is *meant* to be rejected;
   that the guard fires is correct behavior.

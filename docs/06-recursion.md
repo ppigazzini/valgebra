@@ -73,7 +73,7 @@ assert not recursive(lambda s: union(int, [s])).is_valid(cyclic)  # recursion_lo
 ## Recursion in the decision procedure
 
 Recursive schemas also take part in [subtyping, equivalence, and
-emptiness](decidability.md). Equirecursive schemas compare at their greatest
+emptiness](15-decidability.md). Equirecursive schemas compare at their greatest
 fixpoint — a coinductive comparison that assumes a goal already being proven on
 the current path — so a recursive schema is a subtype of itself and two
 structurally identical recursive schemas are equivalent, and a recursive schema

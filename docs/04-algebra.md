@@ -61,7 +61,7 @@ rather than asserting it.
 
 The model — schemas as value-sets, subtyping as set inclusion, full union,
 intersection, and complement — is *semantic subtyping*. The
-[foundations](foundations.md) page records the theory and its references, and
+[foundations](13-foundations.md) page records the theory and its references, and
 states where the simplifier decides relationships versus where it stays
 conservative.
 
@@ -257,7 +257,7 @@ The simplifier folds the scalar Boolean fragment — the builtin scalars (with
 `intersection(int, str).simplify()` is `nothing`. It never treats `Any` as the
 top, so a deliberately-unchecked
 schema is preserved. The comparison operators below decide a wider fragment than
-the simplifier folds; the [decidability boundary](decidability.md) maps exactly
+the simplifier folds; the [decidability boundary](15-decidability.md) maps exactly
 what is decided.
 
 `simplify` applies the lattice laws only; it does not run the emptiness
@@ -325,9 +325,9 @@ mappings (including multi-clause mixed maps, a closed record against a catch-all
 mapping, and mixed maps where the supertype's extra field is optional and the
 subtype's catch-all covers it), inclusion in a complement where the two schemas
 share no value, and recursion — and stay conservative on the rest. The
-[decidability boundary](decidability.md) lists exactly what is decided, what is
+[decidability boundary](15-decidability.md) lists exactly what is decided, what is
 conservative, and what is undecidable at runtime; see the
-[foundations](foundations.md) for the theory.
+[foundations](13-foundations.md) for the theory.
 
 ## `Any` versus `anything`
 

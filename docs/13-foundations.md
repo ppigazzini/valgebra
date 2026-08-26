@@ -9,7 +9,7 @@ combinators form a real Boolean algebra, and where the algebra decides
 relationships versus where it stays deliberately conservative. It is the
 reference behind the claims the rest of the docs make — "a closed, lawful
 lattice", "subtyping is set inclusion", "a law-justified simplifier" — so each
-is backed rather than asserted. The [soundness argument](soundness.md) takes the
+is backed rather than asserted. The [soundness argument](14-soundness.md) takes the
 next step: why an accept is never wrong, node by node.
 
 ## Schemas denote sets; validation is membership
@@ -36,7 +36,7 @@ distributive, complemented lattice. Every Boolean-algebra law therefore holds �
 commutativity, associativity, idempotence, absorption, identities,
 distributivity, De Morgan, and double negation — and valgebra property-tests each
 against the membership relation rather than asserting it (see the
-[algebra guide](algebra.md)).
+[algebra guide](04-algebra.md)).
 
 `simplify` rewrites a schema by these laws while admitting **exactly the same
 values**. That soundness — simplification never changes the value-set — is the
@@ -89,7 +89,7 @@ fragment** and is honest about the rest:
   `is_empty` decide a wider fragment than the simplifier folds — class and literal
   inclusion, refinements (including the emptiness of contradictory bounds like
   `Ge(10) & Le(0)`), sequences, sets, records and mappings, and recursion at its
-  greatest fixpoint. The [decidability boundary](decidability.md) lists exactly
+  greatest fixpoint. The [decidability boundary](15-decidability.md) lists exactly
   what is decided and what stays conservative.
 - **Conservative.** A predicate refinement is opaque, and a narrow decidable tail
   and the runtime-undecidable constructs remain (the boundary records them). Every

@@ -4,7 +4,7 @@ Each shape drives a resource guard valgebra enforces against untrusted input: a
 deeply nested value (object and JSON paths), a wide union, and a hostile mapping.
 The point is to *measure* the bounded cost rather than reason about it; the guards
 are correctness-tested in ``tests/test_adversarial_bounds.py``. Record the numbers
-in ``docs/performance.md``.
+in ``docs/11-performance.md``.
 
 Run with ``pytest benches/bench_adversarial.py`` after installing the ``bench``
 dependency group.

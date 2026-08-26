@@ -12,7 +12,7 @@ asserts nothing beyond the procedure's reach.
 
 That asymmetry is deliberate and it is what makes the procedure safe to extend.
 Adding a rule can only move answers from false to true, so no extension can make
-an accept wrong. The published boundary is `docs/decidability.md`; the enumerated
+an accept wrong. The published boundary is `docs/15-decidability.md`; the enumerated
 relations the procedure is required to *decide* are
 `tests/test_completeness_ledger.py`, which fails in both directions —
 a relation that regresses to conservatism fails, and a closed hole whose ledger
@@ -139,7 +139,7 @@ it has a comment. Prefer one rule that asks the question.
 
 ## The limit
 
-Read `docs/decidability.md` for the published fragment. What it does not decide,
+Read `docs/15-decidability.md` for the published fragment. What it does not decide,
 all of it honestly conservative and none of it a soundness question:
 
 - a mixed keyed map where the supertype declares a **required** field the subtype

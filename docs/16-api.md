@@ -22,7 +22,7 @@ from the top-level `valgebra` namespace.
 The whole-schema transforms `simplify` (reduce by the lattice laws), `open`, and
 `close` (a record's key set) are methods on the compiled validator
 (`Validator.simplify`/`open`/`close`), documented above. A fixed-length list is
-the native `[A, B]` literal (see the [schema language](schema-language.md)).
+the native `[A, B]` literal (see the [schema language](03-schema-language.md)).
 
 ## Refinement markers
 

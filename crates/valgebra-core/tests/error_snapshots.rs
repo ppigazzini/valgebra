@@ -1,7 +1,7 @@
 //! Snapshot coverage of the violation message format.
 //!
 //! The one-line rendering of a [`Violation`] is part of the error-model
-//! contract (the message style guide in `docs/error-model.md`). This locks the
+//! contract (the message style guide in `docs/08-error-model.md`). This locks the
 //! exact format across a representative corpus so any change to it is reviewed
 //! in the snapshot diff, never silently accepted.
 

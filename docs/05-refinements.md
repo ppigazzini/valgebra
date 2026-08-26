@@ -23,7 +23,7 @@ assert not adult.is_valid(5)
 ```
 
 Refinements built from bound and length markers also take part in the
-[decision procedure](decidability.md): a refinement is a subtype of its base and
+[decision procedure](15-decidability.md): a refinement is a subtype of its base and
 of a looser refinement, and a bound conjunction that cannot be satisfied is
 detected as empty.
 

@@ -29,7 +29,7 @@ file or symbol that owns the thing, so a rename dates the entry.
 | Term | Means |
 |---|---|
 | **sound** | a `true` is a proof. Every relation here is sound, and a `false` means "not proven" rather than "false" |
-| **complete** | every true relation is decided. valgebra is complete on a published fragment and conservative elsewhere; `docs/decidability.md` states the line |
+| **complete** | every true relation is decided. valgebra is complete on a published fragment and conservative elsewhere; `docs/15-decidability.md` states the line |
 | **conservative** | the answer a procedure gives when it cannot decide: the one that claims less |
 | **opaque** | a schema whose region is unknown, so the scalar rules do not apply. Any combination containing one is opaque |
 | **the oracle** (in the core) | `LeafRelations`, the trait through which the decision procedure asks the bindings about a class or a value |

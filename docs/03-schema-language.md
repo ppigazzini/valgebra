@@ -35,7 +35,7 @@ assert Validator(float).is_valid(1.0)
 
 `object` is the **top** of the lattice (`anything`): every value. `Any` is the
 gradual dynamic type — at runtime it also admits every value, but it is a
-distinct atom that the [simplifier](algebra.md) never rewrites, preserving
+distinct atom that the [simplifier](04-algebra.md) never rewrites, preserving
 "deliberately unchecked" as different from "checked: all admitted".
 
 ```python
@@ -282,7 +282,7 @@ assert not Validator(Point).is_valid(Point(1, "y"))
 !!! note "Recursive classes"
     A class whose own type appears in a field (a tree node, a linked list) is
     recursive and cannot compile directly — express it with
-    [`recursive`](recursion.md), which ties the fixpoint explicitly.
+    [`recursive`](06-recursion.md), which ties the fixpoint explicitly.
 
 !!! note "Bare classes, callables, and the runtime boundary"
     A bare class is an `isinstance` check: `Validator(complex)` admits any
@@ -295,7 +295,7 @@ assert not Validator(Point).is_valid(Point(1, "y"))
 ## Refinements
 
 `Annotated[T, ...markers]` narrows `T` with constraints — bounds, lengths,
-multiples, and predicates. See the [refinements guide](refinements.md).
+multiples, and predicates. See the [refinements guide](05-refinements.md).
 
 ## Stable repr
 

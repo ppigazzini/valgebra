@@ -14,7 +14,7 @@ answered by set reasoning rather than by reading. They suit an agent working on 
 codebase it did not write, and they need no adoption from that codebase.
 
 For using valgebra as a contract *in* your own code, see the
-[tutorial](tutorial.md) and the [algebra guide](algebra.md).
+[tutorial](01-tutorial.md) and the [algebra guide](04-algebra.md).
 
 ## The shape of every question
 
@@ -204,7 +204,7 @@ assert not any(Validator(str).is_valid(value) for value in observed)  # `str` un
 disproven. A recipe that reads `not a.is_subtype_of(b)` as "a narrowing happened"
 reports a change that may not have occurred.
 
-The [decidability boundary](decidability.md) states where the answers are exact.
+The [decidability boundary](15-decidability.md) states where the answers are exact.
 The places that bite an inspection script are the gradual `Any`, a literal union
 of about a thousand members, and a deeply nested Boolean combination.
 

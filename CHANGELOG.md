@@ -179,7 +179,7 @@ Membership costs less on a refined schema, and no decision or message changes.
   `intersection`, `complement`, `recursive`, and `simplify` all reject a schema
   past a fixed nesting depth, recursive-definition count, or total node count
   with a `ValueError`. `simplify` can therefore raise when negation-normal form
-  expands a schema past the size bound (see `docs/limits.md`).
+  expands a schema past the size bound (see `docs/10-limits.md`).
 - The project describes its schema algebra as *closed* under its operations
   rather than *complete*.
 
@@ -205,7 +205,7 @@ Membership costs less on a refined schema, and no decision or message changes.
   `union`, `intersection`, or `complement` past a fixed depth is rejected at
   construction with a `ValueError`, so a schema grown in an unbounded loop cannot
   overflow the native stack on its next check. A `recursive` back edge counts as
-  a leaf, so a recursive schema's depth stays finite (see `docs/limits.md`).
+  a leaf, so a recursive schema's depth stays finite (see `docs/10-limits.md`).
 - The type stub declares the `__copy__` and `__deepcopy__` methods a compiled
   validator exposes.
 

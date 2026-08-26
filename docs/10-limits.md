@@ -17,7 +17,7 @@ fields) is written by the developer and is trusted.
   compiling and rejects a schema that never reaches a leaf, with
   `NotImplementedError`. A self-referential class is the shape that gets there,
   because its field type names the class; model it with
-  [`recursive`](recursion.md) instead.
+  [`recursive`](06-recursion.md) instead.
 - **Schema construction size.** Every way of growing a schema — the `Validator`
   constructor, the `|` operator, `union`, `intersection`, `complement`,
   `recursive`, and `simplify` — is bounded at construction, so no sequence of
@@ -40,7 +40,7 @@ fields) is written by the developer and is trusted.
       doubles its node count each step).
 
   A real schema stays far under all three. Structural recursion belongs in
-  [`recursive`](recursion.md), whose back edge does not count toward the depth.
+  [`recursive`](06-recursion.md), whose back edge does not count toward the depth.
 - **Value-walk depth.** A value nested past a fixed depth fails with
   `recursion_limit` rather than recursing into the native stack. This holds on
   both the object path and the JSON path; an over-deep JSON document is rejected

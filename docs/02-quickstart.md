@@ -6,7 +6,7 @@ description: Condensed feature tour for readers who know the domain.
 
 This is the condensed tour — a one-line scalar check through a refined
 `TypedDict` to a composed contract — for a reader who wants valgebra at a glance.
-For a guided, step-by-step path, start with the [tutorial](tutorial.md) instead.
+For a guided, step-by-step path, start with the [tutorial](01-tutorial.md) instead.
 Every snippet runs as written.
 
 ## Compile once, check many

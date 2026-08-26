@@ -5,7 +5,7 @@ It also means the dialect is the Rust engine's rather than `re`'s, and the two
 disagree on patterns *both* accept — so compiling successfully is not a test of
 which language a pattern denotes.
 
-Each case below pins the behaviour and asserts `docs/refinements.md` records it.
+Each case below pins the behaviour and asserts `docs/05-refinements.md` records it.
 A reader porting patterns from `re` has no other way to find out.
 """
 
@@ -19,9 +19,9 @@ import pytest
 
 from valgebra import Regex, Validator
 
-_PAGE = (Path(__file__).resolve().parent.parent / "docs" / "refinements.md").read_text(
-    encoding="utf-8"
-)
+_PAGE = (
+    Path(__file__).resolve().parent.parent / "docs" / "05-refinements.md"
+).read_text(encoding="utf-8")
 
 
 def _matches(pattern: str, text: str) -> bool:
@@ -72,6 +72,6 @@ def test_the_page_names_the_divergence(topic: str) -> None:
     and the assertion is about the topic being covered, not its typography.
     """
     assert topic.lower() in _PAGE.lower(), (
-        f"docs/refinements.md does not mention {topic!r}; a pattern valid in "
+        f"docs/05-refinements.md does not mention {topic!r}; a pattern valid in "
         "both engines can denote different sets, and nothing else says so"
     )

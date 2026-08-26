@@ -10,8 +10,8 @@ constraint, an optional field, a real failure you inspect, and a JSON document �
 building each step on the last. Every snippet runs as written; copy them in
 order.
 
-It assumes valgebra is [installed](installation.md). For the meaning of each
-form you meet here, the [schema language](schema-language.md) is the reference;
+It assumes valgebra is [installed](00-installation.md). For the meaning of each
+form you meet here, the [schema language](03-schema-language.md) is the reference;
 this page is the path, not the catalogue.
 
 ## 1. Your first validator
@@ -85,7 +85,7 @@ assert not users.is_valid({"name": "Ada", "age": "old"})  # age must be an int
 ## 5. Adding a constraint
 
 Plain types say *what kind*; a refinement says *which values*. Narrow a field
-with `Annotated` and an [annotated-types](refinements.md) marker — here, an age
+with `Annotated` and an [annotated-types](05-refinements.md) marker — here, an age
 that cannot be negative:
 
 ```python
@@ -135,7 +135,7 @@ except ValidationError as err:
     assert err.path == ("user", "name")
 ```
 
-The [error model](error-model.md) covers aggregation and union reporting.
+The [error model](08-error-model.md) covers aggregation and union reporting.
 
 ## 7. Validating JSON
 
@@ -156,10 +156,10 @@ assert Validator(list[int]).is_valid_json("[1, 2, 3]")  # str or bytes
 You can now check scalars, collections, records, constraints, failures, and
 JSON. From here:
 
-- The [schema language](schema-language.md) lists every form and the set it
+- The [schema language](03-schema-language.md) lists every form and the set it
   denotes.
-- [Refinements](refinements.md) covers the full constraint vocabulary.
-- The [Boolean algebra](algebra.md) composes schemas with `union`, `intersection`,
-  and `complement`, and the [foundations](foundations.md) explain the theory.
-- [Recursive schemas](recursion.md) handle trees and linked structures with
+- [Refinements](05-refinements.md) covers the full constraint vocabulary.
+- The [Boolean algebra](04-algebra.md) composes schemas with `union`, `intersection`,
+  and `complement`, and the [foundations](13-foundations.md) explain the theory.
+- [Recursive schemas](06-recursion.md) handle trees and linked structures with
   `recursive`.

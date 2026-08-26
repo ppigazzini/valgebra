@@ -1,7 +1,7 @@
 """Comparison benchmarks: valgebra against pydantic-core and jsonschema.
 
 The same synthetic shapes run through three checkers so the recorded baseline in
-``docs/performance.md`` is reproducible. The three do not do identical work, and
+``docs/11-performance.md`` is reproducible. The three do not do identical work, and
 the docs state the caveats:
 
 - valgebra checks membership of the object already in hand: no copy, no coercion.

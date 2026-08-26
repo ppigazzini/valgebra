@@ -152,7 +152,7 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
   for what valgebra is and is not for.
 - These figures are for the object path — validating a value already in hand.
   The JSON input path is measured separately, on the same machine class, in the
-  [JSON page](json.md).
+  [JSON page](07-json.md).
 
 ## How the record fast path is tuned
 

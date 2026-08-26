@@ -99,7 +99,7 @@ variants are the node set:
 `simplify` reduces a schema by the lattice laws — flatten, dedup, identities,
 negation-normal form — and decides the complement laws and provable disjointness
 for the concrete fragment, without ever changing which values the schema admits.
-The theory this rests on is in [docs/foundations.md](docs/foundations.md).
+The theory this rests on is in [docs/13-foundations.md](docs/13-foundations.md).
 
 ## Public surface
 
@@ -146,7 +146,7 @@ The extension ships as a **per-interpreter-version** module, not a stable-ABI
   optimization (PGO) and version-specific fast paths. PGO records its profile by
   *running* the instrumented build, so it needs a concrete interpreter; an
   `abi3` wheel would forfeit that and pin the build to the `abi3` floor. The
-  recorded hot-path speedup is on the [performance page](docs/performance.md).
+  recorded hot-path speedup is on the [performance page](docs/11-performance.md).
 - **The cost it imposes.** One wheel per supported CPython minor. The release
   matrix must therefore cover every minor in `requires-python` (`>=3.10`, so
   3.10 through 3.14, matching the `classifiers` in `pyproject.toml`); an
@@ -173,7 +173,7 @@ wheel-build time rather than set in `Cargo.toml`, so non-maturin builds (such as
 - Building or changing a node: start at the `Schema` enum and its `//!` header
   in [`crates/valgebra-core/src/lib.rs`](crates/valgebra-core/src/lib.rs), then
   the frontend and the walk.
-- The theory behind the algebra: [docs/foundations.md](docs/foundations.md).
+- The theory behind the algebra: [docs/13-foundations.md](docs/13-foundations.md).
 - The development gate, the testing strategy, and the CI pipeline:
   [CONTRIBUTING.md](CONTRIBUTING.md).
 - The invariants that bind agent and human contributors alike:

@@ -4,7 +4,7 @@ What the codebase does, for a contributor or an agent reading it cold. It
 describes the tree **as it is**, not as it is intended to become; where a
 capability is unbuilt, its page says so and says what the absence costs.
 
-This set is not published. The site under [../](../index.md) is the user guide —
+This set is not published. The site under [../](../README.md) is the user guide —
 what valgebra does, for someone using it. These pages are what it is made of.
 
 Read in order. Each page owns a zone of the source and is the live claim about
