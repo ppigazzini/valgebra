@@ -8,6 +8,7 @@ the suite would notice if the pages stopped saying it.
 
 from __future__ import annotations
 
+from collections import abc, deque
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -94,4 +95,50 @@ def test_the_schema_language_page_shows_the_idiom() -> None:
         "docs/03-schema-language.md states that clauses are a disjunction and that "
         "named fields take precedence, but never shows how to constrain some "
         "keys and leave the rest free"
+    )
+
+
+# A form the frontend has no arm for. Named here rather than measured from the
+# error message, so a form that gains support fails this row instead of quietly
+# changing what it proves.
+UNSUPPORTED: list[tuple[str, Any]] = [
+    ("Mapping[str, int]", abc.Mapping[str, int]),
+    ("Sequence[int]", abc.Sequence[int]),
+    ("deque[int]", deque[int]),
+    ("type[int]", type[int]),
+]
+
+
+@pytest.mark.parametrize(
+    ("label", "form"), UNSUPPORTED, ids=[u[0] for u in UNSUPPORTED]
+)
+def test_a_form_outside_the_table_is_refused_when_the_validator_is_built(
+    label: str, form: Any
+) -> None:
+    """The refusal happens at build time, not at the first value."""
+    with pytest.raises(NotImplementedError):
+        Validator(form)
+
+
+@pytest.mark.parametrize(
+    ("label", "form"), UNSUPPORTED, ids=[u[0] for u in UNSUPPORTED]
+)
+def test_the_schema_language_page_names_each_form_it_refuses(
+    label: str,
+    form: Any,
+) -> None:
+    """A reader who writes a refused form needs to find it on the page.
+
+    The tables enumerate the supported forms positively, so the boundary is
+    inferrable and nowhere stated. A reader who reaches it meets a
+    `NotImplementedError` and needs the page to say whether they hit a gap, a
+    bug, or a deliberate exclusion — which means the page has to name the forms
+    they are most likely to have written.
+    """
+    del form  # the companion row above owns the behaviour
+    page = (_DOCS / "03-schema-language.md").read_text(encoding="utf-8")
+    generic = label.split("[", maxsplit=1)[0]
+    assert f"{generic}[" in page, (
+        f"docs/03-schema-language.md never names {label}, so a reader who "
+        "writes it and meets NotImplementedError has no page to consult"
     )

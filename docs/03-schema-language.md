@@ -8,6 +8,39 @@ A schema denotes a **set of Python values**. This page lists every form valgebra
 reads and the set it denotes. The primary notation is standard typing; compact
 native forms and the combinators are alternatives for the same sets.
 
+## A form this page does not list
+
+The list is exhaustive, so a typing form absent from it is one valgebra does not
+read. It raises `NotImplementedError` when the validator is **built**, not when a
+value arrives — a schema that cannot be read never becomes one that quietly
+admits everything.
+
+```python
+from collections.abc import Mapping
+
+from valgebra import Validator
+
+try:
+    Validator(Mapping[str, int])
+except NotImplementedError as error:
+    assert "unsupported typing form" in str(error)
+```
+
+The abstract-collection generics are the ones a reader is most likely to
+reach for: `Mapping[K, V]`, `Sequence[T]`, `Set[T]`, `Iterable[T]`, and the
+subscripted concrete classes such as `deque[T]` and `OrderedDict[K, V]`. These
+are **not built**. Whether they should be is open; nothing here rules them out.
+
+`type[T]` is refused as well, and is a different question: it constrains a value
+that is itself a class, where every form above constrains a container's
+contents.
+
+Where the value really is a `dict` or a `list`, the builtin form denotes the set
+you want: `dict[K, V]` for `Mapping[K, V]`, `list[T]` for `Sequence[T]`. Where it
+is not — a `UserDict`, a `deque` — no form here denotes it, and a
+[predicate refinement](05-refinements.md) over the class is the available
+expression.
+
 ## Scalars
 
 | Schema | Denotes |
