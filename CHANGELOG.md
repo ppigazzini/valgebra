@@ -6,6 +6,55 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.9] - 2026-08-26
+
+Two `Annotated` markers were read as something other than what they mean, and
+both produced a schema that denoted nothing or its complement. No other decision
+changes.
+
+### Fixed
+
+- A marker that is itself **callable** is asked, and only one that is not is
+  taken apart by its `.func`. `annotated_types.Predicate` carries its callable
+  there and is not callable, which is why the attribute is read at all — but
+  `Not` and `functools.partial` carry one too.
+
+  `Not(f)` denotes the values where `f` is false, and it defines `__call__`
+  because calling is what applies the negation. Read by its `.func` it
+  constrained by `f` instead, so every value under it got the opposite verdict:
+  `Annotated[int, Not(is_even)]` admitted the even numbers.
+
+  `partial(eq, 1)` lost its bound argument the same way and became `eq`, which
+  raises when called with a single value, so the schema admitted nothing at all.
+
+  Callability is the discriminator `annotated_types` itself encodes, so this is
+  its rule rather than a heuristic.
+
+- A **class** in `Annotated` metadata is ignored, as the typing spec asks of
+  metadata a consumer does not recognise. A marker carries its values on an
+  instance and a class carries the descriptors that read them: `Ge(0)` holds
+  `ge = 0`, while `Ge` holds the slot descriptor, and reading that as a bound
+  built a comparison no value is ordered against. A class is also callable, and
+  calling one constructs rather than asks — a unit marker written as a class
+  answered no question and refused every value. Both traps ended in a schema
+  denoting nothing.
+
+  Every other callable is still a predicate: a function, a lambda, a bound
+  method, an object with `__call__`.
+
+### Changed
+
+- The documentation pages are numbered, so a page's URL carries its number:
+  `/03-schema-language/` where it was `/schema-language/`. The site's landing
+  page is unchanged.
+
+- The published benchmark figures are re-measured, and the performance page now
+  records the **interpreter build** its baseline was measured on rather than
+  only the version: a free-threaded CPython runs this work about twice as slow
+  as a GIL build of the same version. The ratios are unchanged — 7.6x on deep
+  nesting, 2.0x on the wide record, 1.8x on the large array — and no decision or
+  code path moved.
+
 ## [0.0.8] - 2026-08-25
 
 Membership costs less on a refined schema, and no decision or message changes.
@@ -263,7 +312,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.8...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.9...HEAD
+[0.0.9]: https://github.com/ppigazzini/valgebra/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/ppigazzini/valgebra/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/ppigazzini/valgebra/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/ppigazzini/valgebra/compare/v0.0.5...v0.0.6
