@@ -85,6 +85,18 @@ their output rather than restating rules here.
 These are the invariants tooling cannot enforce. Each pairs a prohibition with
 what to do instead.
 
+- **An uncertain change does not land.** If it is not settled that a change is
+  correct, it does not go in — not behind a flag, not "to be reviewed later",
+  not as a small fix while passing. There is no state between refused and
+  landed, and a change whose justification is still being argued is refused.
+  Write it up with the test it fails; the write-up is the deliverable.
+
+- **A refusal is written down where the next proposal starts.** A reason that
+  lives only in a review comment gets re-litigated by the next reader, who is
+  usually the same agent a week later. `docs/dev/01-schema-ir.md` holds the
+  refused algebra changes, `docs/dev/03-frontend.md` the refused frontend ones,
+  each with the test it fails rather than a verdict.
+
 - **Analysis is not authorisation.** A request to review, audit, measure or write
   a report is a request for a document. It does not license a commit to this
   tree, a dependency bump, or a "small fix while I was in there". Propose the

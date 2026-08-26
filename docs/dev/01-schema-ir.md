@@ -73,8 +73,7 @@ deliberate narrowing".
 
 ### What does not count as evidence
 
-Three arguments look like they settle case 1 and do not. Each has been made in
-this project's own analysis and each was wrong:
+Three arguments look like they settle case 1 and do not:
 
 - **"The behaviour already looks right."** A `Validator` probe shows what the
   walk does. The walk can agree with a denotation by accident, and a node's
@@ -87,6 +86,67 @@ this project's own analysis and each was wrong:
   Subtyping is defined from the denotation (`[[s ∧ ¬t]] = ∅`), so changing which
   values inhabit a constructor changes the subtyping relation. There is no lever
   that separates the two.
+
+## Refused, and the test each one fails
+
+These do not go in. Each carries the test it fails, so a proposal starts here
+rather than at the beginning.
+
+**A carrier for `KeyedMap`, so `Mapping[K, V]` and `Sequence[T]` build.**
+Refused. It is a constructor extension, not an encoding change: `KeyedMap`
+denotes dicts and has no carrier field, so supplying one changes the
+constructor. Beyond the admission test, two costs specific to this one:
+
+- The model `KeyedMap` is built from is recorded in
+  [10-theory.md](10-theory.md) as *records and maps as quasi-constant
+  functions* — named fields plus a key-typed default. No carrier appears in that
+  description. Whether the source paper treats a nominal carrier is **not
+  established here**, and its title names structs, so do not assume it does not.
+  What follows is only that this project has no recorded reading of a
+  carrier-indexed map: an absence of guidance, not a permission and not a
+  prohibition.
+- The decision procedures this project sources decide maps **without** a
+  carrier: Elixir's `Module.Types.Descr`, and the negated-map-atom decomposition
+  for deciding a keyed map under negation. A carrier-indexed map is outside the
+  fragment with a published decision, which is the part the completeness claim
+  rests on.
+
+**A carrier-free attribute form, so "any object whose `.a` is an `int`" builds.**
+Refused. `Attrs` requires its `class_index`; the set is denoted by no type, and
+making the field optional makes the node denote a set it currently cannot.
+
+**Records keyed by a non-string.** Refused. A record's fields are named by
+strings, and arbitrary keys are a different labelling than the record model
+assumes.
+
+### Arguments for the carrier change, and why each fails
+
+| argument | why it fails |
+|---|---|
+| "the behaviour already looks right" | a probe shows the walk, not the denotation |
+| "the implementation already computes it" | `build_object` computes attribute checks *inside* a node whose denotation includes the class |
+| "it only changes which values a constructor sees" | subtyping is defined from the denotation, so that *is* the algebra |
+| "the sources name no carrier, so adding one is free" | an absence of guidance is not permission. It also is not a refusal — the refusal rests on the admission test, not on this row |
+| "a class carrier is unsound because `register()` mutates it" | false — class relations are re-decided on every call, never cached |
+| "a downstream package needs it, and pays to route around it" | a consumer's requirement is a fact about the consumer. It is the loudest argument for growth and the weakest: every package built on valgebra will want the node that would make its own job easier |
+
+Two rows need separating from the rest.
+
+The `register()` row is an argument *against* the change, and it is also wrong,
+so it is not a reason to refuse. The refusal rests on the admission test and the
+two costs above, and on nothing else.
+
+The downstream row is the one to watch, because it arrives with evidence
+attached — a measured cost, a real user, a working reproduction — and none of
+that bears on whether the set belongs in the algebra. **valgebra is not extended
+to make a consumer's job easier.** A package that cannot express something with
+the algebra as it stands has found a fact about itself; if the same limitation
+also fails the admission test on its own terms, the test is what carries it, and
+the consumer is at most the reason someone looked.
+
+The asymmetry is the point: a consumer can always route around a missing node —
+with a predicate, a conversion, its own translation — at a cost it measures and
+accepts. The algebra cannot route around a node that should not have been added.
 
 ## Adding a variant
 
