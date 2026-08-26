@@ -19,6 +19,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pytest
+
 if TYPE_CHECKING:
     from types import ModuleType
 
@@ -148,11 +150,12 @@ def test_the_three_exit_codes_are_distinct() -> None:
     assert (lint.EXIT_OK, lint.EXIT_FAIL, lint.EXIT_CANNOT_RUN) == (0, 1, 2)
 
 
-def test_the_developer_index_is_held_in_both_directions() -> None:
-    # Driven against the real set, since the check reads a fixed location. Both
+@pytest.mark.parametrize("relative", ["docs", "docs/dev"])
+def test_each_index_is_held_in_both_directions(relative: str) -> None:
+    # Driven against the real sets, since the check reads a fixed location. Both
     # directions are exercised by the negative controls recorded in the commit
     # that added them; here the standing state is asserted clean and non-empty.
-    assert lint.check_dev_index() == []
-    pages = {p.name for p in (ROOT / "docs" / "dev").glob("*.md")}
+    assert lint.check_index(relative) == []
+    pages = {p.name for p in (ROOT / relative).glob("*.md")}
     assert "README.md" in pages
-    assert len(pages) >= 10, f"the developer set holds only {sorted(pages)}"
+    assert len(pages) >= 10, f"{relative} holds only {sorted(pages)}"

@@ -175,14 +175,20 @@ def check_pinned_numbers(text: str, numbers: list[str]) -> list[str]:
     ]
 
 
-def check_dev_index() -> list[str]:
-    """Hold the developer set's index to the set, in both directions."""
-    dev = ROOT / "docs" / "dev"
-    if not dev.is_dir():
+def check_index(relative: str) -> list[str]:
+    """Hold one documentation set's index to the set, in both directions.
+
+    ``relative`` is the directory under the repository root. Both sets index
+    themselves from a ``README.md`` whose rows name sibling pages, so one check
+    serves both; a page in neither the directory nor the index is the drift this
+    catches.
+    """
+    directory = ROOT / relative
+    if not directory.is_dir():
         return []
-    index = dev / "README.md"
+    index = directory / "README.md"
     if not index.exists():
-        return ["docs/dev/ has no README.md index"]
+        return [f"{relative}/ has no README.md index"]
     # An index row names a sibling page by bare filename. A link that walks out
     # of the directory is prose, not a row, and is checked by the link rule.
     listed = {
@@ -190,18 +196,18 @@ def check_dev_index() -> list[str]:
         for target in LINK.findall(index.read_text(encoding="utf-8"))
         if "/" not in target and target.endswith(".md")
     }
-    pages = {p.name for p in dev.glob("*.md")} - {"README.md"}
+    pages = {p.name for p in directory.glob("*.md")} - {"README.md"}
     problems = [
-        f"docs/dev/{missing} is in no row of docs/dev/README.md"
+        f"{relative}/{missing} is in no row of {relative}/README.md"
         for missing in sorted(pages - listed)
     ]
     problems += [
-        f"docs/dev/README.md lists {stale}, which does not exist"
+        f"{relative}/README.md lists {stale}, which does not exist"
         for stale in sorted(listed - pages)
     ]
     # The index is the detector; an empty set would pass having checked nothing.
     if not pages:
-        problems.append("docs/dev/ holds no pages")
+        problems.append(f"{relative}/ holds no pages")
     return problems
 
 
@@ -318,7 +324,7 @@ def main() -> int:
             + check_internal_reference(text)
             + check_pinned_numbers(text, numbers)
         ]
-    failures += check_dev_index()
+    failures += check_index("docs/dev") + check_index("docs")
     failures += check_ledger_table()
     failures += check_llms_manifest()
 
