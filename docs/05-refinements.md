@@ -173,6 +173,22 @@ A predicate that *raises* is reported distinctly, as `predicate_error` rather
 than an ordinary failure, so a buggy predicate is not mistaken for a rejected
 value.
 
+A bare callable is a predicate too, without the wrapper:
+
+```python
+from typing import Annotated
+
+from valgebra import Validator
+
+positive = Validator(Annotated[int, lambda value: value > 0])
+assert positive.is_valid(1)
+assert not positive.is_valid(-1)
+```
+
+`Predicate` is the portable spelling — it is what pydantic, msgspec and cattrs
+read — so prefer it in an annotation other tools also consume. The bare form is
+valgebra's own convenience, and it excludes a class for the reason above.
+
 ## On classes
 
 Refinements declared on a `TypedDict`, dataclass, or `NamedTuple` field are
@@ -199,6 +215,12 @@ assert not Validator(Account).is_valid({"balance": -1})
 Per the typing spec, metadata valgebra does not recognize as a constraint is
 ignored — so non-constraint `Annotated` metadata (documentation strings, unit
 markers) is harmless and carries no membership meaning.
+
+A **class** is among what is ignored. A marker carries its values on an
+instance — `Ge(0)` holds `ge = 0` — so the class itself holds no value to read
+and calling it constructs rather than asks. A unit or documentation marker
+written as a class therefore carries no constraint, exactly as one written as an
+instance does not.
 
 ```python
 from typing import Annotated

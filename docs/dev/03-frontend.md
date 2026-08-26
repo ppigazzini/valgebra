@@ -12,7 +12,15 @@ and never `annotated_types`. A marker carrying `pattern`, `min_length`,
 `max_length` or `multiple_of` contributes the matching constraint, so any
 library's marker of that shape works.
 
-Two arms handle predicates, in this order:
+**A class is never a marker**, and is refused before any attribute is read. A
+marker *class* exposes descriptors where an instance exposes values: `at.Ge(0)`
+carries `ge = 0`, while `at.Ge` carries the slot descriptor that reads it, and
+taking that for a bound builds a comparison no value is ordered against. Calling
+one is the same trap a step later — `Kilograms(1.5)` constructs a unit marker
+rather than answering whether `1.5` belongs. Either way the schema ends up
+denoting nothing, so a class is metadata this frontend does not recognise.
+
+The rest are read in this order:
 
 1. a marker carrying a callable `func` — its `.func` becomes the predicate;
 2. otherwise, a marker that is itself callable — the marker becomes the
@@ -20,6 +28,18 @@ Two arms handle predicates, in this order:
 
 Metadata matching neither is ignored, which the typing spec requires of any
 consumer for metadata it does not recognise.
+
+A class is excluded from the second arm although it is callable, because calling
+one **constructs** rather than asks. `Kilograms(1.5)` builds a unit marker; it
+does not answer whether `1.5` belongs, and a constructor that rejects the value
+would leave the schema uninhabited. Every other callable — a function, a lambda,
+a bound method, an object with `__call__` — is asked.
+
+No other library in the ecosystem reads a bare callable as a constraint:
+pydantic requires `AfterValidator`, beartype `Is[...]`, msgspec `Meta(...)`, and
+`annotated_types` supplies `Predicate`. The typing spec leaves the choice to the
+consumer, so this arm is a deviation rather than a defect — and the class
+exclusion is where the deviation stops being ergonomic and starts being a trap.
 
 ### What that order costs
 

@@ -1,3 +1,4 @@
+import enum
 from typing import Annotated
 
 import annotated_types as at
@@ -44,6 +45,72 @@ def test_bare_callable_metadata_is_a_predicate() -> None:
     positive = Validator(Annotated[int, lambda x: x > 0])
     assert positive.is_valid(1)
     assert not positive.is_valid(-1)
+
+
+def test_a_callable_object_is_a_predicate_too() -> None:
+    """A predicate carried by an instance is asked, like any other callable."""
+
+    class Positive:
+        def __call__(self, value: int) -> bool:
+            return value > 0
+
+    positive = Validator(Annotated[int, Positive()])
+    assert positive.is_valid(1)
+    assert not positive.is_valid(-1)
+
+
+def test_a_class_is_metadata_rather_than_a_predicate() -> None:
+    """A class is callable, and calling it constructs rather than asks.
+
+    `Kilograms(1.5)` builds a unit marker; it does not answer whether 1.5 is in
+    the set. Reading a class as a predicate turns a documentation marker into a
+    schema that admits nothing, so a class is metadata valgebra does not
+    recognise, and the typing spec says to ignore that.
+    """
+
+    class Kilograms:
+        symbol = "kg"
+
+    schema = Validator(Annotated[float, Kilograms])
+    assert repr(schema) == "float"
+    assert schema.is_valid(1.5)
+    assert not schema.is_valid("x")
+
+
+def test_an_enum_class_is_metadata_rather_than_a_predicate() -> None:
+    """The same, for the marker shape a reader is most likely to reach for."""
+
+    class Colour(enum.Enum):
+        RED = "red"
+
+    schema = Validator(Annotated[int, Colour])
+    assert repr(schema) == "int"
+    assert schema.is_valid(1)
+
+
+def test_a_constraint_class_is_ignored_rather_than_read_for_its_slots() -> None:
+    """A marker class exposes descriptors where an instance exposes values.
+
+    `at.Ge(0)` carries `ge = 0`; `at.Ge` carries the slot descriptor that would
+    read it. Taking the descriptor for a bound builds a comparison against an
+    object no value is ordered against, so the schema admits nothing — the same
+    trap as a class read as a predicate, one arm earlier.
+    """
+    schema = Validator(Annotated[int, at.Ge])
+    assert repr(schema) == "int"
+    assert schema.is_valid(1)
+    assert schema.is_valid(-1)
+
+
+def test_a_class_marker_beside_a_real_constraint_leaves_it_standing() -> None:
+    """Ignoring one marker does not disturb the others in the same form."""
+
+    class Kilograms:
+        symbol = "kg"
+
+    schema = Validator(Annotated[int, at.Ge(0), Kilograms])
+    assert schema.is_valid(1)
+    assert not schema.is_valid(-1)
 
 
 def test_base_failure_takes_precedence_over_constraints() -> None:

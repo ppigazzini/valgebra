@@ -701,6 +701,20 @@ fn parse_constraint(
     out: &mut Vec<Constraint>,
     lits: &mut Pool,
 ) -> PyResult<()> {
+    // A class is metadata this frontend does not recognise, and the typing spec
+    // says to ignore what a consumer does not recognise.
+    //
+    // It has to be refused before any attribute is read, not only before the
+    // predicate arms. A marker *class* exposes descriptors where an instance
+    // exposes values: `at.Ge(0)` carries `ge = 0`, while `at.Ge` carries the
+    // slot descriptor that reads it, and taking that for a bound builds a
+    // comparison no value is ordered against. Calling one is the same trap a
+    // step later — `Kilograms(1.5)` constructs a unit marker rather than
+    // answering whether 1.5 belongs.
+    if marker.is_instance_of::<PyType>() {
+        return Ok(());
+    }
+
     // A string-pattern marker: valgebra's `Regex(...)` or a compiled
     // `re.Pattern`, both carrying the source pattern as `.pattern`. The pattern
     // is validated (anchored) here so an invalid expression fails at compile
