@@ -155,6 +155,13 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
   The ratios answer "how fast is each tool's validation step," not "how much
   faster is membership than construction." Deep nesting is the widest gap; the
   array and record margins are narrower but consistent.
+- **The ratios are not the whole argument for using valgebra.** They are real,
+  and they are also a regression gate. But the reasons to reach for a membership
+  check over a parser are additionally semantic — an already-held object is
+  re-examined rather than passed through, a value stays checkable after it is
+  mutated, and schemas can be compared as sets — and every one of those would
+  hold even at a ratio of 1.0. `tests/test_pydantic_boundary.py` pins them as
+  verdicts, with no timer involved.
 - The comparison measures different operations (check vs check-and-construct vs
   pure-Python check). It answers "how fast is the validation step for each
   tool," not "are these tools interchangeable" — they are not. See the README

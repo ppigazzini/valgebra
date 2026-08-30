@@ -43,9 +43,23 @@ turn.
 
 For ingesting untrusted input into typed models with coercion and defaults, use
 **pydantic**; for the fastest deserialization into structs, use **msgspec**.
-valgebra occupies the niche neither covers: a closed, lawful **algebra** of
-schemas (union, intersection, complement, refinement, fixpoints) with
-**check-only** semantics, on a Rust core.
+Neither answers the membership question: both check while *building* a value,
+and hand back one they are given without re-examining it. valgebra occupies the
+niche neither covers: a closed, lawful **algebra** of schemas (union,
+intersection, complement, refinement, fixpoints) with **check-only** semantics,
+on a Rust core.
+
+That is a difference in job as well as in speed, and the difference in job has
+consequences a benchmark does not measure. Both parsers check while building a
+value from untyped input: handed a value that is already an instance of the
+target class, each returns it without checking its fields, and neither
+re-examines a value it built when something mutates it later. A membership question can be asked again, of the
+same object, as many times as the contract needs. And because a schema here is a
+*value* in an algebra rather than a class declaration, `is_subtype_of`,
+`is_equivalent` and `is_empty` ask about the schemas themselves, with no value
+involved. `tests/test_pydantic_boundary.py` pins each of these against pydantic,
+including the case that runs the other way: a pydantic `BaseModel` reaches
+valgebra as a bare class and is not deep-checked.
 
 ## What makes it different
 

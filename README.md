@@ -226,10 +226,74 @@ valgebra **checks an object you already hold**; it never coerces or constructs.
 That makes it different from the tools you might already use:
 
 - **pydantic** parses untrusted input into typed models *with coercion and
-  defaults*. Use it for ingestion; use valgebra to check a value you already have.
-- **msgspec** is the fastest path for *deserializing* bytes into structs.
+  defaults*, and guarantees the type of what it *returns*. Use it for ingestion;
+  use valgebra to check a value you already hold — including one pydantic built.
+- **msgspec** is the fastest path for *deserializing* bytes into structs, and
+  it checks on that path only. A `Struct` constructor validates nothing, and
+  `convert` hands back a `Struct` you already hold without re-examining it —
+  there is no membership call to ask instead. Use it to decode; use valgebra
+  to check what you decoded.
 - **jsonschema** validates against the JSON Schema standard; valgebra validates
   against Python types and a set-theoretic algebra instead.
+
+### The difference is not only speed
+
+The benchmark below measures one operation: how long a passing check takes.
+Three differences do not appear in it, because each is a verdict rather than a
+duration. [`tests/test_pydantic_boundary.py`](tests/test_pydantic_boundary.py)
+runs all three libraries over the same values and asserts every claim here.
+
+**An object you already hold is re-examined.** Handed a value that is already an
+instance of the target class, `TypeAdapter.validate_python` returns it without
+checking its fields, and `msgspec.convert` returns it under `strict` and
+`from_attributes` alike. pydantic's re-check is a *model config*
+(`revalidate_instances`), so reaching it requires pydantic to own the class
+declaration — for a dataclass declared elsewhere `TypeAdapter` raises
+`PydanticUserError` rather than ignoring the setting. msgspec has no such
+setting: its checking runs on the decode path, from untyped input. valgebra
+reads the schema off the class, and every call asks the same membership
+question.
+
+**A value stays checkable after it changes.** A check that runs at construction
+answers about the value handed to the constructor. Membership is a call you
+repeat on the same object, with no rebuild:
+
+```python
+from dataclasses import dataclass
+
+from valgebra import Validator
+
+
+@dataclass
+class Config:
+    lr: float
+    steps: int
+
+
+is_config = Validator(Config)  # derived from the dataclass, never redeclared
+config = Config(lr=0.1, steps=10)
+assert is_config.is_valid(config)
+
+config.steps = "ten"  # something mutates it later
+assert not is_config.is_valid(config)  # the same question, asked again
+```
+
+**Schemas answer questions with no value involved.** `is_subtype_of`,
+`is_equivalent`, `is_empty` and `simplify` take no value at all, so a contract
+no value satisfies is decided from the schemas: `intersection(int, str)` reports
+empty without a test case reaching it. Neither `TypeAdapter` nor
+`msgspec.inspect` exposes any of the three, and the suite asserts that by
+reading both surfaces, so the claim fails if either library grows one.
+`complement` is the other half: a set defined by what it *excludes* is a schema
+here, and a Python predicate — carried and run, but not reasoned about —
+elsewhere.
+
+Where the boundary runs the other way: pydantic in `strict` mode rejects without
+coercing on the ingestion path, msgspec reaches a held value through
+`convert(to_builtins(value), type=T)` — a check that costs building two objects
+and discarding them — and valgebra deep-checks neither a pydantic `BaseModel`
+nor a msgspec `Struct`: each reaches the frontend as a bare class, denoting the
+set of its instances. Check either one's fields through a mapping view of them.
 
 On a synthetic benchmark (the PGO release wheel) a passing check is faster than a
 strict pydantic `TypeAdapter` — roughly 2× on a 50-field record and a large
