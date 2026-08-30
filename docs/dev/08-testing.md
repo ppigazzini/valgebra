@@ -11,6 +11,7 @@ what a schema means.
 | Denotation oracle | the walk, against an independent Python predicate over generated values | what the generator does not draw |
 | Model oracle (Rust) | the IR, `simplify` and the decision procedure, against a value model | the walk — the core cannot see Python |
 | Differential | the walk, against pydantic-core and jsonschema | the fragment where the semantics deliberately differ |
+| Boundary | the claims about *why* a check-only tool differs from a parser, as verdicts against pydantic | anything the two libraries answer the same way |
 | Metamorphic | the JSON path against the object path; fast mode against explain mode | a defect both sides share |
 | Algebra laws | every claimed equivalence, against membership | a law nobody thought to claim |
 | Completeness ledger | that the procedure *decides* an enumerated relation | a relation nobody enumerated |

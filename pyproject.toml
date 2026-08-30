@@ -48,6 +48,7 @@ bench = [
     "pytest-benchmark>=5.2.3",
     "pydantic>=2.13.4",
     "jsonschema>=4.26.0",
+    "msgspec>=0.21.1",
 ]
 # Documentation-site tools: the MkDocs Material site and the mkdocstrings API
 # reference generator. Never runtime dependencies.
@@ -157,7 +158,13 @@ exclude_also = ["if TYPE_CHECKING:"]
 python-version = "3.14"
 
 [tool.ty.src]
-# Benchmarks and the differential suite are separate measurement harnesses, not
-# the typed public surface; they import the optional bench dependency group
-# (pydantic, jsonschema), which is absent in the type-check lane.
-exclude = ["benches", "tests/test_differential.py", "scripts/compare_gate.py"]
+# Benchmarks and the suites that cross-check against another library are
+# separate measurement harnesses, not the typed public surface; they import the
+# optional bench dependency group (pydantic, jsonschema), which is absent in the
+# type-check lane.
+exclude = [
+    "benches",
+    "tests/test_differential.py",
+    "tests/test_pydantic_boundary.py",
+    "scripts/compare_gate.py",
+]

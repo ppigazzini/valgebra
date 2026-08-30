@@ -259,12 +259,17 @@ jobs:
         run: uv run --group bench maturin develop --uv
       # Run the same schemas and values through valgebra and through
       # pydantic-core and jsonschema; the environment flag turns a missing oracle
-      # into a hard failure so the gate cannot pass by silently skipping.
+      # into a hard failure so the gate cannot pass by silently skipping. The
+      # boundary suite shares the flag: it pins where the two libraries answer
+      # different questions, so it needs the same oracle present.
       - name: Cross-check membership against pydantic-core and jsonschema
         env:
           VALGEBRA_REQUIRE_DIFFERENTIAL: "1"
           HYPOTHESIS_PROFILE: ci
-        run: uv run --group bench pytest tests/test_differential.py
+        run: >
+          uv run --group bench pytest
+          tests/test_differential.py
+          tests/test_pydantic_boundary.py
 
   doc-examples:
     name: doc examples
