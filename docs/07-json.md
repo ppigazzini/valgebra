@@ -140,8 +140,9 @@ against a Python object — a literal, a refinement predicate, or an instance or
 attribute check — is the documented step back into Python (detailed below). The
 same walk runs over either input source — a Python object or a JSON value — so
 the two paths stay equivalent. On the benchmark machine (AMD Ryzen 7 PRO 7840U,
-WSL2, CPython 3.14.6, jiter 0.16, the PGO release wheel — the same profile the
-release ships), per-call median on a passing document:
+WSL2, CPython 3.14.7 built as the [performance page](11-performance.md)
+records, jiter 0.16, the PGO release wheel — the same profile the release
+ships), per-call median on a passing document:
 
 | Shape | `is_valid_json` | `json.loads` + `is_valid` | speedup |
 | --- | --- | --- | --- |
@@ -150,8 +151,10 @@ release ships), per-call median on a passing document:
 | `list[int]`, 10,000 elements | 105 us | 501 us | ~4.8x |
 
 Avoiding materialization helps most where the document is large or scalar-heavy:
-the 10,000-element array is nearly five times faster than parse-then-validate and
-well over twice as fast as a strict pydantic adapter on the same input.
+the 10,000-element array is nearly five times faster than parse-then-validate.
+`benches/bench_json.py` measures a strict `TypeAdapter.validate_json` over the
+same three shapes; that column is not recorded above, so read the comparison
+from the benchmark rather than from this page.
 
 Nodes that compare against a Python object — literals, refinements, instance and
 object checks, and predicates — materialize just the value at that node, since

@@ -66,12 +66,18 @@ three check the same set of named fields.
 Machine class: AMD Ryzen 7 PRO 7840U (Zen 4, 8c/16t, up to 5.1 GHz, a 2023-era
 mobile part) under WSL2 on Linux 6.18. Toolchain: rustc 1.98.0 (the build these
 numbers are measured on; the supported minimum is the lower `rust-version` in
-the manifest), CPython 3.14.7 built with `--enable-optimizations --with-lto` and
-**the GIL enabled** (`sysconfig.get_config_var("Py_GIL_DISABLED")` is `0`; the
-free-threaded build of the same version runs this work about twice as slow, so a
-figure measured on one is not comparable with the other), pydantic 2.13.4,
-jsonschema 4.26.0, criterion
-0.8.2, pytest-benchmark 5.2.3.
+the manifest), CPython 3.14.7 built from source with
+`--enable-optimizations --with-lto`, `CC=clang` and
+`CFLAGS=-march=native -mtune=native`, and **the GIL enabled**
+(`sysconfig.get_config_var("Py_GIL_DISABLED")` is `0`; the free-threaded build
+of the same version runs this work about twice as slow, so a figure measured on
+one is not comparable with the other), pydantic 2.13.4, jsonschema 4.26.0,
+criterion 0.8.2, pytest-benchmark 5.2.3.
+
+`sysconfig.get_config_var("CONFIG_ARGS")` reports that build on the machine
+these figures come from. The native tuning is the flag that matters when
+reproducing them: a stock distribution interpreter is a different binary, so a
+figure measured against one is not comparable with a figure here.
 
 The extension is the **PGO** release build — the profile-guided, fat-LTO wheel
 the release ships:

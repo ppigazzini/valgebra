@@ -49,8 +49,9 @@ and subtyping as inclusion, is **semantic subtyping**, developed by Frisch,
 Castagna, and Benzaken. valgebra is a runtime membership checker built on that
 model rather than a static type system, but it inherits the model's payoff: the
 combinators are not ad-hoc primitives, they are the Boolean operations on
-value-sets, and refinements like "an int that is not a bool" are simply
-`intersection(int, complement(bool))`.
+value-sets, and a refinement like "an int that is not a bool" is
+`intersection(int, complement(bool))` — a composition of generators rather
+than a construct of its own.
 
 The same line of work models the structural forms valgebra uses:
 
