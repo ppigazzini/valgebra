@@ -33,11 +33,12 @@ LEDGER: every suspected completeness gap is accepted with a reason
 from __future__ import annotations
 
 import json
-from typing import Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
+import annotated_types as at
 import pytest
 
-from valgebra import Validator, complement, intersection, union
+from valgebra import Regex, Validator, complement, intersection, union
 
 
 class _Rec(TypedDict):
@@ -55,7 +56,14 @@ def _v(annotation: Any) -> Validator:
 
 # Small schemas, chosen to cross the kinds the decision procedure treats
 # differently: scalars, the gradual atom, literals, containers, records, maps,
-# and each algebra node. Names are the ledger's keys, so they are stable.
+# refinements, and each algebra node. Names are the ledger's keys, so they are
+# stable.
+#
+# The refinements carry both constraint families deliberately. An order bound
+# entails a looser one by value, so those atoms report nothing; a regex is opaque
+# to the entailment and reports. A universe holding only the decided family would
+# look clean while saying nothing about the other, which is the shape of a probe
+# that cannot fail.
 SCHEMAS: list[tuple[str, Validator]] = [
     ("int", _v(int)),
     ("bool", _v(bool)),
@@ -87,6 +95,10 @@ SCHEMAS: list[tuple[str, Validator]] = [
     ("{a:int,...}", _v(_Rec).open()),
     ("{a:int,b:str}", _v(_Rec2)),
     ("{a:int}|{a:int,b:str}", union(_Rec, _Rec2)),
+    ("int&Ge(0)", _v(Annotated[int, at.Ge(0)])),
+    ("int&Ge(1)", _v(Annotated[int, at.Ge(1)])),
+    ("str&Regex['a']", _v(Annotated[str, Regex("a")])),
+    ("str&Regex['ab?']", _v(Annotated[str, Regex("ab?")])),
 ]
 
 
@@ -169,6 +181,28 @@ ACCEPTED: dict[str, str] = {
         "compares a pooled constant to a name."
     ),
     "{a:int} <= dict[Lit['a','b'],int]": "As above, with the key a union of literals.",
+    "str&Regex['a'] <= str&Regex['ab?']": (
+        "A regex is opaque to `constraint_entailed`, which gives it no value "
+        "entailment, so a refinement relates through one only when the supertype "
+        "carries it verbatim. Inclusion of one regular language in another is "
+        "decidable, so the route is a language comparison over the two pooled "
+        "patterns rather than equality of them."
+    ),
+    "str&Regex['a'] <= Lit['a']": (
+        "The same opacity read the other way: deciding it means computing that "
+        "the pattern's language is the singleton the literal denotes, and the "
+        "pattern is never turned into a language at all."
+    ),
+    "str&Regex['a'] <= Lit['a','b']": (
+        "As above, with the supertype a union of literals."
+    ),
+    "bool <= int&Ge(0)": (
+        "A subtype that is not itself a refinement reaches one only through the "
+        "value oracle, which answers for a literal and not for a class. Deciding "
+        "it means comparing the bound against the subtype's own value range -- "
+        "`bool` denotes exactly `{False, True}` -- where the core reads a scalar "
+        "region rather than an enumerated set."
+    ),
 }
 
 

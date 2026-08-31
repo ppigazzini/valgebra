@@ -209,8 +209,10 @@ the entry is removed. The literal-meet entry is held the same way by
 each rule that would close it.
 
 That probe searches a fixed universe of schemas, so it reaches a gap only where
-some atom in that universe reaches it. Its universe holds no refinement, so the
-two refinement entries above are held by this page rather than by a gate.
+some atom in that universe reaches it. Its universe carries refinements of both
+constraint families — an order bound, which entails a looser one and so reports
+nothing, and a regex, which is opaque and reports — so the two refinement entries
+above are held by the same gate as the rest.
 
 General regular-expression-types inclusion of sequences (a union of sequence
 languages that splits across branches, or a repeated heterogeneous group) is not

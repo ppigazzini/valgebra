@@ -6,6 +6,16 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The completeness probe searches refinements. Its schema universe crossed every
+  other kind the decision procedure treats differently and held no refinement, so
+  that whole fragment was outside the reach of the gate
+  `docs/15-decidability.md` cites as the reason an unlisted conservative answer
+  cannot go unnoticed. Four atoms — two order bounds and two regexes — put it in
+  reach, and the four suspected gaps they surface are on the ledger with the
+  route to deciding each. No answer changed; nothing was found unsound.
+
 ### Fixed
 
 - `ValidationError` can be pickled, so a validation failure crosses a process
