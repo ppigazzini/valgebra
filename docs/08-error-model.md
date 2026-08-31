@@ -24,6 +24,29 @@ A `ValidationError` exposes:
 - `message`, `code`, `path`, `expected`, `value` — scalar convenience
   attributes mirroring the first item. `str(exc)` is a summary of every failure.
 
+## Crossing a process boundary
+
+The exception pickles, and the structured model travels with it. A worker that
+validates and fails delivers the failure itself — code, path and every item of
+`errors` — rather than a message it has flattened by hand:
+
+```python
+import pickle
+
+from valgebra import ValidationError, Validator
+
+try:
+    Validator({"a": int}).validate({"a": "x"})
+except ValidationError as err:
+    restored = pickle.loads(pickle.dumps(err))
+    assert restored.code == "int_type"
+    assert restored.path == ("a",)
+    assert restored.errors == err.errors
+```
+
+That covers a `multiprocessing` worker, a process pool, a task queue, and a test
+runner that forwards failures from a subprocess.
+
 ## Aggregation and fail-fast
 
 By default the walk does not stop at the first failure: it collects every
@@ -175,8 +198,10 @@ class Backend(enum.Enum):
     TORCH = "torch"
 
 
-for spec, value in [(Literal["torch", "jax"], "tensorflow"),
-                    (union(Backend, Literal["union"]), "arcfase")]:
+for spec, value in [
+    (Literal["torch", "jax"], "tensorflow"),
+    (union(Backend, Literal["union"]), "arcfase"),
+]:
     try:
         Validator(spec).validate(value)
     except ValidationError as err:

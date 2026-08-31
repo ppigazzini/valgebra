@@ -6,6 +6,19 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `ValidationError` can be pickled, so a validation failure crosses a process
+  boundary with its structured model intact. The exception's `__module__` was a
+  bare `_valgebra`, which names no importable module, and `pickle` locates a
+  class by that string together with the qualified name — so a worker in a
+  process pool or a task queue delivered a `PicklingError` naming an internal
+  module instead of the validation result. The module is now `valgebra`, the
+  package the name is exported from: it is baked into every serialized error, so
+  it has to be the path that keeps resolving rather than the private extension
+  underneath, whose name this reference reserves the right to change. A traceback
+  and a `repr` read `valgebra.ValidationError` for the same reason.
+
 ## [0.0.9] - 2026-08-26
 
 Two `Annotated` markers were read as something other than what they mean, and
