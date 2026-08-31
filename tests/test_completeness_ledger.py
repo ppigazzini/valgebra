@@ -314,7 +314,37 @@ _DECIDED = [
 # Known decision-completeness misses. None remain: each relation the procedure
 # declines on a decidable fragment has been closed. An entry returns here only if
 # a future change reintroduces a miss, recorded as a strict expected failure.
-_LEDGERED: list[object] = []
+# LEDGER: involution is decided in one direction only for a structural atom.
+#
+# `A <= ~~A` is decided everywhere -- the arm for a complement on the right asks
+# whether `A` shares a value with `~A`, which it never does. The converse has no
+# arm at all: a complement-headed subtype against a constructor-headed supertype
+# matches no structural pair, so it falls to the leaf oracle, which declines. The
+# answer stays sound, since a `False` is "not proven".
+#
+# The dividing line is the oracle's reach, not constructor versus leaf. It
+# decides for a scalar, for both lattice bounds, for a union and for a
+# complement; it declines for a pooled constant and for a class, so `Literal`,
+# `Enum`, dataclass and attribute schemas are undecided alongside every
+# structural constructor. One representative is ledgered rather than nine, since
+# they share a cause.
+#
+# Closing it wants negation-normal form before the comparison -- `simplify`
+# already cancels double negation -- or the missing arm. In the reduction the
+# published boundary describes, the case cannot arise: the normal form erases
+# double negation by construction.
+_LEDGERED: list[object] = [
+    pytest.param(
+        "subtype",
+        complement(complement(_Dog)),
+        _Dog,
+        id="involution:~~Dog<=Dog",
+        marks=pytest.mark.xfail(
+            strict=True,
+            reason="no arm relates a complement to a constructor; the oracle declines",
+        ),
+    ),
+]
 
 
 @pytest.mark.parametrize(("operation", "left", "right"), _DECIDED + _LEDGERED)

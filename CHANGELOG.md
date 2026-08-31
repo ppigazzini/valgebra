@@ -8,6 +8,17 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Changed
 
+- The decidability boundary records that involution decides in one direction
+  only, wherever the value oracle cannot reach. `A <= ~~A` holds everywhere; the
+  converse holds for a scalar, the two lattice bounds, a union and a complement,
+  and not for a pooled constant, a class, or any structural constructor —
+  because a complement on the left matches no structural rule and the pair falls
+  to the oracle. The answer was always sound — a `False` is "not
+  proven" — but the gap sat off the page while its siblings were on it, so a
+  reader checking a lattice law against the procedure met an unexplained `False`.
+  A strict `xfail` in the completeness ledger now holds it, so closing it forces
+  the entry out.
+
 - The completeness probe searches refinements. Its schema universe crossed every
   other kind the decision procedure treats differently and held no refinement, so
   that whole fragment was outside the reach of the gate

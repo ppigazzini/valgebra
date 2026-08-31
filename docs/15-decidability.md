@@ -177,7 +177,7 @@ from typing import Annotated, Literal
 
 import annotated_types as at
 
-from valgebra import Regex, Validator
+from valgebra import Regex, Validator, complement
 
 pattern = Validator(Annotated[str, Regex("a")])
 assert not pattern.is_subtype_of(Annotated[str, Regex("ab?")])  # L(a) <= L(ab?)
@@ -189,7 +189,36 @@ assert not Validator(Annotated[int, at.MultipleOf(4)]).is_subtype_of(
 # A literal reaches the value oracle; a class does not.
 assert Validator(Literal[5]).is_subtype_of(Annotated[int, at.Ge(0)])
 assert not Validator(bool).is_subtype_of(Annotated[int, at.Ge(0)])
+
+# Involution decides both ways where the oracle reaches, one way elsewhere.
+record = Validator({"a": int})
+assert record.is_subtype_of(complement(complement(record)))
+assert not complement(complement(record)).is_subtype_of(record)  # a record
+assert not complement(complement(Validator(Literal["a"]))).is_subtype_of(
+    Literal["a"]
+)  # a pooled constant, though a leaf
+assert complement(complement(Validator(int))).is_subtype_of(int)  # a scalar
 ```
+
+- **Involution, in one direction.** `~~A` and `A` denote the same set, and
+  `A <= ~~A` is decided everywhere: the rule for a complement on the right asks
+  whether `A` shares a value with `~A`, which it never does. The converse has no
+  rule — a complement on the *left* against anything but another complement
+  matches no structural pair — so it reaches the value oracle, and whether it
+  decides is whether the oracle can answer.
+
+  It **does** for a scalar, for `anything` and `nothing`, for a union, and for a
+  complement: those are the regions the oracle reasons about. It does **not** for
+  a pooled constant or a class, so `Literal["a"]`, an `Enum`, a dataclass and an
+  attribute schema are all undecided — and neither for any structural
+  constructor: a list, a tuple, a set, a mapping or a record. The dividing line
+  is the oracle's reach, not the constructor/leaf distinction: a literal is a
+  leaf and is undecided all the same, for the same reason
+  `Literal["a"] <= ~int` above is.
+
+  This one has a short route: reduce to negation-normal form before comparing.
+  `simplify` already cancels double negation, so the rewrite exists and is simply
+  not on the path the decision takes.
 
 - **A meet of two distinct literals.** `Literal["a"] & Literal["b"]` denotes no
   value and is not decided empty. Unlike the structural entries above this one
@@ -206,7 +235,8 @@ appears that is not written down with a reason. Both are on its ledger, so
 neither can quietly become permanent, and closing either fails the ledger until
 the entry is removed. The literal-meet entry is held the same way by
 `tests/test_completeness_ledger.py`, with the two counterexamples that rule out
-each rule that would close it.
+each rule that would close it, and the involution entry the same way — as a
+strict `xfail`, so closing it fails the ledger and forces the entry out.
 
 That probe searches a fixed universe of schemas, so it reaches a gap only where
 some atom in that universe reaches it. Its universe carries refinements of both
