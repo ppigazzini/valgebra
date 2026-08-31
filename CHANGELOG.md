@@ -8,6 +8,15 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Changed
 
+- A union's `expected` names each branch the way that branch names itself when it
+  fails alone, in place of the branch's node kind. A set of permitted strings —
+  the commonest shape a field has — reported `one of: literal, literal` and now
+  reports `one of: the literal 'torch', the literal 'jax'`; an `Enum` branch
+  names its class. `Literal[...]` builds a union of its constants, so its
+  constants are what the message lists. The list is bounded at the same number of
+  branches the closest-branch search reads and ends in `...` beyond it, so a wide
+  union reports a readable prefix.
+
 - The decidability boundary records that involution decides in one direction
   only, wherever the value oracle cannot reach. `A <= ~~A` holds everywhere; the
   converse holds for a scalar, the two lattice bounds, a union and a complement,

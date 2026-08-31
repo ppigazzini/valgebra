@@ -721,6 +721,90 @@ fn keyed_map_explain(
 /// union summary. Error-path only — the membership result is never affected.
 const CLOSEST_BRANCH_PROBE_LIMIT: usize = 64;
 
+/// The most labels a union's `expected` names before it truncates.
+///
+/// A separate bound from the probe above, on a separate quantity. The probe
+/// bounds how many branches are *walked*, which costs a descent each; this
+/// bounds how many labels are *named*, which costs a string. They are not the
+/// same count even for one union: the label pass flattens a nested union, and
+/// `Literal[...]` is a union of its constants, so two branches can yield a
+/// hundred labels.
+const UNION_LABEL_LIMIT: usize = 64;
+
+/// The branch labels of a union, collected until the limit and no further.
+struct BranchLabels {
+    rendered: Vec<String>,
+    truncated: bool,
+}
+
+impl BranchLabels {
+    fn new() -> Self {
+        Self {
+            rendered: Vec::new(),
+            truncated: false,
+        }
+    }
+
+    /// Take `label` unless the limit is reached, in which case record that the
+    /// list is short rather than growing it.
+    fn push(&mut self, label: String) {
+        if self.rendered.len() < UNION_LABEL_LIMIT {
+            self.rendered.push(label);
+        } else {
+            self.truncated = true;
+        }
+    }
+
+    fn render(&self) -> String {
+        let joined = self.rendered.join(", ");
+        if self.truncated {
+            format!("one of: {joined}, ...")
+        } else {
+            format!("one of: {joined}")
+        }
+    }
+}
+
+/// Name `schema` the way it names itself when it is the only thing that failed.
+///
+/// [`Schema::expected`] gives a node's *kind*, which is the least informative
+/// thing about a literal or an instance: a union of permitted strings joined by
+/// kind reads `one of: literal, literal`. The concrete name needs the pool, and
+/// the pool lives in this crate, so the rendering does too and the core keeps
+/// the kind as the fallback for every node with nothing better to say.
+///
+/// A nested union contributes its members rather than itself, because
+/// `Literal[...]` builds one: without this, a single-constant `Literal` names
+/// itself `union`.
+fn push_branch_label(schema: &Schema, ctx: Ctx<'_>, py: Python<'_>, out: &mut BranchLabels) {
+    match schema {
+        Schema::Union(members) => {
+            for member in members {
+                push_branch_label(member, ctx, py, out);
+            }
+        }
+        Schema::Literal(index) => {
+            let label = const_at(ctx, *index, py).map_or_else(
+                || schema.expected().to_owned(),
+                |c| format!("the literal {}", summarize(&c)),
+            );
+            out.push(label);
+        }
+        Schema::Instance(index)
+        | Schema::Attrs {
+            class_index: index, ..
+        } => {
+            let label = class_at(ctx, *index, py)
+                .map_or_else(|| schema.expected().to_owned(), |c| class_label(&c));
+            out.push(label);
+        }
+        // A refinement's type is its base, matching `Schema::expected`; the
+        // constraints report themselves when one of them is what failed.
+        Schema::Refine { base, .. } => push_branch_label(base, ctx, py, out),
+        other => out.push(other.expected().to_owned()),
+    }
+}
+
 fn check_union(
     members: &[Schema],
     value: &Value<'_, '_>,
@@ -783,11 +867,14 @@ fn check_union(
     match best {
         Some((progress, branch)) if progress > 0 => out.extend(branch),
         _ => {
-            let labels: Vec<&str> = members.iter().map(Schema::expected).collect();
+            let mut labels = BranchLabels::new();
+            for member in members {
+                push_branch_label(member, ctx, value.py(), &mut labels);
+            }
             out.push(Violation {
                 code: "union_error",
                 path: path.clone(),
-                expected: format!("one of: {}", labels.join(", ")),
+                expected: labels.render(),
                 value_summary: summarize_value(value),
             });
         }

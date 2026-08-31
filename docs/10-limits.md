@@ -48,9 +48,13 @@ fields) is written by the developer and is trusted.
 - **Self-reference.** A value that contains itself is caught by an
   object-identity guard and fails with `recursion_loop` rather than looping
   forever.
-- **Closest-branch probe.** When a value misses a wide union, the error report
-  searches only a bounded number of branches for the closest match, so building
-  the explanation stays bounded regardless of how the value is shaped.
+- **Union error reporting.** When a value misses a wide union, the error report
+  is bounded in two independent ways: it searches only a bounded number of
+  branches for the closest match, and `expected` names only a bounded number of
+  **labels** before truncating with `...`. The two counts differ — a branch that
+  is itself a union, such as a wide `Literal[...]`, contributes one branch and
+  many labels — so each carries its own bound. Building the explanation stays
+  bounded regardless of how wide the union is or how the value is shaped.
 
 ## Rejection is clean, not catastrophic
 

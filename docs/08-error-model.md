@@ -175,17 +175,16 @@ Messages and codes follow a fixed style so they stay predictable:
 - The `code` is stable and machine-readable; it is the field to branch on, not
   the prose. Codes do not change meaning across releases.
 - `expected` names the set, `value` is a short repr of what was found, truncated
-  so a large value cannot flood the message. **A union is the exception**: it
-  names the *kind* of each branch rather than what each branch accepts — see
-  below.
+  so a large value cannot flood the message. A union names each of its branches,
+  bounded, as each would name itself alone.
 - Set-membership failures (`union`, `complement`) report at the location of the
   combinator, not inside a discarded branch.
 
 ## What a union's `expected` says
 
 A union that no branch admits reports one failure at the union's own location,
-and its `expected` lists **what kind of schema each branch is**, not the values
-each branch accepts:
+and its `expected` names each branch the way that branch names itself when it is
+the only thing that failed:
 
 ```python
 import enum
@@ -200,24 +199,31 @@ class Backend(enum.Enum):
 
 for spec, value in [
     (Literal["torch", "jax"], "tensorflow"),
-    (union(Backend, Literal["union"]), "arcfase"),
+    (union(Backend, Literal["cpu"]), "arcfase"),
 ]:
     try:
         Validator(spec).validate(value)
     except ValidationError as err:
         print(err.errors[0]["expected"])
 
-# one of: literal, literal
-# one of: instance, union
+# one of: the literal 'torch', the literal 'jax'
+# one of: Backend, the literal 'cpu'
 ```
 
-So for the commonest shape a field has — a set of permitted strings — the
-message does not list them. A caller who wants the permitted values in the
-message supplies that text itself; the schema is where the values live, and
-`repr` of the validator prints them.
+A `Literal[...]` builds a union of its constants, so its branches are the
+constants and the message lists them. An `Enum` branch names the class, as it
+does alone.
 
-This is a known limit of the union renderer, not a property of the algebra, and
-it is the one place the `expected` rule above does not hold.
+The list is bounded at 64 labels and ends in `...` beyond that, so a union wide
+enough to be a generated table reports a readable prefix. A branch that is itself
+a union contributes its own members, so the label count and the branch count are
+not the same number. See [resource limits](10-limits.md).
+
+**`expected` describes the schema as written, not a canonical name for the set.**
+`int | str`, `str | int` and `~(~int & ~str)` denote one set and read
+differently, in the same way `repr` renders the annotation that produced a
+schema. Read `expected` to see what was asked for; use
+[`is_equivalent`](04-algebra.md) to ask whether two schemas mean the same thing.
 
 ## Which spelling produces which code
 
