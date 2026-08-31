@@ -15,7 +15,7 @@ A `ValidationError` exposes:
 - `errors` — a tuple of structured items, one per failure. Each item is a plain
   dict with these keys:
   - `code` — a stable, machine-readable code (e.g. `int_type`, `missing_key`,
-    `literal_error`).
+    `too_short`).
   - `path` — the location of the offending value from the root, a tuple of
     string keys and integer indices (empty at the root).
   - `message` — the rendered one-line human message.
@@ -124,6 +124,18 @@ attribute access included. A base exception that is not an ordinary exception
 non-member, so it propagates out of `validate`/`is_valid` rather than being
 reported as "not a member" or a `predicate_error`.
 
+## The set of codes
+
+There is no hand-maintained list of every code on this page, because a list that
+drifts from the walk is worse than none. The codes are pinned by
+`tests/test_error_codes.py`, which asserts the code and the path for each node
+kind — read it as the enumeration, and add a case there when you need one that is
+not covered.
+
+What is guaranteed here is the property a caller depends on: a code is stable and
+does not change meaning across releases, so branching on one written down today
+keeps working. New codes may appear for node kinds that gain a distinct failure.
+
 ## Determinism
 
 For a given schema and value the error model is deterministic: the same codes,
@@ -140,6 +152,72 @@ Messages and codes follow a fixed style so they stay predictable:
 - The `code` is stable and machine-readable; it is the field to branch on, not
   the prose. Codes do not change meaning across releases.
 - `expected` names the set, `value` is a short repr of what was found, truncated
-  so a large value cannot flood the message.
+  so a large value cannot flood the message. **A union is the exception**: it
+  names the *kind* of each branch rather than what each branch accepts — see
+  below.
 - Set-membership failures (`union`, `complement`) report at the location of the
   combinator, not inside a discarded branch.
+
+## What a union's `expected` says
+
+A union that no branch admits reports one failure at the union's own location,
+and its `expected` lists **what kind of schema each branch is**, not the values
+each branch accepts:
+
+```python
+import enum
+from typing import Literal
+
+from valgebra import ValidationError, Validator, union
+
+
+class Backend(enum.Enum):
+    TORCH = "torch"
+
+
+for spec, value in [(Literal["torch", "jax"], "tensorflow"),
+                    (union(Backend, Literal["union"]), "arcfase")]:
+    try:
+        Validator(spec).validate(value)
+    except ValidationError as err:
+        print(err.errors[0]["expected"])
+
+# one of: literal, literal
+# one of: instance, union
+```
+
+So for the commonest shape a field has — a set of permitted strings — the
+message does not list them. A caller who wants the permitted values in the
+message supplies that text itself; the schema is where the values live, and
+`repr` of the validator prints them.
+
+This is a known limit of the union renderer, not a property of the algebra, and
+it is the one place the `expected` rule above does not hold.
+
+## Which spelling produces which code
+
+Two spellings of the same singleton denote the same set and are `is_equivalent`,
+but they build different schema shapes and so report differently:
+
+```python
+from typing import Literal
+
+from valgebra import ValidationError, Validator
+
+for spec in ("active", Literal["active"]):
+    try:
+        Validator(spec).validate("x")
+    except ValidationError as err:
+        print(err.errors[0]["code"], "|", err.errors[0]["expected"])
+
+# literal_error | the literal 'active'
+# union_error   | one of: literal
+```
+
+`Literal[...]` builds a union of its constants — of one branch, when there is one
+constant — and a union reports `union_error`. The bare constant builds a literal
+leaf and reports `literal_error`. `simplify()` reduces the one-branch union to
+the leaf, so `Validator(Literal["active"]).simplify()` reports `literal_error`
+and compares equal to `Validator("active")` under `==`.
+
+Branch on the code you actually observe for the spelling you actually write.

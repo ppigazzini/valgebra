@@ -253,6 +253,61 @@ assert not closed.is_valid({"name": "Ada", "extra": 1})
 assert closed.open().is_valid({"name": "Ada", "extra": 1})
 ```
 
+Both apply to every record that **declares at least one field**, at any depth,
+including inside a recursive definition. They are projections rather than
+inverses: `open` on such a record widens any typed catch-all it carries to admit
+every key, and `close` drops the catch-all, so applying either twice changes
+nothing the second time.
+
+A dict schema that declares no named field is a **mapping**, not a record, and
+neither transform rewrites it — only the schemas inside its clauses are visited.
+That covers `dict[K, V]` and the empty schema `{}`:
+
+```python
+from valgebra import Validator
+
+assert repr(Validator({str: int}).open()) == "dict[str, int]"  # unchanged
+assert repr(Validator({}).open()) == "{}"  # unchanged
+
+# The same clause is widened once a named field sits beside it.
+assert repr(Validator({"name": str, str: int}).open()) == "{'name': str, ...}"
+```
+
+So whether a typed catch-all is freed depends on whether the schema also
+declares a field. Write the key set you want rather than reaching for `open` on a
+mapping.
+
+#### Under a `complement`, the direction reverses
+
+A record reached through a `complement` is rewritten like any other. Opening it
+makes the complemented set larger, which makes the complement — and so the whole
+schema — **smaller**:
+
+```python
+from valgebra import Validator, anything, complement
+
+not_a_k_record = complement(Validator({"k": anything}))
+schema = Validator({"x": not_a_k_record})
+value = {"x": {"k": 1, "z": 2}}
+
+# `{"k": 1, "z": 2}` is not a closed `{k: …}` record, so it is in the complement.
+assert schema.is_valid(value)
+
+# Opening admits it to the inner record, so it leaves the complement.
+assert not schema.open().is_valid(value)
+assert repr(schema.open()) == "{'x': complement({'k': anything, ...}), ...}"
+```
+
+`close` reverses under a complement for the same reason: it narrows the inner
+record, which widens the schema.
+
+So "open admits more" holds of the record the transform rewrites, and of the
+whole schema only where no complement stands between them. Under a negation the
+two swap. The practical consequence is that adding or removing an `.open()`
+**inside** a complement changes the schema in the direction opposite to the one
+the name suggests, and the change is invisible from outside unless you check —
+`repr` shows it, as above.
+
 ### Heterogeneous maps and catch-alls
 
 A dict schema's string keys are named fields; any *other* key is a schema that
@@ -339,6 +394,42 @@ assert Validator(Color).is_valid(Color.RED)
 assert Validator(Point).is_valid(Point(1, 2))
 assert not Validator(Point).is_valid(Point(1, "y"))
 ```
+
+### Pass the class, not its annotations
+
+Give `Validator` the class itself. It reads the annotations, resolves the string
+forms, and keeps the `Annotated` metadata — which is where every refinement
+lives.
+
+Extracting the hints yourself and passing the mapping is the path that goes
+wrong, because `typing.get_type_hints` **drops `Annotated` metadata by default**.
+The schema still builds and still validates; it has quietly lost its
+constraints, and nothing raises:
+
+```python
+from typing import Annotated, TypedDict, get_type_hints
+
+import annotated_types as at
+
+from valgebra import Validator
+
+
+class Account(TypedDict):
+    balance: Annotated[int, at.Ge(0)]
+
+
+assert not Validator(Account).is_valid({"balance": -5})  # the class: constrained
+
+stripped = get_type_hints(Account)  # {'balance': <class 'int'>}
+assert Validator(stripped).is_valid({"balance": -5})  # the bound is gone
+
+kept = get_type_hints(Account, include_extras=True)
+assert not Validator(kept).is_valid({"balance": -5})  # include_extras keeps it
+```
+
+If you must derive the hints — building a schema for a class chosen at runtime,
+say — pass `include_extras=True`. Passing the class is the supported path and has
+no such footgun.
 
 !!! note "Recursive classes"
     A class whose own type appears in a field (a tree node, a linked list) is

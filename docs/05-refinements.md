@@ -10,6 +10,11 @@ first, then each constraint. valgebra reads the
 [annotated-types](https://pypi.org/project/annotated-types/) markers
 structurally, so it has no runtime dependency on that library.
 
+That is a fact about valgebra, not about your environment: the **examples** on
+this page import `annotated_types`, and `pip install valgebra` does not bring it
+in. Install it alongside — `pip install annotated-types` — or write the same
+constraint with `valgebra.Regex`, which needs nothing beyond valgebra.
+
 ```python
 from typing import Annotated
 
@@ -89,8 +94,9 @@ assert Validator(Annotated[str, re.compile(r"\d+")]).is_valid("123")
 Running natively is what buys the linear-time guarantee, and it is also what
 makes the dialect the Rust engine's. The two languages are close but not equal,
 and **a pattern both engines accept can denote different sets**. Compiling
-successfully is therefore not a test of which language a pattern is in; port a
-pattern from `re` by checking these three, which are where they part:
+successfully is therefore not a test of which language a pattern is in. Three
+places the two engines part, which a ported pattern should be checked against —
+this is where they differ, not a complete audit of what a pattern denotes:
 
 ```python
 import re
@@ -123,6 +129,46 @@ works here fails there and a reader finds out at once. The first two are the
 quiet ones — both engines build the pattern and answer differently — and they
 are the reason a library holding itself to `re`'s decisions cannot adopt `Regex`
 behind a fallback that triggers on compile failure.
+
+### Agreement with `re` is not ASCII
+
+Checking a pattern against the list above tells you the two engines agree. It
+does not tell you the pattern denotes what you meant, and the character classes
+are where that bites: `\d`, `\w` and `\s` are **Unicode-aware** here, exactly as
+they are in `re`. The two engines agree, and a reader who wanted digits gets
+every decimal digit Unicode defines.
+
+```python
+import re
+from typing import Annotated
+
+from valgebra import Regex, Validator
+
+year = Validator(Annotated[str, Regex(r"\d{4}")])
+assert year.is_valid("٢٠٢٦")  # Arabic-Indic digits are decimal digits
+assert re.fullmatch(r"\d{4}", "٢٠٢٦") is not None  # `re` agrees
+
+assert Validator(Annotated[str, Regex(r"\w")]).is_valid("é")
+assert Validator(Annotated[str, Regex(r"\s")]).is_valid("\u00a0")  # no-break space
+```
+
+Write the ASCII set when you mean the ASCII set. `[0-9]` is the portable
+spelling; `(?-u:\d)` is the same thing with the Unicode flag turned off for that
+group, and is this engine's syntax rather than `re`'s:
+
+```python
+from typing import Annotated
+
+from valgebra import Regex, Validator
+
+assert not Validator(Annotated[str, Regex(r"[0-9]{4}")]).is_valid("٢٠٢٦")
+assert not Validator(Annotated[str, Regex(r"(?-u:\d){4}")]).is_valid("٢٠٢٦")
+assert Validator(Annotated[str, Regex(r"[0-9]{4}")]).is_valid("2026")
+```
+
+This is the shape that reaches production: a timestamp, an identifier or a
+version pattern written with `\d` admits strings the parser downstream rejects,
+and every engine involved agreed the pattern was fine.
 
 
 `MultipleOf(n)` requires a nonzero divisor: no value is a multiple of zero, so

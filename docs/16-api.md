@@ -79,6 +79,64 @@ assert union(int, nothing).is_equivalent(int)
 assert complement(anything).is_equivalent(nothing)
 ```
 
+## What raises, and when
+
+A failure at **build** time — when the schema is compiled — is a different kind
+of event from a failure at **validation** time, and it raises a different
+exception. `ValidationError` is only ever the second. Building raises one of
+three, and which one says what went wrong:
+
+| Raised | When | Example |
+| --- | --- | --- |
+| `NotImplementedError` | The spec names a form with no decidable runtime membership. | `Sequence[int]`, `Mapping[str, int]`, a `TypeVar`, `Final`, `ClassVar` |
+| `NotImplementedError` | Compiling descends 128 levels without reaching a leaf. | a self-referential class, whose field type names the class |
+| `ValueError` | A constructed schema crosses a size bound: depth, definitions, or nodes. | growing a schema in a loop with `\|`, `union`, `intersection`, `open`, `simplify` |
+| `ValueError` | A marker's value cannot denote a set. | `MultipleOf(0)` |
+| `ValueError` | A `recursive` body is not contractive — its back edge is not under a structural constructor. | `recursive(lambda s: s)` |
+| `TypeError` | An argument is the wrong Python type for the call. | `validate_json(123)`, `load(123)` |
+
+The two `NotImplementedError` rows are **different bounds** that happen to share
+a class. The first is about the *form* and no depth would help it; the second is
+about *depth while compiling*, and is what a self-referential class reaches
+because its field type names the class again. The `ValueError` depth row is a
+third bound, on the schema a sequence of calls has constructed. The
+[resource limits](10-limits.md) guide covers all three sizes.
+
+```python
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+from valgebra import Validator, recursive
+
+
+@dataclass
+class Node:
+    next: "Node"
+
+
+for spec in (Sequence[int], Node):
+    try:
+        Validator(spec)
+        raise AssertionError("expected a rejection")
+    except NotImplementedError:
+        pass
+
+try:
+    Validator(recursive(lambda schema: schema))
+    raise AssertionError("expected a rejection")
+except ValueError:
+    pass
+
+try:
+    Validator(int).validate_json(123)
+    raise AssertionError("expected a rejection")
+except TypeError:
+    pass
+```
+
+Every one of these is raised before any value is checked, so a schema that
+compiles is a schema whose every membership question is answerable.
+
 ## Errors
 
 ### `ValidationError`

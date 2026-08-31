@@ -19,6 +19,16 @@ pip install valgebra
 uv add valgebra
 ```
 
+valgebra has no runtime dependencies. It reads
+[annotated-types](https://pypi.org/project/annotated-types/) markers
+structurally, never by importing that package — but most of the refinement
+examples in these pages are *written* with it, so install it too if you want to
+run them as printed:
+
+```bash
+pip install annotated-types
+```
+
 Wheels are published for Linux (manylinux and musllinux, x86_64 and aarch64),
 macOS (Intel and Apple silicon), Windows, and free-threaded CPython 3.14 where
 the release image exposes a `cp314t` interpreter. Free-threaded support starts at

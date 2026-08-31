@@ -224,3 +224,11 @@ of about a thousand members, and a deeply nested Boolean combination.
 - **A finding needs a witness.** These recipes answer questions about sets; a
   concrete value from the offending set is what makes an answer checkable by a
   human, and one that cannot produce a value is not yet a finding.
+- **A compiled schema does not enumerate itself.** There is no call returning a
+  validator's declared keys, its per-field clauses, or its arms. Every question
+  above is asked by *comparing a schema to another schema* — that is the whole
+  interface, and it is enough for the questions on this page. `repr` renders the
+  annotation that produces a schema and is meant for a human to read; parsing it
+  to recover structure is not supported and will break. To check that a schema
+  and a class declare the same fields, write the field set down once and build
+  both from it, rather than reading it back out of either.
