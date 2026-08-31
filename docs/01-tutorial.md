@@ -151,6 +151,18 @@ users.validate_json('{"name": "Ada", "age": 36}')  # passes, raises nothing
 assert Validator(list[int]).is_valid_json("[1, 2, 3]")  # str or bytes
 ```
 
+Those two answer a verdict and throw the document away. When you want the data as
+well, `load` validates and returns the parsed value, so the document is parsed
+once rather than once by you and once by the check:
+
+```python
+from valgebra import Validator
+
+users = Validator({"name": str, "age?": int})
+record = users.load('{"name": "Ada", "age": 36}')
+assert record == {"name": "Ada", "age": 36}
+```
+
 ## Where to go next
 
 You can now check scalars, collections, records, constraints, failures, and

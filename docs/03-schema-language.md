@@ -185,6 +185,34 @@ assert not Validator(Literal[1]).is_valid(True)
 assert not Validator(Literal[1]).is_valid(1.0)
 ```
 
+### Anything unrecognized is a literal
+
+The literal form is also the **fallback**: an object the frontend does not read
+as one of the forms above becomes `Literal[that object]`, so `Validator(x)`
+denotes `{x}` for any `x` valgebra has no other reading for. That is what makes
+`Validator("active")` mean the string rather than an error, and it applies to a
+function, a module or an instance just the same:
+
+```python
+from valgebra import Validator
+
+
+def positive(value):
+    return value > 0
+
+
+schema = Validator(positive)
+assert repr(schema).startswith("Literal[")
+assert schema.is_valid(positive)  # the function object itself
+assert not schema.is_valid(1)  # not a predicate: 1 is not that function
+```
+
+A callable is the case worth naming, because the same callable **is** a
+predicate one position inward, as `Annotated` metadata — see
+[refinements](05-refinements.md#a-bare-callable-is-metadata-only). At the top
+level there is no base for it to narrow, so the fallback applies and the schema
+denotes the single function object.
+
 ## Unions and `Optional`
 
 `X | Y` and `Optional[X]` denote the union of the member sets:

@@ -125,7 +125,9 @@ except ValidationError as err:
 ## Validate JSON directly
 
 `validate_json` parses and checks JSON on the Rust path, reaching the same
-decision as validating the parsed object:
+decision as validating the parsed object. `load` does the same and **returns the
+parsed value**, so a document you also need the data from is parsed once rather
+than once by `json.loads` and once by the check:
 
 ```python
 from valgebra import Validator
@@ -133,4 +135,5 @@ from valgebra import Validator
 users = Validator({"name": str, "age?": int})
 users.validate_json('{"name": "Ada", "age": 36}')
 assert Validator(list[int]).is_valid_json(b"[1, 2, 3]")
+assert users.load('{"name": "Ada"}') == {"name": "Ada"}
 ```

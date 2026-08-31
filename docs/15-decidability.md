@@ -151,9 +151,49 @@ tracked as future work.
   cannot place it in a region; the value oracle already answers the membership
   this reduces to, and is not yet asked here.
 
+- **A constraint with no value entailment.** A bound (`Ge`, `Gt`, `Le`, `Lt`,
+  `MinLen`, `MaxLen`) entails a looser one through the ordering oracle, so a
+  tighter bound is decided below a looser one. The other three kinds — `Regex`,
+  `MultipleOf` and a predicate — are opaque: nothing is read out of them, so a
+  refinement carrying one relates to another schema only when that schema carries
+  the same constraint verbatim. A regex is never turned into the language it
+  denotes, so neither `Regex("a")` below `Regex("ab?")` nor `Regex("a")` below
+  the singleton `Literal["a"]` is decided, and `MultipleOf(4)` is not decided
+  below `MultipleOf(2)`. A predicate has no route to being decided (its
+  satisfiability is undecidable, below). The other two do — regular-language
+  inclusion is decidable, and so is divisibility of one integer by another — and
+  each needs the core to reason about a pooled constant rather than test it for
+  equality.
+
+- **A schema that is not itself a refinement, against one that is.** Only a
+  literal reaches the value oracle, which answers by running the membership.
+  `Literal[5]` is decided below `Annotated[int, Ge(0)]`; `bool` is not, though
+  every `bool` is an `int` at or above zero. Deciding it needs the bound compared
+  against the subtype's own value range, which the core reads from a scalar
+  region rather than from an enumerated set.
+
+```python
+from typing import Annotated, Literal
+
+import annotated_types as at
+
+from valgebra import Regex, Validator
+
+pattern = Validator(Annotated[str, Regex("a")])
+assert not pattern.is_subtype_of(Annotated[str, Regex("ab?")])  # L(a) <= L(ab?)
+assert not pattern.is_subtype_of(Literal["a"])  # L(a) is exactly {"a"}
+assert not Validator(Annotated[int, at.MultipleOf(4)]).is_subtype_of(
+    Annotated[int, at.MultipleOf(2)]
+)
+
+# A literal reaches the value oracle; a class does not.
+assert Validator(Literal[5]).is_subtype_of(Annotated[int, at.Ge(0)])
+assert not Validator(bool).is_subtype_of(Annotated[int, at.Ge(0)])
+```
+
 - **A meet of two distinct literals.** `Literal["a"] & Literal["b"]` denotes no
-  value and is not decided empty. Unlike the entries above this one has no route
-  to being decided: a literal denotes `{v : type(v) is type(c) and v == c}`, and
+  value and is not decided empty. Unlike the structural entries above this one
+  has no route to being decided: a literal denotes `{v : type(v) is type(c) and v == c}`, and
   `==` is the value's own, so two literals can share a value while neither
   contains the other. Restricting a rule to the types `Literal[...]` admits does
   not help either — an enum member is one of them and carries user equality.
@@ -167,6 +207,10 @@ neither can quietly become permanent, and closing either fails the ledger until
 the entry is removed. The literal-meet entry is held the same way by
 `tests/test_completeness_ledger.py`, with the two counterexamples that rule out
 each rule that would close it.
+
+That probe searches a fixed universe of schemas, so it reaches a gap only where
+some atom in that universe reaches it. Its universe holds no refinement, so the
+two refinement entries above are held by this page rather than by a gate.
 
 General regular-expression-types inclusion of sequences (a union of sequence
 languages that splits across branches, or a repeated heterogeneous group) is not

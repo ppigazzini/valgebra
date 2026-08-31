@@ -150,7 +150,12 @@ materialized into an untyped object graph first:
 from valgebra import Validator
 
 assert Validator(list[int]).is_valid_json(b"[1, 2, 3]")  # parse + check in Rust
+assert Validator(list[int]).load("[1, 2, 3]") == [1, 2, 3]  # and keep the value
 ```
+
+`load` is the one to reach for when the document is data you go on to use: it
+returns the parsed value, so an untrusted payload is parsed once instead of once
+by `json.loads` and again by the check.
 
 ## Two ways to use it
 

@@ -189,6 +189,55 @@ assert not positive.is_valid(-1)
 read — so prefer it in an annotation other tools also consume. The bare form is
 valgebra's own convenience, and it excludes a class for the reason above.
 
+### A bare callable is metadata only
+
+The bare form is read **only** in `Annotated` metadata position, and reading it
+there at all is valgebra's own convenience: the libraries that share this
+metadata channel each require a wrapper — pydantic `AfterValidator`, beartype
+`Is[...]`, msgspec `Meta(...)`, `annotated_types` `Predicate`. The typing spec
+leaves each consumer to say what its own metadata means, so this arm reaches
+exactly as far as the metadata position and no further.
+
+A schema language that reads a top-level callable as a predicate is expressing a
+different rule for a position `Annotated` metadata does not cover; valgebra's
+rule for that position is the one below.
+
+Passed as a schema on its own, a callable is not a predicate. It is an object
+the frontend has no other reading for, so it takes the
+[fallback literal](03-schema-language.md#anything-unrecognized-is-a-literal)
+form and denotes the one function object:
+
+```python
+from typing import Annotated, TypedDict
+
+from valgebra import Validator, intersection
+
+
+class Record(TypedDict):
+    kind: str
+
+
+def kind_is_known(value):
+    return value["kind"] in {"a", "b"}
+
+
+checked = intersection(Record, kind_is_known)  # NOT a refinement of Record
+assert not checked.is_valid({"kind": "a"})  # a dict is not that function
+assert not checked.is_empty()  # nor is emptiness a warning: see below
+
+refined = Validator(Annotated[Record, kind_is_known])  # the refinement
+assert refined.is_valid({"kind": "a"})
+assert not refined.is_valid({"kind": "z"})
+```
+
+The first schema admits nothing, and nothing reports it. `is_empty` returning
+`False` is not a claim that the set is inhabited — a negative answer from any
+decision is "no, or not yet proven" (see the
+[decidability boundary](15-decidability.md#the-contract)), and the meet of a
+record with a literal is one it does not decide. So the failure mode is a schema
+that silently rejects every value. Write the refinement as `Annotated`, and the
+callable narrows the base rather than replacing it.
+
 `annotated_types.Not` wraps a predicate and denotes the values it rejects:
 
 ```python

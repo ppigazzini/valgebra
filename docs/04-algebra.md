@@ -308,6 +308,63 @@ set but are written differently are equal under `is_equivalent` yet not under
 `==`. Ask `is_equivalent` "do these mean the same set?" and `==` "are these the
 same shape?".
 
+### Relations between your own schemas
+
+A codebase with more than one schema for the same data has relations between them
+that nothing checks: the schema an endpoint accepts against the one a record is
+stored as, a narrowed variant against the schema it narrows, an intersection
+against the arms it was built from. Those are set questions, so they are
+assertions rather than review comments, and they belong in the test suite beside
+the schemas:
+
+```python
+from typing import Annotated, NotRequired, TypedDict
+
+import annotated_types as at
+
+from valgebra import Validator
+
+
+class Stored(TypedDict):
+    name: str
+    runs: int
+
+
+class Submitted(TypedDict):
+    name: str
+    runs: int
+    note: NotRequired[str]
+
+
+# Every persisted record is a valid submission, or a round trip through storage
+# produces something the endpoint refuses.
+assert Validator(Stored).is_subtype_of(Submitted)
+
+# A tightened field stays within the field it tightens.
+assert Validator(Annotated[int, at.Ge(0), at.Le(100)]).is_subtype_of(
+    Annotated[int, at.Ge(0)]
+)
+```
+
+Assert the **positive** direction only. A `True` from `is_subtype_of`,
+`is_equivalent` or `is_empty` is a proof; a `False` is "no, or not yet proven"
+(the [decidability boundary](15-decidability.md#the-contract) says which is
+which). So `assert not a.is_subtype_of(b)` passes both when the relation is false
+and when it merely is not decided, and `assert not schema.is_empty()` is not a
+check that the schema admits anything — a schema that admits nothing can answer
+`False` there. To assert a schema is inhabited, name a value it must admit:
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import intersection
+
+bounded = intersection(Annotated[int, at.Ge(0)], Annotated[int, at.Le(10)])
+assert bounded.is_valid(5)  # a witness, not `not bounded.is_empty()`
+```
+
 ```python
 from valgebra import Validator, union
 
