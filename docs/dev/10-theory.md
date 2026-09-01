@@ -53,10 +53,22 @@ structurally has a hole wherever an arm is missing, and the reduction's name ove
 the top is what stops anyone looking: a complement on the right had no arm at all
 for months, and this page said the reduction covered it.
 
-It also carries the theorem that matters most for expectations: **a conservative
-simplifier cannot be complete once negation exists.** That is why
+**It does not carry a theorem that a conservative simplifier cannot be complete
+once negation exists**, and this page said it did. There is no result of that
+form in the paper. What it has is an argument for the semantic approach, made of
+a syntactic rule set rather than of a simplifier:
+
+> when considering arrow, intersection and union types, one must take into
+> account — that is, introduce rules for — many distributivity relations such as,
+> for instance, `(t1 ∨ t2) → s ≃ (t1 → s) ∧ (t2 → s)`. Forgetting any of these
+> rules yields a type system that, although sound, does not match (i.e., it is
+> not complete with respect to) the intuitive semantics of types.
+
+A rewriter missing rules is sound and incomplete. That shape is why
 [02-decision.md](02-decision.md) states soundness as the contract and treats
-completeness as a measured, growing property rather than a promise.
+completeness as a measured, growing property rather than a promise — but the
+step from an observation about arrow distributivity to an expectation about this
+simplifier is **valgebra's reasoning, not a result the paper proves**.
 
 **Castagna, "Programming with Union, Intersection, and Negation Types" (2023).**
 The modern synthesis. **[GUIDING]**

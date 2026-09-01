@@ -76,10 +76,15 @@ intersection types, where the dynamic type is an interval, not the top.
 ## What the algebra decides, and the conservative frontier
 
 Deciding whether two arbitrary set-theoretic types are equal — equivalently,
-whether a type is empty — is decidable but **EXPTIME-complete**. valgebra does
-not need that decision to validate: membership is answered directly by the walk,
-not by reducing the schema. So the simplifier implements the **soundly decidable
-fragment** and is honest about the rest:
+whether a type is empty — is decidable **in EXPTIME**. That is an upper bound,
+established by Gesbert, Genevès & Layaïda, and it answered an open question.
+EXPTIME-*completeness* is the stronger claim, and the one this line of work
+proves is Hosoya, Vouillon & Pierce's, stated of their regular tree types rather
+than of the relation above.
+
+valgebra does not need that decision to validate: membership is answered
+directly by the walk, not by reducing the schema. So the simplifier implements
+the **soundly decidable fragment** and is honest about the rest:
 
 - **Folded by the simplifier.** The complement laws (`X ∩ ¬X = ⊥`,
   `X ∪ ¬X = ⊤`) for any `X` except the gradual `Any`, and disjointness of the
@@ -116,11 +121,12 @@ The essential reading, in the order it maps onto valgebra:
    The foundation: types as sets, subtyping as inclusion, full Boolean
    connectives.
 2. **Gesbert, Genevès & Layaïda — "A Logical Approach to Deciding Semantic
-   Subtyping", *TOPLAS* 38(1), 2015.** The decision procedure and its
-   EXPTIME-completeness — why the full emptiness decision is deferred.
+   Subtyping", *TOPLAS* 38(1), 2015.** The decision procedure, and the EXPTIME
+   upper bound it establishes — why the full emptiness decision is deferred.
 3. **Hosoya, Vouillon & Pierce — "Regular Expression Types for XML", *TOPLAS*
    27(1), 2005.** Regular-tree types — the model behind sequences as one regex
-   node.
+   node, and the source of the EXPTIME-completeness result, which is stated of
+   that type language.
 4. **Castagna — "Typing Records, Maps, and Structs", *ICFP* 2023.**
    [doi:10.1145/3607838](https://doi.org/10.1145/3607838). Records and maps as
    keyed-default functions.
