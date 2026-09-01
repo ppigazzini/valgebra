@@ -159,10 +159,9 @@ The soundness is relative to a small, explicit trust base:
   leaf is the caller's. Regex constraints are matched natively and related only
   by syntactic identity.
 - **The suites check necessary properties, which is weaker than an oracle.** A
-  property-based or metamorphic check fails when the implementation is wrong; it
-  passing does not entail the implementation is right, and this holds however
-  many such properties are added. So the layers below raise the cost of a defect
-  surviving; they do not bound it.
+  property-based or metamorphic check fails when the implementation is wrong;
+  passing does not entail it is right, however many such properties are added. So
+  the layers above raise the cost of a defect surviving without bounding it.
 
 Within that base, an accept is a claim that `x ∈ ⟦S⟧`, justified node by node
 above and exercised by the four test layers — which is what "rock solid" can

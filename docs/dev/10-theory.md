@@ -41,34 +41,27 @@ exact there ([02-decision.md](02-decision.md)).
 
 **Frisch, Castagna & Benzaken, "Semantic Subtyping" (JACM 2008).** The model
 valgebra *is*: value sets with union, intersection and negation, where subtyping
-is `[[s ∧ ¬t]] = ∅`. **[LOAD-BEARING]** — but read the qualifier, because the
-short version of this sentence was wrong for as long as it was written.
-`is_subtype_of` is **not** that reduction applied uniformly. It is a structural
-procedure whose arms decompose each pair by shape, and it calls `is_empty` at the
-three places where no shape is available to recurse into: the two lattice bounds,
-and a complement on the right. Everywhere else the arms decide directly.
+is `[[s ∧ ¬t]] = ∅`. **[LOAD-BEARING]**, with a qualifier: `is_subtype_of` is
+**not** that reduction applied uniformly. It is a structural procedure whose arms
+decompose each pair by shape, and it calls `is_empty` at the three places where no
+shape is available to recurse into: the two lattice bounds, and a complement on
+the right. Everywhere else the arms decide directly.
 
 The distinction is not pedantry. A rule stated as the reduction and implemented
 structurally has a hole wherever an arm is missing, and the reduction's name over
-the top is what stops anyone looking: a complement on the right had no arm at all
-for months, and this page said the reduction covered it.
+the top is what stops anyone looking for one.
 
-**It does not carry a theorem that a conservative simplifier cannot be complete
-once negation exists**, and this page said it did. There is no result of that
-form in the paper. What it has is an argument for the semantic approach, made of
-a syntactic rule set rather than of a simplifier:
+On the expectation to hold of a simplifier, the paper offers an observation in
+§2.2, not a theorem, and it is about a syntactic rule set:
 
-> when considering arrow, intersection and union types, one must take into
-> account — that is, introduce rules for — many distributivity relations such as,
-> for instance, `(t1 ∨ t2) → s ≃ (t1 → s) ∧ (t2 → s)`. Forgetting any of these
-> rules yields a type system that, although sound, does not match (i.e., it is
-> not complete with respect to) the intuitive semantics of types.
+> Forgetting any of these rules yields a type system that, although sound, does
+> not match (i.e., it is not complete with respect to) the intuitive semantics of
+> types.
 
-A rewriter missing rules is sound and incomplete. That shape is why
+A rewriter missing rules is sound and incomplete. Reading that shape onto this
+simplifier is **valgebra's reasoning, not a result of the paper**, and it is why
 [02-decision.md](02-decision.md) states soundness as the contract and treats
-completeness as a measured, growing property rather than a promise — but the
-step from an observation about arrow distributivity to an expectation about this
-simplifier is **valgebra's reasoning, not a result the paper proves**.
+completeness as a measured, growing property rather than a promise.
 
 **Castagna, "Programming with Union, Intersection, and Negation Types" (2023).**
 The modern synthesis. **[GUIDING]**
@@ -96,18 +89,17 @@ is a single clause with no fields.
 
 The paper's clauses are *ordered*, with the first matching clause governing a
 key. valgebra's are not: a key belongs when **some** clause admits it and its
-value, in the walk and in subtyping alike. That is a deliberate narrowing, and
-the node's doc comment said "ordered" for a while, which is a semantics no code
-here implements.
+value, in the walk and in subtyping alike. That is a deliberate narrowing:
+"ordered" is a semantics no code here implements, so nothing may describe the
+node that way.
 
 ## Recursion
 
 **Nakano, guarded recursion (2000).** A contractive map has a **unique** fixpoint.
-**[LOAD-BEARING]** — that, not Knaster–Tarski, is what `recursive` denotes, and
-this page said otherwise.
+**[LOAD-BEARING]** — that is what `recursive` denotes.
 
-The distinction is forced by `complement`, which is **antitone**. A guarded body
-may therefore be non-monotone, and one is reachable:
+The distinction from Knaster–Tarski is forced by `complement`, which is
+**antitone**. A guarded body may therefore be non-monotone, and one is reachable:
 `recursive(lambda x: [complement(x)])` builds and validates, with the
 self-reference under `list` so the contractiveness check accepts it. It has no
 monotone `F`, so it has no Knaster–Tarski least fixpoint. What makes it well
@@ -173,17 +165,16 @@ and check a relation between the two outputs; neither run needs an oracle.
 explain mode. Both relate a source run to a follow-up run, which is what makes
 them metamorphic relations rather than invariants that happen to hold.
 
-The two citations are not interchangeable, and this page carried only the first.
-The 1998 report states the approach. The **criterion** for saying a property
-qualifies is the 2018 review's: an MR relates multiple inputs and their outputs,
-so a necessary property of a single input is not one — the review's example is
-that `-1 ≤ sin(x) ≤ 1` is necessary and is not an MR. Neither "metamorphic
-relation" nor "necessary property" occurs in the 1998 report; both are later
-refinements, so a claim that rests on the criterion owes the later citation.
+The two are cited for different things. The 1998 report states the approach;
+neither "metamorphic relation" nor "necessary property" occurs in it. The
+**criterion** is the 2018 review's: an MR relates multiple inputs and their
+outputs, so a necessary property of a single input is not one — the review's
+example is that `-1 ≤ sin(x) ≤ 1` is necessary and is not an MR. Cite the review
+for the criterion.
 
-The review also states the limit that bounds what `docs/14-soundness.md` may rest
-on these suites: MRs are *necessary* properties, so even a complete set of them
-is not a test oracle. That page's trust base records it.
+The review also bounds what `docs/14-soundness.md` may rest on these suites: MRs
+are *necessary* properties, so even a complete set of them is not a test oracle.
+That page's trust base records it.
 
 ## The limit
 

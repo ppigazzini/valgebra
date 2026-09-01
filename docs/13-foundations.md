@@ -76,11 +76,10 @@ intersection types, where the dynamic type is an interval, not the top.
 ## What the algebra decides, and the conservative frontier
 
 Deciding whether two arbitrary set-theoretic types are equal — equivalently,
-whether a type is empty — is decidable **in EXPTIME**. That is an upper bound,
-established by Gesbert, Genevès & Layaïda, and it answered an open question.
-EXPTIME-*completeness* is the stronger claim, and the one this line of work
-proves is Hosoya, Vouillon & Pierce's, stated of their regular tree types rather
-than of the relation above.
+whether a type is empty — is decidable **in EXPTIME**, an upper bound Gesbert,
+Genevès & Layaïda establish. The EXPTIME-*completeness* result in this line of
+work is Hosoya, Vouillon & Pierce's, and is stated of their regular tree types, a
+narrower language.
 
 valgebra does not need that decision to validate: membership is answered
 directly by the walk, not by reducing the schema. So the simplifier implements
