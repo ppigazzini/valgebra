@@ -513,30 +513,6 @@ def test_emptiness_claims_hold_on_the_universe(spec: object) -> None:
         assert not _accepted(spec)
 
 
-# A meet of two distinct same-type literals denotes no value, and `is_empty`
-# does not report it. `has_disjoint_pair` decides through `Schema::type_tag`,
-# which is `None` for a literal: the core holds the constant as a pool index it
-# cannot read.
-#
-# There is no sound rule to close it with, which is why this entry is permanent
-# rather than a task. A literal denotes `{v : type(v) is type(c) and v == c}`,
-# and `==` is the value's own, so:
-#
-#   - "not mutually subtypes" does not imply "disjoint" -- two literals can
-#     overlap while neither contains the other
-#     (`test_a_literal_is_not_always_a_singleton`); and
-#   - restricting the rule to the types `Literal[...]` admits does not rescue it,
-#     because an enum member is one of those and carries user equality
-#     (`test_a_spec_literal_type_is_not_a_singleton_either`).
-#
-# A rule keyed on the constant's *type* would also decide by how a value was
-# spelled rather than by what the schema denotes, which is not a rule this
-# algebra can hold. Strict, so the entry fails the day it stops being true.
-@pytest.mark.xfail(strict=True, reason="a literal carries no type tag in the core")
-def test_a_meet_of_distinct_literals_is_not_decided_empty() -> None:
-    assert intersection(Validator(Literal["a"]), Validator(Literal["b"])).is_empty()
-
-
 class _Partial:
     """A value whose equality admits some others of its own class."""
 

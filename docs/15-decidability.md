@@ -44,6 +44,13 @@ conservative](#sound-but-conservative)).
   dataclass or named tuple relates the same way: its schema is below one over a
   base class it carries every attribute of, each with a narrower schema, and below
   the bare class it is an instance of.
+- **Literals against other kinds.** A literal pins `type(x)` exactly, so it
+  carries the kind of its constant and is decided against another kind:
+  `Literal["a"]` is below `~int`, and `Literal["a"] & Literal["b"]` is empty.
+  `Literal[1]` and `Literal[True]` are disjoint although `1 == True`, because the
+  two pin different types. The rule reads the constant's type and applies only to
+  the builtin scalars, whose equality is Python's own; an `Enum` member carries
+  user-defined equality, so a meet of two of them stays conservative.
 - **Refinements.** A refinement is a subtype of its base and of a refinement with
   looser bounds — a tighter numeric or length bound entails a looser one, not only
   a verbatim-contained constraint set; a bound conjunction that cannot be satisfied
@@ -146,11 +153,6 @@ tracked as future work.
   that key. Deciding it needs the core to compare a field name against a pooled
   constant, which is a question only the binding can answer today.
 
-- **A literal against the complement of a scalar.** `Literal["a"]` is not decided
-  below `~int`. The core gives a literal no type tag, so the disjointness rule
-  cannot place it in a region; the value oracle already answers the membership
-  this reduces to, and is not yet asked here.
-
 - **A constraint with no value entailment.** A bound (`Ge`, `Gt`, `Le`, `Lt`,
   `MinLen`, `MaxLen`) entails a looser one through the ordering oracle, so a
   tighter bound is decided below a looser one. The other three kinds — `Regex`,
@@ -177,7 +179,7 @@ from typing import Annotated, Literal
 
 import annotated_types as at
 
-from valgebra import Regex, Validator, complement
+from valgebra import Regex, Validator, complement, intersection
 
 pattern = Validator(Annotated[str, Regex("a")])
 assert not pattern.is_subtype_of(Annotated[str, Regex("ab?")])  # L(a) <= L(ab?)
@@ -189,6 +191,11 @@ assert not Validator(Annotated[int, at.MultipleOf(4)]).is_subtype_of(
 # A literal reaches the value oracle; a class does not.
 assert Validator(Literal[5]).is_subtype_of(Annotated[int, at.Ge(0)])
 assert not Validator(bool).is_subtype_of(Annotated[int, at.Ge(0)])
+
+# A literal carries its constant's kind.
+assert Validator(Literal["a"]).is_subtype_of(complement(int))
+assert intersection(Literal["a"], Literal["b"]).is_empty()
+assert intersection(Literal[1], Literal[True]).is_empty()  # 1 == True, types differ
 
 # Involution decides both ways where the oracle reaches, one way elsewhere.
 record = Validator({"a": int})
@@ -219,15 +226,6 @@ assert complement(complement(Validator(int))).is_subtype_of(int)  # a scalar
   This one has a short route: reduce to negation-normal form before comparing.
   `simplify` already cancels double negation, so the rewrite exists and is simply
   not on the path the decision takes.
-
-- **A meet of two distinct literals.** `Literal["a"] & Literal["b"]` denotes no
-  value and is not decided empty. Unlike the structural entries above this one
-  has no route to being decided: a literal denotes `{v : type(v) is type(c) and v == c}`, and
-  `==` is the value's own, so two literals can share a value while neither
-  contains the other. Restricting a rule to the types `Literal[...]` admits does
-  not help either — an enum member is one of them and carries user equality.
-  Deciding by the constant's type would answer from how a value was spelled
-  rather than from what the schema denotes.
 
 The two catch-all entries were found by `tests/test_completeness_probe.py`, which
 searches for relations answered `False` that no value refutes, and fails when one

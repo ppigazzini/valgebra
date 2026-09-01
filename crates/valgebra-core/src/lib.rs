@@ -18,7 +18,7 @@ mod ir;
 mod simplify;
 mod violation;
 
-pub use decision::{LeafRelations, NoLeafRelations};
+pub use decision::{LeafRelations, NoLeafRelations, TypeTag};
 pub use ir::{
     ClassIx, ConstIx, Constraint, DefIx, DefShift, Field, Guarded, MapClause, Openness, OperandIx,
     PathSegment, PoolShift, PredIx, Schema, SeqKind, SeqRegex,

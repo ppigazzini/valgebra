@@ -1,7 +1,7 @@
 //! The decision procedures over the IR: emptiness, subtyping, equivalence, and
 //! disjointness, with the leaf-relation oracle and the scalar region partition.
 
-use crate::ir::{ClassIx, Constraint, DefIx, Field, OperandIx, Schema, SeqKind, SeqRegex};
+use crate::ir::{ClassIx, ConstIx, Constraint, DefIx, Field, OperandIx, Schema, SeqKind, SeqRegex};
 use rustc_hash::FxHashMap;
 use std::cell::Cell;
 
@@ -153,10 +153,37 @@ impl Schema {
     /// subclass a builtin), `Any`, references, and combinators.
     #[must_use]
     pub fn disjoint(&self, other: &Schema) -> bool {
+        self.disjoint_with(other, &NoLeafRelations)
+    }
+
+    /// [`disjoint`](Self::disjoint) with an oracle that can kind a `Literal` and
+    /// settle a pair of them, neither of which the core can read.
+    pub(crate) fn disjoint_with(&self, other: &Schema, oracle: &dyn LeafRelations) -> bool {
         if matches!(self, Schema::Nothing) || matches!(other, Schema::Nothing) {
             return true;
         }
-        match (self.type_tag(), other.type_tag()) {
+        // A union shares no value with a schema when none of its members does.
+        // The frontend builds `Literal[...]` as a union of its constants, so a
+        // single-constant literal arrives wrapped and the pair rule below would
+        // never see it.
+        match (self, other) {
+            (Schema::Union(members), _) => {
+                return !members.is_empty()
+                    && members.iter().all(|m| m.disjoint_with(other, oracle));
+            }
+            (_, Schema::Union(members)) => {
+                return !members.is_empty()
+                    && members.iter().all(|m| self.disjoint_with(m, oracle));
+            }
+            // Two literals pin `type(x)` exactly, so the kind rule below -- which
+            // exempts `bool`/`int` because `bool` subclasses `int` -- is the wrong
+            // question for them. Ask the oracle about the constants instead.
+            (Schema::Literal(a), Schema::Literal(b)) => {
+                return oracle.literals_disjoint(*a, *b).unwrap_or(false);
+            }
+            _ => {}
+        }
+        match (self.type_tag_with(oracle), other.type_tag_with(oracle)) {
             // Distinct concrete types are disjoint, except bool ⊆ int.
             (Some(a), Some(b)) => {
                 a != b
@@ -172,7 +199,13 @@ impl Schema {
     /// A concrete type tag for nodes whose disjointness the core can decide
     /// soundly. `None` for nodes it cannot (`Literal`/`Instance`/`Any`/...).
     fn type_tag(&self) -> Option<TypeTag> {
+        self.type_tag_with(&NoLeafRelations)
+    }
+
+    /// [`type_tag`](Self::type_tag) with the oracle that kinds a `Literal`.
+    fn type_tag_with(&self, oracle: &dyn LeafRelations) -> Option<TypeTag> {
         Some(match self {
+            Schema::Literal(constant) => return oracle.literal_kind(*constant),
             Schema::NoneType => TypeTag::NoneType,
             Schema::Bool => TypeTag::Bool,
             Schema::Int => TypeTag::Int,
@@ -192,7 +225,7 @@ impl Schema {
             Schema::KeyedMap { .. } => TypeTag::Dict,
             // A refinement is a subset of its base, so its base's disjointness
             // is sound for it.
-            Schema::Refine { base, .. } => return base.type_tag(),
+            Schema::Refine { base, .. } => return base.type_tag_with(oracle),
             _ => return None,
         })
     }
@@ -391,7 +424,7 @@ impl Schema {
                 let empty = any_empty
                     || region.known().is_some_and(Region::is_empty)
                     || has_complementary_pair(members)
-                    || has_disjoint_pair(members)
+                    || has_disjoint_pair(members, oracle)
                     || intersection_bounds_unsatisfiable(members, oracle);
                 (empty, region)
             }
@@ -779,6 +812,30 @@ pub trait LeafRelations {
     ) -> Option<bool> {
         None
     }
+
+    /// The kind of the pooled constant behind a [`Schema::Literal`], or `None`
+    /// when the bindings decline to kind it.
+    ///
+    /// A literal denotes `{x | type(x) is type(c) and x == c}`, so its kind is
+    /// the kind of `c`'s type and the core cannot read it. Answering places the
+    /// literal in the partition, which is what decides it against another kind.
+    /// The default declines, so a core with no value oracle stays conservative.
+    fn literal_kind(&self, _constant: ConstIx) -> Option<TypeTag> {
+        None
+    }
+
+    /// Whether the two pooled constants behind a pair of [`Schema::Literal`]s
+    /// denote disjoint singletons, or `None` when it cannot be settled soundly.
+    ///
+    /// Two literals share no value when their constants have different types --
+    /// a literal pins `type(x)` exactly, so `Literal[1]` and `Literal[True]` are
+    /// disjoint although `1 == True` -- or when the types are the same and the
+    /// values differ under an equality the bindings trust. They must decline for
+    /// a type carrying user-defined equality, where two distinct constants may
+    /// still admit one value. The default declines.
+    fn literals_disjoint(&self, _left: ConstIx, _right: ConstIx) -> Option<bool> {
+        None
+    }
 }
 
 /// The trivial [`LeafRelations`] that decides nothing — the core default, under
@@ -990,8 +1047,8 @@ pub(crate) fn has_complementary_pair(members: &[Schema]) -> bool {
 /// int` aside), so the intersection is empty. This decides the structural-kind
 /// disjointness (a list is never a set) the scalar region bitset cannot see.
 /// Shared with the simplifier so both read the same lattice law.
-pub(crate) fn has_disjoint_pair(members: &[Schema]) -> bool {
-    unordered_pairs(members).any(|(a, b)| a.disjoint(b))
+pub(crate) fn has_disjoint_pair(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
+    unordered_pairs(members).any(|(a, b)| a.disjoint_with(b, oracle))
 }
 
 /// Whether the refinement constraints of the intersection's **directly refined
@@ -1264,9 +1321,18 @@ impl Region {
     }
 }
 
-/// A concrete runtime type, for the sound fragment of disjointness.
+/// A concrete runtime type: the kind a value belongs to.
+///
+/// The kinds partition the value universe, so two schemas carrying different
+/// kinds share no value -- `bool` and `int` aside, since `bool` subclasses `int`.
+/// A schema the core cannot kind has no tag, and disjointness stays conservative.
+///
+/// Public because the core cannot see a Python object: a `Literal`'s kind is a
+/// fact about a pooled constant, which only the bindings can read, and they
+/// answer in this vocabulary through [`LeafRelations::literal_kind`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TypeTag {
+pub enum TypeTag {
+    /// `None`.
     NoneType,
     Bool,
     Int,

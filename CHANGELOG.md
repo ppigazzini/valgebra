@@ -17,17 +17,6 @@ All notable changes to valgebra are recorded here. The format follows
   branches the closest-branch search reads and ends in `...` beyond it, so a wide
   union reports a readable prefix.
 
-- The decidability boundary records that involution decides in one direction
-  only, wherever the value oracle cannot reach. `A <= ~~A` holds everywhere; the
-  converse holds for a scalar, the two lattice bounds, a union and a complement,
-  and not for a pooled constant, a class, or any structural constructor —
-  because a complement on the left matches no structural rule and the pair falls
-  to the oracle. The answer was always sound — a `False` is "not
-  proven" — but the gap sat off the page while its siblings were on it, so a
-  reader checking a lattice law against the procedure met an unexplained `False`.
-  A strict `xfail` in the completeness ledger now holds it, so closing it forces
-  the entry out.
-
 - The completeness probe searches refinements. Its schema universe crossed every
   other kind the decision procedure treats differently and held no refinement, so
   that whole fragment was outside the reach of the gate
@@ -157,6 +146,17 @@ Membership costs less on a refined schema, and no decision or message changes.
   naming a cause it cannot know.
 
 ### Added
+
+- `is_subtype_of`, `is_equivalent` and `is_empty` normalise their arguments by
+  the lattice laws before comparing, so involution decides in both directions
+  for every schema and a union covering the universe is recognised as the top.
+- A literal carries the kind of its constant, so it is decided against another
+  kind: `Literal["a"]` is below `~int`, and `Literal["a"] & Literal["b"]` is
+  empty. `Literal[1]` and `Literal[True]` are disjoint although `1 == True`,
+  because a literal pins `type(x)` exactly. The rule applies to the builtin
+  scalars, whose equality is Python's own; a meet of two `Enum` members stays
+  conservative, since user-defined equality can admit one value for two
+  constants.
 
 - `is_empty` decides an interval that skips every integer however the meet is
   spelled. `intersection(Annotated[int, Gt(0)], Annotated[int, Lt(1)])` is empty,

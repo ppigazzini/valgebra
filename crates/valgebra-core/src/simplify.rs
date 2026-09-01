@@ -2,7 +2,7 @@
 //! IR (flattening, identities, De Morgan, deduplication).
 
 use crate::decision::{
-    Region, Regions, has_complementary_pair, has_disjoint_pair, unordered_pairs,
+    NoLeafRelations, Region, Regions, has_complementary_pair, has_disjoint_pair, unordered_pairs,
 };
 use crate::ir::{Constraint, Field, Schema, SeqRegex};
 
@@ -241,7 +241,7 @@ fn finish_intersection(mut flat: Vec<Schema>) -> Schema {
         .filter_map(Regions::known)
         .fold(Region::ALL, Region::intersect)
         .is_empty();
-    if has_complementary_pair(&flat) || has_disjoint_pair(&flat) || region_empty {
+    if has_complementary_pair(&flat) || has_disjoint_pair(&flat, &NoLeafRelations) || region_empty {
         return Schema::Nothing;
     }
     match flat.len() {

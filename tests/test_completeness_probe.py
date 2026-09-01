@@ -165,13 +165,6 @@ VALUES: list[Any] = [
 # an admission, not a design: a gap described as a decision is what keeps it
 # alive. Every one of these has a known route to being decided.
 ACCEPTED: dict[str, str] = {
-    "Lit['a'] <= ~int": (
-        "A literal's disjointness from a scalar needs the value oracle: the core "
-        "gives Literal no type tag, so `has_disjoint_pair` cannot place it in a "
-        "region. Decidable through `LeafRelations::leaf_subtype`, which already "
-        "answers membership for a pooled constant."
-    ),
-    "Lit['a','b'] <= ~int": "As above; a multi-constant literal is a union of them.",
     "{a:int} <= dict[Lit['a'],int]": (
         "Whether a supertype catch-all covers a field name is asked by matching "
         "the key against the `Str`/`Anything` atoms rather than by asking whether "
