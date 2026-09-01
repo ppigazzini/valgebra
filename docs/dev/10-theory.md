@@ -95,12 +95,10 @@ node that way.
 
 ## Recursion
 
-**Nakano, "A Modality for Recursion" (2000).** A modality under which a
-self-reference is productive. **[LOAD-BEARING]** — the contractiveness check in
-`crates/valgebra-core/src/ir.rs` is that discipline, and Nakano's Theorem 3
-(Convergence) is what it buys. `recursive` denotes the **guarded** fixpoint;
-uniqueness of a guarded fixpoint is the standard contraction result, not a
-theorem of this paper.
+**Nakano, "A Modality for Recursion" (2000).** The guardedness modality: a
+contractive map has a unique fixpoint. **[LOAD-BEARING]** — `recursive` denotes
+that fixpoint, and the contractiveness check in
+`crates/valgebra-core/src/ir.rs` is the discipline that earns it.
 
 The distinction from Knaster–Tarski is forced by `complement`, which is
 **antitone**. A guarded body may therefore be non-monotone, and one is reachable:
