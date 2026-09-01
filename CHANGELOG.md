@@ -147,6 +147,12 @@ Membership costs less on a refined schema, and no decision or message changes.
 
 ### Added
 
+- A meet of two record schemas is decided empty when a key one side requires
+  cannot hold — because the types the two give it share no value, or because the
+  other side is closed and does not declare it. `{"a": int} & {"a": str}` is
+  empty, and so `{"a": int}` is below `~{"a": str}`. Only a required key empties
+  a meet: two mappings, or two optional fields, always admit the empty dict.
+
 - A fixed-length sequence is decided against a union of fixed-length sequences
   it splits across, where no single branch contains it: `tuple[int | str, int]`
   is below `tuple[int, int] | tuple[str, int]`. The rule needs a fixed component

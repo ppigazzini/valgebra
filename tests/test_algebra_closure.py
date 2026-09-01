@@ -84,3 +84,44 @@ def test_arity_does_not_mix():
 
 
 # --- R5a: the record meet, and the shapes it must NOT empty ------------------
+
+
+def test_a_record_is_below_the_complement_of_a_disjoint_record():
+    assert Validator({"a": int}).is_subtype_of(complement({"a": str}))
+
+
+# --- R3 soundness guards: the rule must NOT fire where equality is the value's -
+
+
+def test_a_required_field_with_an_empty_meet_empties_the_record():
+    assert intersection({"a": int}, {"a": str}).is_empty()
+
+
+def test_required_on_one_side_is_enough():
+    assert intersection({"a": int}, {"a?": str}).is_empty()
+
+
+def test_two_optional_fields_do_not_empty_the_record():
+    # The empty dict is in both, so the meet is inhabited.
+    assert not intersection({"a?": int}, {"a?": str}).is_empty()
+
+
+def test_two_pure_maps_never_meet_empty():
+    # ICFP footnote 11: a meet of two mappings always contains `{}`.
+    assert not intersection({str: int}, {str: str}).is_empty()
+
+
+def test_a_compatible_meet_stays_inhabited():
+    assert not intersection({"a": int}, {"a": bool}).is_empty()
+
+
+def test_a_closed_record_admits_no_key_it_does_not_declare():
+    # `{'a': int}` is closed, so no dict in it carries 'b'; `{'b': str}` requires
+    # one. Nothing is in both.
+    assert intersection({"a": int}, {"b": str}).is_empty()
+
+
+def test_two_open_records_admit_each_other_s_keys():
+    # Both carry a catch-all, so each admits the key the other requires and a
+    # dict with both keys is in the meet.
+    assert not intersection({"a": int, str: object}, {"b": str, str: object}).is_empty()

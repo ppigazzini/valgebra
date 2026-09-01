@@ -425,7 +425,8 @@ impl Schema {
                     || region.known().is_some_and(Region::is_empty)
                     || has_complementary_pair(members)
                     || has_disjoint_pair(members, oracle)
-                    || intersection_bounds_unsatisfiable(members, oracle);
+                    || intersection_bounds_unsatisfiable(members, oracle)
+                    || keyed_map_meet_empty(members, oracle, defs, budget);
                 (empty, region)
             }
             // A set or frozenset is *known* non-empty — the empty collection is
@@ -1046,6 +1047,65 @@ pub(crate) fn has_complementary_pair(members: &[Schema]) -> bool {
         }
         _ => false,
     })
+}
+
+/// Whether the keyed maps meeting in an intersection admit no dict between them.
+///
+/// ICFP formula (12) meets two record atoms pointwise -- field by field, clause
+/// by clause -- and formula (11) makes the result empty when a field's type is.
+/// A dict in the meet carries every key some side requires, with a value in every
+/// type its sides give that key, so two rules follow:
+///
+/// - a key required somewhere whose types meet to nothing admits no dict;
+/// - a key required somewhere and absent from a *closed* map admits none either,
+///   since a closed map is exactly its declared keys.
+///
+/// Only a **required** key can empty a meet. Footnote 11 of the same paper is the
+/// guard: the meet of two mappings "is never empty since it always contains at
+/// least the empty record expression", and two optional fields are the same case
+/// -- the empty dict satisfies both.
+///
+/// A map with clauses is not read as closed here. Deciding whether a clause
+/// admits a given name means comparing a bare `String` against a key schema,
+/// which the core cannot do, so any clause at all leaves the map open and the
+/// second rule declines.
+fn keyed_map_meet_empty(
+    members: &[Schema],
+    oracle: &dyn LeafRelations,
+    defs: &[Schema],
+    budget: &Cell<u32>,
+) -> bool {
+    let maps: Vec<(&[Field], bool)> = members
+        .iter()
+        .filter_map(|member| match member {
+            Schema::KeyedMap { fields, defaults } => Some((fields.as_slice(), defaults.is_empty())),
+            _ => None,
+        })
+        .collect();
+    if maps.len() < 2 {
+        return false;
+    }
+    // Every type the maps give a key, and whether any of them requires it.
+    let mut keys: FxHashMap<&str, (Vec<&Schema>, bool)> = FxHashMap::default();
+    for (fields, _) in &maps {
+        for field in *fields {
+            let entry = keys.entry(field.name.as_str()).or_default();
+            entry.0.push(&field.schema);
+            entry.1 |= field.required;
+        }
+    }
+    keys.iter()
+        .filter(|(_, (_, required))| *required)
+        .any(|(name, (types, _))| {
+            let types_cannot_hold = types.len() > 1 && {
+                let meet = Schema::Intersection(types.iter().copied().cloned().collect());
+                meet.is_empty_rec(oracle, defs, &mut Vec::new(), budget)
+            };
+            types_cannot_hold
+                || maps.iter().any(|(fields, closed)| {
+                    *closed && !fields.iter().any(|field| field.name == **name)
+                })
+        })
 }
 
 /// The element schemas of a *fixed-arity* sequence, or `None` when the regex is

@@ -77,7 +77,11 @@ conservative](#sound-but-conservative)).
   in the supertype and the subtype's catch-all covers its value type (each extra
   or optional field covered by a catch-all over all string keys). A closed record
   is compared against a catch-all mapping by the same rule, so `{"x": int}` is
-  decided below `dict[str, int]`.
+  decided below `dict[str, int]`. A **meet** of two of them is empty when some key
+  one side requires cannot hold: because the types the two give it share no value,
+  or because the other side is closed and does not declare it. Only a required key
+  can do this — a meet of two mappings, or of two optional fields, always contains
+  the empty dict.
 - **Inclusion in a complement.** `A` is below `~B` exactly when `A` and `B` share
   no value, so the relation is decided wherever emptiness decides disjointness:
   `list[int]` is below `~int`, and `dict[str, int]` below `~str`. This is the
@@ -116,6 +120,10 @@ assert Validator(list[int]).is_subtype_of(
 assert Validator(tuple[int | str, int]).is_subtype_of(
     union(tuple[int, int], tuple[str, int])
 )  # a product splits across branches
+assert intersection({"a": int}, {"a": str}).is_empty()  # 'a' cannot hold both
+assert not intersection(
+    {"a?": int}, {"a?": str}
+).is_empty()  # the empty dict is in both
 assert union(bool, int).is_equivalent(int)  # bool | int is just int
 assert intersection(int, complement(int)).is_empty()  # the complement law
 assert intersection(
