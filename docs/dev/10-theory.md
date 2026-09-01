@@ -95,8 +95,12 @@ node that way.
 
 ## Recursion
 
-**Nakano, guarded recursion (2000).** A contractive map has a **unique** fixpoint.
-**[LOAD-BEARING]** — that is what `recursive` denotes.
+**Nakano, "A Modality for Recursion" (2000).** A modality under which a
+self-reference is productive. **[LOAD-BEARING]** — the contractiveness check in
+`crates/valgebra-core/src/ir.rs` is that discipline, and Nakano's Theorem 3
+(Convergence) is what it buys. `recursive` denotes the **guarded** fixpoint;
+uniqueness of a guarded fixpoint is the standard contraction result, not a
+theorem of this paper.
 
 The distinction from Knaster–Tarski is forced by `complement`, which is
 **antitone**. A guarded body may therefore be non-monotone, and one is reachable:
@@ -112,11 +116,8 @@ least fixpoint. **[GUIDING]** — it applies to the complement-free fragment, wh
 the unique guarded fixpoint coincides with the least one. It is not the general
 justification.
 
-The guard is therefore load-bearing twice over: it makes the fixpoint unique, and
-it is what the contractiveness check in `crates/valgebra-core/src/ir.rs` enforces
-by requiring every self-reference to sit under a constructor.
-[01-schema-ir.md](01-schema-ir.md) records why its structural arms compute
-nothing.
+[01-schema-ir.md](01-schema-ir.md) records why the check's structural arms
+compute nothing.
 
 **Amadio & Cardelli, "Subtyping Recursive Types" (1993).** Subtyping between
 recursive types is decided coinductively: assume the goal, unfold, and a cycle
