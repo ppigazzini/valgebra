@@ -64,7 +64,11 @@ conservative](#sound-but-conservative)).
 - **Sequences.** Homogeneous, fixed-length, and prefix-plus-tail lists and tuples,
   with the container as part of the type (a list is never a tuple). Every sequence
   schema valgebra builds takes this linear shape, so sequence inclusion is decided
-  completely.
+  completely. A **fixed-length** sequence is also decided against a union of
+  fixed-length ones it splits across, where no single branch contains it:
+  `tuple[int | str, int]` is below `tuple[int, int] | tuple[str, int]`. The rule
+  needs a fixed component count, so a homogeneous or variadic sequence — a star,
+  matching every length — is not decomposed.
 - **Sets and frozensets.** By element inclusion.
 - **Records and mappings.** Closed-record width, depth, and required-ness; pure
   mappings with several key-pattern clauses (each subtype clause subsumed by a
@@ -109,6 +113,9 @@ assert Validator({"x": int}).is_subtype_of(
 assert Validator(list[int]).is_subtype_of(
     complement(int)
 )  # inside a complement: a list shares no value with an int
+assert Validator(tuple[int | str, int]).is_subtype_of(
+    union(tuple[int, int], tuple[str, int])
+)  # a product splits across branches
 assert union(bool, int).is_equivalent(int)  # bool | int is just int
 assert intersection(int, complement(int)).is_empty()  # the complement law
 assert intersection(

@@ -634,10 +634,15 @@ impl Schema {
                     || matches!(other, Schema::Union(branches)
                         if branches.iter().any(|b| self.is_subtype_rec(b, cx, assumptions)))
             }
-            // A ⊆ (Y ∪ Z) if A lands in one branch (sound, conservative).
-            (_, Schema::Union(members)) => members
-                .iter()
-                .any(|m| self.is_subtype_rec(m, cx, assumptions)),
+            // A ⊆ (Y ∪ Z) if A lands in one branch (sound, conservative), or -- for
+            // a fixed-arity sequence -- if it splits across the branches, which
+            // no single-branch rule can see.
+            (_, Schema::Union(members)) => {
+                members
+                    .iter()
+                    .any(|m| self.is_subtype_rec(m, cx, assumptions))
+                    || seq_splits_across_union(self, members, cx, assumptions)
+            }
             // Unfold a recursive reference — after the lattice rules, so an
             // intersection or union meeting a reference decomposes first (which
             // lets a recursive member be compared against the reference rather
@@ -1041,6 +1046,114 @@ pub(crate) fn has_complementary_pair(members: &[Schema]) -> bool {
         }
         _ => false,
     })
+}
+
+/// The element schemas of a *fixed-arity* sequence, or `None` when the regex is
+/// not one.
+///
+/// Lemma 6.5 decomposes a product, and a sequence is a product only when its
+/// component count is fixed: a star matches sequences of every length, so there
+/// is no tuple of components to split over. `Empty` is the nullary product.
+fn fixed_components(regex: &SeqRegex) -> Option<Vec<Schema>> {
+    match regex {
+        SeqRegex::Empty => Some(Vec::new()),
+        SeqRegex::Elem(element) => Some(vec![(**element).clone()]),
+        SeqRegex::Cat(parts) => parts
+            .iter()
+            .map(|part| match part {
+                SeqRegex::Elem(element) => Some((**element).clone()),
+                _ => None,
+            })
+            .collect(),
+        SeqRegex::Or(_) | SeqRegex::Star(_) => None,
+    }
+}
+
+/// Whether the product `components` is contained in the union of the products in
+/// `branches`, all of the same arity.
+///
+/// JACM Lemma 6.5 characterises this by splitting the negative set every way,
+/// which is `2^|N|` subsets *and* needs a hypothesis retracted whenever a split
+/// fails. ICFP §2.1.4 gives the equivalent formulation that does not backtrack,
+/// and this is that function at `n` components rather than two:
+///
+/// ```text
+/// Phi(P, [])       = false
+/// Phi(P, [B, ..R]) = for every i:  P[i] <= B[i]  or  Phi(P with P[i] := P[i] \ B[i], R)
+/// ```
+///
+/// Narrowing a component to the empty set makes the whole product empty, and the
+/// empty set is below everything -- which is the base case that makes a value
+/// split across branches decide, since no single branch contains it.
+fn product_subtype(
+    components: &[Schema],
+    branches: &[&[Schema]],
+    cx: SubtypeCx<'_>,
+    assumptions: &mut Vec<(Schema, Schema)>,
+) -> bool {
+    if !spend(cx.budget) {
+        return false;
+    }
+    if components
+        .iter()
+        .any(|c| c.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget))
+    {
+        return true;
+    }
+    let Some((branch, rest)) = branches.split_first() else {
+        return false;
+    };
+    components
+        .iter()
+        .zip(branch.iter())
+        .enumerate()
+        .all(|(position, (mine, theirs))| {
+            mine.is_subtype_rec(theirs, cx, assumptions) || {
+                let mut narrowed = components.to_vec();
+                narrowed[position] = Schema::Intersection(vec![
+                    mine.clone(),
+                    Schema::Complement(Box::new(theirs.clone())),
+                ]);
+                product_subtype(&narrowed, rest, cx, assumptions)
+            }
+        })
+}
+
+/// Whether a fixed-arity sequence is covered by the sequence branches of a union.
+///
+/// A value that splits across branches -- `tuple[int|str, int]` covered by
+/// `tuple[int, int] | tuple[str, int]` -- lands in no single branch, so the rule
+/// that tries each branch alone cannot see it. Branches of another container or
+/// another arity share no value with `self` by shape, so they drop out rather
+/// than blocking the decomposition.
+fn seq_splits_across_union(
+    schema: &Schema,
+    members: &[Schema],
+    cx: SubtypeCx<'_>,
+    assumptions: &mut Vec<(Schema, Schema)>,
+) -> bool {
+    let Schema::Seq { container, regex } = schema else {
+        return false;
+    };
+    let Some(components) = fixed_components(regex) else {
+        return false;
+    };
+    let branches: Vec<Vec<Schema>> = members
+        .iter()
+        .filter_map(|member| match member {
+            Schema::Seq {
+                container: their_kind,
+                regex: their_regex,
+            } if their_kind == container => fixed_components(their_regex),
+            _ => None,
+        })
+        .filter(|branch| branch.len() == components.len())
+        .collect();
+    if branches.is_empty() {
+        return false;
+    }
+    let branches: Vec<&[Schema]> = branches.iter().map(Vec::as_slice).collect();
+    product_subtype(&components, &branches, cx, assumptions)
 }
 
 /// Whether two members are provably disjoint (distinct concrete kinds, `bool ⊆

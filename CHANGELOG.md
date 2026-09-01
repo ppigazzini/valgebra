@@ -147,6 +147,12 @@ Membership costs less on a refined schema, and no decision or message changes.
 
 ### Added
 
+- A fixed-length sequence is decided against a union of fixed-length sequences
+  it splits across, where no single branch contains it: `tuple[int | str, int]`
+  is below `tuple[int, int] | tuple[str, int]`. The rule needs a fixed component
+  count, so a homogeneous or variadic sequence is not decomposed, and branches of
+  another container or arity drop out rather than blocking it.
+
 - `is_subtype_of`, `is_equivalent` and `is_empty` normalise their arguments by
   the lattice laws before comparing, so involution decides in both directions
   for every schema and a union covering the universe is recognised as the top.

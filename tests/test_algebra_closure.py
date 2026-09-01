@@ -7,7 +7,7 @@ Every assertion here is true set-theoretically. Each failure is a row in
 import enum
 from typing import Literal
 
-from valgebra import Validator, complement, intersection
+from valgebra import Validator, anything, complement, intersection, union
 
 
 def test_a_literal_is_disjoint_from_another_kind():
@@ -43,3 +43,44 @@ def test_a_literal_is_still_a_member_of_its_own_kind():
 
 
 # --- R4: product decomposition, and the shapes it must NOT decide -------------
+
+
+def test_a_product_splits_across_union_branches():
+    assert Validator(tuple[int | str, int]).is_subtype_of(
+        union(tuple[int, int], tuple[str, int])
+    )
+
+
+# --- R5: records must be closed under difference (ICFP Def. 4.1) -------------
+
+
+def test_a_product_splits_on_its_second_component():
+    assert Validator(tuple[int, int | str]).is_subtype_of(
+        union(tuple[int, int], tuple[int, str])
+    )
+
+
+def test_a_list_product_splits_too():
+    assert Validator([int | str, int]).is_subtype_of(union([int, int], [str, int]))
+
+
+def test_a_product_does_not_split_across_both_components():
+    # (int, bytes) is in the left and in neither branch on the right.
+    assert not Validator(tuple[int | str, int | bytes]).is_subtype_of(
+        union(tuple[int, int], tuple[str, bytes])
+    )
+
+
+def test_a_product_is_not_below_branches_that_miss_it():
+    assert not Validator(tuple[int, int]).is_subtype_of(
+        union(tuple[str, int], tuple[int, str])
+    )
+
+
+def test_arity_does_not_mix():
+    assert not Validator(tuple[int, int]).is_subtype_of(
+        union(tuple[int], tuple[int, int, int])
+    )
+
+
+# --- R5a: the record meet, and the shapes it must NOT empty ------------------
