@@ -8,7 +8,7 @@ Each entry is tagged **LOAD-BEARING** (code here rests on it), **GUIDING**
 built). A planned reference is an intention; it never implies the thing is built.
 
 Some of this is decades old and stays, because a theorem does not expire.
-Stone's representation theorem and Tarski's fixpoint theorem are exactly the
+Stone's representation theorem and Nakano's guarded fixpoint are exactly the
 results the design leans on, not dated approximations of them.
 
 ## The frame: a schema denotes a set
@@ -102,13 +102,29 @@ here implements.
 
 ## Recursion
 
-**Tarski's fixpoint theorem (1955).** A monotone map on a complete lattice has a
-least fixpoint. **[LOAD-BEARING]** — `recursive` is that fixpoint.
+**Nakano, guarded recursion (2000).** A contractive map has a **unique** fixpoint.
+**[LOAD-BEARING]** — that, not Knaster–Tarski, is what `recursive` denotes, and
+this page said otherwise.
 
-**Nakano, guarded recursion (2000).** A fixpoint is well defined when every
-self-reference sits under a constructor. **[LOAD-BEARING]** — the contractiveness
-check in `crates/valgebra-core/src/ir.rs`; [01-schema-ir.md](01-schema-ir.md)
-records why its structural arms compute nothing.
+The distinction is forced by `complement`, which is **antitone**. A guarded body
+may therefore be non-monotone, and one is reachable:
+`recursive(lambda x: [complement(x)])` builds and validates, with the
+self-reference under `list` so the contractiveness check accepts it. It has no
+monotone `F`, so it has no Knaster–Tarski least fixpoint. What makes it well
+defined is the guard: each unfolding consumes one constructor of a finite value,
+so the recursion is productive and the fixpoint is unique whether or not the body
+is monotone.
+
+**Tarski's fixpoint theorem (1955).** A monotone map on a complete lattice has a
+least fixpoint. **[GUIDING]** — it applies to the complement-free fragment, where
+the unique guarded fixpoint coincides with the least one. It is not the general
+justification.
+
+The guard is therefore load-bearing twice over: it makes the fixpoint unique, and
+it is what the contractiveness check in `crates/valgebra-core/src/ir.rs` enforces
+by requiring every self-reference to sit under a constructor.
+[01-schema-ir.md](01-schema-ir.md) records why its structural arms compute
+nothing.
 
 **Amadio & Cardelli, "Subtyping Recursive Types" (1993).** Subtyping between
 recursive types is decided coinductively: assume the goal, unfold, and a cycle
