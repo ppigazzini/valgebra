@@ -147,6 +147,12 @@ Membership costs less on a refined schema, and no decision or message changes.
 
 ### Added
 
+- Involution and the excluded middle are decided for every schema: `~~A` is `A`
+  and a union carrying a schema together with its complement is the top. Both
+  are settled where the schema is built, so the decision procedure never meets
+  either shape and pays nothing per comparison. `repr` and `==` follow the
+  cancelled form: `complement(complement(int))` is `int`.
+
 - A meet of two record schemas is decided empty when a key one side requires
   cannot hold — because the types the two give it share no value, or because the
   other side is closed and does not declare it. `{"a": int} & {"a": str}` is

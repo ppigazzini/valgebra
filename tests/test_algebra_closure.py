@@ -1,11 +1,12 @@
-"""R0: the closure relations the algebra must decide but does not.
+"""Closure relations of the schema algebra.
 
-Every assertion here is true set-theoretically. Each failure is a row in
-`REPORT-30`; each is expected to fail until its milestone lands.
+Every assertion is true set-theoretically. A relation the procedure does not
+decide is marked as a strict expected failure with what would close it, so the
+suite fails the day it becomes decided and the entry is forced out.
 """
 
 import enum
-from typing import Literal
+from typing import Any, Literal
 
 from valgebra import Validator, anything, complement, intersection, union
 
@@ -125,3 +126,27 @@ def test_two_open_records_admit_each_other_s_keys():
     # Both carry a catch-all, so each admits the key the other requires and a
     # dict with both keys is in the meet.
     assert not intersection({"a": int, str: object}, {"b": str, str: object}).is_empty()
+
+
+# --- normalisation-free lattice rules ----------------------------------------
+
+
+def test_involution_holds_for_a_record():
+    r = Validator({"a": int})
+    assert complement(complement(r)).is_subtype_of(r)
+
+
+def test_involution_holds_through_four_negations():
+    r = Validator({"a": int})
+    assert complement(complement(complement(complement(r)))).is_subtype_of(r)
+
+
+def test_excluded_middle_covers_the_universe():
+    j = union(list[int], complement(list[int]))
+    assert Validator(anything).is_subtype_of(j)
+
+
+def test_the_gradual_atom_is_exempt_from_excluded_middle():
+    # `Any` is the dynamic type, not a set whose complement completes it.
+    j = union(Any, complement(Any))
+    assert not Validator(anything).is_subtype_of(j)

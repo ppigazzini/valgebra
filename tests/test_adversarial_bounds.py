@@ -110,7 +110,7 @@ def _compose_in_a_loop(compose: Callable[[object], object]) -> None:
         lambda s: s | str,
         lambda s: union(s, str),
         lambda s: intersection(s, str),
-        complement,
+        lambda s: complement(Validator([s])),
     ],
 )
 def test_composition_depth_guard_rejects_unbounded_nesting(
@@ -125,13 +125,24 @@ def test_composition_depth_guard_rejects_unbounded_nesting(
         _compose_in_a_loop(compose)
 
 
+def test_repeated_complement_does_not_nest():
+    # `~~A` is `A`, cancelled where the schema is built, so complementing in a
+    # loop oscillates between two shapes rather than growing. There is no depth
+    # to guard, which is why complement is composed with a constructor above.
+    v = Validator(int)
+    for _ in range(1000):
+        v = complement(v)
+    assert v == Validator(int)  # an even count cancels away entirely
+    assert repr(complement(v)) == "complement(int)"
+
+
 @pytest.mark.parametrize(
     ("door", "loop"),
     [
         ("constructor list literal", "v = Validator([v])"),
         ("constructor list[...]", "v = Validator(list[v])"),
         ("union operator", "v = v | str"),
-        ("complement", "v = complement(v)"),
+        ("complement of a list", "v = complement(Validator([v]))"),
         ("recursive body", "v = recursive(lambda s, prev=v: [prev, s])"),
     ],
 )

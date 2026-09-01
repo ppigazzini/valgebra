@@ -89,6 +89,13 @@ conservative](#sound-but-conservative)).
   complement has no shape on the right to recurse into.
 - **Recursion.** Equirecursive schemas compare at their greatest fixpoint; the
   rule is sound and is witnessed by an independent reference denotation.
+- **Involution and the excluded middle.** `~~A` and `A` denote the same set and
+  each is decided below the other, for every schema; a union carrying a schema
+  together with its complement is the universe. Both are settled where the schema
+  is built, so `repr` and `==` follow the cancelled form —
+  `complement(complement(int))` is `int` — and no comparison pays for the rule.
+  `Any` is exempt from the second, as from the first: `Any | ~Any` is not the
+  top.
 
 ```python
 from typing import Annotated, Any
@@ -212,35 +219,13 @@ assert Validator(Literal["a"]).is_subtype_of(complement(int))
 assert intersection(Literal["a"], Literal["b"]).is_empty()
 assert intersection(Literal[1], Literal[True]).is_empty()  # 1 == True, types differ
 
-# Involution decides both ways where the oracle reaches, one way elsewhere.
+# Involution decides both ways, for every schema.
 record = Validator({"a": int})
 assert record.is_subtype_of(complement(complement(record)))
-assert not complement(complement(record)).is_subtype_of(record)  # a record
-assert not complement(complement(Validator(Literal["a"]))).is_subtype_of(
-    Literal["a"]
-)  # a pooled constant, though a leaf
-assert complement(complement(Validator(int))).is_subtype_of(int)  # a scalar
+assert complement(complement(record)).is_subtype_of(record)
+assert complement(complement(Validator(Literal["a"]))).is_subtype_of(Literal["a"])
+assert complement(complement(Validator(int))).is_subtype_of(int)
 ```
-
-- **Involution, in one direction.** `~~A` and `A` denote the same set, and
-  `A <= ~~A` is decided everywhere: the rule for a complement on the right asks
-  whether `A` shares a value with `~A`, which it never does. The converse has no
-  rule — a complement on the *left* against anything but another complement
-  matches no structural pair — so it reaches the value oracle, and whether it
-  decides is whether the oracle can answer.
-
-  It **does** for a scalar, for `anything` and `nothing`, for a union, and for a
-  complement: those are the regions the oracle reasons about. It does **not** for
-  a pooled constant or a class, so `Literal["a"]`, an `Enum`, a dataclass and an
-  attribute schema are all undecided — and neither for any structural
-  constructor: a list, a tuple, a set, a mapping or a record. The dividing line
-  is the oracle's reach, not the constructor/leaf distinction: a literal is a
-  leaf and is undecided all the same, for the same reason
-  `Literal["a"] <= ~int` above is.
-
-  This one has a short route: reduce to negation-normal form before comparing.
-  `simplify` already cancels double negation, so the rewrite exists and is simply
-  not on the path the decision takes.
 
 The two catch-all entries were found by `tests/test_completeness_probe.py`, which
 searches for relations answered `False` that no value refutes, and fails when one

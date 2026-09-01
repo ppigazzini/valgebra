@@ -646,10 +646,21 @@ impl Schema {
     pub fn union(members: impl IntoIterator<Item = Schema>) -> Schema {
         let members: Vec<Schema> = members.into_iter().collect();
         if members.is_empty() {
-            Schema::Nothing
-        } else {
-            Schema::Union(members)
+            return Schema::Nothing;
         }
+        // A join carrying a schema together with its complement is the top,
+        // whatever those are. Settled here rather than recognised by the decision,
+        // so the procedure never meets the shape and no comparison pays for it:
+        // a construction happens once.
+        //
+        // The law is `crate::decision::has_complementary_pair`, which the
+        // simplifier already consumes, so both read one statement of it -- and
+        // one that reaches a pairwise comparison only for a member that is itself
+        // a complement, so a union of literals walks its members once and stops.
+        if crate::decision::has_complementary_pair(&members) {
+            return Schema::Anything;
+        }
+        Schema::Union(members)
     }
 
     /// The meet of `members`: a value belongs when it belongs to every one.
@@ -670,9 +681,16 @@ impl Schema {
     /// Named for the operation rather than spelled as `!`, matching `Region` and
     /// the Python surface: a one-character operator in a fold is a one-character
     /// defect, and typing has no operator for this one.
+    /// `~~A` is `A`, so a complement of a complement cancels here rather than
+    /// being carried and recognised later. The decision procedure then never
+    /// meets the shape and needs no rule for it, which is the difference between
+    /// paying once per construction and paying per comparison step.
     #[must_use]
     pub fn complement(self) -> Schema {
-        Schema::Complement(Box::new(self))
+        match self {
+            Schema::Complement(inner) => *inner,
+            other => Schema::Complement(Box::new(other)),
+        }
     }
 
     /// A record of named fields. An open record admits any other key with any
