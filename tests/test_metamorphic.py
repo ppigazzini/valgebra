@@ -1,9 +1,20 @@
-"""Metamorphic invariants for the decision procedure.
+"""Necessary properties of the decision procedure, two of them metamorphic.
 
 Each property is a theorem any sound relation satisfies, so a violation is a
 proof of a defect rather than a conservatism. They hold for valgebra because the
 procedure is sound, which makes every one a hard gate -- the cheap tripwire that
 catches the reflexivity and pool-merge class of bug.
+
+Only two are **metamorphic relations** in the sense the 2018 review defines:
+`test_double_complement_preserves_membership` and
+`test_de_morgan_preserves_membership` each derive a follow-up schema from a
+source one and relate the two runs. The other four judge a single schema or a
+fixed example, which is what the review's Concept 1 excludes -- a necessary
+property of one input is not an MR. They are worth having and none needs to
+change; the distinction is here so the name over the file does not claim more
+than the file does. The two metamorphic checks `docs/dev/10-theory.md` cites as
+load-bearing are different ones, and live elsewhere: the JSON path against the
+object path, and fast mode against explain mode.
 """
 
 from typing import Annotated

@@ -149,9 +149,25 @@ hypothesis and proptest. **[LOAD-BEARING]** — every algebra law is proved agai
 membership by a property suite rather than asserted
 ([08-testing.md](08-testing.md)).
 
-**Chen et al., "Metamorphic Testing" (1998).** A relation between two runs is
-checkable without an oracle for either. **[LOAD-BEARING]** — the JSON path
-against the object path, and fast mode against explain mode.
+**Chen, Cheung & Yiu, "Metamorphic Testing: A New Approach for Generating Next
+Test Cases" (1998)**, and **Chen et al., "Metamorphic Testing: A Review of
+Challenges and Opportunities" (2018).** Derive a test case from one that passed
+and check a relation between the two outputs; neither run needs an oracle.
+**[LOAD-BEARING]** — the JSON path against the object path, and fast mode against
+explain mode. Both relate a source run to a follow-up run, which is what makes
+them metamorphic relations rather than invariants that happen to hold.
+
+The two citations are not interchangeable, and this page carried only the first.
+The 1998 report states the approach. The **criterion** for saying a property
+qualifies is the 2018 review's: an MR relates multiple inputs and their outputs,
+so a necessary property of a single input is not one — the review's example is
+that `-1 ≤ sin(x) ≤ 1` is necessary and is not an MR. Neither "metamorphic
+relation" nor "necessary property" occurs in the 1998 report; both are later
+refinements, so a claim that rests on the criterion owes the later citation.
+
+The review also states the limit that bounds what `docs/14-soundness.md` may rest
+on these suites: MRs are *necessary* properties, so even a complete set of them
+is not a test oracle. That page's trust base records it.
 
 ## The limit
 

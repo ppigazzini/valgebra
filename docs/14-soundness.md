@@ -158,6 +158,11 @@ The soundness is relative to a small, explicit trust base:
   Python; valgebra checks that it returned truthy, and the soundness of *that*
   leaf is the caller's. Regex constraints are matched natively and related only
   by syntactic identity.
+- **The suites check necessary properties, which is weaker than an oracle.** A
+  property-based or metamorphic check fails when the implementation is wrong; it
+  passing does not entail the implementation is right, and this holds however
+  many such properties are added. So the layers below raise the cost of a defect
+  surviving; they do not bound it.
 
 Within that base, an accept is a claim that `x ∈ ⟦S⟧`, justified node by node
 above and exercised by the four test layers — which is what "rock solid" can
