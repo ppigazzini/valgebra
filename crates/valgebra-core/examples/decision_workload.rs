@@ -1,21 +1,17 @@
 //! A fixed, deterministic workload over the core *decision* procedures.
 //!
-//! The sibling `perf_workload` covers the schema transformations -- the
-//! simplifier, the composition remap, the record transform. It does not run
-//! `is_subtype_of`, `is_empty` or `is_equivalent`, so the whole decision surface
-//! sits outside the instruction-count gate: a rule added there costs nothing the
-//! gate can see, and a rule that makes a comparison five times faster earns
-//! nothing it can see either. This workload closes that.
+//! `is_subtype_of`, `is_empty` and `is_equivalent`, which the sibling
+//! `perf_workload` does not reach: that one covers the schema transformations,
+//! and the two together are what the instruction-count gate measures.
 //!
-//! Run under cachegrind, its instruction count is deterministic for a given
-//! build, so a committed budget catches an algorithmic change without depending
-//! on a wall clock -- which on this class of machine reports several percent of
-//! drift on an unchanged binary.
+//! Run under cachegrind, the count is deterministic for a given build, so a
+//! committed budget catches an algorithmic change without a wall clock.
 //!
 //! The corpus is the shapes whose cost differs: reflexivity on a wide record,
-//! inclusion across a union, a literal union against a wider one, inclusion in
-//! a complement, a meet of disjoint kinds, and emptiness through a nesting. Keep it and `ITERATIONS`
-//! fixed; changing either moves the budget and requires re-recording it.
+//! inclusion across a union, a literal union against a wider one, inclusion in a
+//! complement, a meet of disjoint kinds, and emptiness through a nesting. Keep it
+//! and `ITERATIONS` fixed; changing either moves the budget and requires
+//! re-recording it.
 
 use valgebra_core::{ConstIx, Field, Openness, Schema, SeqRegex};
 
@@ -88,10 +84,9 @@ fn main() {
         checksum += usize::from(b(&record).is_subtype_of(b(&record_copy)));
         // Inclusion decided by the scalar region partition.
         checksum += usize::from(b(&scalar).is_subtype_of(b(&scalar_sup)));
-        // A union against a wider union: the cross product the budget bounds.
+        // A union against a wider union, which set containment settles.
         checksum += usize::from(b(&narrow).is_subtype_of(b(&wide)));
-        // A complement on the right, which is the reduction to disjointness and
-        // the shape the boundary calls out: a list shares no value with an int.
+        // A complement on the right, which reduces to disjointness.
         checksum += usize::from(b(&list_int).is_subtype_of(b(&not_int)));
         // Emptiness: a meet of disjoint kinds, and a walk through a nesting.
         checksum += usize::from(b(&disjoint).is_empty());

@@ -649,14 +649,10 @@ impl Schema {
             return Schema::Nothing;
         }
         // A join carrying a schema together with its complement is the top,
-        // whatever those are. Settled here rather than recognised by the decision,
-        // so the procedure never meets the shape and no comparison pays for it:
-        // a construction happens once.
-        //
-        // The law is `crate::decision::has_complementary_pair`, which the
-        // simplifier already consumes, so both read one statement of it -- and
-        // one that reaches a pairwise comparison only for a member that is itself
-        // a complement, so a union of literals walks its members once and stops.
+        // whatever those are, so no such join survives construction and no rule
+        // downstream may assume one does. `has_complementary_pair` is the one
+        // statement of the law, shared with the simplifier; it reaches a pairwise
+        // comparison only for a member that is itself a complement.
         if crate::decision::has_complementary_pair(&members) {
             return Schema::Anything;
         }
@@ -681,10 +677,9 @@ impl Schema {
     /// Named for the operation rather than spelled as `!`, matching `Region` and
     /// the Python surface: a one-character operator in a fold is a one-character
     /// defect, and typing has no operator for this one.
-    /// `~~A` is `A`, so a complement of a complement cancels here rather than
-    /// being carried and recognised later. The decision procedure then never
-    /// meets the shape and needs no rule for it, which is the difference between
-    /// paying once per construction and paying per comparison step.
+    ///
+    /// `~~A` is `A`, so a complement of a complement cancels. Nothing downstream
+    /// carries a double negation, and no rule anywhere may assume one exists.
     #[must_use]
     pub fn complement(self) -> Schema {
         match self {

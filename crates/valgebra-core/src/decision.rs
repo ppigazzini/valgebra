@@ -535,11 +535,9 @@ impl Schema {
         // decision stops and returns the conservative `false` rather than running
         // unbounded. A real annotation decides in a few steps; only an adversarial
         // schema reaches the ceiling.
-        // Reflexivity, by identity. One pointer comparison, and it comes first
-        // because everything below walks: the structural compare at the end
-        // reads every field of both sides to reach the same answer. A subtree
-        // compared against itself is the common case under recursion and behind
-        // `is_equivalent`, which asks both directions of the same pair.
+        // Reflexivity, by identity. The checks below are ordered by what they
+        // cost, and each answers the whole query on its own, so a cheaper one
+        // never hides a verdict a later one would reach.
         if core::ptr::eq(self, other) {
             return true;
         }
@@ -547,9 +545,9 @@ impl Schema {
             return false;
         }
         // Scalar fragment: exact via the region partition. Subtyping there is
-        // set inclusion between the two region sets, and nothing else. Cheap off
-        // it too -- a non-scalar node yields `Unknown` from its own discriminant,
-        // without descending.
+        // set inclusion between the two region sets, and nothing else. A
+        // non-scalar node yields `Unknown` from its own discriminant, so this
+        // costs one match off the fragment.
         let supertype_regions = other.region_set();
         if let (Regions::Known(a), Regions::Known(b)) = (self.region_set(), supertype_regions) {
             return a.subset_of(b);
@@ -560,12 +558,11 @@ impl Schema {
         }
         // Coinductive hypothesis: a goal already being proven on this path is
         // assumed to hold, so two recursive types are compared at their greatest
-        // fixpoint rather than unfolded forever. Asked after the cheap answers,
-        // since each of those terminates the query on its own; the scan is empty
-        // (free) for a non-recursive one, and under recursion it holds one entry
-        // per reference goal still being unfolded. Every recorded goal has a
-        // `Ref` on one side, so the structural compare rejects a mismatched goal
-        // on the discriminant before walking either subtree.
+        // fixpoint rather than unfolded forever. The scan is empty for a
+        // non-recursive query; under recursion the stack holds one entry per
+        // reference goal still being unfolded. Every recorded goal has a `Ref` on
+        // one side, so the structural compare rejects a mismatched goal on the
+        // discriminant before walking either subtree.
         if assumptions.iter().any(|(a, b)| a == self && b == other) {
             return true;
         }
@@ -587,11 +584,9 @@ impl Schema {
     /// question one De Morgan step away and needs no separate procedure.
     fn bounds_the_pair(&self, supertype_regions: Regions, cx: SubtypeCx<'_>) -> bool {
         // `other` covers the universe exactly when its region set is the whole
-        // partition, and that set is the caller's: `is_subtype_rec` reads it to
-        // try the exact scalar rule and it is unchanged here. Recomputing it
-        // would walk the supertype again on every step of a decision that
-        // distributes over its members. Asked first, because it is a comparison
-        // where the emptiness below is a walk.
+        // partition. The set is the caller's -- `is_subtype_rec` reads it for the
+        // exact scalar rule and nothing between there and here changes `other` --
+        // so it arrives as an argument rather than being derived twice.
         if supertype_regions == Regions::Known(Region::ALL) {
             return true;
         }
@@ -607,10 +602,9 @@ impl Schema {
     /// already decides kind disjointness and the scalar regions. Without it a
     /// container is never seen below the complement of a scalar.
     fn shares_no_value_with(&self, other: &Schema, cx: SubtypeCx<'_>) -> bool {
-        // Kind disjointness settles most pairs and reads only the two
-        // discriminants -- a list never shares a value with an int. Asked first
-        // because the general question below has to build the meet, which means
-        // cloning both sides on a path taken for every complement on the right.
+        // Kind disjointness reads two discriminants and settles most pairs: a
+        // list never shares a value with an int. The general question below owns
+        // the rest, and has to build the meet to ask it.
         if self.disjoint_with(other, cx.oracle) {
             return true;
         }
@@ -659,11 +653,9 @@ impl Schema {
             // a fixed-arity sequence -- if it splits across the branches, which
             // no single-branch rule can see.
             (_, Schema::Union(members)) => {
-                // A branch equal to the subject settles it, and finding one is a
-                // scan of equalities. Recursing into each branch reaches the same
-                // answer through a budget spend and two region walks per branch,
-                // which for a union of literals against a wider one is the whole
-                // cost of the query.
+                // A branch equal to the subject settles it, which is set
+                // containment and is linear in the branches. The recursion below
+                // decides the rest, at the cost of a full step per branch.
                 members.contains(self)
                     || members
                         .iter()

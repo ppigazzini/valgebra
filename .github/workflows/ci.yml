@@ -345,6 +345,13 @@ jobs:
       # of runner noise, so it blocks merges; a wall-clock budget could not.
       - name: Instruction-count regression gate
         run: uv run --no-sync python scripts/perf_gate.py
+      # The same gate for the decision procedures. A separate workload because
+      # the core one runs the transformations and never calls `is_subtype_of`,
+      # `is_empty` or `is_equivalent`, so without this the whole decision surface
+      # is invisible here in both directions: neither what a new rule costs nor
+      # what a cheaper one saves.
+      - name: Decision-path instruction-count regression gate
+        run: uv run --no-sync python scripts/perf_gate.py --decision
       # The same gate for the binding hot path: the membership walk over a live
       # Python value, which the pure-Rust core workload does not reach. The
       # workload embeds the interpreter, so PYO3_PYTHON selects it at build time

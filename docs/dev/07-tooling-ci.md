@@ -58,9 +58,17 @@ that builds it.
 
 Wall-clock benchmarks on shared runners are too noisy to gate, so
 `scripts/perf_gate.py` gates **instruction counts under cachegrind**, which are
-identical across runs of a build. Two workloads: the pure-Rust core, and the
-membership walk over a live Python value, which is the shipped hot path the core
-workload does not reach.
+identical across runs of a build. Three workloads, one per surface, because a
+gate only catches what it exercises:
+
+- the **core** transformations — the simplifier, the composition remap, the
+  record transform;
+- the **decision** procedures (`--decision`) — subtyping, emptiness,
+  equivalence. The core workload never calls one, so without this the whole
+  decision surface is unmeasured in both directions: neither what a new rule
+  costs nor what a cheaper one saves;
+- the **binding** walk (`--binding`) — membership over a live Python value,
+  which is the shipped hot path neither pure-Rust workload reaches.
 
 The binding workload embeds CPython, whose startup is not a fixed instruction
 count, so the gate measures the **difference** between two iteration counts:
@@ -74,10 +82,12 @@ verdict:
   never earned. A deliberate optimization past the floor is re-recorded rather
   than absorbed.
 - **The workload proves it ran.** Each prints a checksum folded through every
-  result, compared **before** any count. The core workload's is a recorded
-  constant; the binding workload's *is* its iteration count by construction, so a
-  workload that ignored its argument — reporting a difference near zero — fails
-  rather than passing under the ceiling.
+  result, compared **before** any count. The core and decision workloads' are
+  recorded constants; the binding workload's *is* its iteration count by
+  construction, so a workload that ignored its argument — reporting a difference
+  near zero — fails rather than passing under the ceiling. The decision
+  workload's checksum counts verdicts, so a change that decides *differently*
+  fails on the checksum before its instruction count is read.
 - **An unreadable measurement exits 2.**
 
 The budgets live in `scripts/perf_budget.json`. Do not copy one into prose:
