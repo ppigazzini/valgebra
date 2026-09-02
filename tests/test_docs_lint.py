@@ -21,6 +21,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+# The repository checks are not the product suite: this file reads the tree,
+# the configuration and the gate scripts, none of which ship in a wheel.
+pytestmark = pytest.mark.repository
+
 if TYPE_CHECKING:
     from types import ModuleType
 

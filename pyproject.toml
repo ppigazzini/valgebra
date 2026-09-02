@@ -86,6 +86,14 @@ minversion = "9.0"
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers", "--strict-config"]
 xfail_strict = true
+# The suite holds two kinds of test. Most exercise the library, and run against
+# an installed wheel wherever one is built. The rest read this repository -- its
+# tree, its configuration, its gate scripts and its documentation -- and answer
+# for the project rather than for the product; none of what they read ships. They
+# carry the `repository` marker, so `-m "not repository"` is the product suite
+# and `-m repository` is the project's own audit. `tests/test_suite_partition.py`
+# holds the two apart in both directions.
+markers = ["repository: reads the repository rather than exercising the library"]
 
 [tool.ruff]
 target-version = "py310"

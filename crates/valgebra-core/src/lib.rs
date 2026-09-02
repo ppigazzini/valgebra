@@ -1529,11 +1529,19 @@ mod laws {
         );
     }
 
+    // Trapping on overflow is a property of the profile, not of the code, so
+    // this exists only in the profiles that promise it. `cargo test --release`
+    // builds with `overflow-checks = false` by the manifest's own decision, and
+    // an unconditional `#[should_panic]` would read an honest release run as a
+    // broken one. There is no stable `cfg(overflow_checks)`; the manifest sets
+    // the checks and the assertions together in every profile, so this is the
+    // condition it can be asked under.
+    #[cfg(debug_assertions)]
     #[test]
     #[should_panic(expected = "attempt to add with overflow")]
-    fn the_test_profile_traps_an_overflowing_add() {
+    fn the_dev_and_test_profiles_trap_an_overflowing_add() {
         // The policy, driven rather than read off the manifest: `overflow-checks`
-        // is on in dev and test, so a bare `+` that wraps is a defect these
+        // is on in dev and test, so a bare `+` that wraps is a defect those
         // profiles catch. Every intended saturation in this tree is spelled, so
         // nothing legitimate trips it.
         let _ = std::hint::black_box(usize::MAX) + std::hint::black_box(1);
