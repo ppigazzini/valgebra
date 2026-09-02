@@ -8,7 +8,7 @@ Each entry is tagged **LOAD-BEARING** (code here rests on it), **GUIDING**
 built). A planned reference is an intention; it never implies the thing is built.
 
 Some of this is decades old and stays, because a theorem does not expire.
-Stone's representation theorem and Nakano's guarded fixpoint are exactly the
+Stone's representation theorem and Nakano's guardedness modality are exactly the
 results the design leans on, not dated approximations of them.
 
 ## The frame: a schema denotes a set
@@ -63,8 +63,8 @@ simplifier is **valgebra's reasoning, not a result of the paper**, and it is why
 [02-decision.md](02-decision.md) states soundness as the contract and treats
 completeness as a measured, growing property rather than a promise.
 
-**Castagna, "Programming with Union, Intersection, and Negation Types" (2023).**
-The modern synthesis. **[GUIDING]**
+**Castagna, "Programming with Union, Intersection, and Negation Types"**
+(arXiv:2111.03354, revised 2024). The modern synthesis. **[GUIDING]**
 
 **Castagna, Duboc & Valim, "The Design Principles of the Elixir Type System"
 (2023).** The same algebra in a production language, with the engineering
@@ -75,9 +75,19 @@ compromises stated. **[GUIDING]** — the closest thing to a peer implementation
 **Hosoya, Vouillon & Pierce, "Regular Expression Types for XML" (TOPLAS 2005).**
 Regular languages are closed under union, intersection and complement, so a
 sequence type is a first-class member of the algebra rather than an ad-hoc node.
-**[LOAD-BEARING]** — `SeqRegex` is one node subsuming the homogeneous, fixed and
+**[GUIDING]** — `SeqRegex` is one node subsuming the homogeneous, fixed and
 prefix-plus-tail forms for exactly this reason
-([01-schema-ir.md](01-schema-ir.md)).
+([01-schema-ir.md](01-schema-ir.md)). It is guiding rather than load-bearing
+because nothing here builds an automaton: the forms the frontend produces are
+linear, and membership walks them positionally.
+
+**The rule that splits a fixed-length sequence across a union** is the product
+decomposition — Frisch, Castagna & Benzaken Lemma 6.5 for pairs, in the
+backtrack-free form Castagna gives as `Φ`, and generalised to a fixed component
+count the way Castagna & Duboc state the tuple rule for larger arities.
+**[LOAD-BEARING]** — `product_subtype` in `decision.rs`. It applies in subtyping
+and nowhere else: emptiness does not decompose a product, so the same relation
+asked as a meet with a complement is not decided.
 
 ## Records and maps
 
@@ -87,40 +97,61 @@ the heterogeneous mapping and their combination. **[LOAD-BEARING]** —
 `Schema::KeyedMap`, where a closed record is no default clause and `dict[K, V]`
 is a single clause with no fields.
 
-The paper's clauses are *ordered*, with the first matching clause governing a
-key. valgebra's are not: a key belongs when **some** clause admits it and its
-value, in the walk and in subtyping alike. That is a deliberate narrowing:
-"ordered" is a semantics no code here implements, so nothing may describe the
-node that way.
+The paper's model is a *quasi-constant function*: named labels over a finite
+domain, with the rest given by a default keyed by a partition of the key space.
+valgebra's clauses are neither ordered nor a partition — a key belongs when
+**some** clause admits it and its value, in the walk and in subtyping alike, and
+two clauses may claim the same key. That is valgebra's own model rather than the
+paper's, and the paper says why it is not theirs: it forbids overlapping domains
+in one map, and rejects the leftmost-match reading precisely because a semantic
+subtyping relation disregards the order of the fields. The set each node denotes
+is well defined; what it does not have is the paper's canonical form, which is
+why the domain is the field list as written.
 
 ## Recursion
 
+**What makes `recursive` well defined is not a fixpoint theorem.** The values are
+finite, so the immediate-substructure relation on them is well founded, and for a
+guarded body `F` the statement `v ∈ X ⟺ v ∈ F(X)` is a *definition by
+well-founded recursion on `v`*: each unfolding consumes one constructor of the
+value, so the question about `v` is answered from strictly smaller questions.
+Existence and uniqueness among sets of finite values follow from that induction —
+no metric, no lattice, and no monotonicity. **This is the argument the walk
+implements**, and it is why `recursive(lambda x: [complement(x)])` is well
+defined although `complement` is antitone and the body has no monotone `F`.
+
+Two theorems sit nearby and neither is the justification. **Banach's fixed-point
+theorem** — "a contractile map over a complete metric space has a unique
+fixpoint", quoted at Amadio & Cardelli §3.3.2 — is the metric account of
+recursive types, and its unique fixpoint lives among *infinite* trees, which the
+walk never admits. **Tarski's fixpoint theorem (1955)** gives a monotone map on a
+complete lattice a least fixpoint, and applies to the complement-free fragment,
+where the inductive set is that least fixpoint. Both are **[GUIDING]**.
+
 **Nakano, "A Modality for Recursion" (2000).** The guardedness modality: a
-contractive map has a unique fixpoint. **[LOAD-BEARING]** — `recursive` denotes
-that fixpoint, and the contractiveness check in
-`crates/valgebra-core/src/ir.rs` is the discipline that earns it.
-
-The distinction from Knaster–Tarski is forced by `complement`, which is
-**antitone**. A guarded body may therefore be non-monotone, and one is reachable:
-`recursive(lambda x: [complement(x)])` builds and validates, with the
-self-reference under `list` so the contractiveness check accepts it. It has no
-monotone `F`, so it has no Knaster–Tarski least fixpoint. What makes it well
-defined is the guard: each unfolding consumes one constructor of a finite value,
-so the recursion is productive and the fixpoint is unique whether or not the body
-is monotone.
-
-**Tarski's fixpoint theorem (1955).** A monotone map on a complete lattice has a
-least fixpoint. **[GUIDING]** — it applies to the complement-free fragment, where
-the unique guarded fixpoint coincides with the least one. It is not the general
-justification.
+recursion variable under a guard is productive. **[LOAD-BEARING]** for the
+*discipline* — `occurs_unguarded` is that condition, and it is what makes the
+induction above well founded. The paper proves soundness of a modal type system
+by a step-indexed realizability argument; it states no theorem about contractive
+maps, and citing one to it is the error this page previously made.
 
 [01-schema-ir.md](01-schema-ir.md) records why the check's structural arms
 compute nothing.
 
 **Amadio & Cardelli, "Subtyping Recursive Types" (1993).** Subtyping between
-recursive types is decided coinductively: assume the goal, unfold, and a cycle
-back to an assumed goal is a proof. **[LOAD-BEARING]** — the assumption stack in
-`crates/valgebra-core/src/decision.rs`.
+recursive types is decided coinductively over a **trail** of address pairs:
+assume the goal, unfold, and a pair already on the trail is a local success
+(§1.5, with the algorithm at §4.4). **[LOAD-BEARING]** — the assumption stack in
+`crates/valgebra-core/src/decision.rs` is that idea, with terms where the paper
+has addresses. The arms are not the paper's: it decides an ordering over
+`⊥/⊤/→/µ` and valgebra decides a lattice with no arrow.
+
+**Frisch, Castagna & Benzaken, Definition 6.9.** Emptiness is proved
+coinductively too: a *simulation* is "a self-justifying set, that is a
+co-inductive proof of the fact that all its elements are equal to `0`".
+**[GUIDING]** — valgebra's emptiness recurses on the structure and reads a cycle
+back to a visiting reference as uninhabited, which is the inductive reading of
+the same fact over finite values.
 
 Coinduction also governs the *value* side: a value that contains itself is
 refused by identity rather than followed ([04-walk.md](04-walk.md)).

@@ -82,21 +82,23 @@ structurally identical recursive schemas are equivalent, and a recursive schema
 with no base case is detected as uninhabited.
 
 These are views of one definition, not separate definitions. *Membership* unfolds
-the unique guarded (contractive) fixpoint against a finite value — a value is in
-the set when its finite unfolding matches. *Inclusion* uses the greatest fixpoint
-coinductively, which is the sound way to relate two such definitions without
-unfolding forever. On the inhabitants the two agree: the greatest fixpoint admits
-exactly the values the guarded unfolding accepts, so a subtype result never
-contradicts membership.
+the definition against a finite value — a value is in the set when its finite
+unfolding matches. That is not a choice between fixpoints: values are finite, so
+each unfolding asks about strictly smaller values and the set is *defined* by
+that induction. Guardedness is what makes it well founded, which is why a
+non-contractive body is refused rather than resolved somehow. *Inclusion* uses
+the greatest fixpoint coinductively, which is the sound way to relate two such
+definitions without unfolding forever. On the finite values the two agree, so a
+subtype result never contradicts membership.
 
 *Emptiness* asks the opposite question and takes the **least** fixpoint: a
 reference reached again while resolving it demands an infinite unfolding, and no
 finite value supplies one, so that occurrence is uninhabited. This is why a
 mandatory self-reference with no base case is empty — under the greatest fixpoint
 it would be inhabited by infinite trees, and valgebra validates finite Python
-values. Contractivity is what keeps the two consistent: a guarded definition has
-one fixpoint, so what inclusion relates and what emptiness counts are the same
-set.
+values. Contractivity is what keeps the two consistent: over the finite values a
+guarded definition names one set, so what inclusion relates and what emptiness
+counts are the same set.
 
 ```python
 from valgebra import recursive, union, Validator
