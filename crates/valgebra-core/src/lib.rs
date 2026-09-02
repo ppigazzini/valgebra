@@ -1007,6 +1007,7 @@ mod tests {
 #[cfg(test)]
 mod laws {
     use super::*;
+    use crate::decision::DECISION_BUDGET;
     use proptest::prelude::*;
 
     /// A small schema generator: atoms combined by union, intersection, and
@@ -2713,30 +2714,41 @@ mod laws {
     }
 
     /// The simplifier stays within a single bottom-up pass: a deeply nested
-    /// complemented tree reduces well inside a generous ceiling. A regression to
-    /// re-normalising each member per nesting level takes tens of seconds at this
-    /// depth and trips the guard.
+    /// complemented tree is reduced by visiting each of its nodes once. A
+    /// regression to re-normalising each member per nesting level visits them
+    /// once per level instead, which is what this separates.
+    ///
+    /// The pass is measured in nodes visited rather than in seconds. One visit
+    /// per node *is* the claim, and the count is the same number on every
+    /// machine; a duration is a claim about the machine as much as about the
+    /// pass, and it separates a linear pass from a quadratic one only where the
+    /// machine is fast enough to notice.
     #[test]
     fn simplify_stays_linear_on_a_complemented_tower() {
         let schema = complemented_tower(18);
-        let start = std::time::Instant::now();
-        let reduced = schema.simplify();
-        let elapsed = start.elapsed();
         // The duplicate union members collapse, so the reduced form is small;
-        // the point is the time it took to get there.
-        assert!(matches!(reduced, Schema::Complement(_)));
+        // the point is the work it took to get there.
+        assert!(matches!(schema.simplify(), Schema::Complement(_)));
+        let nodes = schema.node_count() as u64;
+        let steps = schema.simplify_steps();
         assert!(
-            elapsed < std::time::Duration::from_secs(3),
-            "simplify of a depth-18 complemented tower took {elapsed:?}; the \
-             bottom-up pass should finish in milliseconds"
+            steps <= nodes,
+            "simplify visited {steps} nodes of a {nodes}-node tower; a single \
+             bottom-up pass visits each at most once"
         );
     }
 
-    /// The subtyping decision terminates promptly on a deeply nested
+    /// The subtyping decision terminates on a deeply nested
     /// intersection-of-unions, where the union and intersection distribution
     /// rules re-explore the schema exponentially in its depth. The work budget
     /// stops the descent and returns the conservative answer instead of running
     /// for minutes; this guards against a regression that removes the bound.
+    ///
+    /// The bound is read as a step count rather than as a duration. What the
+    /// budget promises is that no query spends more than `DECISION_BUDGET`
+    /// steps, and that is the same number on a quiet laptop and on a loaded CI
+    /// runner. A wall-clock assertion tests the machine alongside the algorithm
+    /// and fails for reasons that have nothing to do with the code.
     // SWEEP-SKIP: this case exists to prove a bound, so a mutation that removes
     // the bound makes it run without end. It stays in the test lane and leaves
     // the mutation sweep, where a run that returns no verdict is a rig fault.
@@ -2744,15 +2756,19 @@ mod laws {
     fn subtyping_terminates_on_a_distributed_tower() {
         let narrow = intersection_of_unions_tower(18, Schema::Int);
         let wide = intersection_of_unions_tower(18, union(Schema::Int, Schema::Float));
-        let start = std::time::Instant::now();
         // The verdict on this adversarial shape may be conservative; the property
-        // under test is that the decision stops quickly rather than the answer.
-        let _ = narrow.is_subtype_of(&wide);
-        let elapsed = start.elapsed();
+        // under test is that the decision stops rather than the answer.
+        let steps = narrow.subtype_steps(&wide);
         assert!(
-            elapsed < std::time::Duration::from_secs(3),
-            "is_subtype_of on a depth-18 distributed tower took {elapsed:?}; the \
-             work budget should stop it promptly"
+            steps <= DECISION_BUDGET,
+            "is_subtype_of on a depth-18 distributed tower spent {steps} steps, \
+             past the {DECISION_BUDGET}-step budget"
+        );
+        // The shape really does exhaust the budget: a bound this case never
+        // reaches would pass with the bound removed.
+        assert_eq!(
+            steps, DECISION_BUDGET,
+            "the tower stopped short of the budget, so it no longer drives it"
         );
     }
 
@@ -2839,12 +2855,11 @@ mod laws {
     #[test]
     fn deep_subtype_into_bottom_terminates() {
         let deep = intersection_of_unions_tower(18, Schema::Int);
-        let start = std::time::Instant::now();
-        let _ = deep.is_subtype_of(&Schema::Nothing);
-        let elapsed = start.elapsed();
+        let steps = deep.subtype_steps(&Schema::Nothing);
         assert!(
-            elapsed < std::time::Duration::from_secs(3),
-            "subtype-into-bottom on a depth-18 tower took {elapsed:?}"
+            steps <= DECISION_BUDGET,
+            "subtype-into-bottom on a depth-18 tower spent {steps} steps, past \
+             the {DECISION_BUDGET}-step budget"
         );
     }
 
@@ -2876,31 +2891,44 @@ mod laws {
 
     /// The emptiness decision derives each intersection's region from its children
     /// instead of re-walking the whole subtree at every level, so a deeply nested
-    /// intersection is decided in time linear in its size. The pre-fix quadratic
-    /// re-walk took multiple seconds at this depth (≈ 9 s, growing 4× per
-    /// doubling); the bottom-up fold finishes in milliseconds. Run on a large
-    /// stack because the schema is intentionally left-nested to this depth.
+    /// intersection is decided in work linear in its size. The pre-fix quadratic
+    /// re-walk visited the subtree once per level, which is the growth this
+    /// pins. Run on a large stack because the schema is intentionally
+    /// left-nested to this depth.
+    ///
+    /// Linearity is asserted on the step count at two depths rather than on a
+    /// duration. Doubling the depth doubles the steps of a linear pass and
+    /// quadruples the steps of the re-walk, so the ratio separates the two
+    /// exactly, on any machine and under any load. A wall-clock bound separates
+    /// them only where the machine is fast enough, which is a property of the
+    /// runner.
     #[test]
     fn emptiness_decides_a_deep_intersection_in_linear_time() {
+        /// ¬Int ∩ ¬Str ∩ … : region-decidable, never empty (the non-scalar
+        /// region survives), so the walk visits every level — the worst case.
+        fn left_nested_complements(depth: usize) -> Schema {
+            let mut deep = Schema::Complement(Box::new(Schema::Int));
+            for _ in 0..depth {
+                deep = Schema::Intersection(vec![deep, Schema::Complement(Box::new(Schema::Str))]);
+            }
+            deep
+        }
+
         let worker = std::thread::Builder::new()
             .stack_size(256 * 1024 * 1024)
             .spawn(|| {
-                // ¬Int ∩ ¬Str ∩ … : region-decidable, never empty (the non-scalar
-                // region survives), so the walk visits every level — the worst case.
-                let mut deep = Schema::Complement(Box::new(Schema::Int));
-                for _ in 0..20_000 {
-                    deep =
-                        Schema::Intersection(vec![deep, Schema::Complement(Box::new(Schema::Str))]);
-                }
-                let start = std::time::Instant::now();
-                let empty = deep.is_empty();
-                let elapsed = start.elapsed();
-                assert!(!empty);
+                let shallow = left_nested_complements(10_000);
+                let deep = left_nested_complements(20_000);
+                assert!(!shallow.is_empty());
+                assert!(!deep.is_empty());
+                let (small, large) = (shallow.empty_steps(), deep.empty_steps());
+                // Linear growth doubles the work; the quadratic re-walk would
+                // quadruple it. Three is the midpoint that tells the two apart
+                // and leaves room for the constant per-level overhead.
                 assert!(
-                    elapsed < std::time::Duration::from_secs(2),
-                    "is_empty on a depth-20000 intersection took {elapsed:?}; the \
-                     bottom-up region fold should finish in milliseconds, while the \
-                     quadratic re-walk takes many seconds"
+                    u64::from(large) < 3 * u64::from(small),
+                    "doubling the depth took {small} steps to {large}; a linear \
+                     fold roughly doubles, a per-level re-walk quadruples"
                 );
             })
             .expect("spawn worker thread");
