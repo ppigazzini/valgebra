@@ -298,9 +298,10 @@ inverses: `open` on such a record widens any typed catch-all it carries to admit
 every key, and `close` drops the catch-all, so applying either twice changes
 nothing the second time.
 
-A dict schema that declares no named field is a **mapping**, not a record, and
-neither transform rewrites it — only the schemas inside its clauses are visited.
-That covers `dict[K, V]` and the empty schema `{}`:
+Both transforms act on a dict schema that **declares named fields**, and on no
+other: a schema without them carries no field list to open around, so only the
+schemas inside its clauses are visited. That covers `dict[K, V]` and `{}` — which
+declares no field and no clause, and therefore denotes the empty dict alone:
 
 ```python
 from valgebra import Validator

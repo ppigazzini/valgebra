@@ -75,10 +75,16 @@ PLACEHOLDER = re.compile(r"[*<>]|\.\.\.")
 MIN_TRACKED_PAGES = 5
 
 
-def tracked_markdown() -> list[Path]:
-    """Every Markdown file git tracks. Untracked notes are not shipped prose."""
+def tracked_files(pattern: str = "*") -> list[Path]:
+    """Every file git tracks, or every one matching `pattern`.
+
+    Untracked notes are not shipped, so they are not held to these rules. The
+    default is every tracked file rather than every page: a reference to a
+    gitignored surface dangles wherever it is written, and the rule that forbids
+    it is about the reference rather than about prose.
+    """
     result = subprocess.run(
-        ["git", "ls-files", "*.md"],
+        ["git", "ls-files", pattern],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -88,6 +94,11 @@ def tracked_markdown() -> list[Path]:
         print(f"docs_lint: git ls-files failed: {result.stderr.strip()}")
         raise SystemExit(EXIT_CANNOT_RUN)
     return [ROOT / line for line in result.stdout.split() if line]
+
+
+def tracked_markdown() -> list[Path]:
+    """Every Markdown file git tracks."""
+    return tracked_files("*.md")
 
 
 def check_links(path: Path, text: str) -> list[str]:
@@ -248,15 +259,20 @@ def check_ledger_table() -> list[str]:
         if not (tests / name).exists()
     ]
     # The count is prose beside the table, so it rots on its own schedule.
-    spelled = {4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
+    spelled = {4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine"}
     want = spelled.get(len(declared))
-    for doc in (page, ROOT / "docs" / "dev" / "13-glossary.md"):
+    counted = (
+        page,
+        ROOT / "docs" / "dev" / "13-glossary.md",
+        ROOT / "docs" / "dev" / "README.md",
+    )
+    for doc in counted:
         if not doc.exists():
             continue
         for wrong, word in spelled.items():
             if wrong == len(declared):
                 continue
-            spelling = rf"\b{word}\b of them|There are {word}\b"
+            spelling = rf"\b{word}\b of them|There are {word}\b|the {word} ledgers"
             if re.search(spelling, doc.read_text(encoding="utf-8"), re.IGNORECASE):
                 problems.append(
                     f"{doc.relative_to(ROOT)}: says {word} ledgers; there are "
@@ -303,6 +319,16 @@ def main() -> int:
     if len(files) < MIN_TRACKED_PAGES:
         print(f"docs_lint: found only {len(files)} tracked Markdown files")
         return EXIT_CANNOT_RUN
+    # The internal-surface rule is about the reference, not about prose, so it
+    # reads every tracked file.
+    # This file names the surface to forbid it, a test of the rule has to write
+    # one to check it, and `.gitignore` is where the surface is declared ignored.
+    exempt = {
+        ROOT / "scripts" / "docs_lint.py",
+        ROOT / "tests" / "test_docs_lint.py",
+        ROOT / ".gitignore",
+    }
+    referencing = [path for path in tracked_files() if path not in exempt]
     numbers = gate_numbers()
     # One `git check-ignore` for the whole set rather than one per file.
     every_named = [
@@ -324,6 +350,17 @@ def main() -> int:
             + check_internal_reference(text)
             + check_pinned_numbers(text, numbers)
         ]
+    for path in referencing:
+        if path.suffix == ".md":
+            continue  # already read above, with every rule applied
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue  # a binary or unreadable file names nothing
+        failures += [
+            f"{path.relative_to(ROOT)}: {problem}"
+            for problem in check_internal_reference(text)
+        ]
     failures += check_index("docs/dev") + check_index("docs")
     failures += check_ledger_table()
     failures += check_llms_manifest()
@@ -333,7 +370,10 @@ def main() -> int:
             print(failure)
         print(f"\ndocs_lint: {len(failures)} problem(s) in {len(files)} files")
         return EXIT_FAIL
-    print(f"docs_lint: {len(files)} tracked Markdown files, no problems")
+    print(
+        f"docs_lint: {len(files)} tracked Markdown files and "
+        f"{len(referencing)} tracked files, no problems"
+    )
     return EXIT_OK
 
 

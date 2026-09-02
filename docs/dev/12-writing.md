@@ -10,7 +10,8 @@ milestone backlog, user-requested analyses. **Do not converge the two.** A
 shipped page must not carry campaign history; an untracked note must not be the
 only place a shipped fact lives. And a shipped file must not name that surface's
 **location** — it is gitignored, so the reference dangles for every reader but
-its author, and `scripts/docs_lint.py` sweeps every tracked file for it.
+its author. `scripts/docs_lint.py` sweeps every tracked file for it, prose and
+source alike, since a dangling reference costs a reader the same either way.
 
 ## The rules
 

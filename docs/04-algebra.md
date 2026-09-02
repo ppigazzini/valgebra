@@ -395,8 +395,14 @@ conservative, and what is undecidable at runtime; see the
 Both admit every value at runtime, but they are different in the algebra:
 
 - `anything` is the lattice **top**. It obeys the laws —
-  `complement(anything)` is `nothing`, `intersection(anything, s)` is `s`.
+  `complement(anything)` denotes `nothing`, `intersection(anything, s)` denotes
+  `s`.
 - `Any` is the gradual dynamic type, an **atom** the simplifier never rewrites.
+  Membership does not distinguish the two: `Any` admits every value, so
+  `complement(Any)` admits none and `intersection(Any, complement(Any))` denotes
+  the empty set. What differs is the *algebra*, which holds `Any` as an atom and
+  so does not decide those — a difference the decision reports as "not proven",
+  never as a different set.
 
 ```python
 from typing import Any
@@ -408,4 +414,6 @@ assert repr(Validator(Any).simplify()) == "Any"  # left untouched
 ```
 
 This keeps "checked: every value is admitted" (`anything`) distinct from
-"deliberately not checked" (`Any`).
+"deliberately not checked" (`Any`) in the schema a reader sees, at the price of
+relations the procedure declines rather than decides
+([the boundary](15-decidability.md)).

@@ -67,7 +67,8 @@ The same line of work models the structural forms valgebra uses:
 
 `Any` (the gradual dynamic type) and `anything` (the lattice top) both admit
 every value at runtime, but they are different objects in the algebra. `anything`
-obeys the laws — `complement(anything)` is `nothing`. `Any` is the **gradual**
+obeys the laws — `complement(anything)` denotes `nothing`, and is decided equal
+to it. `Any` is the **gradual**
 dynamic type: an atom the simplifier never rewrites, so `intersection(Any, s)` is
 not collapsed and "deliberately unchecked" stays distinct from "checked: all
 values admitted". This follows the treatment of the gradual `?` under union and

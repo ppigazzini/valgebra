@@ -16,6 +16,9 @@ Two mechanisms:
 - A finite-universe soundness fuzzer. For random schema pairs, a claimed subtype
   never accepts a value the supertype rejects across a region-complete universe.
 
+LEDGER: every relation the procedure must decide is decided, and every relation
+it declines is a strict expected failure that fails the day it is decided.
+
 Every relation is written the way a caller writes it. A case built from the other
 operand -- a wider union built by adding a member to the narrower one, rather
 than written out -- shares its constants with it, and the shortcuts the procedure

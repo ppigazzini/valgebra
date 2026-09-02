@@ -55,7 +55,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Eight of them:
+for and misses the other. Nine of them:
 
 | Ledger | Holds |
 |---|---|
@@ -66,13 +66,13 @@ for and misses the other. Eight of them:
 | `tests/test_harness_conditionals.py` | every `cfg(feature = ..)` site is test-only, or named |
 | `tests/test_contract_inventory.py` | every gate script has a contract row; every row names a real source |
 | `tests/test_completeness_probe.py` | every suspected completeness gap is accepted with a reason |
-| `tests/test_completeness_ledger.py` | every relation the procedure must decide is decided; every recorded miss is still a miss |
+| `tests/test_completeness_ledger.py` | every relation the procedure must decide is decided; every relation it declines is still declined |
 | `tests/test_laws.py` | the complement laws decide against a respelling the procedure proves equal |
 
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are eight.
+because a table nothing counts is the one that drifts: there are nine.
 
 `tests/test_node_matrix.py` is the same shape one level in: it reads the `Schema`
 variants out of the IR and fails when one carries no row, so the universe is

@@ -256,9 +256,9 @@ _RESPELLINGS = [
 # spelling and for roughly two in five against an equal one.
 #
 # Closing it wants the operands compared as sets where the rules read equality,
-# which is what a representation closed under the Boolean operations gives --
-# `__DEV/5-THEORY.md` §14.5. Strict, so the entry fails the day it stops being
-# true.
+# which is what a representation closed under the Boolean operations gives: one
+# per kind, so a negated atom of that kind lands somewhere. Strict, so the entry
+# fails the day it stops being true.
 @pytest.mark.parametrize(
     ("name", "respell"), _RESPELLINGS, ids=[name for name, _ in _RESPELLINGS]
 )

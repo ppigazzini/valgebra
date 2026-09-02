@@ -15,7 +15,7 @@ the hot path crosses into Rust exactly once per call.
 
 | Component | Path | Owns | PyO3 |
 | --- | --- | --- | --- |
-| Core | [`crates/valgebra-core/`](crates/valgebra-core/src/lib.rs) | the schema IR, the denotation of every node, the structured `Violation` | no |
+| Core | [`crates/valgebra-core/`](crates/valgebra-core/src/ir.rs) | the schema IR, the denotation of every node, the structured `Violation` | no |
 | Bindings | [`crates/valgebra-py/`](crates/valgebra-py/src/lib.rs) | the schema frontend, the membership walk, the error and `repr` layers; built as the `_valgebra` extension | yes |
 | Package | [`python/valgebra/`](python/valgebra/__init__.py) | the importable public surface; `_valgebra` is private | — |
 
@@ -32,7 +32,7 @@ flowchart LR
     subgraph py["valgebra-py (PyO3 bindings)"]
         direction TB
         FE["build.rs<br/>frontend"]
-        CHK["check.rs<br/>membership walk"]
+        CHK["check/walk.rs<br/>membership walk"]
         INP["input.rs<br/>Value: object | JSON"]
         ERRM["errors.rs<br/>ValidationError"]
         REN["render.rs<br/>repr"]
@@ -65,7 +65,7 @@ constants pool. The result is wrapped in an immutable `Validator`.
 **Validate fast.** Each call crosses into Rust once. The value — a Python object
 or a JSON document — is presented through one `Value` abstraction
 ([`input.rs`](crates/valgebra-py/src/input.rs)), and a **single membership walk**
-([`check.rs`](crates/valgebra-py/src/check.rs)) decides it. The walk runs in one
+([`check/walk.rs`](crates/valgebra-py/src/check/walk.rs)) decides it. The walk runs in one
 of two modes: a *fast* mode that returns a bool and allocates nothing, and an
 *explain* mode that builds a `Violation` with the path, the expected label, and a
 value summary. A `Violation` becomes the `ValidationError`
@@ -77,10 +77,10 @@ same errors.
 
 ## The IR
 
-The schema IR is one enum, [`Schema`](crates/valgebra-core/src/lib.rs), whose
+The schema IR is one enum, [`Schema`](crates/valgebra-core/src/ir.rs), whose
 variants are the node set:
 
-- **Atoms** — `Anything` (lattice top), `Nothing` (bottom), `Any` (the gradual
+- **Atoms** — `Anything` (lattice top), `Nothing` (bottom), `Dynamic` (the gradual
   dynamic type, distinct from the top), `NoneType`, `Bool`, `Int`, `Float`,
   `Str`, `Bytes`, and `Literal` (a typed singleton, pooled).
 - **Containers** — `Seq { container, regex }` carries every list and tuple form
