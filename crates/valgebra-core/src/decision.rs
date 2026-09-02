@@ -1875,6 +1875,305 @@ mod tests {
         assert!(!Schema::Intersection(vec![list(Schema::Int), list(Schema::Bool)]).is_empty());
     }
 
+    /// The two rules that read only the left side -- a reference unfolds, a
+    /// refinement drops to its base -- and the union rule beside them.
+    ///
+    /// A union on the right is tried branch by branch, which commits to a
+    /// branch. Both readings are sound and neither subsumes the other, so where
+    /// both apply both are asked; these are the cases that separate them.
+    #[test]
+    fn a_reference_and_a_refinement_are_read_beside_the_union_rule() {
+        let defs = vec![Schema::union([Schema::Int, Schema::Str])];
+        let reference = Schema::Ref(DefIx::new(0));
+        let body = Schema::union([Schema::Int, Schema::Str]);
+        let refined = |base: Schema| Schema::Refine {
+            base: Box::new(base),
+            constraints: vec![Constraint::Ge(OperandIx::new(0))],
+        };
+
+        // Against a union: only the left-side rule decides these. The reference
+        // is in no branch of its own body, and the refinement is in neither
+        // branch of the union it refines.
+        assert!(reference.is_subtype_of_under(&body, &NoLeafRelations, &defs));
+        assert!(refined(body.clone()).is_subtype_of(&body));
+
+        // Against a non-union: the same two rules, reached through their own
+        // arms rather than through the union rule.
+        assert!(Schema::Ref(DefIx::new(0)).is_subtype_of_under(
+            &Schema::union([Schema::Int, Schema::Str, Schema::Bytes]),
+            &NoLeafRelations,
+            &defs
+        ));
+        assert!(refined(Schema::Int).is_subtype_of(&Schema::Int));
+        let int_def = vec![Schema::Int];
+        assert!(Schema::Ref(DefIx::new(0)).is_subtype_of_under(
+            &Schema::Int,
+            &NoLeafRelations,
+            &int_def
+        ));
+
+        // The union rule is not replaced by them. A branch equal to the subject
+        // settles it, and the base rule would answer no: `int` is not below the
+        // refinement, so a subject that IS the refinement is decided only by the
+        // branch it equals.
+        let narrowed = refined(Schema::Int);
+        assert!(narrowed.is_subtype_of(&Schema::union([narrowed.clone(), Schema::Str])));
+        // And a subject that neither rule reaches still lands in its branch.
+        assert!(Schema::Int.is_subtype_of(&Schema::union([Schema::Int, Schema::Str])));
+
+        // Sound in the other direction: unfolding a reference is not a licence.
+        assert!(!Schema::Ref(DefIx::new(0)).is_subtype_of_under(
+            &Schema::union([Schema::Int, Schema::Bytes]),
+            &NoLeafRelations,
+            &defs
+        ));
+        // A reference no definition resolves decides nothing.
+        assert!(!Schema::Ref(DefIx::new(9)).is_subtype_of_under(&body, &NoLeafRelations, &defs));
+    }
+
+    /// A field, spelled once rather than at each of the many sites below.
+    fn field(name: &str, schema: Schema, required: bool) -> Field {
+        Field {
+            name: name.to_owned(),
+            schema,
+            required,
+        }
+    }
+
+    /// A record: declared fields and no catch-all clause, so it is closed.
+    fn closed(fields: Vec<Field>) -> Schema {
+        Schema::KeyedMap {
+            fields,
+            defaults: Vec::new(),
+        }
+    }
+
+    /// A record with a catch-all clause, which is what makes it open.
+    fn open(fields: Vec<Field>) -> Schema {
+        Schema::KeyedMap {
+            fields,
+            defaults: vec![(Schema::Str, Schema::Anything)],
+        }
+    }
+
+    fn meet_is_empty(members: &[Schema]) -> bool {
+        keyed_map_meet_empty(members, &NoLeafRelations, &[], &Cell::new(DECISION_BUDGET))
+    }
+
+    /// The two rules ICFP formulae (11) and (12) give for a meet of record atoms,
+    /// and the footnote-11 guard that stops each from firing where it must not.
+    ///
+    /// Driven against the rule rather than through `is_empty`, because the
+    /// question is which of these shapes the rule answers for: reached through
+    /// the decision procedure, an intersection has half a dozen other reasons to
+    /// be reported empty, and a test that only watches the verdict cannot tell
+    /// which one spoke.
+    #[test]
+    fn a_record_meet_is_empty_only_where_a_required_key_cannot_hold() {
+        // Rule one: a key required somewhere whose types meet to nothing.
+        assert!(meet_is_empty(&[
+            closed(vec![field("a", Schema::Int, true)]),
+            closed(vec![field("a", Schema::Str, true)]),
+        ]));
+        // The types must actually meet to nothing. `bool` is below `int`, so
+        // these two agree on every bool.
+        assert!(!meet_is_empty(&[
+            closed(vec![field("a", Schema::Int, true)]),
+            closed(vec![field("a", Schema::Bool, true)]),
+        ]));
+
+        // Rule two: a key required somewhere and absent from a closed map.
+        assert!(meet_is_empty(&[
+            closed(vec![field("a", Schema::Int, true)]),
+            closed(vec![field("b", Schema::Int, true)]),
+        ]));
+        // The map that lacks the key must be closed. A clause admits keys the
+        // field list does not name, so an open map is no obstacle.
+        assert!(!meet_is_empty(&[
+            closed(vec![field("a", Schema::Int, true)]),
+            open(vec![]),
+        ]));
+        // And a closed map that declares the key is no obstacle either, which is
+        // the same walk reading the field list the other way.
+        assert!(!meet_is_empty(&[
+            closed(vec![field("a", Schema::Int, true)]),
+            closed(vec![field("a", Schema::Anything, true)]),
+        ]));
+
+        // Footnote 11: only a REQUIRED key can empty a meet. Two optional fields
+        // whose types share nothing still admit the empty dict, and so does a
+        // key absent from a closed map when nothing requires it.
+        assert!(!meet_is_empty(&[
+            closed(vec![field("a", Schema::Int, false)]),
+            closed(vec![field("a", Schema::Str, false)]),
+        ]));
+        assert!(!meet_is_empty(&[
+            closed(vec![field("a", Schema::Int, false)]),
+            closed(vec![field("b", Schema::Int, false)]),
+        ]));
+        // Required on ONE side is enough: the meet must satisfy both maps, so a
+        // key one of them demands is a key every value in the meet carries.
+        assert!(meet_is_empty(&[
+            closed(vec![field("a", Schema::Int, true)]),
+            closed(vec![field("a", Schema::Str, false)]),
+        ]));
+
+        // The first rule is about types from DIFFERENT maps meeting to nothing.
+        // A required key whose type is uninhabited in a single map empties that
+        // map on its own, and the keyed-map node's own rule decides it -- so
+        // this one declines rather than answering a question already answered.
+        assert!(!meet_is_empty(&[
+            closed(vec![field("a", Schema::Nothing, true)]),
+            open(vec![]),
+        ]));
+        assert!(
+            Schema::Intersection(vec![
+                closed(vec![field("a", Schema::Nothing, true)]),
+                open(vec![]),
+            ])
+            .is_empty()
+        );
+
+        // Fewer than two maps is not a meet of maps. One map alone is decided by
+        // the node's own rule, and a meet with a non-map member says nothing
+        // about the keys.
+        assert!(!meet_is_empty(&[closed(vec![field(
+            "a",
+            Schema::Nothing,
+            true
+        )])]));
+        assert!(!meet_is_empty(&[
+            closed(vec![field("a", Schema::Int, true)]),
+            Schema::Str,
+        ]));
+        // Three maps: the pair that cannot hold together need not be the first
+        // two, so the scan runs over all of them rather than stopping at a count.
+        assert!(meet_is_empty(&[
+            open(vec![]),
+            closed(vec![field("a", Schema::Int, true)]),
+            closed(vec![field("a", Schema::Str, true)]),
+        ]));
+    }
+
+    /// A fixed-arity sequence is a product, and a product is decided against a
+    /// union of products by the backtrack-free `Phi` -- so a value that lands in
+    /// no single branch is still decided, which is the whole reason the rule
+    /// exists.
+    #[test]
+    fn a_fixed_sequence_splits_across_the_branches_that_share_its_shape() {
+        let tuple = |elements: [Schema; 2]| Schema::tuple(SeqShape::fixed(elements));
+        let int_or_str = Schema::union([Schema::Int, Schema::Str]);
+
+        // The split: neither branch contains the subject, and together they do.
+        let subject = tuple([int_or_str.clone(), Schema::Int]);
+        let split = Schema::union([
+            tuple([Schema::Int, Schema::Int]),
+            tuple([Schema::Str, Schema::Int]),
+        ]);
+        assert!(subject.is_subtype_of(&split));
+        // Sound in the other direction: branches that do not cover it decide no.
+        assert!(!subject.is_subtype_of(&Schema::union([
+            tuple([Schema::Int, Schema::Int]),
+            tuple([Schema::Bytes, Schema::Int]),
+        ])));
+
+        // A branch of another container kind shares no value with the subject, so
+        // it drops out rather than being read as a component-wise cover.
+        let list_branches = Schema::union([
+            Schema::list(SeqShape::fixed([Schema::Int, Schema::Int])),
+            Schema::list(SeqShape::fixed([Schema::Str, Schema::Int])),
+        ]);
+        assert!(!subject.is_subtype_of(&list_branches));
+        // A branch of another arity drops out the same way.
+        assert!(!subject.is_subtype_of(&Schema::union([
+            Schema::tuple(SeqShape::fixed([Schema::Int])),
+            Schema::tuple(SeqShape::fixed([Schema::Str])),
+        ])));
+        // With no branch of the subject's shape at all there is nothing to split
+        // over, and the rule declines rather than deciding on an empty product.
+        assert!(!subject.is_subtype_of(&Schema::union([Schema::Int, Schema::Str])));
+
+        // The subject must be a product. A repeated tail admits every length, so
+        // there is no tuple of components to split.
+        let variadic = Schema::tuple(SeqShape::homogeneous(int_or_str.clone()));
+        assert!(!variadic.is_subtype_of(&Schema::union([
+            Schema::tuple(SeqShape::homogeneous(Schema::Int)),
+            Schema::tuple(SeqShape::homogeneous(Schema::Str)),
+        ])));
+        // Nor is a branch with a tail a product, so it drops out of the branches.
+        assert!(!subject.is_subtype_of(&Schema::union([
+            Schema::tuple(SeqShape::prefix_tail([Schema::Int], Schema::Int)),
+            tuple([Schema::Str, Schema::Int]),
+        ])));
+
+        // The empty prefix is the nullary product, and it is covered by itself.
+        let nullary = Schema::tuple(SeqShape::fixed([]));
+        assert!(nullary.is_subtype_of(&Schema::union([nullary.clone(), Schema::Int])));
+    }
+
+    /// An oracle that kinds a pooled constant by its index and settles a pair of
+    /// them, standing in for the bindings' reading of two Python objects.
+    ///
+    /// Index 0 is an `int`, 1 a `str`, 2 a second `int`. Two constants are
+    /// disjoint when their kinds differ or their indices do -- the same rule the
+    /// bindings apply to a builtin scalar, whose equality is Python's own.
+    struct Kinded;
+    impl LeafRelations for Kinded {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            None
+        }
+        fn literal_kind(&self, constant: ConstIx) -> Option<TypeTag> {
+            match constant.get() {
+                0 | 2 => Some(TypeTag::Int),
+                1 => Some(TypeTag::Str),
+                _ => None,
+            }
+        }
+        fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+            Some(left != right)
+        }
+    }
+
+    /// What a literal contributes to disjointness, and where each answer comes
+    /// from. Three rules meet at a literal and they are asked in this order: two
+    /// literals go to the constants, a literal against anything else goes to the
+    /// kind, and an unkinded constant declines.
+    #[test]
+    fn a_literal_is_disjoint_by_its_constants_then_by_its_kind() {
+        let lit = |i: usize| Schema::Literal(ConstIx::new(i));
+
+        // Two literals: the constants settle it, and the kind rule never runs --
+        // which matters because the kind rule exempts bool/int and would answer
+        // differently for two int constants.
+        assert!(lit(0).disjoint_with(&lit(1), &Kinded));
+        assert!(lit(0).disjoint_with(&lit(2), &Kinded));
+        assert!(!lit(0).disjoint_with(&lit(0), &Kinded));
+        // An oracle that declines leaves the pair conservative rather than
+        // falling through to a rule that would answer for it.
+        assert!(!lit(0).disjoint_with(&lit(1), &NoLeafRelations));
+
+        // A literal against a kind: the constant's kind places it in the
+        // partition. Without it the literal is opaque and nothing is decided.
+        assert!(lit(0).disjoint_with(&Schema::Str, &Kinded));
+        assert!(!lit(0).disjoint_with(&Schema::Int, &Kinded));
+        assert!(!lit(0).disjoint_with(&Schema::Str, &NoLeafRelations));
+        // Read the other way round too: the arms are ordered, and only one of
+        // them puts the literal on the left.
+        assert!(Schema::Str.disjoint_with(&lit(0), &Kinded));
+
+        // A union is disjoint from a schema when every member is, which is how a
+        // `Literal[...]` -- built as a union of its constants -- is reached at
+        // all. One overlapping member is enough to decline.
+        let table = Schema::union([lit(0), lit(2)]);
+        assert!(table.disjoint_with(&Schema::Str, &Kinded));
+        assert!(!table.disjoint_with(&Schema::Int, &Kinded));
+        assert!(Schema::Str.disjoint_with(&table, &Kinded));
+        assert!(!Schema::Int.disjoint_with(&table, &Kinded));
+        // An empty union denotes nothing, so it is disjoint from everything --
+        // by the bottom rule above these arms, not by "every member is".
+        assert!(Schema::union(Vec::new()).disjoint_with(&Schema::Int, &Kinded));
+    }
+
     /// An oracle treating each pool index as its own value, so comparing indices
     /// orders the bound values they stand for.
     struct ByIndex;

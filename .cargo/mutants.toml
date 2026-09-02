@@ -41,13 +41,17 @@ exclude_globs = [
 # the coverage claim that argues for a target that no longer exists.
 exclude_re = [
     "has_disjoint_complement_pair",
-    # The two `LeafRelations` defaults are read through call sites that collapse
-    # `None` and `Some(false)` to the same answer: `leaf_subtype(..)
-    # .unwrap_or(false)` and `no_int_between(..) == Some(true)`. Cannot-decide
-    # and decided-against are the same conservative verdict there, which is the
-    # point of the defaults, so no test can tell the two apart.
+    # The three `LeafRelations` defaults are read through call sites that
+    # collapse `None` and `Some(false)` to the same answer: `leaf_subtype(..)
+    # .unwrap_or(false)`, `no_int_between(..) == Some(true)`, and
+    # `literals_disjoint(..).unwrap_or(false)`. Cannot-decide and decided-against
+    # are the same conservative verdict there, which is the point of the
+    # defaults, so no test can tell the two apart. The `Some(true)` mutant of each
+    # IS killable and stays in the sweep: it turns a declined question into a
+    # claim, which is the direction that would be unsound.
     "replace <impl LeafRelations for NoLeafRelations>::leaf_subtype -> Option<bool> with Some\\(false\\)",
     "replace LeafRelations::no_int_between -> Option<bool> with Some\\(false\\)",
+    "replace LeafRelations::literals_disjoint -> Option<bool> with Some\\(false\\)",
     # The `Set`/`FrozenSet` arm of `empty_and_region` returns exactly what the
     # match's default returns. It is written out because the two answer the same
     # thing for OPPOSITE reasons -- a collection is known non-empty, the default
