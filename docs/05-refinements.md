@@ -67,6 +67,37 @@ is one `is_subtype_of` pays for.
 | `Regex(p)` | the string fully matches the regex `p` | `string_pattern_mismatch` |
 | `Predicate(f)` | `f(value)` is truthy | `predicate_failed` |
 
+`Interval` and `Len` expand to the bounds they carry (below), and `Not` wraps a
+predicate. A marker from `annotated_types` that is **not** in this table names a
+constraint valgebra does not check — `Timezone` and `Unit` are the two — and is
+refused when the validator is built rather than ignored: ignoring it would leave
+a schema that admits exactly the values the marker was written to exclude.
+
+A constraint must also be one the base can answer. Asking an `int` for its length
+raises, and a raise reads as a non-member, so `Annotated[int, MinLen(1)]` would
+denote *nothing at all* while looking like a narrowing. A constraint no value of
+the base can answer is therefore refused too; where some value can — a union with
+a `str` branch, or a class that may define what the constraint asks for — it is a
+narrowing and stands.
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import Validator
+
+try:
+    Validator(Annotated[int, at.MinLen(1)])
+except NotImplementedError as error:
+    assert "length" in str(error)
+
+# One branch can answer it, so this narrows rather than empties.
+narrowed = Validator(Annotated[int | str, at.MinLen(1)])
+assert narrowed.is_valid("a")
+assert not narrowed.is_valid(5)
+```
+
 `Regex` is valgebra's own marker (`from valgebra import Regex`), since
 `annotated-types` defines none for strings. The match is **anchored** — the whole
 string must match, like `re.fullmatch` — and runs natively in Rust with a
@@ -87,7 +118,17 @@ assert not oid.is_valid("0123456789abcdef0123456X")  # not hex
 assert not oid.is_valid("0123")  # not the full 24 characters
 
 assert Validator(Annotated[str, re.compile(r"\d+")]).is_valid("123")
+
+# A compiled pattern's flags are part of the pattern and are carried over.
+assert Validator(Annotated[str, re.compile("abc", re.I)]).is_valid("ABC")
 ```
+
+A pattern is matched against text, so a `bytes` pattern is refused. So are
+`re.ASCII`, `re.LOCALE` and `re.DEBUG`: the first two change what a character
+class means in ways this engine spells differently (see the dialect section
+below), and the third asks the other engine to report on itself.
+`re.IGNORECASE`, `re.MULTILINE`, `re.DOTALL` and `re.VERBOSE` are written into
+the pattern, which is how this engine spells them.
 
 ### The dialect is Rust's, not `re`'s
 
@@ -327,14 +368,16 @@ assert not Validator(Account).is_valid({"balance": -1})
 ## Unrecognized markers
 
 Per the typing spec, metadata valgebra does not recognize as a constraint is
-ignored — so non-constraint `Annotated` metadata (documentation strings, unit
-markers) is harmless and carries no membership meaning.
+ignored — so non-constraint `Annotated` metadata, such as a documentation string,
+is harmless and carries no membership meaning. The carve-out is the
+`annotated_types` vocabulary itself: a marker from there was written to narrow
+*this* schema, so one valgebra does not check is refused rather than ignored.
 
 A **class** is among what is ignored. A marker carries its values on an
 instance — `Ge(0)` holds `ge = 0` — so the class itself holds no value to read
-and calling it constructs rather than asks. A unit or documentation marker
-written as a class therefore carries no constraint, exactly as one written as an
-instance does not.
+and calling it constructs rather than asks. A documentation marker written as a
+class therefore carries no constraint, exactly as one written as an instance does
+not.
 
 ```python
 from typing import Annotated

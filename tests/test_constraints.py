@@ -14,7 +14,7 @@ from typing import Annotated
 import annotated_types as at
 import pytest
 
-from valgebra import ValidationError, Validator
+from valgebra import Regex, ValidationError, Validator
 
 
 def _code(spec: object, value: object) -> str | None:
@@ -94,9 +94,40 @@ def test_a_divisor_of_another_type_divides(
     assert not schema.is_valid(non_member)
 
 
-def test_multiple_of_on_a_non_number_is_not_a_multiple() -> None:
-    # The base admits the value but the modulo is undefined: not a multiple.
-    assert not Validator(Annotated[str, at.MultipleOf(3)]).is_valid("abc")
+@pytest.mark.parametrize(
+    ("spec", "missing"),
+    [
+        pytest.param(Annotated[int, at.MinLen(1)], "length", id="length-on-a-number"),
+        pytest.param(Annotated[int, Regex("a")], "text", id="pattern-on-a-number"),
+        pytest.param(Annotated[bytes, Regex("a")], "text", id="pattern-on-bytes"),
+        pytest.param(Annotated[str, at.MultipleOf(3)], "number", id="divisor-on-text"),
+        pytest.param(Annotated[int, at.Ge("a")], "order", id="bound-of-another-kind"),
+        pytest.param(Annotated[str, at.Ge(1)], "order", id="bound-on-text"),
+    ],
+)
+def test_a_constraint_the_base_cannot_answer_is_refused(
+    spec: object,
+    missing: str,
+) -> None:
+    # Asking a value something it cannot answer raises, and the walk reads a raise
+    # as a non-member: the schema would admit nothing at all and say nothing about
+    # why. That is not a schema anyone writes on purpose.
+    with pytest.raises(NotImplementedError, match=missing):
+        Validator(spec)
+
+
+def test_a_constraint_one_branch_can_answer_narrows_rather_than_empties() -> None:
+    # A union where some member carries the constraint is a narrowing of the
+    # union, which is a set a reader can mean.
+    schema = Validator(Annotated[int | str, at.MinLen(1)])
+    assert schema.is_valid("a")
+    assert not schema.is_valid(5)
+
+
+def test_an_opaque_base_keeps_its_constraint() -> None:
+    # A class may define whatever the constraint asks for, so the check stands
+    # aside rather than guessing.
+    assert Validator(Annotated[object, at.MinLen(1)]).is_valid("ab")
 
 
 def test_multiple_of_zero_is_rejected_at_build() -> None:

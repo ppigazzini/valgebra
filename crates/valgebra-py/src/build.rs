@@ -837,6 +837,9 @@ fn build_refine(
     for marker in metadata.iter() {
         parse_constraint(&marker, &mut constraints, lits)?;
     }
+    for constraint in &constraints {
+        check_constraint_fits(&base_schema, constraint, lits)?;
+    }
     if constraints.is_empty() {
         Ok(base_schema)
     } else {
@@ -845,6 +848,263 @@ fn build_refine(
             constraints,
         })
     }
+}
+
+/// Whether the values a base admits can answer a constraint.
+///
+/// Three answers, because a refusal needs certainty. A constraint is refused only
+/// where *no* value of the base can answer it, since that is the case where the
+/// refinement denotes the empty set and the marker was written to narrow rather
+/// than to empty. Where the base is opaque — a class, the gradual atom, a
+/// literal's pooled constant, a recursive reference — the check stands aside.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Carries {
+    /// Every value of the base can answer the constraint.
+    Yes,
+    /// No value of the base can, so the refinement admits nothing.
+    No,
+    /// The base does not say.
+    Maybe,
+}
+
+impl Carries {
+    /// The answer for a base that is a union of the two.
+    ///
+    /// A member that can answer makes the constraint a narrowing of the union
+    /// rather than an emptying of it: `Annotated[int | str, MinLen(1)]` is the
+    /// non-empty strings, which is a set a reader can mean.
+    fn or(self, other: Carries) -> Carries {
+        match (self, other) {
+            (Carries::Yes, _) | (_, Carries::Yes) => Carries::Yes,
+            (Carries::Maybe, _) | (_, Carries::Maybe) => Carries::Maybe,
+            (Carries::No, Carries::No) => Carries::No,
+        }
+    }
+}
+
+/// Fold `answer` over the members of a union, and stand aside anywhere else that
+/// is not a plain base: an intersection or a complement narrows a set this check
+/// does not compute, and a refinement's answer is its own base's.
+fn carries_through(base: &Schema, answer: &impl Fn(&Schema) -> Carries) -> Option<Carries> {
+    match base {
+        Schema::Union(members) => Some(members.iter().map(answer).fold(Carries::No, Carries::or)),
+        Schema::Refine { base, .. } => Some(answer(base)),
+        Schema::Intersection(_) | Schema::Complement(_) | Schema::Ref(_) | Schema::SelfRef(_) => {
+            Some(Carries::Maybe)
+        }
+        _ => None,
+    }
+}
+
+/// Whether the base's values have a length.
+fn carries_length(base: &Schema) -> Carries {
+    if let Some(answer) = carries_through(base, &carries_length) {
+        return answer;
+    }
+    match base {
+        Schema::Str
+        | Schema::Bytes
+        | Schema::Seq { .. }
+        | Schema::Set(_)
+        | Schema::FrozenSet(_)
+        | Schema::KeyedMap { .. } => Carries::Yes,
+        Schema::NoneType | Schema::Bool | Schema::Int | Schema::Float => Carries::No,
+        _ => Carries::Maybe,
+    }
+}
+
+/// Whether the base's values are text a pattern can be matched against.
+fn carries_pattern(base: &Schema) -> Carries {
+    if let Some(answer) = carries_through(base, &carries_pattern) {
+        return answer;
+    }
+    match base {
+        Schema::Str => Carries::Yes,
+        Schema::NoneType
+        | Schema::Bool
+        | Schema::Int
+        | Schema::Float
+        | Schema::Bytes
+        | Schema::Seq { .. }
+        | Schema::Set(_)
+        | Schema::FrozenSet(_)
+        | Schema::KeyedMap { .. } => Carries::No,
+        _ => Carries::Maybe,
+    }
+}
+
+/// Whether the base's values are numbers, which is what a divisor needs.
+fn carries_division(base: &Schema) -> Carries {
+    if let Some(answer) = carries_through(base, &carries_division) {
+        return answer;
+    }
+    match base {
+        Schema::Bool | Schema::Int | Schema::Float => Carries::Yes,
+        Schema::NoneType
+        | Schema::Str
+        | Schema::Bytes
+        | Schema::Seq { .. }
+        | Schema::Set(_)
+        | Schema::FrozenSet(_)
+        | Schema::KeyedMap { .. } => Carries::No,
+        _ => Carries::Maybe,
+    }
+}
+
+/// Whether the base's values are ordered against `operand`.
+///
+/// Python orders numbers with numbers, text with text and bytes with bytes, and
+/// raises across those groups. A bound whose operand is in another group than the
+/// base compares nothing, so the refinement it builds admits nothing.
+fn carries_order(base: &Schema, operand: &Bound<'_, PyAny>) -> Carries {
+    let by_group = |base: &Schema| carries_order(base, operand);
+    if let Some(answer) = carries_through(base, &by_group) {
+        return answer;
+    }
+    let number = operand
+        .py()
+        .import("numbers")
+        .and_then(|numbers| numbers.getattr("Number"))
+        .is_ok_and(|class| operand.is_instance(&class).unwrap_or(false));
+    let matches = match base {
+        Schema::Bool | Schema::Int | Schema::Float => number,
+        Schema::Str => operand.is_instance_of::<PyString>(),
+        Schema::Bytes => operand.is_instance_of::<PyBytes>(),
+        _ => return Carries::Maybe,
+    };
+    if matches { Carries::Yes } else { Carries::No }
+}
+
+/// Refuse a constraint no value of the base can answer.
+///
+/// A constraint that cannot be asked of a value is not a narrowing: reading a
+/// length off an `int` raises, and the walk reads a raise as a non-member, so
+/// `Annotated[int, MinLen(1)]` compiles to a schema that admits nothing at all
+/// and says nothing about why. That is a schema nobody writes on purpose, so it
+/// is refused where it is written rather than at the first value that meets it.
+fn check_constraint_fits(base: &Schema, constraint: &Constraint, lits: &Pool) -> PyResult<()> {
+    let operand = |index: OperandIx| lits.items().get(index.get());
+    let (answer, what) = match constraint {
+        Constraint::MinLen(_) | Constraint::MaxLen(_) => (carries_length(base), "length"),
+        Constraint::Regex(_) => (carries_pattern(base), "text for a pattern to match"),
+        Constraint::MultipleOf(index) => match operand(*index) {
+            Some(_) => (carries_division(base), "number for a divisor"),
+            None => (Carries::Maybe, ""),
+        },
+        Constraint::Ge(index)
+        | Constraint::Gt(index)
+        | Constraint::Le(index)
+        | Constraint::Lt(index) => match operand(*index) {
+            Some(bound) => (
+                Python::attach(|py| carries_order(base, bound.bind(py))),
+                "order against that bound",
+            ),
+            None => (Carries::Maybe, ""),
+        },
+        Constraint::Predicate(_) => (Carries::Maybe, ""),
+    };
+    if answer == Carries::No {
+        return Err(not_implemented(&format!(
+            "{} values have no {what}, so this constraint admits none of them; \
+             constrain a base the constraint can be asked of",
+            base.expected()
+        )));
+    }
+    Ok(())
+}
+
+/// The compilation flags a `re.Pattern` carries, folded into the pattern itself.
+///
+/// A compiled pattern keeps its flags beside its source, and the source alone is
+/// a different expression: `re.compile("abc", re.I)` matches `"ABC"` and `"abc"`
+/// does not. Dropping them silently narrows the set the marker was written for,
+/// so each flag is either written into the pattern -- the engine here reads the
+/// same inline spellings -- or refused by name.
+///
+/// `re.UNICODE` is the default for a `str` pattern in both engines and says
+/// nothing extra, so it is not named here at all. `re.ASCII` and `re.LOCALE` change what a
+/// character class means in ways this engine spells differently, and `re.DEBUG`
+/// asks the other engine to talk about itself, so all three are refused rather
+/// than approximated.
+fn with_inline_flags(marker: &Bound<'_, PyAny>, pattern: String) -> PyResult<String> {
+    // `re`'s own bit values, which are part of its published interface.
+    const IGNORECASE: u32 = 2;
+    const LOCALE: u32 = 4;
+    const MULTILINE: u32 = 8;
+    const DOTALL: u32 = 16;
+    const DEBUG: u32 = 128;
+    const VERBOSE: u32 = 64;
+    const ASCII: u32 = 256;
+
+    let Ok(flags) = marker.getattr("flags") else {
+        return Ok(pattern);
+    };
+    let Ok(flags) = flags.extract::<u32>() else {
+        return Ok(pattern);
+    };
+    for (bit, name, why) in [
+        (
+            ASCII,
+            "re.ASCII",
+            "write the ASCII spellings ([0-9], [A-Za-z0-9_]) instead",
+        ),
+        (
+            LOCALE,
+            "re.LOCALE",
+            "a pattern here does not depend on a locale",
+        ),
+        (
+            DEBUG,
+            "re.DEBUG",
+            "it asks the other engine to report on itself",
+        ),
+    ] {
+        if flags & bit != 0 {
+            return Err(not_implemented(&format!(
+                "{name} cannot be carried into this pattern: {why}"
+            )));
+        }
+    }
+    let mut inline = String::new();
+    for (bit, letter) in [
+        (IGNORECASE, 'i'),
+        (MULTILINE, 'm'),
+        (DOTALL, 's'),
+        (VERBOSE, 'x'),
+    ] {
+        if flags & bit != 0 {
+            inline.push(letter);
+        }
+    }
+    if inline.is_empty() {
+        Ok(pattern)
+    } else {
+        Ok(format!("(?{inline}){pattern}"))
+    }
+}
+
+/// Whether `marker` comes from `annotated_types`, whose vocabulary a reader
+/// expects this frontend to know.
+///
+/// The typing spec says to ignore metadata a consumer does not recognise, and
+/// that is right for metadata written for someone else. A marker from the
+/// constraint vocabulary is not that: it was written to narrow this schema, and
+/// ignoring it leaves a validator that admits everything the marker excludes.
+/// The one member carrying no constraint is the documentation marker, which says
+/// nothing about which values belong.
+fn is_unhandled_constraint(marker: &Bound<'_, PyAny>) -> bool {
+    let ty = marker.get_type();
+    let from_vocabulary = ty
+        .getattr("__module__")
+        .ok()
+        .and_then(|module| module.extract::<String>().ok())
+        .is_some_and(|module| module == "annotated_types");
+    let documentation = ty
+        .getattr("__name__")
+        .ok()
+        .and_then(|name| name.extract::<String>().ok())
+        .is_some_and(|name| name == "DocInfo");
+    from_vocabulary && !documentation
 }
 
 fn parse_constraint(
@@ -865,14 +1125,25 @@ fn parse_constraint(
     if marker.is_instance_of::<PyType>() {
         return Ok(());
     }
+    let before = out.len();
 
     // A string-pattern marker: valgebra's `Regex(...)` or a compiled
     // `re.Pattern`, both carrying the source pattern as `.pattern`. The pattern
     // is validated (anchored) here so an invalid expression fails at compile
     // time, not at first validation; the compiled regex is cached per validator.
-    if let Ok(attr) = marker.getattr("pattern")
-        && let Ok(pattern) = attr.extract::<String>()
-    {
+    if let Ok(attr) = marker.getattr("pattern") {
+        let Ok(pattern) = attr.extract::<String>() else {
+            // A `bytes` pattern: `re` compiles one against `bytes` values, and a
+            // pattern constraint here matches the text of a `str`. Reading the
+            // marker and dropping the pattern would leave a schema that admits
+            // every value of its base, which is the opposite of what a pattern
+            // is written for.
+            return Err(not_implemented(
+                "a bytes pattern cannot constrain a schema: a pattern is matched \
+                 against text, so write the pattern as a str",
+            ));
+        };
+        let pattern = with_inline_flags(marker, pattern)?;
         crate::check::compile_pattern(&pattern).map_err(|err| {
             PyValueError::new_err(format!("invalid regular expression {pattern:?}: {err}"))
         })?;
@@ -892,17 +1163,25 @@ fn parse_constraint(
             out.push(make(lits.intern_operand(&bound)));
         }
     }
-    // Length bounds.
-    if let Ok(min) = marker.getattr("min_length")
-        && let Ok(n) = min.extract::<usize>()
-    {
-        out.push(Constraint::MinLen(n));
-    }
-    if let Ok(max) = marker.getattr("max_length")
-        && !max.is_none()
-        && let Ok(n) = max.extract::<usize>()
-    {
-        out.push(Constraint::MaxLen(n));
+    // Length bounds. A bound no length can be compared against -- negative, or
+    // past what a container can hold -- is refused rather than dropped: dropping
+    // it leaves a schema that admits every value of its base, and the marker was
+    // written to admit fewer.
+    for (attr, make) in [
+        ("min_length", Constraint::MinLen as fn(usize) -> Constraint),
+        ("max_length", Constraint::MaxLen),
+    ] {
+        if let Ok(bound) = marker.getattr(attr)
+            && !bound.is_none()
+        {
+            let n = bound.extract::<usize>().map_err(|_| {
+                PyValueError::new_err(format!(
+                    "{attr} must be a length a value can have, and {} is not",
+                    summarize(&bound)
+                ))
+            })?;
+            out.push(make(n));
+        }
     }
     // Numeric multiple-of bound. A zero divisor is rejected here: no value is a
     // multiple of zero, and checking one would divide by zero at validation time,
@@ -932,6 +1211,13 @@ fn parse_constraint(
         && func.is_callable()
     {
         out.push(Constraint::Predicate(lits.intern_predicate(&func)));
+    } else if out.len() == before && is_unhandled_constraint(marker) {
+        return Err(not_implemented(&format!(
+            "{} is a constraint this frontend does not check; a schema carrying \
+             it would admit the values it excludes, so it is refused rather than \
+             ignored",
+            summarize(marker)
+        )));
     }
     Ok(())
 }

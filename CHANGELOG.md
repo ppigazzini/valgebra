@@ -27,6 +27,25 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Fixed
 
+- A refinement marker that would be dropped is refused instead. Four shapes
+  silently produced a schema that admits either everything the marker excludes or
+  nothing at all: a compiled `re.Pattern`'s flags were discarded, so a
+  case-insensitive pattern refused the strings it matches; a `bytes` pattern and
+  a length bound no length can equal were skipped entirely, leaving the base
+  unconstrained; and a marker from `annotated_types` that valgebra does not
+  check, such as `Timezone` or `Unit`, was ignored as if it were someone else's
+  metadata. `re.IGNORECASE`, `re.MULTILINE`, `re.DOTALL` and `re.VERBOSE` are
+  written into the pattern; `re.ASCII`, `re.LOCALE` and `re.DEBUG` are refused by
+  name. Metadata from outside that vocabulary is still ignored, as the typing
+  spec asks.
+
+- A constraint no value of the base can answer is refused at build.
+  `Annotated[int, MinLen(1)]` asked an integer for its length, which raises, and
+  a raise reads as a non-member — so the schema denoted nothing at all while
+  looking like a narrowing. A constraint some value of the base *can* answer is
+  unaffected: a union with a text branch, or a class that may define what the
+  constraint asks for, still narrows.
+
 - `==` on validators reads a pooled constant the way `Literal` does: same type
   and equal. Python's `==` runs across types, so comparing by equality alone made
   `Validator(Literal[1])` and `Validator(Literal[True])` the same validator while
