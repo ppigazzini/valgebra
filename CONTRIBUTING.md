@@ -102,6 +102,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | core instruction budget | `scripts/perf_budget.json` | `uv run python scripts/perf_gate.py` |
 | binding instruction budget | `scripts/perf_budget.json` | `uv run python scripts/perf_gate.py --binding` |
 | competitive ratio | `scripts/perf_compare.json` | `uv run --group bench python scripts/compare_gate.py` |
+| membership held and decisions only widened | `scripts/metamorphic_reference.json` | `uv run python scripts/metamorphic_gate.py` |
 | core mutation adequacy | `scripts/mutation_baseline.json` | `cargo mutants --package valgebra-core -- -- --skip deep_subtype_into_bottom_terminates --skip subtyping_terminates_on_a_distributed_tower` |
 | walk mutation adequacy | `scripts/mutation_baseline_walk.json` | `cargo mutants --package valgebra-py --file crates/valgebra-py/src/check/walk.rs --file crates/valgebra-py/src/check/ctx.rs --features interpreter-tests -- -- --skip recursion_deeper_than_the_bound_is_refused` |
 | a mutation verdict | either baseline | `python3 scripts/mutation_gate.py --baseline core` |
