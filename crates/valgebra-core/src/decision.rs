@@ -659,9 +659,15 @@ impl Schema {
             // a fixed-arity sequence -- if it splits across the branches, which
             // no single-branch rule can see.
             (_, Schema::Union(members)) => {
-                members
-                    .iter()
-                    .any(|m| self.is_subtype_rec(m, cx, assumptions))
+                // A branch equal to the subject settles it, and finding one is a
+                // scan of equalities. Recursing into each branch reaches the same
+                // answer through a budget spend and two region walks per branch,
+                // which for a union of literals against a wider one is the whole
+                // cost of the query.
+                members.contains(self)
+                    || members
+                        .iter()
+                        .any(|m| self.is_subtype_rec(m, cx, assumptions))
                     || seq_splits_across_union(self, members, cx, assumptions)
             }
             // Unfold a recursive reference — after the lattice rules, so an

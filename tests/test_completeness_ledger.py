@@ -326,30 +326,14 @@ def test_decision_decides_true_relations(
 
 # Enum widening at the sizes a real annotation reaches. A literal union is the
 # shape that grows: an error-code table, a currency list, a set of tags. The
-# relation is decided by distributing the union on both sides, so the work is the
-# product of the two member counts and the decision budget is what bounds it.
+# A branch equal to the subject settles the relation, so widening is decided as
+# set containment rather than as the product of the two member counts, and the
+# decision budget does not bound it at any size a table reaches.
 
 
-@pytest.mark.parametrize("members", [8, 64, 256, 512])
+@pytest.mark.parametrize("members", [8, 64, 256, 512, 4096])
 def test_enum_widening_is_decided_at_realistic_sizes(members: int) -> None:
     narrow = union(*[Validator(f"code_{index:05d}") for index in range(members)])
-    wide = union(narrow, Validator("extra"))
-    assert narrow.is_subtype_of(wide)
-
-
-# LEDGER: the decision budget bounds enum widening above roughly a thousand
-# members.
-#
-# Both sides distribute, so the work is the product of the two member counts and
-# the budget is spent before the relation is proven. The answer stays sound -- a
-# `False` is "not proven" -- but the published boundary calls the budget reachable
-# only by an adversarial schema, and a literal union of this size is an error-code
-# table. Closing it wants literal-union inclusion decided as set containment
-# rather than as a cross product, which needs the pooled values and so belongs to
-# the leaf oracle. Strict, so the entry fails the day it stops being true.
-@pytest.mark.xfail(strict=True, reason="the decision budget bounds the cross product")
-def test_enum_widening_is_not_decided_past_the_budget() -> None:
-    narrow = union(*[Validator(f"code_{index:05d}") for index in range(4096)])
     wide = union(narrow, Validator("extra"))
     assert narrow.is_subtype_of(wide)
 

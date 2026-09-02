@@ -306,11 +306,12 @@ conservative answer (`False`, "not proven") rather than running unbounded. This
 preserves soundness: a bail-out is never a wrong `True`.
 
 The budget binds where the work is a **product** rather than a sum. Subtyping
-distributes over both sides of a union, so relating two unions costs the product
-of their member counts, and a union of about a thousand literals — an error-code
-table, a currency list — reaches the ceiling. Below that the relation decides.
-Depth reaches it sooner: a Boolean combination nested past a handful of levels
-demands work exponential in its depth. Everything else stays far inside.
+distributes over both sides of a union, so relating two unions can cost the
+product of their member counts. A union whose branches are *contained* in the
+supertype's — an error-code table widened by a case, a currency list — is decided
+by containment instead, and stays far inside the ceiling at any size such a table
+reaches. Depth is what reaches it: a Boolean combination nested past a handful of
+levels demands work exponential in its depth.
 
 So a `False` on a wide literal union or a deep Boolean tower may mean "not proven
 within the bound" rather than "not a subtype"; on anything else it means the

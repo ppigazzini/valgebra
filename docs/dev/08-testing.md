@@ -55,7 +55,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Eight of them:
+for and misses the other. Seven of them:
 
 | Ledger | Holds |
 |---|---|
@@ -71,7 +71,7 @@ for and misses the other. Eight of them:
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are eight.
+because a table nothing counts is the one that drifts: there are seven.
 
 `tests/test_node_matrix.py` is the same shape one level in: it reads the `Schema`
 variants out of the IR and fails when one carries no row, so the universe is

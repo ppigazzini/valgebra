@@ -147,6 +147,11 @@ Membership costs less on a refined schema, and no decision or message changes.
 
 ### Added
 
+- Widening a literal union is decided by containment rather than by the product
+  of the two member counts, so an error-code table or a currency list relates to
+  a wider one at any size such a table reaches, where the decision budget
+  previously bounded it above roughly a thousand members.
+
 - Involution and the excluded middle are decided for every schema: `~~A` is `A`
   and a union carrying a schema together with its complement is the top. Both
   are settled where the schema is built, so the decision procedure never meets
