@@ -2500,6 +2500,85 @@ mod laws {
             prop_assert_eq!(once.clone(), once.simplify());
         }
 
+        /// The laws, as statements about the *sets* two schemas denote.
+        ///
+        /// The properties below them compare two simplified schemas for
+        /// structural equality, which is a property of the simplifier: it says
+        /// the normal form does not depend on the order the members were
+        /// written in. That is worth holding and it is not the law. The law is
+        /// that the two sides admit the same values, and over the fragment the
+        /// oracle decides exactly, that is what this checks.
+        #[test]
+        fn the_lattice_laws_hold_of_the_sets(
+            a in scalar_or_set_schema(),
+            b in scalar_or_set_schema(),
+            c in scalar_or_set_schema(),
+        ) {
+            let same = |left: &Schema, right: &Schema| {
+                samples_v().iter().all(|value| member_v(left, value) == member_v(right, value))
+            };
+            // Commutativity.
+            prop_assert!(same(&union(a.clone(), b.clone()), &union(b.clone(), a.clone())));
+            prop_assert!(same(
+                &intersection(a.clone(), b.clone()),
+                &intersection(b.clone(), a.clone()),
+            ));
+            // Associativity.
+            prop_assert!(same(
+                &union(a.clone(), union(b.clone(), c.clone())),
+                &union(union(a.clone(), b.clone()), c.clone()),
+            ));
+            prop_assert!(same(
+                &intersection(a.clone(), intersection(b.clone(), c.clone())),
+                &intersection(intersection(a.clone(), b.clone()), c.clone()),
+            ));
+            // Idempotence.
+            prop_assert!(same(&union(a.clone(), a.clone()), &a));
+            prop_assert!(same(&intersection(a.clone(), a.clone()), &a));
+            // The bounds.
+            prop_assert!(same(&union(a.clone(), Schema::Nothing), &a));
+            prop_assert!(same(&intersection(a.clone(), Schema::Anything), &a));
+            prop_assert!(same(&union(a.clone(), Schema::Anything), &Schema::Anything));
+            prop_assert!(same(&intersection(a.clone(), Schema::Nothing), &Schema::Nothing));
+            // Distributivity, which the simplifier does not apply at all, so no
+            // structural property below could state it.
+            prop_assert!(same(
+                &intersection(a.clone(), union(b.clone(), c.clone())),
+                &union(intersection(a.clone(), b.clone()), intersection(a.clone(), c.clone())),
+            ));
+            prop_assert!(same(
+                &union(a.clone(), intersection(b.clone(), c.clone())),
+                &intersection(union(a.clone(), b.clone()), union(a.clone(), c.clone())),
+            ));
+            // Absorption, likewise.
+            prop_assert!(same(&union(a.clone(), intersection(a.clone(), b.clone())), &a));
+            prop_assert!(same(&intersection(a.clone(), union(a.clone(), b.clone())), &a));
+        }
+
+        /// The complement laws, as statements about the sets.
+        #[test]
+        fn the_complement_laws_hold_of_the_sets(
+            a in scalar_or_set_schema(),
+            b in scalar_or_set_schema(),
+        ) {
+            let same = |left: &Schema, right: &Schema| {
+                samples_v().iter().all(|value| member_v(left, value) == member_v(right, value))
+            };
+            prop_assert!(same(&not(not(a.clone())), &a));
+            prop_assert!(same(&union(a.clone(), not(a.clone())), &Schema::Anything));
+            prop_assert!(same(&intersection(a.clone(), not(a.clone())), &Schema::Nothing));
+            prop_assert!(same(
+                &not(union(a.clone(), b.clone())),
+                &intersection(not(a.clone()), not(b.clone())),
+            ));
+            prop_assert!(same(
+                &not(intersection(a.clone(), b.clone())),
+                &union(not(a.clone()), not(b.clone())),
+            ));
+        }
+
+        /// Simplifying two sides of a law reaches one normal form. A property of
+        /// the simplifier, not of the algebra: the law itself is above.
         #[test]
         fn union_and_intersection_commute(a in schema(), b in schema()) {
             prop_assert_eq!(union(a.clone(), b.clone()).simplify(), union(b.clone(), a.clone()).simplify());
@@ -3170,6 +3249,25 @@ mod laws {
     /// A generator over the non-opaque fragment the value oracle decides: scalars,
     /// pool literals, sets, linear list sequences, refinements, closed records,
     /// and their Boolean combinations.
+    /// Keep the first field of each name, as the frontend's uniqueness check
+    /// leaves. A record with two fields of one name is an IR the frontend
+    /// refuses to build, and the decision procedure reads its field index on
+    /// that invariant, so generating one measures the assertion rather than the
+    /// rule.
+    fn unique_by_name(fields: Vec<Field>) -> Vec<Field> {
+        let mut seen: Vec<String> = Vec::new();
+        fields
+            .into_iter()
+            .filter(|field| {
+                let fresh = !seen.contains(&field.name);
+                if fresh {
+                    seen.push(field.name.clone());
+                }
+                fresh
+            })
+            .collect()
+    }
+
     fn decidable_schema() -> impl Strategy<Value = Schema> {
         let leaf = prop_oneof![
             Just(Schema::Anything),
@@ -3199,7 +3297,7 @@ mod laws {
                 inner.clone(),
             )
                 .prop_map(|(fields, value)| Schema::KeyedMap {
-                    fields,
+                    fields: unique_by_name(fields),
                     defaults: vec![(Schema::Str, value)],
                 });
             prop_oneof![
@@ -3235,8 +3333,12 @@ mod laws {
                         base: Box::new(base),
                         constraints,
                     }),
+                // A closed record. The names are deduplicated: a record with two
+                // fields of one name is an IR the frontend refuses to build, and
+                // the decision procedure reads the field index on the invariant
+                // that it does.
                 proptest::collection::vec(field, 0..3).prop_map(|fields| Schema::KeyedMap {
-                    fields,
+                    fields: unique_by_name(fields),
                     defaults: vec![],
                 }),
                 open_record,
@@ -3338,6 +3440,41 @@ mod laws {
                     member_full(&schema, value, &pool),
                     "simplify changed membership of {:?}", value
                 );
+            }
+        }
+
+        /// A claimed subtype never admits a value its supertype rejects, over the
+        /// same value-aware oracle.
+        ///
+        /// The scalar-and-set property elsewhere in this crate checks the same
+        /// statement over a fragment with no sequence, record, refinement or
+        /// literal in it, so every structural rule the decision procedure has was
+        /// held only by hand-written examples. Soundness is the one property this
+        /// library promises without qualification, and it is the direction a
+        /// generator can attack: an accept is a claim about every value, and a
+        /// counterexample is a single one.
+        #[test]
+        fn subtyping_is_sound_over_the_structural_fragment(
+            a in decidable_schema(),
+            b in decidable_schema(),
+        ) {
+            let pool = const_pool();
+            prop_assert!(a.is_subtype_of(&a), "reflexivity");
+            if a.is_subtype_of(&b) {
+                for value in &sample_values() {
+                    prop_assert!(
+                        !member_full(&a, value, &pool) || member_full(&b, value, &pool),
+                        "{:?} is in the subtype and not in the supertype", value
+                    );
+                }
+            }
+            if a.is_empty() {
+                for value in &sample_values() {
+                    prop_assert!(
+                        !member_full(&a, value, &pool),
+                        "{:?} is a member of a schema decided empty", value
+                    );
+                }
             }
         }
     }
