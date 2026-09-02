@@ -12,6 +12,18 @@ impl SeqRegex {
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Nodes [`Schema::simplify`] has visited on this thread.
+    ///
+    /// The instrument behind [`Schema::simplify_steps`]. A bottom-up pass visits
+    /// each node once, so the count against the node count is the linearity
+    /// claim itself, exactly and on every machine. Compiled out of every profile
+    /// but the test one, so the shipped pass carries neither the cell nor the
+    /// increment.
+    static SIMPLIFY_STEPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
 impl Schema {
     /// Return a membership-equivalent schema reduced by the lattice laws.
     ///
@@ -33,8 +45,23 @@ impl Schema {
     /// [`is_empty`](Self::is_empty), [`is_subtype_of`](Self::is_subtype_of), and
     /// [`is_equivalent`](Self::is_equivalent) are the stronger, separate decision
     /// procedures, deciding a wider fragment than `simplify` folds.
+    /// The nodes one [`simplify`](Self::simplify) of this schema visits.
+    ///
+    /// A single bottom-up pass visits each node once, so this against
+    /// [`node_count`](Self::node_count) is the pass's linearity, measured rather
+    /// than timed. A wall-clock bound answers the same question only on a
+    /// machine fast enough to tell the two growths apart.
+    #[cfg(test)]
+    pub(crate) fn simplify_steps(&self) -> u64 {
+        SIMPLIFY_STEPS.with(|steps| steps.set(0));
+        let _ = self.simplify();
+        SIMPLIFY_STEPS.with(std::cell::Cell::get)
+    }
+
     #[must_use]
     pub fn simplify(&self) -> Schema {
+        #[cfg(test)]
+        SIMPLIFY_STEPS.with(|steps| steps.set(steps.get() + 1));
         match self {
             Schema::Seq { container, regex } => Schema::Seq {
                 container: *container,

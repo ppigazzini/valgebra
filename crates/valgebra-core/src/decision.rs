@@ -18,7 +18,7 @@ use std::cell::Cell;
 /// adversarial schema built to blow up the decision reaches it, and there a
 /// `false` ("not proven") is sound by the conservative contract. A complete,
 /// work-sharing decision is the interning-based procedure.
-const DECISION_BUDGET: u32 = 1_000_000;
+pub(crate) const DECISION_BUDGET: u32 = 1_000_000;
 
 /// Spend one unit of `budget`; returns `false` when it is already exhausted, the
 /// signal a budgeted decision uses to stop and report the conservative answer.
@@ -323,6 +323,37 @@ impl Schema {
     #[must_use]
     pub fn is_empty_with(&self, oracle: &dyn LeafRelations, defs: &[Schema]) -> bool {
         self.is_empty_rec(oracle, defs, &mut Vec::new(), &Cell::new(DECISION_BUDGET))
+    }
+
+    /// The decision steps [`is_empty`](Self::is_empty) spends on this schema.
+    ///
+    /// The instrument for the tests that pin a complexity bound. A wall-clock
+    /// assertion measures the machine as much as the algorithm: it passes on a
+    /// quiet laptop and fails on a loaded runner for reasons that have nothing
+    /// to do with the code. The step count is the quantity the bound is actually
+    /// about, and it is the same number on every machine.
+    #[cfg(test)]
+    pub(crate) fn empty_steps(&self) -> u32 {
+        let budget = Cell::new(DECISION_BUDGET);
+        self.is_empty_rec(&NoLeafRelations, &[], &mut Vec::new(), &budget);
+        DECISION_BUDGET - budget.get()
+    }
+
+    /// The decision steps [`is_subtype_of`](Self::is_subtype_of) spends, by the
+    /// same argument as [`empty_steps`](Self::empty_steps).
+    #[cfg(test)]
+    pub(crate) fn subtype_steps(&self, other: &Schema) -> u32 {
+        let budget = Cell::new(DECISION_BUDGET);
+        self.is_subtype_rec(
+            other,
+            SubtypeCx {
+                oracle: &NoLeafRelations,
+                defs: &[],
+                budget: &budget,
+            },
+            &mut Vec::new(),
+        );
+        DECISION_BUDGET - budget.get()
     }
 
     fn is_empty_rec(
