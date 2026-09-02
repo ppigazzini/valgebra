@@ -175,6 +175,13 @@ tracked as future work.
   that key. Deciding it needs the core to compare a field name against a pooled
   constant, which is a question only the binding can answer today.
 
+- **A relation against a respelled operand.** The rules that settle the
+  complement laws read structural equality, so `A | ~A` is recognised as the
+  universe and `A | ~B` is not — for a `B` that `is_equivalent` proves equal to
+  `A`, such as `A | nothing`. The same holds of every rule the decision applies:
+  two of them compose only where the operands are spelled alike. Deciding it in
+  general wants the operands compared as sets wherever a rule reads equality.
+
 - **A constraint with no value entailment.** A bound (`Ge`, `Gt`, `Le`, `Lt`,
   `MinLen`, `MaxLen`) entails a looser one through the ordering oracle, so a
   tighter bound is decided below a looser one. The other three kinds — `Regex`,

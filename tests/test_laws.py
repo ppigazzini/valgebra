@@ -10,8 +10,10 @@ them is searched for. The semantic decision (`is_equivalent`) is cross-checked
 against membership separately in the subtyping suite.
 """
 
+from collections.abc import Callable
 from typing import Any, Literal
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -230,3 +232,42 @@ def test_simplify_leaves_the_gradual_any_uncollapsed() -> None:
     # simplified forms are neither the empty set nor the universe.
     assert not intersection(Any, complement(Any)).simplify().is_empty()
     assert not union(Any, complement(Any)).simplify().is_equivalent(anything)
+
+
+# Two spellings the procedure itself proves equal, for the law below.
+_RESPELLINGS = [
+    ("a-or-nothing", lambda a: union(a, nothing)),
+    ("a-and-anything", lambda a: intersection(a, anything)),
+    ("a-or-a", lambda a: union(a, a)),
+]
+
+
+# LEDGER: the decision reads the spelling, not the set.
+#
+# The laws above are checked as membership, and hold. The *decision* about them
+# does not follow: a complement cancels and a join collapses to the top by
+# structural equality, so `A | ~A` covers the universe and `A | ~B` does not --
+# for a `B` the procedure itself decides equivalent to `A`.
+#
+# The answer stays sound, since a `False` is "not proven". What it costs is
+# composition: every rule the procedure gains is keyed the same way, so two of
+# them meet only where the caller spelled both operands alike. Measured over 200
+# random schemas, the complement laws decide for every schema against its own
+# spelling and for roughly two in five against an equal one.
+#
+# Closing it wants the operands compared as sets where the rules read equality,
+# which is what a representation closed under the Boolean operations gives --
+# `__DEV/5-THEORY.md` §14.5. Strict, so the entry fails the day it stops being
+# true.
+@pytest.mark.parametrize(
+    ("name", "respell"), _RESPELLINGS, ids=[name for name, _ in _RESPELLINGS]
+)
+@pytest.mark.xfail(strict=True, reason="the rules are keyed on structural equality")
+def test_the_complement_laws_survive_a_respelling(
+    name: str, respell: Callable[[Validator], Validator]
+) -> None:
+    a = Validator(list[int])
+    b = respell(a)
+    assert a.is_equivalent(b), "the respelling must denote the same set"
+    assert Validator(anything).is_subtype_of(union(a, complement(b)))
+    assert intersection(a, complement(b)).is_empty()
