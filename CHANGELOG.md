@@ -27,6 +27,15 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Fixed
 
+- A class is checked for the attributes it declares rather than for every
+  annotation on it. A dataclass carrying an `InitVar` denoted the empty set —
+  the marker names a constructor parameter no instance keeps, so every instance
+  was refused for a missing attribute — and one carrying a `ClassVar` failed to
+  build at all. Both are read as what they are, a field declared `init=False` is
+  still checked because the instance carries it, and a `TypedDict` field
+  qualified `ReadOnly` compiles to the type it qualifies instead of being
+  refused.
+
 - A string in the argument of a typing form is refused instead of read as a
   literal. `list["Account"]` is a forward reference the typing spec resolves
   against the namespace the annotation was written in, and a runtime object

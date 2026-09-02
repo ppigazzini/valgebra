@@ -403,9 +403,9 @@ assert fully_open.is_valid({"name": "Ada", "age": "old"})
 
 | Form | How it validates |
 | --- | --- |
-| `TypedDict` | a record; required keys from the class, `Required`/`NotRequired` honored |
-| dataclass | `isinstance` plus a deep check of each field |
-| `NamedTuple` | `isinstance` plus a deep check of each field |
+| `TypedDict` | a record; required keys from the class, `Required`/`NotRequired`/`ReadOnly` honored |
+| dataclass | `isinstance` plus a deep check of each declared field |
+| `NamedTuple` | `isinstance` plus a deep check of each declared field |
 | `Enum` | an instance of the enumeration (any member) |
 | runtime-checkable `Protocol` | `isinstance` against the protocol |
 | `NewType` | validates the supertype it wraps |
@@ -433,6 +433,14 @@ assert Validator(Color).is_valid(Color.RED)
 assert Validator(Point).is_valid(Point(1, 2))
 assert not Validator(Point).is_valid(Point(1, "y"))
 ```
+
+What a class **declares** is not every annotation on it. A `ClassVar` annotates
+the class and an `InitVar` names a constructor parameter, so neither is an
+attribute of an instance and neither is checked; a field declared
+`init=False` is on the instance and is. On a `TypedDict`, `Required`,
+`NotRequired` and `ReadOnly` qualify the key rather than narrowing its type:
+requiredness is read from the class, and read-only-ness is about writing the key
+back rather than about which values belong.
 
 ### Pass the class, not its annotations
 

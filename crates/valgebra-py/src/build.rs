@@ -411,8 +411,35 @@ fn build_typed_dict(
     Ok(Schema::record(fields, Openness::Closed))
 }
 
-/// Build an Object node (isinstance plus per-attribute checks) for a class
-/// whose fields come from its resolved type hints; all fields are required.
+/// The attribute names a class declares, in declaration order.
+///
+/// Not every annotation on a dataclass names an attribute of its instances:
+/// `ClassVar` annotates the class, and `InitVar` names a constructor parameter
+/// the instance does not keep. Reading the hints alone asks an instance for
+/// attributes it cannot have, which is a schema no instance of the class
+/// satisfies — the empty set wearing the class's name. Each kind of class keeps
+/// its own list of what it declares, so that list is what is read: a dataclass's
+/// `fields()` and a named tuple's `_fields`. A field declared `init=False` is on
+/// the instance and stays.
+fn declared_fields<'py>(ty: &Bound<'py, PyType>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let py = ty.py();
+    let dataclasses = py.import("dataclasses")?;
+    if dataclasses
+        .call_method1("is_dataclass", (ty,))?
+        .is_truthy()?
+    {
+        return dataclasses
+            .call_method1("fields", (ty,))?
+            .try_iter()?
+            .map(|field| field?.getattr("name"))
+            .collect();
+    }
+    ty.getattr("_fields")?.try_iter()?.collect()
+}
+
+/// Build an Attrs node (isinstance plus per-attribute checks) for a class,
+/// reading the type of each declared field from the resolved hints. Every
+/// attribute an instance declares is required, because an instance carries it.
 fn build_object(
     ty: &Bound<'_, PyType>,
     lits: &mut Pool,
@@ -421,8 +448,15 @@ fn build_object(
     let hints = resolve_type_hints(ty)?;
     let hints = hints.cast::<PyDict>()?;
     let class_index = lits.intern_class(ty.as_any());
-    let mut fields = Vec::with_capacity(hints.len());
-    for (name, hint) in hints.iter() {
+    let declared = declared_fields(ty)?;
+    let mut fields = Vec::with_capacity(declared.len());
+    for name in declared {
+        // A name the hints do not carry is unannotated -- a `collections`
+        // namedtuple's fields are the case -- so there is no type to check and
+        // the class's own isinstance test is the whole of it.
+        let Some(hint) = hints.get_item(&name)? else {
+            continue;
+        };
         fields.push(Field {
             name: field_name(&name.str()?)?,
             schema: build_schema(&hint, lits, defs)?,
@@ -480,11 +514,10 @@ fn build_parametrized(
     if origin.is(py.get_type::<PyTuple>()) {
         return build_tuple(args, lits, defs);
     }
-    if is_required_marker(origin)? {
-        // Required[T]/NotRequired[T] only annotate a TypedDict field's
-        // requiredness, which is already read from __required_keys__; validate
-        // the wrapped type. These wrappers survive hint resolution because field
-        // metadata is kept (include_extras), so the frontend must unwrap them.
+    if is_field_qualifier(origin)? {
+        // A field qualifier survives hint resolution because field metadata is
+        // kept (include_extras), so the frontend unwraps it and compiles the type
+        // it qualifies.
         return build_type_argument(&single_arg(args)?, lits, defs);
     }
     if is_union_origin(origin)? {
@@ -530,12 +563,17 @@ fn is_literal_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
     Ok(origin.is(forms(py)?.literal.bind(py)))
 }
 
-/// True if `origin` is `typing.Required` or `typing.NotRequired`, the
-/// `TypedDict` field-requiredness markers (kept in field hints by
-/// `include_extras`).
-fn is_required_marker(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
+/// True if `origin` is one of the `TypedDict` field qualifiers, which
+/// `include_extras` keeps in the resolved hints.
+///
+/// `Required`/`NotRequired` say whether the key must be present, which is read
+/// from the class's own `__required_keys__` rather than from the annotation, and
+/// `ReadOnly` says whether a consumer may write the key back — a statement about
+/// use, not about which values belong. None of the three narrows the field's set,
+/// so each is unwrapped to the type it qualifies.
+fn is_field_qualifier(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
     let typing = origin.py().import("typing")?;
-    for name in ["Required", "NotRequired"] {
+    for name in ["Required", "NotRequired", "ReadOnly"] {
         if let Ok(marker) = typing.getattr(name)
             && origin.is(&marker)
         {
@@ -569,8 +607,9 @@ fn build_type_argument(
     };
     if arg.is_instance_of::<PyString>() || forward_ref {
         return Err(not_implemented(&format!(
-            "{} is a forward reference, and a schema is built from the types              themselves: resolve the annotation first with \
-             typing.get_type_hints(..., include_extras=True), or write the type              rather than its name",
+            "{} is a forward reference, and a schema is built from the types \
+             themselves: resolve the annotation first with typing.get_type_hints(\
+             ..., include_extras=True), or write the type rather than its name",
             summarize(arg)
         )));
     }

@@ -1,3 +1,4 @@
+import collections
 import dataclasses
 import enum
 import sys
@@ -209,3 +210,76 @@ def test_intenum_is_an_instance_check() -> None:
     schema = Validator(Level)
     assert schema.is_valid(Level.LOW)
     assert not schema.is_valid(1)  # a bare int is not an enum member
+
+
+# --- What a class declares is not every annotation on it ----------------------
+#
+# A dataclass carries annotations that name no attribute of its instances, and
+# reading them all asks an instance for something it cannot have -- a schema no
+# instance satisfies. Each kind of class keeps its own list of what it declares,
+# and that list is what the frontend reads.
+
+
+@dataclasses.dataclass
+class WithInitVar:
+    kept: int
+    seed: dataclasses.InitVar[int]
+
+    def __post_init__(self, seed: int) -> None:
+        del seed
+
+
+@dataclasses.dataclass
+class WithClassVar:
+    kept: int
+    shared: typing.ClassVar[int] = 3
+
+
+@dataclasses.dataclass
+class WithLateField:
+    kept: int
+    derived: int = dataclasses.field(init=False, default=7)
+
+
+def test_an_init_only_field_is_not_an_attribute() -> None:
+    # `InitVar` names a constructor parameter; the instance does not keep it.
+    schema = Validator(WithInitVar)
+    assert schema.is_valid(WithInitVar(1, 2))
+    assert not schema.is_valid(WithInitVar("no", 2))
+
+
+def test_a_class_variable_is_not_an_attribute_of_the_instance() -> None:
+    schema = Validator(WithClassVar)
+    assert schema.is_valid(WithClassVar(1))
+    assert not schema.is_valid(WithClassVar("no"))
+
+
+def test_a_field_the_constructor_does_not_take_is_still_checked() -> None:
+    # `init=False` keeps the field off the constructor, not off the instance.
+    good = WithLateField(1)
+    schema = Validator(WithLateField)
+    assert schema.is_valid(good)
+    good.derived = "no"
+    assert not schema.is_valid(good)
+
+
+def test_an_unannotated_named_tuple_is_an_instance_check() -> None:
+    plain = collections.namedtuple("plain", "a b")  # noqa: PYI024
+    schema = Validator(plain)
+    assert schema.is_valid(plain(1, "x"))
+    assert not schema.is_valid((1, "x"))
+
+
+@pytest.mark.skipif(sys.version_info < (3, 13), reason="ReadOnly marker")
+def test_a_read_only_typed_dict_field_is_the_type_it_qualifies() -> None:
+    # `ReadOnly` says whether a consumer may write the key back, which is a
+    # statement about use rather than about which values belong.
+    class Config(TypedDict):
+        name: typing.ReadOnly[str]
+        port: typing.NotRequired[typing.ReadOnly[int]]
+
+    schema = Validator(Config)
+    assert schema.is_valid({"name": "a"})
+    assert schema.is_valid({"name": "a", "port": 1})
+    assert not schema.is_valid({"name": "a", "port": "no"})
+    assert not schema.is_valid({})

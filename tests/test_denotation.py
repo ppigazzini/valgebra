@@ -19,7 +19,7 @@ import dataclasses
 from collections.abc import Callable, Sequence
 from functools import reduce
 from types import GenericAlias
-from typing import Annotated, Any, NoReturn
+from typing import Annotated, Any, Literal, NoReturn
 
 import annotated_types as at
 from hypothesis import given
@@ -84,8 +84,14 @@ _HASHABLE: list[Spec] = [
 
 
 def _literal(const: object) -> Spec:
-    """Build a literal schema and its typed-singleton predicate (same type, equal)."""
-    return (const, lambda x: type(x) is type(const) and x == const)
+    """Build a literal schema and its typed-singleton predicate (same type, equal).
+
+    Spelled ``Literal[const]`` rather than bare: these leaves are also used as the
+    *argument* of a generic, where a bare value names a type rather than being
+    one. The bare spelling denotes the same set and is covered by
+    ``tests/test_literals.py``.
+    """
+    return (Literal[const], lambda x: type(x) is type(const) and x == const)
 
 
 def _ge_pred(k: int) -> Pred:

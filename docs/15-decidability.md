@@ -281,8 +281,12 @@ message or treats them opaquely — it never guesses.
     execute user code, as `is_empty` executes a rich comparison when it orders two
     refinement bounds. A predicate with side effects, or one that is slow, is one
     a type query pays for.
-- **Typing qualifiers.** `Final` and `ClassVar` are rejected; they qualify a
-  declaration and carry no value-membership meaning.
+- **Typing qualifiers.** `Final` and `ClassVar` are rejected as schemas; they
+  qualify a declaration and carry no value-membership meaning. On a class they
+  are read as what they are: a `ClassVar` annotates the class rather than an
+  instance, so a dataclass field carrying one is not an attribute the schema
+  asks for, and neither is an `InitVar`, which names a constructor parameter the
+  instance does not keep.
 
 ```python
 from collections.abc import Sequence
