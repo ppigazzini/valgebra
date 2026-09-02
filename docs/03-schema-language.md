@@ -91,6 +91,7 @@ assert Validator(Any).is_valid(object())
 | `tuple[A, B]` | length-2 tuples with `A` then `B` |
 | `tuple[T, ...]` | tuples of any length, every element in `T` |
 | `tuple[A, B, ...]` | a fixed prefix `A`, then zero or more `B` (see below) |
+| `tuple[A, *tuple[B, ...]]` | the same, spelled by unpacking (3.11+) |
 
 ```python
 from valgebra import Validator
@@ -150,6 +151,14 @@ and vice versa.
 | `[A, B, ...]` | a list: an `A`, then zero or more `B` |
 | `[T, T, ...]` | a non-empty list of `T` (at least one) |
 | `tuple[A, B, ...]` | a tuple: an `A`, then zero or more `B` |
+| `tuple[A, *tuple[B, ...]]` | the same tuple, spelled by unpacking (3.11+) |
+
+An **unpacked** variadic tuple says the prefix-and-tail shape the way PEP 646
+spells it, and `Unpack[tuple[B, ...]]` is the same thing written out. An unpacked
+*fixed* tuple splices its elements in, so `tuple[A, *tuple[B, C]]` is
+`tuple[A, B, C]`. What a sequence cannot carry is an element **after** the
+repeating tail — `tuple[*tuple[int, ...], str]` names a set this algebra does not
+spell — so that form is rejected rather than read as something else.
 
 ```python
 from valgebra import Validator
@@ -166,6 +175,10 @@ assert not non_empty.is_valid([])
 tup = Validator(tuple[str, int, ...])  # the same shape, as a tuple
 assert tup.is_valid(("x", 1, 2))
 assert not tup.is_valid(["x", 1, 2])  # a list is not a member of the tuple form
+
+unpacked = Validator(tuple[str, *tuple[int, ...]])  # the PEP 646 spelling
+assert unpacked.is_valid(("x", 1, 2))
+assert repr(unpacked) == "tuple[str, int, ...]"
 ```
 
 ## Literals

@@ -27,6 +27,15 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Fixed
 
+- An unpacked variadic tuple compiles to the shape it names.
+  `tuple[int, *tuple[str, ...]]` is a fixed prefix followed by a repeating tail —
+  the same shape `tuple[int, str, ...]` spells — and it was read as a two-element
+  tuple whose second element is a tuple, so it refused `(1, "a")` and admitted
+  `(1, ("a",))`. `Unpack[...]` says the same thing and compiles the same way; an
+  unpacked *fixed* tuple splices its elements in. An element after the repeating
+  tail names a set the sequence node cannot carry and is refused, as is
+  unpacking a `TypeVarTuple`, which binds no element types at runtime.
+
 - The product-splitting rule builds its narrowed component through the schema
   constructors instead of writing at an index, so the double negation it used to
   manufacture — a complement of a branch component that is itself a complement —

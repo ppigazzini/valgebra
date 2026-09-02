@@ -478,39 +478,7 @@ fn build_parametrized(
         }));
     }
     if origin.is(py.get_type::<PyTuple>()) {
-        // tuple[A, ..., Z, ...]: a trailing `...` repeats the element before it
-        // after a fixed prefix, mirroring the list form; tuple[T, ...] is the
-        // prefix-free homogeneous case. Other shapes are a fixed-length tuple.
-        let len = args.len();
-        if len >= 2 && is_ellipsis(&args.get_item(len - 1)?) {
-            let mut elements = Vec::with_capacity(len - 1);
-            for index in 0..len - 1 {
-                let item = args.get_item(index)?;
-                if is_ellipsis(&item) {
-                    return Err(not_implemented(
-                        "`...` may appear only as the last element of a tuple schema",
-                    ));
-                }
-                elements.push(build_schema(&item, lits, defs)?);
-            }
-            let tail = elements.pop().expect("at least one element precedes `...`");
-            let regex = if elements.is_empty() {
-                SeqRegex::homogeneous(tail)
-            } else {
-                SeqRegex::prefix_tail(elements, tail)
-            };
-            return Ok(Schema::tuple(regex));
-        }
-        let mut elements = Vec::with_capacity(len);
-        for arg in args.iter() {
-            if is_ellipsis(&arg) {
-                return Err(not_implemented(
-                    "`...` may appear only as the last element of a tuple schema",
-                ));
-            }
-            elements.push(build_schema(&arg, lits, defs)?);
-        }
-        return Ok(Schema::tuple(SeqRegex::fixed(elements)));
+        return build_tuple(args, lits, defs);
     }
     if is_required_marker(origin)? {
         // Required[T]/NotRequired[T] only annotate a TypedDict field's
@@ -575,6 +543,118 @@ fn is_required_marker(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
         }
     }
     Ok(false)
+}
+
+/// What an unpacked tuple argument contributes to the tuple that carries it.
+enum Unpacked<'py> {
+    /// `*tuple[A, B]`: its elements splice in where it stands.
+    Fixed(Vec<Bound<'py, PyAny>>),
+    /// `*tuple[B, ...]`: the tuple repeats `B` from here on.
+    Tail(Bound<'py, PyAny>),
+}
+
+/// Read `arg` as an unpacked tuple, or `None` when it is an ordinary element.
+///
+/// Two spellings say the same thing: `*tuple[B, ...]` is the tuple alias itself
+/// carrying a flag, and `Unpack[tuple[B, ...]]` wraps it. Both have to be read,
+/// because a reader who writes one and a reader who writes the other mean one
+/// annotation, and reading only the second leaves the first looking like a
+/// nested tuple — a schema that admits a different set than the annotation says.
+///
+/// Only a tuple can be unpacked into a tuple. `*Ts` over a `TypeVarTuple` binds
+/// no element types at runtime, so it is refused here rather than read as an
+/// empty splice.
+fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Unpacked<'py>>> {
+    let py = arg.py();
+    let typing = py.import("typing")?;
+    let inner = if is_truthy_attr(arg, "__unpacked__") {
+        arg.clone()
+    } else {
+        let Ok(unpack) = typing.getattr("Unpack") else {
+            return Ok(None);
+        };
+        if !typing.call_method1("get_origin", (arg,))?.is(&unpack) {
+            return Ok(None);
+        }
+        let wrapped = typing.call_method1("get_args", (arg,))?;
+        single_arg(wrapped.cast::<PyTuple>()?)?
+    };
+    if !typing
+        .call_method1("get_origin", (&inner,))?
+        .is(py.get_type::<PyTuple>())
+    {
+        return Err(not_implemented(&format!(
+            "only a tuple can be unpacked into a tuple schema; {} binds no \
+             element types at runtime",
+            summarize(&inner)
+        )));
+    }
+    let args = typing.call_method1("get_args", (&inner,))?;
+    let args = args.cast::<PyTuple>()?;
+    let len = args.len();
+    if len == 2 && is_ellipsis(&args.get_item(1)?) {
+        return Ok(Some(Unpacked::Tail(args.get_item(0)?)));
+    }
+    Ok(Some(Unpacked::Fixed(args.iter().collect())))
+}
+
+/// `tuple[...]`, in every shape typing spells it.
+///
+/// A trailing `...` repeats the element before it after a fixed prefix, and an
+/// unpacked variadic tuple — `tuple[A, *tuple[B, ...]]` — is that same shape said
+/// another way, so both compile to the prefix-and-tail form. An unpacked *fixed*
+/// tuple splices its elements in where it stands.
+///
+/// What a sequence carries is a fixed prefix and then a repeating tail, with
+/// nothing after it. An element following the tail is therefore refused: the set
+/// it names is one this algebra cannot spell, and reading it as anything else
+/// would admit a different one.
+fn build_tuple(
+    args: &Bound<'_, PyTuple>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let mut prefix: Vec<Bound<'_, PyAny>> = Vec::with_capacity(args.len());
+    let mut tail: Option<Bound<'_, PyAny>> = None;
+    for arg in args.iter() {
+        if tail.is_some() {
+            return Err(not_implemented(
+                "a tuple schema carries a fixed prefix and then a repeating \
+                 tail, so nothing may follow the tail: write the repeating part \
+                 last",
+            ));
+        }
+        match unpacked_tuple(&arg)? {
+            Some(Unpacked::Fixed(items)) => prefix.extend(items),
+            Some(Unpacked::Tail(item)) => tail = Some(item),
+            None if is_ellipsis(&arg) => {
+                let Some(repeated) = prefix.pop() else {
+                    return Err(not_implemented(
+                        "`...` repeats the element before it, so a tuple schema \
+                         cannot begin with one",
+                    ));
+                };
+                tail = Some(repeated);
+            }
+            None => prefix.push(arg),
+        }
+    }
+    let mut elements = Vec::with_capacity(prefix.len());
+    for element in &prefix {
+        elements.push(build_schema(element, lits, defs)?);
+    }
+    let regex = match tail {
+        None => SeqRegex::fixed(elements),
+        Some(tail) => {
+            let tail = build_schema(&tail, lits, defs)?;
+            if elements.is_empty() {
+                SeqRegex::homogeneous(tail)
+            } else {
+                SeqRegex::prefix_tail(elements, tail)
+            }
+        }
+    };
+    Ok(Schema::tuple(regex))
 }
 
 fn single_arg<'py>(args: &Bound<'py, PyTuple>) -> PyResult<Bound<'py, PyAny>> {
