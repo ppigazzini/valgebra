@@ -38,7 +38,7 @@ from typing import Annotated, Any, Literal, TypedDict
 import annotated_types as at
 import pytest
 
-from valgebra import Regex, Validator, complement, intersection, union
+from valgebra import Regex, Validator, complement, intersection, recursive, union
 
 
 class _Rec(TypedDict):
@@ -52,6 +52,13 @@ class _Rec2(TypedDict):
 
 def _v(annotation: Any) -> Validator:
     return annotation if isinstance(annotation, Validator) else Validator(annotation)
+
+
+_GE0 = Annotated[int, at.Ge(0)]
+_GE1 = Annotated[int, at.Ge(1)]
+
+# A fixpoint and its own unfolding: two spellings of one set.
+_LINKED = recursive(lambda t: union(None, {"a": int, "next": t}))
 
 
 # Small schemas, chosen to cross the kinds the decision procedure treats
@@ -99,6 +106,14 @@ SCHEMAS: list[tuple[str, Validator]] = [
     ("int&Ge(1)", _v(Annotated[int, at.Ge(1)])),
     ("str&Regex['a']", _v(Annotated[str, Regex("a")])),
     ("str&Regex['ab?']", _v(Annotated[str, Regex("ab?")])),
+    # A meet of two refinements and the single refinement carrying both bounds
+    # denote one set through two shapes, which is the pair that separates a rule
+    # reading the schema from one reading the constraints.
+    ("int&Ge(0)&Ge(1)", intersection(_GE0, _GE1)),
+    ("int&(Ge(0),Ge(1))", _v(Annotated[int, at.Ge(0), at.Ge(1)])),
+    # A fixpoint, whose definitions table nothing else in this universe reaches.
+    ("mu t.None|{a:int,next:t}", _LINKED),
+    ("None|{a:int,next:mu t}", union(None, {"a": int, "next": _LINKED})),
 ]
 
 
@@ -111,6 +126,10 @@ class _Obj:
 # what separates an open record (whose catch-all admits any key) from a
 # `dict[str, ...]`, and without it the two look equal.
 VALUES: list[Any] = [
+    # A link of the fixpoint above, and the value that separates it from `None`:
+    # without one, every relation with the fixpoint on the left looks true.
+    {"a": 1, "next": None},
+    {"a": 1, "next": {"a": 2, "next": None}},
     0,
     1,
     2,
@@ -188,6 +207,14 @@ ACCEPTED: dict[str, str] = {
     ),
     "str&Regex['a'] <= Lit['a','b']": (
         "As above, with the supertype a union of literals."
+    ),
+    "mu t.None|{a:int,next:t} <= None|{a:int,next:mu t}": (
+        "A fixpoint below its own unfolding. Both denote one set, and the two "
+        "sides differ only in where the unfolding happened. A union on the right "
+        "is tried branch by branch before a reference is unfolded, so the "
+        "reference reaches no arm that would unfold it and the relation falls "
+        "through. Deciding it means trying the lossless moves -- unfolding a "
+        "reference, dropping a refinement to its base -- before the lossy one."
     ),
     "bool <= int&Ge(0)": (
         "A subtype that is not itself a refinement reaches one only through the "

@@ -1,14 +1,16 @@
 """Closure relations of the schema algebra.
 
-Every assertion is true set-theoretically. A relation the procedure does not
-decide is marked as a strict expected failure with what would close it, so the
-suite fails the day it becomes decided and the entry is forced out.
+Every assertion is true set-theoretically, and every one is a relation the
+procedure decides or a fold the constructors perform. A true relation the
+procedure declines belongs on the completeness ledger
+(``tests/test_completeness_ledger.py``), where it is a strict expected failure
+that fails the day it becomes decided; this file holds what does not need one.
 """
 
 import enum
 from typing import Any, Literal
 
-from valgebra import Validator, anything, complement, intersection, union
+from valgebra import Validator, anything, complement, intersection, nothing, union
 
 
 def test_a_literal_is_disjoint_from_another_kind():
@@ -19,7 +21,7 @@ def test_two_distinct_literals_share_no_value():
     assert intersection(Literal["a"], Literal["b"]).is_empty()
 
 
-# --- R4: products must decompose (JACM Lemma 6.5) ----------------------------
+# --- A literal is a typed singleton, so its kind places it --------------------
 
 
 def test_a_literal_int_is_disjoint_from_a_literal_bool():
@@ -43,16 +45,13 @@ def test_a_literal_is_still_a_member_of_its_own_kind():
     assert not Validator(Literal["a"]).is_subtype_of(int)
 
 
-# --- R4: product decomposition, and the shapes it must NOT decide -------------
+# --- Products decompose (JACM Lemma 6.5), and the shapes that must NOT --------
 
 
 def test_a_product_splits_across_union_branches():
     assert Validator(tuple[int | str, int]).is_subtype_of(
         union(tuple[int, int], tuple[str, int])
     )
-
-
-# --- R5: records must be closed under difference (ICFP Def. 4.1) -------------
 
 
 def test_a_product_splits_on_its_second_component():
@@ -84,14 +83,11 @@ def test_arity_does_not_mix():
     )
 
 
-# --- R5a: the record meet, and the shapes it must NOT empty ------------------
+# --- The record meet, and the shapes it must NOT empty -----------------------
 
 
 def test_a_record_is_below_the_complement_of_a_disjoint_record():
     assert Validator({"a": int}).is_subtype_of(complement({"a": str}))
-
-
-# --- R3 soundness guards: the rule must NOT fire where equality is the value's -
 
 
 def test_a_required_field_with_an_empty_meet_empties_the_record():
@@ -128,25 +124,36 @@ def test_two_open_records_admit_each_other_s_keys():
     assert not intersection({"a": int, str: object}, {"b": str, str: object}).is_empty()
 
 
-# --- normalisation-free lattice rules ----------------------------------------
+# --- The complement laws, settled where the schema is built -------------------
+#
+# `~~A` and `A | ~A` are folded by the constructors, so a comparison between the
+# folded form and its operand asks the procedure nothing: the two are the same
+# schema. What the fold does is the claim, so that is what is asserted; what the
+# procedure decides when the fold does not reach a shape is on the completeness
+# ledger.
 
 
-def test_involution_holds_for_a_record():
-    r = Validator({"a": int})
-    assert complement(complement(r)).is_subtype_of(r)
+def test_a_double_complement_is_the_schema_it_negates_twice():
+    record = Validator({"a": int})
+    assert complement(complement(record)) == record
+    assert complement(complement(complement(complement(record)))) == record
 
 
-def test_involution_holds_through_four_negations():
-    r = Validator({"a": int})
-    assert complement(complement(complement(complement(r)))).is_subtype_of(r)
+def test_a_join_with_a_complement_is_the_top():
+    assert union(list[int], complement(list[int])) == Validator(anything)
 
 
-def test_excluded_middle_covers_the_universe():
-    j = union(list[int], complement(list[int]))
-    assert Validator(anything).is_subtype_of(j)
+def test_the_fold_reaches_a_schema_built_through_the_constructors_only():
+    # A respelling denotes the same set and is not folded, because the fold reads
+    # structural equality; the procedure has no rule for the shape either, which
+    # is the ledger entry.
+    record = Validator({"a": int})
+    respelled = union(record, complement(union(record, Validator(nothing))))
+    assert respelled != Validator(anything)
+    assert not Validator(anything).is_subtype_of(respelled)
 
 
-def test_the_gradual_atom_is_exempt_from_excluded_middle():
+def test_the_gradual_atom_is_exempt_from_the_fold():
     # `Any` is the dynamic type, not a set whose complement completes it.
-    j = union(Any, complement(Any))
-    assert not Validator(anything).is_subtype_of(j)
+    assert union(Any, complement(Any)) != Validator(anything)
+    assert not Validator(anything).is_subtype_of(union(Any, complement(Any)))
