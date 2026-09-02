@@ -25,11 +25,26 @@ pub use ir::{
 };
 pub use violation::Violation;
 
-/// Fresh, process-unique tokens for the transient [`Schema::SelfRef`] marker, so
-/// nested `recursive` definitions never resolve each other's self-references.
+/// Fresh tokens for the transient [`Schema::SelfRef`] marker, so no two
+/// `recursive` definitions ever resolve each other's self-references.
+///
+/// **Process-unique, deliberately.** The placeholder carrying a token is an
+/// ordinary Python object, so a caller can keep one past the builder call that
+/// gave it meaning and pass it into another -- on this thread or on any other.
+/// The binding refuses that, by asking whether the token names a definition
+/// currently being built; and that question is only sound while a token means
+/// one definition across the whole process. A per-thread counter would hand two
+/// threads the same first token, and one thread's escaped placeholder would then
+/// answer to the other's open definition: not a refusal, but a silently
+/// different schema. The counter is shared so that the tokens cannot collide.
 static NEXT_SELF_TOKEN: AtomicU64 = AtomicU64::new(0);
 
 /// Allocate a fresh self-reference token for a `recursive` definition.
+///
+/// `Relaxed` is the whole ordering this needs. The token is compared for
+/// equality and never orders anything, so the one guarantee wanted from the
+/// counter is that no two calls return the same value -- which `fetch_add`
+/// gives under any ordering.
 #[must_use]
 pub fn fresh_self_token() -> u64 {
     NEXT_SELF_TOKEN.fetch_add(1, Ordering::Relaxed)
