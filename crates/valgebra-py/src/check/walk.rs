@@ -30,10 +30,12 @@
 //! interrupted check stops instead of being silently reported as a non-member.
 
 use std::borrow::Cow;
+use std::ops::ControlFlow;
 
 use jiter::JsonValue;
 use pyo3::exceptions::{PyException, PyMemoryError, PyRecursionError};
 use pyo3::prelude::*;
+use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
 use rustc_hash::{FxHashMap, FxHashSet};
 use valgebra_core::{
@@ -195,7 +197,14 @@ pub(crate) fn member(
             // pass re-walks in declared order to aggregate ordered violations.
             let ok = keyed_map_matches(fields, defaults, value, ctx);
             if !ok && ctx.mode.explains() {
+                let before = out.len();
                 keyed_map_explain(fields, defaults, value, path, ctx, out);
+                if out.len() == before {
+                    // Two passes read the same dict and disagreed, so the dict
+                    // did not stay still between them: report that rather than a
+                    // failure with nothing behind it.
+                    mutated(value, path, ctx, out);
+                }
             }
             ok
         }
@@ -421,6 +430,147 @@ fn seq_length_fail(
     false
 }
 
+/// What a scan over a container the walk does not own produced.
+///
+/// A container can change while it is being read: membership runs arbitrary
+/// Python at every entry — a predicate, an `__eq__`, an `isinstance` hook — and a
+/// free-threaded interpreter lets another thread write to it meanwhile. The scan
+/// therefore has a third outcome beside "walked it all" and "stopped early".
+enum Scan {
+    /// Every entry was visited.
+    Complete,
+    /// The visitor stopped the scan before the end.
+    Stopped,
+    /// The container could not be read to the end, so there is no reading of its
+    /// contents to answer from. Membership reports a non-member and names the
+    /// mutation rather than answering from the part it managed to see.
+    Unreadable,
+}
+
+/// The code and message a value that changed under the walk reports.
+///
+/// valgebra-coined, because it describes a failure of the *check* rather than of
+/// the value: nothing about the value's contents was decided. Two shapes reach
+/// it — a container whose entries move while they are being read, and a value
+/// whose two readings disagree because something it runs is not a function of
+/// the value.
+const MUTATED_CODE: &str = "mutated_during_validation";
+const MUTATED_EXPECTED: &str = "a value that does not change while it is checked";
+
+/// Record that a container changed under the walk, and report a non-member.
+fn mutated(
+    value: &Value<'_, '_>,
+    path: &[PathSegment],
+    ctx: Ctx<'_>,
+    out: &mut Vec<Violation>,
+) -> bool {
+    if ctx.mode.explains() {
+        out.push(Violation {
+            code: MUTATED_CODE,
+            path: path.to_vec(),
+            expected: MUTATED_EXPECTED.to_owned(),
+            value_summary: summarize_value(value),
+        });
+    }
+    false
+}
+
+/// Visit a dict's entries, refusing rather than panicking when the dict changes
+/// size underneath the scan.
+///
+/// The iterator `PyO3` hands out panics when the dict's length moves, and the walk
+/// runs Python at every entry, so that panic is reachable from an ordinary
+/// schema — and a panic is not one of the answers this library gives: it crosses
+/// the boundary as a `BaseException` that no caller catches as a validation
+/// failure. The scan asks the same question one step earlier, before each step
+/// rather than inside it, and stops at the entry count it began with, so the
+/// iterator is never advanced into either of the states it panics in. The
+/// critical section keeps a second thread out of the dict for the parts of the
+/// scan that do not call back into the interpreter.
+fn scan_dict<'py>(
+    dict: &Bound<'py, PyDict>,
+    mut visit: impl FnMut(&Bound<'py, PyAny>, &Bound<'py, PyAny>) -> ControlFlow<()>,
+) -> Scan {
+    with_critical_section(dict.as_any(), || {
+        let entries = dict.len();
+        let mut iter = dict.iter();
+        let mut seen = 0;
+        while seen < entries {
+            if dict.len() != entries {
+                return Scan::Unreadable;
+            }
+            let Some((key, value)) = iter.next() else {
+                break;
+            };
+            seen += 1;
+            if visit(&key, &value).is_break() {
+                return Scan::Stopped;
+            }
+        }
+        if dict.len() == entries {
+            Scan::Complete
+        } else {
+            Scan::Unreadable
+        }
+    })
+}
+
+/// Visit a set's or frozenset's elements, reporting rather than panicking when
+/// the container changes underneath the scan.
+///
+/// A set is walked through its own Python iterator, which *raises* on mutation
+/// where `PyO3`'s wrapper unwraps that error into a panic. Taking the iterator
+/// directly keeps the raise, which is an outcome the walk already knows how to
+/// carry: a fatal signal propagates, and anything else means the container did
+/// not answer.
+fn scan_set<'py>(
+    set: &Bound<'py, PyAny>,
+    ctx: Ctx<'_>,
+    mut visit: impl FnMut(&Bound<'py, PyAny>) -> ControlFlow<()>,
+) -> Scan {
+    with_critical_section(set, || {
+        let Ok(iter) = set.try_iter() else {
+            return Scan::Unreadable;
+        };
+        for item in iter {
+            match item {
+                Ok(item) => {
+                    if visit(&item).is_break() {
+                        return Scan::Stopped;
+                    }
+                }
+                Err(err) => {
+                    if is_fatal(&err, set.py()) {
+                        record_fatal(err, ctx);
+                    }
+                    return Scan::Unreadable;
+                }
+            }
+        }
+        Scan::Complete
+    })
+}
+
+/// A set-like container the walk reads: what its type failure reports, and the
+/// test that recognises it.
+struct Collection {
+    code: &'static str,
+    word: &'static str,
+    is_kind: fn(&Bound<'_, PyAny>) -> bool,
+}
+
+const SET: Collection = Collection {
+    code: "set_type",
+    word: "set",
+    is_kind: |value| value.is_instance_of::<PySet>(),
+};
+
+const FROZEN_SET: Collection = Collection {
+    code: "frozen_set_type",
+    word: "frozenset",
+    is_kind: |value| value.is_instance_of::<PyFrozenSet>(),
+};
+
 /// A set whose every element matches `element`. Set order is not meaningful, so
 /// element failures carry no index segment. JSON has no sets.
 fn check_set(
@@ -430,20 +580,7 @@ fn check_set(
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    let Value::Py(v) = value else {
-        return type_fail("set_type", "set", value, path, ctx, out);
-    };
-    let Ok(set) = v.cast::<PySet>() else {
-        return type_fail("set_type", "set", value, path, ctx, out);
-    };
-    let mut ok = true;
-    for item in set.iter() {
-        ok &= member(element, &Value::Py(&item), path, ctx, out);
-        if !ok && stop(ctx) {
-            return false;
-        }
-    }
-    ok
+    check_elements(&SET, element, value, path, ctx, out)
 }
 
 /// A frozenset whose every element matches `element`. JSON has no frozensets.
@@ -454,20 +591,40 @@ fn check_frozenset(
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    let Value::Py(v) = value else {
-        return type_fail("frozen_set_type", "frozenset", value, path, ctx, out);
+    check_elements(&FROZEN_SET, element, value, path, ctx, out)
+}
+
+/// Membership for either set-like container: the value is of the container's
+/// kind and every element belongs to `element`. One rule for both, because the
+/// two differ only in the type they admit and the code they report.
+fn check_elements(
+    collection: &Collection,
+    element: &Schema,
+    value: &Value<'_, '_>,
+    path: &mut Vec<PathSegment>,
+    ctx: Ctx<'_>,
+    out: &mut Vec<Violation>,
+) -> bool {
+    let Value::Py(container) = value else {
+        return type_fail(collection.code, collection.word, value, path, ctx, out);
     };
-    let Ok(set) = v.cast::<PyFrozenSet>() else {
-        return type_fail("frozen_set_type", "frozenset", value, path, ctx, out);
-    };
-    let mut ok = true;
-    for item in set.iter() {
-        ok &= member(element, &Value::Py(&item), path, ctx, out);
-        if !ok && stop(ctx) {
-            return false;
-        }
+    if !(collection.is_kind)(container) {
+        return type_fail(collection.code, collection.word, value, path, ctx, out);
     }
-    ok
+    let mut ok = true;
+    let scan = scan_set(container, ctx, |item| {
+        ok &= member(element, &Value::Py(item), path, ctx, out);
+        if !ok && stop(ctx) {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, path, ctx, out),
+    }
 }
 
 /// Membership for a keyed map: named fields, then a default clause for every
@@ -554,7 +711,7 @@ fn keyed_map_scan(
     lookup: impl Fn(&str) -> Option<usize>,
 ) -> bool {
     let sub = fast(ctx);
-    for (key, val) in dict.iter() {
+    let scan = scan_dict(dict, |key, val| {
         // A non-string key, or a string carrying a lone surrogate (which cannot
         // equal a field name, since names are valid UTF-8 by build-time check),
         // resolves to no field and must instead be covered by a default clause.
@@ -567,12 +724,12 @@ fn keyed_map_scan(
             Some(field) => {
                 if !member(
                     &field.schema,
-                    &Value::Py(&val),
+                    &Value::Py(val),
                     &mut Vec::new(),
                     sub,
                     &mut Vec::new(),
                 ) {
-                    return false;
+                    return ControlFlow::Break(());
                 }
                 if field.required {
                     // Saturating: the counter is the precomputed required-field
@@ -582,13 +739,14 @@ fn keyed_map_scan(
                 }
             }
             None => {
-                if !covered(defaults, &Value::Py(&key), &Value::Py(&val), ctx) {
-                    return false;
+                if !covered(defaults, &Value::Py(key), &Value::Py(val), ctx) {
+                    return ControlFlow::Break(());
                 }
             }
         }
-    }
-    required_remaining == 0
+        ControlFlow::Continue(())
+    });
+    matches!(scan, Scan::Complete) && required_remaining == 0
 }
 
 /// The keyed-map fast path over a JSON object. Keys are strings; a duplicate key
@@ -695,21 +853,21 @@ fn keyed_map_explain(
             return;
         }
     }
-    for (key, val) in dict.iter() {
+    let scan = scan_dict(dict, |key, val| {
         if let Some(name) = key.cast::<PyString>().ok().and_then(|s| s.to_str().ok())
             && declared.contains(name)
         {
-            continue;
+            return ControlFlow::Continue(());
         }
-        if covered(defaults, &Value::Py(&key), &Value::Py(&val), ctx) {
-            continue;
+        if covered(defaults, &Value::Py(key), &Value::Py(val), ctx) {
+            return ControlFlow::Continue(());
         }
         if let Some((key_schema, value_schema)) = defaults.first() {
             // A clause exists but did not cover this key: surface the key and
             // value violations against it (the homogeneous-mapping error).
-            path.push(PathSegment::Key(key_label(&key)));
-            member(key_schema, &Value::Py(&key), path, ctx, out);
-            member(value_schema, &Value::Py(&val), path, ctx, out);
+            path.push(PathSegment::Key(key_label(key)));
+            member(key_schema, &Value::Py(key), path, ctx, out);
+            member(value_schema, &Value::Py(val), path, ctx, out);
             path.pop();
         } else {
             // A closed record: the key is simply not allowed.
@@ -725,8 +883,15 @@ fn keyed_map_explain(
             ));
         }
         if ctx.mode.stops_at_first() && !out.is_empty() {
-            return;
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
         }
+    });
+    // The fast pass reported a non-member; if the dict moved underneath this one
+    // there is nothing else to report, and the mutation is the finding.
+    if matches!(scan, Scan::Unreadable) {
+        mutated(value, path, ctx, out);
     }
 }
 

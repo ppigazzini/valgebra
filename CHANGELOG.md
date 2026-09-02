@@ -27,6 +27,19 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Fixed
 
+- A container that changes size while it is being checked is reported as
+  `mutated_during_validation` instead of aborting the interpreter. Membership
+  runs Python at almost every entry of a dict or a set — a predicate, an
+  `__eq__`, an `isinstance` hook — and a free-threaded interpreter lets another
+  thread write to a shared value meanwhile; the iterators underneath both
+  containers answer that with a panic, which crosses the boundary as a
+  `BaseException` no caller catches as a validation failure. The walk reads both
+  containers in a way that survives the change and reports a non-member, because
+  a reading cut short decides nothing about the contents. Only a change in size
+  costs the reading: a value rewritten in place is unaffected. The same code
+  reports a value whose two readings disagree, which is the same failure of the
+  check to have a stable value to decide about.
+
 - The membership walk counts the levels it holds open and refuses past 512 of
   them with `recursion_limit`, so a value inside every published construction
   bound cannot exhaust the native stack. Counting recursive *unfoldings* alone

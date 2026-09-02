@@ -147,6 +147,44 @@ attribute access included. A base exception that is not an ordinary exception
 non-member, so it propagates out of `validate`/`is_valid` rather than being
 reported as "not a member" or a `predicate_error`.
 
+## When a value changes while it is checked
+
+Membership reads a container entry by entry and runs Python at almost every one,
+so the container can move underneath the reading: a predicate that writes to the
+dict it is checking, and — on a free-threaded interpreter — another thread
+writing to a shared value. A reading interrupted that way decides nothing about
+the contents, so it is reported rather than guessed: the value is a non-member
+and `validate` names it `mutated_during_validation`.
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import ValidationError, Validator
+
+grown = {"a": 1, "b": 2}
+schema = Validator(
+    {
+        "a": Annotated[int, at.Predicate(lambda _: grown.setdefault("c", 3) or True)],
+        "b": int,
+        "c?": int,
+    }
+)
+
+assert schema.is_valid(grown) is False
+try:
+    schema.validate(grown)
+except ValidationError as error:
+    assert error.code == "mutated_during_validation"
+```
+
+Only a change in the container's **size** costs the reading; a value rewritten in
+place leaves the entries where they are and the check answers normally. The
+same code also reports the rarer case of a value that answers two readings
+differently — a predicate or an `__eq__` that is not a function of the value —
+because it is the same failure: the check has no stable value to decide about.
+
 ## The set of codes
 
 There is no hand-maintained list of every code on this page, because a list that

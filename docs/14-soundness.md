@@ -158,6 +158,14 @@ The soundness is relative to a small, explicit trust base:
   Python; valgebra checks that it returned truthy, and the soundness of *that*
   leaf is the caller's. Regex constraints are matched natively and related only
   by syntactic identity.
+- **The value holds still for the length of the call.** Membership is a claim
+  about the value the walk read, so a value that changes while it is being read
+  has no membership answer. A change the walk can see — a container whose size
+  moves, or a second reading that disagrees with the first — is reported as
+  `mutated_during_validation` rather than answered
+  ([the error model](08-error-model.md)); a change it cannot see, such as a
+  field rewritten in place after the walk passed it, leaves an answer about the
+  value as it was.
 - **The suites check necessary properties, which is weaker than an oracle.** A
   property-based or metamorphic check fails when the implementation is wrong;
   passing does not entail it is right, however many such properties are added. So
