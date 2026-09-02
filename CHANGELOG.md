@@ -6,6 +6,43 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Widening a literal union is decided by containment rather than by the product
+  of the two member counts, so a table whose members are *the same constants* as
+  the wider one's relates at any size. Two tables written independently pool
+  their constants separately, and those still meet the decision budget above
+  roughly a thousand members, which the completeness ledger records.
+
+- `~~A` is `A` and a union carrying a schema together with its complement is the
+  top, settled where the schema is built. The decision procedure has no rule for
+  either shape and does not meet one built through the constructors; a shape
+  built another way — a recursive definition, a respelling, constants equal but
+  not identical — reaches the procedure and is not decided. `repr`, `==`, and
+  the code a violation reports follow the cancelled form:
+  `complement(complement(int))` reports `int_type` where it reported
+  `unexpected_match`.
+
+- A meet of two record schemas is decided empty when a key one side requires
+  cannot hold — because the types the two give it share no value, or because the
+  other side is closed and does not declare it. `{"a": int} & {"a": str}` is
+  empty, and so `{"a": int}` is below `~{"a": str}`. Only a required key empties
+  a meet: two mappings, or two optional fields, always admit the empty dict.
+
+- A fixed-length sequence is decided against a union of fixed-length sequences
+  it splits across, where no single branch contains it: `tuple[int | str, int]`
+  is below `tuple[int, int] | tuple[str, int]`. The rule needs a fixed component
+  count, so a homogeneous or variadic sequence is not decomposed, and branches of
+  another container or arity drop out rather than blocking it.
+
+- A literal carries the kind of its constant, so it is decided against another
+  kind: `Literal["a"]` is below `~int`, and `Literal["a"] & Literal["b"]` is
+  empty. `Literal[1]` and `Literal[True]` are disjoint although `1 == True`,
+  because a literal pins `type(x)` exactly. The rule applies to the builtin
+  scalars, whose equality is Python's own; a meet of two `Enum` members stays
+  conservative, since user-defined equality can admit one value for two
+  constants.
+
 ### Changed
 
 - A union's `expected` names each branch the way that branch names itself when it
@@ -219,7 +256,7 @@ Membership costs less on a refined schema, and no decision or message changes.
   fifty thousand: a single comparison bound about 16 ns where it was about 123,
   and two about 29 where they were about 258. A comparison bound therefore costs
   less than a call into a Python predicate, which is the ordering
-  [the refinements page](https://ppigazzini.github.io/valgebra/refinements/)
+  [the refinements page](https://ppigazzini.github.io/valgebra/05-refinements/)
   describes. The absolute figures are one machine's and move by around a tenth
   between runs; the ratio and the ordering are what travel.
 
@@ -264,40 +301,6 @@ Membership costs less on a refined schema, and no decision or message changes.
 
 ### Added
 
-- Widening a literal union is decided by containment rather than by the product
-  of the two member counts, so an error-code table or a currency list relates to
-  a wider one at any size such a table reaches, where the decision budget
-  previously bounded it above roughly a thousand members.
-
-- Involution and the excluded middle are decided for every schema: `~~A` is `A`
-  and a union carrying a schema together with its complement is the top. Both
-  are settled where the schema is built, so the decision procedure never meets
-  either shape and pays nothing per comparison. `repr` and `==` follow the
-  cancelled form: `complement(complement(int))` is `int`.
-
-- A meet of two record schemas is decided empty when a key one side requires
-  cannot hold — because the types the two give it share no value, or because the
-  other side is closed and does not declare it. `{"a": int} & {"a": str}` is
-  empty, and so `{"a": int}` is below `~{"a": str}`. Only a required key empties
-  a meet: two mappings, or two optional fields, always admit the empty dict.
-
-- A fixed-length sequence is decided against a union of fixed-length sequences
-  it splits across, where no single branch contains it: `tuple[int | str, int]`
-  is below `tuple[int, int] | tuple[str, int]`. The rule needs a fixed component
-  count, so a homogeneous or variadic sequence is not decomposed, and branches of
-  another container or arity drop out rather than blocking it.
-
-- `is_subtype_of`, `is_equivalent` and `is_empty` normalise their arguments by
-  the lattice laws before comparing, so involution decides in both directions
-  for every schema and a union covering the universe is recognised as the top.
-- A literal carries the kind of its constant, so it is decided against another
-  kind: `Literal["a"]` is below `~int`, and `Literal["a"] & Literal["b"]` is
-  empty. `Literal[1]` and `Literal[True]` are disjoint although `1 == True`,
-  because a literal pins `type(x)` exactly. The rule applies to the builtin
-  scalars, whose equality is Python's own; a meet of two `Enum` members stays
-  conservative, since user-defined equality can admit one value for two
-  constants.
-
 - `is_empty` decides an interval that skips every integer however the meet is
   spelled. `intersection(Annotated[int, Gt(0)], Annotated[int, Lt(1)])` is empty,
   as `Annotated[int, Gt(0), Lt(1)]` already was: an intersection is a subset of
@@ -329,7 +332,7 @@ Membership costs less on a refined schema, and no decision or message changes.
   once no later member can change the verdict.
 
 - Membership costs what it cost. The competitive baseline in
-  [the performance page](https://ppigazzini.github.io/valgebra/performance/) is re-measured with its spread and
+  [the performance page](https://ppigazzini.github.io/valgebra/11-performance/) is re-measured with its spread and
   the method that produced it: against pydantic in strict mode, 7.6x on a schema
   nested twenty-five deep, 2.1x on a fifty-field closed record, and 1.8x on a
   flat array of ten thousand integers.
