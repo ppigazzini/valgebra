@@ -139,18 +139,30 @@ it has a comment. Prefer one rule that asks the question.
 
 ## The limit
 
-Read `docs/15-decidability.md` for the published fragment. What it does not decide,
-all of it honestly conservative and none of it a soundness question:
+Read `docs/15-decidability.md` for the published fragment and
+`tests/test_completeness_ledger.py` for the relations it declines, each a strict
+expected failure. None of them is a soundness question. Six shapes account for
+almost all of them, and naming the shapes is more useful than naming the cases:
 
-- a mixed keyed map where the supertype declares a **required** field the subtype
-  lacks in the general case;
-- the split of a language across a union of branches;
-- whether a catch-all keyed by literals covers a declared field name — the key is
-  matched against the `Str` and `Anything` atoms rather than asked whether it
-  admits the name, and the name is a bare `String` the core cannot pool;
-- a literal against the complement of a scalar, which wants the value oracle the
-  core already has but does not ask here.
+- **emptiness never asks an inclusion.** `is_empty` decides the regions, the
+  complement law and the bounds directly and never asks whether one member of a
+  meet is below another, so `list[bool] & ~list[int]` is not decided empty
+  although the inclusion under it is decided;
+- **a container meet is not met componentwise**, so a meet that denotes the empty
+  container is not recognised as one;
+- **a kind is a region bit, not a set of its values**, so a finite kind is not the
+  union of its members and a negated literal has nowhere to go inside one;
+- **a bound is compared against a bound**, so a base that is not itself a
+  refinement reaches one only through the value oracle, and a length bound is
+  opaque to the shape it bounds;
+- **a map's domain is its field list as written**, and a key type is matched
+  against the `Str` and `Anything` atoms rather than asked whether it admits a
+  name;
+- **a lossy arm is reached before a lossless one**: a union on the right
+  distributes before a reference is unfolded or a refinement drops to its base.
 
-The first two would be decided by the interning and automata engine the theory
-names ([10-theory.md](10-theory.md)). The last two are ordinary work: each has a
-route, and each is on the probe's ledger so it cannot quietly become permanent.
+The first four are the same diagnosis in four places — no kind has a
+representation closed under complement, so a negated atom of that kind falls
+through — and that is the representation the theory names
+([10-theory.md](10-theory.md)). The last is an ordering, and the fifth is
+ordinary work.

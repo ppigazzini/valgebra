@@ -244,14 +244,17 @@ def test_an_unsatisfiable_contract_is_detected_before_any_value() -> None:
     rejected, and nothing says the set was empty.
 
     The procedure is sound, not complete: it decides a wide fragment and answers
-    ``False`` beyond it rather than guessing. Two disjoint literal sets are
-    outside that fragment today, so this test uses disjoint scalar carriers,
-    which are inside it.
+    ``False`` beyond it rather than guessing. Two carriers that share no value
+    are inside that fragment, and so are two literals of different kinds.
     """
-    impossible = intersection(int, str)
-    assert impossible.is_empty()
-    assert not impossible.is_valid(1)
-    assert not impossible.is_valid("1")
+    empty_meets = (
+        intersection(int, str),
+        intersection(Literal["a"], Literal["b"]),
+    )
+    for impossible in empty_meets:
+        assert impossible.is_empty()
+        assert not impossible.is_valid(1)
+        assert not impossible.is_valid("a")
 
 
 # --- msgspec answers the same question from further away ---------------------

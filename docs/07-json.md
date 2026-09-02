@@ -94,7 +94,7 @@ module produces them:
 | number, no fraction or exponent (`42`) | `int` | `int`, not `float` |
 | number with fraction or exponent (`4.2`, `1e3`) | `float` | `float`, not `int` |
 | string | `str` | `str` |
-| array | `list` | `list[...]`, fixed lists, tuples |
+| array | `list` | `list[...]` and fixed lists; **not** `tuple[...]`, which is a different container |
 | object | `dict` | records and mappings |
 
 Two consequences follow from valgebra's value-set semantics:

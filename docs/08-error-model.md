@@ -241,17 +241,21 @@ class Backend(enum.Enum):
     TORCH = "torch"
 
 
-for spec, value in [
-    (Literal["torch", "jax"], "tensorflow"),
-    (union(Backend, Literal["cpu"]), "arcfase"),
-]:
+def expected_of(spec: object, value: object) -> str:
     try:
         Validator(spec).validate(value)
     except ValidationError as err:
-        print(err.errors[0]["expected"])
+        return err.errors[0]["expected"]
+    raise AssertionError("expected a failure")
 
-# one of: the literal 'torch', the literal 'jax'
-# one of: Backend, the literal 'cpu'
+
+assert (
+    expected_of(Literal["torch", "jax"], "tensorflow")
+    == "one of: the literal 'torch', the literal 'jax'"
+)
+assert expected_of(union(Backend, Literal["cpu"]), "arcfase") == (
+    "one of: Backend, the literal 'cpu'"
+)
 ```
 
 A `Literal[...]` builds a union of its constants, so its branches are the
@@ -263,11 +267,16 @@ enough to be a generated table reports a readable prefix. A branch that is itsel
 a union contributes its own members, so the label count and the branch count are
 not the same number. See [resource limits](10-limits.md).
 
-**`expected` describes the schema as written, not a canonical name for the set.**
+**`expected` describes the schema as built, not a canonical name for the set.**
 `int | str`, `str | int` and `~(~int & ~str)` denote one set and read
-differently, in the same way `repr` renders the annotation that produced a
-schema. Read `expected` to see what was asked for; use
-[`is_equivalent`](04-algebra.md) to ask whether two schemas mean the same thing.
+differently, in the same way `repr` renders the schema that was built. Read
+`expected` to see what was asked for; use [`is_equivalent`](04-algebra.md) to ask
+whether two schemas mean the same thing.
+
+*As built* rather than *as written*, because two constructors fold: `complement`
+cancels a complement and `union` collapses a join carrying a schema beside its
+own complement. `complement(complement(int))` is the schema `int`, so it reports
+`int_type` and names `int` — there is no second schema left to report.
 
 ## Which spelling produces which code
 
@@ -279,14 +288,16 @@ from typing import Literal
 
 from valgebra import ValidationError, Validator
 
-for spec in ("active", Literal["active"]):
+def report(spec: object) -> tuple[str, str]:
     try:
         Validator(spec).validate("x")
     except ValidationError as err:
-        print(err.errors[0]["code"], "|", err.errors[0]["expected"])
+        return err.errors[0]["code"], err.errors[0]["expected"]
+    raise AssertionError("expected a failure")
 
-# literal_error | the literal 'active'
-# union_error   | one of: literal
+
+assert report("active") == ("literal_error", "the literal 'active'")
+assert report(Literal["active"]) == ("union_error", "one of: the literal 'active'")
 ```
 
 `Literal[...]` builds a union of its constants — of one branch, when there is one

@@ -155,7 +155,10 @@ instance, so they are written here rather than generated.
 | `expected` | `str` | A short label of the set the first item expected, such as `int`. |
 | `value` | `str` | A repr-style summary of the first item's offending value. |
 
-The [error model](08-error-model.md) guide lists every code and the path format.
+The [error model](08-error-model.md) guide gives the path format and the
+properties a code carries; the codes themselves are enumerated by
+`tests/test_error_codes.py`, which asserts each against the node kind that emits
+it, because a list written out beside the walk drifts from it.
 
 ```python
 import json

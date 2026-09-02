@@ -37,13 +37,17 @@ conservative](#sound-but-conservative)).
   schema together with its complement (`A & ~A`), or two members of provably
   disjoint kinds (a list and a set, an `int` and a `str`), is empty — for the
   structural kinds, not only the scalars. The gradual `Any` is exempt from the
-  complement law: `Any & ~Any` is *not* empty, because `Any` is the dynamic type,
-  not a set whose complement cancels it.
-- **Class and literal inclusion.** A class is a subtype of its base classes
-  (`issubclass`), and a literal is a subtype of any schema it is a member of. A
+  rule: `intersection(Any, complement(Any))` is not *decided* empty, because
+  `Any` is held as an atom rather than as the set it admits. At runtime it admits
+  nothing, so the set is empty and the procedure declines to say so.
+- **Class and literal inclusion.** A class is a subtype of its base *classes*,
+  by `issubclass`, and a literal is a subtype of any schema it is a member of. A
   dataclass or named tuple relates the same way: its schema is below one over a
   base class it carries every attribute of, each with a narrower schema, and below
-  the bare class it is an instance of.
+  the bare class it is an instance of. The relation is between two class atoms:
+  a scalar or a container is a node of its own rather than a class, so
+  `Validator(MyInt)` is not decided below `Validator(int)` for an `int`
+  subclass, though every value of the first is a value of the second.
 - **Literals against other kinds.** A literal pins `type(x)` exactly, so it
   carries the kind of its constant and is decided against another kind:
   `Literal["a"]` is below `~int`, and `Literal["a"] & Literal["b"]` is empty.
@@ -63,8 +67,10 @@ conservative](#sound-but-conservative)).
   subclasses `int`; a `float` base stays dense, so the same bounds are not empty.
 - **Sequences.** Homogeneous, fixed-length, and prefix-plus-tail lists and tuples,
   with the container as part of the type (a list is never a tuple). Every sequence
-  schema valgebra builds takes this linear shape, so sequence inclusion is decided
-  completely. A **fixed-length** sequence is also decided against a union of
+  schema valgebra builds takes this linear shape, so inclusion *between two
+  sequence schemas* is decided completely — a bare `list` is a class atom rather
+  than a sequence, and relates as a class does, not as a sequence. A
+  **fixed-length** sequence is also decided against a union of
   fixed-length ones it splits across, where no single branch contains it:
   `tuple[int | str, int]` is below `tuple[int, int] | tuple[str, int]`. The rule
   needs a fixed component count, so a homogeneous or variadic sequence — a star,
@@ -88,14 +94,19 @@ conservative](#sound-but-conservative)).
   semantic-subtyping reduction applied where no structural rule can help — a
   complement has no shape on the right to recurse into.
 - **Recursion.** Equirecursive schemas compare at their greatest fixpoint; the
-  rule is sound and is witnessed by an independent reference denotation.
-- **Involution and the excluded middle.** `~~A` and `A` denote the same set and
-  each is decided below the other, for every schema; a union carrying a schema
-  together with its complement is the universe. Both are settled where the schema
-  is built, so `repr` and `==` follow the cancelled form —
-  `complement(complement(int))` is `int` — and no comparison pays for the rule.
-  `Any` is exempt from the second, as from the first: `Any | ~Any` is not the
-  top.
+  rule is sound and is witnessed by an independent reference denotation. The
+  *sets* are inductive — a guarded fixpoint contains the values built by finitely
+  many unfoldings — while the *comparison* assumes its goal and is coinductive;
+  the two agree because a value is finite.
+- **The complement laws, where the constructors reach them.** `complement`
+  cancels a complement and `union` folds a join carrying a schema beside its own
+  complement, both where the schema is built. So `complement(complement(int))`
+  **is** `int` — one schema, which `repr` and `==` report and which a comparison
+  is never asked about — and a union covering the universe **is** `anything`.
+  The decision procedure has no rule for either shape and never meets one built
+  this way. A shape the fold does not reach is a different matter and is
+  conservative (below). `Any` is exempt: it is an atom, not a set whose
+  complement completes it.
 
 ```python
 from typing import Annotated, Any
@@ -203,12 +214,60 @@ tracked as future work.
   against the subtype's own value range, which the core reads from a scalar
   region rather than from an enumerated set.
 
+- **A shape the complement fold does not reach.** The fold reads structural
+  equality inside one validator's constants, so it settles a join written
+  `union(A, complement(A))` and not one written any other way: a respelling such
+  as `union(A, complement(union(A, nothing)))`, a recursive schema whose two
+  occurrences compile to two definitions, or two constants that are equal without
+  being the same object. The procedure has no rule for those, so they are not
+  decided.
+
+- **An emptiness that needs an inclusion.** `is_empty` decides the regions, the
+  complement law and the bounds directly, and never asks whether one member of a
+  meet is below another. So `list[bool] & ~list[int]` is not decided empty, even
+  though `list[bool] <= list[int]` is decided — and a container meet is not met
+  componentwise, so `list[int] & list[str]` is not decided to be the empty list.
+
+- **A scalar kind against its own values.** A kind is a region bit rather than a
+  set of the values in it, so `bool` is not decided below `Literal[True, False]`,
+  `Literal[1]` is not decided below `int & ~bool`, and a negated literal is not
+  subtracted from the kind that holds it.
+
+- **A refinement against a base that is not one.** A bound is compared against
+  another bound, and a base that is not itself a refinement reaches one only
+  through the value oracle, which answers for a literal and not for a class or a
+  kind. A length bound is opaque to the shape it bounds, so a two-tuple is not
+  decided empty under `MinLen(3)`.
+
+- **A map's domain as written.** The field list is the domain, so a field whose
+  type is empty is not absorbed and `{"a?": nothing}` is not decided equal to
+  `{}`; and a key type is matched against the string and top atoms rather than
+  asked whether it admits a name, so `{"a": int}` is not decided below
+  `dict[Literal["a"], int]`.
+
+- **A lossy rule reached before a lossless one.** A union on the right is tried
+  branch by branch before a reference is unfolded or a refinement drops to its
+  base, so a fixpoint is not decided below its own unfolding and
+  `Annotated[int | str, Ge(0)]` is not decided below `int | str`.
+
+Every relation named here is a strict expected failure in
+`tests/test_completeness_ledger.py`, so the day a rule decides one the mark fails
+and the entry leaves both the ledger and this list.
+
 ```python
 from typing import Annotated, Literal
 
 import annotated_types as at
 
-from valgebra import Regex, Validator, complement, intersection
+from valgebra import (
+    Regex,
+    Validator,
+    anything,
+    complement,
+    intersection,
+    nothing,
+    union,
+)
 
 pattern = Validator(Annotated[str, Regex("a")])
 assert not pattern.is_subtype_of(Annotated[str, Regex("ab?")])  # L(a) <= L(ab?)
@@ -226,34 +285,33 @@ assert Validator(Literal["a"]).is_subtype_of(complement(int))
 assert intersection(Literal["a"], Literal["b"]).is_empty()
 assert intersection(Literal[1], Literal[True]).is_empty()  # 1 == True, types differ
 
-# Involution decides both ways, for every schema.
+# The complement fold is a construction, so `~~A` is `A` -- one schema, not two
+# the procedure relates.
 record = Validator({"a": int})
-assert record.is_subtype_of(complement(complement(record)))
-assert complement(complement(record)).is_subtype_of(record)
-assert complement(complement(Validator(Literal["a"]))).is_subtype_of(Literal["a"])
-assert complement(complement(Validator(int))).is_subtype_of(int)
+assert complement(complement(record)) == record
+
+# Written another way, the same set is a shape the fold does not reach and the
+# procedure does not decide.
+respelled = union(record, complement(union(record, nothing)))
+assert respelled != Validator(anything)
+assert not Validator(anything).is_subtype_of(respelled)
 ```
 
-The two catch-all entries were found by `tests/test_completeness_probe.py`, which
-searches for relations answered `False` that no value refutes, and fails when one
-appears that is not written down with a reason. Both are on its ledger, so
-neither can quietly become permanent, and closing either fails the ledger until
-the entry is removed. The literal-meet entry is held the same way by
-`tests/test_completeness_ledger.py`, with the two counterexamples that rule out
-each rule that would close it, and the involution entry the same way — as a
-strict `xfail`, so closing it fails the ledger and forces the entry out.
-
-That probe searches a fixed universe of schemas, so it reaches a gap only where
-some atom in that universe reaches it. Its universe carries refinements of both
-constraint families — an order bound, which entails a looser one and so reports
-nothing, and a regex, which is opaque and reports — so the two refinement entries
-above are held by the same gate as the rest.
+Two instruments hold this list to the tree. `tests/test_completeness_ledger.py`
+carries each relation above as a strict expected failure, written the way a
+caller writes it rather than built from the other operand — a distinction that
+matters, because the shortcuts the procedure takes are keyed on two schemas
+sharing their constants. `tests/test_completeness_probe.py` searches a fixed
+universe for relations answered `False` that no value refutes and fails when one
+appears without a written reason, so a gap nobody thought of cannot arrive
+unnoticed. It reaches a gap only where some atom in its universe reaches it,
+which is why that universe carries both constraint families, a fixpoint beside
+its own unfolding, and a record beside a literal-keyed map.
 
 General regular-expression-types inclusion of sequences (a union of sequence
 languages that splits across branches, or a repeated heterogeneous group) is not
-implemented, but no schema valgebra builds takes that shape — every sequence is
-the linear prefix-and-tail form, which is decided completely — so it is not a
-reachable gap.
+implemented, and no schema valgebra builds takes that shape: every sequence is
+the linear prefix-and-tail form.
 
 ## Undecidable at runtime
 
@@ -318,12 +376,20 @@ preserves soundness: a bail-out is never a wrong `True`.
 
 The budget binds where the work is a **product** rather than a sum. Subtyping
 distributes over both sides of a union, so relating two unions can cost the
-product of their member counts. A union whose branches are *contained* in the
-supertype's — an error-code table widened by a case, a currency list — is decided
-by containment instead, and stays far inside the ceiling at any size such a table
-reaches. Depth is what reaches it: a Boolean combination nested past a handful of
-levels demands work exponential in its depth.
+product of their member counts, and a Boolean combination nested past a handful
+of levels demands work exponential in its depth.
+
+One shortcut avoids the product, and it is worth knowing exactly what reaches it:
+a union whose branches are *contained* in the supertype's is settled by
+containment, and containment is structural equality over one validator's
+constants. Two schemas share those when one is built from the other — a table
+widened by a member, `union(codes, Validator("extra"))` — and not when both are
+written out. So a table widened in place is decided at any size, while two tables
+written separately, as a codebase with the same schema in two modules has them,
+distribute against each other and reach the ceiling above roughly a thousand
+members each. Both sizes are on the ledger.
 
 So a `False` on a wide literal union or a deep Boolean tower may mean "not proven
 within the bound" rather than "not a subtype"; on anything else it means the
-relation is outside the decided fragment above.
+relation is outside the decided fragment above. The bound is the price of a
+procedure with no memo, and removing it is the interning work the theory names.
