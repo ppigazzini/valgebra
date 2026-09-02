@@ -11,6 +11,11 @@ directions:
 * an exclusion naming a file that no longer exists fails, so the list cannot
   accumulate entries with no subject.
 
+The same holds of ``exclude_re``, which excuses individual mutants rather than
+files: each entry must match a mutant `cargo mutants --list` really offers. A
+regex matching nothing has outlived the code it argued about, and reads as
+coverage the sweep does not have.
+
 The list is a hole in the coverage claim, so each entry carries the reason it is
 there -- stated once in the config's own comment, which this checks is present.
 
@@ -20,7 +25,11 @@ LEDGER: every binding file is swept or excluded by name
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / ".cargo" / "mutants.toml"
@@ -60,6 +69,36 @@ def _excluded_globs() -> list[str]:
         if not line.lstrip().startswith("#")
     )
     return re.findall(r'"([^"]+)"', body)
+
+
+def _excluded_regexes() -> list[str]:
+    """Read `exclude_re` from the config, by the same rule as the globs."""
+    text = CONFIG.read_text(encoding="utf-8")
+    match = re.search(r"^exclude_re\s*=\s*\[(.*?)^\]", text, re.DOTALL | re.MULTILINE)
+    assert match is not None, "exclude_re is absent from the mutants config"
+    body = "\n".join(
+        line
+        for line in match.group(1).splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    # TOML escapes a backslash inside a basic string, so `\\(` on the page is the
+    # regex `\(`. Undo that one level to recover the pattern cargo-mutants reads.
+    return [entry.replace("\\\\", "\\") for entry in re.findall(r'"([^"]+)"', body)]
+
+
+def _every_mutant() -> list[str]:
+    """List every mutant in the workspace, with the exclusions turned off."""
+    cargo = shutil.which("cargo")
+    assert cargo is not None, "cargo is on the path wherever cargo-mutants is"
+    listing = subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
+        [cargo, "mutants", "--list", "--no-config"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert listing.returncode == 0, listing.stderr
+    return listing.stdout.splitlines()
 
 
 def _binding_sources() -> set[str]:
@@ -128,4 +167,27 @@ def test_the_glob_matcher_distinguishes_the_shapes_it_is_used_with() -> None:
     assert _matches("crates/valgebra-py/src/lib.rs", "crates/valgebra-py/src/lib.rs")
     assert not _matches(
         "crates/valgebra-py/src/lib.rs", "crates/valgebra-py/src/check/lib.rs"
+    )
+
+
+@pytest.mark.skipif(
+    shutil.which("cargo-mutants") is None, reason="cargo-mutants is not installed"
+)
+def test_no_excused_mutant_has_outlived_its_subject() -> None:
+    # `--list` applies the exclusions, so the unfiltered listing is the universe
+    # to match against; matching the filtered one would excuse every entry that
+    # works and every entry that is dead alike.
+    mutants = _every_mutant()
+    assert len(mutants) >= 100, f"the mutant listing returned {len(mutants)} lines"
+
+    patterns = _excluded_regexes()
+    assert patterns, "the exclusion list parsed empty"
+    stale = sorted(
+        pattern
+        for pattern in patterns
+        if not any(re.search(pattern, mutant) for mutant in mutants)
+    )
+    assert not stale, (
+        f"exclusions matching no mutant: {stale}. "
+        "Delete each with the argument beside it, or fix the pattern."
     )
