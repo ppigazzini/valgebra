@@ -58,6 +58,27 @@ doc = '[{"a": 1}, {"b": "x"}]'
 assert v.is_valid_json(doc) == v.is_valid(json.loads(doc))
 ```
 
+Two documents are held to the JSON grammar where `json.loads` is looser, so the
+two paths part on those and nowhere else: the non-standard float tokens (below),
+and an escape naming a **lone surrogate**. `"\ud800"` is a half of a pair that
+encodes no character, and the parser reports `json_invalid` where `json.loads`
+builds a `str` the object path admits.
+
+```python
+import json
+
+from valgebra import ValidationError, Validator
+
+text = Validator(str)
+assert text.is_valid(json.loads(r'"\ud800"'))  # the object path admits it
+assert not text.is_valid_json(r'"\ud800"')  # the JSON grammar does not
+
+try:
+    text.validate_json(r'"\ud800"')
+except ValidationError as error:
+    assert error.code == "json_invalid"
+```
+
 This equivalence is locked by tests over a corpus spanning the JSON value model.
 
 ## JSON-to-Python value mapping

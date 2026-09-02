@@ -150,6 +150,22 @@ in place of a fully formal proof.
 The soundness is relative to a small, explicit trust base:
 
 - `isinstance` and the PyO3 conversions report Python's own membership faithfully.
+- **What a value answers is a function of the value.** Membership asks a value
+  questions through Python — `isinstance`, `__eq__`, a rich comparison, `__len__`,
+  `%`, a predicate — and reads the answers as facts about it. A method that
+  answers differently on two calls with the same argument is not describing a
+  set, and both the walk and the comparison operators are built on the assumption
+  that none does. Two rules rest on it directly, and neither can check it:
+  `A & ~A` is decided empty for every `A`, which holds only because `A` admits a
+  given value or does not; and a bound conjunction is decided unsatisfiable by
+  comparing the *bounds*, which holds only because a value ordered against one
+  is ordered the same way against the other. A class whose `__instancecheck__`
+  alternates, or a predicate that flips, gets a `True` no value supports.
+- **A value's length is the length of what the walk reads.** `MinLen`/`MaxLen`
+  call `__len__`, while a sequence schema walks the storage the container holds.
+  For every builtin these are the same number; a subclass that overrides one and
+  not the other has two lengths, and the two constraints then describe different
+  sets.
 - The JSON parser (jiter) yields the value `json.loads` would, so the JSON path's
   denotation matches the object path's.
 - The crates contain no `unsafe`, so there is no memory-safety obligation beyond
@@ -157,7 +173,18 @@ The soundness is relative to a small, explicit trust base:
 - **Predicate refinements are opaque.** A `Predicate` constraint runs arbitrary
   Python; valgebra checks that it returned truthy, and the soundness of *that*
   leaf is the caller's. Regex constraints are matched natively and related only
-  by syntactic identity.
+  by syntactic identity, and match the text of a `str`: a string carrying a lone
+  surrogate has no such text and matches no pattern.
+- **A literal is a singleton where its constant's equality is Python's own.**
+  `Literal[c]` denotes `{x | type(x) is type(c) and x == c}`. For a builtin
+  scalar that is one value; for a constant whose class defines `__eq__` it is
+  whatever that method admits, and for `float("nan")`, which is equal to nothing
+  including itself, it is the empty set.
+- **The values are the finite ones.** A guarded fixpoint denotes the values built
+  by finitely many unfoldings, which is what makes membership an induction on the
+  value. A value that contains itself is not a large member: it is outside the
+  model, which is why the identity guard reports `recursion_loop` rather than
+  deciding.
 - **The value holds still for the length of the call.** Membership is a claim
   about the value the walk read, so a value that changes while it is being read
   has no membership answer. A change the walk can see — a container whose size
