@@ -47,7 +47,7 @@ def _schemas() -> st.SearchStrategy[object]:
     # schema in its own right and is covered by `tests/test_literals.py`.
     leaf = st.one_of(
         st.sampled_from(_SCALARS),
-        st.sampled_from(_LITERALS).map(lambda value: Literal[value]),
+        st.sampled_from(_LITERALS).map(lambda value: Literal[value]),  # ty: ignore[invalid-type-form]
         _refinements(),
     )
     return st.recursive(

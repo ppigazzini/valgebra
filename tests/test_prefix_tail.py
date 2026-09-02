@@ -8,6 +8,7 @@ is the prefix-free (homogeneous) case, and `[T, T, ...]` is the non-empty list.
 import sys
 import typing
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 
@@ -78,12 +79,12 @@ requires_unpacking = pytest.mark.skipif(
 )
 
 
-def _starred(alias: object) -> object:
+def _starred(alias: Any) -> object:
     """`*alias`, without the star syntax the support floor cannot parse."""
     return next(iter(alias))
 
 
-def _unpacked(alias: object) -> object:
+def _unpacked(alias: Any) -> object:
     """`Unpack[alias]`, the other spelling of the same thing."""
     return typing.Unpack[alias]
 
@@ -93,7 +94,7 @@ def _unpacked(alias: object) -> object:
 def test_an_unpacked_variadic_tuple_is_the_prefix_and_tail_form(
     spell: Callable[[object], object],
 ) -> None:
-    schema = Validator(tuple[int, spell(tuple[str, ...])])
+    schema = Validator(tuple[int, spell(tuple[str, ...])])  # ty: ignore[invalid-type-form]
     assert schema.is_valid((1,))
     assert schema.is_valid((1, "a", "b"))
     assert not schema.is_valid((1, 2))
@@ -105,7 +106,7 @@ def test_an_unpacked_variadic_tuple_is_the_prefix_and_tail_form(
 
 @requires_unpacking
 def test_an_unpacked_fixed_tuple_splices_its_elements() -> None:
-    schema = Validator(tuple[bool, _starred(tuple[int, str])])
+    schema = Validator(tuple[bool, _starred(tuple[int, str])])  # ty: ignore[invalid-type-form]
     assert schema.is_valid((True, 1, "a"))
     assert not schema.is_valid((True, 1))
     assert not schema.is_valid((1, 1, "a"))
@@ -114,7 +115,7 @@ def test_an_unpacked_fixed_tuple_splices_its_elements() -> None:
 
 @requires_unpacking
 def test_an_unpacked_tuple_alone_is_its_own_shape() -> None:
-    schema = Validator(tuple[_starred(tuple[str, ...])])
+    schema = Validator(tuple[_starred(tuple[str, ...])])  # ty: ignore[invalid-type-form]
     assert schema.is_valid(())
     assert schema.is_valid(("a", "b"))
     assert not schema.is_valid((1,))
@@ -125,11 +126,14 @@ def test_an_element_after_the_tail_is_refused() -> None:
     # A sequence carries a fixed prefix and then a repeating tail, with nothing
     # after it. Reading this as any other shape would admit a different set.
     with pytest.raises(NotImplementedError, match="nothing may follow the tail"):
-        Validator(tuple[_starred(tuple[int, ...]), str])
+        Validator(tuple[_starred(tuple[int, ...]), str])  # ty: ignore[invalid-type-form]
 
 
 @requires_unpacking
 def test_an_unpacked_type_variable_tuple_is_refused() -> None:
     # `*Ts` binds no element types at runtime, so there is nothing to check.
     with pytest.raises(NotImplementedError, match="only a tuple can be unpacked"):
-        Validator(tuple[int, typing.Unpack[typing.TypeVarTuple("Ts")]])
+        Validator(
+            # ty: ignore[invalid-type-form,invalid-legacy-type-variable]
+            tuple[int, typing.Unpack[typing.TypeVarTuple("Ts")]]
+        )

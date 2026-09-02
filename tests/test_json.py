@@ -168,7 +168,7 @@ def _json_schemas() -> st.SearchStrategy[object]:
         st.sampled_from([int, float, bool, str, None, object]),
         # Spelled `Literal[v]`: the leaf is also a generic's argument, where a
         # bare value names a type rather than being one.
-        st.sampled_from([0, 1, "a", "", True, 1.5]).map(lambda value: Literal[value]),
+        st.sampled_from([0, 1, "a", "", True, 1.5]).map(lambda value: Literal[value]),  # ty: ignore[invalid-type-form]
         st.integers(min_value=-3, max_value=3).map(lambda k: Annotated[int, at.Ge(k)]),
     )
     return st.recursive(

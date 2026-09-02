@@ -91,7 +91,7 @@ def _literal(const: object) -> Spec:
     one. The bare spelling denotes the same set and is covered by
     ``tests/test_literals.py``.
     """
-    return (Literal[const], lambda x: type(x) is type(const) and x == const)
+    return (Literal[const], lambda x: type(x) is type(const) and x == const)  # ty: ignore[invalid-type-form]
 
 
 def _ge_pred(k: int) -> Pred:

@@ -245,13 +245,13 @@ def test_an_init_only_field_is_not_an_attribute() -> None:
     # `InitVar` names a constructor parameter; the instance does not keep it.
     schema = Validator(WithInitVar)
     assert schema.is_valid(WithInitVar(1, 2))
-    assert not schema.is_valid(WithInitVar("no", 2))
+    assert not schema.is_valid(WithInitVar("no", 2))  # ty: ignore[invalid-argument-type]
 
 
 def test_a_class_variable_is_not_an_attribute_of_the_instance() -> None:
     schema = Validator(WithClassVar)
     assert schema.is_valid(WithClassVar(1))
-    assert not schema.is_valid(WithClassVar("no"))
+    assert not schema.is_valid(WithClassVar("no"))  # ty: ignore[invalid-argument-type]
 
 
 def test_a_field_the_constructor_does_not_take_is_still_checked() -> None:
@@ -259,7 +259,7 @@ def test_a_field_the_constructor_does_not_take_is_still_checked() -> None:
     good = WithLateField(1)
     schema = Validator(WithLateField)
     assert schema.is_valid(good)
-    good.derived = "no"
+    good.derived = "no"  # ty: ignore[invalid-assignment]
     assert not schema.is_valid(good)
 
 

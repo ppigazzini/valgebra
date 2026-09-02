@@ -142,7 +142,7 @@ def test_a_placeholder_kept_past_its_builder_is_refused() -> None:
     for build in (
         lambda: Validator(escaped),
         lambda: union(escaped, int),
-        lambda: Validator(list[escaped]),
+        lambda: Validator(list[escaped]),  # ty: ignore[invalid-type-form]
     ):
         with pytest.raises(ValueError, match="unresolved recursive placeholder"):
             build()

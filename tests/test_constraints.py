@@ -73,15 +73,30 @@ def test_multiple_of_handles_negatives_and_floats() -> None:
 
 
 @pytest.mark.parametrize(
-    ("operand", "member", "non_member"),
+    ("spec", "member", "non_member"),
     [
-        pytest.param(0.5, 1, 1.25, id="int-against-a-float-divisor"),
-        pytest.param(Fraction(1, 2), 1, Fraction(1, 4), id="int-against-a-fraction"),
-        pytest.param(Decimal(1), 3, Decimal("0.5"), id="int-against-a-decimal"),
+        pytest.param(
+            Annotated[int | float, at.MultipleOf(0.5)],
+            1,
+            1.25,
+            id="int-against-a-float-divisor",
+        ),
+        pytest.param(
+            Annotated[int | float, at.MultipleOf(Fraction(1, 2))],
+            1,
+            Fraction(1, 4),
+            id="int-against-a-fraction",
+        ),
+        pytest.param(
+            Annotated[int | float, at.MultipleOf(Decimal(1))],
+            3,
+            Decimal("0.5"),
+            id="int-against-a-decimal",
+        ),
     ],
 )
 def test_a_divisor_of_another_type_divides(
-    operand: object,
+    spec: object,
     member: object,
     non_member: object,
 ) -> None:
@@ -89,7 +104,7 @@ def test_a_divisor_of_another_type_divides(
     # value that does not know the divisor defers to its `__rmod__`. Reading only
     # the value's `__mod__` reports `NotImplemented`, which is truthy and so reads
     # as a non-zero remainder -- every such pair a non-multiple.
-    schema = Validator(Annotated[int | float | object, at.MultipleOf(operand)])
+    schema = Validator(spec)
     assert schema.is_valid(member)
     assert not schema.is_valid(non_member)
 

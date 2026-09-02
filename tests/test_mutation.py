@@ -16,12 +16,15 @@ from __future__ import annotations
 
 import sys
 import threading
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import annotated_types as at
 import pytest
 
 from valgebra import ValidationError, Validator
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 MUTATED = "mutated_during_validation"
 
@@ -94,7 +97,11 @@ def test_an_unmutated_container_is_unaffected() -> None:
     assert not Validator(frozenset[int]).is_valid({1})
 
 
-def _hammer(validator: Validator, shared: object, mutate: object) -> list[str]:
+def _hammer(
+    validator: Validator,
+    shared: Any,
+    mutate: Callable[[Any], None],
+) -> list[str]:
     """Read `shared` from four threads while two others resize it."""
     escaped: list[str] = []
     stop = threading.Event()
@@ -150,7 +157,7 @@ def _resize_set(container: set[int]) -> None:
 )
 def test_a_container_written_by_another_thread_never_escapes_as_an_exception(
     schema: object,
-    shared: object,
-    mutate: object,
+    shared: Any,
+    mutate: Callable[[Any], None],
 ) -> None:
     assert _hammer(Validator(schema), shared, mutate) == []

@@ -61,7 +61,7 @@ def test_a_set_reports_its_failures_in_an_order_the_value_fixes() -> None:
     schema = Validator(set[int])
     with pytest.raises(ValidationError) as info:
         schema.validate({"d", "b", "a", "c"})
-    reported = [item["value"] for item in info.value.errors]
+    reported = [str(item["value"]) for item in info.value.errors]
     assert reported == sorted(reported)
     assert len(reported) == 4
 

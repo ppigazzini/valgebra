@@ -1,5 +1,5 @@
 from types import GenericAlias
-from typing import ForwardRef, Literal, Union
+from typing import ForwardRef, Literal
 
 import pytest
 
@@ -55,7 +55,7 @@ _FORWARD_REFERENCES = [
     pytest.param(GenericAlias(dict, (_UNRESOLVED, int)), id="dict-key"),
     pytest.param(GenericAlias(dict, (str, _UNRESOLVED)), id="dict-value"),
     pytest.param(GenericAlias(tuple, (_UNRESOLVED, int)), id="tuple"),
-    pytest.param(Union[ForwardRef(_UNRESOLVED), None], id="optional"),  # noqa: UP007
+    pytest.param(GenericAlias(list, (ForwardRef(_UNRESOLVED),)), id="ForwardRef"),
 ]
 
 
