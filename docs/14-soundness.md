@@ -75,10 +75,12 @@ membership test for those sets, and `Literal` adds the same-type guard that keep
 
 ### Recursion terminates and stays exact
 
-A `recursive` schema is a guarded (contractive) fixpoint: every back-edge sits
-under a structural constructor. Membership unfolds that fixpoint against the
-value in hand. Because the value is a **finite** Python object, the unfolding is
-finite, and two guards keep it so:
+A `recursive` schema is guarded: every back-edge sits under a structural
+constructor. Membership unfolds the definition against the value in hand, and
+because the value is a **finite** Python object each unfolding asks about a
+strictly smaller value — so the set is defined by well-founded recursion on the
+value rather than chosen among fixpoints, and the guard is what makes that
+recursion well founded. Two further guards keep the unfolding finite in the walk:
 
 - an object-identity guard rejects a value that contains itself
   (`recursion_loop`) rather than looping, and
