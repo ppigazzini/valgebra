@@ -17,7 +17,10 @@ A `ValidationError` exposes:
   - `code` — a stable, machine-readable code (e.g. `int_type`, `missing_key`,
     `too_short`).
   - `path` — the location of the offending value from the root, a tuple of
-    string keys and integer indices (empty at the root).
+    string keys and integer indices (empty at the root). A dict key that is not
+    a string has no spelling here, so it appears as its `repr`: the segment names
+    the key rather than being one a caller can index back with. A string key is
+    itself, in full.
   - `message` — the rendered one-line human message.
   - `expected` — a short label of the expected set (e.g. `int`).
   - `value` — a repr-style summary of the offending value.
@@ -200,7 +203,10 @@ keeps working. New codes may appear for node kinds that gain a distinct failure.
 ## Determinism
 
 For a given schema and value the error model is deterministic: the same codes,
-paths, and order across runs and platforms. Tools can diff it. The exact output
+paths, and order across runs and platforms. Tools can diff it. A set has no
+positions, so its failing elements are reported in the order of what they say
+rather than the order the interpreter hands them over, which moves with the hash
+seed; `fail_fast` keeps the first of that order. The exact output
 is locked by snapshot tests (the message format on the Rust side, the structured
 `errors` on the Python side), so any change to it is reviewed, never silent.
 

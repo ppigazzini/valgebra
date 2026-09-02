@@ -1,10 +1,11 @@
 //! Building the structured [`Violation`] values the explain walk reports.
 
 use pyo3::prelude::*;
+use pyo3::types::PyString;
 use valgebra_core::{PathSegment, Schema, Violation};
 
 use crate::check::ctx::Ctx;
-use crate::errors::{summarize, truncate};
+use crate::errors::summarize;
 use crate::input::Value;
 
 /// A type/value mismatch for a leaf schema.
@@ -72,10 +73,16 @@ pub(crate) fn summarize_value(value: &Value<'_, '_>) -> String {
     }
 }
 
-/// A short, printable label for a mapping key, used in error paths.
+/// The label a mapping key carries in an error path.
+///
+/// A string key is itself, in full: the path is what a caller walks back down to
+/// the value, and a truncated key indexes nothing. A key of any other type has no
+/// spelling in a path made of strings and integers, so it appears as its `repr` —
+/// which names the key without pretending to be it, and is why the error model
+/// says a path is walkable only when every key is a string.
 pub(crate) fn key_label(key: &Bound<'_, PyAny>) -> String {
-    match key.str() {
-        Ok(text) => truncate(&text.to_string(), 40),
+    match key.cast::<PyString>() {
+        Ok(text) => text.to_string(),
         Err(_) => summarize(key),
     }
 }

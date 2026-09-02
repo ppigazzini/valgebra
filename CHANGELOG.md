@@ -27,6 +27,18 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Fixed
 
+- A set reports its failing elements in an order the value fixes rather than the
+  one the interpreter hands them over in, which moves with the hash seed. A set
+  has no positions, so an element failure carries no index and only what it
+  reports distinguishes it; the report is ordered by that, and `fail_fast` keeps
+  the first of that order. The error model promised this determinism and a set
+  was where it did not hold.
+
+- A dict key that is not a string appears in an error path as its full `repr`
+  instead of a summary cut at forty characters, and a string key appears whole.
+  A path is what a caller walks back down to the value, and a truncated key
+  indexes nothing.
+
 - A refinement marker that would be dropped is refused instead. Four shapes
   silently produced a schema that admits either everything the marker excludes or
   nothing at all: a compiled `re.Pattern`'s flags were discarded, so a

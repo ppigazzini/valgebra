@@ -611,6 +611,9 @@ fn check_elements(
     if !(collection.is_kind)(container) {
         return type_fail(collection.code, collection.word, value, path, ctx, out);
     }
+    if ctx.mode.explains() {
+        return explain_elements(element, container, value, path, ctx, out);
+    }
     let mut ok = true;
     let scan = scan_set(container, ctx, |item| {
         ok &= member(element, &Value::Py(item), path, ctx, out);
@@ -625,6 +628,52 @@ fn check_elements(
         Scan::Stopped => false,
         Scan::Unreadable => mutated(value, path, ctx, out),
     }
+}
+
+/// Report a set's failing elements in an order that is a property of the value
+/// rather than of the run.
+///
+/// A set has no positions, so an element failure carries no index and the only
+/// thing distinguishing two of them is what they say. Iteration order is the
+/// interpreter's and moves with the hash seed, so following it means the same
+/// schema and the same value report differently between runs — which the error
+/// model promises they do not. Every element is walked and the failures are
+/// ordered by what they report; fail-fast then keeps the first of *that* order,
+/// which costs a full scan of a set that is already failing.
+fn explain_elements(
+    element: &Schema,
+    container: &Bound<'_, PyAny>,
+    value: &Value<'_, '_>,
+    path: &mut Vec<PathSegment>,
+    ctx: Ctx<'_>,
+    out: &mut Vec<Violation>,
+) -> bool {
+    let mut failures: Vec<(String, Vec<Violation>)> = Vec::new();
+    let scan = scan_set(container, ctx, |item| {
+        let mut reported = Vec::new();
+        if !member(element, &Value::Py(item), path, ctx, &mut reported) {
+            let key = reported
+                .first()
+                .map(|violation| format!("{} {}", violation.value_summary, violation.code))
+                .unwrap_or_default();
+            failures.push((key, reported));
+        }
+        ControlFlow::Continue(())
+    });
+    if matches!(scan, Scan::Unreadable) {
+        return mutated(value, path, ctx, out);
+    }
+    let ok = failures.is_empty();
+    failures.sort_by(|left, right| left.0.cmp(&right.0));
+    let reported = if ctx.mode.stops_at_first() {
+        1
+    } else {
+        failures.len()
+    };
+    for (_, group) in failures.into_iter().take(reported) {
+        out.extend(group);
+    }
+    ok
 }
 
 /// Membership for a keyed map: named fields, then a default clause for every
