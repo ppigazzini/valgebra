@@ -27,6 +27,21 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Fixed
 
+- A `recursive` definition nested inside another resolves its self-reference
+  wherever the build put it. An inner fixpoint whose body names the *outer*
+  variable compiles to a definition of its own, and the outer marker lands in
+  that definition rather than in the outer body — so resolving the body alone
+  left the marker dangling, and a dangling marker matches no value: the schema
+  silently rejected members. Contractivity is checked over the whole system of
+  definitions for the same reason, which refuses `X = ~X` and `X = X | list[Y]`
+  written across a nesting; both built before and denoted no fixpoint.
+
+- A placeholder kept past the `recursive` builder it was handed to is refused at
+  construction. The placeholder is an ordinary validator, so nothing stops a
+  caller storing it, and what it stands for stops existing when the builder
+  returns; using one afterwards built a validator that admitted no value and said
+  nothing about why.
+
 - A container that changes size while it is being checked is reported as
   `mutated_during_validation` instead of aborting the interpreter. Membership
   runs Python at almost every entry of a dict or a set — a predicate, an

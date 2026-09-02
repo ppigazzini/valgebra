@@ -1164,12 +1164,78 @@ impl Schema {
     /// check, rather than an arm per constructor stating it again.
     #[must_use]
     pub fn occurs_unguarded(&self, target: DefIx, guarded: Guarded) -> bool {
+        self.occurs_unguarded_under(target, guarded, &[])
+    }
+
+    /// [`occurs_unguarded`](Self::occurs_unguarded) following `Ref` edges through
+    /// `defs`, so an occurrence one definition away is reached.
+    ///
+    /// A body that names only itself is answered by the term: every path from it
+    /// to the reference is spelled out in the term. A body that names *another*
+    /// definition is not — an inner fixpoint whose own body mentions this one
+    /// puts the occurrence behind a `Ref`, where a term walk sees a leaf. The
+    /// contractivity condition is about the whole system of definitions, so the
+    /// check reads the whole system; with no definitions the two questions are
+    /// the same one, which is why the term entry point is this with an empty
+    /// graph rather than a second traversal.
+    ///
+    /// A definition already open on the path is not re-entered: the walk that
+    /// opened it is still looking for the target, so a second visit adds no path
+    /// to it and would not terminate.
+    #[must_use]
+    pub fn occurs_unguarded_under(&self, target: DefIx, guarded: Guarded, defs: &[Schema]) -> bool {
+        self.occurs_unguarded_within(target, guarded, defs, &mut Vec::new())
+    }
+
+    fn occurs_unguarded_within(
+        &self,
+        target: DefIx,
+        guarded: Guarded,
+        defs: &[Schema],
+        visiting: &mut Vec<DefIx>,
+    ) -> bool {
         if let Schema::Ref(id) = self {
-            return *id == target && guarded == Guarded::No;
+            if guarded == Guarded::Yes {
+                return false;
+            }
+            if *id == target {
+                return true;
+            }
+            if visiting.contains(id) {
+                return false;
+            }
+            let Some(definition) = defs.get(id.get()) else {
+                return false;
+            };
+            visiting.push(*id);
+            let reaches = definition.occurs_unguarded_within(target, Guarded::No, defs, visiting);
+            visiting.pop();
+            return reaches;
         }
         let below = guarded.join(self.guards_children());
         self.children()
-            .any(|child| child.occurs_unguarded(target, below))
+            .any(|child| child.occurs_unguarded_within(target, below, defs, visiting))
+    }
+
+    /// Whether this schema carries a self-reference marker whose token `is_open`
+    /// does not recognise.
+    ///
+    /// A finished schema carries no marker at all: `recursive` resolves the one
+    /// it minted into a back edge before it returns. A marker reaches
+    /// construction two ways, and only one of them is legitimate — from inside
+    /// the builder of the definition it stands for, where the schemas the caller
+    /// composes carry it until that definition closes; or from a placeholder kept
+    /// past the call it was handed to, which stands for a fixpoint nobody is
+    /// defining any more. Which token is which is the caller's fact, so the
+    /// caller brings the test and this walk brings the traversal.
+    #[must_use]
+    pub fn has_escaped_self_ref(&self, is_open: &dyn Fn(u64) -> bool) -> bool {
+        match self {
+            Schema::SelfRef(token) => !is_open(*token),
+            _ => self
+                .children()
+                .any(|child| child.has_escaped_self_ref(is_open)),
+        }
     }
 
     /// Return a copy with every record-shaped [`Schema::KeyedMap`] in the tree

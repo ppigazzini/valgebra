@@ -51,6 +51,43 @@ pub(crate) const MAX_DEFINITIONS: usize = 128;
 /// whose sizes already sum past it is rejected, so the doubling stops early
 /// rather than exhausting memory.
 pub(crate) const MAX_SCHEMA_NODES: usize = 100_000;
+thread_local! {
+    /// The self-reference tokens of the `recursive` definitions being built on
+    /// this thread, innermost last.
+    ///
+    /// A placeholder validator says nothing about where it means something: it is
+    /// an ordinary `Validator`, and a caller can keep it past the builder it was
+    /// handed to. Its token sits here for exactly the span in which the fixpoint
+    /// it stands for is being defined, which is what lets construction tell a
+    /// marker that is about to become a back edge from one that outlived its
+    /// call.
+    static OPEN_DEFINITIONS: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
+}
+
+/// One `recursive` definition open on this thread, closed when the guard drops.
+pub(crate) struct OpenDefinition;
+
+impl OpenDefinition {
+    /// Open `token` for as long as the returned guard lives.
+    pub(crate) fn open(token: u64) -> Self {
+        OPEN_DEFINITIONS.with_borrow_mut(|open| open.push(token));
+        OpenDefinition
+    }
+}
+
+impl Drop for OpenDefinition {
+    fn drop(&mut self) {
+        OPEN_DEFINITIONS.with_borrow_mut(|open| {
+            open.pop();
+        });
+    }
+}
+
+/// Whether `token` names a definition being built on this thread.
+fn definition_is_open(token: u64) -> bool {
+    OPEN_DEFINITIONS.with_borrow(|open| open.contains(&token))
+}
+
 fn math_floor_ceil(py: Python<'_>) -> PyResult<&'static (Py<PyAny>, Py<PyAny>)> {
     MATH_FLOOR_CEIL.get_or_try_init(py, || {
         let math = py.import("math")?;
@@ -376,6 +413,26 @@ impl Validator {
                  validator with itself in an unbounded loop, which doubles its size each \
                  step; building it would exhaust memory."
             )));
+        }
+        // The placeholder a `recursive` builder receives is an ordinary validator,
+        // so a caller can keep it and hand it back after the call it stands for
+        // has finished -- at which point it names a fixpoint nobody is defining.
+        // A marker for a definition still open is the ordinary way a body is
+        // written and passes; one for a closed definition denotes no set, so it
+        // is refused here rather than validating as a value nothing matches.
+        let is_open: &dyn Fn(u64) -> bool = &definition_is_open;
+        if schema.has_escaped_self_ref(is_open)
+            || definitions
+                .iter()
+                .any(|definition| definition.has_escaped_self_ref(is_open))
+        {
+            return Err(PyValueError::new_err(
+                "schema holds an unresolved recursive placeholder: the validator a \
+                 recursive(...) builder receives stands for the schema being defined \
+                 and is only meaningful inside that call. Build the schema that uses \
+                 it inside the builder, and use the validator recursive(...) returns \
+                 outside.",
+            ));
         }
         Ok(Validator::new(schema, literals, definitions))
     }

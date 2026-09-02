@@ -1,8 +1,10 @@
+from collections.abc import Callable
+
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import ValidationError, Validator, recursive, union
+from valgebra import ValidationError, Validator, complement, recursive, union
 
 json_value = recursive(
     lambda j: union(None, bool, int, float, str, [j], {str: j}),
@@ -78,6 +80,72 @@ def test_mutual_recursion_through_nested_builders() -> None:
 def test_non_contractive_body_is_rejected() -> None:
     with pytest.raises(ValueError, match="contractive"):
         recursive(lambda r: union(int, r))
+
+
+def test_an_inner_definition_may_name_the_one_being_built() -> None:
+    # An inner fixpoint whose body names the outer variable is a definition that
+    # refers back across the nesting. The marker for the outer one lands in the
+    # inner definition rather than in the outer body, so resolving only the body
+    # would leave it dangling -- and a dangling marker matches no value, which
+    # reads as an ordinary non-member.
+    schema = recursive(
+        lambda outer: union(
+            None, {"child": recursive(lambda inner: union(outer, [inner]))}
+        )
+    )
+    assert schema.is_valid(None)
+    assert schema.is_valid({"child": None})
+    assert schema.is_valid({"child": [None]})
+    assert schema.is_valid({"child": [[None]]})
+    assert schema.is_valid({"child": {"child": None}})
+    assert not schema.is_valid({"child": 5})
+
+
+@pytest.mark.parametrize(
+    "builder",
+    [
+        # X = ~X, which no set satisfies.
+        pytest.param(
+            lambda outer: recursive(lambda _inner: complement(outer)),
+            id="complement-across-the-nesting",
+        ),
+        # X = X | list[Y], where the occurrence of X is not under a constructor.
+        pytest.param(
+            lambda outer: recursive(lambda inner: union(outer, [inner])),
+            id="union-across-the-nesting",
+        ),
+    ],
+)
+def test_an_unguarded_occurrence_behind_a_definition_is_rejected(
+    builder: Callable[[Validator], object],
+) -> None:
+    # Contractivity is a property of the system of definitions, not of one body:
+    # the occurrence sits behind a `Ref`, which a walk over the body alone reads
+    # as a leaf.
+    with pytest.raises(ValueError, match="contractive"):
+        recursive(builder)
+
+
+def test_a_placeholder_kept_past_its_builder_is_refused() -> None:
+    # The placeholder is an ordinary validator, so nothing stops a caller keeping
+    # it; what it stands for stops existing when the builder returns. Using one
+    # afterwards builds a schema whose marker resolves to nothing, which would
+    # otherwise be a validator that silently admits no value.
+    kept: list[Validator] = []
+
+    def keep(placeholder: Validator) -> object:
+        kept.append(placeholder)
+        return union(None, [placeholder])
+
+    recursive(keep)
+    escaped = kept[0]
+    for build in (
+        lambda: Validator(escaped),
+        lambda: union(escaped, int),
+        lambda: Validator(list[escaped]),
+    ):
+        with pytest.raises(ValueError, match="unresolved recursive placeholder"):
+            build()
 
 
 def test_self_containing_value_is_rejected_as_a_loop() -> None:

@@ -29,7 +29,7 @@ use valgebra_core::{DefIx, Guarded, Schema, SeqKind, SeqRegex, fresh_self_token}
 pub use crate::exception::ValidationError;
 pub use crate::validator::Validator;
 
-use crate::validator::{MAX_DEFINITIONS, MAX_SCHEMA_DEPTH, MAX_SCHEMA_NODES};
+use crate::validator::{MAX_DEFINITIONS, MAX_SCHEMA_DEPTH, MAX_SCHEMA_NODES, OpenDefinition};
 
 use crate::build::{Pool, build_schema, combine};
 use crate::check::{WalkMode, WalkState, member};
@@ -97,21 +97,35 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
         py,
         Validator::new(Schema::SelfRef(token), Vec::new(), Vec::new()),
     )?;
-    let body_obj = builder.call1((placeholder,))?;
+    // The placeholder is meaningful for the length of the builder call: the
+    // schemas the caller composes inside it carry the marker, and construction
+    // has to tell those from a placeholder that outlives the call.
+    let body_obj = {
+        let _open = OpenDefinition::open(token);
+        builder.call1((placeholder,))?
+    };
     let mut literals = Pool::default();
     let mut definitions = Vec::new();
     let body = build_schema(&body_obj, &mut literals, &mut definitions)?;
     // The body becomes a definition; the self-reference resolves to it.
     let ref_id = DefIx::new(definitions.len());
-    let resolved = body.resolve_self(token, ref_id);
-    if resolved.occurs_unguarded(ref_id, Guarded::No) {
+    // The marker is resolved wherever the build put it. A `recursive` inside the
+    // body compiles to a definition of its own, and that definition may name
+    // *this* fixpoint, so the body is not the only place the marker lands.
+    for definition in &mut definitions {
+        *definition = definition.resolve_self(token, ref_id);
+    }
+    definitions.push(body.resolve_self(token, ref_id));
+    // Contractivity is a property of the whole system of definitions: an inner
+    // fixpoint that names this one puts the occurrence behind a `Ref`, which a
+    // walk over the body alone reads as a leaf.
+    if definitions[ref_id.get()].occurs_unguarded_under(ref_id, Guarded::No, &definitions) {
         return Err(PyValueError::new_err(
             "recursive schema is not contractive: the recursive reference must \
              occur under a structural constructor (a list, tuple, set, dict, \
              record, or object)",
         ));
     }
-    definitions.push(resolved);
     Validator::checked(Schema::Ref(ref_id), literals.into_items(), definitions)
 }
 
