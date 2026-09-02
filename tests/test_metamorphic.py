@@ -95,7 +95,12 @@ def test_double_complement_preserves_membership(spec: object) -> None:
     compiled = _build(spec)
     if compiled is None:
         return
-    doubled = Validator(complement(complement(spec)))
+    # `complement` cancels a complement where it is built, so `~~s` *is* `s` and
+    # comparing the two asks nothing. The follow-up schema is one the fold does
+    # not reach: a complement of a join whose other member admits nothing, which
+    # denotes the same set through a shape the constructors leave standing.
+    doubled = complement(union(complement(spec), Validator(nothing)))
+    assert doubled != compiled
     for value in _UNIVERSE:
         assert doubled.is_valid(value) == compiled.is_valid(value)
 
