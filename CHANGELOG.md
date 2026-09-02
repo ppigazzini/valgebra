@@ -27,6 +27,14 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Fixed
 
+- A `MultipleOf` divisor of a different type than the value divides. The check
+  reads the `%` operator rather than the value's `__mod__` alone, and half of
+  what `%` means lives on the divisor: a value that does not know it answers
+  `NotImplemented`, the divisor's `__rmod__` is asked next, and `NotImplemented`
+  is truthy — so it read as a non-zero remainder. `Annotated[int,
+  MultipleOf(0.5)]` refused every integer, and a `Fraction` or `Decimal` divisor
+  refused every value.
+
 - A `recursive` definition nested inside another resolves its self-reference
   wherever the build put it. An inner fixpoint whose body names the *outer*
   variable compiles to a definition of its own, and the outer marker lands in

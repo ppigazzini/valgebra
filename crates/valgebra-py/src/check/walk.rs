@@ -1474,11 +1474,16 @@ pub(crate) fn literal_matches(
 }
 
 /// Whether `value % operand == 0`. The remainder is zero iff it is falsy. Returns
-/// the result so a raising `__mod__` is folded by the caller (a non-numeric value
-/// whose modulo is not defined is then a non-multiple).
+/// the result so a raising `%` is folded by the caller (a non-numeric value whose
+/// modulo is not defined is then a non-multiple).
+///
+/// The operator, not `__mod__` by name: the dunder is only half of what `%`
+/// means. A type that does not know the operand answers `NotImplemented` and the
+/// operand's `__rmod__` is asked next, which is how a `Fraction` or a `Decimal`
+/// divides an `int` — and `NotImplemented` is truthy, so reading the dunder's
+/// result directly reports every such pair a non-multiple.
 fn is_multiple_of(value: &Bound<'_, PyAny>, operand: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let remainder = value.call_method1("__mod__", (operand,))?;
-    Ok(!remainder.is_truthy()?)
+    Ok(!value.rem(operand)?.is_truthy()?)
 }
 
 /// Run a user predicate and report whether it returned a truthy result.

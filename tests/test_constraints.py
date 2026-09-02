@@ -7,6 +7,8 @@ admits invalid values, so every constraint is checked in both directions.
 
 from __future__ import annotations
 
+from decimal import Decimal
+from fractions import Fraction
 from typing import Annotated
 
 import annotated_types as at
@@ -68,6 +70,28 @@ def test_multiple_of_handles_negatives_and_floats() -> None:
     assert Validator(Annotated[int, at.MultipleOf(3)]).is_valid(-6)
     assert Validator(Annotated[float, at.MultipleOf(0.5)]).is_valid(1.5)
     assert not Validator(Annotated[float, at.MultipleOf(0.5)]).is_valid(1.3)
+
+
+@pytest.mark.parametrize(
+    ("operand", "member", "non_member"),
+    [
+        pytest.param(0.5, 1, 1.25, id="int-against-a-float-divisor"),
+        pytest.param(Fraction(1, 2), 1, Fraction(1, 4), id="int-against-a-fraction"),
+        pytest.param(Decimal(1), 3, Decimal("0.5"), id="int-against-a-decimal"),
+    ],
+)
+def test_a_divisor_of_another_type_divides(
+    operand: object,
+    member: object,
+    non_member: object,
+) -> None:
+    # `%` is the operator, and half of what it means lives on the *operand*: a
+    # value that does not know the divisor defers to its `__rmod__`. Reading only
+    # the value's `__mod__` reports `NotImplemented`, which is truthy and so reads
+    # as a non-zero remainder -- every such pair a non-multiple.
+    schema = Validator(Annotated[int | float | object, at.MultipleOf(operand)])
+    assert schema.is_valid(member)
+    assert not schema.is_valid(non_member)
 
 
 def test_multiple_of_on_a_non_number_is_not_a_multiple() -> None:
