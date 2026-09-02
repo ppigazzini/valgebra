@@ -1,3 +1,4 @@
+import threading
 from collections.abc import Callable
 
 import pytest
@@ -146,6 +147,57 @@ def test_a_placeholder_kept_past_its_builder_is_refused() -> None:
     ):
         with pytest.raises(ValueError, match="unresolved recursive placeholder"):
             build()
+
+
+def test_a_placeholder_is_not_read_as_a_later_definition_self_reference() -> None:
+    # The refusal above works by asking whether the placeholder's marker names a
+    # definition being built right now. Inside a *later* `recursive` builder the
+    # answer for that builder's own marker is yes, so the two must not share one:
+    # if they did, the escaped placeholder would resolve to this definition and
+    # build a schema the caller never wrote -- silently, since every check the
+    # binding makes would pass.
+    kept: list[Validator] = []
+
+    def keep(placeholder: Validator) -> object:
+        kept.append(placeholder)
+        return union(None, [placeholder])
+
+    recursive(keep)
+    escaped = kept[0]
+
+    with pytest.raises(ValueError, match="unresolved recursive placeholder"):
+        recursive(lambda _fresh: union(None, [escaped]))
+
+
+def test_a_placeholder_does_not_cross_a_thread_into_another_definition() -> None:
+    # The same claim where a per-thread marker would break it. Two threads each
+    # opening their first definition would be handed the same marker, and this
+    # thread's escaped placeholder would answer to the other thread's open
+    # definition. The markers are drawn from one counter for the whole process,
+    # so they cannot collide and the refusal holds wherever the placeholder goes.
+    kept: list[Validator] = []
+
+    def keep(placeholder: Validator) -> object:
+        kept.append(placeholder)
+        return union(None, [placeholder])
+
+    recursive(keep)
+    escaped = kept[0]
+    outcome: list[object] = []
+
+    def build_elsewhere() -> None:
+        try:
+            outcome.append(recursive(lambda _fresh: union(None, [escaped])))
+        except ValueError as err:
+            outcome.append(err)
+
+    worker = threading.Thread(target=build_elsewhere)
+    worker.start()
+    worker.join()
+    assert isinstance(outcome[0], ValueError), (
+        "an escaped placeholder built a schema on another thread"
+    )
+    assert "unresolved recursive placeholder" in str(outcome[0])
 
 
 def test_self_containing_value_is_rejected_as_a_loop() -> None:
