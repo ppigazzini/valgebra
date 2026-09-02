@@ -288,6 +288,7 @@ from typing import Literal
 
 from valgebra import ValidationError, Validator
 
+
 def report(spec: object) -> tuple[str, str]:
     try:
         Validator(spec).validate("x")
