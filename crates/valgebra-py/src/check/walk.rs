@@ -1630,6 +1630,166 @@ mod interpreter {
         fast
     }
 
+    /// A dict scan stops at the entry count it began with, and reports rather
+    /// than reads a dict whose size moved.
+    ///
+    /// The count is what keeps the iterator away from the state `PyO3` panics in,
+    /// and a panic is not one of the answers this library gives: it crosses the
+    /// FFI boundary as a `BaseException` no caller catches as a validation
+    /// failure. Driven against the scan rather than through a schema, because
+    /// the schema path needs a value that mutates itself mid-walk and the
+    /// question here is what the scan does with the count.
+    #[test]
+    fn a_dict_scan_visits_each_entry_once_and_stops_where_it_is_told() {
+        Python::attach(|py| {
+            let dict = PyDict::new(py);
+            for i in 0..5 {
+                dict.set_item(i, i).expect("set_item");
+            }
+
+            // Every entry, exactly once: a count that advanced by more than one
+            // per entry would visit fewer, and one that compared loosely would
+            // step past the end.
+            let mut seen = 0;
+            let scan = scan_dict(&dict, |_, _| {
+                seen += 1;
+                ControlFlow::Continue(())
+            });
+            assert!(matches!(scan, Scan::Complete));
+            assert_eq!(seen, 5, "each of the five entries is visited once");
+
+            // A visitor that breaks stops the scan, and the answer says so: a
+            // stop is not a complete reading, and the caller reports the miss
+            // that caused it rather than the container.
+            let mut before_break = 0;
+            let scan = scan_dict(&dict, |_, _| {
+                before_break += 1;
+                if before_break == 2 {
+                    ControlFlow::Break(())
+                } else {
+                    ControlFlow::Continue(())
+                }
+            });
+            assert!(matches!(scan, Scan::Stopped));
+            assert_eq!(before_break, 2);
+
+            // A dict that grows under the scan has no reading to answer from.
+            let moving = PyDict::new(py);
+            for i in 0..4 {
+                moving.set_item(i, i).expect("set_item");
+            }
+            let scan = scan_dict(&moving, |key, _| {
+                if key.extract::<i64>().unwrap_or(-1) == 0 {
+                    moving.set_item("added", 1).expect("set_item");
+                }
+                ControlFlow::Continue(())
+            });
+            assert!(
+                matches!(scan, Scan::Unreadable),
+                "a dict whose size moved is not readable"
+            );
+
+            // And one that shrinks, which is the same fact reached at the other
+            // end: the scan began expecting entries that are no longer there.
+            let shrinking = PyDict::new(py);
+            for i in 0..4 {
+                shrinking.set_item(i, i).expect("set_item");
+            }
+            let scan = scan_dict(&shrinking, |key, _| {
+                if key.extract::<i64>().unwrap_or(-1) == 0 {
+                    shrinking.del_item(3).expect("del_item");
+                }
+                ControlFlow::Continue(())
+            });
+            assert!(matches!(scan, Scan::Unreadable));
+        });
+    }
+
+    /// A value that changed under the walk is a non-member, and in explain mode
+    /// it says which failure it was.
+    ///
+    /// The code is valgebra-coined because it reports a failure of the *check*:
+    /// nothing about the value's contents was decided. A verdict of `true` here
+    /// would admit a value no reading of it supports.
+    #[test]
+    fn a_changed_container_is_a_non_member_that_names_itself() {
+        Python::attach(|py| {
+            let value = PyDict::new(py);
+            let state = WalkState::new();
+            let index = build_index(py, &Schema::Anything, &[], &[]);
+            let ctx = |mode| Ctx {
+                pool: &[],
+                defs: &[],
+                records: &index.records,
+                unions: &index.unions,
+                regexes: &index.regexes,
+                guard: &state.guard,
+                depth: &state.depth,
+                fatal: &state.fatal,
+                fatal_seen: &state.fatal_seen,
+                mode,
+            };
+
+            let mut out = Vec::new();
+            let held = mutated(&Value::Py(&value), &[], ctx(WalkMode::Explain), &mut out);
+            assert!(!held, "a value that changed under the walk is a non-member");
+            assert_eq!(out.len(), 1);
+            assert_eq!(out[0].code, MUTATED_CODE);
+            assert_eq!(out[0].expected, MUTATED_EXPECTED);
+
+            // Fast mode reports the same verdict and writes nothing: the
+            // violations it would build go to a buffer nothing reads.
+            let mut fast_out = Vec::new();
+            let held = mutated(&Value::Py(&value), &[], ctx(WalkMode::Fast), &mut fast_out);
+            assert!(!held);
+            assert!(fast_out.is_empty());
+        });
+    }
+
+    /// A union's `expected` names each branch the way that branch names itself,
+    /// and a nested union contributes its members rather than itself.
+    ///
+    /// `Literal[...]` builds a union of its constants, so without the nesting
+    /// rule a single-constant literal would name itself `union` and a table of
+    /// permitted strings would read `one of: literal, literal`.
+    #[test]
+    fn a_union_names_its_branches_by_their_constants() {
+        Python::attach(|py| {
+            let pool: Vec<Py<PyAny>> = ["torch", "jax"]
+                .iter()
+                .map(|name| PyString::new(py, name).into_any().unbind())
+                .collect();
+            let table = Schema::Union(vec![
+                Schema::Literal(ConstIx::new(0)),
+                Schema::Literal(ConstIx::new(1)),
+            ]);
+            // Nested, which is the shape `Literal[...]` beside another branch
+            // builds: the inner union's members are the branches, not the union.
+            let schema = Schema::Union(vec![table, Schema::Int]);
+            let index = build_index(py, &schema, &[], &pool);
+            let state = WalkState::new();
+            let ctx = Ctx {
+                pool: &pool,
+                defs: &[],
+                records: &index.records,
+                unions: &index.unions,
+                regexes: &index.regexes,
+                guard: &state.guard,
+                depth: &state.depth,
+                fatal: &state.fatal,
+                fatal_seen: &state.fatal_seen,
+                mode: WalkMode::Explain,
+            };
+            let mut labels = BranchLabels::new();
+            push_branch_label(&schema, ctx, py, &mut labels);
+            assert_eq!(
+                labels.render(),
+                "one of: the literal 'torch', the literal 'jax', int",
+                "each branch names itself, and the nested union names its members"
+            );
+        });
+    }
+
     /// `(schema, value, expected)` over an empty pool and no definitions.
     fn case(py: Python<'_>, schema: &Schema, value: &Bound<'_, PyAny>, expected: bool) {
         assert_eq!(
@@ -2967,5 +3127,47 @@ mod interpreter {
                 &mut Vec::new()
             ));
         });
+    }
+}
+
+#[cfg(test)]
+mod label_tests {
+    use super::{BranchLabels, UNION_LABEL_LIMIT};
+
+    /// The list a union's `expected` reads is bounded, and says so when it is
+    /// short.
+    ///
+    /// A wide union -- an error-code table, a currency list -- has more branches
+    /// than a message can carry, so the list stops and ends in `...`. The two
+    /// halves are the claim: a reader must not be shown a truncated list as if
+    /// it were the whole set, and must not be shown `...` after a complete one.
+    /// Neither needs an interpreter: the labels arrive as strings.
+    #[test]
+    fn the_branch_list_stops_at_its_limit_and_marks_that_it_did() {
+        let mut labels = BranchLabels::new();
+        labels.push("int".to_owned());
+        labels.push("str".to_owned());
+        assert_eq!(labels.render(), "one of: int, str");
+
+        // Exactly the limit is a complete list: the boundary belongs to the
+        // labels, not to the ellipsis.
+        let mut full = BranchLabels::new();
+        for i in 0..UNION_LABEL_LIMIT {
+            full.push(format!("b{i}"));
+        }
+        let rendered = full.render();
+        assert!(!rendered.ends_with(", ..."), "{rendered} is not truncated");
+        assert_eq!(rendered.matches(", ").count(), UNION_LABEL_LIMIT - 1);
+
+        // One past it is short, and the label is dropped rather than kept.
+        full.push("dropped".to_owned());
+        let rendered = full.render();
+        assert!(rendered.ends_with(", ..."), "{rendered} is truncated");
+        assert!(!rendered.contains("dropped"));
+        assert_eq!(rendered.matches(", ").count(), UNION_LABEL_LIMIT);
+
+        // An empty union renders its prefix and nothing else, which is what a
+        // renderer returning a fixed string would also do for every other case.
+        assert_eq!(BranchLabels::new().render(), "one of: ");
     }
 }

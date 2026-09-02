@@ -766,6 +766,49 @@ mod tests {
         assert_eq!(refined.error_code(), "string_type");
     }
 
+    /// The escaped-marker walk: which token is open is the caller's fact, and
+    /// this brings the traversal that finds every marker to ask about.
+    ///
+    /// The binding refuses a validator carrying a marker no open definition
+    /// claims, and that refusal is the whole reason a placeholder kept past its
+    /// builder cannot build a schema whose back edge points at nothing. Tested
+    /// here against the walk, so a marker the traversal fails to reach is a
+    /// failure rather than a validator that silently admits no value.
+    #[test]
+    fn the_escaped_marker_walk_finds_a_marker_wherever_it_sits() {
+        let open_none: &dyn Fn(u64) -> bool = &|_| false;
+        let open_all: &dyn Fn(u64) -> bool = &|_| true;
+        let open_seven: &dyn Fn(u64) -> bool = &|token| token == 7;
+
+        // A bare marker is the shortest case, and the one an arm that only
+        // recursed into children would miss: a marker has no children.
+        assert!(Schema::SelfRef(7).has_escaped_self_ref(open_none));
+        // Open is the other answer, and it is the common one: inside the builder
+        // of the definition the marker stands for, every schema carries it.
+        assert!(!Schema::SelfRef(7).has_escaped_self_ref(open_all));
+        // Which token is which is the caller's fact, so two markers under one
+        // predicate answer differently.
+        assert!(!Schema::SelfRef(7).has_escaped_self_ref(open_seven));
+        assert!(Schema::SelfRef(9).has_escaped_self_ref(open_seven));
+
+        // A schema with no marker at all is the finished shape, and `recursive`
+        // returns one: the marker it minted is a back edge by then.
+        assert!(!Schema::Ref(DefIx::new(0)).has_escaped_self_ref(open_none));
+        assert!(!Schema::Int.has_escaped_self_ref(open_none));
+
+        // Buried, under each way a schema holds a child: an escaped marker
+        // anywhere in the tree is one the validator must not carry.
+        let buried = Schema::union([
+            Schema::Int,
+            Schema::list(SeqShape::prefix_tail(
+                [Schema::Str],
+                Schema::Set(Box::new(Schema::SelfRef(9))),
+            )),
+        ]);
+        assert!(buried.has_escaped_self_ref(open_none));
+        assert!(!buried.has_escaped_self_ref(open_all));
+    }
+
     #[test]
     fn field_is_cloneable_and_carries_its_flag() {
         let field = Field {

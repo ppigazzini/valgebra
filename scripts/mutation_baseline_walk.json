@@ -1,15 +1,18 @@
 {
   "_comment": "Mutation survivors accepted as a baseline for the walk sweep. The nightly ratchet fails when a survivor appears outside this set, and when an entry is no longer a survivor. Regenerate with `python scripts/mutation_gate.py --baseline walk --update` after a sweep, and only ever let this set shrink. Entries are the survivor line without its line:col position, so they survive unrelated code motion.",
-  "survivors": [
-    "crates/valgebra-py/src/check/walk.rs: delete field mode from struct Ctx expression in fast",
-    "crates/valgebra-py/src/check/walk.rs: replace && with || in member",
-    "crates/valgebra-py/src/check/walk.rs: replace > with == in check_ref",
-    "crates/valgebra-py/src/check/walk.rs: replace > with >= in check_ref"
-  ],
   "_accepted": {
     "check/walk.rs: replace > with == in check_ref": "The recursion depth bound. Killed by `recursion_deeper_than_the_bound_is_refused`, which the sweep skips: that case drives a 130-level chain through a two-branch union, so any mutation removing a short-circuit turns it exponential and the whole run returns no verdict. Skipping it buys a judged verdict for every other mutant at the cost of these two. The case still runs on every push in the ordinary test lane.",
     "check/walk.rs: replace > with >= in check_ref": "As above.",
     "check/walk.rs: replace && with || in member": "Cannot change a verdict. It makes the explain pass over a keyed map run when the map already matched (which reports nothing) and in fast mode (where the violations go to a buffer nothing reads). Only the cost moves, and cost is the instruction budget's business.",
-    "check/walk.rs: delete field mode from struct Ctx expression in fast": "Cannot change a verdict. The speculative sub-check inherits the caller's mode instead of the fast one, so a discarded branch walk aggregates into a throwaway buffer. Same answer, more work."
-  }
+    "check/walk.rs: delete field mode from struct Ctx expression in fast": "Cannot change a verdict. The speculative sub-check inherits the caller's mode instead of the fast one, so a discarded branch walk aggregates into a throwaway buffer. Same answer, more work.",
+    "check/walk.rs: replace < with <= in scan_dict": "The entry count bounds the scan, and no dict can show the bound being loose by one. The extra turn the mutant allows re-checks the length, finds the iterator exhausted, and breaks -- the same answer, reached one step later. What the count is for is keeping the iterator away from the state PyO3 panics in, and the length check at the top of each turn is what actually reaches that state first, so the two cannot be told apart by a value. Driven both ways by hand: every Rust and Python test passes under the mutation.",
+    "check/walk.rs: replace += with *= in scan_dict": "As above, from the other side: a counter stuck at zero leaves the loop terminated by the iterator alone, which exhausts after exactly the entries the dict held. A dict that changed size is caught by the length check before the iterator is advanced, and one that changed without changing size panics inside `next` whether or not the count moved. So the count is belt and braces over a bound the length check already holds, and no dict distinguishes them."
+  },
+  "survivors": [
+    "crates/valgebra-py/src/check/walk.rs: delete field mode from struct Ctx expression in fast",
+    "crates/valgebra-py/src/check/walk.rs: replace += with *= in scan_dict",
+    "crates/valgebra-py/src/check/walk.rs: replace < with <= in scan_dict",
+    "crates/valgebra-py/src/check/walk.rs: replace > with == in check_ref",
+    "crates/valgebra-py/src/check/walk.rs: replace > with >= in check_ref"
+  ]
 }
