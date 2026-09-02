@@ -157,6 +157,27 @@ _DECIDED = [
         "subtype", [bool, int, ...], [int, int, ...], id="[bool,int,...]<=[int,int,...]"
     ),
     pytest.param("empty", intersection(int, str), None, id="empty:int&str"),
+    # A union on the right is tried branch by branch, which is lossy: it commits
+    # to one branch. Where the subject is one a left-side rule reduces -- a
+    # reference to its definition, a refinement to its base -- both rules are
+    # asked, because the relation is their disjunction and not whichever arm the
+    # match reaches first.
+    pytest.param(
+        "subtype",
+        _RECURSIVE,
+        union(None, {"value": int, "next": _RECURSIVE}),
+        id="mu-t<=its-own-body",
+    ),
+    pytest.param(
+        "subtype",
+        # `int | str` rather than `union(int, str)`: the two build the same
+        # schema, and `Annotated` takes a *type*, which 3.10 checks as the form
+        # is built -- so a runtime validator there raises at import and takes
+        # the whole module out of collection.
+        Annotated[int | str, at.Ge(0)],
+        union(int, str),
+        id="refinement-of-a-union<=the-union",
+    ),
     # The lattice bounds, decided by EMPTINESS rather than by the shape of the
     # atom. A schema that denotes the empty set without being spelled `nothing`
     # is below everything; one that covers the universe without being spelled
@@ -528,27 +549,6 @@ _LEDGERED = [
         _Pair,
         tuple[int, int],
         id="NamedTuple<=tuple[int,int]",
-        marks=_MISSED,
-    ),
-    # A union on the right is tried branch by branch before a reference is
-    # unfolded or a refinement drops to its base, so neither reaches the arm that
-    # would decide it.
-    pytest.param(
-        "subtype",
-        _RECURSIVE,
-        union(None, {"value": int, "next": _RECURSIVE}),
-        id="mu-t<=its-own-body",
-        marks=_MISSED,
-    ),
-    pytest.param(
-        "subtype",
-        # `int | str` rather than `union(int, str)`: the two build the same
-        # schema, and `Annotated` takes a *type*, which 3.10 checks as the form
-        # is built -- so a runtime validator there raises at import and takes
-        # the whole module out of collection.
-        Annotated[int | str, at.Ge(0)],
-        union(int, str),
-        id="refinement-of-a-union<=the-union",
         marks=_MISSED,
     ),
     # The complement laws are settled by the constructors, so a shape they do not

@@ -615,6 +615,41 @@ impl Schema {
         )
     }
 
+    /// Whether `self` reduces to something below `other` by a rule that reads
+    /// only the left side: a reference unfolds to its definition, and a
+    /// refinement drops to its base.
+    ///
+    /// Both rules are sound alone, and the `A ⊆ (Y ∪ Z)` rule beside them is
+    /// *lossy* -- it commits to a single branch, so a subject that lands in the
+    /// union only once it has been reduced gets no answer from it. A match picks
+    /// one arm, but the relation is the disjunction of every sound rule that
+    /// applies, so where both do, both are asked. That is what decides a
+    /// recursive schema against its own body, and a refinement of a union
+    /// against that union.
+    ///
+    /// The reference case records its goal before descending, so a cycle back to
+    /// it meets the coinductive hypothesis rather than unfolding forever.
+    fn left_reduces_below(
+        &self,
+        other: &Schema,
+        cx: SubtypeCx<'_>,
+        assumptions: &mut Vec<(Schema, Schema)>,
+    ) -> bool {
+        match self {
+            Schema::Ref(id) => match cx.defs.get(id.get()) {
+                Some(def) => {
+                    assumptions.push((self.clone(), other.clone()));
+                    let holds = def.is_subtype_rec(other, cx, assumptions);
+                    assumptions.pop();
+                    holds
+                }
+                None => false,
+            },
+            Schema::Refine { base, .. } => base.is_subtype_rec(other, cx, assumptions),
+            _ => false,
+        }
+    }
+
     fn subtype_decide(
         &self,
         other: &Schema,
@@ -650,7 +685,8 @@ impl Schema {
             }
             // A ⊆ (Y ∪ Z) if A lands in one branch (sound, conservative), or -- for
             // a fixed-arity sequence -- if it splits across the branches, which
-            // no single-branch rule can see.
+            // no single-branch rule can see. Failing both, the subject may still
+            // be one a left-side rule reduces to something the union contains.
             (_, Schema::Union(members)) => {
                 // A branch equal to the subject settles it, which is set
                 // containment and is linear in the branches. The recursion below
@@ -660,21 +696,14 @@ impl Schema {
                         .iter()
                         .any(|m| self.is_subtype_rec(m, cx, assumptions))
                     || seq_splits_across_union(self, members, cx, assumptions)
+                    || self.left_reduces_below(other, cx, assumptions)
             }
             // Unfold a recursive reference — after the lattice rules, so an
             // intersection or union meeting a reference decomposes first (which
             // lets a recursive member be compared against the reference rather
-            // than the reference being unfolded past it). The goal is recorded so
-            // a cycle back to it is caught by the coinductive hypothesis above.
-            (Schema::Ref(id), _) => match cx.defs.get(id.get()) {
-                Some(def) => {
-                    assumptions.push((self.clone(), other.clone()));
-                    let holds = def.is_subtype_rec(other, cx, assumptions);
-                    assumptions.pop();
-                    holds
-                }
-                None => false,
-            },
+            // than the reference being unfolded past it). Where the union rule
+            // above ran first and declined, it has already asked this one.
+            (Schema::Ref(_), _) => self.left_reduces_below(other, cx, assumptions),
             (_, Schema::Ref(id)) => match cx.defs.get(id.get()) {
                 Some(def) => {
                     assumptions.push((self.clone(), other.clone()));
@@ -753,7 +782,7 @@ impl Schema {
                     })
             }
             // Against a non-refinement, a refinement inherits its base's supertypes.
-            (Schema::Refine { base, .. }, _) => base.is_subtype_rec(other, cx, assumptions),
+            (Schema::Refine { .. }, _) => self.left_reduces_below(other, cx, assumptions),
             // A leaf the structural rules cannot relate (an instance or literal):
             // defer to the oracle, conservative when it declines.
             _ => cx.oracle.leaf_subtype(self, other).unwrap_or(false),
