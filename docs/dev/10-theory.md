@@ -75,11 +75,18 @@ compromises stated. **[GUIDING]** — the closest thing to a peer implementation
 **Hosoya, Vouillon & Pierce, "Regular Expression Types for XML" (TOPLAS 2005).**
 Regular languages are closed under union, intersection and complement, so a
 sequence type is a first-class member of the algebra rather than an ad-hoc node.
-**[GUIDING]** — `SeqRegex` is one node subsuming the homogeneous, fixed and
+**[GUIDING]** — `SeqShape` is one node subsuming the homogeneous, fixed and
 prefix-plus-tail forms for exactly this reason
-([01-schema-ir.md](01-schema-ir.md)). It is guiding rather than load-bearing
-because nothing here builds an automaton: the forms the frontend produces are
-linear, and membership walks them positionally.
+([01-schema-ir.md](01-schema-ir.md)).
+
+It is guiding rather than load-bearing, and the gap is the point: the general
+form is a regular expression over element schemas, and deciding inclusion
+between two of those wants the automaton construction
+[15-decidability.md](../15-decidability.md) records as unbuilt. What the IR
+carries is the *linear* fragment — a fixed prefix and an optional repeated tail
+— which is every shape the schema language can spell. The closure the paper
+gives is at the schema level here, through union, intersection and complement
+over the sequence node, rather than inside the sequence body.
 
 **The rule that splits a fixed-length sequence across a union** is the product
 decomposition — Frisch, Castagna & Benzaken Lemma 6.5 for pairs, in the

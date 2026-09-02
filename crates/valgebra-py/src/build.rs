@@ -12,7 +12,7 @@ use pyo3::types::{
 };
 use valgebra_core::{
     ClassIx, ConstIx, Constraint, DefShift, Field, MapClause, Openness, OperandIx, PredIx, Schema,
-    SeqRegex,
+    SeqShape,
 };
 
 use crate::errors::summarize;
@@ -27,12 +27,20 @@ thread_local! {
 
 /// The most levels of schema nesting the frontend descends while compiling.
 ///
-/// Set to the published construction depth so the frontend never rejects a schema
-/// the construction bounds would accept: below this, `Validator::checked` owns the
-/// verdict and reports which bound tripped. A self-referential class is the shape
-/// that reaches it, because its field type names the class and the descent does
-/// not terminate.
-const MAX_BUILD_DEPTH: usize = crate::validator::MAX_SCHEMA_DEPTH;
+/// One level above the published construction depth, so the frontend never
+/// rejects a schema the construction bounds would accept: below this,
+/// `Validator::checked` owns the verdict and reports which bound tripped. A
+/// self-referential class is the shape that reaches this one, because its field
+/// type names the class and the descent does not terminate.
+///
+/// The margin is what makes the ownership hold rather than happen to hold. Each
+/// level the frontend descends builds at least one schema node, so the deepest
+/// schema `checked` accepts is reached in at most that many descents; one more
+/// lets the schema *past* the bound be built and refused by name. The two
+/// constants were equal while a sequence counted two levels of depth per level of
+/// descent, which hid the question: no list chain could reach this bound before
+/// `checked` had already refused it.
+const MAX_BUILD_DEPTH: usize = crate::validator::MAX_SCHEMA_DEPTH + 1;
 
 /// RAII guard that bounds `build_schema` recursion. Entering past the bound is an
 /// error; leaving (including on an early `?`) restores the depth.
@@ -478,7 +486,7 @@ fn build_parametrized(
 ) -> PyResult<Schema> {
     let py = origin.py();
     if origin.is(py.get_type::<PyList>()) {
-        return Ok(Schema::list(SeqRegex::homogeneous(build_type_argument(
+        return Ok(Schema::list(SeqShape::homogeneous(build_type_argument(
             &single_arg(args)?,
             lits,
             defs,
@@ -715,13 +723,13 @@ fn build_tuple(
         elements.push(build_type_argument(element, lits, defs)?);
     }
     let regex = match tail {
-        None => SeqRegex::fixed(elements),
+        None => SeqShape::fixed(elements),
         Some(tail) => {
             let tail = build_type_argument(&tail, lits, defs)?;
             if elements.is_empty() {
-                SeqRegex::homogeneous(tail)
+                SeqShape::homogeneous(tail)
             } else {
-                SeqRegex::prefix_tail(elements, tail)
+                SeqShape::prefix_tail(elements, tail)
             }
         }
     };
@@ -745,7 +753,7 @@ fn build_sequence(
     // [T]: a homogeneous list of T (the single-element idiom).
     if len == 1 && !is_ellipsis(&list.get_item(0)?) {
         let element = build_schema(&list.get_item(0)?, lits, defs)?;
-        return Ok(Schema::list(SeqRegex::homogeneous(element)));
+        return Ok(Schema::list(SeqShape::homogeneous(element)));
     }
     // [p0, ..., tail, ...]: a trailing `...` repeats the element before it, after
     // a fixed prefix of the earlier elements. [T, ...] is the prefix-free case,
@@ -763,9 +771,9 @@ fn build_sequence(
         }
         let tail = elements.pop().expect("at least one element precedes `...`");
         let regex = if elements.is_empty() {
-            SeqRegex::homogeneous(tail)
+            SeqShape::homogeneous(tail)
         } else {
-            SeqRegex::prefix_tail(elements, tail)
+            SeqShape::prefix_tail(elements, tail)
         };
         return Ok(Schema::list(regex));
     }
@@ -782,7 +790,7 @@ fn build_sequence(
         }
         elements.push(build_schema(&item, lits, defs)?);
     }
-    Ok(Schema::list(SeqRegex::fixed(elements)))
+    Ok(Schema::list(SeqShape::fixed(elements)))
 }
 
 fn build_dict(

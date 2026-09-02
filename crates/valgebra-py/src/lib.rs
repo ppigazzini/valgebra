@@ -24,7 +24,7 @@ mod validator;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
-use valgebra_core::{DefIx, Guarded, Schema, SeqKind, SeqRegex, fresh_self_token};
+use valgebra_core::{DefIx, Guarded, Schema, SeqKind, SeqShape, fresh_self_token};
 
 pub use crate::exception::ValidationError;
 pub use crate::validator::Validator;
@@ -56,7 +56,7 @@ pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
     // tax), the most common shape on the hot path.
     let schema = Schema::Seq {
         container: SeqKind::List,
-        regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Int)))),
+        shape: SeqShape::homogeneous(Schema::Int),
     };
     let validator = Validator::new(schema, Vec::new(), Vec::new());
 

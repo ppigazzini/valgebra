@@ -48,19 +48,15 @@ pub(crate) fn render(
         Schema::Str => "str".to_owned(),
         Schema::Bytes => "bytes".to_owned(),
         Schema::Literal(i) => format!("Literal[{}]", pool_repr(py, pool, i.get())),
-        Schema::Seq { container, regex } => {
+        Schema::Seq { container, shape } => {
             let list = matches!(container, SeqKind::List);
-            let Some((prefix, tail)) = regex.linear() else {
-                // Alternation/nesting exist only inside the decision procedure.
-                return "<sequence>".to_owned();
-            };
-            match (prefix.as_slice(), tail) {
+            match (shape.prefix.as_slice(), shape.tail.as_deref()) {
                 // Homogeneous: list[T] / tuple[T, ...].
                 ([], Some(t)) if list => format!("list[{}]", r(t)),
                 ([], Some(t)) => format!("tuple[{}, ...]", r(t)),
                 // Fixed positional: [A, B] / tuple[A, B].
                 (ps, None) => {
-                    let body = ps.iter().map(|s| r(s)).collect::<Vec<_>>().join(", ");
+                    let body = ps.iter().map(r).collect::<Vec<_>>().join(", ");
                     if list {
                         format!("[{body}]")
                     } else {
@@ -69,7 +65,7 @@ pub(crate) fn render(
                 }
                 // Fixed prefix then a repeated tail.
                 (ps, Some(t)) => {
-                    let mut parts: Vec<String> = ps.iter().map(|s| r(s)).collect();
+                    let mut parts: Vec<String> = ps.iter().map(r).collect();
                     parts.push(r(t));
                     parts.push("...".to_owned());
                     let body = parts.join(", ");

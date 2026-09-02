@@ -49,9 +49,9 @@ def test_a_refinement_spends_a_level_of_the_depth_budget() -> None:
     plain = _first_refused_depth(lambda t: list[t])
     refined = _first_refused_depth(lambda t: Annotated[list[t], at.Len(1, 1)])
 
-    # A list costs two levels per wrapping; the refinement makes it three.
-    assert plain == 64
-    assert refined == 43
+    # A list costs one level per wrapping; the refinement makes it two.
+    assert plain == 128
+    assert refined == 64
 
     # The marker is irrelevant — the level belongs to the node, not the class.
     assert _first_refused_depth(lambda t: Annotated[list[t], at.MinLen(1)]) == refined

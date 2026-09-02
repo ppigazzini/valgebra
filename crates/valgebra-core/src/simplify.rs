@@ -4,10 +4,10 @@
 use crate::decision::{
     NoLeafRelations, Region, Regions, has_complementary_pair, has_disjoint_pair, unordered_pairs,
 };
-use crate::ir::{Constraint, Field, Schema, SeqRegex};
+use crate::ir::{Constraint, Field, Schema, SeqShape};
 
-impl SeqRegex {
-    fn simplify(&self) -> SeqRegex {
+impl SeqShape {
+    fn simplify(&self) -> SeqShape {
         self.map_elems(&Schema::simplify)
     }
 }
@@ -63,9 +63,9 @@ impl Schema {
         #[cfg(test)]
         SIMPLIFY_STEPS.with(|steps| steps.set(steps.get() + 1));
         match self {
-            Schema::Seq { container, regex } => Schema::Seq {
+            Schema::Seq { container, shape } => Schema::Seq {
                 container: *container,
-                regex: regex.simplify(),
+                shape: shape.simplify(),
             },
             Schema::Set(e) => Schema::Set(Box::new(e.simplify())),
             Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.simplify())),

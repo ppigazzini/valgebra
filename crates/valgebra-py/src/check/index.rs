@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyInt, PyString};
 use regex::Regex;
 use rustc_hash::{FxHashMap, FxHashSet};
-use valgebra_core::{Constraint, Schema, SeqRegex};
+use valgebra_core::{Constraint, Schema};
 
 use crate::input::Value;
 
@@ -157,21 +157,12 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
                 collect(py, &f.schema, pool, index);
             }
         }
-        Schema::Seq { regex, .. } => collect_seq(py, regex, pool, index),
-        _ => {}
-    }
-}
-
-fn collect_seq(py: Python<'_>, regex: &SeqRegex, pool: &[Py<PyAny>], index: &mut ValidatorIndex) {
-    match regex {
-        SeqRegex::Empty => {}
-        SeqRegex::Elem(schema) => collect(py, schema, pool, index),
-        SeqRegex::Cat(parts) | SeqRegex::Or(parts) => {
-            for part in parts {
-                collect_seq(py, part, pool, index);
+        Schema::Seq { shape, .. } => {
+            for element in shape.prefix.iter().chain(shape.tail.as_deref()) {
+                collect(py, element, pool, index);
             }
         }
-        SeqRegex::Star(inner) => collect_seq(py, inner, pool, index),
+        _ => {}
     }
 }
 

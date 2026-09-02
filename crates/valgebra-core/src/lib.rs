@@ -21,7 +21,7 @@ mod violation;
 pub use decision::{LeafRelations, NoLeafRelations, TypeTag};
 pub use ir::{
     ClassIx, ConstIx, Constraint, DefIx, DefShift, Field, Guarded, MapClause, Openness, OperandIx,
-    PathSegment, PoolShift, PredIx, Schema, SeqKind, SeqRegex,
+    PathSegment, PoolShift, PredIx, Schema, SeqKind, SeqShape,
 };
 pub use violation::Violation;
 
@@ -82,11 +82,10 @@ mod tests {
             Schema::Instance(ClassIx::new(0)),
             Schema::Ref(DefIx::new(0)),
             Schema::SelfRef(0),
-            Schema::list(SeqRegex::homogeneous(Schema::Int)),
-            Schema::tuple(SeqRegex::fixed([Schema::Int, Schema::Str])),
-            Schema::list(SeqRegex::prefix_tail([Schema::Int], Schema::Str)),
-            Schema::list(SeqRegex::Or(vec![SeqRegex::Elem(Box::new(Schema::Int))])),
-            Schema::list(SeqRegex::Empty),
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Str])),
+            Schema::list(SeqShape::prefix_tail([Schema::Int], Schema::Str)),
+            Schema::list(SeqShape::fixed([])),
             Schema::Set(Box::new(Schema::Int)),
             Schema::FrozenSet(Box::new(Schema::Int)),
             Schema::Complement(Box::new(Schema::Int)),
@@ -140,21 +139,17 @@ mod tests {
         );
         // The regex constructor is not itself a node; its element subtree is.
         assert_eq!(
-            Schema::list(SeqRegex::homogeneous(Schema::Complement(Box::new(
+            Schema::list(SeqShape::homogeneous(Schema::Complement(Box::new(
                 Schema::Int
             ))))
             .node_count(),
             3
         );
         assert_eq!(
-            Schema::list(SeqRegex::Cat(vec![
-                SeqRegex::Elem(Box::new(Schema::Int)),
-                SeqRegex::Elem(Box::new(Schema::Str)),
-            ]))
-            .node_count(),
+            Schema::list(SeqShape::fixed([Schema::Int, Schema::Str])).node_count(),
             3
         );
-        assert_eq!(Schema::list(SeqRegex::Empty).node_count(), 1);
+        assert_eq!(Schema::list(SeqShape::fixed([])).node_count(), 1);
         // A keyed map counts declared fields and both halves of every default.
         // Distinct field and default totals so neither the sum of the two nor
         // its factors coincide with a wrong operator.
@@ -209,37 +204,25 @@ mod tests {
     fn depth_descends_every_container_arm() {
         assert_eq!(Schema::Set(Box::new(Schema::Int)).depth(), 2);
         assert_eq!(Schema::FrozenSet(Box::new(Schema::Int)).depth(), 2);
-        // Star and Elem each add a level under the Seq node.
-        assert_eq!(Schema::list(SeqRegex::Empty).depth(), 1);
+        // A sequence is one level, whichever shape it holds: the elements sit
+        // directly in the shape, so reaching one is a single descent. While the
+        // body was a regular expression the constructors above an element were
+        // levels of their own, and the same three shapes measured 1, 3 and 4.
+        assert_eq!(Schema::list(SeqShape::fixed([])).depth(), 1);
+        assert_eq!(Schema::list(SeqShape::fixed([Schema::Int])).depth(), 2);
+        assert_eq!(Schema::list(SeqShape::homogeneous(Schema::Int)).depth(), 2);
         assert_eq!(
-            Schema::list(SeqRegex::Elem(Box::new(Schema::Int))).depth(),
+            Schema::list(SeqShape::prefix_tail([Schema::Int], Schema::Str)).depth(),
             2
         );
-        assert_eq!(Schema::list(SeqRegex::homogeneous(Schema::Int)).depth(), 3);
-        // A regex constructor nested under another: the prefix-and-tail form puts
-        // a `Star` inside a `Cat`, so the sequence contributes two levels rather
-        // than one. Only a nested shape separates counting the constructors from
-        // counting the outermost one -- above, every inner regex is an element, so
-        // the arithmetic that combines them is unobservable.
+        // The max over the elements, not the sum: a deeper element decides.
         assert_eq!(
-            Schema::list(SeqRegex::prefix_tail([Schema::Int], Schema::Str)).depth(),
-            4
-        );
-        assert_eq!(
-            Schema::list(SeqRegex::Star(Box::new(SeqRegex::Star(Box::new(
-                SeqRegex::Elem(Box::new(Schema::Int))
-            )))))
-            .depth(),
-            4
-        );
-        // Cat takes the max over parts, not the sum.
-        assert_eq!(
-            Schema::list(SeqRegex::Cat(vec![
-                SeqRegex::Elem(Box::new(Schema::Int)),
-                SeqRegex::Elem(Box::new(Schema::Complement(Box::new(Schema::Str)))),
+            Schema::list(SeqShape::fixed([
+                Schema::Int,
+                Schema::Complement(Box::new(Schema::Str))
             ]))
             .depth(),
-            4
+            3
         );
         assert_eq!(
             Schema::Refine {
@@ -397,7 +380,7 @@ mod tests {
                 .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         assert!(
-            !Schema::list(SeqRegex::homogeneous(Schema::Ref(DefIx::new(0))))
+            !Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0))))
                 .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         // A guarded reference under a combinator is still guarded.
@@ -410,9 +393,7 @@ mod tests {
     /// The element schema of a homogeneous (`[T, ...]`) sequence node.
     fn homogeneous_elem(schema: &Schema) -> &Schema {
         match schema {
-            Schema::Seq { regex, .. } => {
-                regex.linear().expect("linear").1.expect("homogeneous tail")
-            }
+            Schema::Seq { shape, .. } => shape.tail.as_deref().expect("homogeneous tail"),
             _ => panic!("not a sequence: {schema:?}"),
         }
     }
@@ -454,12 +435,12 @@ mod tests {
             (Schema::Bytes, "bytes", "bytes_type"),
             (Schema::Literal(ConstIx::new(0)), "literal", "literal_error"),
             (
-                Schema::list(SeqRegex::homogeneous(Schema::Int)),
+                Schema::list(SeqShape::homogeneous(Schema::Int)),
                 "list",
                 "list_type",
             ),
             (
-                Schema::tuple(SeqRegex::fixed([Schema::Int])),
+                Schema::tuple(SeqShape::fixed([Schema::Int])),
                 "tuple",
                 "tuple_type",
             ),
@@ -558,7 +539,7 @@ mod tests {
             }],
             Openness::Closed,
         );
-        let schema = Schema::list(SeqRegex::homogeneous(record));
+        let schema = Schema::list(SeqShape::homogeneous(record));
         let opened = schema.with_records_open(Openness::Open);
         assert!(record_is_open(homogeneous_elem(&opened)));
         // strict flips it back.
@@ -641,17 +622,16 @@ mod tests {
     }
 
     /// Both size measures read the same child set and differ only in what each
-    /// node contributes on its own: the depth counts a sequence's regex
-    /// constructors because a walk descends them, the node count does not because
-    /// a constructor is not a schema node. Neither can read a child the other
-    /// misses.
+    /// node contributes on its own: a node is always one level, and always one
+    /// node plus the constraints a refinement carries, which are payloads rather
+    /// than child schemas. Neither measure can read a child the other misses.
     #[test]
     fn both_size_measures_read_the_shared_traversal() {
         for schema in every_variant() {
             let children: Vec<&Schema> = schema.children().collect();
             let deepest = children.iter().map(|c| c.depth()).max().unwrap_or(0);
             let total: usize = children.iter().map(|c| c.node_count()).sum();
-            assert_eq!(schema.depth(), schema.own_depth() + deepest);
+            assert_eq!(schema.depth(), 1 + deepest);
             assert_eq!(schema.node_count(), schema.own_nodes() + total);
         }
     }
@@ -694,12 +674,12 @@ mod tests {
     #[test]
     fn schema_equality_is_structural() {
         assert_eq!(
-            Schema::list(SeqRegex::homogeneous(Schema::Int)),
-            Schema::list(SeqRegex::homogeneous(Schema::Int))
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Schema::list(SeqShape::homogeneous(Schema::Int))
         );
         assert_ne!(
-            Schema::list(SeqRegex::homogeneous(Schema::Int)),
-            Schema::list(SeqRegex::homogeneous(Schema::Str))
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Schema::list(SeqShape::homogeneous(Schema::Str))
         );
         assert_ne!(
             Schema::Literal(ConstIx::new(0)),
@@ -709,7 +689,7 @@ mod tests {
 
     #[test]
     fn resolve_self_replaces_only_the_matching_token() {
-        let body = Schema::list(SeqRegex::homogeneous(Schema::SelfRef(1)));
+        let body = Schema::list(SeqShape::homogeneous(Schema::SelfRef(1)));
         let resolved = body.resolve_self(1, DefIx::new(3));
         assert_eq!(homogeneous_elem(&resolved), &Schema::Ref(DefIx::new(3)));
         assert!(matches!(
@@ -721,7 +701,7 @@ mod tests {
     #[test]
     fn contractivity_requires_a_structural_guard() {
         assert!(
-            !Schema::list(SeqRegex::homogeneous(Schema::Ref(DefIx::new(0))))
+            !Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0))))
                 .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         assert!(Schema::Ref(DefIx::new(0)).occurs_unguarded(DefIx::new(0), Guarded::No));
@@ -730,7 +710,7 @@ mod tests {
                 .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         assert!(
-            !Schema::list(SeqRegex::homogeneous(Schema::Union(vec![
+            !Schema::list(SeqShape::homogeneous(Schema::Union(vec![
                 Schema::Int,
                 Schema::Ref(DefIx::new(0))
             ])))
@@ -740,7 +720,7 @@ mod tests {
 
     #[test]
     fn shifted_remaps_ref_by_the_definition_offset() {
-        let shifted = Schema::list(SeqRegex::homogeneous(Schema::Ref(DefIx::new(0))))
+        let shifted = Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0))))
             .shifted(PoolShift::new(7), DefShift::new(4));
         assert_eq!(homogeneous_elem(&shifted), &Schema::Ref(DefIx::new(4)));
         assert!(matches!(
@@ -800,57 +780,37 @@ mod tests {
     }
 
     #[test]
-    fn linear_recognizes_the_frontend_sequence_shapes() {
-        let homogeneous = SeqRegex::homogeneous(Schema::Int);
-        let (prefix, tail) = homogeneous.linear().expect("homogeneous is linear");
-        assert!(prefix.is_empty());
-        assert!(matches!(tail, Some(Schema::Int)));
+    fn a_shape_is_the_three_spellings_and_nothing_else() {
+        // The three forms a caller can write, and what each one is. There is no
+        // fourth: a shape is a prefix and an optional tail, so the question the
+        // old `linear` answered -- is this regex one of the shapes the frontend
+        // builds? -- has no way left to answer no.
+        let homogeneous = SeqShape::homogeneous(Schema::Int);
+        assert!(homogeneous.prefix.is_empty());
+        assert_eq!(homogeneous.tail.as_deref(), Some(&Schema::Int));
 
-        let fixed = SeqRegex::fixed([Schema::Int, Schema::Str]);
-        let (prefix, tail) = fixed.linear().expect("fixed is linear");
-        assert_eq!(prefix.len(), 2);
-        assert!(tail.is_none());
+        let fixed = SeqShape::fixed([Schema::Int, Schema::Str]);
+        assert_eq!(fixed.prefix, vec![Schema::Int, Schema::Str]);
+        assert!(fixed.tail.is_none());
 
-        let prefix_tail = SeqRegex::prefix_tail([Schema::Str], Schema::Int);
-        let (prefix, tail) = prefix_tail.linear().expect("prefix-plus-tail is linear");
-        assert_eq!(prefix.len(), 1);
-        assert!(matches!(tail, Some(Schema::Int)));
+        let prefixed = SeqShape::prefix_tail([Schema::Str], Schema::Int);
+        assert_eq!(prefixed.prefix, vec![Schema::Str]);
+        assert_eq!(prefixed.tail.as_deref(), Some(&Schema::Int));
 
-        let (prefix, tail) = SeqRegex::Empty.linear().expect("empty is linear");
-        assert!(prefix.is_empty() && tail.is_none());
+        // The empty sequence, which `fixed` of nothing is and `Default` gives.
+        assert_eq!(SeqShape::fixed([]), SeqShape::default());
+        assert!(SeqShape::default().prefix.is_empty() && SeqShape::default().tail.is_none());
     }
 
     #[test]
-    fn linear_rejects_the_non_linear_shapes() {
-        let elem = || SeqRegex::Elem(Box::new(Schema::Int));
-        // Alternation is not a linear sequence.
-        assert!(SeqRegex::Or(vec![elem()]).linear().is_none());
-        // A repetition of something other than a single element.
-        assert!(
-            SeqRegex::Star(Box::new(SeqRegex::Cat(vec![])))
-                .linear()
-                .is_none()
-        );
-        // A repetition that is not in tail position.
-        let star_first = SeqRegex::Cat(vec![SeqRegex::Star(Box::new(elem())), elem()]);
-        assert!(star_first.linear().is_none());
-        // Alternation nested inside a concatenation.
-        let cat_or = SeqRegex::Cat(vec![SeqRegex::Or(vec![SeqRegex::Empty])]);
-        assert!(cat_or.linear().is_none());
-    }
-
-    #[test]
-    fn sequence_transforms_recurse_through_every_regex_arm() {
-        // A regex touching Or, Cat, Star, and Elem, with a Ref element and a
-        // SelfRef under a repetition, so every arm of the transforms is walked.
-        let regex = SeqRegex::Or(vec![
-            SeqRegex::Cat(vec![
-                SeqRegex::Elem(Box::new(Schema::Ref(DefIx::new(0)))),
-                SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::SelfRef(7))))),
-            ]),
-            SeqRegex::Empty,
-        ]);
-        let seq = Schema::list(regex);
+    fn sequence_transforms_reach_the_prefix_and_the_tail() {
+        // A shape with a Ref in its prefix and a SelfRef in its tail, so every
+        // element a transform must reach is one it would miss by handling only
+        // the other.
+        let seq = Schema::list(SeqShape::prefix_tail(
+            [Schema::Ref(DefIx::new(0))],
+            Schema::SelfRef(7),
+        ));
 
         // The Ref sits under the sequence guard, so it is not unguarded.
         assert!(!seq.occurs_unguarded(DefIx::new(0), Guarded::No));
@@ -861,40 +821,17 @@ mod tests {
             Schema::Seq { .. }
         ));
 
-        // shifted moves the Ref element by the definitions offset.
-        let Schema::Seq {
-            regex: SeqRegex::Or(branches),
-            ..
-        } = seq.shifted(PoolShift::new(0), DefShift::new(5))
-        else {
+        // shifted moves the prefix's Ref by the definitions offset.
+        let Schema::Seq { shape, .. } = seq.shifted(PoolShift::new(0), DefShift::new(5)) else {
             panic!("shape preserved")
         };
-        let SeqRegex::Cat(parts) = &branches[0] else {
-            panic!("Or branch is a Cat")
-        };
-        let SeqRegex::Elem(head) = &parts[0] else {
-            panic!("first part is an element")
-        };
-        assert_eq!(**head, Schema::Ref(DefIx::new(5)));
+        assert_eq!(shape.prefix, vec![Schema::Ref(DefIx::new(5))]);
 
-        // resolve_self rewrites the SelfRef under the repetition into a Ref.
-        let Schema::Seq {
-            regex: SeqRegex::Or(branches),
-            ..
-        } = seq.resolve_self(7, DefIx::new(3))
-        else {
+        // resolve_self rewrites the tail's SelfRef into a Ref.
+        let Schema::Seq { shape, .. } = seq.resolve_self(7, DefIx::new(3)) else {
             panic!("shape preserved")
         };
-        let SeqRegex::Cat(parts) = &branches[0] else {
-            panic!("Or branch is a Cat")
-        };
-        let SeqRegex::Star(inner) = &parts[1] else {
-            panic!("second part is a repetition")
-        };
-        let SeqRegex::Elem(tail) = inner.as_ref() else {
-            panic!("repetition wraps an element")
-        };
-        assert_eq!(**tail, Schema::Ref(DefIx::new(3)));
+        assert_eq!(shape.tail.as_deref(), Some(&Schema::Ref(DefIx::new(3))));
     }
 
     #[test]
@@ -940,7 +877,7 @@ mod tests {
         // The law is the complementary pair itself, not scalar-region coverage: an
         // opaque member has no region, so `X ∪ ¬X` here is decided only by finding
         // the pair, with the whole universe left unaccounted for by the bitset.
-        let opaque = Schema::list(SeqRegex::homogeneous(Schema::Int));
+        let opaque = Schema::list(SeqShape::homogeneous(Schema::Int));
         assert_eq!(
             Schema::Union(vec![opaque.clone(), not(opaque)]).simplify(),
             Schema::Anything
@@ -952,7 +889,7 @@ mod tests {
         );
         assert_eq!(
             Schema::Intersection(vec![
-                Schema::list(SeqRegex::homogeneous(Schema::Int)),
+                Schema::list(SeqShape::homogeneous(Schema::Int)),
                 Schema::Set(Box::new(Schema::Int)),
             ])
             .simplify(),
@@ -985,8 +922,8 @@ mod tests {
         // Every concrete tag is disjoint from a distinct one.
         assert!(Schema::NoneType.disjoint(&Schema::Int));
         assert!(Schema::Bytes.disjoint(&Schema::Str));
-        let list_int = Schema::list(SeqRegex::homogeneous(Schema::Int));
-        let tuple_empty = Schema::tuple(SeqRegex::fixed([]));
+        let list_int = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let tuple_empty = Schema::tuple(SeqShape::fixed([]));
         assert!(tuple_empty.disjoint(&list_int)); // tuple vs list
         assert!(
             Schema::FrozenSet(Box::new(Schema::Int)).disjoint(&Schema::Set(Box::new(Schema::Int)))
@@ -1002,7 +939,7 @@ mod tests {
         assert!(Schema::Nothing.disjoint(&Schema::Int));
         assert!(Schema::Int.disjoint(&Schema::Nothing));
         // Same tag is not disjoint: two list types share the empty list.
-        assert!(!list_int.disjoint(&Schema::list(SeqRegex::homogeneous(Schema::Str))));
+        assert!(!list_int.disjoint(&Schema::list(SeqShape::homogeneous(Schema::Str))));
         assert!(!Schema::Bool.disjoint(&Schema::Int)); // bool is a subtype of int
         assert!(!Schema::Int.disjoint(&Schema::Int));
         // Conservative where the core cannot decide soundly.
@@ -1156,7 +1093,7 @@ mod laws {
         assert!(!Schema::Literal(ConstIx::new(0)).is_empty());
         assert!(!Schema::Instance(ClassIx::new(0)).is_empty());
         assert!(!Schema::Set(Box::new(Schema::Int)).is_empty());
-        assert!(!Schema::list(SeqRegex::homogeneous(Schema::Int)).is_empty());
+        assert!(!Schema::list(SeqShape::homogeneous(Schema::Int)).is_empty());
         // A scalar mixed with a non-scalar leaf is undecidable here, so it is
         // never claimed empty (an instance could subclass the scalar's type).
         assert!(
@@ -1176,11 +1113,11 @@ mod laws {
     #[test]
     fn decides_structural_container_emptiness() {
         // A fixed sequence with an impossible element matches no sequence.
-        let empty_pair = Schema::tuple(SeqRegex::fixed([Schema::Int, Schema::Nothing]));
+        let empty_pair = Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Nothing]));
         assert!(empty_pair.is_empty());
         // A list or tuple that admits the empty sequence is never empty.
-        assert!(!Schema::list(SeqRegex::homogeneous(Schema::Nothing)).is_empty());
-        assert!(!Schema::tuple(SeqRegex::fixed([Schema::Int])).is_empty());
+        assert!(!Schema::list(SeqShape::homogeneous(Schema::Nothing)).is_empty());
+        assert!(!Schema::tuple(SeqShape::fixed([Schema::Int])).is_empty());
         // A set or frozenset is never empty: the empty collection is a member.
         assert!(!Schema::Set(Box::new(Schema::Nothing)).is_empty());
         assert!(!Schema::FrozenSet(Box::new(Schema::Nothing)).is_empty());
@@ -1223,26 +1160,26 @@ mod laws {
         let list = |r| Schema::list(r);
         let tuple = |r| Schema::tuple(r);
         assert!(
-            list(SeqRegex::homogeneous(Schema::Bool))
-                .is_subtype_of(&list(SeqRegex::homogeneous(Schema::Int)))
+            list(SeqShape::homogeneous(Schema::Bool))
+                .is_subtype_of(&list(SeqShape::homogeneous(Schema::Int)))
         );
         assert!(
-            !list(SeqRegex::homogeneous(Schema::Int))
-                .is_subtype_of(&list(SeqRegex::homogeneous(Schema::Str)))
+            !list(SeqShape::homogeneous(Schema::Int))
+                .is_subtype_of(&list(SeqShape::homogeneous(Schema::Str)))
         );
         // Fixed sequences compare pointwise; a tuple is not a list.
         assert!(
-            tuple(SeqRegex::fixed([Schema::Bool, Schema::Str]))
-                .is_subtype_of(&tuple(SeqRegex::fixed([Schema::Int, Schema::Str])))
+            tuple(SeqShape::fixed([Schema::Bool, Schema::Str]))
+                .is_subtype_of(&tuple(SeqShape::fixed([Schema::Int, Schema::Str])))
         );
         assert!(
-            !tuple(SeqRegex::fixed([Schema::Int]))
-                .is_subtype_of(&list(SeqRegex::homogeneous(Schema::Int)))
+            !tuple(SeqShape::fixed([Schema::Int]))
+                .is_subtype_of(&list(SeqShape::homogeneous(Schema::Int)))
         );
         // A fixed list is a subtype of a homogeneous list when each element is.
         assert!(
-            list(SeqRegex::fixed([Schema::Bool, Schema::Int]))
-                .is_subtype_of(&list(SeqRegex::homogeneous(Schema::Int)))
+            list(SeqShape::fixed([Schema::Bool, Schema::Int]))
+                .is_subtype_of(&list(SeqShape::homogeneous(Schema::Int)))
         );
         // Equivalence between structurally different container schemas.
         assert!(
@@ -1304,12 +1241,7 @@ mod laws {
     #[test]
     fn decides_sequence_subtyping_with_prefix_tail_and_alternation() {
         // A list `[head, tail*]`: a one-element fixed prefix then a repeated tail.
-        let prefix_tail = |head, tail| {
-            Schema::list(SeqRegex::Cat(vec![
-                SeqRegex::Elem(Box::new(head)),
-                SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(tail)))),
-            ]))
-        };
+        let prefix_tail = |head, tail| Schema::list(SeqShape::prefix_tail([head], tail));
         // Prefix and tail covary (bool ⊆ int), in both positions.
         assert!(
             prefix_tail(Schema::Bool, Schema::Bool)
@@ -1321,7 +1253,7 @@ mod laws {
         );
         // A fixed-length list is a subtype of a prefix-and-tail one it fits.
         assert!(
-            Schema::list(SeqRegex::fixed([Schema::Bool, Schema::Int]))
+            Schema::list(SeqShape::fixed([Schema::Bool, Schema::Int]))
                 .is_subtype_of(&prefix_tail(Schema::Int, Schema::Int))
         );
         // ...and is NOT one it is too short for. `[int]` does not fit
@@ -1331,34 +1263,36 @@ mod laws {
         // comparisons that DO happen all succeed, so a disjunction there reports
         // a subtype relation that does not hold.
         assert!(
-            !Schema::list(SeqRegex::fixed([Schema::Int])).is_subtype_of(&Schema::list(
-                SeqRegex::prefix_tail([Schema::Int, Schema::Int], Schema::Int)
+            !Schema::list(SeqShape::fixed([Schema::Int])).is_subtype_of(&Schema::list(
+                SeqShape::prefix_tail([Schema::Int, Schema::Int], Schema::Int)
             ))
         );
         // Two fixed lists of the SAME length whose elements do not relate. Equal
         // lengths are necessary and not sufficient, so the length test and the
         // element test are a conjunction here too.
         assert!(
-            !Schema::list(SeqRegex::fixed([Schema::Int]))
-                .is_subtype_of(&Schema::list(SeqRegex::fixed([Schema::Str])))
+            !Schema::list(SeqShape::fixed([Schema::Int]))
+                .is_subtype_of(&Schema::list(SeqShape::fixed([Schema::Str])))
         );
         assert!(
-            Schema::list(SeqRegex::fixed([Schema::Bool]))
-                .is_subtype_of(&Schema::list(SeqRegex::fixed([Schema::Int])))
+            Schema::list(SeqShape::fixed([Schema::Bool]))
+                .is_subtype_of(&Schema::list(SeqShape::fixed([Schema::Int])))
         );
-        // Alternation distributes: (bool* | int*) ⊆ int*, but int* ⊄ (bool* | str*).
+        // A union of sequences is a union of schemas, which the lattice rules
+        // already distribute over: (bool* | int*) <= int*, and int* is in
+        // neither branch of (bool* | str*).
         let alternation = |a, b| {
-            Schema::list(SeqRegex::Or(vec![
-                SeqRegex::homogeneous(a),
-                SeqRegex::homogeneous(b),
-            ]))
+            Schema::union([
+                Schema::list(SeqShape::homogeneous(a)),
+                Schema::list(SeqShape::homogeneous(b)),
+            ])
         };
         assert!(
             alternation(Schema::Bool, Schema::Int)
-                .is_subtype_of(&Schema::list(SeqRegex::homogeneous(Schema::Int)))
+                .is_subtype_of(&Schema::list(SeqShape::homogeneous(Schema::Int)))
         );
         assert!(
-            !Schema::list(SeqRegex::homogeneous(Schema::Int))
+            !Schema::list(SeqShape::homogeneous(Schema::Int))
                 .is_subtype_of(&alternation(Schema::Bool, Schema::Str))
         );
     }
@@ -1368,25 +1302,25 @@ mod laws {
         // The same prefix-plus-tail regex carried by the tuple container. The
         // decision procedure shares the regex with lists, so this pins that the
         // container is honoured throughout subtyping, emptiness, and equivalence.
-        let tup = |head, tail| Schema::tuple(SeqRegex::prefix_tail([head], tail));
+        let tup = |head, tail| Schema::tuple(SeqShape::prefix_tail([head], tail));
 
         // Subtyping is covariant in both the prefix and the repeated tail.
         assert!(tup(Schema::Bool, Schema::Bool).is_subtype_of(&tup(Schema::Int, Schema::Int)));
         assert!(!tup(Schema::Int, Schema::Int).is_subtype_of(&tup(Schema::Int, Schema::Bool)));
         // A fixed-length tuple is a subtype of a prefix-and-tail one it fits.
         assert!(
-            Schema::tuple(SeqRegex::fixed([Schema::Bool, Schema::Int]))
+            Schema::tuple(SeqShape::fixed([Schema::Bool, Schema::Int]))
                 .is_subtype_of(&tup(Schema::Int, Schema::Int))
         );
 
         // The container is part of the type: a list is never a tuple, even with
         // an identical element regex.
         assert!(
-            !Schema::list(SeqRegex::prefix_tail([Schema::Int], Schema::Int))
+            !Schema::list(SeqShape::prefix_tail([Schema::Int], Schema::Int))
                 .is_subtype_of(&tup(Schema::Int, Schema::Int))
         );
         assert!(!tup(Schema::Int, Schema::Int).is_subtype_of(&Schema::list(
-            SeqRegex::prefix_tail([Schema::Int], Schema::Int)
+            SeqShape::prefix_tail([Schema::Int], Schema::Int)
         )));
 
         // Emptiness reasons about position: an uninhabited prefix empties the
@@ -1571,14 +1505,14 @@ mod laws {
         // No region cancels, no pair is complementary or disjoint, and no bound
         // contradicts, so a fold that lost a member's verdict would report a
         // non-empty intersection.
-        let empty_list = Schema::list(SeqRegex::Elem(Box::new(Schema::Nothing)));
+        let empty_list = Schema::list(SeqShape::fixed([Schema::Nothing]));
         assert!(empty_list.is_empty());
         assert!(Schema::Intersection(vec![empty_list.clone(), Schema::Anything]).is_empty());
         // Order does not matter: the fold runs over every member.
         assert!(Schema::Intersection(vec![Schema::Anything, empty_list]).is_empty());
         // And an intersection of two inhabited members with an opaque region is
         // not reported empty, so the fold is not simply answering true.
-        let list_of_int = Schema::list(SeqRegex::homogeneous(Schema::Int));
+        let list_of_int = Schema::list(SeqShape::homogeneous(Schema::Int));
         assert!(!Schema::Intersection(vec![list_of_int, Schema::Anything]).is_empty());
     }
 
@@ -1596,8 +1530,8 @@ mod laws {
             Schema::Float,
             Schema::Str,
             Schema::Bytes,
-            Schema::list(SeqRegex::homogeneous(Schema::Int)),
-            Schema::tuple(SeqRegex::fixed([Schema::Int])),
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Schema::tuple(SeqShape::fixed([Schema::Int])),
             Schema::Set(Box::new(Schema::Int)),
             Schema::FrozenSet(Box::new(Schema::Int)),
             Schema::mapping(MapClause {
@@ -1635,7 +1569,7 @@ mod laws {
                 Some(a.get().cmp(&b.get()))
             }
         }
-        let list = |element| Schema::list(SeqRegex::homogeneous(element));
+        let list = |element| Schema::list(SeqShape::homogeneous(element));
         // A mapping in one call, so an assertion still reads as one line.
         let map = |key, value| Schema::mapping(MapClause { key, value });
         // Short spellings of the pooled bounds, so an assertion still reads as
@@ -1977,29 +1911,25 @@ mod laws {
     }
 
     #[test]
-    fn every_constructed_sequence_regex_is_linear() {
-        // Sequences are built only with these constructors, all linear (a fixed
-        // prefix then an optional repeated tail), and the structure-preserving
-        // transforms map over elements without changing the regex shape. So every
-        // regex that reaches the decision procedure linearizes, and the `Or` and
-        // nested-`Star` forms that `regex_subtype` handles defensively are never
-        // built outside tests -- its conservative fallback is unreachable from a
-        // real schema, and sequence inclusion is decided for every sequence.
-        assert!(SeqRegex::homogeneous(Schema::Int).linear().is_some());
-        assert!(
-            SeqRegex::fixed([Schema::Int, Schema::Str])
-                .linear()
-                .is_some()
+    fn a_transform_over_a_sequence_keeps_its_shape() {
+        // The structure-preserving transforms map over elements without moving
+        // one between the prefix and the tail. That is the whole invariant the
+        // decision procedure needs: it reads a sequence's arity off the prefix
+        // length and its unbounded part off the tail, and a transform that
+        // shuffled them would change which lengths the schema admits.
+        let shape = SeqShape::prefix_tail([Schema::Str], Schema::Int);
+        let mapped = shape.map_elems(&|s| s.clone());
+        assert_eq!(mapped, shape);
+
+        let complemented = shape.map_elems(&|s| Schema::Complement(Box::new(s.clone())));
+        assert_eq!(
+            complemented.prefix,
+            vec![Schema::Complement(Box::new(Schema::Str))]
         );
-        assert!(SeqRegex::fixed(Vec::<Schema>::new()).linear().is_some());
-        assert!(
-            SeqRegex::prefix_tail([Schema::Str], Schema::Int)
-                .linear()
-                .is_some()
+        assert_eq!(
+            complemented.tail.as_deref(),
+            Some(&Schema::Complement(Box::new(Schema::Int)))
         );
-        // The element-mapping transform preserves linearity.
-        let mapped = SeqRegex::prefix_tail([Schema::Str], Schema::Int).map_elems(&|s| s.clone());
-        assert!(mapped.linear().is_some());
     }
 
     #[test]
@@ -2207,7 +2137,7 @@ mod laws {
         }];
         assert!(!Schema::Ref(DefIx::new(0)).is_empty_under(&optional));
         // t = [t] — a list of itself is inhabited by the empty list.
-        let list_of_self = [Schema::list(SeqRegex::homogeneous(Schema::Ref(
+        let list_of_self = [Schema::list(SeqShape::homogeneous(Schema::Ref(
             DefIx::new(0),
         )))];
         assert!(!Schema::Ref(DefIx::new(0)).is_empty_under(&list_of_self));
@@ -2386,7 +2316,7 @@ mod laws {
                 ),
                 inner.clone().prop_map(|s| Schema::Seq {
                     container: SeqKind::List,
-                    regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(s)))),
+                    shape: SeqShape::homogeneous(s),
                 }),
                 (inner.clone(), inner).prop_map(|(field, default)| Schema::KeyedMap {
                     fields: vec![Field {
@@ -2422,7 +2352,7 @@ mod laws {
                 inner.clone().prop_map(|s| Schema::Set(Box::new(s))),
                 inner
                     .clone()
-                    .prop_map(|s| Schema::list(SeqRegex::homogeneous(s))),
+                    .prop_map(|s| Schema::list(SeqShape::homogeneous(s))),
                 inner.prop_map(|s| Schema::record(
                     vec![Field {
                         name: "f".to_owned(),
@@ -2808,7 +2738,7 @@ mod laws {
         assert_eq!(tower.depth(), 11);
         // A list whose element is a recursive back edge is finite: the `Ref` is a
         // leaf, so the depth does not follow it into the definitions table.
-        let recursive_list = Schema::list(SeqRegex::homogeneous(Schema::Ref(DefIx::new(0))));
+        let recursive_list = Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0))));
         assert!(recursive_list.depth() < 10);
     }
 
@@ -2819,15 +2749,11 @@ mod laws {
     fn budgeted_subtyping_decides_recursive_relations() {
         let int_list = Schema::Seq {
             container: SeqKind::List,
-            regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Ref(DefIx::new(
-                0,
-            )))))),
+            shape: SeqShape::homogeneous(Schema::Ref(DefIx::new(0))),
         };
         let wide_list = Schema::Seq {
             container: SeqKind::List,
-            regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Ref(DefIx::new(
-                1,
-            )))))),
+            shape: SeqShape::homogeneous(Schema::Ref(DefIx::new(1))),
         };
         let defs = vec![
             union(Schema::Int, int_list.clone()),
@@ -3032,16 +2958,11 @@ mod laws {
         let defs = vec![Schema::Ref(DefIx::new(0))];
         let with_phantom_tail = Schema::Seq {
             container: SeqKind::List,
-            regex: SeqRegex::Cat(vec![
-                SeqRegex::Elem(Box::new(Schema::Int)),
-                SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Ref(DefIx::new(
-                    0,
-                )))))),
-            ]),
+            shape: SeqShape::prefix_tail([Schema::Int], Schema::Ref(DefIx::new(0))),
         };
         let just_int = Schema::Seq {
             container: SeqKind::List,
-            regex: SeqRegex::Elem(Box::new(Schema::Int)),
+            shape: SeqShape::fixed([Schema::Int]),
         };
         let oracle = NoLeafRelations;
         // The phantom tail never repeats, so the two denote the same language.
@@ -3156,30 +3077,23 @@ mod laws {
         }
     }
 
-    /// Match a sequence's items against its regex with the oracle's *own* matcher,
-    /// sharing no code with the production `SeqRegex::linear`/decision under test.
-    /// The generator emits exactly two shapes — `Star(Elem(s))` (a homogeneous
-    /// sequence) and `Cat([Elem(a), Elem(b)])` (a fixed pair) — and `simplify`
-    /// preserves the shape (it only rewrites the element schemas), so a direct
-    /// encoding of those two cases is exact for everything the oracle judges.
-    fn seq_matches(regex: &SeqRegex, items: &[Obj], pool: &[Obj]) -> bool {
-        match regex {
-            // `[s, ...]`: every element is a member of `s`; the empty sequence matches.
-            SeqRegex::Star(inner) => match &**inner {
-                SeqRegex::Elem(s) => items.iter().all(|item| member_full(s, item, pool)),
-                other => unreachable!("oracle does not model regex {other:?}"),
-            },
-            // `[a, b]`: exactly two elements, matched positionally.
-            SeqRegex::Cat(parts) => match parts.as_slice() {
-                [SeqRegex::Elem(a), SeqRegex::Elem(b)] => {
-                    items.len() == 2
-                        && member_full(a, &items[0], pool)
-                        && member_full(b, &items[1], pool)
-                }
-                other => unreachable!("oracle does not model regex {other:?}"),
-            },
-            other => unreachable!("oracle does not model regex {other:?}"),
-        }
+    /// Match a sequence's items against its shape with the oracle's *own* matcher,
+    /// sharing no code with the decision procedure under test.
+    ///
+    /// The denotation, written out: the first `prefix.len()` items must belong to
+    /// the prefix schemas positionally, and every item past them to the tail --
+    /// with no such item at all when there is no tail. It is short enough to read
+    /// against the definition, which is what makes it an oracle rather than a
+    /// second implementation of the same walk.
+    fn seq_matches(shape: &SeqShape, items: &[Obj], pool: &[Obj]) -> bool {
+        let fits = match &shape.tail {
+            Some(_) => items.len() >= shape.prefix.len(),
+            None => items.len() == shape.prefix.len(),
+        };
+        fits && items.iter().enumerate().all(|(i, item)| {
+            let element = shape.prefix.get(i).or(shape.tail.as_deref());
+            element.is_some_and(|schema| member_full(schema, item, pool))
+        })
     }
 
     /// Reference membership over the non-opaque fragment, transcribing each node's
@@ -3203,9 +3117,9 @@ mod laws {
                 Obj::FrozenSet(items) => items.iter().all(|item| member_full(element, item, pool)),
                 _ => false,
             },
-            Schema::Seq { container, regex } => match (container, value) {
+            Schema::Seq { container, shape } => match (container, value) {
                 (SeqKind::List, Obj::List(items)) | (SeqKind::Tuple, Obj::Tuple(items)) => {
-                    seq_matches(regex, items, pool)
+                    seq_matches(shape, items, pool)
                 }
                 _ => false,
             },
@@ -3356,25 +3270,19 @@ mod laws {
                 inner.clone().prop_map(|s| Schema::FrozenSet(Box::new(s))),
                 inner.clone().prop_map(|s| Schema::Seq {
                     container: SeqKind::List,
-                    regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(s)))),
+                    shape: SeqShape::homogeneous(s),
                 }),
                 inner.clone().prop_map(|s| Schema::Seq {
                     container: SeqKind::Tuple,
-                    regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(s)))),
+                    shape: SeqShape::homogeneous(s),
                 }),
                 (inner.clone(), inner.clone()).prop_map(|(a, b)| Schema::Seq {
                     container: SeqKind::Tuple,
-                    regex: SeqRegex::Cat(vec![
-                        SeqRegex::Elem(Box::new(a)),
-                        SeqRegex::Elem(Box::new(b)),
-                    ]),
+                    shape: SeqShape::fixed([a, b]),
                 }),
                 (inner.clone(), inner.clone()).prop_map(|(a, b)| Schema::Seq {
                     container: SeqKind::List,
-                    regex: SeqRegex::Cat(vec![
-                        SeqRegex::Elem(Box::new(a)),
-                        SeqRegex::Elem(Box::new(b)),
-                    ]),
+                    shape: SeqShape::fixed([a, b]),
                 }),
                 (
                     inner.clone(),
@@ -3400,7 +3308,7 @@ mod laws {
         })
     }
 
-    /// The oracle's own sequence matcher (independent of `SeqRegex::linear`) and
+    /// The oracle's own sequence matcher (independent of `SeqShape::linear`) and
     /// the container arms decide the shapes the generator emits: a homogeneous
     /// `Star` sequence, a fixed `Cat` pair, and the open-record `defaults` branch.
     #[test]
@@ -3409,7 +3317,7 @@ mod laws {
         // `[int, ...]`: empty and homogeneous lists match; a wrong element does not.
         let int_list = Schema::Seq {
             container: SeqKind::List,
-            regex: SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(Schema::Int)))),
+            shape: SeqShape::homogeneous(Schema::Int),
         };
         assert!(member_full(&int_list, &Obj::List(vec![]), &pool));
         assert!(member_full(
@@ -3425,10 +3333,7 @@ mod laws {
         // A tuple shape is not a list and vice versa.
         let int_pair = Schema::Seq {
             container: SeqKind::Tuple,
-            regex: SeqRegex::Cat(vec![
-                SeqRegex::Elem(Box::new(Schema::Int)),
-                SeqRegex::Elem(Box::new(Schema::Str)),
-            ]),
+            shape: SeqShape::fixed([Schema::Int, Schema::Str]),
         };
         assert!(member_full(
             &int_pair,
@@ -3591,15 +3496,11 @@ mod index_laws {
                 proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Intersection),
                 inner
                     .clone()
-                    .prop_map(|s| Schema::list(SeqRegex::homogeneous(s))),
+                    .prop_map(|s| Schema::list(SeqShape::homogeneous(s))),
                 (inner.clone(), inner.clone())
-                    .prop_map(|(a, b)| Schema::tuple(SeqRegex::prefix_tail([a], b))),
-                // `Or` and nesting are built only inside the decision procedure,
-                // so the regex map's alternation arm has no other cover here.
-                (inner.clone(), inner.clone()).prop_map(|(a, b)| Schema::list(SeqRegex::Or(vec![
-                    SeqRegex::Elem(Box::new(a)),
-                    SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(b)))),
-                ]))),
+                    .prop_map(|(a, b)| Schema::tuple(SeqShape::prefix_tail([a], b))),
+                proptest::collection::vec(inner.clone(), 0..3)
+                    .prop_map(|elements| Schema::list(SeqShape::fixed(elements))),
                 (inner.clone(), inner.clone())
                     .prop_map(|(key, value)| Schema::mapping(MapClause { key, value })),
                 inner
@@ -3662,8 +3563,8 @@ mod index_laws {
                     indices(member, pool, defs);
                 }
             }
-            Schema::Seq { regex, .. } => {
-                for element in regex_elements(regex) {
+            Schema::Seq { shape, .. } => {
+                for element in shape.elements() {
                     indices(element, pool, defs);
                 }
             }
@@ -3699,18 +3600,6 @@ mod index_laws {
                     }
                 }
             }
-        }
-    }
-
-    /// The element schemas of a sequence regex, in order.
-    fn regex_elements(regex: &SeqRegex) -> Vec<&Schema> {
-        match regex {
-            SeqRegex::Empty => Vec::new(),
-            SeqRegex::Elem(schema) => vec![schema],
-            SeqRegex::Cat(parts) | SeqRegex::Or(parts) => {
-                parts.iter().flat_map(regex_elements).collect()
-            }
-            SeqRegex::Star(inner) => regex_elements(inner),
         }
     }
 

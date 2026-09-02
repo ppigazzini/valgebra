@@ -45,6 +45,23 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Changed
 
+- A list or tuple counts one level of the construction depth bound, not two, so a
+  schema can nest twice as deep before the bound refuses it: a chain of 128
+  nested lists now builds where 64 was the limit, and a chain that pins a length
+  on each list reaches 64 where 43 was the limit. The sequence node carries its
+  elements directly rather than as a regular expression over them, and the two
+  levels a list spent were the expression's own constructors — levels a walk
+  descended and a reader had no way to see. The bound itself is unchanged at 128
+  levels, and no schema that built before is refused now.
+
+- A schema refused for depth says so by name. The frontend's own descent limit
+  stood at the same 128 levels as the construction bound, and once a list cost
+  one level rather than two the two limits met: a too-deep chain of lists
+  reported `NotImplementedError` about a type that never reaches a leaf instead
+  of `ValueError` about the depth. The frontend now descends one level further
+  than the deepest schema construction accepts, so the bound that tripped is the
+  bound that speaks.
+
 - A union's `expected` names each branch the way that branch names itself when it
   fails alone, in place of the branch's node kind. A set of permitted strings —
   the commonest shape a field has — reported `one of: literal, literal` and now
