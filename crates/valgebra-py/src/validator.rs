@@ -915,25 +915,37 @@ impl Validator {
     /// recursive definitions, and pooled constants all match. This is *syntactic*
     /// — `union(int, str)` and `union(str, int)` are not equal — whereas
     /// `is_equivalent` compares the sets two schemas denote regardless of shape.
-    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+    ///
+    /// A pooled constant is compared the way a literal reads one: same type and
+    /// equal. Python's `==` runs across types, so equality alone makes
+    /// `Literal[1]` and `Literal[True]` the same validator while `is_equivalent`
+    /// reports them disjoint — two answers about one pair. The type test is what
+    /// `Literal` already means, so equality says what the schema says.
+    ///
+    /// A non-validator gets `NotImplemented` rather than `False`: the data model
+    /// asks the other operand next, and it may know something about validators
+    /// that validators do not know about it.
+    fn __eq__<'py>(&self, other: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
+        let py = other.py();
         let Ok(bound) = other.cast::<Validator>() else {
-            return false;
+            return py.NotImplemented().into_bound(py);
         };
-        let py = bound.py();
         let other = bound.get();
-        if self.schema != other.schema
-            || self.definitions != other.definitions
-            || self.literals.len() != other.literals.len()
-        {
-            return false;
-        }
-        // Compare pooled constants by value (identity first, so a validator
-        // equals itself even when it pools a value that is not equal to itself,
-        // such as NaN).
-        self.literals.iter().zip(&other.literals).all(|(a, b)| {
-            let (a, b) = (a.bind(py), b.bind(py));
-            a.is(b) || a.eq(b).unwrap_or(false)
-        })
+        let equal = self.schema == other.schema
+            && self.definitions == other.definitions
+            && self.literals.len() == other.literals.len()
+            // Identity first, so a validator equals itself even when it pools a
+            // value that is not equal to itself, such as NaN.
+            && self
+                .literals
+                .iter()
+                .zip(&other.literals)
+                .all(|(a, b)| {
+                    let (a, b) = (a.bind(py), b.bind(py));
+                    a.is(b)
+                        || (a.get_type().is(b.get_type()) && a.eq(b).unwrap_or(false))
+                });
+        PyBool::new(py, equal).to_owned().into_any()
     }
 
     /// A hash consistent with structural equality. It digests the schema shape

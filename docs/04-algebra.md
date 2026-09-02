@@ -308,6 +308,10 @@ set but are written differently are equal under `is_equivalent` yet not under
 `==`. Ask `is_equivalent` "do these mean the same set?" and `==` "are these the
 same shape?".
 
+Shape includes the constants a schema pins, read the way `Literal` reads one:
+same type and equal. `Validator(Literal[1]) != Validator(Literal[True])`, because
+the two denote disjoint sets even though `1 == True`.
+
 ### Relations between your own schemas
 
 A codebase with more than one schema for the same data has relations between them

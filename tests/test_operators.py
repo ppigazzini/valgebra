@@ -5,7 +5,7 @@ typing already uses for it); `==`/`hash` are *syntactic* (schema shape), distinc
 from the semantic `is_equivalent`.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 from hypothesis import given
@@ -79,10 +79,25 @@ def test_eq_is_syntactic_not_semantic() -> None:
     assert union(bool, int).is_equivalent(int)
 
 
-def test_eq_against_a_non_validator_is_false() -> None:
+def test_eq_against_a_non_validator_defers_to_the_other_operand() -> None:
     assert Validator(int) != 5
     assert Validator(int) != "int"
     assert (Validator(int) == object()) is False
+    # The comparison itself says "ask the other operand", which is what lets a
+    # type that knows about validators answer for the pair; `==` then falls back
+    # to identity, so the observable answer is unchanged.
+    assert Validator(int).__eq__(5) is NotImplemented
+
+
+def test_eq_reads_a_pooled_constant_the_way_a_literal_does() -> None:
+    # Python's `==` runs across types, so comparing constants by equality alone
+    # makes two validators equal that `is_equivalent` reports disjoint. The type
+    # test is what `Literal` already means.
+    assert Validator(Literal[1]) != Validator(Literal[True])
+    assert intersection(Literal[1], Literal[True]).is_empty()
+    assert Validator(1) != Validator(True)
+    assert Validator(1) != Validator(1.0)
+    assert Validator(Literal[1]) == Validator(Literal[1])
 
 
 def test_validators_are_hashable_and_consistent() -> None:

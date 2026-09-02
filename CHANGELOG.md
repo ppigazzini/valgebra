@@ -27,6 +27,14 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Fixed
 
+- `==` on validators reads a pooled constant the way `Literal` does: same type
+  and equal. Python's `==` runs across types, so comparing by equality alone made
+  `Validator(Literal[1])` and `Validator(Literal[True])` the same validator while
+  `is_equivalent` reported them disjoint — two answers about one pair. Comparing
+  a validator with something else answers `NotImplemented` rather than `False`,
+  so the other operand gets its turn as the data model asks; `==` still falls
+  back to identity, so the answer a caller sees is unchanged.
+
 - A class is checked for the attributes it declares rather than for every
   annotation on it. A dataclass carrying an `InitVar` denoted the empty set —
   the marker names a constructor parameter no instance keeps, so every instance
