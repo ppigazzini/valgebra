@@ -25,6 +25,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
+# The repository checks are not the product suite: this file reads the tree,
+# the configuration and the gate scripts, none of which ship in a wheel.
+pytestmark = pytest.mark.repository
+
 ROOT = Path(__file__).resolve().parent.parent
 CONTRIBUTING = ROOT / "CONTRIBUTING.md"
 SCRIPTS = ROOT / "scripts"

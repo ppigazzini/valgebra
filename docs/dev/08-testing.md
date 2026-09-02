@@ -4,6 +4,32 @@ Correctness here is checked against the **denotation**, not against itself. A
 test that asserts the validator agrees with the validator proves nothing about
 what a schema means.
 
+## Two suites in one directory
+
+`tests/` holds two kinds of file, and only one of them says anything about the
+library. Most exercise valgebra. The rest read *this repository* -- its
+configuration, its gate scripts, its documentation, its CI workflows -- and
+answer for the project rather than for the product. They carry the `repository`
+marker:
+
+```bash
+pytest -m "not repository"   # the product suite
+pytest -m repository         # the project's own audit
+pytest                       # both, which is what CI runs
+```
+
+The split is worth drawing for two reasons. A repository check counted as a
+product test makes the library look tested by work that never touched it. And a
+reader who has the library without the tree -- from a wheel, an sdist, a
+distribution package -- cannot run those checks at all, so a suite that mixes
+them fails for a reason that is not about valgebra.
+
+The marker is not maintained by hand. A test file that never imports `valgebra`
+exercises nothing and must carry it; a marked file that *does* import valgebra
+is a product test the marker would silently drop. `test_suite_partition.py`
+reads both facts from the syntax and fails either way round, so a new file lands
+on one side the day it arrives.
+
 ## The layers, and what each can see
 
 | Layer | Judges | Blind to |
@@ -55,7 +81,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Nine of them:
+for and misses the other. Ten of them:
 
 | Ledger | Holds |
 |---|---|
@@ -68,11 +94,12 @@ for and misses the other. Nine of them:
 | `tests/test_completeness_probe.py` | every suspected completeness gap is accepted with a reason |
 | `tests/test_completeness_ledger.py` | every relation the procedure must decide is decided; every relation it declines is still declined |
 | `tests/test_laws.py` | the complement laws decide against a respelling the procedure proves equal |
+| `tests/test_suite_partition.py` | every test file is a product test or a marked repository check |
 
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are nine.
+because a table nothing counts is the one that drifts: there are ten.
 
 `tests/test_node_matrix.py` is the same shape one level in: it reads the `Schema`
 variants out of the IR and fails when one carries no row, so the universe is
