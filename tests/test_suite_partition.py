@@ -18,6 +18,11 @@ Reading the import rather than a hand-written list is what makes the check
 survive a new file. A test that arrives importing nothing is caught the day it
 arrives, rather than at the next audit.
 
+The same parse answers a second question about the suite, for the same reason:
+a typing form subscripted with a runtime validator is a collection error on the
+oldest Python this project supports, and the newest accepts it. A suite run only
+on the newest version cannot see it.
+
 LEDGER: every test file is a product test or a marked repository check
 """
 
@@ -55,6 +60,49 @@ def _imports_the_library(tree: ast.Module) -> bool:
         ):
             return True
     return False
+
+
+# The combinators that return a `Validator`. A validator is a runtime object,
+# not a type, so `typing` refuses it where a type belongs -- on 3.10 loudly, at
+# subscription time, which is a collection error rather than a test failure.
+_COMBINATORS = frozenset(
+    {
+        "union",
+        "intersection",
+        "complement",
+        "recursive",
+        "Validator",
+    }
+)
+
+
+def _validators_in_typing_forms(tree: ast.Module) -> list[str]:
+    """List the `Annotated[...]` forms subscripted with a validator call.
+
+    `Annotated[t, ...]` takes a *type*. On 3.10 `t` is checked when the form is
+    built, so a validator there raises at import and takes the whole module out
+    of collection; on 3.12 and later the check is looser and the same line runs.
+    The schema a validator spells has a typing spelling too -- `Union[int, str]`
+    for `union(int, str)` -- and that one is a type on every version.
+
+    Only the head of the subscription is read. A validator *inside* a builtin
+    generic (`list[nothing]`) builds a `types.GenericAlias`, which every
+    supported version accepts.
+    """
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Subscript):
+            continue
+        if not (isinstance(node.value, ast.Name) and node.value.id == "Annotated"):
+            continue
+        head = node.slice.elts[0] if isinstance(node.slice, ast.Tuple) else node.slice
+        if (
+            isinstance(head, ast.Call)
+            and isinstance(head.func, ast.Name)
+            and head.func.id in _COMBINATORS
+        ):
+            found.append(f"line {head.lineno}: Annotated[{head.func.id}(...), ...]")
+    return found
 
 
 def _is_marked(tree: ast.Module) -> bool:
@@ -130,3 +178,38 @@ def test_an_import_is_read_from_the_syntax_and_not_the_text() -> None:
     assert _imports_the_library(submodule)
     similar = ast.parse("import valgebra_vtjson\n")
     assert not _imports_the_library(similar)
+
+
+def test_no_typing_form_is_subscripted_with_a_validator() -> None:
+    # The failure this catches is a collection error, not a test failure: the
+    # module raises on import and every test in it disappears, which on a green
+    # newer interpreter looks like nothing at all.
+    offenders = {}
+    for path in sorted(TESTS.glob("test_*.py")):
+        found = _validators_in_typing_forms(ast.parse(path.read_text(encoding="utf-8")))
+        if found:
+            offenders[path.name] = found
+    assert not offenders, (
+        f"typing forms subscripted with a runtime validator: {offenders}. "
+        "Spell the schema as a typing form -- `Union[int, str]` for "
+        "`union(int, str)` -- which every supported Python accepts."
+    )
+
+
+def test_the_validator_head_is_read_and_a_nested_one_is_not() -> None:
+    # The two readings the check turns on. A validator at the head is the
+    # failure; one inside a builtin generic builds a `types.GenericAlias`, which
+    # every supported version accepts, and flagging it would refuse a spelling
+    # the suite relies on.
+    head = ast.parse("x = Annotated[union(int, str), Ge(0)]\n")
+    assert _validators_in_typing_forms(head) == ["line 1: Annotated[union(...), ...]"]
+    nested = ast.parse("x = Annotated[list[nothing], MinLen(1)]\n")
+    assert _validators_in_typing_forms(nested) == []
+    typed = ast.parse("x = Annotated[Union[int, str], Ge(0)]\n")
+    assert _validators_in_typing_forms(typed) == []
+    # A single-argument subscription is not a tuple, and the head is the whole
+    # slice: the two shapes reach the same read by different paths.
+    lone = ast.parse("x = Annotated[complement(int)]\n")
+    assert _validators_in_typing_forms(lone) == [
+        "line 1: Annotated[complement(...), ...]"
+    ]
