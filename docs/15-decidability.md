@@ -97,7 +97,9 @@ conservative](#sound-but-conservative)).
   rule is sound and is witnessed by an independent reference denotation. The
   *sets* are inductive — a guarded fixpoint contains the values built by finitely
   many unfoldings — while the *comparison* assumes its goal and is coinductive;
-  the two agree because a value is finite.
+  the two agree because a value is finite. A fixpoint is decided below its own
+  unfolding, so a `recursive` schema and the body written out around it relate
+  in both directions.
 - **The complement laws, where the constructors reach them.** `complement`
   cancels a complement and `union` folds a join carrying a schema beside its own
   complement, both where the schema is built. So `complement(complement(int))`
@@ -245,11 +247,6 @@ tracked as future work.
   asked whether it admits a name, so `{"a": int}` is not decided below
   `dict[Literal["a"], int]`.
 
-- **A lossy rule reached before a lossless one.** A union on the right is tried
-  branch by branch before a reference is unfolded or a refinement drops to its
-  base, so a fixpoint is not decided below its own unfolding and
-  `Annotated[int | str, Ge(0)]` is not decided below `int | str`.
-
 Every relation named here is a strict expected failure in
 `tests/test_completeness_ledger.py`, so the day a rule decides one the mark fails
 and the entry leaves both the ledger and this list.
@@ -310,8 +307,8 @@ its own unfolding, and a record beside a literal-keyed map.
 
 General regular-expression-types inclusion of sequences (a union of sequence
 languages that splits across branches, or a repeated heterogeneous group) is not
-implemented, and no schema valgebra builds takes that shape: every sequence is
-the linear prefix-and-tail form.
+implemented, and no schema valgebra builds takes that shape: the sequence node
+carries the linear prefix-and-tail form and has no syntax for the rest.
 
 ## Undecidable at runtime
 

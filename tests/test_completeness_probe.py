@@ -208,14 +208,6 @@ ACCEPTED: dict[str, str] = {
     "str&Regex['a'] <= Lit['a','b']": (
         "As above, with the supertype a union of literals."
     ),
-    "mu t.None|{a:int,next:t} <= None|{a:int,next:mu t}": (
-        "A fixpoint below its own unfolding. Both denote one set, and the two "
-        "sides differ only in where the unfolding happened. A union on the right "
-        "is tried branch by branch before a reference is unfolded, so the "
-        "reference reaches no arm that would unfold it and the relation falls "
-        "through. Deciding it means trying the lossless moves -- unfolding a "
-        "reference, dropping a refinement to its base -- before the lossy one."
-    ),
     "bool <= int&Ge(0)": (
         "A subtype that is not itself a refinement reaches one only through the "
         "value oracle, which answers for a literal and not for a class. Deciding "

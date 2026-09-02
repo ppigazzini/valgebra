@@ -43,6 +43,16 @@ All notable changes to valgebra are recorded here. The format follows
   conservative, since user-defined equality can admit one value for two
   constants.
 
+### Added
+
+- A recursive schema is decided below its own body written out, and a refinement
+  of a union below that union: `recursive(lambda t: union(None, {"next": t}))` is
+  a subtype of `union(None, {"next": <that schema>})`, and
+  `Annotated[int | str, Ge(0)]` of `int | str`. Trying a union's branches one by
+  one commits to a branch, and a subject that lands in the union only once a
+  reference is unfolded or a refinement drops to its base got no answer from it.
+  Both rules are sound alone, so where both apply both are asked.
+
 ### Changed
 
 - A list or tuple counts one level of the construction depth bound, not two, so a
