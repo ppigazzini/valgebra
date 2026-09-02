@@ -444,21 +444,21 @@ fn build_parametrized(
 ) -> PyResult<Schema> {
     let py = origin.py();
     if origin.is(py.get_type::<PyList>()) {
-        return Ok(Schema::list(SeqRegex::homogeneous(build_schema(
+        return Ok(Schema::list(SeqRegex::homogeneous(build_type_argument(
             &single_arg(args)?,
             lits,
             defs,
         )?)));
     }
     if origin.is(py.get_type::<PySet>()) {
-        return Ok(Schema::Set(Box::new(build_schema(
+        return Ok(Schema::Set(Box::new(build_type_argument(
             &single_arg(args)?,
             lits,
             defs,
         )?)));
     }
     if origin.is(py.get_type::<PyFrozenSet>()) {
-        return Ok(Schema::FrozenSet(Box::new(build_schema(
+        return Ok(Schema::FrozenSet(Box::new(build_type_argument(
             &single_arg(args)?,
             lits,
             defs,
@@ -473,8 +473,8 @@ fn build_parametrized(
         // Named rather than positional: `dict[K, V]` compiled with the two
         // transposed is `dict[V, K]`, which typechecks and validates real values.
         return Ok(Schema::mapping(MapClause {
-            key: build_schema(&args.get_item(0)?, lits, defs)?,
-            value: build_schema(&args.get_item(1)?, lits, defs)?,
+            key: build_type_argument(&args.get_item(0)?, lits, defs)?,
+            value: build_type_argument(&args.get_item(1)?, lits, defs)?,
         }));
     }
     if origin.is(py.get_type::<PyTuple>()) {
@@ -485,12 +485,12 @@ fn build_parametrized(
         // requiredness, which is already read from __required_keys__; validate
         // the wrapped type. These wrappers survive hint resolution because field
         // metadata is kept (include_extras), so the frontend must unwrap them.
-        return build_schema(&single_arg(args)?, lits, defs);
+        return build_type_argument(&single_arg(args)?, lits, defs);
     }
     if is_union_origin(origin)? {
         let mut members = Vec::with_capacity(args.len());
         for arg in args.iter() {
-            members.push(build_schema(&arg, lits, defs)?);
+            members.push(build_type_argument(&arg, lits, defs)?);
         }
         return Ok(Schema::union(members));
     }
@@ -543,6 +543,38 @@ fn is_required_marker(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
         }
     }
     Ok(false)
+}
+
+/// Compile a *type argument* of a typing form.
+///
+/// A string here is a forward reference, which the typing spec asks a consumer to
+/// resolve against the namespace the annotation was written in. valgebra has no
+/// such namespace in hand, and the constant fallthrough would read `list["int"]`
+/// as a list of the string `"int"` — a schema that refuses what the annotation
+/// admits and admits what it refuses. So the position is refused, and the caller
+/// is pointed at the resolution the spec provides.
+///
+/// `Literal["a"]`'s arguments are not this position: they are values, which is
+/// why the literal arm compiles them straight through. Nor is the native list or
+/// dict literal, where a bare value is a literal by design.
+fn build_type_argument(
+    arg: &Bound<'_, PyAny>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let py = arg.py();
+    let forward_ref = match py.import("typing")?.getattr("ForwardRef") {
+        Ok(class) => arg.is_instance(&class)?,
+        Err(_) => false,
+    };
+    if arg.is_instance_of::<PyString>() || forward_ref {
+        return Err(not_implemented(&format!(
+            "{} is a forward reference, and a schema is built from the types              themselves: resolve the annotation first with \
+             typing.get_type_hints(..., include_extras=True), or write the type              rather than its name",
+            summarize(arg)
+        )));
+    }
+    build_schema(arg, lits, defs)
 }
 
 /// What an unpacked tuple argument contributes to the tuple that carries it.
@@ -641,12 +673,12 @@ fn build_tuple(
     }
     let mut elements = Vec::with_capacity(prefix.len());
     for element in &prefix {
-        elements.push(build_schema(element, lits, defs)?);
+        elements.push(build_type_argument(element, lits, defs)?);
     }
     let regex = match tail {
         None => SeqRegex::fixed(elements),
         Some(tail) => {
-            let tail = build_schema(&tail, lits, defs)?;
+            let tail = build_type_argument(&tail, lits, defs)?;
             if elements.is_empty() {
                 SeqRegex::homogeneous(tail)
             } else {

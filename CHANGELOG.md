@@ -27,6 +27,15 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Fixed
 
+- A string in the argument of a typing form is refused instead of read as a
+  literal. `list["Account"]` is a forward reference the typing spec resolves
+  against the namespace the annotation was written in, and a runtime object
+  carries no namespace; reading it as a constant built a list of the *word*,
+  which refuses what the annotation admits. `Validator` still reads a bare
+  constant as a literal wherever a value belongs — at the top level, in a native
+  list or dict literal, and in `Literal[...]` — and still resolves a class's own
+  string annotations.
+
 - An unpacked variadic tuple compiles to the shape it names.
   `tuple[int, *tuple[str, ...]]` is a fixed prefix followed by a repeating tail —
   the same shape `tuple[int, str, ...]` spells — and it was read as a two-element

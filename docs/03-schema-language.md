@@ -198,6 +198,32 @@ assert not Validator(Literal[1]).is_valid(True)
 assert not Validator(Literal[1]).is_valid(1.0)
 ```
 
+### A string inside a generic is a forward reference, and is refused
+
+The fallback reads a bare value as a literal, and that reading stops at the
+argument of a typing form. `list["Account"]` is a **forward reference** to a type
+named `Account`, which the typing spec resolves against the namespace the
+annotation was written in — a namespace valgebra does not have, because it is
+handed the runtime object rather than the source. Reading the string as a literal
+instead would build a list of the *word* `"Account"`, a schema that refuses what
+the annotation admits, so the position is refused:
+
+```python
+from valgebra import Validator
+
+try:
+    Validator(list["Account"])
+except NotImplementedError as error:
+    assert "forward reference" in str(error)
+
+# Say the type, or say the value.
+assert Validator(list[int]).is_valid([1])
+assert Validator(["active"]).is_valid(["active"])  # a list of that literal
+```
+
+A class's own annotations are a different matter: `Validator(SomeClass)` resolves
+their strings for you (see [classes](#classes)).
+
 ### Anything unrecognized is a literal
 
 The literal form is also the **fallback**: an object the frontend does not read

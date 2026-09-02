@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from types import GenericAlias
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Literal
 
 import annotated_types as at
 import pytest
@@ -166,7 +166,9 @@ def test_fail_fast_stops_at_first_failure_on_the_json_path() -> None:
 def _json_schemas() -> st.SearchStrategy[object]:
     leaf = st.one_of(
         st.sampled_from([int, float, bool, str, None, object]),
-        st.sampled_from([0, 1, "a", "", True, 1.5]),
+        # Spelled `Literal[v]`: the leaf is also a generic's argument, where a
+        # bare value names a type rather than being one.
+        st.sampled_from([0, 1, "a", "", True, 1.5]).map(lambda value: Literal[value]),
         st.integers(min_value=-3, max_value=3).map(lambda k: Annotated[int, at.Ge(k)]),
     )
     return st.recursive(

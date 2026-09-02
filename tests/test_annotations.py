@@ -1,3 +1,6 @@
+from types import GenericAlias
+from typing import ForwardRef, Literal, Union
+
 import pytest
 
 from valgebra import ValidationError, Validator
@@ -39,3 +42,36 @@ def test_generic_annotation_reports_located_failure() -> None:
         Validator(list[int]).validate([1, "x"])
     assert info.value.code == "int_type"
     assert info.value.path == (1,)
+
+
+# A name no module defines, so resolving it is impossible rather than merely
+# unattempted. The forms are built at runtime: written as annotations they would
+# be flagged by the linter for the very reason this test exists.
+_UNRESOLVED = "Account"
+
+_FORWARD_REFERENCES = [
+    pytest.param(GenericAlias(list, (_UNRESOLVED,)), id="list"),
+    pytest.param(GenericAlias(set, (_UNRESOLVED,)), id="set"),
+    pytest.param(GenericAlias(dict, (_UNRESOLVED, int)), id="dict-key"),
+    pytest.param(GenericAlias(dict, (str, _UNRESOLVED)), id="dict-value"),
+    pytest.param(GenericAlias(tuple, (_UNRESOLVED, int)), id="tuple"),
+    pytest.param(Union[ForwardRef(_UNRESOLVED), None], id="optional"),  # noqa: UP007
+]
+
+
+@pytest.mark.parametrize("spec", _FORWARD_REFERENCES)
+def test_a_forward_reference_in_a_generic_argument_is_refused(spec: object) -> None:
+    # The typing spec resolves a string in this position against the namespace the
+    # annotation was written in, and a runtime object carries no namespace.
+    # Reading it as a literal instead builds a container of the *word*, which
+    # refuses what the annotation admits.
+    with pytest.raises(NotImplementedError, match="forward reference"):
+        Validator(spec)
+
+
+def test_a_constant_is_still_a_literal_where_a_value_belongs() -> None:
+    # The refusal is about the argument of a typing form, not about constants.
+    assert Validator("active").is_valid("active")
+    assert Validator(["active"]).is_valid(["active"])
+    assert Validator(Literal["active"]).is_valid("active")
+    assert Validator({"state": "active"}).is_valid({"state": "active"})

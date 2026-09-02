@@ -17,7 +17,7 @@ would make them agree while both being wrong. The denotation oracle in
 from __future__ import annotations
 
 from types import GenericAlias
-from typing import Annotated
+from typing import Annotated, Literal
 
 import annotated_types as at
 from hypothesis import given
@@ -41,8 +41,14 @@ def _refinements() -> st.SearchStrategy[object]:
 
 
 def _schemas() -> st.SearchStrategy[object]:
+    # A constant is spelled `Literal[v]` rather than bare: these leaves are also
+    # used as the *argument* of a generic, where a bare value is a forward
+    # reference to a type rather than a value. The bare-constant spelling is a
+    # schema in its own right and is covered by `tests/test_literals.py`.
     leaf = st.one_of(
-        st.sampled_from(_SCALARS), st.sampled_from(_LITERALS), _refinements()
+        st.sampled_from(_SCALARS),
+        st.sampled_from(_LITERALS).map(lambda value: Literal[value]),
+        _refinements(),
     )
     return st.recursive(
         leaf,
