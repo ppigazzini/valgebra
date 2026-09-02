@@ -50,6 +50,19 @@ repos:
         language: system
         types: [rust]
         pass_filenames: false
+      # The library targets carry two restriction lints the default group does
+      # not, so the hook above passes on code the merge gate refuses. Same
+      # command as the CI step, so a panicking index or unwrap is caught here
+      # rather than after the push; tests and benches use both legitimately and
+      # stay out of scope.
+      - id: cargo-clippy-restrictions
+        name: cargo clippy (no panicking index or unwrap in the library)
+        entry: >-
+          cargo clippy --locked --lib --all-features --
+          -D clippy::indexing_slicing -D clippy::unwrap_used
+        language: system
+        types: [rust]
+        pass_filenames: false
       # The fuzz crate is a detached workspace, so the clippy hook above does not
       # reach it and a change to the core's public types compiles cleanly here
       # while breaking the fuzz lane. Checked, not clippy-linted: its own lane

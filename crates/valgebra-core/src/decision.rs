@@ -1187,11 +1187,22 @@ fn product_subtype(
         .enumerate()
         .all(|(position, (mine, theirs))| {
             mine.is_subtype_rec(theirs, cx, assumptions) || {
-                let mut narrowed = components.to_vec();
-                narrowed[position] = Schema::Intersection(vec![
-                    mine.clone(),
-                    Schema::Complement(Box::new(theirs.clone())),
-                ]);
+                // The component this branch does not cover, narrowed by what the
+                // branch takes away, with the rest of the tuple as it was. Built
+                // by mapping rather than by writing at an index: the position
+                // comes from the same enumeration as the component, so an index
+                // write cannot go out of range and cannot be seen not to.
+                let narrowed: Vec<Schema> = components
+                    .iter()
+                    .enumerate()
+                    .map(|(index, component)| {
+                        if index == position {
+                            Schema::meet([mine.clone(), theirs.clone().complement()])
+                        } else {
+                            component.clone()
+                        }
+                    })
+                    .collect();
                 product_subtype(&narrowed, rest, cx, assumptions)
             }
         })

@@ -27,6 +27,12 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Fixed
 
+- The product-splitting rule builds its narrowed component through the schema
+  constructors instead of writing at an index, so the double negation it used to
+  manufacture — a complement of a branch component that is itself a complement —
+  cancels where the rest of the tree says it does. The verdicts are unchanged;
+  the rule stops producing a shape no other rule is written for.
+
 - A `MultipleOf` divisor of a different type than the value divides. The check
   reads the `%` operator rather than the value's `__mod__` alone, and half of
   what `%` means lives on the divisor: a value that does not know it answers

@@ -115,17 +115,20 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
     for definition in &mut definitions {
         *definition = definition.resolve_self(token, ref_id);
     }
-    definitions.push(body.resolve_self(token, ref_id));
+    let resolved = body.resolve_self(token, ref_id);
     // Contractivity is a property of the whole system of definitions: an inner
     // fixpoint that names this one puts the occurrence behind a `Ref`, which a
-    // walk over the body alone reads as a leaf.
-    if definitions[ref_id.get()].occurs_unguarded_under(ref_id, Guarded::No, &definitions) {
+    // walk over the body alone reads as a leaf. The definitions the body's build
+    // appended are the graph; this definition is not among them and needs not be,
+    // since reaching it is the answer rather than a step.
+    if resolved.occurs_unguarded_under(ref_id, Guarded::No, &definitions) {
         return Err(PyValueError::new_err(
             "recursive schema is not contractive: the recursive reference must \
              occur under a structural constructor (a list, tuple, set, dict, \
              record, or object)",
         ));
     }
+    definitions.push(resolved);
     Validator::checked(Schema::Ref(ref_id), literals.into_items(), definitions)
 }
 
