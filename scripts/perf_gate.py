@@ -37,6 +37,8 @@ verdict:
 
 Usage:
     python scripts/perf_gate.py                      # check the core budget
+    python scripts/perf_gate.py --decision           # gate the decision procedures
+    python scripts/perf_gate.py --decision --update  # re-record that budget
     python scripts/perf_gate.py --update             # re-record the core budget
     python scripts/perf_gate.py --binding            # check the binding budget
     python scripts/perf_gate.py --binding --update   # re-record it
@@ -63,6 +65,7 @@ EXIT_CANNOT_RUN = 2
 ROOT = Path(__file__).resolve().parent.parent
 BUDGET_FILE = ROOT / "scripts" / "perf_budget.json"
 WORKLOAD = ROOT / "target" / "release" / "examples" / "perf_workload"
+DECISION_WORKLOAD = ROOT / "target" / "release" / "examples" / "decision_workload"
 BINDING_WORKLOAD = ROOT / "target" / "release" / "examples" / "binding_workload"
 # The two iteration counts whose cachegrind difference isolates the per-iteration
 # binding walk cost from the fixed (cancelling) interpreter startup.
@@ -81,14 +84,14 @@ class Measurement:
         self.checksum = checksum
 
 
-def build_workload() -> None:
+def build_workload(example: str = "perf_workload") -> None:
     subprocess.run(
         [
             "cargo",
             "build",
             "--release",
             "--example",
-            "perf_workload",
+            example,
             "-p",
             "valgebra-core",
         ],
@@ -217,6 +220,35 @@ def run_core(budget: dict, *, update: bool) -> int:
     )
 
 
+def run_decision(budget: dict, *, update: bool) -> int:
+    """Gate the decision procedures: subtyping, emptiness, equivalence.
+
+    A separate workload from the core one because it measures a separate
+    surface. Without it a rule added to `decision.rs` is invisible to the gate in
+    both directions -- neither the cost of a new one nor the saving from a
+    cheaper one shows up.
+    """
+    build_workload("decision_workload")
+    result = measure(DECISION_WORKLOAD)
+    if update:
+        budget["decision_workload_irefs"] = result.irefs
+        budget["decision_workload_checksum"] = result.checksum
+        BUDGET_FILE.write_text(json.dumps(budget, indent=2) + "\n", encoding="utf-8")
+        print(f"recorded decision budget: {result.irefs:,} instructions")
+        print(f"recorded decision checksum: {result.checksum}")
+        return 0
+    failed = check_checksum(
+        result.checksum, int(budget["decision_workload_checksum"]), "decision workload"
+    )
+    if failed:
+        return failed
+    return check_against_budget(
+        result.irefs,
+        int(budget["decision_workload_irefs"]),
+        float(budget["tolerance"]),
+    )
+
+
 def run_binding(budget: dict, *, update: bool) -> int:
     build_binding_workload()
     # The walk's per-iteration cost, isolated by subtracting two runs so the
@@ -254,6 +286,8 @@ def main() -> int:
     budget = json.loads(BUDGET_FILE.read_text(encoding="utf-8"))
     if "--binding" in args:
         return run_binding(budget, update=update)
+    if "--decision" in args:
+        return run_decision(budget, update=update)
     return run_core(budget, update=update)
 
 

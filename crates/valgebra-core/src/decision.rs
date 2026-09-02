@@ -535,29 +535,41 @@ impl Schema {
         // decision stops and returns the conservative `false` rather than running
         // unbounded. A real annotation decides in a few steps; only an adversarial
         // schema reaches the ceiling.
+        // Reflexivity, by identity. One pointer comparison, and it comes first
+        // because everything below walks: the structural compare at the end
+        // reads every field of both sides to reach the same answer. A subtree
+        // compared against itself is the common case under recursion and behind
+        // `is_equivalent`, which asks both directions of the same pair.
+        if core::ptr::eq(self, other) {
+            return true;
+        }
         if !spend(cx.budget) {
             return false;
         }
-        // Coinductive hypothesis: a goal already being proven on this path is
-        // assumed to hold, so two recursive types are compared at their greatest
-        // fixpoint rather than unfolded forever. The scan is empty (free) for a
-        // non-recursive query; under recursion the stack holds one entry per
-        // reference goal still being unfolded — bounded by the distinct goals
-        // before a cycle and, overall, by the shared work budget. Every recorded
-        // goal has a `Ref` on one side, so the structural compare rejects a
-        // mismatched goal on the discriminant before walking either subtree.
-        if assumptions.iter().any(|(a, b)| a == self && b == other) {
-            return true;
-        }
         // Scalar fragment: exact via the region partition. Subtyping there is
-        // set inclusion between the two region sets, and nothing else.
-        if let (Regions::Known(a), Regions::Known(b)) = (self.region_set(), other.region_set()) {
+        // set inclusion between the two region sets, and nothing else. Cheap off
+        // it too -- a non-scalar node yields `Unknown` from its own discriminant,
+        // without descending.
+        let supertype_regions = other.region_set();
+        if let (Regions::Known(a), Regions::Known(b)) = (self.region_set(), supertype_regions) {
             return a.subset_of(b);
         }
+        // Reflexivity for two equal spellings that are not the same node.
         if self == other {
             return true;
         }
-        self.subtype_decide(other, cx, assumptions)
+        // Coinductive hypothesis: a goal already being proven on this path is
+        // assumed to hold, so two recursive types are compared at their greatest
+        // fixpoint rather than unfolded forever. Asked after the cheap answers,
+        // since each of those terminates the query on its own; the scan is empty
+        // (free) for a non-recursive one, and under recursion it holds one entry
+        // per reference goal still being unfolded. Every recorded goal has a
+        // `Ref` on one side, so the structural compare rejects a mismatched goal
+        // on the discriminant before walking either subtree.
+        if assumptions.iter().any(|(a, b)| a == self && b == other) {
+            return true;
+        }
+        self.subtype_decide(other, supertype_regions, cx, assumptions)
     }
 
     /// The structural subtyping decision: the lattice, recursion, and
@@ -573,17 +585,17 @@ impl Schema {
     ///
     /// The universe side asks whether the complement is empty, which is the same
     /// question one De Morgan step away and needs no separate procedure.
-    fn bounds_the_pair(&self, other: &Schema, cx: SubtypeCx<'_>) -> bool {
-        if self.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget) {
+    fn bounds_the_pair(&self, supertype_regions: Regions, cx: SubtypeCx<'_>) -> bool {
+        // `other` covers the universe exactly when its region set is the whole
+        // partition, and that set is the caller's: `is_subtype_rec` reads it to
+        // try the exact scalar rule and it is unchanged here. Recomputing it
+        // would walk the supertype again on every step of a decision that
+        // distributes over its members. Asked first, because it is a comparison
+        // where the emptiness below is a walk.
+        if supertype_regions == Regions::Known(Region::ALL) {
             return true;
         }
-        // `other` covers the universe exactly when its region set is the whole
-        // partition, which is what asking whether its complement is empty comes
-        // down to. Reading the region directly is the same question without
-        // building a complement around a deep clone of `other` on every step of
-        // a decision that distributes over its members.
-        let (_, regions) = other.empty_and_region(cx.oracle, cx.defs, &mut Vec::new(), cx.budget);
-        regions == Regions::Known(Region::ALL)
+        self.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget)
     }
 
     /// Whether `self` and `other` share no value, which is what decides `self ⊆
@@ -595,6 +607,13 @@ impl Schema {
     /// already decides kind disjointness and the scalar regions. Without it a
     /// container is never seen below the complement of a scalar.
     fn shares_no_value_with(&self, other: &Schema, cx: SubtypeCx<'_>) -> bool {
+        // Kind disjointness settles most pairs and reads only the two
+        // discriminants -- a list never shares a value with an int. Asked first
+        // because the general question below has to build the meet, which means
+        // cloning both sides on a path taken for every complement on the right.
+        if self.disjoint_with(other, cx.oracle) {
+            return true;
+        }
         Schema::Intersection(vec![self.clone(), other.clone()]).is_empty_rec(
             cx.oracle,
             cx.defs,
@@ -606,6 +625,7 @@ impl Schema {
     fn subtype_decide(
         &self,
         other: &Schema,
+        supertype_regions: Regions,
         cx: SubtypeCx<'_>,
         assumptions: &mut Vec<(Schema, Schema)>,
     ) -> bool {
@@ -615,7 +635,7 @@ impl Schema {
             // emptiness, so one guard answers them and a per-atom arm beside it
             // would be dead code -- the mutation sweep says so, by surviving its
             // deletion.
-            _ if self.bounds_the_pair(other, cx) => true,
+            _ if self.bounds_the_pair(supertype_regions, cx) => true,
             // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z; A ⊆ (Y ∩ Z) iff A ⊆ Y and A ⊆ Z.
             (Schema::Union(members), _) => members
                 .iter()
