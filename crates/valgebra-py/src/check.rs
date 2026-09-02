@@ -19,6 +19,6 @@ mod index;
 mod violation;
 mod walk;
 
-pub(crate) use ctx::{Ctx, WalkMode};
+pub(crate) use ctx::{Ctx, WalkMode, WalkState};
 pub(crate) use index::{ValidatorIndex, build_index, compile_pattern};
 pub(crate) use walk::member;

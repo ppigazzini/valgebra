@@ -215,6 +215,43 @@ def test_deeply_nested_object_hits_the_recursion_limit() -> None:
     assert info.value.code == "recursion_limit"
 
 
+def test_a_deep_body_reaches_the_walk_bound_rather_than_the_stack() -> None:
+    # The walk descends one native frame per level, and a recursive definition
+    # descends its whole body once per level of the value: the frames a value can
+    # demand are the *product* of the unfolding bound and the body's depth, not
+    # either alone. A body 60 records deep unfolded 127 times asks for thousands
+    # of frames, which is a bound the walk holds rather than a stack it exhausts.
+    body_depth, unfoldings = 60, 127
+
+    def wrap(inner: object, levels: int) -> object:
+        for _ in range(levels):
+            inner = {"c": inner}
+        return inner
+
+    schema = Validator(recursive(lambda j: union(None, wrap(j, body_depth))))
+    value: object = None
+    for _ in range(unfoldings):
+        value = wrap(value, body_depth)
+
+    assert not schema.is_valid(value)
+    with pytest.raises(ValidationError) as info:
+        schema.validate(value)
+    assert info.value.code == "recursion_limit"
+
+
+def test_a_recursive_value_at_the_unfolding_bound_still_validates() -> None:
+    # The walk bound sits above what the published unfolding bound asks of a
+    # linked list, so bounding the descent refuses only the shapes that would
+    # have exhausted the stack, not the recursion the schema language is for.
+    schema = Validator(recursive(lambda t: union(None, {"next": t})))
+    node: object = None
+    # One short of the published 128 levels of recursion, spelled out because the
+    # bound is documentation rather than a name a caller imports.
+    for _ in range(127):
+        node = {"next": node}
+    assert schema.is_valid(node)
+
+
 def test_deeply_nested_json_is_rejected_cleanly() -> None:
     schema = Validator(recursive(lambda j: union(int, [j])))
     document = "[" * 5000 + "1" + "]" * 5000

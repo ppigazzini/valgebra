@@ -41,10 +41,15 @@ fields) is written by the developer and is trusted.
 
   A real schema stays far under all three. Structural recursion belongs in
   [`recursive`](06-recursion.md), whose back edge does not count toward the depth.
-- **Value-walk depth.** A value nested past a fixed depth fails with
-  `recursion_limit` rather than recursing into the native stack. This holds on
-  both the object path and the JSON path; an over-deep JSON document is rejected
-  by the parser as `json_invalid`.
+- **Value-walk depth.** Two bounds hold the walk inside the stack, and reaching
+  either fails with `recursion_limit`: at most 128 levels of **recursive
+  unfolding**, and at most 512 levels of **descent** in total. The second is what
+  binds for a deep definition, because a recursive definition descends its whole
+  body once per level of the value — so the frames a value can ask for are the
+  product of the two, not either one. A level costs well under a kilobyte of
+  native stack, which puts the deepest walk inside the stack a platform gives a
+  thread. This holds on both the object path and the JSON path; an over-deep JSON
+  document is rejected by the parser as `json_invalid`.
 - **Self-reference.** A value that contains itself is caught by an
   object-identity guard and fails with `recursion_loop` rather than looping
   forever.

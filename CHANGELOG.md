@@ -27,6 +27,15 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Fixed
 
+- The membership walk counts the levels it holds open and refuses past 512 of
+  them with `recursion_limit`, so a value inside every published construction
+  bound cannot exhaust the native stack. Counting recursive *unfoldings* alone
+  does not bound the frames: an unfolding descends the whole definition body, so
+  a body at the schema-depth bound turns the 128 permitted unfoldings into
+  thousands of frames. A recursive schema over a deep body meets the level bound
+  and reports it; a linked list at the unfolding bound is unaffected, because the
+  level ceiling sits above what that shape asks for.
+
 - `ValidationError` can be pickled, so a validation failure crosses a process
   boundary with its structured model intact. The exception's `__module__` was a
   bare `_valgebra`, which names no importable module, and `pickle` locates a

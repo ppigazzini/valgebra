@@ -41,7 +41,7 @@ use valgebra_core::{
     SeqRegex, Violation,
 };
 
-use crate::check::ctx::{Ctx, WalkMode};
+use crate::check::ctx::{Ctx, MAX_WALK_DEPTH, WalkMode};
 use crate::check::index::compile_pattern;
 use crate::check::violation::{
     key_label, located, mismatch, summarize_value, type_fail, type_mismatch,
@@ -147,6 +147,23 @@ pub(crate) fn member(
     if ctx.fatal_seen.get() {
         return false;
     }
+    // One level of the walk is one native stack frame, so the walk counts its own
+    // levels rather than trusting the value to be shallow. A recursive definition
+    // unfolds once per level of the value and descends its whole body each time,
+    // so the frames a value demands are the product of the two construction
+    // bounds; the counter bounds that product, and a value that reaches it is
+    // refused the way an over-deep one already is.
+    let Some(_level) = ctx.descend() else {
+        if ctx.mode.explains() {
+            out.push(Violation {
+                code: "recursion_limit",
+                path: path.clone(),
+                expected: format!("at most {MAX_WALK_DEPTH} levels of nesting"),
+                value_summary: summarize_value(value),
+            });
+        }
+        return false;
+    };
     match schema {
         Schema::Anything | Schema::Dynamic => true,
         // Bottom admits nothing; an unresolved self-reference is never a member.
@@ -1312,9 +1329,8 @@ fn predicate_passes(value: &Bound<'_, PyAny>, predicate: &Bound<'_, PyAny>) -> P
 #[cfg(all(test, feature = "interpreter-tests"))]
 mod interpreter {
     use super::*;
-    use crate::check::{WalkMode, build_index};
+    use crate::check::{WalkMode, WalkState, build_index};
     use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyModule};
-    use std::cell::{Cell, RefCell};
     use valgebra_core::{Field, MapClause, Openness};
 
     /// Decide membership of a Python value against a schema, through the real
@@ -1327,18 +1343,17 @@ mod interpreter {
         defs: &[Schema],
     ) -> bool {
         let index = build_index(py, schema, defs, pool);
-        let guard = RefCell::new(FxHashSet::default());
-        let fatal = RefCell::new(None);
-        let fatal_seen = Cell::new(false);
+        let state = WalkState::new();
         let ctx = Ctx {
             pool,
             defs,
             records: &index.records,
             unions: &index.unions,
             regexes: &index.regexes,
-            guard: &guard,
-            fatal: &fatal,
-            fatal_seen: &fatal_seen,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
             mode: WalkMode::Fast,
         };
         member(
@@ -1361,18 +1376,17 @@ mod interpreter {
         defs: &[Schema],
     ) -> (bool, Vec<Violation>) {
         let index = build_index(py, schema, defs, pool);
-        let guard = RefCell::new(FxHashSet::default());
-        let fatal = RefCell::new(None);
-        let fatal_seen = Cell::new(false);
+        let state = WalkState::new();
         let ctx = Ctx {
             pool,
             defs,
             records: &index.records,
             unions: &index.unions,
             regexes: &index.regexes,
-            guard: &guard,
-            fatal: &fatal,
-            fatal_seen: &fatal_seen,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
             mode: WalkMode::Explain,
         };
         let mut out = Vec::new();
@@ -1930,18 +1944,17 @@ mod interpreter {
         pool: &[Py<PyAny>],
     ) -> (bool, bool) {
         let index = build_index(py, schema, &[], pool);
-        let guard = RefCell::new(FxHashSet::default());
-        let fatal = RefCell::new(None);
-        let fatal_seen = Cell::new(false);
+        let state = WalkState::new();
         let ctx = Ctx {
             pool,
             defs: &[],
             records: &index.records,
             unions: &index.unions,
             regexes: &index.regexes,
-            guard: &guard,
-            fatal: &fatal,
-            fatal_seen: &fatal_seen,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
             mode: WalkMode::Fast,
         };
         let ok = member(
@@ -1951,24 +1964,23 @@ mod interpreter {
             ctx,
             &mut Vec::new(),
         );
-        (ok, fatal.borrow().is_some())
+        (ok, state.fatal.borrow().is_some())
     }
 
     /// Decide membership of a parsed JSON value, in the mode `is_valid_json` uses.
     fn holds_json(py: Python<'_>, schema: &Schema, json: &JsonValue<'_>) -> bool {
         let index = build_index(py, schema, &[], &[]);
-        let guard = RefCell::new(FxHashSet::default());
-        let fatal = RefCell::new(None);
-        let fatal_seen = Cell::new(false);
+        let state = WalkState::new();
         let ctx = Ctx {
             pool: &[],
             defs: &[],
             records: &index.records,
             unions: &index.unions,
             regexes: &index.regexes,
-            guard: &guard,
-            fatal: &fatal,
-            fatal_seen: &fatal_seen,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
             mode: WalkMode::Fast,
         };
         member(
@@ -2176,9 +2188,7 @@ mod interpreter {
                 .set_item("x", PyString::new(py, "a"))
                 .expect("set");
             let deep_value = deep_value.into_any();
-            let guard = RefCell::new(FxHashSet::default());
-            let fatal = RefCell::new(None);
-            let fatal_seen = Cell::new(false);
+            let state = WalkState::new();
             let mut out = Vec::new();
             let ok = member(
                 &schema,
@@ -2190,9 +2200,10 @@ mod interpreter {
                     records: &index.records,
                     unions: &index.unions,
                     regexes: &index.regexes,
-                    guard: &guard,
-                    fatal: &fatal,
-                    fatal_seen: &fatal_seen,
+                    guard: &state.guard,
+                    depth: &state.depth,
+                    fatal: &state.fatal,
+                    fatal_seen: &state.fatal_seen,
                     mode: WalkMode::ExplainFailFast,
                 },
                 &mut out,
@@ -2256,18 +2267,17 @@ mod interpreter {
 
             let index = build_index(py, &schema, &[], &[]);
             let run = |mode: WalkMode| {
-                let guard = RefCell::new(FxHashSet::default());
-                let fatal = RefCell::new(None);
-                let fatal_seen = Cell::new(false);
+                let state = WalkState::new();
                 let ctx = Ctx {
                     pool: &[],
                     defs: &[],
                     records: &index.records,
                     unions: &index.unions,
                     regexes: &index.regexes,
-                    guard: &guard,
-                    fatal: &fatal,
-                    fatal_seen: &fatal_seen,
+                    guard: &state.guard,
+                    depth: &state.depth,
+                    fatal: &state.fatal,
+                    fatal_seen: &state.fatal_seen,
                     mode,
                 };
                 let mut out = Vec::new();
@@ -2289,18 +2299,17 @@ mod interpreter {
         mode: WalkMode,
     ) -> (bool, usize) {
         let index = build_index(py, schema, &[], &[]);
-        let guard = RefCell::new(FxHashSet::default());
-        let fatal = RefCell::new(None);
-        let fatal_seen = Cell::new(false);
+        let state = WalkState::new();
         let ctx = Ctx {
             pool: &[],
             defs: &[],
             records: &index.records,
             unions: &index.unions,
             regexes: &index.regexes,
-            guard: &guard,
-            fatal: &fatal,
-            fatal_seen: &fatal_seen,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
             mode,
         };
         let mut out = Vec::new();
@@ -2569,18 +2578,17 @@ mod interpreter {
 
             let index = build_index(py, &schema, &[], &[]);
             let run = |mode: WalkMode| {
-                let guard = RefCell::new(FxHashSet::default());
-                let fatal = RefCell::new(None);
-                let fatal_seen = Cell::new(false);
+                let state = WalkState::new();
                 let ctx = Ctx {
                     pool: &[],
                     defs: &[],
                     records: &index.records,
                     unions: &index.unions,
                     regexes: &index.regexes,
-                    guard: &guard,
-                    fatal: &fatal,
-                    fatal_seen: &fatal_seen,
+                    guard: &state.guard,
+                    depth: &state.depth,
+                    fatal: &state.fatal,
+                    fatal_seen: &state.fatal_seen,
                     mode,
                 };
                 let mut out = Vec::new();
@@ -2713,18 +2721,17 @@ mod interpreter {
                 JsonValue::Int(2),
             ]));
             let index = build_index(py, &schema, &[], &[]);
-            let guard = RefCell::new(FxHashSet::default());
-            let fatal = RefCell::new(None);
-            let fatal_seen = Cell::new(false);
+            let state = WalkState::new();
             let ctx = Ctx {
                 pool: &[],
                 defs: &[],
                 records: &index.records,
                 unions: &index.unions,
                 regexes: &index.regexes,
-                guard: &guard,
-                fatal: &fatal,
-                fatal_seen: &fatal_seen,
+                guard: &state.guard,
+                depth: &state.depth,
+                fatal: &state.fatal,
+                fatal_seen: &state.fatal_seen,
                 mode: WalkMode::Fast,
             };
             assert!(member(

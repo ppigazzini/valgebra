@@ -38,6 +38,10 @@ pub(crate) struct Ctx<'a> {
     /// reads it for a `Regex(...)` constraint instead of recompiling.
     pub(crate) regexes: &'a RegexIndex,
     pub(crate) guard: &'a RefCell<FxHashSet<(usize, usize)>>,
+    /// How many walk levels are open below the entry point. Each level is a
+    /// native stack frame, and [`MAX_WALK_DEPTH`] is the ceiling
+    /// [`descend`](Ctx::descend) holds it under.
+    pub(crate) depth: &'a Cell<usize>,
     /// A fatal interpreter signal raised mid-walk — a base exception that is not
     /// an ordinary exception (`KeyboardInterrupt`, `SystemExit`, `GeneratorExit`),
     /// or a `MemoryError`/`RecursionError`. The first such error is recorded here;
@@ -52,6 +56,97 @@ pub(crate) struct Ctx<'a> {
     /// What the walk is for. Constant for a whole walk, so the fast path pays
     /// nothing for the explain bookkeeping.
     pub(crate) mode: WalkMode,
+}
+
+/// The mutable state one membership test carries: the recursion guard, the
+/// first fatal signal and the flag mirroring it, and the count of open walk
+/// levels.
+///
+/// One owner rather than a local per cell at each entry point. They share a
+/// lifetime — one call — and they are read together as `Ctx`, so a caller that
+/// assembles three of them and forgets the fourth is a caller the type system
+/// should not be able to spell.
+pub(crate) struct WalkState {
+    /// `(object id, definition index)` pairs open on the current path, so a value
+    /// that contains itself fails with `recursion_loop` instead of looping.
+    pub(crate) guard: RefCell<FxHashSet<(usize, usize)>>,
+    pub(crate) fatal: RefCell<Option<PyErr>>,
+    pub(crate) fatal_seen: Cell<bool>,
+    pub(crate) depth: Cell<usize>,
+}
+
+impl WalkState {
+    pub(crate) fn new() -> Self {
+        Self {
+            guard: RefCell::new(FxHashSet::default()),
+            fatal: RefCell::new(None),
+            fatal_seen: Cell::new(false),
+            depth: Cell::new(0),
+        }
+    }
+
+    /// The fatal interpreter signal the walk recorded, taken by the entry point
+    /// that re-raises it.
+    pub(crate) fn into_fatal(self) -> Option<PyErr> {
+        self.fatal.into_inner()
+    }
+}
+
+impl Default for WalkState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// The most walk levels one membership test holds open at once.
+///
+/// Every level of the walk is a native stack frame, and the frames a value can
+/// demand are not bounded by either published limit on its own: a recursive
+/// definition unfolds once per level of the *value*, and every unfolding
+/// descends the whole body, so the frames are the product of the unfolding bound
+/// and the definition's depth. This bounds that product directly, which is what
+/// makes "a value never overflows the native stack" a statement about the walk
+/// rather than about the values a caller happens to pass.
+///
+/// The figure is the stack a walk needs. A level costs under a kilobyte of
+/// native stack in an unoptimized build, so 512 of them sit inside the smallest
+/// stack a platform gives a thread (512 KiB) and far inside the megabytes a main
+/// thread gets. A schema at the construction depth bound reaches 128 of them
+/// against a flat value, so the ceiling is four times the depth any
+/// non-recursive schema can ask for.
+pub(crate) const MAX_WALK_DEPTH: usize = 512;
+
+/// One open level of walk descent, given out by [`Ctx::descend`].
+///
+/// The level is closed when this is dropped, which is what makes the counter a
+/// *depth* rather than a total: a walk over a wide value takes and returns one
+/// level per child, and only nesting accumulates. Every early return in the walk
+/// closes the level for the same reason it releases any other guard.
+pub(crate) struct Descent<'a>(&'a Cell<usize>);
+
+impl Drop for Descent<'_> {
+    fn drop(&mut self) {
+        let level = self.0.get();
+        debug_assert!(level > 0, "a descent closes a level that was opened");
+        self.0.set(level - 1);
+    }
+}
+
+impl<'a> Ctx<'a> {
+    /// Open one level of descent, or refuse when the walk already holds
+    /// [`MAX_WALK_DEPTH`] of them.
+    ///
+    /// The caller turns a refusal into a non-member with a `recursion_limit`
+    /// violation — the same answer an over-deep value gets from the unfolding
+    /// bound, because it is the same fact about the value.
+    pub(crate) fn descend(self) -> Option<Descent<'a>> {
+        let level = self.depth.get() + 1;
+        if level > MAX_WALK_DEPTH {
+            return None;
+        }
+        self.depth.set(level);
+        Some(Descent(self.depth))
+    }
 }
 
 /// What a membership walk is being run for.

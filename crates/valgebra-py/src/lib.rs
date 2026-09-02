@@ -21,12 +21,9 @@ mod input;
 mod render;
 mod validator;
 
-use std::cell::{Cell, RefCell};
-
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
-use rustc_hash::FxHashSet;
 use valgebra_core::{DefIx, Guarded, Schema, SeqKind, SeqRegex, fresh_self_token};
 
 pub use crate::exception::ValidationError;
@@ -35,7 +32,7 @@ pub use crate::validator::Validator;
 use crate::validator::{MAX_DEFINITIONS, MAX_SCHEMA_DEPTH, MAX_SCHEMA_NODES};
 
 use crate::build::{Pool, build_schema, combine};
-use crate::check::{WalkMode, member};
+use crate::check::{WalkMode, WalkState, member};
 use crate::input::Value;
 
 /// A deterministic, binding-level instruction workload for the perf gate.
@@ -52,6 +49,7 @@ use crate::input::Value;
 /// and cancels, leaving the deterministic per-iteration walk cost. This is the
 /// budgeted signal, and it also covers the per-node `ctx.fatal.borrow()` tax.
 #[doc(hidden)]
+#[must_use]
 pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
     // A homogeneous int list: the walk crosses the boundary at the container and
     // at each element (an `isinstance` check and the per-node `ctx.fatal.borrow()`
@@ -70,16 +68,14 @@ pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
 
     let mut checksum: u64 = 0;
     for _ in 0..iters {
-        let guard = RefCell::new(FxHashSet::default());
-        let fatal = RefCell::new(None);
-        let fatal_seen = Cell::new(false);
+        let state = WalkState::new();
         // `black_box` the inputs so the optimizer cannot hoist the loop-invariant
         // walk out of the loop: the per-iteration walk is the signal being timed.
         let ok = member(
             std::hint::black_box(&validator.schema),
             &Value::Py(std::hint::black_box(&obj)),
             &mut Vec::new(),
-            validator.context(py, &guard, &fatal, &fatal_seen, WalkMode::Fast),
+            validator.context(py, &state, WalkMode::Fast),
             &mut Vec::new(),
         );
         checksum = checksum.wrapping_add(u64::from(ok));

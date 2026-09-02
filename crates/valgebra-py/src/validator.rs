@@ -6,7 +6,7 @@
 //! of its members is what puts the two in a cycle. `lib.rs` re-exports it, so no
 //! caller spells a new path and the Python surface is unchanged.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::sync::OnceLock;
 
 use jiter::{JsonValue, PythonParse};
@@ -19,7 +19,7 @@ use rustc_hash::FxHashSet;
 use valgebra_core::{ConstIx, LeafRelations, Openness, OperandIx, Schema, TypeTag};
 
 use crate::build::{Pool, build_schema};
-use crate::check::{Ctx, ValidatorIndex, WalkMode, build_index, member};
+use crate::check::{Ctx, ValidatorIndex, WalkMode, WalkState, build_index, member};
 use crate::errors::{into_pyerr, json_invalid_error};
 use crate::input::Value;
 use crate::render::render;
@@ -62,8 +62,8 @@ fn math_floor_ceil(py: Python<'_>) -> PyResult<&'static (Py<PyAny>, Py<PyAny>)> 
 }
 /// Turn a membership walk's outcome into a Python result: re-raise a fatal
 /// interpreter signal the walk recorded, otherwise report the membership verdict.
-fn reraise_fatal(fatal: RefCell<Option<PyErr>>, ok: bool) -> PyResult<bool> {
-    match fatal.into_inner() {
+fn reraise_fatal(state: WalkState, ok: bool) -> PyResult<bool> {
+    match state.into_fatal() {
         Some(err) => Err(err),
         None => Ok(ok),
     }
@@ -138,14 +138,12 @@ struct PoolRelations<'py, 'pool> {
 
 impl PoolRelations<'_, '_> {
     fn is_member(&self, schema: &Schema, value: &Bound<'_, PyAny>) -> bool {
-        let guard = RefCell::new(FxHashSet::default());
         // These leaf-subtype probes run on transient schemas during compilation,
         // not on a finished validator, so they carry no precomputed index; the
         // walk falls back to its general path for any record or union here. A
         // fatal signal in a probe folds to non-membership here (the decision
-        // procedure is not the interruptible hot path); the cell is local.
-        let fatal = RefCell::new(None);
-        let fatal_seen = Cell::new(false);
+        // procedure is not the interruptible hot path); the state is local.
+        let state = WalkState::new();
         let index = ValidatorIndex::default();
         let ctx = Ctx {
             pool: self.literals,
@@ -153,9 +151,10 @@ impl PoolRelations<'_, '_> {
             records: &index.records,
             unions: &index.unions,
             regexes: &index.regexes,
-            guard: &guard,
-            fatal: &fatal,
-            fatal_seen: &fatal_seen,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
             mode: WalkMode::Fast,
         };
         member(
@@ -408,13 +407,11 @@ impl Validator {
     }
 
     /// The read-only walk context: the pool, the definitions, the precomputed
-    /// record and union indexes, a fresh recursion guard, and the walk mode.
+    /// record and union indexes, the call's own [`WalkState`], and the mode.
     pub(crate) fn context<'a>(
         &'a self,
         py: Python<'_>,
-        guard: &'a RefCell<FxHashSet<(usize, usize)>>,
-        fatal: &'a RefCell<Option<PyErr>>,
-        fatal_seen: &'a Cell<bool>,
+        state: &'a WalkState,
         mode: WalkMode,
     ) -> Ctx<'a> {
         let index = self.index(py);
@@ -424,9 +421,10 @@ impl Validator {
             records: &index.records,
             unions: &index.unions,
             regexes: &index.regexes,
-            guard,
-            fatal,
-            fatal_seen,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
             mode,
         }
     }
@@ -455,17 +453,15 @@ impl Validator {
         let Ok(json) = JsonValue::parse(bytes, false) else {
             return Ok(false);
         };
-        let guard = RefCell::new(FxHashSet::default());
-        let fatal = RefCell::new(None);
-        let fatal_seen = Cell::new(false);
+        let state = WalkState::new();
         let ok = member(
             &self.schema,
             &Value::Json(py, &json),
             &mut Vec::new(),
-            self.context(py, &guard, &fatal, &fatal_seen, WalkMode::Fast),
+            self.context(py, &state, WalkMode::Fast),
             &mut Vec::new(),
         );
-        reraise_fatal(fatal, ok)
+        reraise_fatal(state, ok)
     }
 }
 
@@ -515,25 +511,17 @@ impl Validator {
     ///         failure with a code and a path.
     #[pyo3(signature = (obj, *, fail_fast = false))]
     fn validate(&self, obj: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
-        let guard = RefCell::new(FxHashSet::default());
-        let fatal = RefCell::new(None);
-        let fatal_seen = Cell::new(false);
+        let state = WalkState::new();
         let mut path = Vec::new();
         let mut violations = Vec::new();
         let ok = member(
             &self.schema,
             &Value::Py(obj),
             &mut path,
-            self.context(
-                obj.py(),
-                &guard,
-                &fatal,
-                &fatal_seen,
-                WalkMode::explaining(fail_fast),
-            ),
+            self.context(obj.py(), &state, WalkMode::explaining(fail_fast)),
             &mut violations,
         );
-        if let Some(err) = fatal.into_inner() {
+        if let Some(err) = state.into_fatal() {
             return Err(err);
         }
         if ok {
@@ -561,17 +549,15 @@ impl Validator {
     ///     BaseException: If a membership comparison raises a fatal interpreter
     ///         signal, it propagates rather than being read as a non-member.
     fn is_valid(&self, obj: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let guard = RefCell::new(FxHashSet::default());
-        let fatal = RefCell::new(None);
-        let fatal_seen = Cell::new(false);
+        let state = WalkState::new();
         let ok = member(
             &self.schema,
             &Value::Py(obj),
             &mut Vec::new(),
-            self.context(obj.py(), &guard, &fatal, &fatal_seen, WalkMode::Fast),
+            self.context(obj.py(), &state, WalkMode::Fast),
             &mut Vec::new(),
         );
-        reraise_fatal(fatal, ok)
+        reraise_fatal(state, ok)
     }
 
     /// Validate `obj` and return it unchanged.

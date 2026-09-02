@@ -95,8 +95,18 @@ source of truth for behaviour.
 
 `check_ref` records `(object id, definition index)` on the path. A value that
 contains itself fails with `recursion_loop` rather than looping, and a chain
-deeper than the bound fails with `recursion_limit` rather than descending —
-the walk takes one native frame per level, so the bound is a real one.
+deeper than the unfolding bound fails with `recursion_limit` rather than
+descending.
+
+Counting unfoldings is not counting frames, and the walk needs both. Every level
+takes one native frame, and an unfolding descends the *whole definition body*, so
+a body at the construction depth bound turns 128 unfoldings into thousands of
+frames — more stack than a thread has. `Ctx::descend` therefore counts the levels
+themselves and refuses past `MAX_WALK_DEPTH`, with the same `recursion_limit` the
+unfolding bound gives, because it is the same fact about the value. The count is
+a depth rather than a total because the level is released when the frame that
+took it returns, so a wide value pays for its widest child and not for all of
+them.
 
 ## The limit
 
