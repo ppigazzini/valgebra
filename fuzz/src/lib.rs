@@ -17,7 +17,7 @@
 
 use arbitrary::{Arbitrary, Result, Unstructured};
 use valgebra_core::{
-    ClassIx, ConstIx, Constraint, Field, OperandIx, PredIx, Schema, SeqKind, SeqRegex,
+    ClassIx, ConstIx, Constraint, Field, OperandIx, PredIx, Schema, SeqKind, SeqShape,
 };
 
 const NAMES: [&str; 4] = ["a", "b", "c", "d"];
@@ -56,34 +56,30 @@ fn build_constraint(u: &mut Unstructured) -> Result<Constraint> {
     })
 }
 
-fn build_regex(u: &mut Unstructured, depth: u32) -> Result<SeqRegex> {
-    if depth == 0 || u.is_empty() {
-        return Ok(match u.arbitrary::<u8>()? % 2 {
-            0 => SeqRegex::Empty,
-            _ => SeqRegex::Elem(Box::new(build_schema(u, 0)?)),
-        });
+/// Build one sequence shape: a prefix of up to four element schemas, and a tail
+/// on half the draws.
+///
+/// The generator covers the shape's whole space, which is what it did not do
+/// while the sequence body was a regular expression: three of its five branches
+/// then built alternations and nested repetitions that nothing else in the tree
+/// produces, so the fuzzer spent its budget on languages no value could reach.
+fn build_shape(u: &mut Unstructured, depth: u32) -> Result<SeqShape> {
+    let arity = if depth == 0 || u.is_empty() {
+        0
+    } else {
+        count(u, 4)?
+    };
+    let element_depth = depth.saturating_sub(1);
+    let mut prefix = Vec::with_capacity(arity);
+    for _ in 0..arity {
+        prefix.push(build_schema(u, element_depth)?);
     }
-    Ok(match u.arbitrary::<u8>()? % 5 {
-        0 => SeqRegex::Empty,
-        1 => SeqRegex::Elem(Box::new(build_schema(u, depth - 1)?)),
-        2 => {
-            let n = 1 + count(u, 3)?;
-            let mut parts = Vec::with_capacity(n);
-            for _ in 0..n {
-                parts.push(build_regex(u, depth - 1)?);
-            }
-            SeqRegex::Cat(parts)
-        }
-        3 => {
-            let n = 1 + count(u, 3)?;
-            let mut parts = Vec::with_capacity(n);
-            for _ in 0..n {
-                parts.push(build_regex(u, depth - 1)?);
-            }
-            SeqRegex::Or(parts)
-        }
-        _ => SeqRegex::Star(Box::new(build_regex(u, depth - 1)?)),
-    })
+    let tail = if u.arbitrary::<bool>()? {
+        Some(Box::new(build_schema(u, element_depth)?))
+    } else {
+        None
+    };
+    Ok(SeqShape { prefix, tail })
 }
 
 /// Build one schema from the fuzzer's bytes, bounded by `depth` recursion levels.
@@ -142,7 +138,7 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
             } else {
                 SeqKind::Tuple
             },
-            regex: build_regex(u, depth - 1)?,
+            shape: build_shape(u, depth - 1)?,
         },
         _ => {
             // Unique field names are a caller invariant the frontend guarantees
@@ -292,19 +288,12 @@ mod tests {
             | Schema::Set(inner)
             | Schema::FrozenSet(inner)
             | Schema::Refine { base: inner, .. } => assert_unique_field_names(inner),
-            Schema::Seq { regex, .. } => assert_unique_regex(regex),
-            _ => {}
-        }
-    }
-
-    fn assert_unique_regex(regex: &SeqRegex) {
-        match regex {
-            SeqRegex::Empty => {}
-            SeqRegex::Elem(schema) => assert_unique_field_names(schema),
-            SeqRegex::Star(inner) => assert_unique_regex(inner),
-            SeqRegex::Cat(parts) | SeqRegex::Or(parts) => {
-                parts.iter().for_each(assert_unique_regex);
+            Schema::Seq { shape, .. } => {
+                for element in shape.prefix.iter().chain(shape.tail.as_deref()) {
+                    assert_unique_field_names(element);
+                }
             }
+            _ => {}
         }
     }
 

@@ -381,8 +381,7 @@ pub enum Schema {
     /// compiled validator. The same-type test is applied in the bindings, where
     /// the Python value is in hand.
     Literal(ConstIx),
-    /// Denotes lists or tuples whose element sequence matches a regular
-    /// expression over element schemas.
+    /// Denotes lists or tuples whose elements take a [`SeqShape`].
     ///
     /// One node subsumes the homogeneous `list[T]`/`tuple[T, ...]`, the fixed
     /// `[A, B]`/`tuple[A, B]`, and the prefix-plus-tail forms: one shape to walk
@@ -390,7 +389,7 @@ pub enum Schema {
     ///
     /// A sequence composes in the Boolean algebra the way every other node does,
     /// through [`Schema::Union`], [`Schema::Intersection`] and
-    /// [`Schema::Complement`] over the sequence node. The regex itself is *not*
+    /// [`Schema::Complement`] over the sequence node. The shape itself is *not*
     /// closed under those operations here -- it has no complement or intersection
     /// constructor -- so the closure is at the schema level and the regular
     /// languages the shape is drawn from are the model, not a computation this
@@ -398,8 +397,8 @@ pub enum Schema {
     Seq {
         /// Whether the value is a list or a tuple.
         container: SeqKind,
-        /// The regular expression over element schemas the sequence must match.
-        regex: SeqRegex,
+        /// The prefix and optional tail the value's elements must take.
+        shape: SeqShape,
     },
     /// Denotes sets whose every element belongs to the inner schema.
     Set(Box<Schema>),
@@ -485,140 +484,83 @@ pub enum SeqKind {
     Tuple,
 }
 
-/// A regular expression over element schemas, the body of a [`Schema::Seq`].
+/// The element shape of a [`Schema::Seq`]: a fixed prefix, then an optional
+/// repeated tail.
 ///
-/// A value's element sequence is a member iff it is in the regular language this
-/// expression denotes, where a single element symbol "matches" `Elem(s)` when the
-/// element belongs to `s`. The homogeneous form is `Star(Elem(t))`, the fixed
-/// form is `Cat([Elem(a), Elem(b), ...])`, and the prefix-plus-tail form appends a
-/// trailing `Star`. Those three are every shape anything here builds:
-/// [`SeqRegex::linear`] recognizes them and the membership walk needs no
-/// automaton.
+/// A value's element sequence is a member iff its first `prefix.len()` elements
+/// belong to the prefix schemas positionally and every element past them belongs
+/// to `tail` -- with no element past the prefix at all when there is no tail.
+/// The three forms a caller can spell are the three this shape takes:
+/// homogeneous (`list[T]`) is an empty prefix and a tail, fixed (`tuple[A, B]`)
+/// is a prefix and no tail, and prefix-plus-tail (`tuple[A, *tuple[B, ...]]`) is
+/// both.
 ///
-/// [`Or`](SeqRegex::Or) and nesting have **no producer** in this crate or the
-/// bindings -- only the tests and the fuzz target construct one. The arms that
-/// handle them (in `linear`, in language emptiness, and in regex inclusion) are
-/// what would make a produced one sound, and until something produces one they
-/// decide nothing that is reachable. Deciding sequence inclusion in general wants
-/// the automaton construction `docs/15-decidability.md` records as unbuilt.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum SeqRegex {
-    /// The empty sequence.
-    Empty,
-    /// A single element belonging to the schema.
-    Elem(Box<Schema>),
-    /// Concatenation: each part in order.
-    Cat(Vec<SeqRegex>),
-    /// Alternation: any one branch.
-    Or(Vec<SeqRegex>),
-    /// Zero or more repetitions.
-    Star(Box<SeqRegex>),
+/// This is a *linear* language rather than a regular one, and deliberately so.
+/// The general form is a regular expression over element schemas, as
+/// Hosoya-Vouillon-Pierce give it, and deciding inclusion between two of those
+/// wants the automaton construction `docs/15-decidability.md` records as
+/// unbuilt. Nothing in this crate or the bindings builds an alternation or a
+/// nested repetition, so carrying the general form meant every walk answering
+/// for shapes no value could reach and every membership check first proving the
+/// shape it held was one of the three. The shape it holds is now the only shape
+/// there is.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct SeqShape {
+    /// The positional element schemas, matched in order from the front.
+    pub prefix: Vec<Schema>,
+    /// The schema every element past the prefix must belong to, or `None` when
+    /// the sequence ends at the prefix.
+    pub tail: Option<Box<Schema>>,
 }
 
-impl SeqRegex {
-    /// Map every element schema through `f`, preserving the regex structure.
-    pub(crate) fn map_elems(&self, f: &impl Fn(&Schema) -> Schema) -> SeqRegex {
-        match self {
-            SeqRegex::Empty => SeqRegex::Empty,
-            SeqRegex::Elem(s) => SeqRegex::Elem(Box::new(f(s))),
-            SeqRegex::Cat(parts) => SeqRegex::Cat(parts.iter().map(|p| p.map_elems(f)).collect()),
-            SeqRegex::Or(parts) => SeqRegex::Or(parts.iter().map(|p| p.map_elems(f)).collect()),
-            SeqRegex::Star(inner) => SeqRegex::Star(Box::new(inner.map_elems(f))),
+impl SeqShape {
+    /// Map every element schema through `f`, preserving the shape.
+    pub(crate) fn map_elems(&self, f: &impl Fn(&Schema) -> Schema) -> SeqShape {
+        SeqShape {
+            prefix: self.prefix.iter().map(f).collect(),
+            tail: self.tail.as_deref().map(|t| Box::new(f(t))),
         }
     }
 
-    fn with_records_open(&self, open: Openness) -> SeqRegex {
+    fn with_records_open(&self, open: Openness) -> SeqShape {
         self.map_elems(&|s| s.with_records_open(open))
     }
 
-    /// Every element schema this regex holds, in order.
+    /// Every element schema this shape holds: the prefix in order, then the tail.
     ///
     /// The sequence half of [`Schema::children`]: a measure over a sequence reads
-    /// its elements from here rather than restating which regex constructors hold
-    /// one.
-    fn elements(&self) -> Box<dyn Iterator<Item = &Schema> + '_> {
-        match self {
-            SeqRegex::Empty => Box::new(core::iter::empty()),
-            SeqRegex::Elem(s) => Box::new(core::iter::once(s.as_ref())),
-            SeqRegex::Cat(parts) | SeqRegex::Or(parts) => {
-                Box::new(parts.iter().flat_map(SeqRegex::elements))
-            }
-            SeqRegex::Star(inner) => inner.elements(),
-        }
+    /// its elements from here rather than restating where a sequence keeps one.
+    pub(crate) fn elements(&self) -> impl Iterator<Item = &Schema> {
+        self.prefix.iter().chain(self.tail.as_deref())
     }
 
-    /// The regex constructors above the deepest element schema.
+    /// Whether this shape admits no sequence at all -- its language is empty.
     ///
-    /// A constructor is a level a recursive walk descends -- through `Box`es the
-    /// regex owns -- so the sequence's depth counts it. It is not a schema node,
-    /// so the node count does not; that is the whole difference between the two
-    /// measures over a sequence.
-    fn constructor_depth(&self) -> usize {
-        match self {
-            SeqRegex::Empty | SeqRegex::Elem(_) => 0,
-            SeqRegex::Cat(parts) | SeqRegex::Or(parts) => {
-                1 + parts
-                    .iter()
-                    .map(SeqRegex::constructor_depth)
-                    .max()
-                    .unwrap_or(0)
-            }
-            SeqRegex::Star(inner) => 1 + inner.constructor_depth(),
-        }
-    }
-
-    /// If this regex is a *linear* sequence — a fixed prefix of element schemas
-    /// followed by an optional repeated tail element — return `(prefix, tail)`.
-    ///
-    /// The frontend's forms are all linear: homogeneous (`Star(Elem)`), fixed
-    /// (`Cat` of `Elem`s), and prefix-plus-tail (`Cat` of `Elem`s ending in
-    /// `Star(Elem)`). `Or` and nested forms, built only inside the decision
-    /// procedure, are not linear and never reach value membership.
-    #[must_use]
-    pub fn linear(&self) -> Option<(Vec<&Schema>, Option<&Schema>)> {
-        match self {
-            SeqRegex::Empty => Some((Vec::new(), None)),
-            SeqRegex::Elem(s) => Some((vec![s.as_ref()], None)),
-            SeqRegex::Star(inner) => match inner.as_ref() {
-                SeqRegex::Elem(s) => Some((Vec::new(), Some(s.as_ref()))),
-                _ => None,
-            },
-            SeqRegex::Cat(parts) => {
-                let mut prefix = Vec::new();
-                let mut tail = None;
-                for (i, part) in parts.iter().enumerate() {
-                    match part {
-                        SeqRegex::Elem(s) => prefix.push(s.as_ref()),
-                        SeqRegex::Star(inner) if i + 1 == parts.len() => match inner.as_ref() {
-                            SeqRegex::Elem(s) => tail = Some(s.as_ref()),
-                            _ => return None,
-                        },
-                        _ => return None,
-                    }
-                }
-                Some((prefix, tail))
-            }
-            SeqRegex::Or(_) => None,
-        }
+    /// A tail is a *zero*-or-more repetition, so an uninhabited tail still
+    /// admits the sequences that stop at the prefix. A prefix position is not
+    /// optional: an uninhabited one admits nothing, because every sequence this
+    /// shape describes has an element there.
+    pub(crate) fn language_is_empty(&self, mut empty: impl FnMut(&Schema) -> bool) -> bool {
+        self.prefix.iter().any(&mut empty)
     }
 }
 
 impl Schema {
-    /// A list whose element sequence matches `regex`.
+    /// A list whose elements take `shape`.
     #[must_use]
-    pub fn list(regex: SeqRegex) -> Schema {
+    pub fn list(shape: SeqShape) -> Schema {
         Schema::Seq {
             container: SeqKind::List,
-            regex,
+            shape,
         }
     }
 
-    /// A tuple whose element sequence matches `regex`.
+    /// A tuple whose elements take `shape`.
     #[must_use]
-    pub fn tuple(regex: SeqRegex) -> Schema {
+    pub fn tuple(shape: SeqShape) -> Schema {
         Schema::Seq {
             container: SeqKind::Tuple,
-            regex,
+            shape,
         }
     }
 
@@ -701,34 +643,33 @@ impl Schema {
     }
 }
 
-impl SeqRegex {
-    /// The homogeneous form `Star(Elem(element))`: any number of `element`s.
+impl SeqShape {
+    /// The homogeneous form: any number of elements, each in `element`.
     #[must_use]
-    pub fn homogeneous(element: Schema) -> SeqRegex {
-        SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(element))))
+    pub fn homogeneous(element: Schema) -> SeqShape {
+        SeqShape {
+            prefix: Vec::new(),
+            tail: Some(Box::new(element)),
+        }
     }
 
-    /// The fixed form `Cat([Elem(e0), Elem(e1), ...])`: each element positionally.
+    /// The fixed form: each element positionally, and no element past them.
     #[must_use]
-    pub fn fixed(elements: impl IntoIterator<Item = Schema>) -> SeqRegex {
-        SeqRegex::Cat(
-            elements
-                .into_iter()
-                .map(|s| SeqRegex::Elem(Box::new(s)))
-                .collect(),
-        )
+    pub fn fixed(elements: impl IntoIterator<Item = Schema>) -> SeqShape {
+        SeqShape {
+            prefix: elements.into_iter().collect(),
+            tail: None,
+        }
     }
 
-    /// The prefix-plus-tail form `Cat([Elem(p0), ..., Star(Elem(tail))])`: a fixed
-    /// positional prefix, then zero or more elements matching `tail`.
+    /// The prefix-plus-tail form: a fixed positional prefix, then zero or more
+    /// elements in `tail`.
     #[must_use]
-    pub fn prefix_tail(prefix: impl IntoIterator<Item = Schema>, tail: Schema) -> SeqRegex {
-        let mut parts: Vec<SeqRegex> = prefix
-            .into_iter()
-            .map(|s| SeqRegex::Elem(Box::new(s)))
-            .collect();
-        parts.push(SeqRegex::Star(Box::new(SeqRegex::Elem(Box::new(tail)))));
-        SeqRegex::Cat(parts)
+    pub fn prefix_tail(prefix: impl IntoIterator<Item = Schema>, tail: Schema) -> SeqShape {
+        SeqShape {
+            prefix: prefix.into_iter().collect(),
+            tail: Some(Box::new(tail)),
+        }
     }
 }
 
@@ -901,9 +842,9 @@ impl Schema {
             | Schema::Instance(_)
             | Schema::Ref(_)
             | Schema::SelfRef(_) => self.clone(),
-            Schema::Seq { container, regex } => Schema::Seq {
+            Schema::Seq { container, shape } => Schema::Seq {
                 container: *container,
-                regex: regex.map_elems(f),
+                shape: shape.map_elems(f),
             },
             Schema::Set(inner) => Schema::Set(Box::new(f(inner))),
             Schema::FrozenSet(inner) => Schema::FrozenSet(Box::new(f(inner))),
@@ -1021,7 +962,7 @@ impl Schema {
             | Schema::Instance(_)
             | Schema::Ref(_)
             | Schema::SelfRef(_) => Box::new(core::iter::empty()),
-            Schema::Seq { regex, .. } => regex.elements(),
+            Schema::Seq { shape, .. } => Box::new(shape.elements()),
             Schema::Set(inner) | Schema::FrozenSet(inner) | Schema::Complement(inner) => {
                 Box::new(core::iter::once(inner.as_ref()))
             }
@@ -1035,16 +976,6 @@ impl Schema {
             ),
             Schema::Attrs { fields, .. } => Box::new(fields.iter().map(|field| &field.schema)),
             Schema::Refine { base, .. } => Box::new(core::iter::once(base.as_ref())),
-        }
-    }
-
-    /// The structural levels this node contributes above its children: one for
-    /// the node, plus a sequence's regex constructors, which a recursive walk
-    /// descends.
-    pub(crate) fn own_depth(&self) -> usize {
-        match self {
-            Schema::Seq { regex, .. } => 1 + regex.constructor_depth(),
-            _ => 1,
         }
     }
 
@@ -1065,11 +996,16 @@ impl Schema {
     /// this terminates. The count mirrors the native stack a recursive walk over
     /// the tree descends -- one frame per level in clone, drop, the decision
     /// procedure, and the render back to an annotation -- so composition can be
-    /// bounded to a depth every such walk survives. A sequence therefore counts
-    /// its regex constructors: they are levels those walks descend.
+    /// bounded to a depth every such walk survives.
+    ///
+    /// Every node is one such level, sequences included: a [`SeqShape`] holds its
+    /// elements directly, so reaching one costs the same descent as reaching a
+    /// set's element or a field's schema. While a sequence carried a regular
+    /// expression a sequence node counted its constructor nesting too, because a
+    /// walk descended those boxes as well.
     #[must_use]
     pub fn depth(&self) -> usize {
-        self.own_depth() + self.children().map(Schema::depth).max().unwrap_or(0)
+        1 + self.children().map(Schema::depth).max().unwrap_or(0)
     }
 
     /// The total number of schema nodes in this tree, counting this node plus
@@ -1281,9 +1217,9 @@ impl Schema {
                 class_index: *class_index,
                 fields: fields_open(fields),
             },
-            Schema::Seq { container, regex } => Schema::Seq {
+            Schema::Seq { container, shape } => Schema::Seq {
                 container: *container,
-                regex: regex.with_records_open(open),
+                shape: shape.with_records_open(open),
             },
             Schema::Set(e) => Schema::Set(Box::new(recur(e))),
             Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(recur(e))),

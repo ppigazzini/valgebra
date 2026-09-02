@@ -1,6 +1,6 @@
 {
   "_comment": "Instruction-count budget for the core schema-operation workload, measured with cachegrind. Deterministic for a given build; re-record with scripts/perf_gate.py --update after an intentional change to the workload or a large compiler codegen shift. The tolerance absorbs compiler-codegen drift across toolchain versions while still catching algorithmic regressions, which are far larger; the count is CPU-independent, so this is codegen headroom, not runner noise. The band is two-sided: a count below the floor means the workload stopped doing the work, or an optimization landed that must be re-recorded rather than absorbed.",
-  "core_workload_irefs": 252026154,
+  "core_workload_irefs": 218283820,
   "tolerance": 0.1,
   "_checksum_comment": "The value the core workload folds through every result and prints. It depends only on the fixed corpus and iteration count, so it is a constant of the workload, not of the machine or the build. The gate compares it before it compares any instruction count: a workload whose body collapsed measures low, and a budget cannot tell that from an optimization.",
   "core_workload_checksum": 134000,

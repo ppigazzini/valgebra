@@ -13,7 +13,7 @@
 //! and `ITERATIONS` fixed; changing either moves the budget and requires
 //! re-recording it.
 
-use valgebra_core::{ConstIx, Field, Openness, Schema, SeqRegex};
+use valgebra_core::{ConstIx, Field, Openness, Schema, SeqShape};
 
 /// Iterations per relation. Large enough that process startup is a rounding
 /// error against the measured work.
@@ -45,7 +45,7 @@ fn nested_records(depth: usize) -> Schema {
         inner = Schema::record(
             vec![Field {
                 name: "child".to_owned(),
-                schema: Schema::list(SeqRegex::homogeneous(inner)),
+                schema: Schema::list(SeqShape::homogeneous(inner)),
                 required: true,
             }],
             Openness::Closed,
@@ -67,10 +67,10 @@ fn main() {
     let scalar_sup = Schema::union([Schema::Int, Schema::Str]);
     let narrow = literal_union(8);
     let wide = literal_union(9);
-    let list_int = Schema::list(SeqRegex::homogeneous(Schema::Int));
+    let list_int = Schema::list(SeqShape::homogeneous(Schema::Int));
     let not_int = Schema::Complement(Box::new(Schema::Int));
     let disjoint = Schema::Intersection(vec![
-        Schema::list(SeqRegex::homogeneous(Schema::Int)),
+        Schema::list(SeqShape::homogeneous(Schema::Int)),
         Schema::Set(Box::new(Schema::Int)),
     ]);
 

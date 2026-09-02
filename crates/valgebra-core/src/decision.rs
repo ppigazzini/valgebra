@@ -1,7 +1,7 @@
 //! The decision procedures over the IR: emptiness, subtyping, equivalence, and
 //! disjointness, with the leaf-relation oracle and the scalar region partition.
 
-use crate::ir::{ClassIx, ConstIx, Constraint, DefIx, Field, OperandIx, Schema, SeqKind, SeqRegex};
+use crate::ir::{ClassIx, ConstIx, Constraint, DefIx, Field, OperandIx, Schema, SeqKind, SeqShape};
 use rustc_hash::FxHashMap;
 use std::cell::Cell;
 
@@ -85,62 +85,28 @@ impl Regions {
     }
 }
 
-impl SeqRegex {
-    /// Whether the regex matches **no** sequence at all — its language is empty.
-    /// `Empty` and `Star` always match the empty sequence, so they are never
-    /// empty; a single element is empty when its schema is; a concatenation is
-    /// empty when any part is (every part must be matchable); an alternation is
-    /// empty only when every alternative is.
-    fn language_is_empty(
+impl SeqShape {
+    /// Whether every sequence this shape admits is also admitted by `other`.
+    ///
+    /// The whole rule is [`linear_subtype`]; this is where the elements are
+    /// borrowed out of the two shapes. There is no alternation to distribute
+    /// over and no shape to first prove linear, because a shape is the linear
+    /// form.
+    fn shape_subtype(
         &self,
-        oracle: &dyn LeafRelations,
-        defs: &[Schema],
-        visiting: &mut Vec<DefIx>,
-        budget: &Cell<u32>,
-    ) -> bool {
-        match self {
-            SeqRegex::Empty | SeqRegex::Star(_) => false,
-            SeqRegex::Elem(schema) => schema.is_empty_rec(oracle, defs, visiting, budget),
-            SeqRegex::Cat(parts) => parts
-                .iter()
-                .any(|p| p.language_is_empty(oracle, defs, visiting, budget)),
-            SeqRegex::Or(parts) => parts
-                .iter()
-                .all(|p| p.language_is_empty(oracle, defs, visiting, budget)),
-        }
-    }
-
-    /// Whether every sequence this regex matches is also matched by `other` —
-    /// language inclusion. Alternation distributes; everything else reduces to
-    /// the prefix-and-tail [`linear`](Self::linear) form and
-    /// [`linear_subtype`]. Sound throughout: a regex shape it cannot put in
-    /// linear form (a nested non-trailing star) yields `false`, never a guess.
-    fn regex_subtype(
-        &self,
-        other: &SeqRegex,
+        other: &SeqShape,
         cx: SubtypeCx<'_>,
         assumptions: &mut Vec<(Schema, Schema)>,
     ) -> bool {
-        if self == other {
-            return true;
-        }
-        // A union of languages is included iff every branch is; a language is
-        // included in a union if it lands in one branch (sound, conservative —
-        // it may instead split across several).
-        if let SeqRegex::Or(parts) = self {
-            return parts
-                .iter()
-                .all(|part| part.regex_subtype(other, cx, assumptions));
-        }
-        if let SeqRegex::Or(parts) = other {
-            return parts
-                .iter()
-                .any(|part| self.regex_subtype(part, cx, assumptions));
-        }
-        match (self.linear(), other.linear()) {
-            (Some((pa, ta)), Some((pb, tb))) => linear_subtype(&pa, ta, &pb, tb, cx, assumptions),
-            _ => false,
-        }
+        self == other
+            || linear_subtype(
+                &self.prefix,
+                self.tail.as_deref(),
+                &other.prefix,
+                other.tail.as_deref(),
+                cx,
+                assumptions,
+            )
     }
 }
 
@@ -421,8 +387,10 @@ impl Schema {
                     None => (false, Regions::Unknown),
                 }
             }
-            Schema::Seq { regex, .. } => (
-                regex.language_is_empty(oracle, defs, visiting, budget),
+            Schema::Seq { shape, .. } => (
+                shape.language_is_empty(|element| {
+                    element.is_empty_rec(oracle, defs, visiting, budget)
+                }),
                 Regions::Unknown,
             ),
             // A refinement is a subset of its base: an empty base empties it, and
@@ -720,17 +688,17 @@ impl Schema {
             (Schema::Set(a), Schema::Set(b)) | (Schema::FrozenSet(a), Schema::FrozenSet(b)) => {
                 a.is_subtype_rec(b, cx, assumptions)
             }
-            // Same-kind sequence inclusion is language inclusion on the regexes.
+            // Same-kind sequence inclusion is language inclusion on the shapes.
             (
                 Schema::Seq {
                     container: ka,
-                    regex: ra,
+                    shape: sa,
                 },
                 Schema::Seq {
                     container: kb,
-                    regex: rb,
+                    shape: sb,
                 },
-            ) if ka == kb => ra.regex_subtype(rb, cx, assumptions),
+            ) if ka == kb => sa.shape_subtype(sb, cx, assumptions),
             // Record and mapping inclusion.
             (
                 Schema::KeyedMap {
@@ -1157,25 +1125,15 @@ fn keyed_map_meet_empty(
         })
 }
 
-/// The element schemas of a *fixed-arity* sequence, or `None` when the regex is
-/// not one.
+/// The element schemas of a *fixed-arity* sequence, or `None` when the shape has
+/// a tail.
 ///
 /// Lemma 6.5 decomposes a product, and a sequence is a product only when its
-/// component count is fixed: a star matches sequences of every length, so there
-/// is no tuple of components to split over. `Empty` is the nullary product.
-fn fixed_components(regex: &SeqRegex) -> Option<Vec<Schema>> {
-    match regex {
-        SeqRegex::Empty => Some(Vec::new()),
-        SeqRegex::Elem(element) => Some(vec![(**element).clone()]),
-        SeqRegex::Cat(parts) => parts
-            .iter()
-            .map(|part| match part {
-                SeqRegex::Elem(element) => Some((**element).clone()),
-                _ => None,
-            })
-            .collect(),
-        SeqRegex::Or(_) | SeqRegex::Star(_) => None,
-    }
+/// component count is fixed: a repeated tail admits sequences of every length,
+/// so there is no tuple of components to split over. An empty prefix with no
+/// tail is the nullary product.
+fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
+    shape.tail.is_none().then(|| shape.prefix.clone())
 }
 
 /// Whether the product `components` is contained in the union of the products in
@@ -1252,10 +1210,10 @@ fn seq_splits_across_union(
     cx: SubtypeCx<'_>,
     assumptions: &mut Vec<(Schema, Schema)>,
 ) -> bool {
-    let Schema::Seq { container, regex } = schema else {
+    let Schema::Seq { container, shape } = schema else {
         return false;
     };
-    let Some(components) = fixed_components(regex) else {
+    let Some(components) = fixed_components(shape) else {
         return false;
     };
     let branches: Vec<Vec<Schema>> = members
@@ -1263,8 +1221,8 @@ fn seq_splits_across_union(
         .filter_map(|member| match member {
             Schema::Seq {
                 container: their_kind,
-                regex: their_regex,
-            } if their_kind == container => fixed_components(their_regex),
+                shape: their_shape,
+            } if their_kind == container => fixed_components(their_shape),
             _ => None,
         })
         .filter(|branch| branch.len() == components.len())
@@ -1306,13 +1264,13 @@ fn intersection_bounds_unsatisfiable(members: &[Schema], oracle: &dyn LeafRelati
     !merged.is_empty() && bounds_unsatisfiable(merged.iter().copied(), oracle, int_discrete)
 }
 
-/// Whether the linear language `pa · ta*` is included in `pb · tb*` — a fixed
-/// prefix optionally followed by a repeated tail, the shape
-/// [`SeqRegex::linear`] returns. `ta`/`tb` of `None` mean no repeated tail.
+/// Whether the language `pa · ta*` is included in `pb · tb*` — a fixed prefix
+/// optionally followed by a repeated tail, which is every [`SeqShape`].
+/// `ta`/`tb` of `None` mean no repeated tail.
 fn linear_subtype(
-    pa: &[&Schema],
+    pa: &[Schema],
     ta: Option<&Schema>,
-    pb: &[&Schema],
+    pb: &[Schema],
     tb: Option<&Schema>,
     cx: SubtypeCx<'_>,
     assumptions: &mut Vec<(Schema, Schema)>,
@@ -1856,7 +1814,7 @@ mod tests {
 
     #[test]
     fn is_empty_decides_complement_and_disjoint_intersections() {
-        let list = |e| Schema::list(SeqRegex::homogeneous(e));
+        let list = |e| Schema::list(SeqShape::homogeneous(e));
         let not = |s| Schema::Complement(Box::new(s));
 
         // A ∩ ¬A is empty for a structural A the scalar region bitset cannot see.

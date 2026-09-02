@@ -33,7 +33,7 @@ the difference decides how large a change is that widens one:
 
 | node | how the carrier is fixed | widening it means |
 |---|---|---|
-| `Seq { container: SeqKind, regex }` | a **parameter** — `SeqKind` is `List \| Tuple` | another variant in an existing enum |
+| `Seq { container: SeqKind, shape }` | a **parameter** — `SeqKind` is `List \| Tuple` | another variant in an existing enum |
 | `KeyedMap { fields, defaults }` | **the denotation** — the doc comment reads "Denotes dicts…", and there is no carrier field | giving the node a carrier it does not have |
 | `Attrs { class_index, fields }` | a **required field** | making a required field optional, so the node denotes a set it currently cannot |
 

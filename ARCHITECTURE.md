@@ -83,9 +83,9 @@ variants are the node set:
 - **Atoms** — `Anything` (lattice top), `Nothing` (bottom), `Dynamic` (the gradual
   dynamic type, distinct from the top), `NoneType`, `Bool`, `Int`, `Float`,
   `Str`, `Bytes`, and `Literal` (a typed singleton, pooled).
-- **Containers** — `Seq { container, regex }` carries every list and tuple form
-  as a regular expression (`SeqRegex`: `Empty`, `Elem`, `Cat`, `Or`, `Star`)
-  over element schemas; `Set` and `FrozenSet`; `KeyedMap { fields, defaults }`
+- **Containers** — `Seq { container, shape }` carries every list and tuple form
+  as a `SeqShape`: a positional `prefix` of element schemas and an optional
+  repeated `tail`; `Set` and `FrozenSet`; `KeyedMap { fields, defaults }`
   carries dicts, records, and maps as named fields plus key-schema-keyed default
   clauses.
 - **Combinators** — `Union`, `Intersection`, `Complement`: the Boolean algebra.

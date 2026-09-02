@@ -11,7 +11,7 @@
 //! iteration count is large. Keep the corpus and `ITERATIONS` fixed; changing
 //! either moves the budget and requires re-recording it.
 
-use valgebra_core::{ConstIx, DefShift, Field, Openness, PoolShift, Schema, SeqRegex};
+use valgebra_core::{ConstIx, DefShift, Field, Openness, PoolShift, Schema, SeqShape};
 
 /// Iterations per operation. Large enough that startup is a rounding error.
 const ITERATIONS: usize = 2_000;
@@ -59,7 +59,7 @@ fn nested_records(depth: usize) -> Schema {
         inner = Schema::record(
             vec![Field {
                 name: "child".to_owned(),
-                schema: Schema::list(SeqRegex::homogeneous(inner)),
+                schema: Schema::list(SeqShape::homogeneous(inner)),
                 required: true,
             }],
             Openness::Closed,
@@ -92,15 +92,15 @@ fn main() {
     println!("checksum={checksum}");
 }
 
-/// Sum the depth markers of a sequence regex's element schemas, without
+/// Sum the depth markers of a sequence shape's element schemas, without
 /// allocating, so the workload's cost is stable across runs.
-fn regex_depth(regex: &SeqRegex) -> usize {
-    match regex {
-        SeqRegex::Empty => 0,
-        SeqRegex::Elem(s) => s.depth_marker(),
-        SeqRegex::Cat(parts) | SeqRegex::Or(parts) => parts.iter().map(regex_depth).sum(),
-        SeqRegex::Star(inner) => regex_depth(inner),
-    }
+fn shape_depth(shape: &SeqShape) -> usize {
+    shape
+        .prefix
+        .iter()
+        .chain(shape.tail.as_deref())
+        .map(DepthMarker::depth_marker)
+        .sum()
 }
 
 /// A cheap structural fingerprint, just enough to keep results observable.
@@ -113,7 +113,7 @@ impl DepthMarker for Schema {
         match self {
             Schema::Union(members) | Schema::Intersection(members) => members.len(),
             Schema::KeyedMap { fields, .. } | Schema::Attrs { fields, .. } => fields.len(),
-            Schema::Seq { regex, .. } => 1 + regex_depth(regex),
+            Schema::Seq { shape, .. } => 1 + shape_depth(shape),
             Schema::Complement(inner) | Schema::Set(inner) | Schema::FrozenSet(inner) => {
                 1 + inner.depth_marker()
             }

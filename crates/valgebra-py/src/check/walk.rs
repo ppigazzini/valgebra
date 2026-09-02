@@ -40,7 +40,7 @@ use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
 use rustc_hash::{FxHashMap, FxHashSet};
 use valgebra_core::{
     ClassIx, ConstIx, Constraint, DefIx, Field, OperandIx, PathSegment, PredIx, Schema, SeqKind,
-    SeqRegex, Violation,
+    SeqShape, Violation,
 };
 
 use crate::check::ctx::{Ctx, MAX_WALK_DEPTH, WalkMode};
@@ -189,7 +189,7 @@ pub(crate) fn member(
         Schema::Str => admit(value.is_str(), schema, value, path, ctx, out),
         Schema::Bytes => admit(value.is_bytes(), schema, value, path, ctx, out),
         Schema::Literal(index) => check_literal(*index, value, path, ctx, out),
-        Schema::Seq { container, regex } => check_seq(*container, regex, value, path, ctx, out),
+        Schema::Seq { container, shape } => check_seq(*container, shape, value, path, ctx, out),
         Schema::Set(element) => check_set(element, value, path, ctx, out),
         Schema::FrozenSet(element) => check_frozenset(element, value, path, ctx, out),
         Schema::KeyedMap { fields, defaults } => {
@@ -267,14 +267,14 @@ fn check_literal(
     ok
 }
 
-/// Membership for a sequence node: the value is a list or tuple whose element
-/// sequence matches the regex. The frontend emits only *linear* regexes — a
-/// fixed positional prefix then an optional repeated tail — so the elements are
-/// walked lazily with no automaton and no collection, identical in cost to a
-/// direct positional or homogeneous check. JSON arrays are lists.
+/// Membership for a sequence node: the value is a list or tuple whose elements
+/// take the schema's shape — a fixed positional prefix then an optional repeated
+/// tail. The elements are walked lazily against the shape the node holds, with
+/// no automaton and no collection, identical in cost to a direct positional or
+/// homogeneous check. JSON arrays are lists.
 fn check_seq(
     container: SeqKind,
-    regex: &SeqRegex,
+    shape: &SeqShape,
     value: &Value<'_, '_>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
@@ -284,22 +284,18 @@ fn check_seq(
         SeqKind::List => ("list", "list_type", "list_length"),
         SeqKind::Tuple => ("tuple", "tuple_type", "tuple_length"),
     };
-    let Some((prefix, tail)) = regex.linear() else {
-        // Alternation and nesting are built only inside the decision procedure;
-        // such a regex never reaches value membership.
-        return false;
-    };
+    let (prefix, tail) = (shape.prefix.as_slice(), shape.tail.as_deref());
     match (container, value) {
         (SeqKind::List, Value::Py(v)) => {
             let Ok(list) = v.cast::<PyList>() else {
                 return type_fail(type_code, kind_word, value, path, ctx, out);
             };
-            if !SeqArity::of(prefix.len(), tail.as_ref()).admits(list.len()) {
-                return seq_length_fail(len_code, kind_word, &prefix, tail, value, path, ctx, out);
+            if !SeqArity::of(prefix.len(), tail).admits(list.len()) {
+                return seq_length_fail(len_code, kind_word, prefix, tail, value, path, ctx, out);
             }
             let mut ok = true;
             for (i, item) in list.iter().enumerate() {
-                ok &= seq_element(&prefix, tail, i, &Value::Py(&item), path, ctx, out);
+                ok &= seq_element(prefix, tail, i, &Value::Py(&item), path, ctx, out);
                 if !ok && stop(ctx) {
                     return false;
                 }
@@ -307,12 +303,12 @@ fn check_seq(
             ok
         }
         (SeqKind::List, Value::Json(py, JsonValue::Array(items))) => {
-            if !SeqArity::of(prefix.len(), tail.as_ref()).admits(items.len()) {
-                return seq_length_fail(len_code, kind_word, &prefix, tail, value, path, ctx, out);
+            if !SeqArity::of(prefix.len(), tail).admits(items.len()) {
+                return seq_length_fail(len_code, kind_word, prefix, tail, value, path, ctx, out);
             }
             let mut ok = true;
             for (i, item) in items.iter().enumerate() {
-                ok &= seq_element(&prefix, tail, i, &Value::Json(*py, item), path, ctx, out);
+                ok &= seq_element(prefix, tail, i, &Value::Json(*py, item), path, ctx, out);
                 if !ok && stop(ctx) {
                     return false;
                 }
@@ -323,12 +319,12 @@ fn check_seq(
             let Ok(tuple) = v.cast::<PyTuple>() else {
                 return type_fail(type_code, kind_word, value, path, ctx, out);
             };
-            if !SeqArity::of(prefix.len(), tail.as_ref()).admits(tuple.len()) {
-                return seq_length_fail(len_code, kind_word, &prefix, tail, value, path, ctx, out);
+            if !SeqArity::of(prefix.len(), tail).admits(tuple.len()) {
+                return seq_length_fail(len_code, kind_word, prefix, tail, value, path, ctx, out);
             }
             let mut ok = true;
             for (i, item) in tuple.iter().enumerate() {
-                ok &= seq_element(&prefix, tail, i, &Value::Py(&item), path, ctx, out);
+                ok &= seq_element(prefix, tail, i, &Value::Py(&item), path, ctx, out);
                 if !ok && stop(ctx) {
                     return false;
                 }
@@ -340,8 +336,8 @@ fn check_seq(
     }
 }
 
-/// The element counts a linear sequence regex admits: exactly the prefix length
-/// with no tail, or at least it when a repeated tail follows.
+/// The element counts a sequence shape admits: exactly the prefix length with no
+/// tail, or at least it when a repeated tail follows.
 ///
 /// One argument rather than a length and a flag beside the value's own length.
 /// The two lengths were adjacent and the same type, and transposing them turns
@@ -349,15 +345,15 @@ fn check_seq(
 /// failing.
 #[derive(Clone, Copy)]
 enum SeqArity {
-    /// A fixed-length regex: the count must equal this.
+    /// A fixed-length shape: the count must equal this.
     Exactly(usize),
     /// A prefix followed by a repeated tail: the count must be at least this.
     AtLeast(usize),
 }
 
 impl SeqArity {
-    /// The arity of a prefix-and-optional-tail regex.
-    fn of(prefix_len: usize, tail: Option<&&Schema>) -> Self {
+    /// The arity of a prefix-and-optional-tail shape.
+    fn of(prefix_len: usize, tail: Option<&Schema>) -> Self {
         if tail.is_some() {
             SeqArity::AtLeast(prefix_len)
         } else {
@@ -377,7 +373,7 @@ impl SeqArity {
 /// Match one element at position `i`: the prefix schema at `i`, or the repeated
 /// tail past the prefix. The index segment is pushed only in explain mode.
 fn seq_element(
-    prefix: &[&Schema],
+    prefix: &[Schema],
     tail: Option<&Schema>,
     i: usize,
     item: &Value<'_, '_>,
@@ -385,7 +381,7 @@ fn seq_element(
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    let Some(schema) = prefix.get(i).copied().or(tail) else {
+    let Some(schema) = prefix.get(i).or(tail) else {
         // Unreachable: the caller's length check guarantees `i` lands in the
         // prefix, or a repeated tail covers the overflow. Fold to non-member
         // rather than panic across the FFI boundary if that ever breaks.
@@ -402,12 +398,12 @@ fn seq_element(
 }
 
 /// A sequence-length mismatch: terminal, since the positional match is then
-/// meaningless. A tailless regex wants an exact length; a tailed one a minimum.
+/// meaningless. A tailless shape wants an exact length; a tailed one a minimum.
 #[allow(clippy::too_many_arguments)]
 fn seq_length_fail(
     len_code: &'static str,
     kind_word: &str,
-    prefix: &[&Schema],
+    prefix: &[Schema],
     tail: Option<&Schema>,
     value: &Value<'_, '_>,
     path: &[PathSegment],
@@ -1722,7 +1718,7 @@ mod interpreter {
     #[test]
     fn a_sequence_matches_its_regex_and_its_container_kind() {
         Python::attach(|py| {
-            let homogeneous = Schema::list(SeqRegex::homogeneous(Schema::Int));
+            let homogeneous = Schema::list(SeqShape::homogeneous(Schema::Int));
             case(py, &homogeneous, &list_of(py, vec![]), true);
             case(py, &homogeneous, &list_of(py, vec![1, 2, 3]), true);
             let mixed = PyList::new(py, [1i64])
@@ -1742,13 +1738,13 @@ mod interpreter {
             case(py, &homogeneous, &tuple, false);
             case(
                 py,
-                &Schema::tuple(SeqRegex::homogeneous(Schema::Int)),
+                &Schema::tuple(SeqShape::homogeneous(Schema::Int)),
                 &tuple,
                 true,
             );
 
             // Fixed arity: exactly the prefix length, no more and no fewer.
-            let fixed = Schema::list(SeqRegex::fixed([Schema::Int, Schema::Str]));
+            let fixed = Schema::list(SeqShape::fixed([Schema::Int, Schema::Str]));
             let ok = PyList::new(py, [1i64]).expect("builds").into_any();
             ok.cast::<PyList>()
                 .expect("a list")
@@ -1759,7 +1755,7 @@ mod interpreter {
             case(py, &fixed, &list_of(py, vec![1, 2, 3]), false);
 
             // Prefix plus tail: at least the prefix length, and the tail repeats.
-            let prefixed = Schema::list(SeqRegex::prefix_tail([Schema::Int], Schema::Int));
+            let prefixed = Schema::list(SeqShape::prefix_tail([Schema::Int], Schema::Int));
             case(py, &prefixed, &list_of(py, vec![]), false);
             case(py, &prefixed, &list_of(py, vec![1]), true);
             case(py, &prefixed, &list_of(py, vec![1, 2, 3]), true);
@@ -2314,10 +2310,10 @@ mod interpreter {
             let int_text = PyList::new(py, [1i64]).expect("builds");
             int_text.append(PyString::new(py, "x")).expect("append");
 
-            let list_schema = Schema::list(SeqRegex::homogeneous(Schema::Int));
+            let list_schema = Schema::list(SeqShape::homogeneous(Schema::Int));
             case(py, &list_schema, &int_text.clone().into_any(), false);
 
-            let tuple_schema = Schema::tuple(SeqRegex::homogeneous(Schema::Int));
+            let tuple_schema = Schema::tuple(SeqShape::homogeneous(Schema::Int));
             let tuple = PyTuple::new(py, [1i64, 2]).expect("builds").into_any();
             case(py, &tuple_schema, &tuple, true);
             let mixed_tuple = int_text.to_tuple().into_any();
@@ -2543,7 +2539,7 @@ mod interpreter {
             // fail-fast reports the first; the fast path reports none. Every
             // composite consults one predicate for this, so a sequence pins it
             // for the arms a record does not reach.
-            let schema = Schema::list(SeqRegex::homogeneous(Schema::Int));
+            let schema = Schema::list(SeqShape::homogeneous(Schema::Int));
             let value = PyList::new(py, [1i64]).expect("builds");
             value.append(PyString::new(py, "a")).expect("append");
             value.append(PyString::new(py, "b")).expect("append");
@@ -2934,7 +2930,7 @@ mod interpreter {
         Python::attach(|py| {
             // The two input paths share one walk, so they must decide alike. This
             // drives the `Value::Json` arms the object corpus above never reaches.
-            let schema = Schema::list(SeqRegex::homogeneous(Schema::Int));
+            let schema = Schema::list(SeqShape::homogeneous(Schema::Int));
             let json = JsonValue::Array(std::sync::Arc::new(vec![
                 JsonValue::Int(1),
                 JsonValue::Int(2),
