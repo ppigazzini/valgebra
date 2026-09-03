@@ -31,6 +31,7 @@ use crate::decision::Kind;
 use floats::FloatSet;
 use integers::IntSet;
 use regular::{Alphabet, RegularSet};
+use symbolic::{Guard, SymbolicDfa};
 
 /// The two booleans, as a subset.
 ///
@@ -38,7 +39,7 @@ use regular::{Alphabet, RegularSet};
 /// `Literal[True]` is `{True}`, and `Literal[True] | Literal[False]` is the
 /// whole kind rather than a union the procedure must recognise. A two-bit set is
 /// the smallest thing closed under the three operations here.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BoolSet(u8);
 
 impl BoolSet {
@@ -87,12 +88,12 @@ impl BoolSet {
 /// One variant per representation, not per kind: a kind whose values are not yet
 /// distinguished carries [`Coarse`](Component::Coarse), and moving a kind to an
 /// exact representation is adding a variant and the arms that go with it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Component {
     /// Every value of the kind, or none.
     ///
     /// Exact for `None`, which has one value, and coarse for every other kind
-    /// that still carries it: `list[int]` and `list[str]` are the same component,
+    /// that still carries it: `set[int]` and `set[str]` are the same component,
     /// so the descriptor cannot yet tell them apart. Coarse is *sound* rather
     /// than wrong -- it is the honest representation of a distinction not yet
     /// made, and emptiness over it decides the kind partition and nothing finer.
@@ -113,6 +114,14 @@ pub enum Component {
     /// which alphabet a *pattern* is read over is settled where the language is
     /// built rather than carried here.
     Words(RegularSet),
+    /// The sequences this descriptor admits, as an automaton over value sets.
+    ///
+    /// Serves `list` and `tuple` both, and the difference between them is the
+    /// kind rather than the language: `list[int]` is a loop and `tuple[int, str]`
+    /// is a chain, which one constructor spells. The letters are descriptors, so
+    /// the component is recursive -- through the automaton's *states*, where the
+    /// cycle is an edge and every guard stays a finite descriptor.
+    Sequences(SymbolicDfa<Descr>),
 }
 
 impl Component {
@@ -123,6 +132,7 @@ impl Component {
             Kind::Int => Component::Integers(IntSet::all()),
             Kind::Float => Component::Floats(FloatSet::all()),
             Kind::Str | Kind::Bytes => Component::Words(RegularSet::all()),
+            Kind::List | Kind::Tuple => Component::Sequences(SymbolicDfa::all()),
             _ => Component::Coarse(true),
         }
     }
@@ -134,6 +144,7 @@ impl Component {
             Kind::Int => Component::Integers(IntSet::empty()),
             Kind::Float => Component::Floats(FloatSet::empty()),
             Kind::Str | Kind::Bytes => Component::Words(RegularSet::empty()),
+            Kind::List | Kind::Tuple => Component::Sequences(SymbolicDfa::empty()),
             _ => Component::Coarse(false),
         }
     }
@@ -146,6 +157,7 @@ impl Component {
             Component::Integers(set) => set.is_empty(),
             Component::Floats(set) => set.is_empty(),
             Component::Words(set) => set.is_empty(),
+            Component::Sequences(set) => set.is_empty(),
         }
     }
 
@@ -186,6 +198,16 @@ impl Component {
                 };
                 Component::Words(combined?)
             }
+            (Component::Sequences(a), Component::Sequences(b)) => {
+                // Refused for the same reason, one alphabet up: a product of two
+                // automata can pass the bound, and a language too wide is
+                // complemented into one too narrow.
+                let combined = match op {
+                    Op::Union => a.union(b),
+                    Op::Intersect => a.intersect(b),
+                };
+                Component::Sequences(combined?)
+            }
             (mine, theirs) => {
                 debug_assert!(false, "combining {mine:?} with {theirs:?} of another kind");
                 mine.clone()
@@ -201,6 +223,7 @@ impl Component {
             Component::Integers(set) => Component::Integers(set.complement()),
             Component::Floats(set) => Component::Floats(set.complement()),
             Component::Words(set) => Component::Words(set.complement()),
+            Component::Sequences(set) => Component::Sequences(set.complement()),
         }
     }
 }
@@ -219,6 +242,15 @@ fn alphabet_of(kind: Kind) -> Option<Alphabet> {
     }
 }
 
+/// Whether a kind's values are sequences of values, which is what the automaton
+/// component reads.
+///
+/// `set` and `dict` are containers too, but a set has no order for an automaton
+/// to walk and a dict's elements are pairs, so each wants its own rule.
+fn is_sequence(kind: Kind) -> bool {
+    matches!(kind, Kind::List | Kind::Tuple)
+}
+
 /// Which way two components combine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Op {
@@ -233,7 +265,7 @@ enum Op {
 /// descriptors admit the same values exactly when they are equal. Nothing needs
 /// normalising afterwards, which is what makes the three operations total and
 /// their laws structural rather than up-to-equivalence.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Descr {
     /// One component per kind, indexed by that kind's position in [`Kind::ALL`].
     kinds: [Component; Kind::ALL.len()],
@@ -316,6 +348,25 @@ impl Descr {
         alphabet_of(kind)?;
         let mut descr = Descr::nothing();
         descr.set(kind, Component::Words(RegularSet::word(word)));
+        Some(descr)
+    }
+
+    /// The sequences a shape spells, for a sequence kind.
+    ///
+    /// One constructor for the three spellings, because they are one shape with
+    /// different parts filled in. `tuple[A, B]` is a prefix and no tail;
+    /// `list[T]` is no prefix and a tail; `tuple[A, *tuple[B, ...], C]` is a
+    /// prefix, a tail and a prefix, which is the same chain with a loop in it.
+    ///
+    /// `None` where the kind's values are not sequences, which is a caller error
+    /// rather than a set.
+    #[must_use]
+    pub fn sequence(prefix: &[Descr], tail: Option<&Descr>, kind: Kind) -> Option<Descr> {
+        if !is_sequence(kind) {
+            return None;
+        }
+        let mut descr = Descr::nothing();
+        descr.set(kind, Component::Sequences(SymbolicDfa::shape(prefix, tail)));
         Some(descr)
     }
 
@@ -420,7 +471,44 @@ impl Descr {
             Component::Integers(set) => value.integer.is_some_and(|i| set.holds(i)),
             Component::Floats(set) => value.float.is_some_and(|f| set.holds(f)),
             Component::Words(set) => value.word.is_some_and(|w| set.holds(w)),
+            Component::Sequences(set) => value.elements.is_some_and(|e| set.holds(e)),
         }
+    }
+}
+
+/// A descriptor is a letter of the sequence automaton, which is what makes the
+/// component recursive.
+///
+/// The three operations and emptiness are the ones above; the trait is the
+/// interface the automaton asks a letter for, and nothing here is new work. It
+/// is the *fallibility* that shows through: a guard that cannot join leaves the
+/// table coarser rather than wrong, which is why the automaton's minimisation
+/// asks for a join and accepts a refusal.
+impl Guard for Descr {
+    type Value = Value;
+
+    fn none() -> Descr {
+        Descr::nothing()
+    }
+
+    fn meet(&self, other: &Descr) -> Option<Descr> {
+        self.intersect(other)
+    }
+
+    fn join(&self, other: &Descr) -> Option<Descr> {
+        self.union(other)
+    }
+
+    fn complement(&self) -> Descr {
+        Descr::complement(self)
+    }
+
+    fn is_empty(&self) -> bool {
+        Descr::is_empty(self)
+    }
+
+    fn holds(&self, value: &Value) -> bool {
+        self.admits(*value)
     }
 }
 
@@ -443,6 +531,11 @@ pub struct Value {
     /// Which word, where the kind is [`Kind::Str`] or [`Kind::Bytes`]. A `str`
     /// is its UTF-8 bytes, which is the same alphabet the language is over.
     pub word: Option<&'static [u8]>,
+    /// The elements, where the kind is [`Kind::List`] or [`Kind::Tuple`].
+    ///
+    /// A value again, which is what makes the question recursive: whether a
+    /// sequence is admitted is asked of its elements, one letter at a time.
+    pub elements: Option<&'static [Value]>,
 }
 
 impl Value {
@@ -455,6 +548,7 @@ impl Value {
             integer: None,
             float: None,
             word: None,
+            elements: None,
         }
     }
 
@@ -467,6 +561,7 @@ impl Value {
             integer: None,
             float: None,
             word: None,
+            elements: None,
         }
     }
 
@@ -479,6 +574,7 @@ impl Value {
             integer: Some(value),
             float: None,
             word: None,
+            elements: None,
         }
     }
 
@@ -492,6 +588,7 @@ impl Value {
             integer: None,
             float: None,
             word: Some(word),
+            elements: None,
         }
     }
 
@@ -504,6 +601,7 @@ impl Value {
             integer: None,
             float: Some(value),
             word: None,
+            elements: None,
         }
     }
 
@@ -516,6 +614,20 @@ impl Value {
             integer: None,
             float: None,
             word: None,
+            elements: None,
+        }
+    }
+    /// One sequence, for a sequence kind. The elements are values again, which
+    /// is the letters the automaton reads.
+    #[must_use]
+    pub const fn sequence(elements: &'static [Value], kind: Kind) -> Value {
+        Value {
+            kind: Some(kind),
+            boolean: None,
+            integer: None,
+            float: None,
+            word: None,
+            elements: Some(elements),
         }
     }
 }
@@ -539,7 +651,13 @@ mod tests {
             .filter(|kind| {
                 !matches!(
                     kind,
-                    Kind::Bool | Kind::Int | Kind::Float | Kind::Str | Kind::Bytes
+                    Kind::Bool
+                        | Kind::Int
+                        | Kind::Float
+                        | Kind::Str
+                        | Kind::Bytes
+                        | Kind::List
+                        | Kind::Tuple
                 )
             })
             .map(|kind| Value::of_kind(*kind))
@@ -585,9 +703,117 @@ mod tests {
                 values.push(Value::word(word, kind));
             }
         }
+        // Sequences over the letters the generated guards separate, for both
+        // sequence kinds. The empty one and the two lengths are what tell a
+        // chain from a loop: `tuple[int]` and `list[int]` agree on every
+        // one-element sequence and part on the others.
+        for kind in [Kind::List, Kind::Tuple] {
+            values.extend(SEQUENCES.map(|elements| Value::sequence(elements, kind)));
+        }
         values.push(Value::other());
         values
     }
+
+    /// The distinction the coarse component could not make.
+    ///
+    /// `list[int]` and `list[str]` are one component while a kind is coarse, so
+    /// their meet is the whole kind rather than the one sequence they share.
+    /// With the automaton they are two languages over different letters, and
+    /// what they share is the empty list -- which both hold, and which is the
+    /// answer a coarse component cannot give.
+    #[test]
+    fn two_lists_of_different_elements_share_only_the_empty_one() {
+        const NOTHING: &[Value] = &[];
+        const INTS: &[Value] = &[Value::integer(1)];
+        const WORDS: &[Value] = &[Value::word(b"a", Kind::Str)];
+
+        let ints = Descr::sequence(&[], Some(&Descr::of_kind(Kind::Int)), Kind::List)
+            .expect("list is a sequence kind");
+        let words = Descr::sequence(&[], Some(&Descr::of_kind(Kind::Str)), Kind::List)
+            .expect("list is a sequence kind");
+
+        assert!(!ints.is_empty() && !words.is_empty());
+        let shared = ints.intersect(&words).expect("two small automata");
+        assert!(shared.admits(Value::sequence(NOTHING, Kind::List)));
+        assert!(!shared.admits(Value::sequence(INTS, Kind::List)));
+        assert!(!shared.admits(Value::sequence(WORDS, Kind::List)));
+        assert!(ints.admits(Value::sequence(INTS, Kind::List)));
+        assert!(words.admits(Value::sequence(WORDS, Kind::List)));
+        assert!(!ints.admits(Value::sequence(WORDS, Kind::List)));
+    }
+
+    /// A chain is not a loop: `tuple[int]` holds one element and `list[int]`
+    /// holds any number, which is the length the prefix pins and the tail does
+    /// not.
+    #[test]
+    fn a_prefix_pins_the_length_and_a_tail_does_not() {
+        const ONE: &[Value] = &[Value::integer(1)];
+        const TWO: &[Value] = &[Value::integer(1), Value::integer(1)];
+
+        let int = Descr::of_kind(Kind::Int);
+        let pair = Descr::sequence(&[int.clone(), int.clone()], None, Kind::Tuple)
+            .expect("tuple is a sequence kind");
+        let many = Descr::sequence(&[], Some(&int), Kind::Tuple).expect("tuple is a sequence kind");
+
+        assert!(!pair.admits(Value::sequence(ONE, Kind::Tuple)));
+        assert!(pair.admits(Value::sequence(TWO, Kind::Tuple)));
+        assert!(many.admits(Value::sequence(ONE, Kind::Tuple)));
+        assert!(many.admits(Value::sequence(TWO, Kind::Tuple)));
+    }
+
+    /// The kind is what separates a list from a tuple, not the language: the
+    /// same shape under two kinds is two components, and they do not meet.
+    #[test]
+    fn the_same_shape_under_two_kinds_does_not_meet() {
+        const ELEMENTS: &[Value] = &[Value::integer(1)];
+
+        let int = Descr::of_kind(Kind::Int);
+        let one = std::slice::from_ref(&int);
+        let list = Descr::sequence(one, None, Kind::List).expect("a sequence kind");
+        let tuple = Descr::sequence(one, None, Kind::Tuple).expect("a sequence kind");
+
+        assert!(list.admits(Value::sequence(ELEMENTS, Kind::List)));
+        assert!(!list.admits(Value::sequence(ELEMENTS, Kind::Tuple)));
+        assert!(
+            list.intersect(&tuple)
+                .expect("two small automata")
+                .is_empty()
+        );
+    }
+
+    /// A letter is a descriptor, so a sequence of sequences is a sequence: the
+    /// recursion the component carries is the one the values have.
+    #[test]
+    fn a_sequence_of_sequences_reads_its_elements() {
+        const INNER: &[Value] = &[Value::integer(1)];
+        const OUTER: &[Value] = &[Value::sequence(INNER, Kind::List)];
+        const FLAT: &[Value] = &[Value::integer(1)];
+
+        let inner = Descr::sequence(&[], Some(&Descr::of_kind(Kind::Int)), Kind::List)
+            .expect("a sequence kind");
+        let outer = Descr::sequence(&[], Some(&inner), Kind::List).expect("a sequence kind");
+
+        assert!(outer.admits(Value::sequence(OUTER, Kind::List)));
+        assert!(!outer.admits(Value::sequence(FLAT, Kind::List)));
+    }
+
+    /// A word kind refuses the sequence constructor rather than building a set
+    /// over letters it has none of.
+    #[test]
+    fn a_kind_whose_values_are_not_sequences_refuses() {
+        assert!(Descr::sequence(&[], None, Kind::Str).is_none());
+        assert!(Descr::sequence(&[], None, Kind::Set).is_none());
+    }
+
+    /// The element sequences the universe is built from.
+    const SEQUENCES: [&[Value]; 6] = [
+        &[],
+        &[Value::integer(0)],
+        &[Value::integer(1)],
+        &[Value::word(b"a", Kind::Str)],
+        &[Value::integer(0), Value::integer(1)],
+        &[Value::integer(0), Value::integer(0), Value::integer(0)],
+    ];
 
     /// Whether two descriptors agree about every value in the universe.
     ///
@@ -634,19 +860,31 @@ mod tests {
                     .prop_map(|(a, b)| a.union(&b).unwrap_or_else(Descr::anything)),
                 (inner.clone(), inner.clone())
                     .prop_map(|(a, b)| a.intersect(&b).unwrap_or_else(Descr::nothing)),
-                inner.prop_map(|a| a.complement()),
+                inner.clone().prop_map(|a| a.complement()),
+                // Both spellings from one constructor: a prefix with no tail is
+                // a chain, a tail is a loop, and the two together are the
+                // variadic form. The letters are descriptors drawn the same way,
+                // so a sequence of sequences is generated too.
+                (
+                    proptest::collection::vec(inner.clone(), 0..=2),
+                    proptest::option::of(inner),
+                    prop_oneof![Just(Kind::List), Just(Kind::Tuple)],
+                )
+                    .prop_map(|(prefix, tail, kind)| {
+                        Descr::sequence(&prefix, tail.as_ref(), kind).unwrap_or_else(Descr::nothing)
+                    }),
             ]
         })
     }
 
     proptest! {
-        // Fewer cases than the default, and a bounded shrink, because a word
-        // component's operations are automaton products. The case count is what
-        // keeps a pass cheap: the default spends most of the suite's time here.
-        // The shrink bound is what keeps a *failure* cheap, and it is the one
-        // that matters to the mutation sweep -- a broken invariant makes every
-        // draw larger, so shrinking one counterexample takes longer than the
-        // sweep waits, and a caught mutation reads as a run that hangs.
+        // Fewer cases than the default, and a bounded shrink, because a word or
+        // sequence component's operations are automaton products. The case count
+        // is what keeps a pass cheap: the default spends most of the suite's
+        // time here. The shrink bound is what keeps a *failure* cheap, and it is
+        // the one that matters to the mutation sweep -- a broken invariant makes
+        // every draw larger, so shrinking one counterexample takes longer than
+        // the sweep waits, and a caught mutation reads as a run that hangs.
         #![proptest_config(ProptestConfig {
             cases: 64,
             max_shrink_time: 2_000,

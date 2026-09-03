@@ -33,6 +33,20 @@ use std::collections::VecDeque;
 /// rather than answering.
 pub const MAX_STATES: usize = 4096;
 
+/// The most transitions one state may have.
+///
+/// The other dimension a product multiplies. [`MAX_STATES`] bounds how many
+/// positions a shape distinguishes; this bounds how many *alternatives* one
+/// position holds, and neither implies the other -- a product's row is the
+/// pairwise meets of the two sides' rows, so a table well inside the state bound
+/// can still have rows too wide to hold.
+///
+/// The same figure as the state bound: as many alternatives at one position as
+/// there are positions in a shape. Both are far past what an annotation writes
+/// -- `list[int | str]` branches three ways -- and both are limits of the
+/// representation rather than approximations, so a shape past either refuses.
+pub const MAX_ROW: usize = MAX_STATES;
+
 /// A Boolean algebra of value sets, which is what an automaton's guards must
 /// form.
 ///
@@ -77,7 +91,7 @@ pub trait Guard: Clone + Eq + Ord + core::fmt::Debug {
 /// edges do not. Every state has exactly one, last in the list, which is how a
 /// transition is total without a guard that names the universe -- and it is why
 /// a letter needs no `any()`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Edge<G> {
     pub(crate) guard: Option<G>,
     pub(crate) target: u32,
@@ -107,7 +121,7 @@ type Signature<G> = (bool, Vec<(u32, Option<G>)>);
 /// universe and are held in guard order, so the table is a name for the
 /// language: equal tables are equal languages, and the minimisation below is
 /// what makes the converse true.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SymbolicDfa<G: Guard> {
     edges: Vec<Vec<Edge<G>>>,
     accepting: Vec<bool>,
@@ -262,8 +276,8 @@ impl<G: Guard> SymbolicDfa<G> {
         .minimal()
     }
 
-    /// The sequences in either language, or `None` past [`MAX_STATES`] or where
-    /// a guard operation refuses.
+    /// The sequences in either language, or `None` past [`MAX_STATES`] or
+    /// [`MAX_ROW`], or where a guard operation refuses.
     #[must_use]
     pub fn union(&self, other: &SymbolicDfa<G>) -> Option<SymbolicDfa<G>> {
         self.product(other, |a, b| a || b)
@@ -339,6 +353,9 @@ impl<G: Guard> SymbolicDfa<G> {
                         pending.push_back(pair);
                         id
                     };
+                    if row.len() >= MAX_ROW {
+                        return None;
+                    }
                     row.push(Edge { guard, target });
                 }
             }
@@ -629,7 +646,7 @@ fn rest_of<G: Guard>(row: &[Edge<G>]) -> Option<G> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Guard, SymbolicDfa};
+    use super::{Edge, Guard, MAX_ROW, SymbolicDfa};
     use crate::descr::integers::IntSet;
     use proptest::prelude::*;
 
@@ -909,6 +926,37 @@ mod tests {
         // The prefix form too: one letter, any value, and nothing after it.
         let one = SymbolicDfa::shape(&[IntSet::all()], None);
         assert!(one.holds(&[0]) && !one.holds(&[]) && !one.holds(&[0, 0]));
+    }
+
+    /// A product row too wide to hold refuses rather than being built.
+    ///
+    /// [`MAX_STATES`] bounds the states and [`MAX_ROW`] bounds the rows, which
+    /// is the other dimension a product multiplies. The constructors keep rows
+    /// narrow, so the two tables here are written directly: each is one state
+    /// looping on many overlapping guards, and every pair of guards meets, which
+    /// is the shape that makes a row quadratic.
+    #[test]
+    fn a_product_past_the_row_bound_refuses() {
+        let wide = |count: i64| SymbolicDfa {
+            edges: vec![
+                (0..count)
+                    .map(|n| Edge {
+                        guard: Some(IntSet::between(Some(-n), None)),
+                        target: 0,
+                    })
+                    .collect(),
+            ],
+            accepting: vec![true],
+        };
+        // A row of the product is the two rows multiplied, so a wide side and a
+        // narrow one reach the bound between them.
+        let long = i64::try_from(MAX_ROW).unwrap_or(i64::MAX) / 2 + 2;
+
+        assert!(wide(long).intersect(&wide(3)).is_none());
+        assert!(
+            wide(2).intersect(&wide(2)).is_some(),
+            "a narrow one still answers"
+        );
     }
 
     /// Two states reaching one block through *separate* equivalent targets stay

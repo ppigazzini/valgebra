@@ -54,7 +54,7 @@ type Class = u16;
 /// State zero is the start. Every state has a transition for every class, so a
 /// walk never falls off the table and a complement is a flip of the accepting
 /// flags rather than a construction.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Dfa {
     /// The class of each byte.
     classes: Vec<Class>,
@@ -374,7 +374,7 @@ fn refine(a: &Dfa, b: &Dfa) -> (Vec<Class>, usize, Vec<(Class, Class)>) {
 }
 
 /// Which words a pattern is read over.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Alphabet {
     /// UTF-8 text, where `.` is one code point and a pattern may name a
     /// Unicode class. This is what a `str` refinement means.
@@ -385,7 +385,7 @@ pub enum Alphabet {
 }
 
 /// A set of words: a regular language.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RegularSet {
     dfa: Dfa,
 }
