@@ -14,6 +14,20 @@ pub(crate) struct RecordPlan {
     pub(crate) required: usize,
 }
 
+/// The interned attribute names of one [`Schema::Attrs`] node, in field order.
+///
+/// `getattr` takes a name, and passing a Rust `&str` builds a fresh `PyString`
+/// for every attribute of every value checked. The names are a property of the
+/// schema, so they are built once here and the walk hands the interpreter the
+/// same objects each time.
+pub(crate) struct AttrsPlan {
+    pub(crate) names: Vec<Py<PyString>>,
+}
+
+/// The attribute index for a whole validator, keyed and rebuilt like
+/// [`RecordIndex`].
+pub(crate) type AttrsIndex = FxHashMap<usize, AttrsPlan>;
+
 /// The record index for a whole validator: each record's `fields`-buffer address
 /// mapped to its [`RecordPlan`]. The buffer address is stable for the life of the
 /// (immutable) schema, and the index is rebuilt per validator from its own
@@ -57,10 +71,18 @@ impl UnionPlan {
 /// address mapped to its [`UnionPlan`]. Keyed and rebuilt like [`RecordIndex`].
 pub(crate) type UnionIndex = FxHashMap<usize, UnionPlan>;
 
-/// Each `Regex(...)` constraint's source pattern mapped to its compiled,
+/// Each `Regex(...)` constraint's pattern-buffer address mapped to its compiled,
 /// anchored regex, built once per validator so a string-pattern refinement
 /// matches natively without recompiling on every call.
-pub(crate) type RegexIndex = FxHashMap<String, Regex>;
+///
+/// Keyed by address rather than by the pattern text, as the record and union
+/// plans are keyed: the buffer is stable for the life of the (immutable) schema
+/// and the index is rebuilt per validator from its own schema, so an entry
+/// always refers to the same live constraint. The text is a key that must be
+/// hashed in full for every value a pattern refinement checks; the address is
+/// one integer. Two occurrences of the same pattern compile twice, once, at
+/// build time.
+pub(crate) type RegexIndex = FxHashMap<usize, Regex>;
 
 /// Anchor a user pattern so the whole string must match (`re.fullmatch`
 /// semantics): `\A` and `\z` are absolute string boundaries, and the
@@ -75,6 +97,7 @@ pub(crate) fn compile_pattern(pattern: &str) -> Result<Regex, regex::Error> {
 #[derive(Default)]
 pub(crate) struct ValidatorIndex {
     pub(crate) records: RecordIndex,
+    pub(crate) attrs: AttrsIndex,
     pub(crate) unions: UnionIndex,
     pub(crate) regexes: RegexIndex,
 }
@@ -145,14 +168,24 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
             collect(py, base, pool, index);
             for constraint in constraints {
                 if let Constraint::Regex(pattern) = constraint
-                    && !index.regexes.contains_key(pattern)
                     && let Ok(compiled) = compile_pattern(pattern)
                 {
-                    index.regexes.insert(pattern.clone(), compiled);
+                    index.regexes.insert(pattern.as_ptr() as usize, compiled);
                 }
             }
         }
         Schema::Attrs { fields, .. } => {
+            if !fields.is_empty() {
+                index
+                    .attrs
+                    .entry(fields.as_ptr() as usize)
+                    .or_insert_with(|| AttrsPlan {
+                        names: fields
+                            .iter()
+                            .map(|f| PyString::new(py, &f.name).unbind())
+                            .collect(),
+                    });
+            }
             for f in fields {
                 collect(py, &f.schema, pool, index);
             }
