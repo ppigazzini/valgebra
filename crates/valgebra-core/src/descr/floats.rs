@@ -402,6 +402,14 @@ mod tests {
     }
 
     proptest! {
+        // A bounded shrink, so a broken invariant cannot turn a caught mutation
+        // into a run that outlasts a sweep: every draw is larger under one, and
+        // shrinking a counterexample redraws it thousands of times.
+        #![proptest_config(ProptestConfig {
+            max_shrink_time: 2_000,
+            ..ProptestConfig::default()
+        })]
+
         /// The Boolean algebra, checked against the floats.
         #[test]
         fn the_lattice_laws_hold_of_the_floats(

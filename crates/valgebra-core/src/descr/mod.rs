@@ -25,6 +25,7 @@ pub mod floats;
 pub mod integers;
 pub mod interval;
 pub mod regular;
+pub mod symbolic;
 
 use crate::decision::Kind;
 use floats::FloatSet;
@@ -639,12 +640,18 @@ mod tests {
     }
 
     proptest! {
-        // Fewer cases than the default here, because a word component's
-        // operations are automaton products: the default count spends most of
-        // the suite's time on them, and a failure's shrinking -- thousands of
-        // draws over one counterexample -- takes longer than a mutation sweep
-        // waits, which turns a caught mutation into a run that does not finish.
-        #![proptest_config(ProptestConfig::with_cases(64))]
+        // Fewer cases than the default, and a bounded shrink, because a word
+        // component's operations are automaton products. The case count is what
+        // keeps a pass cheap: the default spends most of the suite's time here.
+        // The shrink bound is what keeps a *failure* cheap, and it is the one
+        // that matters to the mutation sweep -- a broken invariant makes every
+        // draw larger, so shrinking one counterexample takes longer than the
+        // sweep waits, and a caught mutation reads as a run that hangs.
+        #![proptest_config(ProptestConfig {
+            cases: 64,
+            max_shrink_time: 2_000,
+            ..ProptestConfig::default()
+        })]
 
         /// The Boolean algebra, checked by equality of the canonical forms.
         ///
