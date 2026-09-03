@@ -11,7 +11,7 @@ use pyo3::prelude::*;
 use rustc_hash::FxHashSet;
 use valgebra_core::Schema;
 
-use super::index::{RecordIndex, RegexIndex, UnionIndex};
+use super::index::{AttrsIndex, RecordIndex, RegexIndex, UnionIndex};
 
 /// The read-only context threaded through a validation walk: the constants pool,
 /// the recursion definitions, the precomputed record index, the active recursion
@@ -28,6 +28,10 @@ pub(crate) struct Ctx<'a> {
     /// from it falls back to building the map, so correctness never depends on
     /// it being complete.
     pub(crate) records: &'a RecordIndex,
+    /// Per-attribute-schema interned names, built once per validator. The
+    /// attribute walk hands these to `getattr` instead of building a fresh
+    /// `PyString` per attribute per value.
+    pub(crate) attrs: &'a AttrsIndex,
     /// Per-union value sets for unions whose members are all literals, keyed by
     /// the address of the union's members buffer. The membership fast path
     /// dispatches an exact int or str value through it instead of scanning every
@@ -212,12 +216,14 @@ mod descent_tests {
     /// a `Cell<usize>` and the guard that returns a level to it.
     fn with_ctx(state: &WalkState, run: impl FnOnce(Ctx<'_>)) {
         let records = FxHashMap::default();
+        let attrs = FxHashMap::default();
         let unions = FxHashMap::default();
         let regexes = FxHashMap::default();
         run(Ctx {
             pool: &[],
             defs: &[],
             records: &records,
+            attrs: &attrs,
             unions: &unions,
             regexes: &regexes,
             guard: &state.guard,

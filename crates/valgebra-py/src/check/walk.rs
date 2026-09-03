@@ -104,29 +104,47 @@ fn fold(result: PyResult<bool>, py: Python<'_>, ctx: Ctx<'_>) -> bool {
 /// Private, and reached only through the four typed accessors below: this is the
 /// one place an index space stops being tracked, so the pool's four uses each
 /// name themselves at the call site.
-fn pool_slot<'py>(ctx: Ctx<'_>, slot: usize, py: Python<'py>) -> Option<Bound<'py, PyAny>> {
+fn pool_slot<'a, 'py>(ctx: Ctx<'a>, slot: usize, py: Python<'py>) -> Option<&'a Bound<'py, PyAny>> {
     let obj = ctx.pool.get(slot);
     debug_assert!(obj.is_some(), "pool index {slot} out of range");
-    obj.map(|object| object.bind(py).clone())
+    // Borrowed, not cloned: the pool outlives the walk, and a clone here is a
+    // reference-count round trip per literal compared and per class checked.
+    obj.map(|object| object.bind(py))
 }
 
 /// The constant behind a [`Schema::Literal`].
-fn const_at<'py>(ctx: Ctx<'_>, index: ConstIx, py: Python<'py>) -> Option<Bound<'py, PyAny>> {
+fn const_at<'a, 'py>(
+    ctx: Ctx<'a>,
+    index: ConstIx,
+    py: Python<'py>,
+) -> Option<&'a Bound<'py, PyAny>> {
     pool_slot(ctx, index.get(), py)
 }
 
 /// The class behind a [`Schema::Instance`] or a [`Schema::Attrs`].
-fn class_at<'py>(ctx: Ctx<'_>, index: ClassIx, py: Python<'py>) -> Option<Bound<'py, PyAny>> {
+fn class_at<'a, 'py>(
+    ctx: Ctx<'a>,
+    index: ClassIx,
+    py: Python<'py>,
+) -> Option<&'a Bound<'py, PyAny>> {
     pool_slot(ctx, index.get(), py)
 }
 
 /// The operand behind a comparison or multiple-of constraint.
-fn operand_at<'py>(ctx: Ctx<'_>, index: OperandIx, py: Python<'py>) -> Option<Bound<'py, PyAny>> {
+fn operand_at<'a, 'py>(
+    ctx: Ctx<'a>,
+    index: OperandIx,
+    py: Python<'py>,
+) -> Option<&'a Bound<'py, PyAny>> {
     pool_slot(ctx, index.get(), py)
 }
 
 /// The callable behind a [`Constraint::Predicate`].
-fn predicate_at<'py>(ctx: Ctx<'_>, index: PredIx, py: Python<'py>) -> Option<Bound<'py, PyAny>> {
+fn predicate_at<'a, 'py>(
+    ctx: Ctx<'a>,
+    index: PredIx,
+    py: Python<'py>,
+) -> Option<&'a Bound<'py, PyAny>> {
     pool_slot(ctx, index.get(), py)
 }
 
@@ -252,7 +270,7 @@ fn check_literal(
     let ok = fold(
         value
             .to_python()
-            .and_then(|obj| literal_matches(&obj, &literal)),
+            .and_then(|obj| literal_matches(&obj, literal)),
         value.py(),
         ctx,
     );
@@ -260,7 +278,7 @@ fn check_literal(
         out.push(Violation {
             code: "literal_error",
             path: path.to_vec(),
-            expected: format!("the literal {}", summarize(&literal)),
+            expected: format!("the literal {}", summarize(literal)),
             value_summary: summarize_value(value),
         });
     }
@@ -822,14 +840,29 @@ fn keyed_map_matches_json(
         }
     }
     // Every key that is not a declared field must be covered by a default clause,
-    // testing each key's last value (json.loads semantics). Collapse the entries
-    // to each non-field key's last value in one pass, so a document with many keys
-    // (or many duplicates) is covered linearly rather than by rescanning the tail
-    // per key.
-    let field_names: FxHashSet<&str> = fields.iter().map(|f| f.name.as_str()).collect();
+    // testing each key's last value (json.loads semantics).
+    //
+    // Whether a key is a declared field is a question about the *schema*, so it
+    // is answered from the record plan built once per validator rather than from
+    // a name set rebuilt per object. A schema absent from the plan falls back to
+    // scanning the field list, so correctness never depends on the plan being
+    // complete.
+    let plan = ctx.records.get(&(fields.as_ptr() as usize));
+    let declares = |name: &str| match plan {
+        Some(plan) => plan.by_name.contains_key(name),
+        None => fields.iter().any(|f| f.name == name),
+    };
+    // A closed record has no clause to cover an undeclared key with, so the first
+    // one decides and there is nothing to collapse.
+    if defaults.is_empty() {
+        return entries.iter().all(|(key, _)| declares(key.as_ref()));
+    }
+    // Collapse the entries to each non-field key's last value in one pass, so a
+    // document with many keys (or many duplicates) is covered linearly rather
+    // than by rescanning the tail per key.
     let mut last_value: FxHashMap<&str, &JsonValue<'_>> = FxHashMap::default();
     for (key, val) in entries {
-        if field_names.contains(key.as_ref()) {
+        if declares(key.as_ref()) {
             continue;
         }
         last_value.insert(key.as_ref(), val);
@@ -1008,7 +1041,7 @@ fn push_branch_label(schema: &Schema, ctx: Ctx<'_>, py: Python<'_>, out: &mut Br
         Schema::Literal(index) => {
             let label = const_at(ctx, *index, py).map_or_else(
                 || schema.expected().to_owned(),
-                |c| format!("the literal {}", summarize(&c)),
+                |c| format!("the literal {}", summarize(c)),
             );
             out.push(label);
         }
@@ -1017,7 +1050,7 @@ fn push_branch_label(schema: &Schema, ctx: Ctx<'_>, py: Python<'_>, out: &mut Br
             class_index: index, ..
         } => {
             let label = class_at(ctx, *index, py)
-                .map_or_else(|| schema.expected().to_owned(), |c| class_label(&c));
+                .map_or_else(|| schema.expected().to_owned(), |c| class_label(c));
             out.push(label);
         }
         // A refinement's type is its base, matching `Schema::expected`; the
@@ -1156,14 +1189,14 @@ fn check_instance(
         return false;
     };
     let ok = fold(
-        value.to_python().and_then(|obj| obj.is_instance(&class)),
+        value.to_python().and_then(|obj| obj.is_instance(class)),
         value.py(),
         ctx,
     );
     if !ok && ctx.mode.explains() {
         out.push(type_mismatch(
             "instance_type",
-            &class_label(&class),
+            &class_label(class),
             value,
             path,
         ));
@@ -1186,21 +1219,30 @@ fn check_object(
     let Some(class) = class_at(ctx, class_index, value.py()) else {
         return false;
     };
-    if !fold(obj.is_instance(&class), value.py(), ctx) {
+    if !fold(obj.is_instance(class), value.py(), ctx) {
         // Not an instance: the attribute checks below cannot be trusted.
         if ctx.mode.explains() {
             out.push(type_mismatch(
                 "instance_type",
-                &class_label(&class),
+                &class_label(class),
                 value,
                 path,
             ));
         }
         return false;
     }
+    // The interned names, in field order. A schema absent from the index (an
+    // incomplete build traversal) falls back to the field's own text, so
+    // correctness never depends on the plan being complete.
+    let interned = ctx.attrs.get(&(fields.as_ptr() as usize));
     let mut ok = true;
-    for field in fields {
-        match obj.getattr(field.name.as_str()) {
+    for (position, field) in fields.iter().enumerate() {
+        let name = interned.and_then(|plan| plan.names.get(position));
+        let attribute = match name {
+            Some(interned) => obj.getattr(interned.bind(value.py())),
+            None => obj.getattr(field.name.as_str()),
+        };
+        match attribute {
             Ok(attr) => {
                 if ctx.mode.explains() {
                     path.push(PathSegment::Key(field.name.clone()));
@@ -1313,8 +1355,11 @@ fn order_bound<'py>(
     symbol: &'static str,
 ) -> Option<(bool, &'static str, Expected<'py>)> {
     let bound = operand_at(ctx, index, py)?;
-    let ok = fold(compare(value, &bound), py, ctx);
-    Some((ok, code, Expected::Order(symbol, bound)))
+    let ok = fold(compare(value, bound), py, ctx);
+    // Cloned only here, where the violation payload owns what it will summarize.
+    // The lookup itself borrows, which is what keeps a literal comparison and an
+    // isinstance check off the reference-count path.
+    Some((ok, code, Expected::Order(symbol, bound.clone())))
 }
 
 /// Whether `value` (already a base member, materialized once) satisfies one
@@ -1376,8 +1421,8 @@ fn check_constraint<'py>(
             let Some(operand) = operand_at(ctx, *i, py) else {
                 return false;
             };
-            let ok = fold(is_multiple_of(value, &operand), py, ctx);
-            (ok, "multiple_of", Expected::Multiple(operand))
+            let ok = fold(is_multiple_of(value, operand), py, ctx);
+            (ok, "multiple_of", Expected::Multiple(operand.clone()))
         }
         Constraint::Predicate(i) => {
             // Slow path: the user's Python callable runs at the boundary. A
@@ -1386,7 +1431,7 @@ fn check_constraint<'py>(
             let Some(predicate) = predicate_at(ctx, *i, py) else {
                 return false;
             };
-            match predicate_passes(value, &predicate) {
+            match predicate_passes(value, predicate) {
                 Ok(passed) => (
                     passed,
                     "predicate_failed",
@@ -1412,7 +1457,7 @@ fn check_constraint<'py>(
                 .cast::<PyString>()
                 .ok()
                 .and_then(|s| s.to_str().ok())
-                .is_some_and(|text| match ctx.regexes.get(pattern) {
+                .is_some_and(|text| match ctx.regexes.get(&(pattern.as_ptr() as usize)) {
                     Some(compiled) => compiled.is_match(text),
                     None => compile_pattern(pattern).is_ok_and(|re| re.is_match(text)),
                 });
@@ -1539,6 +1584,7 @@ fn predicate_passes(value: &Bound<'_, PyAny>, predicate: &Bound<'_, PyAny>) -> P
 #[cfg(all(test, feature = "interpreter-tests"))]
 mod interpreter {
     use super::*;
+    use crate::check::index::ValidatorIndex;
     use crate::check::{WalkMode, WalkState, build_index};
     use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyModule};
     use valgebra_core::{Field, MapClause, Openness};
@@ -1558,6 +1604,7 @@ mod interpreter {
             pool,
             defs,
             records: &index.records,
+            attrs: &index.attrs,
             unions: &index.unions,
             regexes: &index.regexes,
             guard: &state.guard,
@@ -1591,6 +1638,7 @@ mod interpreter {
             pool,
             defs,
             records: &index.records,
+            attrs: &index.attrs,
             unions: &index.unions,
             regexes: &index.regexes,
             guard: &state.guard,
@@ -1716,6 +1764,7 @@ mod interpreter {
                 pool: &[],
                 defs: &[],
                 records: &index.records,
+                attrs: &index.attrs,
                 unions: &index.unions,
                 regexes: &index.regexes,
                 guard: &state.guard,
@@ -1767,6 +1816,7 @@ mod interpreter {
                 pool: &pool,
                 defs: &[],
                 records: &index.records,
+                attrs: &index.attrs,
                 unions: &index.unions,
                 regexes: &index.regexes,
                 guard: &state.guard,
@@ -2319,6 +2369,7 @@ mod interpreter {
             pool,
             defs: &[],
             records: &index.records,
+            attrs: &index.attrs,
             unions: &index.unions,
             regexes: &index.regexes,
             guard: &state.guard,
@@ -2345,6 +2396,7 @@ mod interpreter {
             pool: &[],
             defs: &[],
             records: &index.records,
+            attrs: &index.attrs,
             unions: &index.unions,
             regexes: &index.regexes,
             guard: &state.guard,
@@ -2568,6 +2620,7 @@ mod interpreter {
                     pool: &[],
                     defs: &[],
                     records: &index.records,
+                    attrs: &index.attrs,
                     unions: &index.unions,
                     regexes: &index.regexes,
                     guard: &state.guard,
@@ -2642,6 +2695,7 @@ mod interpreter {
                     pool: &[],
                     defs: &[],
                     records: &index.records,
+                    attrs: &index.attrs,
                     unions: &index.unions,
                     regexes: &index.regexes,
                     guard: &state.guard,
@@ -2674,6 +2728,7 @@ mod interpreter {
             pool: &[],
             defs: &[],
             records: &index.records,
+            attrs: &index.attrs,
             unions: &index.unions,
             regexes: &index.regexes,
             guard: &state.guard,
@@ -2953,6 +3008,7 @@ mod interpreter {
                     pool: &[],
                     defs: &[],
                     records: &index.records,
+                    attrs: &index.attrs,
                     unions: &index.unions,
                     regexes: &index.regexes,
                     guard: &state.guard,
@@ -3080,6 +3136,70 @@ mod interpreter {
         });
     }
 
+    /// The JSON record path answers the same with the plan and without it.
+    ///
+    /// Whether a key is a declared field is read from the per-validator record
+    /// plan, and a schema absent from that plan falls back to scanning the field
+    /// list. The fallback is what keeps correctness from depending on the index
+    /// being complete, so it has to answer the same -- and nothing exercises it
+    /// through the ordinary entry points, because the index is always built.
+    #[test]
+    fn the_json_record_path_agrees_with_and_without_its_plan() {
+        Python::attach(|py| {
+            let schema = Schema::keyed_map(
+                vec![Field {
+                    name: "a".to_owned(),
+                    schema: Schema::Int,
+                    required: true,
+                }],
+                vec![MapClause {
+                    key: Schema::Str,
+                    value: Schema::Str,
+                }],
+            );
+            let Schema::KeyedMap { fields, defaults } = &schema else {
+                panic!("the schema is a keyed map")
+            };
+
+            // `a` is the declared field and takes an int; `b` is undeclared and
+            // must go to the clause, which takes a string. A reading that
+            // confused the two would accept the first and reject the second.
+            let good = [
+                ("a".into(), JsonValue::Int(1)),
+                ("b".into(), JsonValue::Str("x".into())),
+            ];
+            let bad = [
+                ("a".into(), JsonValue::Int(1)),
+                ("b".into(), JsonValue::Int(2)),
+            ];
+
+            let built = build_index(py, &schema, &[], &[]);
+            let empty = ValidatorIndex::default();
+            for index in [&built, &empty] {
+                let state = WalkState::new();
+                let ctx = Ctx {
+                    pool: &[],
+                    defs: &[],
+                    records: &index.records,
+                    attrs: &index.attrs,
+                    unions: &index.unions,
+                    regexes: &index.regexes,
+                    guard: &state.guard,
+                    depth: &state.depth,
+                    fatal: &state.fatal,
+                    fatal_seen: &state.fatal_seen,
+                    mode: WalkMode::Fast,
+                };
+                assert!(keyed_map_matches_json(fields, defaults, py, &good, ctx));
+                assert!(!keyed_map_matches_json(fields, defaults, py, &bad, ctx));
+            }
+            // The plan really was absent for the second pass, so the two answers
+            // came from the two readings rather than from one of them twice.
+            assert!(built.records.contains_key(&(fields.as_ptr() as usize)));
+            assert!(empty.records.is_empty());
+        });
+    }
+
     #[test]
     fn the_json_path_and_the_object_path_agree() {
         Python::attach(|py| {
@@ -3096,6 +3216,7 @@ mod interpreter {
                 pool: &[],
                 defs: &[],
                 records: &index.records,
+                attrs: &index.attrs,
                 unions: &index.unions,
                 regexes: &index.regexes,
                 guard: &state.guard,
