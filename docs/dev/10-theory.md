@@ -79,14 +79,26 @@ sequence type is a first-class member of the algebra rather than an ad-hoc node.
 prefix-plus-tail forms for exactly this reason
 ([01-schema-ir.md](01-schema-ir.md)).
 
-It is guiding rather than load-bearing, and the gap is the point: the general
-form is a regular expression over element schemas, and deciding inclusion
-between two of those wants the automaton construction
-[15-decidability.md](../15-decidability.md) records as unbuilt. What the IR
-carries is the *linear* fragment — a fixed prefix and an optional repeated tail
-— which is every shape the schema language can spell. The closure the paper
-gives is at the schema level here, through union, intersection and complement
-over the sequence node, rather than inside the sequence body.
+It is guiding rather than load-bearing for *sequences*, and the gap is the
+point: the general form is a regular expression over element schemas, and
+deciding inclusion between two of those wants an automaton construction over
+schemas that [15-decidability.md](../15-decidability.md) records as unbuilt.
+What the IR carries is the *linear* fragment — a fixed prefix and an optional
+repeated tail — which is every shape the schema language can spell. The closure
+the paper gives is at the schema level there, through union, intersection and
+complement over the sequence node, rather than inside the sequence body.
+
+The same closure argument *is* load-bearing one kind over, for strings and
+bytes. A `str` refinement's language is regular — a literal is one word, a
+length bound is a symbol count, a pattern is itself — and the descriptor's word
+component is a minimal deterministic automaton, canonically numbered. Union and
+intersection are product constructions, complement is a flip of the accepting
+states, and emptiness is a reachability walk; two spellings of one language have
+one table, so `Regex("a")` is decided inside `Regex("ab?")` and equal to
+`Literal["a"]`. The automaton for one pattern comes from `regex-automata`, which
+the binding already depends on; the three set operations and the emptiness
+decision are valgebra's, because that crate builds automata for searching and
+offers no complement.
 
 **The rule that splits a fixed-length sequence across a union** is the product
 decomposition — Frisch, Castagna & Benzaken Lemma 6.5 for pairs, in the
