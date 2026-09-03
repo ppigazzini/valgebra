@@ -74,8 +74,11 @@ repos:
         types: [markdown]
         pass_filenames: false
       - id: cargo-check-fuzz
+        # `--all-targets`, because the fuzz crate carries its own tests and CI
+        # runs them: a plain `check` compiles the library and leaves the test
+        # target for the lane to discover.
         name: cargo check (detached fuzz workspace)
-        entry: cargo check --manifest-path fuzz/Cargo.toml
+        entry: cargo check --manifest-path fuzz/Cargo.toml --all-targets
         language: system
         types: [rust]
         pass_filenames: false

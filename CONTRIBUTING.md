@@ -60,7 +60,7 @@ Linux, macOS, and Windows; local runs are previews of that source of truth.
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
-cargo check --manifest-path fuzz/Cargo.toml
+cargo check --manifest-path fuzz/Cargo.toml --all-targets
 uv run python scripts/docs_lint.py
 uv run maturin develop --uv
 uv run ruff check . && uv run ruff format --check .
@@ -92,7 +92,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | Rust behaviour | `crates/` | `cargo test` |
 | Rust documentation links | the doc comments in `crates/` | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` |
 | the walk's own corpus | `crates/valgebra-py/src/check/walk.rs` | `cargo test -p valgebra-py --features interpreter-tests` |
-| the detached fuzz surface | `fuzz/Cargo.toml` | `cargo check --manifest-path fuzz/Cargo.toml` |
+| the detached fuzz surface | `fuzz/Cargo.toml` | `cargo check --manifest-path fuzz/Cargo.toml --all-targets` |
 | fuzz harness laws | `fuzz/src/lib.rs` | `cargo +nightly test --manifest-path fuzz/Cargo.toml --lib` |
 | Python behaviour | `tests/` | `uv run pytest` |
 | Python lint and format | `pyproject.toml` `[tool.ruff]` | `uv run ruff check . && uv run ruff format --check .` |
