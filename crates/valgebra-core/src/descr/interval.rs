@@ -19,7 +19,7 @@ use core::cmp::{max, min};
 /// Inclusive at both ends, because the elements are integers: a half-open end
 /// would be a second way to write the same set, and the point of the form is
 /// that there is one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct Span {
     lo: Option<i64>,
     hi: Option<i64>,
@@ -73,7 +73,7 @@ fn bound(a: Option<i64>, b: Option<i64>, pick: fn(i64, i64) -> i64) -> Option<i6
 }
 
 /// A set of integers: sorted, disjoint, non-adjacent spans.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IntervalSet {
     spans: Vec<Span>,
 }
@@ -295,6 +295,14 @@ mod tests {
     }
 
     proptest! {
+        // A bounded shrink, so a broken invariant cannot turn a caught mutation
+        // into a run that outlasts a sweep: every draw is larger under one, and
+        // shrinking a counterexample redraws it thousands of times.
+        #![proptest_config(ProptestConfig {
+            max_shrink_time: 2_000,
+            ..ProptestConfig::default()
+        })]
+
         /// The Boolean algebra, checked against the integers rather than against
         /// the two representations agreeing.
         #[test]

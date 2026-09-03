@@ -700,7 +700,13 @@ mod tests {
         // Fewer cases than the default, for the reason the descriptor module
         // gives: every operation here is an automaton product, and shrinking a
         // failure over thousands of draws outruns a mutation sweep's patience.
-        #![proptest_config(ProptestConfig::with_cases(64))]
+        #![proptest_config(ProptestConfig {
+            cases: 64,
+            // A bounded shrink, so a broken invariant cannot turn a caught
+            // mutation into a run that outlasts a sweep.
+            max_shrink_time: 2_000,
+            ..ProptestConfig::default()
+        })]
 
         /// The Boolean algebra, checked by equality of the canonical forms.
         ///

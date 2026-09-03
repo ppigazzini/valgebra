@@ -201,6 +201,30 @@ impl IntSet {
     }
 }
 
+impl Ord for IntSet {
+    /// Order two sets by their tables at the period where their classes line
+    /// up.
+    ///
+    /// Lifted for the same reason equality is: the multiples of two and the same
+    /// set written with a period of four are one set, so comparing the tables as
+    /// they stand would order two equal sets apart. Consistency with `eq` is the
+    /// whole requirement on an ordering, and lifting is what gives it -- the
+    /// order itself is arbitrary, and its only use is fixing a canonical
+    /// position for a set in a list.
+    fn cmp(&self, other: &IntSet) -> core::cmp::Ordering {
+        let modulus = self.common(other);
+        self.lifted(modulus)
+            .classes
+            .cmp(&other.lifted(modulus).classes)
+    }
+}
+
+impl PartialOrd for IntSet {
+    fn partial_cmp(&self, other: &IntSet) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl PartialEq for IntSet {
     /// Two sets are equal when they hold the same integers, which is not the
     /// same as carrying the same period: the multiples of two and the multiples
@@ -294,6 +318,14 @@ mod tests {
     }
 
     proptest! {
+        // A bounded shrink, so a broken invariant cannot turn a caught mutation
+        // into a run that outlasts a sweep: every draw is larger under one, and
+        // shrinking a counterexample redraws it thousands of times.
+        #![proptest_config(ProptestConfig {
+            max_shrink_time: 2_000,
+            ..ProptestConfig::default()
+        })]
+
         /// The Boolean algebra, checked against the integers.
         #[test]
         fn the_lattice_laws_hold_of_the_integers(
@@ -348,6 +380,16 @@ mod tests {
         #[test]
         fn emptiness_agrees_with_the_integers(a in int_set()) {
             prop_assert_eq!(a.is_empty(), window(&a, &a).all(|n| !a.holds(n)));
+        }
+
+        /// The order is total and agrees with equality, which is all a sort of
+        /// guards asks of it: two sets holding the same integers compare equal
+        /// whatever periods they are written with, and no pair is incomparable.
+        #[test]
+        fn the_order_is_total_and_agrees_with_equality(a in int_set(), b in int_set()) {
+            prop_assert_eq!(a.partial_cmp(&b), Some(a.cmp(&b)));
+            prop_assert_eq!(a.cmp(&b) == core::cmp::Ordering::Equal, a == b);
+            prop_assert_eq!(a.cmp(&b), b.cmp(&a).reverse());
         }
 
         /// Lifting a set to a multiple of its period changes no integer.
