@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 02d771fbd7d94db56b9eb9116e2f22825b8b3c84bd49ce8bf889c3e19a889874 # shrinks to a = FloatSet { spans: [Span { lo: -inf, lo_closed: false, hi: -2.0, hi_closed: false }], nan: false }
