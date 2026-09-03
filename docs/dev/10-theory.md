@@ -189,7 +189,7 @@ saying so is the point of the tag.
 
 **The descriptor**, the representation the two Castagna papers above give and
 Elixir's `Module.Types.Descr` implements, is **[IN PROGRESS]** in
-`crates/valgebra-core/src/descr.rs`. Where the procedure in `decision.rs` reads a
+`crates/valgebra-core/src/descr/`. Where the procedure in `decision.rs` reads a
 schema's syntax and applies inclusion rules, the descriptor gives the *set* a
 representation closed under union, intersection and complement, so a relation is
 decided by emptiness of one combination rather than by whether a rule matched the

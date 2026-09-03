@@ -21,6 +21,8 @@
 //! which is which, so what the descriptor can and cannot see is read off it
 //! rather than inferred.
 
+pub mod interval;
+
 use crate::decision::Kind;
 
 /// The two booleans, as a subset.
@@ -29,7 +31,7 @@ use crate::decision::Kind;
 /// `Literal[True]` is `{True}`, and `Literal[True] | Literal[False]` is the
 /// whole kind rather than a union the procedure must recognise. A two-bit set is
 /// the smallest thing closed under the three operations here.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoolSet(u8);
 
 impl BoolSet {
