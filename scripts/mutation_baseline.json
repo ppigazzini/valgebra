@@ -1,9 +1,9 @@
 {
   "_comment": "Mutation survivors accepted as a baseline for the core sweep. The nightly ratchet fails when a survivor appears outside this set, and when an entry is no longer a survivor. Regenerate with `python scripts/mutation_gate.py --baseline core --update` after a sweep, and only ever let this set shrink. Entries are the survivor line without its line:col position, so they survive unrelated code motion.",
-  "survivors": [
-    "crates/valgebra-core/src/decision.rs: replace << with >>"
-  ],
   "_accepted": {
-    "crates/valgebra-core/src/decision.rs: replace << with >>": "Region's NONE_TYPE is `1 << 0`, and `1 >> 0` is the same value. A genuinely equivalent mutant: the other six shift constants are killed by `the_scalar_regions_partition_the_universe`, which requires each region to be non-empty and pairwise disjoint."
-  }
+    "crates/valgebra-core/src/decision.rs: replace << with >> in Kind::region": "`Kind::NoneType`'s region is `1 << 0`, and `1 >> 0` is the same value. A genuinely equivalent mutant, and the only one of the seven shift constants that is: the other six are killed by `every_kind_lands_in_the_partition_and_the_scalars_land_apart`, which requires each scalar kind's region to be non-empty and pairwise disjoint and every container kind to share the one that is left."
+  },
+  "survivors": [
+    "crates/valgebra-core/src/decision.rs: replace << with >> in Kind::region"
+  ]
 }
