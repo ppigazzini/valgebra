@@ -105,7 +105,32 @@ jobs:
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: cargo build --locked --workspace
+      # Every target, not just the libraries: a benchmark, an example or a test
+      # that needs a newer compiler than the manifest promises is a broken build
+      # for a reader who takes the manifest at its word, and building the
+      # libraries alone cannot see it.
+      - run: cargo build --locked --workspace --all-targets
+
+  rust-doc:
+    name: rust doc
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # A doc comment is prose the compiler can check part of: an intra-doc link
+      # to an item that was renamed or made private resolves to nothing and the
+      # rendered page shows the text without the link. Denied here, so a stale
+      # reference fails rather than degrading quietly.
+      - name: Build the rustdoc, denying warnings
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps
 
   rust-coverage:
     name: rust coverage
@@ -918,10 +943,12 @@ jobs:
         rust-lint,
         rust-test,
         rust-msrv,
+        rust-doc,
         rust-coverage,
         binding-coverage,
         python,
         differential,
+        metamorphic,
         doc-examples,
         docs,
         bench,
@@ -944,10 +971,12 @@ jobs:
           needs.rust-lint.result != 'success' ||
           needs.rust-test.result != 'success' ||
           needs.rust-msrv.result != 'success' ||
+          needs.rust-doc.result != 'success' ||
           needs.rust-coverage.result != 'success' ||
           needs.binding-coverage.result != 'success' ||
           needs.python.result != 'success' ||
           needs.differential.result != 'success' ||
+          needs.metamorphic.result != 'success' ||
           needs.doc-examples.result != 'success' ||
           needs.docs.result != 'success' ||
           needs.bench.result != 'success' ||

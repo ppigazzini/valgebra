@@ -4,10 +4,10 @@
 //! predicate, an instance or attribute check) is the documented step back across
 //! the boundary.
 //!
-//! The crate is split into the frontend ([`build`]) that reads Python forms
-//! into the IR, the walk ([`check`]) with its explain path and membership fast
-//! path, the [`render`] back to an annotation string, and [`errors`] that build
-//! the Python [`ValidationError`].
+//! The crate is split into the frontend (`build`) that reads Python forms into
+//! the IR, the walk (`check`) with its explain path and membership fast path,
+//! the `render` back to an annotation string, and `errors` that build the
+//! Python `ValidationError`.
 //!
 //! The crate forbids `unsafe`, so the security policy's no-unsafe guarantee is
 //! compiler-enforced across the binding boundary too, not merely asserted.
