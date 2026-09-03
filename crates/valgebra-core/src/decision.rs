@@ -152,11 +152,7 @@ impl Schema {
         match (self.type_tag_with(oracle), other.type_tag_with(oracle)) {
             // Distinct concrete types are disjoint, except bool ⊆ int.
             (Some(a), Some(b)) => {
-                a != b
-                    && !matches!(
-                        (a, b),
-                        (TypeTag::Bool, TypeTag::Int) | (TypeTag::Int, TypeTag::Bool)
-                    )
+                a != b && !matches!((a, b), (Kind::Bool, Kind::Int) | (Kind::Int, Kind::Bool))
             }
             _ => false,
         }
@@ -164,31 +160,31 @@ impl Schema {
 
     /// A concrete type tag for nodes whose disjointness the core can decide
     /// soundly. `None` for nodes it cannot (`Literal`/`Instance`/`Any`/...).
-    fn type_tag(&self) -> Option<TypeTag> {
+    fn type_tag(&self) -> Option<Kind> {
         self.type_tag_with(&NoLeafRelations)
     }
 
     /// [`type_tag`](Self::type_tag) with the oracle that kinds a `Literal`.
-    fn type_tag_with(&self, oracle: &dyn LeafRelations) -> Option<TypeTag> {
+    fn type_tag_with(&self, oracle: &dyn LeafRelations) -> Option<Kind> {
         Some(match self {
             Schema::Literal(constant) => return oracle.literal_kind(*constant),
-            Schema::NoneType => TypeTag::NoneType,
-            Schema::Bool => TypeTag::Bool,
-            Schema::Int => TypeTag::Int,
-            Schema::Float => TypeTag::Float,
-            Schema::Str => TypeTag::Str,
-            Schema::Bytes => TypeTag::Bytes,
+            Schema::NoneType => Kind::NoneType,
+            Schema::Bool => Kind::Bool,
+            Schema::Int => Kind::Int,
+            Schema::Float => Kind::Float,
+            Schema::Str => Kind::Str,
+            Schema::Bytes => Kind::Bytes,
             Schema::Seq {
                 container: SeqKind::List,
                 ..
-            } => TypeTag::List,
+            } => Kind::List,
             Schema::Seq {
                 container: SeqKind::Tuple,
                 ..
-            } => TypeTag::Tuple,
-            Schema::Set(_) => TypeTag::Set,
-            Schema::FrozenSet(_) => TypeTag::FrozenSet,
-            Schema::KeyedMap { .. } => TypeTag::Dict,
+            } => Kind::Tuple,
+            Schema::Set(_) => Kind::Set,
+            Schema::FrozenSet(_) => Kind::FrozenSet,
+            Schema::KeyedMap { .. } => Kind::Dict,
             // A refinement is a subset of its base, so its base's disjointness
             // is sound for it.
             Schema::Refine { base, .. } => return base.type_tag_with(oracle),
@@ -196,24 +192,44 @@ impl Schema {
         })
     }
 
-    /// The value-universe regions this schema denotes, as a bitset over the
-    /// `REGION_*` partition, or `None` when the schema is not *scalar-decidable*
-    /// — built only from the scalar atoms, `Nothing`, `Anything`, and the
-    /// `Union`/`Intersection`/`Complement` combinators. On that fragment the
-    /// bitset is exact, so emptiness and subtyping are decided completely;
-    /// elsewhere the caller stays conservative. The gradual `Any`, literals,
-    /// instances, refinements, content-bearing containers, and references are
-    /// not scalar-decidable, so any combination containing one yields `None`.
+    /// The region a scalar atom denotes *exactly*, or `None` for every other node.
+    ///
+    /// Exactness is the whole condition. A region set is read back through
+    /// [`Region::complement`], and the complement of an over-approximation is an
+    /// under-approximation -- which would report an inhabited schema empty. So a
+    /// node earns a region only when it denotes that region and nothing less:
+    /// `str` is every string, while `list[int]` is a proper part of the lists
+    /// and stays opaque.
+    fn atom_region(&self) -> Option<Region> {
+        Some(match self {
+            Schema::NoneType => Kind::NoneType.region(),
+            Schema::Bool => Kind::Bool.region(),
+            // `bool` subclasses `int`, so an `int` schema admits both regions.
+            // This is the one place a schema's regions are not its kind's.
+            Schema::Int => Kind::Bool.region().union(Kind::Int.region()),
+            Schema::Float => Kind::Float.region(),
+            Schema::Str => Kind::Str.region(),
+            Schema::Bytes => Kind::Bytes.region(),
+            _ => return None,
+        })
+    }
+
+    /// The value-universe regions this schema denotes, as a set over the
+    /// [`Kind`] partition, or [`Regions::Unknown`] when the schema is not
+    /// *scalar-decidable* — built only from the scalar atoms, `Nothing`,
+    /// `Anything`, and the `Union`/`Intersection`/`Complement` combinators. On
+    /// that fragment the set is **exact**, so emptiness and subtyping are decided
+    /// completely; elsewhere the caller stays conservative. The gradual `Any`,
+    /// literals, instances, refinements, content-bearing containers, and
+    /// references are not scalar-decidable, so any combination holding one is
+    /// `Unknown`.
     pub(crate) fn region_set(&self) -> Regions {
+        if let Some(region) = self.atom_region() {
+            return Regions::Known(region);
+        }
         Regions::Known(match self {
             Schema::Nothing => Region::EMPTY,
             Schema::Anything => Region::ALL,
-            Schema::NoneType => Region::NONE_TYPE,
-            Schema::Bool => Region::BOOL,
-            Schema::Int => Region::BOOL.union(Region::INT), // bool ⊆ int
-            Schema::Float => Region::FLOAT,
-            Schema::Str => Region::STR,
-            Schema::Bytes => Region::BYTES,
             Schema::Union(members) => {
                 let mut acc = Regions::UNION_UNIT;
                 for member in members {
@@ -358,17 +374,17 @@ impl Schema {
         if !spend(budget) {
             return (false, Regions::Unknown);
         }
+        // A scalar atom names its region exactly and is inhabited: every one of
+        // them admits a value. Read before the match so the mapping from atom to
+        // region is written once, beside the exactness it depends on.
+        if let Some(region) = self.atom_region() {
+            return (false, Regions::Known(region));
+        }
         match self {
-            // Scalar atoms and the lattice bounds carry a known region; their
-            // emptiness is exactly "the region is empty".
+            // The lattice bounds carry a known region; their emptiness is
+            // exactly "the region is empty".
             Schema::Nothing => (true, Regions::Known(Region::EMPTY)),
             Schema::Anything => (false, Regions::Known(Region::ALL)),
-            Schema::NoneType => (false, Regions::Known(Region::NONE_TYPE)),
-            Schema::Bool => (false, Regions::Known(Region::BOOL)),
-            Schema::Int => (false, Regions::Known(Region::BOOL.union(Region::INT))), // bool ⊆ int
-            Schema::Float => (false, Regions::Known(Region::FLOAT)),
-            Schema::Str => (false, Regions::Known(Region::STR)),
-            Schema::Bytes => (false, Regions::Known(Region::BYTES)),
             Schema::Ref(id) => {
                 // A reference reached again while resolving it is a cycle: this
                 // occurrence demands an infinite unfolding, so on its own it has
@@ -872,7 +888,7 @@ pub trait LeafRelations {
     /// the kind of `c`'s type and the core cannot read it. Answering places the
     /// literal in the partition, which is what decides it against another kind.
     /// The default declines, so a core with no value oracle stays conservative.
-    fn literal_kind(&self, _constant: ConstIx) -> Option<TypeTag> {
+    fn literal_kind(&self, _constant: ConstIx) -> Option<Kind> {
         None
     }
 
@@ -916,7 +932,7 @@ impl LeafRelations for NoLeafRelations {
 fn bounded_to_the_integers<'a>(bases: impl IntoIterator<Item = &'a Schema>) -> bool {
     bases
         .into_iter()
-        .any(|base| matches!(base.type_tag(), Some(TypeTag::Int | TypeTag::Bool)))
+        .any(|base| matches!(base.type_tag(), Some(Kind::Int | Kind::Bool)))
 }
 
 /// Whether a refinement's bound and length constraints cannot hold together: a
@@ -1470,14 +1486,18 @@ fn field_index(fields: &[Field]) -> FxHashMap<&str, &Field> {
 /// universe is cut into a schema's denotation can reach.
 ///
 /// The value universe is partitioned so a Boolean combination of scalar atoms
-/// denotes a set the lattice operations compute exactly. The scalar atoms occupy
-/// `NONE_TYPE`..`BYTES` (with `int` covering `BOOL | INT`); one further region
-/// holds everything that is not one of the six scalar kinds — containers,
-/// instances, callables, and the rest — lumped together. No atom ever names that
-/// region alone, so the non-scalar kinds need no further bits; it exists so the
+/// denotes a set the lattice operations compute exactly. Which region a kind
+/// falls in is [`Kind::region`]: the six scalar kinds take one each, and every
+/// container kind shares [`Region::NON_SCALAR`]. That region exists so the
 /// complement of a scalar includes every non-scalar value, which keeps emptiness
-/// sound (the meet of all six scalar complements is the non-empty non-scalar
-/// region, not the empty set).
+/// sound — the meet of all six scalar complements is the inhabited non-scalar
+/// region, not the empty set.
+///
+/// **A set holds a region only when a schema names it exactly.** The set is read
+/// back through [`complement`](Region::complement), and the complement of an
+/// over-approximation is an under-approximation, which would report an inhabited
+/// schema empty. So `str` earns a region and `list[int]` does not: a list schema
+/// is a proper part of the lists, and the fold keeps it opaque.
 ///
 /// **It is a set, and its operations are the set's.** The bits were an
 /// `Option<u8>` combined at each call site with `|`, `&`, `!`, `|=`, and `<<`,
@@ -1500,13 +1520,10 @@ impl Region {
     /// Every region: the whole value universe.
     pub(crate) const ALL: Region = Region((1 << 7) - 1);
 
-    const NONE_TYPE: Region = Region(1 << 0);
-    const BOOL: Region = Region(1 << 1);
-    /// `int` values other than `bool`; `Schema::Int` denotes `BOOL | INT`.
-    const INT: Region = Region(1 << 2);
-    const FLOAT: Region = Region(1 << 3);
-    const STR: Region = Region(1 << 4);
-    const BYTES: Region = Region(1 << 5);
+    /// Everything that is no scalar kind -- containers, instances, callables,
+    /// and the rest -- in one region. No schema names it alone, which is why
+    /// one bit is enough for every kind that falls in it.
+    const NON_SCALAR: Region = Region(1 << 6);
 
     /// Every region in either set.
     #[inline]
@@ -1541,17 +1558,17 @@ impl Region {
     }
 }
 
-/// A concrete runtime type: the kind a value belongs to.
+/// A concrete runtime kind: the type a value's `type(x)` is.
 ///
 /// The kinds partition the value universe, so two schemas carrying different
 /// kinds share no value -- `bool` and `int` aside, since `bool` subclasses `int`.
-/// A schema the core cannot kind has no tag, and disjointness stays conservative.
+/// A schema the core cannot kind has none, and disjointness stays conservative.
 ///
 /// Public because the core cannot see a Python object: a `Literal`'s kind is a
 /// fact about a pooled constant, which only the bindings can read, and they
 /// answer in this vocabulary through [`LeafRelations::literal_kind`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TypeTag {
+pub enum Kind {
     /// `None`.
     NoneType,
     Bool,
@@ -1564,6 +1581,35 @@ pub enum TypeTag {
     Set,
     FrozenSet,
     Dict,
+}
+
+impl Kind {
+    /// The [`Region`] this kind falls in.
+    ///
+    /// The one place that says where a kind lands, so adding a kind is a change
+    /// in one file that the compiler makes you finish. The two vocabularies were
+    /// separate lists -- the kinds here and a set of region constants beside
+    /// them -- with nothing tying `List` to the region a list belongs to.
+    ///
+    /// The six scalar kinds each get a region of their own, because a schema can
+    /// name one exactly: `str` denotes every string and nothing else, so the
+    /// complement of `str` is exactly the other six regions. The five container
+    /// kinds share the non-scalar region, because no schema names one exactly --
+    /// `list[int]` is a proper part of the lists, so the fold keeps a container
+    /// opaque rather than claiming a region for it (see [`Regions`]).
+    pub(crate) const fn region(self) -> Region {
+        match self {
+            Kind::NoneType => Region(1 << 0),
+            Kind::Bool => Region(1 << 1),
+            Kind::Int => Region(1 << 2),
+            Kind::Float => Region(1 << 3),
+            Kind::Str => Region(1 << 4),
+            Kind::Bytes => Region(1 << 5),
+            Kind::List | Kind::Tuple | Kind::Set | Kind::FrozenSet | Kind::Dict => {
+                Region::NON_SCALAR
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1605,7 +1651,7 @@ mod budget_tests {
 
 #[cfg(test)]
 mod region_tests {
-    use super::{Region, Regions};
+    use super::{Kind, Region, Regions};
 
     /// Every region operation is a set operation, and each is pinned here rather
     /// than inside the folds that use it. The bits used to be combined at each
@@ -1615,15 +1661,18 @@ mod region_tests {
     /// are, over the boundary cases the folds start and end at.
     #[test]
     fn the_region_operations_are_the_set_operations() {
-        let a = Region::BOOL.union(Region::INT);
-        let b = Region::BOOL.union(Region::STR);
+        let a = Kind::Bool.region().union(Kind::Int.region());
+        let b = Kind::Bool.region().union(Kind::Str.region());
 
         // Union and intersection, distinguished: a wrong operator swaps these.
         assert_eq!(
             a.union(b),
-            Region::BOOL.union(Region::INT).union(Region::STR)
+            Kind::Bool
+                .region()
+                .union(Kind::Int.region())
+                .union(Kind::Str.region())
         );
-        assert_eq!(a.intersect(b), Region::BOOL);
+        assert_eq!(a.intersect(b), Kind::Bool.region());
         assert_ne!(a.union(b), a.intersect(b));
 
         // The bounds are the identities of their operations, and absorb the other.
@@ -1644,16 +1693,16 @@ mod region_tests {
         assert!(Region::EMPTY.is_empty());
         assert!(!Region::ALL.is_empty());
         assert!(!a.is_empty());
-        assert!(a.intersect(Region::STR).is_empty());
+        assert!(a.intersect(Kind::Str.region()).is_empty());
 
         // Inclusion is the subtyping relation on the scalar fragment, and it is
         // not symmetric: `bool` is below `int`, and `int` is not below `bool`.
-        assert!(Region::BOOL.subset_of(a));
-        assert!(!a.subset_of(Region::BOOL));
+        assert!(Kind::Bool.region().subset_of(a));
+        assert!(!a.subset_of(Kind::Bool.region()));
         assert!(a.subset_of(a));
         assert!(Region::EMPTY.subset_of(a));
         assert!(a.subset_of(Region::ALL));
-        assert!(!Region::STR.subset_of(a));
+        assert!(!Kind::Str.region().subset_of(a));
     }
 
     /// The region set an emptiness fold accumulates is a monoid under each lattice
@@ -1665,7 +1714,7 @@ mod region_tests {
     fn the_region_set_is_a_monoid_with_an_absorbing_element() {
         let known = |r| Regions::Known(r);
         let unknown = Regions::Unknown;
-        let bool_int = known(Region::BOOL.union(Region::INT));
+        let bool_int = known(Kind::Bool.region().union(Kind::Int.region()));
 
         // Each operation has its identity.
         assert_eq!(bool_int.union(Regions::UNION_UNIT), bool_int);
@@ -1687,10 +1736,13 @@ mod region_tests {
 
         // The operations are the region's own where both sides are known.
         assert_eq!(
-            known(Region::BOOL).union(known(Region::STR)),
-            known(Region::BOOL.union(Region::STR))
+            known(Kind::Bool.region()).union(known(Kind::Str.region())),
+            known(Kind::Bool.region().union(Kind::Str.region()))
         );
-        assert_eq!(bool_int.intersect(known(Region::BOOL)), known(Region::BOOL));
+        assert_eq!(
+            bool_int.intersect(known(Kind::Bool.region())),
+            known(Kind::Bool.region())
+        );
     }
 
     /// The six scalar regions and the non-scalar remainder partition the
@@ -1698,30 +1750,63 @@ mod region_tests {
     /// soundness rests on the cover — the meet of all six scalar complements must
     /// be the non-empty non-scalar region, not the empty set.
     #[test]
-    fn the_scalar_regions_partition_the_universe() {
+    fn every_kind_lands_in_the_partition_and_the_scalars_land_apart() {
+        // The claim the region fold rests on, read off the kinds rather than off
+        // a second list beside them. Six scalar kinds, each with a region of its
+        // own; five container kinds sharing the one that is left. A kind added
+        // without a region fails to compile, and one given a region that
+        // collapses or collides fails here.
         let scalars = [
-            Region::NONE_TYPE,
-            Region::BOOL,
-            Region::INT,
-            Region::FLOAT,
-            Region::STR,
-            Region::BYTES,
+            Kind::NoneType,
+            Kind::Bool,
+            Kind::Int,
+            Kind::Float,
+            Kind::Str,
+            Kind::Bytes,
         ];
+        let containers = [
+            Kind::List,
+            Kind::Tuple,
+            Kind::Set,
+            Kind::FrozenSet,
+            Kind::Dict,
+        ];
+
         // Non-empty and pairwise disjoint together force six distinct bits, which
         // is what makes the partition a partition. Either half alone is satisfied
         // by a region that collapsed to nothing.
         for (i, one) in scalars.iter().enumerate() {
-            assert!(!one.is_empty());
+            assert!(!one.region().is_empty(), "{one:?} has no region");
             for other in &scalars[i + 1..] {
-                assert!(one.intersect(*other).is_empty());
+                assert!(
+                    one.region().intersect(other.region()).is_empty(),
+                    "{one:?} and {other:?} share a region"
+                );
             }
         }
-        let union = scalars.iter().fold(Region::EMPTY, |acc, r| acc.union(*r));
-        assert_ne!(union, Region::ALL);
-        assert!(!union.complement().is_empty());
-        let all_complements = scalars
+
+        // The container kinds share one region, and it is none of the scalars'.
+        // No schema names it alone -- `list[int]` is a proper part of the lists --
+        // which is why one bit carries all five.
+        let non_scalar = Kind::List.region();
+        for kind in containers {
+            assert_eq!(kind.region(), non_scalar, "{kind:?} left the shared region");
+        }
+        for kind in scalars {
+            assert!(kind.region().intersect(non_scalar).is_empty());
+        }
+
+        // The scalars do not cover the universe: what is left is the region a
+        // complement must keep, which is what makes the meet of all six scalar
+        // complements inhabited rather than empty.
+        let union = scalars
             .iter()
-            .fold(Region::ALL, |acc, r| acc.intersect(r.complement()));
+            .fold(Region::EMPTY, |acc, kind| acc.union(kind.region()));
+        assert_ne!(union, Region::ALL);
+        assert_eq!(union.complement(), non_scalar);
+        let all_complements = scalars.iter().fold(Region::ALL, |acc, kind| {
+            acc.intersect(kind.region().complement())
+        });
         assert!(!all_complements.is_empty());
         assert_eq!(all_complements, union.complement());
     }
@@ -2122,10 +2207,10 @@ mod tests {
         fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
             None
         }
-        fn literal_kind(&self, constant: ConstIx) -> Option<TypeTag> {
+        fn literal_kind(&self, constant: ConstIx) -> Option<Kind> {
             match constant.get() {
-                0 | 2 => Some(TypeTag::Int),
-                1 => Some(TypeTag::Str),
+                0 | 2 => Some(Kind::Int),
+                1 => Some(Kind::Str),
                 _ => None,
             }
         }

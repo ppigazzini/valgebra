@@ -16,7 +16,7 @@ use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBool, PyBytes, PyFloat, PyInt, PyString, PyType};
 use rustc_hash::FxHashSet;
-use valgebra_core::{ConstIx, LeafRelations, Openness, OperandIx, Schema, TypeTag};
+use valgebra_core::{ConstIx, Kind, LeafRelations, Openness, OperandIx, Schema};
 
 use crate::build::{Pool, build_schema};
 use crate::check::{Ctx, ValidatorIndex, WalkMode, WalkState, build_index, member};
@@ -232,22 +232,22 @@ impl LeafRelations for PoolRelations<'_, '_> {
         }
     }
 
-    fn literal_kind(&self, constant: ConstIx) -> Option<TypeTag> {
+    fn literal_kind(&self, constant: ConstIx) -> Option<Kind> {
         // A literal pins `type(x)` exactly, so its kind is its constant's type.
-        // Exact types only: a subclass of `int` is not `TypeTag::Int`'s extension,
+        // Exact types only: a subclass of `int` is not `Kind::Int`'s extension,
         // and any other type is a kind the partition does not name. Both decline,
         // which leaves disjointness conservative rather than wrong.
         let value = self.literals.get(constant.get())?.bind(self.py);
         if value.is_none() {
-            return Some(TypeTag::NoneType);
+            return Some(Kind::NoneType);
         }
         let ty = value.get_type();
         [
-            (TypeTag::Bool, PyBool::type_object(self.py)),
-            (TypeTag::Int, PyInt::type_object(self.py)),
-            (TypeTag::Float, PyFloat::type_object(self.py)),
-            (TypeTag::Str, PyString::type_object(self.py)),
-            (TypeTag::Bytes, PyBytes::type_object(self.py)),
+            (Kind::Bool, PyBool::type_object(self.py)),
+            (Kind::Int, PyInt::type_object(self.py)),
+            (Kind::Float, PyFloat::type_object(self.py)),
+            (Kind::Str, PyString::type_object(self.py)),
+            (Kind::Bytes, PyBytes::type_object(self.py)),
         ]
         .into_iter()
         .find_map(|(tag, exact)| ty.is(&exact).then_some(tag))
