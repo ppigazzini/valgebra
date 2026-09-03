@@ -14,6 +14,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 mod decision;
+pub mod descr;
 mod ir;
 mod simplify;
 mod violation;
