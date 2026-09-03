@@ -39,8 +39,8 @@ use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
 use rustc_hash::{FxHashMap, FxHashSet};
 use valgebra_core::{
-    ClassIx, ConstIx, Constraint, DefIx, Field, OperandIx, PathSegment, PredIx, Schema, SeqKind,
-    SeqShape, Violation,
+    ClassIx, ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, PathSegment, PredIx, Schema,
+    SeqKind, SeqShape, Violation,
 };
 
 use crate::check::ctx::{Ctx, MAX_WALK_DEPTH, WalkMode};
@@ -678,7 +678,7 @@ fn explain_elements(
 /// `json.loads` does.
 fn keyed_map_matches(
     fields: &[Field],
-    defaults: &[(Schema, Schema)],
+    defaults: &[MapClause],
     value: &Value<'_, '_>,
     ctx: Ctx<'_>,
 ) -> bool {
@@ -694,16 +694,11 @@ fn keyed_map_matches(
 /// Whether `(key, val)` is covered by some default clause: the key belongs to a
 /// clause's key schema and the value to that clause's value schema. The clauses
 /// denote a union of key×value rectangles.
-fn covered(
-    defaults: &[(Schema, Schema)],
-    key: &Value<'_, '_>,
-    val: &Value<'_, '_>,
-    ctx: Ctx<'_>,
-) -> bool {
+fn covered(defaults: &[MapClause], key: &Value<'_, '_>, val: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
     let sub = fast(ctx);
-    defaults.iter().any(|(key_schema, value_schema)| {
-        member(key_schema, key, &mut Vec::new(), sub, &mut Vec::new())
-            && member(value_schema, val, &mut Vec::new(), sub, &mut Vec::new())
+    defaults.iter().any(|clause| {
+        member(&clause.key, key, &mut Vec::new(), sub, &mut Vec::new())
+            && member(&clause.value, val, &mut Vec::new(), sub, &mut Vec::new())
     })
 }
 
@@ -718,7 +713,7 @@ fn covered(
 /// build-time traversal did not reach) falls back to building the map here.
 fn keyed_map_matches_py(
     fields: &[Field],
-    defaults: &[(Schema, Schema)],
+    defaults: &[MapClause],
     dict: &Bound<'_, PyAny>,
     ctx: Ctx<'_>,
 ) -> bool {
@@ -749,7 +744,7 @@ fn keyed_map_matches_py(
 /// matches and every required field was seen.
 fn keyed_map_scan(
     fields: &[Field],
-    defaults: &[(Schema, Schema)],
+    defaults: &[MapClause],
     dict: &Bound<'_, PyDict>,
     ctx: Ctx<'_>,
     mut required_remaining: usize,
@@ -799,7 +794,7 @@ fn keyed_map_scan(
 /// small, so a linear scan beats building a per-object map.
 fn keyed_map_matches_json(
     fields: &[Field],
-    defaults: &[(Schema, Schema)],
+    defaults: &[MapClause],
     py: Python<'_>,
     entries: &[(Cow<'_, str>, JsonValue<'_>)],
     ctx: Ctx<'_>,
@@ -860,7 +855,7 @@ fn keyed_map_matches_json(
 /// and with clauses its key and value are checked against the first clause.
 fn keyed_map_explain(
     fields: &[Field],
-    defaults: &[(Schema, Schema)],
+    defaults: &[MapClause],
     value: &Value<'_, '_>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
@@ -907,12 +902,12 @@ fn keyed_map_explain(
         if covered(defaults, &Value::Py(key), &Value::Py(val), ctx) {
             return ControlFlow::Continue(());
         }
-        if let Some((key_schema, value_schema)) = defaults.first() {
+        if let Some(clause) = defaults.first() {
             // A clause exists but did not cover this key: surface the key and
             // value violations against it (the homogeneous-mapping error).
             path.push(PathSegment::Key(key_label(key)));
-            member(key_schema, &Value::Py(key), path, ctx, out);
-            member(value_schema, &Value::Py(val), path, ctx, out);
+            member(&clause.key, &Value::Py(key), path, ctx, out);
+            member(&clause.value, &Value::Py(val), path, ctx, out);
             path.pop();
         } else {
             // A closed record: the key is simply not allowed.

@@ -168,8 +168,14 @@ mod tests {
                     },
                 ],
                 defaults: vec![
-                    (Schema::Str, Schema::Bytes),
-                    (Schema::Int, Schema::Complement(Box::new(Schema::Str))),
+                    MapClause {
+                        key: Schema::Str,
+                        value: Schema::Bytes,
+                    },
+                    MapClause {
+                        key: Schema::Int,
+                        value: Schema::Complement(Box::new(Schema::Str))
+                    },
                 ],
             }
             .node_count(),
@@ -557,14 +563,23 @@ mod tests {
         // and gains none.
         let mapping = Schema::KeyedMap {
             fields: Vec::new(),
-            defaults: vec![(Schema::Str, Schema::Int)],
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
         };
         let Schema::KeyedMap { fields, defaults } = mapping.with_records_open(Openness::Open)
         else {
             panic!("a mapping opened into a non-map");
         };
         assert!(fields.is_empty());
-        assert_eq!(defaults, vec![(Schema::Str, Schema::Int)]);
+        assert_eq!(
+            defaults,
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int
+            }]
+        );
     }
 
     #[test]
@@ -885,7 +900,10 @@ mod tests {
                 schema: Schema::Ref(DefIx::new(0)),
                 required: true,
             }],
-            defaults: vec![(Schema::Str, Schema::SelfRef(7))],
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::SelfRef(7),
+            }],
         };
         // Both the field's Ref and the default's SelfRef sit under the map guard.
         assert!(!schema.occurs_unguarded(DefIx::new(0), Guarded::No));
@@ -899,7 +917,7 @@ mod tests {
         let Schema::KeyedMap { defaults, .. } = schema.resolve_self(7, DefIx::new(3)) else {
             panic!("shape preserved")
         };
-        assert_eq!(defaults[0].1, Schema::Ref(DefIx::new(3)));
+        assert_eq!(defaults[0].value, Schema::Ref(DefIx::new(3)));
     }
 
     fn not(s: Schema) -> Schema {
@@ -1243,7 +1261,7 @@ mod laws {
         };
         let mapping = |k, v| Schema::KeyedMap {
             fields: Vec::new(),
-            defaults: vec![(k, v)],
+            defaults: vec![MapClause { key: k, value: v }],
         };
 
         // Width: a closed record with fewer keys is a subtype of one with more.
@@ -1679,9 +1697,17 @@ mod laws {
             !Schema::Intersection(vec![refine(vec![ge(0)]), refine(vec![le(5)]),])
                 .is_empty_with(&ByIndex, &[])
         );
+    }
 
+    /// The keyed-map arm of the same pinning, split out because the rule is a
+    /// conjunction of four independent halves: field depth, required-coverage,
+    /// the extra fields a catch-all must reach, and clause subsumption. Each
+    /// assertion below fails under a mutation of exactly one of them.
+    #[test]
+    fn keyed_map_arms_are_pinned_independently_of_the_python_suite() {
         // Keyed maps: each branch's conjunction is needed -- a depth failure is not
         // rescued by the required-coverage holding.
+        let map = |key, value| Schema::mapping(MapClause { key, value });
         let field = |name: &str, schema, required| Field {
             name: name.to_owned(),
             schema,
@@ -1711,7 +1737,10 @@ mod laws {
         // Mixed record-and-catch-all: required-coverage must hold there too.
         let mixed = |required| Schema::KeyedMap {
             fields: vec![field("x", Schema::Int, required)],
-            defaults: vec![(Schema::Str, Schema::Int)],
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
         };
         assert!(!mixed(false).is_subtype_of(&mixed(true)));
         // A pure mapping is not a subtype of a mixed map that requires a field it
@@ -1719,7 +1748,10 @@ mod laws {
         assert!(
             !map(Schema::Str, Schema::Int).is_subtype_of(&Schema::KeyedMap {
                 fields: vec![field("x", Schema::Int, true)],
-                defaults: vec![(Schema::Str, Schema::Int)],
+                defaults: vec![MapClause {
+                    key: Schema::Str,
+                    value: Schema::Int
+                }],
             })
         );
         // A mixed map is not a subtype of one with an extra field whose catch-all
@@ -1728,14 +1760,20 @@ mod laws {
         assert!(
             !Schema::KeyedMap {
                 fields: vec![field("x", Schema::Int, false)],
-                defaults: vec![(Schema::Str, Schema::Int)],
+                defaults: vec![MapClause {
+                    key: Schema::Str,
+                    value: Schema::Int
+                }],
             }
             .is_subtype_of(&Schema::KeyedMap {
                 fields: vec![
                     field("x", Schema::Int, false),
                     field("z", Schema::Bool, false),
                 ],
-                defaults: vec![(Schema::Str, Schema::Int)],
+                defaults: vec![MapClause {
+                    key: Schema::Str,
+                    value: Schema::Int
+                }],
             })
         );
     }
@@ -1754,7 +1792,10 @@ mod laws {
         };
         let with_catch_all = |fields| Schema::KeyedMap {
             fields,
-            defaults: vec![(Schema::Str, Schema::Int)],
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
         };
         let base = || with_catch_all(vec![field("x", Schema::Int, true)]);
         let plus_y = |schema, required| {
@@ -1977,34 +2018,69 @@ mod laws {
 
     #[test]
     fn decides_multi_clause_mapping_subtyping() {
-        let map = |clauses: Vec<(Schema, Schema)>| Schema::KeyedMap {
-            fields: Vec::new(),
-            defaults: clauses,
-        };
+        let map = |clauses: Vec<MapClause>| Schema::keyed_map(Vec::new(), clauses);
         // A mapping is a subtype of one with more clauses that subsume its own.
         assert!(
-            map(vec![(Schema::Str, Schema::Int)]).is_subtype_of(&map(vec![
-                (Schema::Str, Schema::Int),
-                (Schema::Int, Schema::Bool),
+            map(vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int
+            }])
+            .is_subtype_of(&map(vec![
+                MapClause {
+                    key: Schema::Str,
+                    value: Schema::Int
+                },
+                MapClause {
+                    key: Schema::Int,
+                    value: Schema::Bool
+                },
             ]))
         );
         // The reverse fails: the extra int-keyed clause is not covered.
         assert!(
             !map(vec![
-                (Schema::Str, Schema::Int),
-                (Schema::Int, Schema::Bool)
+                MapClause {
+                    key: Schema::Str,
+                    value: Schema::Int
+                },
+                MapClause {
+                    key: Schema::Int,
+                    value: Schema::Bool
+                }
             ])
-            .is_subtype_of(&map(vec![(Schema::Str, Schema::Int)]))
+            .is_subtype_of(&map(vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int
+            }]))
         );
         // A clause is subsumed only when both key and value narrow.
         assert!(
-            map(vec![(Schema::Str, Schema::Bool)])
-                .is_subtype_of(&map(vec![(Schema::Str, Schema::Int)]))
+            map(vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Bool
+            }])
+            .is_subtype_of(&map(vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int
+            }]))
         );
         assert!(
-            !map(vec![(Schema::Str, Schema::Int)])
-                .is_subtype_of(&map(vec![(Schema::Str, Schema::Bool)]))
+            !map(vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int
+            }])
+            .is_subtype_of(&map(vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Bool
+            }]))
         );
+    }
+
+    /// The same rule where a map carries fields as well as clauses: the field
+    /// half and the clause half must both hold, and each is checked against the
+    /// other side's catch-all where the two field lists differ.
+    #[test]
+    fn decides_a_record_beside_its_catch_all() {
         // A closed record is a subtype of an open one that declares its fields.
         let closed = |fields| Schema::record(fields, Openness::Closed);
         let field = |name: &str, schema, required| Field {
@@ -2024,7 +2100,10 @@ mod laws {
         // names, are not subtypes.
         let mixed = |value_field, value_default| Schema::KeyedMap {
             fields: vec![field("a", value_field, true)],
-            defaults: vec![(Schema::Str, value_default)],
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: value_default,
+            }],
         };
         assert!(mixed(Schema::Bool, Schema::Bool).is_subtype_of(&mixed(Schema::Int, Schema::Int)));
         assert!(!mixed(Schema::Int, Schema::Int).is_subtype_of(&mixed(Schema::Int, Schema::Bool)));
@@ -2033,7 +2112,10 @@ mod laws {
         );
         let mixed_b = Schema::KeyedMap {
             fields: vec![field("b", Schema::Int, true)],
-            defaults: vec![(Schema::Str, Schema::Int)],
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
         };
         assert!(!mixed(Schema::Int, Schema::Int).is_subtype_of(&mixed_b));
 
@@ -2041,11 +2123,17 @@ mod laws {
         // over all string keys covers that field's value.
         let with_extra = Schema::KeyedMap {
             fields: vec![field("a", Schema::Int, true), field("b", Schema::Str, true)],
-            defaults: vec![(Schema::Str, Schema::Bytes)],
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Bytes,
+            }],
         };
         let covering = Schema::KeyedMap {
             fields: vec![field("a", Schema::Int, true)],
-            defaults: vec![(Schema::Str, Schema::Anything)],
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Anything,
+            }],
         };
         assert!(with_extra.is_subtype_of(&covering));
         // The extra field is not covered when the catch-all value is too narrow,
@@ -2056,22 +2144,34 @@ mod laws {
                 field("a", Schema::Int, true),
                 field("b", Schema::Bytes, true),
             ],
-            defaults: vec![(Schema::Str, Schema::Int)],
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
         };
         let str_catch_all = Schema::KeyedMap {
             fields: vec![field("a", Schema::Int, true)],
-            defaults: vec![(Schema::Str, Schema::Int)],
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
         };
         assert!(!extra_uncovered.is_subtype_of(&str_catch_all));
         // The catch-all key must admit the field name: an int-keyed catch-all does
         // not cover a string field name even when its value would.
         let extra_str = Schema::KeyedMap {
             fields: vec![field("a", Schema::Int, true), field("b", Schema::Str, true)],
-            defaults: vec![(Schema::Int, Schema::Int)],
+            defaults: vec![MapClause {
+                key: Schema::Int,
+                value: Schema::Int,
+            }],
         };
         let int_catch_all = Schema::KeyedMap {
             fields: vec![field("a", Schema::Int, true)],
-            defaults: vec![(Schema::Int, Schema::Anything)],
+            defaults: vec![MapClause {
+                key: Schema::Int,
+                value: Schema::Anything,
+            }],
         };
         assert!(!extra_str.is_subtype_of(&int_catch_all));
         // The reverse direction -- the supertype declaring a *required* field the
@@ -2367,7 +2467,10 @@ mod laws {
                         schema: field,
                         required: true,
                     }],
-                    defaults: vec![(Schema::Str, default)],
+                    defaults: vec![MapClause {
+                        key: Schema::Str,
+                        value: default
+                    }],
                 }),
             ]
         })
@@ -3178,9 +3281,9 @@ mod laws {
                         if fields.iter().any(|field| field.name == *key) {
                             return true;
                         }
-                        defaults.iter().any(|(key_schema, value_schema)| {
-                            member_full(key_schema, &Obj::Str(key), pool)
-                                && member_full(value_schema, val, pool)
+                        defaults.iter().any(|clause| {
+                            member_full(&clause.key, &Obj::Str(key), pool)
+                                && member_full(&clause.value, val, pool)
                         })
                     });
                     fields_ok && rest_ok
@@ -3306,7 +3409,10 @@ mod laws {
             )
                 .prop_map(|(fields, value)| Schema::KeyedMap {
                     fields: unique_by_name(fields),
-                    defaults: vec![(Schema::Str, value)],
+                    defaults: vec![MapClause {
+                        key: Schema::Str,
+                        value,
+                    }],
                 });
             prop_oneof![
                 inner.clone().prop_map(|s| Schema::Set(Box::new(s))),
@@ -3409,7 +3515,10 @@ mod laws {
         // accepts a matching extra entry and rejects a mistyped one.
         let open = Schema::KeyedMap {
             fields: vec![],
-            defaults: vec![(Schema::Str, Schema::Int)],
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
         };
         assert!(member_full(
             &open,
@@ -3615,9 +3724,9 @@ mod index_laws {
                 for field in fields {
                     indices(&field.schema, pool, defs);
                 }
-                for (key, value) in defaults {
-                    indices(key, pool, defs);
-                    indices(value, pool, defs);
+                for clause in defaults {
+                    indices(&clause.key, pool, defs);
+                    indices(&clause.value, pool, defs);
                 }
             }
             Schema::Attrs {

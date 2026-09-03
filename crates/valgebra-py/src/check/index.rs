@@ -117,9 +117,9 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
             for f in fields {
                 collect(py, &f.schema, pool, index);
             }
-            for (key_schema, value_schema) in defaults {
-                collect(py, key_schema, pool, index);
-                collect(py, value_schema, pool, index);
+            for clause in defaults {
+                collect(py, &clause.key, pool, index);
+                collect(py, &clause.value, pool, index);
             }
         }
         Schema::Union(members) => {
