@@ -21,10 +21,12 @@
 //! which is which, so what the descriptor can and cannot see is read off it
 //! rather than inferred.
 
+pub mod floats;
 pub mod integers;
 pub mod interval;
 
 use crate::decision::Kind;
+use floats::FloatSet;
 use integers::IntSet;
 
 /// The two booleans, as a subset.
@@ -100,6 +102,8 @@ pub enum Component {
     /// -- which is what makes the two components independent. A schema that
     /// admits both spells that as a descriptor holding a component in each.
     Integers(IntSet),
+    /// The floats this descriptor admits, `nan` included.
+    Floats(FloatSet),
 }
 
 impl Component {
@@ -108,6 +112,7 @@ impl Component {
         match kind {
             Kind::Bool => Component::Booleans(BoolSet::BOTH),
             Kind::Int => Component::Integers(IntSet::all()),
+            Kind::Float => Component::Floats(FloatSet::all()),
             _ => Component::Coarse(true),
         }
     }
@@ -117,6 +122,7 @@ impl Component {
         match kind {
             Kind::Bool => Component::Booleans(BoolSet::EMPTY),
             Kind::Int => Component::Integers(IntSet::empty()),
+            Kind::Float => Component::Floats(FloatSet::empty()),
             _ => Component::Coarse(false),
         }
     }
@@ -127,6 +133,7 @@ impl Component {
             Component::Coarse(present) => !present,
             Component::Booleans(set) => set.is_empty(),
             Component::Integers(set) => set.is_empty(),
+            Component::Floats(set) => set.is_empty(),
         }
     }
 
@@ -151,6 +158,10 @@ impl Component {
                 Op::Union => a.union(b),
                 Op::Intersect => a.intersect(b),
             }),
+            (Component::Floats(a), Component::Floats(b)) => Component::Floats(match op {
+                Op::Union => a.union(b),
+                Op::Intersect => a.intersect(b),
+            }),
             (mine, theirs) => {
                 debug_assert!(false, "combining {mine:?} with {theirs:?} of another kind");
                 mine.clone()
@@ -164,6 +175,7 @@ impl Component {
             Component::Coarse(present) => Component::Coarse(!present),
             Component::Booleans(set) => Component::Booleans(set.complement()),
             Component::Integers(set) => Component::Integers(set.complement()),
+            Component::Floats(set) => Component::Floats(set.complement()),
         }
     }
 }
@@ -235,6 +247,14 @@ impl Descr {
     pub fn integer(value: i64) -> Descr {
         let mut descr = Descr::nothing();
         descr.set(Kind::Int, Component::Integers(IntSet::just(value)));
+        descr
+    }
+
+    /// The singleton holding one float, which is empty for `nan`.
+    #[must_use]
+    pub fn float(value: f64) -> Descr {
+        let mut descr = Descr::nothing();
+        descr.set(Kind::Float, Component::Floats(FloatSet::just(value)));
         descr
     }
 
@@ -326,13 +346,14 @@ impl Descr {
             Some(kind) => self.component(kind),
             None => &self.other,
         };
-        match (component, value.boolean, value.integer) {
-            (Component::Coarse(present), _, _) => *present,
-            (Component::Booleans(set), Some(boolean), _) => set.holds(boolean),
-            (Component::Integers(set), _, Some(integer)) => set.holds(integer),
+        match (component, value.boolean, value.integer, value.float) {
+            (Component::Coarse(present), _, _, _) => *present,
+            (Component::Booleans(set), Some(boolean), _, _) => set.holds(boolean),
+            (Component::Integers(set), _, Some(integer), _) => set.holds(integer),
+            (Component::Floats(set), _, _, Some(float)) => set.holds(float),
             // A component asked about a value that carries no payload for it:
             // the caller built a value whose kind and payload disagree.
-            (Component::Booleans(_) | Component::Integers(_), _, _) => {
+            (Component::Booleans(_) | Component::Integers(_) | Component::Floats(_), ..) => {
                 debug_assert!(false, "a {component:?} component has no payload to read");
                 false
             }
@@ -346,7 +367,7 @@ impl Descr {
 /// descriptor can currently answer about a value -- which kind it belongs to,
 /// and, where the kind's component distinguishes its values, which value it is.
 /// Each commit that makes a component exact widens this alongside it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Value {
     /// The kind, or `None` for a value of no listed kind.
     pub kind: Option<Kind>,
@@ -354,6 +375,8 @@ pub struct Value {
     pub boolean: Option<bool>,
     /// Which integer, where the kind is [`Kind::Int`].
     pub integer: Option<i64>,
+    /// Which float, where the kind is [`Kind::Float`].
+    pub float: Option<f64>,
 }
 
 impl Value {
@@ -364,6 +387,7 @@ impl Value {
             kind: Some(kind),
             boolean: None,
             integer: None,
+            float: None,
         }
     }
 
@@ -374,6 +398,7 @@ impl Value {
             kind: Some(Kind::Bool),
             boolean: Some(value),
             integer: None,
+            float: None,
         }
     }
 
@@ -384,6 +409,18 @@ impl Value {
             kind: Some(Kind::Int),
             boolean: None,
             integer: Some(value),
+            float: None,
+        }
+    }
+
+    /// One float, `nan` included.
+    #[must_use]
+    pub const fn float(value: f64) -> Value {
+        Value {
+            kind: Some(Kind::Float),
+            boolean: None,
+            integer: None,
+            float: Some(value),
         }
     }
 
@@ -394,6 +431,7 @@ impl Value {
             kind: None,
             boolean: None,
             integer: None,
+            float: None,
         }
     }
 }
@@ -413,7 +451,7 @@ mod tests {
     fn universe() -> Vec<Value> {
         let mut values: Vec<Value> = Kind::ALL
             .iter()
-            .filter(|kind| !matches!(kind, Kind::Bool | Kind::Int))
+            .filter(|kind| !matches!(kind, Kind::Bool | Kind::Int | Kind::Float))
             .map(|kind| Value::of_kind(*kind))
             .collect();
         values.push(Value::boolean(true));
@@ -421,6 +459,26 @@ mod tests {
         // Enough integers to separate every step and bound the generator uses:
         // a window narrower than the periods would agree by accident.
         values.extend((-14i64..=14).map(Value::integer));
+        // The three floats that make the kind its own case, and a point strictly
+        // inside every gap the generator's endpoints leave -- the unbounded ones
+        // included, where a set like `(-inf, -1.0)` is inhabited by values no
+        // endpoint names.
+        values.extend(
+            [
+                f64::NEG_INFINITY,
+                -2.0,
+                -1.0,
+                -0.5,
+                -0.0,
+                0.0,
+                0.5,
+                1.0,
+                2.0,
+                f64::INFINITY,
+                f64::NAN,
+            ]
+            .map(Value::float),
+        );
         values.push(Value::other());
         values
     }
