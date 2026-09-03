@@ -14,6 +14,9 @@ publish = false
 # crate and the hasher ty uses in its own semantic crates. Pure Rust, so the
 # core stays interpreter-free.
 rustc-hash = { workspace = true }
+# See the workspace entry: the descriptor's string component is a regular
+# language, and this builds the automaton a pattern denotes.
+regex-automata = { workspace = true }
 
 [dev-dependencies]
 criterion = "0.8.2"

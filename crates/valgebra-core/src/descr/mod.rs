@@ -24,10 +24,12 @@
 pub mod floats;
 pub mod integers;
 pub mod interval;
+pub mod regular;
 
 use crate::decision::Kind;
 use floats::FloatSet;
 use integers::IntSet;
+use regular::{Alphabet, RegularSet};
 
 /// The two booleans, as a subset.
 ///
@@ -104,6 +106,12 @@ pub enum Component {
     Integers(IntSet),
     /// The floats this descriptor admits, `nan` included.
     Floats(FloatSet),
+    /// The words this descriptor admits, as a regular language.
+    ///
+    /// Serves `str` and `bytes` both: a word is a byte string either way, and
+    /// which alphabet a *pattern* is read over is settled where the language is
+    /// built rather than carried here.
+    Words(RegularSet),
 }
 
 impl Component {
@@ -113,6 +121,7 @@ impl Component {
             Kind::Bool => Component::Booleans(BoolSet::BOTH),
             Kind::Int => Component::Integers(IntSet::all()),
             Kind::Float => Component::Floats(FloatSet::all()),
+            Kind::Str | Kind::Bytes => Component::Words(RegularSet::all()),
             _ => Component::Coarse(true),
         }
     }
@@ -123,6 +132,7 @@ impl Component {
             Kind::Bool => Component::Booleans(BoolSet::EMPTY),
             Kind::Int => Component::Integers(IntSet::empty()),
             Kind::Float => Component::Floats(FloatSet::empty()),
+            Kind::Str | Kind::Bytes => Component::Words(RegularSet::empty()),
             _ => Component::Coarse(false),
         }
     }
@@ -134,6 +144,7 @@ impl Component {
             Component::Booleans(set) => set.is_empty(),
             Component::Integers(set) => set.is_empty(),
             Component::Floats(set) => set.is_empty(),
+            Component::Words(set) => set.is_empty(),
         }
     }
 
@@ -144,8 +155,8 @@ impl Component {
     /// so both sides of every call are that kind's representation. The mismatch
     /// arm keeps the crate free of a panic across the boundary and is asserted
     /// unreachable in debug.
-    fn combine(&self, other: &Component, op: Op) -> Component {
-        match (self, other) {
+    fn combine(&self, other: &Component, op: Op) -> Option<Component> {
+        Some(match (self, other) {
             (Component::Coarse(a), Component::Coarse(b)) => Component::Coarse(match op {
                 Op::Union => *a || *b,
                 Op::Intersect => *a && *b,
@@ -162,11 +173,23 @@ impl Component {
                 Op::Union => a.union(b),
                 Op::Intersect => a.intersect(b),
             }),
+            (Component::Words(a), Component::Words(b)) => {
+                // A language operation can pass the automaton bound, and there
+                // is no sound set to substitute -- one too wide is complemented
+                // into one too narrow. The whole descriptor becomes unbuildable
+                // rather than quietly wrong, which is what the `Option` on the
+                // three operations carries up.
+                let combined = match op {
+                    Op::Union => a.union(b),
+                    Op::Intersect => a.intersect(b),
+                };
+                Component::Words(combined?)
+            }
             (mine, theirs) => {
                 debug_assert!(false, "combining {mine:?} with {theirs:?} of another kind");
                 mine.clone()
             }
-        }
+        })
     }
 
     /// Every value of the kind this component does not admit.
@@ -176,7 +199,22 @@ impl Component {
             Component::Booleans(set) => Component::Booleans(set.complement()),
             Component::Integers(set) => Component::Integers(set.complement()),
             Component::Floats(set) => Component::Floats(set.complement()),
+            Component::Words(set) => Component::Words(set.complement()),
         }
+    }
+}
+
+/// Which alphabet a word kind's patterns are read over, or `None` for a kind
+/// that has no words.
+///
+/// The one place the two word kinds differ: `str` patterns are Unicode, so `.`
+/// is a code point and a length bound counts code points; `bytes` patterns are
+/// not, so both count bytes.
+fn alphabet_of(kind: Kind) -> Option<Alphabet> {
+    match kind {
+        Kind::Str => Some(Alphabet::Text),
+        Kind::Bytes => Some(Alphabet::Bytes),
+        _ => None,
     }
 }
 
@@ -258,6 +296,28 @@ impl Descr {
         descr
     }
 
+    /// The words one pattern matches whole, for a word kind.
+    ///
+    /// `None` where the pattern does not build, where its automaton is past the
+    /// bound, or where the kind is not a word kind: a pattern over a kind that
+    /// has no words is a caller error rather than a set.
+    #[must_use]
+    pub fn pattern(pattern: &str, kind: Kind) -> Option<Descr> {
+        let language = RegularSet::pattern(pattern, alphabet_of(kind)?)?;
+        let mut descr = Descr::nothing();
+        descr.set(kind, Component::Words(language));
+        Some(descr)
+    }
+
+    /// The one-word set, for a word kind. A `str` is its UTF-8 bytes.
+    #[must_use]
+    pub fn word(word: &[u8], kind: Kind) -> Option<Descr> {
+        alphabet_of(kind)?;
+        let mut descr = Descr::nothing();
+        descr.set(kind, Component::Words(RegularSet::word(word)));
+        Some(descr)
+    }
+
     /// The integers that are multiples of `step`, or `None` where the integer
     /// set cannot hold that step.
     ///
@@ -291,15 +351,22 @@ impl Descr {
         }
     }
 
-    /// Every value in either set.
+    /// Every value in either set, or `None` where a component cannot hold the
+    /// result.
+    ///
+    /// Fallible because one component is: a regular language has an automaton
+    /// bound, and past it there is no sound set to substitute -- one too wide is
+    /// complemented into one too narrow. The refusal reaches the caller rather
+    /// than being absorbed into a descriptor that is quietly wrong.
     #[must_use]
-    pub fn union(&self, other: &Descr) -> Descr {
+    pub fn union(&self, other: &Descr) -> Option<Descr> {
         self.zip(other, Op::Union)
     }
 
-    /// Every value in both sets.
+    /// Every value in both sets, or `None` where a component cannot hold the
+    /// result.
     #[must_use]
-    pub fn intersect(&self, other: &Descr) -> Descr {
+    pub fn intersect(&self, other: &Descr) -> Option<Descr> {
         self.zip(other, Op::Intersect)
     }
 
@@ -318,15 +385,15 @@ impl Descr {
         }
     }
 
-    fn zip(&self, other: &Descr, op: Op) -> Descr {
+    fn zip(&self, other: &Descr, op: Op) -> Option<Descr> {
         let mut kinds = self.kinds.clone();
         for (slot, theirs) in kinds.iter_mut().zip(&other.kinds) {
-            *slot = slot.combine(theirs, op);
+            *slot = slot.combine(theirs, op)?;
         }
-        Descr {
+        Some(Descr {
             kinds,
-            other: self.other.combine(&other.other, op),
-        }
+            other: self.other.combine(&other.other, op)?,
+        })
     }
 
     /// Whether this set admits no value.
@@ -346,17 +413,12 @@ impl Descr {
             Some(kind) => self.component(kind),
             None => &self.other,
         };
-        match (component, value.boolean, value.integer, value.float) {
-            (Component::Coarse(present), _, _, _) => *present,
-            (Component::Booleans(set), Some(boolean), _, _) => set.holds(boolean),
-            (Component::Integers(set), _, Some(integer), _) => set.holds(integer),
-            (Component::Floats(set), _, _, Some(float)) => set.holds(float),
-            // A component asked about a value that carries no payload for it:
-            // the caller built a value whose kind and payload disagree.
-            (Component::Booleans(_) | Component::Integers(_) | Component::Floats(_), ..) => {
-                debug_assert!(false, "a {component:?} component has no payload to read");
-                false
-            }
+        match component {
+            Component::Coarse(present) => *present,
+            Component::Booleans(set) => value.boolean.is_some_and(|b| set.holds(b)),
+            Component::Integers(set) => value.integer.is_some_and(|i| set.holds(i)),
+            Component::Floats(set) => value.float.is_some_and(|f| set.holds(f)),
+            Component::Words(set) => value.word.is_some_and(|w| set.holds(w)),
         }
     }
 }
@@ -377,6 +439,9 @@ pub struct Value {
     pub integer: Option<i64>,
     /// Which float, where the kind is [`Kind::Float`].
     pub float: Option<f64>,
+    /// Which word, where the kind is [`Kind::Str`] or [`Kind::Bytes`]. A `str`
+    /// is its UTF-8 bytes, which is the same alphabet the language is over.
+    pub word: Option<&'static [u8]>,
 }
 
 impl Value {
@@ -388,6 +453,7 @@ impl Value {
             boolean: None,
             integer: None,
             float: None,
+            word: None,
         }
     }
 
@@ -399,6 +465,7 @@ impl Value {
             boolean: Some(value),
             integer: None,
             float: None,
+            word: None,
         }
     }
 
@@ -410,6 +477,20 @@ impl Value {
             boolean: None,
             integer: Some(value),
             float: None,
+            word: None,
+        }
+    }
+
+    /// One word, for a word kind. A `str` is its UTF-8 bytes, which is the
+    /// alphabet the language is over.
+    #[must_use]
+    pub const fn word(word: &'static [u8], kind: Kind) -> Value {
+        Value {
+            kind: Some(kind),
+            boolean: None,
+            integer: None,
+            float: None,
+            word: Some(word),
         }
     }
 
@@ -421,6 +502,7 @@ impl Value {
             boolean: None,
             integer: None,
             float: Some(value),
+            word: None,
         }
     }
 
@@ -432,6 +514,7 @@ impl Value {
             boolean: None,
             integer: None,
             float: None,
+            word: None,
         }
     }
 }
@@ -441,6 +524,7 @@ mod tests {
     use super::{BoolSet, Component, Descr, Value};
     use crate::decision::Kind;
     use proptest::prelude::*;
+    use std::sync::LazyLock;
 
     /// Every value the descriptor can currently tell apart.
     ///
@@ -451,7 +535,12 @@ mod tests {
     fn universe() -> Vec<Value> {
         let mut values: Vec<Value> = Kind::ALL
             .iter()
-            .filter(|kind| !matches!(kind, Kind::Bool | Kind::Int | Kind::Float))
+            .filter(|kind| {
+                !matches!(
+                    kind,
+                    Kind::Bool | Kind::Int | Kind::Float | Kind::Str | Kind::Bytes
+                )
+            })
             .map(|kind| Value::of_kind(*kind))
             .collect();
         values.push(Value::boolean(true));
@@ -479,14 +568,49 @@ mod tests {
             ]
             .map(Value::float),
         );
+        // Words over the alphabet the generated patterns are written in, plus
+        // one non-ASCII, for both word kinds.
+        for kind in [Kind::Str, Kind::Bytes] {
+            for word in [
+                b"".as_slice(),
+                b"a",
+                b"b",
+                b"c",
+                b"ab",
+                b"ba",
+                b"aba",
+                "\u{e9}".as_bytes(),
+            ] {
+                values.push(Value::word(word, kind));
+            }
+        }
         values.push(Value::other());
         values
     }
 
-    /// Whether two descriptors admit exactly the same values.
-    fn same_values(a: &Descr, b: &Descr) -> bool {
+    /// Whether two descriptors agree about every value in the universe.
+    ///
+    /// The direction enumeration can support. Equality is stronger: two regular
+    /// languages agree exactly when they agree on every word shorter than the
+    /// product of their state counts, which no universe can list -- so the full
+    /// canonicity claim is held in each component's own module, where the word
+    /// component checks it against the emptiness decision instead.
+    fn agree_on_values(a: &Descr, b: &Descr) -> bool {
         universe().into_iter().all(|v| a.admits(v) == b.admits(v))
     }
+
+    /// The word descriptors the generator draws from, built once.
+    ///
+    /// A pattern's automaton is determinised and minimised, which is far more
+    /// work than drawing a number: built per draw it dominates the suite, and
+    /// proptest's shrinking -- thousands of draws over one failure -- turns a
+    /// caught mutation into a run that does not finish.
+    static WORD_SETS: LazyLock<Vec<Descr>> = LazyLock::new(|| {
+        ["a", "b", "ab?", "[ab]+"]
+            .iter()
+            .filter_map(|pattern| Descr::pattern(pattern, Kind::Str))
+            .collect()
+    });
 
     /// A generator over the descriptors the constructors can build, combined by
     /// the three operations to a small depth.
@@ -497,91 +621,108 @@ mod tests {
             (0..Kind::ALL.len())
                 .prop_map(|i| Descr::of_kind(Kind::ALL.get(i).copied().unwrap_or(Kind::Int))),
             proptest::bool::ANY.prop_map(Descr::boolean),
+            (-9i64..=9).prop_map(Descr::integer),
+            (1i64..=5).prop_map(|step| Descr::multiple_of(step).expect("a small step")),
+            prop_oneof![Just(-1.0f64), Just(0.0), Just(1.0), Just(f64::NAN)].prop_map(Descr::float),
+            (0..WORD_SETS.len())
+                .prop_map(|i| { WORD_SETS.get(i).cloned().unwrap_or_else(Descr::nothing) }),
         ];
-        leaf.prop_recursive(4, 24, 2, |inner| {
+        leaf.prop_recursive(3, 16, 2, |inner| {
             prop_oneof![
-                (inner.clone(), inner.clone()).prop_map(|(a, b)| a.union(&b)),
-                (inner.clone(), inner.clone()).prop_map(|(a, b)| a.intersect(&b)),
+                (inner.clone(), inner.clone())
+                    .prop_map(|(a, b)| a.union(&b).unwrap_or_else(Descr::anything)),
+                (inner.clone(), inner.clone())
+                    .prop_map(|(a, b)| a.intersect(&b).unwrap_or_else(Descr::nothing)),
                 inner.prop_map(|a| a.complement()),
             ]
         })
     }
 
     proptest! {
-        /// The Boolean algebra, checked against membership.
+        // Fewer cases than the default here, because a word component's
+        // operations are automaton products: the default count spends most of
+        // the suite's time on them, and a failure's shrinking -- thousands of
+        // draws over one counterexample -- takes longer than a mutation sweep
+        // waits, which turns a caught mutation into a run that does not finish.
+        #![proptest_config(ProptestConfig::with_cases(64))]
+
+        /// The Boolean algebra, checked by equality of the canonical forms.
         ///
-        /// Each law says two ways of writing a set admit the same values, so
-        /// that is what is asked. Comparing the two representations instead
-        /// would be a property of the canonicalisation, which is a different
-        /// claim -- and the weaker one, since it holds of any representation
-        /// that normalises consistently.
+        /// One component per kind, each canonical for its representation, so
+        /// equality is equality of the sets and a law is checked at full
+        /// strength rather than over whatever values a universe can list.
         #[test]
-        fn the_lattice_laws_hold_of_the_values(a in descr(), b in descr(), c in descr()) {
-            prop_assert!(same_values(&a.union(&b), &b.union(&a)));
-            prop_assert!(same_values(&a.intersect(&b), &b.intersect(&a)));
-            prop_assert!(same_values(&a.union(&b).union(&c), &a.union(&b.union(&c))));
-            prop_assert!(same_values(
-                &a.intersect(&b).intersect(&c),
-                &a.intersect(&b.intersect(&c))
-            ));
-            prop_assert!(same_values(&a.union(&a), &a));
-            prop_assert!(same_values(&a.intersect(&a), &a));
+        fn the_lattice_laws_hold_of_the_descriptors(a in descr(), b in descr(), c in descr()) {
+            prop_assert_eq!(a.union(&b), b.union(&a));
+            prop_assert_eq!(a.intersect(&b), b.intersect(&a));
+            prop_assert_eq!(
+                a.union(&b).and_then(|ab| ab.union(&c)),
+                b.union(&c).and_then(|bc| a.union(&bc))
+            );
+            prop_assert_eq!(
+                a.intersect(&b).and_then(|ab| ab.intersect(&c)),
+                b.intersect(&c).and_then(|bc| a.intersect(&bc))
+            );
+            prop_assert_eq!(a.union(&a), Some(a.clone()));
+            prop_assert_eq!(a.intersect(&a), Some(a.clone()));
             // Absorption and distributivity, which the structural simplifier
             // cannot state because it does not apply them.
-            prop_assert!(same_values(&a.union(&a.intersect(&b)), &a));
-            prop_assert!(same_values(&a.intersect(&a.union(&b)), &a));
-            prop_assert!(same_values(
-                &a.intersect(&b.union(&c)),
-                &a.intersect(&b).union(&a.intersect(&c))
-            ));
-            prop_assert!(same_values(
-                &a.union(&b.intersect(&c)),
-                &a.union(&b).intersect(&a.union(&c))
-            ));
+            if let Some(met) = a.intersect(&b) {
+                prop_assert_eq!(a.union(&met), Some(a.clone()));
+            }
+            if let Some(joined) = a.union(&b) {
+                prop_assert_eq!(a.intersect(&joined), Some(a.clone()));
+            }
+            if let (Some(left), Some(right)) = (
+                b.union(&c).and_then(|bc| a.intersect(&bc)),
+                a.intersect(&b).and_then(|ab| {
+                    a.intersect(&c).and_then(|ac| ab.union(&ac))
+                }),
+            ) {
+                prop_assert_eq!(left, right);
+            }
         }
 
         /// The complement laws, and the two the structural procedure declines.
         #[test]
-        fn the_complement_laws_hold_of_the_values(a in descr(), b in descr()) {
-            prop_assert!(a.intersect(&a.complement()).is_empty());
-            prop_assert!(same_values(&a.union(&a.complement()), &Descr::anything()));
-            prop_assert!(same_values(&a.complement().complement(), &a));
+        fn the_complement_laws_hold_of_the_descriptors(a in descr(), b in descr()) {
+            prop_assert!(
+                a.intersect(&a.complement())
+                    .is_some_and(|met| met.is_empty())
+            );
+            prop_assert_eq!(a.union(&a.complement()), Some(Descr::anything()));
+            prop_assert_eq!(&a.complement().complement(), &a);
             // De Morgan, both ways.
-            prop_assert!(same_values(
-                &a.union(&b).complement(),
-                &a.complement().intersect(&b.complement())
-            ));
-            prop_assert!(same_values(
-                &a.intersect(&b).complement(),
-                &a.complement().union(&b.complement())
-            ));
+            prop_assert_eq!(
+                a.union(&b).map(|u| u.complement()),
+                a.complement().intersect(&b.complement())
+            );
+            prop_assert_eq!(
+                a.intersect(&b).map(|m| m.complement()),
+                a.complement().union(&b.complement())
+            );
         }
 
-        /// Equality *is* semantic equality, which is what canonical means.
-        ///
-        /// One component per kind, each canonical for its representation, so two
-        /// descriptors admitting the same values have nowhere left to differ.
-        /// This is the property the structural IR does not have -- there, two
-        /// spellings of one set are two trees -- and it is what lets a later
-        /// decision be an emptiness check rather than a search for a rule.
+        /// Two equal descriptors agree about every value.
         #[test]
-        fn admitting_the_same_values_is_being_equal(a in descr(), b in descr()) {
-            prop_assert_eq!(same_values(&a, &b), a == b);
+        fn equal_descriptors_agree_about_every_value(a in descr(), b in descr()) {
+            if a == b {
+                prop_assert!(agree_on_values(&a, &b));
+            }
         }
 
-        /// Emptiness is a decision, not a conservative answer: a descriptor is
-        /// empty exactly when no value in the universe is in it.
+        /// An empty descriptor admits no value, and one that admits a value of
+        /// the universe is not empty.
         #[test]
         fn emptiness_agrees_with_the_values(a in descr()) {
-            let admits_none = universe().into_iter().all(|v| !a.admits(v));
-            prop_assert_eq!(a.is_empty(), admits_none);
+            if a.is_empty() {
+                prop_assert!(universe().into_iter().all(|v| !a.admits(v)));
+            } else if universe().into_iter().any(|v| a.admits(v)) {
+                prop_assert!(!a.is_empty());
+            }
         }
 
         /// A complement saturates the kinds it does not mention.
-        ///
-        /// The property a representation that carried only its own kinds would
-        /// fail: everything not in `a` is in `¬a`, including every value of
-        /// every kind `a` says nothing about.
         #[test]
         fn a_complement_holds_every_value_the_set_does_not(a in descr()) {
             for value in universe() {
@@ -631,7 +772,7 @@ mod tests {
     #[test]
     fn the_two_booleans_are_the_bool_kind() {
         let both = Descr::boolean(true).union(&Descr::boolean(false));
-        assert_eq!(both, Descr::of_kind(Kind::Bool));
+        assert_eq!(both, Some(Descr::of_kind(Kind::Bool)));
         assert!(Descr::boolean(true).admits(Value::boolean(true)));
         assert!(!Descr::boolean(true).admits(Value::boolean(false)));
         // And the complement of one singleton, inside the kind, is the other.
@@ -640,7 +781,7 @@ mod tests {
         assert!(!not_true.admits(Value::boolean(true)));
         // ... while still holding every value of every other kind.
         assert!(not_true.admits(Value::integer(0)));
-        assert!(not_true.admits(Value::of_kind(Kind::Str)));
+        assert!(not_true.admits(Value::word(b"a", Kind::Str)));
         assert!(not_true.admits(Value::other()));
     }
 
@@ -648,13 +789,63 @@ mod tests {
     /// a distinction the descriptor makes.
     #[test]
     fn a_coarse_kind_admits_all_of_its_values_or_none() {
-        let strs = Descr::of_kind(Kind::Str);
-        assert!(strs.admits(Value::of_kind(Kind::Str)));
-        assert!(!strs.admits(Value::of_kind(Kind::Bytes)));
-        assert!(!strs.admits(Value::other()));
-        assert!(!strs.is_empty());
-        assert!(strs.intersect(&Descr::of_kind(Kind::Bytes)).is_empty());
-        assert!(!strs.union(&Descr::of_kind(Kind::Bytes)).is_empty());
+        let sets = Descr::of_kind(Kind::Set);
+        assert!(sets.admits(Value::of_kind(Kind::Set)));
+        assert!(!sets.admits(Value::of_kind(Kind::FrozenSet)));
+        assert!(!sets.admits(Value::other()));
+        assert!(!sets.is_empty());
+        assert!(
+            sets.intersect(&Descr::of_kind(Kind::FrozenSet))
+                .is_some_and(|met| met.is_empty())
+        );
+        assert!(
+            sets.union(&Descr::of_kind(Kind::FrozenSet))
+                .is_some_and(|joined| !joined.is_empty())
+        );
+    }
+
+    /// The two word kinds are exact and separate: a pattern over one says
+    /// nothing about the other, which is what keeps `str` and `bytes` disjoint
+    /// while sharing a representation.
+    #[test]
+    fn the_word_kinds_are_languages_and_stay_apart() {
+        let text = Descr::pattern("ab?", Kind::Str).expect("a small pattern");
+        assert!(text.admits(Value::word(b"a", Kind::Str)));
+        assert!(text.admits(Value::word(b"ab", Kind::Str)));
+        assert!(!text.admits(Value::word(b"b", Kind::Str)));
+        // The same word as `bytes` is a different value, in a component this
+        // descriptor leaves empty.
+        assert!(!text.admits(Value::word(b"a", Kind::Bytes)));
+        assert!(
+            text.intersect(&Descr::of_kind(Kind::Bytes))
+                .is_some_and(|met| met.is_empty())
+        );
+
+        // One pattern inside another, which the structural procedure declines:
+        // it relates two patterns only when they are written identically.
+        let narrow = Descr::pattern("a", Kind::Str).expect("a small pattern");
+        assert!(
+            narrow
+                .intersect(&text.complement())
+                .is_some_and(|met| met.is_empty())
+        );
+        // And a pattern whose language is one word is that word.
+        assert_eq!(narrow, Descr::word(b"a", Kind::Str).expect("a word kind"));
+        // The bytes kind is a word kind too, and its patterns land in its own
+        // component: the same pattern over the two kinds is two disjoint sets.
+        let raw = Descr::pattern("a", Kind::Bytes).expect("a small pattern");
+        assert!(raw.admits(Value::word(b"a", Kind::Bytes)));
+        assert!(!raw.admits(Value::word(b"a", Kind::Str)));
+        assert!(raw.intersect(&narrow).is_some_and(|met| met.is_empty()));
+        // And the two kinds read a pattern over different alphabets: a byte
+        // class outside UTF-8 is a language for `bytes` and no language at all
+        // for `str`.
+        assert!(Descr::pattern(r"(?-u:\xFF)", Kind::Bytes).is_some());
+        assert!(Descr::pattern(r"(?-u:\xFF)", Kind::Str).is_none());
+
+        // A pattern over a kind with no words is a caller error, not a set.
+        assert!(Descr::pattern("a", Kind::Int).is_none());
+        assert!(Descr::word(b"a", Kind::List).is_none());
     }
 
     /// The integers are exact, so a bound conjunction that cannot hold is
@@ -671,14 +862,22 @@ mod tests {
         let evens = Descr::multiple_of(2).expect("two is inside the bound");
         assert!(evens.admits(Value::integer(4)));
         assert!(!evens.admits(Value::integer(3)));
-        assert_eq!(
-            evens.union(&evens.intersect(&ints).complement().intersect(&ints)),
-            ints
-        );
+        // The evens and the odds together are the kind, which no union of
+        // intervals could say.
+        let odds = evens.complement().intersect(&ints).expect("a small meet");
+        assert_eq!(evens.union(&odds), Some(ints.clone()));
 
         // Two singletons meet in nothing, and each is inside the kind.
-        assert!(Descr::integer(1).intersect(&Descr::integer(2)).is_empty());
-        assert!(!Descr::integer(1).intersect(&ints).is_empty());
+        assert!(
+            Descr::integer(1)
+                .intersect(&Descr::integer(2))
+                .is_some_and(|met| met.is_empty())
+        );
+        assert!(
+            Descr::integer(1)
+                .intersect(&ints)
+                .is_some_and(|met| !met.is_empty())
+        );
     }
 
     /// The set operations on the two booleans, driven directly: the descriptor

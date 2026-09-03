@@ -20,6 +20,16 @@ pyo3 = "0.29"
 # pool ids), pinned once so both crates share one hasher version. Pure Rust, so
 # the core crate stays interpreter-free while using it.
 rustc-hash = "2.1"
+# The regex engine, for the descriptor's string and bytes components: a set of
+# strings is a regular language, and the three operations it must be closed
+# under are automata constructions. Already in the tree -- the binding's
+# `regex` depends on it -- so the core shares a version rather than adding one.
+regex-automata = { version = "0.4", default-features = false, features = [
+  "std",
+  "syntax",
+  "dfa-build",
+  "unicode",
+] }
 valgebra-core = { path = "crates/valgebra-core" }
 
 # Lints configured once for the whole workspace; each crate opts in with
