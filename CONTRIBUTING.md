@@ -90,6 +90,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | Rust formatting | rustfmt defaults, unconfigured | `cargo fmt --check` |
 | Rust lint policy | `Cargo.toml` `[workspace.lints]` | `cargo clippy --all-targets --all-features -- -D warnings` |
 | Rust behaviour | `crates/` | `cargo test` |
+| Rust documentation links | the doc comments in `crates/` | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` |
 | the walk's own corpus | `crates/valgebra-py/src/check/walk.rs` | `cargo test -p valgebra-py --features interpreter-tests` |
 | the detached fuzz surface | `fuzz/Cargo.toml` | `cargo check --manifest-path fuzz/Cargo.toml` |
 | fuzz harness laws | `fuzz/src/lib.rs` | `cargo +nightly test --manifest-path fuzz/Cargo.toml --lib` |

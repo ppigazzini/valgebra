@@ -320,9 +320,9 @@ pub enum PathSegment {
 ///
 /// Adding a variant means handling it in every walk over the IR; the compiler
 /// forces the exhaustive `match`es. Checklist:
-/// - core: [`Schema::map_children`], which is where the variant's child schemas
+/// - core: `Schema::map_children`, which is where the variant's child schemas
 ///   are declared and which every purely structural walk reads them from;
-///   [`Schema::remapped_by`], if it carries a pooled or definitions index;
+///   `Schema::remapped_by`, if it carries a pooled or definitions index;
 ///   [`Schema::expected`], [`Schema::error_code`], [`Schema::depth`],
 ///   [`Schema::node_count`], [`Schema::occurs_unguarded`],
 ///   [`Schema::simplify`];
@@ -1063,7 +1063,7 @@ impl Schema {
     /// definition indices by `def_offset`.
     ///
     /// The same walk as `shifted`, over the same payload sites: the two differ
-    /// only in how a pool index moves, which is what [`Remap`] names.
+    /// only in how a pool index moves, which is what `Remap` names.
     #[must_use]
     pub fn reindexed(&self, lit_map: &[usize], def_offset: DefShift) -> Schema {
         self.remapped_by(Remap::Intern {
