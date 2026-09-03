@@ -4,13 +4,7 @@
 use crate::decision::{
     NoLeafRelations, Region, Regions, has_complementary_pair, has_disjoint_pair, unordered_pairs,
 };
-use crate::ir::{Constraint, Field, Schema, SeqShape};
-
-impl SeqShape {
-    fn simplify(&self) -> SeqShape {
-        self.map_elems(&Schema::simplify)
-    }
-}
+use crate::ir::{Constraint, Schema};
 
 #[cfg(test)]
 thread_local! {
@@ -63,48 +57,17 @@ impl Schema {
         #[cfg(test)]
         SIMPLIFY_STEPS.with(|steps| steps.set(steps.get() + 1));
         match self {
-            Schema::Seq { container, shape } => Schema::Seq {
-                container: *container,
-                shape: shape.simplify(),
-            },
-            Schema::Set(e) => Schema::Set(Box::new(e.simplify())),
-            Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(e.simplify())),
-            Schema::KeyedMap { fields, defaults } => Schema::KeyedMap {
-                fields: fields
-                    .iter()
-                    .map(|f| Field {
-                        name: f.name.clone(),
-                        schema: f.schema.simplify(),
-                        required: f.required,
-                    })
-                    .collect(),
-                defaults: defaults
-                    .iter()
-                    .map(|(k, v)| (k.simplify(), v.simplify()))
-                    .collect(),
-            },
-            Schema::Attrs {
-                class_index,
-                fields,
-            } => Schema::Attrs {
-                class_index: *class_index,
-                fields: fields
-                    .iter()
-                    .map(|f| Field {
-                        name: f.name.clone(),
-                        schema: f.schema.simplify(),
-                        required: f.required,
-                    })
-                    .collect(),
-            },
-            Schema::Refine { base, constraints } => {
-                canonical_refine(base.simplify(), constraints.clone())
-            }
+            // The nodes with a rewrite of their own.
             Schema::Union(members) => simplify_union(members),
             Schema::Intersection(members) => simplify_intersection(members),
             Schema::Complement(inner) => simplify_complement(inner),
-            // Atoms (including Any and Literal/Instance) reduce to themselves.
-            other => other.clone(),
+            Schema::Refine { base, constraints } => {
+                canonical_refine(base.simplify(), constraints.clone())
+            }
+            // Every other node reduces to itself with its children reduced --
+            // which is what `map_children` is, so the descent is not written a
+            // second time here. An atom has no children and comes back as it was.
+            _ => self.map_children(&Schema::simplify),
         }
     }
 }

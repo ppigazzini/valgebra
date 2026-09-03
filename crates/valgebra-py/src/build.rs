@@ -818,13 +818,13 @@ fn build_dict(
                 required,
             });
         } else {
-            defaults.push((
-                build_schema(&key, lits, defs)?,
-                build_schema(&value, lits, defs)?,
-            ));
+            defaults.push(MapClause {
+                key: build_schema(&key, lits, defs)?,
+                value: build_schema(&value, lits, defs)?,
+            });
         }
     }
-    Ok(Schema::KeyedMap { fields, defaults })
+    Ok(Schema::keyed_map(fields, defaults))
 }
 
 /// Build a Refine node from an `Annotated` base and its metadata markers.

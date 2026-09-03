@@ -1,7 +1,9 @@
 //! The decision procedures over the IR: emptiness, subtyping, equivalence, and
 //! disjointness, with the leaf-relation oracle and the scalar region partition.
 
-use crate::ir::{ClassIx, ConstIx, Constraint, DefIx, Field, OperandIx, Schema, SeqKind, SeqShape};
+use crate::ir::{
+    ClassIx, ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
+};
 use rustc_hash::FxHashMap;
 use std::cell::Cell;
 
@@ -1366,9 +1368,9 @@ fn linear_subtype(
 /// unsound `true`.
 fn keyed_map_subtype(
     fa: &[Field],
-    da: &[(Schema, Schema)],
+    da: &[MapClause],
     fb: &[Field],
-    db: &[(Schema, Schema)],
+    db: &[MapClause],
     cx: SubtypeCx<'_>,
     assumptions: &mut Vec<(Schema, Schema)>,
 ) -> bool {
@@ -1402,9 +1404,11 @@ fn keyed_map_subtype(
                 // `a`'s catch-all could place at that key fits `b`'s field schema.
                 None => {
                     !b_field.required
-                        && da
-                            .iter()
-                            .all(|(_, va)| va.is_subtype_rec(&b_field.schema, cx, assumptions))
+                        && da.iter().all(|clause| {
+                            clause
+                                .value
+                                .is_subtype_rec(&b_field.schema, cx, assumptions)
+                        })
                 }
             }
         });
@@ -1414,16 +1418,19 @@ fn keyed_map_subtype(
             .iter()
             .filter(|a_field| !b_by_name.contains_key(a_field.name.as_str()))
             .all(|a_field| {
-                db.iter().any(|(kb, vb)| {
-                    matches!(kb, Schema::Str | Schema::Anything)
-                        && a_field.schema.is_subtype_rec(vb, cx, assumptions)
+                db.iter().any(|clause| {
+                    matches!(clause.key, Schema::Str | Schema::Anything)
+                        && a_field
+                            .schema
+                            .is_subtype_rec(&clause.value, cx, assumptions)
                 })
             });
         // Every catch-all clause of `a` (governing its non-field keys) is subsumed
         // by a clause of `b` with both key and value narrower.
-        let defaults = da.iter().all(|(ka, va)| {
-            db.iter().any(|(kb, vb)| {
-                ka.is_subtype_rec(kb, cx, assumptions) && va.is_subtype_rec(vb, cx, assumptions)
+        let defaults = da.iter().all(|mine| {
+            db.iter().any(|theirs| {
+                mine.key.is_subtype_rec(&theirs.key, cx, assumptions)
+                    && mine.value.is_subtype_rec(&theirs.value, cx, assumptions)
             })
         });
         fields_ok && extra_covered && defaults
@@ -2037,7 +2044,10 @@ mod tests {
     fn open(fields: Vec<Field>) -> Schema {
         Schema::KeyedMap {
             fields,
-            defaults: vec![(Schema::Str, Schema::Anything)],
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Anything,
+            }],
         }
     }
 

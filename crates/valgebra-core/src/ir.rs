@@ -429,7 +429,7 @@ pub enum Schema {
         /// carries no meaning to membership or to subtyping. Both consumers ask
         /// `any`, and this comment once said "ordered", which is a semantics no
         /// code here implements.
-        defaults: Vec<(Schema, Schema)>,
+        defaults: Vec<MapClause>,
     },
     /// Denotes the union of the member sets: a value is a member iff it belongs
     /// to at least one member schema.
@@ -522,10 +522,6 @@ impl SeqShape {
         }
     }
 
-    fn with_records_open(&self, open: Openness) -> SeqShape {
-        self.map_elems(&|s| s.with_records_open(open))
-    }
-
     /// Every element schema this shape holds: the prefix in order, then the tail.
     ///
     /// The sequence half of [`Schema::children`]: a measure over a sequence reads
@@ -570,7 +566,7 @@ impl Schema {
     pub fn mapping(clause: MapClause) -> Schema {
         Schema::KeyedMap {
             fields: Vec::new(),
-            defaults: vec![(clause.key, clause.value)],
+            defaults: vec![clause],
         }
     }
 
@@ -634,11 +630,24 @@ impl Schema {
     /// value; a closed one admits none.
     #[must_use]
     pub fn record(fields: Vec<Field>, open: Openness) -> Schema {
-        let defaults = if open == Openness::Open {
-            vec![(Schema::Anything, Schema::Anything)]
-        } else {
-            Vec::new()
-        };
+        Schema::keyed_map(
+            fields,
+            match open {
+                Openness::Open => vec![MapClause::top()],
+                Openness::Closed => Vec::new(),
+            },
+        )
+    }
+
+    /// A dict node: named fields, and the catch-all clauses governing every other
+    /// key.
+    ///
+    /// The constructor the other two are written in terms of, so a caller never
+    /// builds the variant raw. `record` and `mapping` are the two shapes the
+    /// frontend spells; this is the general one they are special cases of, and a
+    /// mixed record-and-catch-all needs it.
+    #[must_use]
+    pub fn keyed_map(fields: Vec<Field>, defaults: Vec<MapClause>) -> Schema {
         Schema::KeyedMap { fields, defaults }
     }
 }
@@ -703,20 +712,44 @@ pub enum Constraint {
     Regex(String),
 }
 
-/// The key and value schemas of a homogeneous mapping, as one argument.
+/// The key and value schemas of one catch-all clause of a [`Schema::KeyedMap`].
 ///
-/// Two positional `Schema` arguments are the shape a type cannot distinguish: a
-/// caller writing `dict[K, V]` with them transposed builds `dict[V, K]`, which
-/// typechecks and validates real values. A struct literal names each at the call
-/// site and cannot be transposed, which is the only remedy that applies here --
-/// a key schema and a value schema are genuinely two schemas, and neither
-/// carries which position it is in.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Two positional `Schema`s are the shape a type cannot distinguish: a caller
+/// writing `dict[K, V]` with them transposed builds `dict[V, K]`, which
+/// typechecks and validates real values. Naming them cannot be transposed, which
+/// is the only remedy that applies here -- a key schema and a value schema are
+/// genuinely two schemas, and neither carries which position it is in.
+///
+/// The IR stores these rather than pairs. A `(Schema, Schema)` in the node put
+/// the hazard back at every site that read one: each `|(k, v)|` closure is a
+/// place the two could be bound the wrong way round, and there is no arity or
+/// type to catch it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MapClause {
-    /// Every key of the mapping must belong to this set.
+    /// Every key the clause governs must belong to this set.
     pub key: Schema,
-    /// Every value of the mapping must belong to this set.
+    /// Every value under such a key must belong to this set.
     pub value: Schema,
+}
+
+impl MapClause {
+    /// The clause admitting every key with every value: what an open record's
+    /// catch-all is.
+    #[must_use]
+    pub fn top() -> MapClause {
+        MapClause {
+            key: Schema::Anything,
+            value: Schema::Anything,
+        }
+    }
+
+    /// This clause with both schemas mapped through `f`.
+    pub(crate) fn map_schemas(&self, f: &impl Fn(&Schema) -> Schema) -> MapClause {
+        MapClause {
+            key: f(&self.key),
+            value: f(&self.value),
+        }
+    }
 }
 
 /// A named field of a [`Schema::KeyedMap`] or [`Schema::Attrs`].
@@ -728,6 +761,22 @@ pub struct Field {
     pub schema: Schema,
     /// Whether the key must be present.
     pub required: bool,
+}
+
+impl Field {
+    /// This field with its schema mapped through `f`, keeping its name and its
+    /// required-ness.
+    ///
+    /// The three-line struct literal that spells this out was written at every
+    /// pass over a field list, and it is the one place a pass could drop a
+    /// field's required-ness by rebuilding it from the wrong parts.
+    pub(crate) fn map_schema(&self, f: &impl Fn(&Schema) -> Schema) -> Field {
+        Field {
+            name: self.name.clone(),
+            schema: f(&self.schema),
+            required: self.required,
+        }
+    }
 }
 
 impl Schema {
@@ -823,11 +872,7 @@ impl Schema {
     /// be handled in [`remapped_by`](Self::remapped_by), which is why that match
     /// takes no wildcard.
     pub(crate) fn map_children(&self, f: &impl Fn(&Schema) -> Schema) -> Schema {
-        let field = |field: &Field| Field {
-            name: field.name.clone(),
-            schema: f(&field.schema),
-            required: field.required,
-        };
+        let field = |field: &Field| field.map_schema(f);
         match self {
             Schema::Anything
             | Schema::Dynamic
@@ -853,7 +898,7 @@ impl Schema {
             Schema::Intersection(members) => Schema::Intersection(members.iter().map(f).collect()),
             Schema::KeyedMap { fields, defaults } => Schema::KeyedMap {
                 fields: fields.iter().map(field).collect(),
-                defaults: defaults.iter().map(|(k, v)| (f(k), f(v))).collect(),
+                defaults: defaults.iter().map(|c| c.map_schemas(f)).collect(),
             },
             Schema::Attrs {
                 class_index,
@@ -971,7 +1016,7 @@ impl Schema {
                 fields.iter().map(|field| &field.schema).chain(
                     defaults
                         .iter()
-                        .flat_map(|(key, value)| [key, value].into_iter()),
+                        .flat_map(|clause| [&clause.key, &clause.value].into_iter()),
                 ),
             ),
             Schema::Attrs { fields, .. } => Box::new(fields.iter().map(|field| &field.schema)),
@@ -1183,54 +1228,25 @@ impl Schema {
     /// its clauses.
     #[must_use]
     pub fn with_records_open(&self, open: Openness) -> Schema {
-        let recur = |s: &Schema| s.with_records_open(open);
-        let fields_open = |fields: &[Field]| -> Vec<Field> {
-            fields
-                .iter()
-                .map(|f| Field {
-                    name: f.name.clone(),
-                    schema: recur(&f.schema),
-                    required: f.required,
-                })
-                .collect()
-        };
         match self {
-            // A record (named fields) opens or closes its catch-all; a pure
-            // mapping (no fields) is not a record, so only its clause schemas are
-            // recursed.
+            // The one node this transform is about: a record (named fields)
+            // replaces its catch-all. A pure mapping has no fields, so it is not
+            // a record and falls through to the descent below.
             Schema::KeyedMap { fields, .. } if !fields.is_empty() => Schema::KeyedMap {
-                fields: fields_open(fields),
-                defaults: if open == Openness::Open {
-                    vec![(Schema::Anything, Schema::Anything)]
-                } else {
-                    Vec::new()
+                fields: fields
+                    .iter()
+                    .map(|field| field.map_schema(&|s| s.with_records_open(open)))
+                    .collect(),
+                defaults: match open {
+                    Openness::Open => vec![MapClause::top()],
+                    Openness::Closed => Vec::new(),
                 },
             },
-            Schema::KeyedMap { defaults, .. } => Schema::KeyedMap {
-                fields: Vec::new(),
-                defaults: defaults.iter().map(|(k, v)| (recur(k), recur(v))).collect(),
-            },
-            Schema::Attrs {
-                class_index,
-                fields,
-            } => Schema::Attrs {
-                class_index: *class_index,
-                fields: fields_open(fields),
-            },
-            Schema::Seq { container, shape } => Schema::Seq {
-                container: *container,
-                shape: shape.with_records_open(open),
-            },
-            Schema::Set(e) => Schema::Set(Box::new(recur(e))),
-            Schema::FrozenSet(e) => Schema::FrozenSet(Box::new(recur(e))),
-            Schema::Complement(e) => Schema::Complement(Box::new(recur(e))),
-            Schema::Union(es) => Schema::Union(es.iter().map(recur).collect()),
-            Schema::Intersection(es) => Schema::Intersection(es.iter().map(recur).collect()),
-            Schema::Refine { base, constraints } => Schema::Refine {
-                base: Box::new(recur(base)),
-                constraints: constraints.clone(),
-            },
-            other => other.clone(),
+            // Every other node carries the transform to its children and keeps
+            // its own payloads. Spelling the descent out here again is what let
+            // it end in a wildcard, where a new child-carrying variant would be
+            // cloned unopened rather than failing to compile.
+            _ => self.map_children(&|s| s.with_records_open(open)),
         }
     }
 }

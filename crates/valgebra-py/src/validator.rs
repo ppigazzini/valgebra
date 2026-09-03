@@ -966,7 +966,7 @@ impl Validator {
 #[cfg(all(test, feature = "interpreter-tests"))]
 mod tests {
     use super::*;
-    use valgebra_core::{DefIx, Field};
+    use valgebra_core::{DefIx, Field, MapClause};
 
     /// A validator whose root is a bare back edge, so every schema it declares
     /// sits in the definitions table. This is the shape a rewrite reaching only
@@ -1000,7 +1000,7 @@ mod tests {
             };
             assert_eq!(
                 defaults.as_slice(),
-                [(Schema::Anything, Schema::Anything)],
+                [MapClause::top()],
                 "the record in the definitions table gained its catch-all clause"
             );
         });

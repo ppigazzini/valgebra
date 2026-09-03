@@ -17,7 +17,7 @@
 
 use arbitrary::{Arbitrary, Result, Unstructured};
 use valgebra_core::{
-    ClassIx, ConstIx, Constraint, Field, OperandIx, PredIx, Schema, SeqKind, SeqShape,
+    ClassIx, ConstIx, Constraint, Field, MapClause, OperandIx, PredIx, Schema, SeqKind, SeqShape,
 };
 
 const NAMES: [&str; 4] = ["a", "b", "c", "d"];
@@ -164,7 +164,10 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
             let nd = count(u, 3)?;
             let mut defaults = Vec::with_capacity(nd);
             for _ in 0..nd {
-                defaults.push((build_schema(u, depth - 1)?, build_schema(u, depth - 1)?));
+                defaults.push(MapClause {
+                    key: build_schema(u, depth - 1)?,
+                    value: build_schema(u, depth - 1)?,
+                });
             }
             Schema::KeyedMap { fields, defaults }
         }
@@ -276,9 +279,9 @@ mod tests {
                     );
                     assert_unique_field_names(&field.schema);
                 }
-                for (key, value) in defaults {
-                    assert_unique_field_names(key);
-                    assert_unique_field_names(value);
+                for clause in defaults {
+                    assert_unique_field_names(&clause.key);
+                    assert_unique_field_names(&clause.value);
                 }
             }
             Schema::Union(members) | Schema::Intersection(members) => {

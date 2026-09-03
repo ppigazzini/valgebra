@@ -4,7 +4,7 @@ use std::cell::RefCell;
 
 use pyo3::prelude::*;
 use rustc_hash::FxHashSet;
-use valgebra_core::{Constraint, DefIx, Field, Schema, SeqKind};
+use valgebra_core::{Constraint, DefIx, Field, MapClause, Schema, SeqKind};
 
 use crate::errors::{class_label, summarize};
 
@@ -110,7 +110,7 @@ pub(crate) fn render(
 fn render_keyed_map(
     py: Python<'_>,
     fields: &[Field],
-    defaults: &[(Schema, Schema)],
+    defaults: &[MapClause],
     pool: &[Py<PyAny>],
     defs: &[Schema],
     active: &RefCell<FxHashSet<DefIx>>,
@@ -119,9 +119,9 @@ fn render_keyed_map(
     let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
     // A pure mapping — no named fields, one clause — is dict[K, V].
     if fields.is_empty()
-        && let [(key, value)] = defaults
+        && let [clause] = defaults
     {
-        return format!("dict[{}, {}]", r(key), r(value));
+        return format!("dict[{}, {}]", r(&clause.key), r(&clause.value));
     }
     // Otherwise a record/struct: named fields, then any catch-all clauses.
     let mut entries: Vec<String> = fields
@@ -131,12 +131,12 @@ fn render_keyed_map(
             format!("'{}{}': {}", field.name, suffix, r(&field.schema))
         })
         .collect();
-    for (key, value) in defaults {
+    for clause in defaults {
         // An anything-to-anything catch-all reads as the open-record marker.
-        if matches!(key, Schema::Anything) && matches!(value, Schema::Anything) {
+        if *clause == MapClause::top() {
             entries.push("...".to_owned());
         } else {
-            entries.push(format!("{}: {}", r(key), r(value)));
+            entries.push(format!("{}: {}", r(&clause.key), r(&clause.value)));
         }
     }
     format!("{{{}}}", entries.join(", "))
