@@ -371,6 +371,13 @@ Every decision also runs under a fixed work budget, and exhausting it returns th
 conservative answer (`False`, "not proven") rather than running unbounded. This
 preserves soundness: a bail-out is never a wrong `True`.
 
+The Python answer is `True` or `False`, so a `False` from an exhausted budget
+reads the same as a `False` the procedure decided. Inside the core the two are
+distinct — emptiness answers *empty*, *inhabited*, or *neither* — which is what
+lets a test say that a bail-out never claims a proof it does not have. The
+distinction is not surfaced here because the contract does not change with it: a
+`False` is "not proven" either way.
+
 The budget binds where the work is a **product** rather than a sum. Subtyping
 distributes over both sides of a union, so relating two unions can cost the
 product of their member counts, and a Boolean combination nested past a handful

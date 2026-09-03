@@ -18,7 +18,7 @@ mod ir;
 mod simplify;
 mod violation;
 
-pub use decision::{Kind, LeafRelations, NoLeafRelations};
+pub use decision::{Kind, LeafRelations, NoLeafRelations, Verdict};
 pub use ir::{
     ClassIx, ConstIx, Constraint, DefIx, DefShift, Field, Guarded, MapClause, Openness, OperandIx,
     PathSegment, PoolShift, PredIx, Schema, SeqKind, SeqShape,
@@ -2827,6 +2827,59 @@ mod laws {
             "simplify visited {steps} nodes of a {nodes}-node tower; a single \
              bottom-up pass visits each at most once"
         );
+    }
+
+    /// A decision says which of the three things it established, and an exhausted
+    /// budget is never mistaken for a proof.
+    ///
+    /// This is the whole point of the third value. `is_empty` answering `false`
+    /// covers a schema proven to admit values and a schema the work bound
+    /// stopped, and nothing outside the procedure could tell them apart -- so a
+    /// budget hit at a realistic size read as a confident answer. It reads as
+    /// `Unknown` now, and this fails if it ever reads as either proof.
+    #[test]
+    fn an_exhausted_budget_proves_nothing_in_either_direction() {
+        // Proven, both ways, on the fragment the regions decide exactly.
+        assert_eq!(Schema::Int.verdict(), Verdict::Inhabited);
+        assert_eq!(Schema::Nothing.verdict(), Verdict::Empty);
+        assert_eq!(
+            intersection(Schema::Int, Schema::Str).verdict(),
+            Verdict::Empty
+        );
+        assert_eq!(
+            union(Schema::Int, Schema::Str).verdict(),
+            Verdict::Inhabited
+        );
+        assert_eq!(
+            intersection(Schema::Int, not(Schema::Int)).verdict(),
+            Verdict::Empty
+        );
+
+        // Not proven, because the core cannot read the leaf. A literal's constant
+        // may be `nan`, which is equal to nothing and denotes the empty set.
+        assert_eq!(Schema::Literal(ConstIx::new(0)).verdict(), Verdict::Unknown);
+        assert_eq!(
+            Schema::Instance(ClassIx::new(0)).verdict(),
+            Verdict::Unknown
+        );
+
+        // Not proven, because the budget stopped the descent. The same tower the
+        // step-count test drives: it spends the whole allowance, so whatever the
+        // fold would have concluded, it did not conclude it here.
+        let tower = intersection_of_unions_tower(18, Schema::Int);
+        assert_eq!(
+            tower.empty_steps(),
+            DECISION_BUDGET,
+            "the tower drives the bound"
+        );
+        assert_eq!(
+            tower.verdict(),
+            Verdict::Unknown,
+            "an exhausted budget must not read as a proof"
+        );
+        // And the public relation still answers the sound `false` for it, which
+        // is what "Unknown reduces to not-proven-empty" means.
+        assert!(!tower.is_empty());
     }
 
     /// The subtyping decision terminates on a deeply nested
