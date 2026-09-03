@@ -34,6 +34,76 @@ fn spend(budget: &Cell<u32>) -> bool {
     }
 }
 
+/// What a decision could establish about a set.
+///
+/// A `bool` answer conflates two different things. `is_empty` returning `false`
+/// means "not proven empty", which covers a schema proven to admit values and a
+/// schema the procedure gave up on -- an opaque leaf, or a descent the work bound
+/// stopped. The caller cannot tell them apart, and neither can an instrument
+/// watching from outside, so a budget exhaustion at a realistic size reads as a
+/// confident answer.
+///
+/// The public relations still answer `bool`, because that is what soundness
+/// promises: `Unknown` and `Inhabited` both mean "not proven empty". What the
+/// three values buy is that the difference is now *visible* -- to a test, to a
+/// gate, and to the memoisation that will make it rarer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    /// Proven to admit no value.
+    Empty,
+    /// Proven to admit at least one value.
+    Inhabited,
+    /// Neither: an opaque leaf the core cannot read, or a descent the work bound
+    /// stopped before it reached one.
+    Unknown,
+}
+
+impl Verdict {
+    /// Whether this verdict proves emptiness. The reduction the public relations
+    /// make, named once: `Unknown` is not a proof, so it answers with
+    /// `Inhabited`.
+    pub(crate) const fn is_empty(self) -> bool {
+        matches!(self, Verdict::Empty)
+    }
+
+    /// The verdict for a value that must satisfy **every** part: a product, a
+    /// meet of positions, a record's required fields.
+    ///
+    /// One empty part empties the whole, whatever the others are, so `Empty`
+    /// absorbs. Otherwise every part must be proven inhabited for the whole to
+    /// be, and one `Unknown` leaves it unknown. An empty iterator is `Inhabited`:
+    /// nothing is required, so the empty value satisfies it.
+    fn every(parts: impl Iterator<Item = Verdict>) -> Verdict {
+        let mut verdict = Verdict::Inhabited;
+        for part in parts {
+            match part {
+                Verdict::Empty => return Verdict::Empty,
+                Verdict::Unknown => verdict = Verdict::Unknown,
+                Verdict::Inhabited => {}
+            }
+        }
+        verdict
+    }
+
+    /// The verdict for a value that may satisfy **any** part: a union.
+    ///
+    /// The dual of [`every`](Self::every). One inhabited part inhabits the whole,
+    /// so `Inhabited` absorbs; every part must be proven empty for the whole to
+    /// be. An empty iterator is `Empty`, which is what a union of no members
+    /// denotes.
+    fn any(parts: impl Iterator<Item = Verdict>) -> Verdict {
+        let mut verdict = Verdict::Empty;
+        for part in parts {
+            match part {
+                Verdict::Inhabited => return Verdict::Inhabited,
+                Verdict::Unknown => verdict = Verdict::Unknown,
+                Verdict::Empty => {}
+            }
+        }
+        verdict
+    }
+}
+
 /// The region set a schema denotes, or `Unknown` where it is not
 /// scalar-decidable.
 ///
@@ -76,6 +146,21 @@ impl Regions {
     /// change the result and a fold over them may stop here.
     pub(crate) const fn is_absorbing(self) -> bool {
         matches!(self, Regions::Unknown)
+    }
+
+    /// The verdict a known region set settles by itself.
+    ///
+    /// A region set is held only when the schema names it *exactly*, so an empty
+    /// one is a proof of emptiness and a non-empty one is a proof of inhabitance.
+    /// That is the whole payoff of the exactness condition
+    /// [`Schema::atom_region`] carries: on the scalar-decidable fragment the fold
+    /// answers both directions, not just the one.
+    pub(crate) const fn verdict(self) -> Verdict {
+        match self {
+            Regions::Known(regions) if regions.is_empty() => Verdict::Empty,
+            Regions::Known(_) => Verdict::Inhabited,
+            Regions::Unknown => Verdict::Unknown,
+        }
     }
 
     /// The regions, where they are known.
@@ -347,6 +432,34 @@ impl Schema {
         visiting: &mut Vec<DefIx>,
         budget: &Cell<u32>,
     ) -> bool {
+        self.verdict_rec(oracle, defs, visiting, budget).is_empty()
+    }
+
+    /// What this schema's emptiness can be proven to be, under the leaf oracle
+    /// and the recursive definitions.
+    ///
+    /// The three-valued answer behind [`is_empty`](Self::is_empty), which reduces
+    /// it: an `Unknown` is not a proof of emptiness, so the public relation
+    /// answers `false` for it exactly as it does for `Inhabited`. What it is for
+    /// is telling those two apart from outside -- an exhausted budget is
+    /// `Unknown`, and a test can say so.
+    #[must_use]
+    pub fn verdict(&self) -> Verdict {
+        self.verdict_rec(
+            &NoLeafRelations,
+            &[],
+            &mut Vec::new(),
+            &Cell::new(DECISION_BUDGET),
+        )
+    }
+
+    fn verdict_rec(
+        &self,
+        oracle: &dyn LeafRelations,
+        defs: &[Schema],
+        visiting: &mut Vec<DefIx>,
+        budget: &Cell<u32>,
+    ) -> Verdict {
         self.empty_and_region(oracle, defs, visiting, budget).0
     }
 
@@ -369,119 +482,132 @@ impl Schema {
         defs: &[Schema],
         visiting: &mut Vec<DefIx>,
         budget: &Cell<u32>,
-    ) -> (bool, Regions) {
+    ) -> (Verdict, Regions) {
         // Bound the work, sharing the budget with the caller (the subtyping
         // decision passes its own `cx.budget` in), so emptiness cannot escape the
-        // ceiling subtyping advertises. Exhaustion returns "not proven empty".
+        // ceiling subtyping advertises. Exhaustion proves nothing either way,
+        // which is what `Unknown` says and what a `false` could not.
         if !spend(budget) {
-            return (false, Regions::Unknown);
+            return (Verdict::Unknown, Regions::Unknown);
         }
-        // A scalar atom names its region exactly and is inhabited: every one of
-        // them admits a value. Read before the match so the mapping from atom to
-        // region is written once, beside the exactness it depends on.
+        // A scalar atom names its region exactly, so the region settles it. Read
+        // before the match so the mapping from atom to region is written once,
+        // beside the exactness it depends on.
         if let Some(region) = self.atom_region() {
-            return (false, Regions::Known(region));
+            let regions = Regions::Known(region);
+            return (regions.verdict(), regions);
         }
         match self {
-            // The lattice bounds carry a known region; their emptiness is
-            // exactly "the region is empty".
-            Schema::Nothing => (true, Regions::Known(Region::EMPTY)),
-            Schema::Anything => (false, Regions::Known(Region::ALL)),
+            // The lattice bounds carry a known region, which settles them the
+            // same way.
+            Schema::Nothing => (Verdict::Empty, Regions::Known(Region::EMPTY)),
+            Schema::Anything => (Verdict::Inhabited, Regions::Known(Region::ALL)),
             Schema::Ref(id) => {
                 // A reference reached again while resolving it is a cycle: this
                 // occurrence demands an infinite unfolding, so on its own it has
                 // no finite inhabitant. A union base case or an optional or
                 // starred position escapes before reaching here.
                 if visiting.contains(id) {
-                    return (true, Regions::Unknown);
+                    return (Verdict::Empty, Regions::Unknown);
                 }
                 match defs.get(id.get()) {
                     Some(def) => {
                         visiting.push(*id);
-                        let empty = def.is_empty_rec(oracle, defs, visiting, budget);
+                        let verdict = def.verdict_rec(oracle, defs, visiting, budget);
                         visiting.pop();
-                        (empty, Regions::Unknown)
+                        (verdict, Regions::Unknown)
                     }
-                    None => (false, Regions::Unknown),
+                    // A reference no definition resolves says nothing about the
+                    // set it names.
+                    None => (Verdict::Unknown, Regions::Unknown),
                 }
             }
-            Schema::Seq { shape, .. } => (
-                shape.language_is_empty(|element| {
-                    element.is_empty_rec(oracle, defs, visiting, budget)
-                }),
-                Regions::Unknown,
-            ),
+            // A sequence admits no value when a prefix element admits none. A
+            // tail repeats zero times, so a shape whose prefix is all inhabited
+            // admits at least the sequence that stops at the prefix.
+            Schema::Seq { shape, .. } => {
+                let prefix = shape
+                    .prefix
+                    .iter()
+                    .map(|element| element.verdict_rec(oracle, defs, visiting, budget));
+                (Verdict::every(prefix), Regions::Unknown)
+            }
             // A refinement is a subset of its base: an empty base empties it, and
             // so does an unsatisfiable bound conjunction (decided by the oracle).
             Schema::Refine { base, constraints } => {
                 let int_discrete = bounded_to_the_integers([base.as_ref()]);
                 let empty = base.is_empty_rec(oracle, defs, visiting, budget)
                     || bounds_unsatisfiable(constraints.iter(), oracle, int_discrete);
-                (empty, Regions::Unknown)
+                // A satisfiable bound over an inhabited base is not a proof of
+                // inhabitance: the constraints narrow the base, and whether any
+                // value survives them is what the bounds check declines to say.
+                (
+                    if empty {
+                        Verdict::Empty
+                    } else {
+                        Verdict::Unknown
+                    },
+                    Regions::Unknown,
+                )
             }
-            // An intersection is empty if a member is, if the scalar regions cancel,
-            // or if the refinement bounds across its members cannot hold together.
-            // Its region is the intersection of its members' regions — combined from
-            // the children's results, never by re-walking the subtree.
             Schema::Intersection(members) => {
-                let mut any_empty = false;
-                let mut region = Regions::MEET_UNIT;
-                for m in members {
-                    let (empty, member_region) = m.empty_and_region(oracle, defs, visiting, budget);
-                    any_empty |= empty;
-                    region = region.intersect(member_region);
-                    // Both accumulators absorb: an empty member empties the meet
-                    // whatever the rest are, and an opaque region stays opaque. No
-                    // later member can change either, so the walk stops rather than
-                    // spending the budget on a fixed answer.
-                    if any_empty && region.is_absorbing() {
-                        break;
-                    }
-                }
-                let empty = any_empty
-                    || region.known().is_some_and(Region::is_empty)
-                    || has_complementary_pair(members)
-                    || has_disjoint_pair(members, oracle)
-                    || intersection_bounds_unsatisfiable(members, oracle)
-                    || keyed_map_meet_empty(members, oracle, defs, budget);
-                (empty, region)
+                intersection_verdict(members, oracle, defs, visiting, budget)
             }
-            // A set or frozenset is *known* non-empty — the empty collection is
-            // always a member — so it is never empty for a different reason than the
-            // opaque wildcard below (which is non-empty only by conservatism).
-            #[allow(clippy::match_same_arms)]
-            Schema::Set(_) | Schema::FrozenSet(_) => (false, Regions::Unknown),
+            // A set or frozenset admits the empty collection whatever its
+            // element schema is, so it is *proven* inhabited -- which two values
+            // could not say apart from the opaque wildcard below, where the same
+            // `false` meant only that nothing proved emptiness.
+            Schema::Set(_) | Schema::FrozenSet(_) => (Verdict::Inhabited, Regions::Unknown),
+            // A map is emptied by a required field that admits nothing, and
+            // admits the empty dict when it requires nothing at all.
             Schema::KeyedMap { fields, .. } => {
-                let empty = fields.iter().any(|field| {
-                    field.required && field.schema.is_empty_rec(oracle, defs, visiting, budget)
-                });
-                (empty, Regions::Unknown)
+                let required = fields.iter().filter(|field| field.required);
+                let verdict = Verdict::every(
+                    required.map(|field| field.schema.verdict_rec(oracle, defs, visiting, budget)),
+                );
+                (verdict, Regions::Unknown)
             }
             // A structural-attribute schema requires every field, so an empty
             // required field's schema empties it — the same rule as a keyed map.
             // An uninhabited dataclass-style schema is detected here; the nominal
             // `isinstance` part stays opaque, so it never narrows to empty.
             Schema::Attrs { fields, .. } => {
-                let empty = fields.iter().any(|field| {
-                    field.required && field.schema.is_empty_rec(oracle, defs, visiting, budget)
-                });
-                (empty, Regions::Unknown)
+                let required = fields.iter().filter(|field| field.required);
+                let attributes = Verdict::every(
+                    required.map(|field| field.schema.verdict_rec(oracle, defs, visiting, budget)),
+                );
+                // Inhabited attributes are not an inhabited schema: a value must
+                // also be an instance of the class, which the core cannot decide.
+                let verdict = if attributes.is_empty() {
+                    Verdict::Empty
+                } else {
+                    Verdict::Unknown
+                };
+                (verdict, Regions::Unknown)
             }
-            // A union is empty when every member is; its region is the union of the
-            // members' regions, again folded from the children.
+            // A union is empty when every member is and inhabited when any member
+            // is; its region is the union of the members' regions, again folded
+            // from the children.
             Schema::Union(members) => {
-                let mut all_empty = true;
+                let mut verdict = Verdict::Empty;
                 let mut region = Regions::UNION_UNIT;
                 for m in members {
-                    let (empty, member_region) = m.empty_and_region(oracle, defs, visiting, budget);
-                    all_empty &= empty;
+                    let (member, member_region) =
+                        m.empty_and_region(oracle, defs, visiting, budget);
+                    verdict = Verdict::any([verdict, member].into_iter());
                     region = region.union(member_region);
-                    // An inhabited member and an opaque region are both absorbing.
-                    if !all_empty && region.is_absorbing() {
+                    // A member that is not proven empty and an opaque region are
+                    // both absorbing: no later member can make the union empty,
+                    // and none can make the region known. The stop is on "not
+                    // proven empty" rather than "proven inhabited", which is
+                    // where the old two-valued fold stopped -- reading further to
+                    // strengthen an `Unknown` into an `Inhabited` would spend
+                    // budget on a question the caller does not ask.
+                    if verdict != Verdict::Empty && region.is_absorbing() {
                         break;
                     }
                 }
-                (all_empty, region)
+                (verdict, region)
             }
             // A complement's region is the partition minus its inner's region; it is
             // empty exactly when that region is empty (`¬⊤ = ∅`).
@@ -491,11 +617,13 @@ impl Schema {
                     Regions::Known(regions) => Regions::Known(regions.complement()),
                     Regions::Unknown => Regions::Unknown,
                 };
-                (region.known().is_some_and(Region::is_empty), region)
+                (region.verdict(), region)
             }
-            // The gradual `Any`, literals, and instances are not scalar-decidable:
-            // an unknown region, never reported empty.
-            _ => (false, Regions::Unknown),
+            // The gradual `Any`, literals, and instances are not scalar-decidable
+            // and the core cannot read them: a literal's constant may be `nan`,
+            // which is equal to nothing and denotes the empty set, and a class may
+            // have no instances. Neither direction is proven.
+            _ => (Verdict::Unknown, Regions::Unknown),
         }
     }
 
@@ -935,6 +1063,52 @@ fn bounded_to_the_integers<'a>(bases: impl IntoIterator<Item = &'a Schema>) -> b
     bases
         .into_iter()
         .any(|base| matches!(base.type_tag(), Some(Kind::Int | Kind::Bool)))
+}
+
+/// The verdict and region set of an intersection.
+///
+/// Five rules can prove a meet empty and they are asked in one place: an empty
+/// member, cancelling scalar regions, a member beside its own complement, two
+/// members of disjoint kinds, refinement bounds that cannot hold together, and a
+/// required key two record members cannot agree on.
+///
+/// Inhabitance has no such rule. Proving a meet inhabited means finding a value
+/// in *every* member, which none of the five does, so it is the region that
+/// settles it -- exactly, over the whole scalar fragment -- and past that the
+/// meet is opaque however inhabited its members are.
+fn intersection_verdict(
+    members: &[Schema],
+    oracle: &dyn LeafRelations,
+    defs: &[Schema],
+    visiting: &mut Vec<DefIx>,
+    budget: &Cell<u32>,
+) -> (Verdict, Regions) {
+    let mut any_empty = false;
+    let mut region = Regions::MEET_UNIT;
+    for m in members {
+        let (verdict, member_region) = m.empty_and_region(oracle, defs, visiting, budget);
+        any_empty |= verdict.is_empty();
+        region = region.intersect(member_region);
+        // Both accumulators absorb: an empty member empties the meet whatever the
+        // rest are, and an opaque region stays opaque. No later member can change
+        // either, so the walk stops rather than spending the budget on an answer
+        // already fixed.
+        if any_empty && region.is_absorbing() {
+            break;
+        }
+    }
+    let empty = any_empty
+        || region.known().is_some_and(Region::is_empty)
+        || has_complementary_pair(members)
+        || has_disjoint_pair(members, oracle)
+        || intersection_bounds_unsatisfiable(members, oracle)
+        || keyed_map_meet_empty(members, oracle, defs, budget);
+    let verdict = if empty {
+        Verdict::Empty
+    } else {
+        region.verdict()
+    };
+    (verdict, region)
 }
 
 /// Whether a refinement's bound and length constraints cannot hold together: a

@@ -529,16 +529,6 @@ impl SeqShape {
     pub(crate) fn elements(&self) -> impl Iterator<Item = &Schema> {
         self.prefix.iter().chain(self.tail.as_deref())
     }
-
-    /// Whether this shape admits no sequence at all -- its language is empty.
-    ///
-    /// A tail is a *zero*-or-more repetition, so an uninhabited tail still
-    /// admits the sequences that stop at the prefix. A prefix position is not
-    /// optional: an uninhabited one admits nothing, because every sequence this
-    /// shape describes has an element there.
-    pub(crate) fn language_is_empty(&self, mut empty: impl FnMut(&Schema) -> bool) -> bool {
-        self.prefix.iter().any(&mut empty)
-    }
 }
 
 impl Schema {
