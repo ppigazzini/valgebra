@@ -21,9 +21,11 @@
 //! which is which, so what the descriptor can and cannot see is read off it
 //! rather than inferred.
 
+pub mod integers;
 pub mod interval;
 
 use crate::decision::Kind;
+use integers::IntSet;
 
 /// The two booleans, as a subset.
 ///
@@ -80,7 +82,7 @@ impl BoolSet {
 /// One variant per representation, not per kind: a kind whose values are not yet
 /// distinguished carries [`Coarse`](Component::Coarse), and moving a kind to an
 /// exact representation is adding a variant and the arms that go with it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Component {
     /// Every value of the kind, or none.
     ///
@@ -92,30 +94,39 @@ pub enum Component {
     Coarse(bool),
     /// The booleans this descriptor admits.
     Booleans(BoolSet),
+    /// The integers this descriptor admits.
+    ///
+    /// `bool` is a separate kind, so this is the integers that are not booleans
+    /// -- which is what makes the two components independent. A schema that
+    /// admits both spells that as a descriptor holding a component in each.
+    Integers(IntSet),
 }
 
 impl Component {
     /// Every value of the kind.
-    const fn top(kind: Kind) -> Component {
+    fn top(kind: Kind) -> Component {
         match kind {
             Kind::Bool => Component::Booleans(BoolSet::BOTH),
+            Kind::Int => Component::Integers(IntSet::all()),
             _ => Component::Coarse(true),
         }
     }
 
     /// No value of the kind.
-    const fn bottom(kind: Kind) -> Component {
+    fn bottom(kind: Kind) -> Component {
         match kind {
             Kind::Bool => Component::Booleans(BoolSet::EMPTY),
+            Kind::Int => Component::Integers(IntSet::empty()),
             _ => Component::Coarse(false),
         }
     }
 
     /// Whether this component admits no value at all.
-    const fn is_empty(self) -> bool {
+    fn is_empty(&self) -> bool {
         match self {
             Component::Coarse(present) => !present,
             Component::Booleans(set) => set.is_empty(),
+            Component::Integers(set) => set.is_empty(),
         }
     }
 
@@ -126,28 +137,33 @@ impl Component {
     /// so both sides of every call are that kind's representation. The mismatch
     /// arm keeps the crate free of a panic across the boundary and is asserted
     /// unreachable in debug.
-    fn combine(self, other: Component, op: Op) -> Component {
+    fn combine(&self, other: &Component, op: Op) -> Component {
         match (self, other) {
             (Component::Coarse(a), Component::Coarse(b)) => Component::Coarse(match op {
-                Op::Union => a || b,
-                Op::Intersect => a && b,
+                Op::Union => *a || *b,
+                Op::Intersect => *a && *b,
             }),
             (Component::Booleans(a), Component::Booleans(b)) => Component::Booleans(match op {
+                Op::Union => a.union(*b),
+                Op::Intersect => a.intersect(*b),
+            }),
+            (Component::Integers(a), Component::Integers(b)) => Component::Integers(match op {
                 Op::Union => a.union(b),
                 Op::Intersect => a.intersect(b),
             }),
             (mine, theirs) => {
                 debug_assert!(false, "combining {mine:?} with {theirs:?} of another kind");
-                mine
+                mine.clone()
             }
         }
     }
 
     /// Every value of the kind this component does not admit.
-    const fn complement(self) -> Component {
+    fn complement(&self) -> Component {
         match self {
             Component::Coarse(present) => Component::Coarse(!present),
             Component::Booleans(set) => Component::Booleans(set.complement()),
+            Component::Integers(set) => Component::Integers(set.complement()),
         }
     }
 }
@@ -166,7 +182,7 @@ enum Op {
 /// descriptors admit the same values exactly when they are equal. Nothing needs
 /// normalising afterwards, which is what makes the three operations total and
 /// their laws structural rather than up-to-equivalence.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Descr {
     /// One component per kind, indexed by that kind's position in [`Kind::ALL`].
     kinds: [Component; Kind::ALL.len()],
@@ -214,6 +230,28 @@ impl Descr {
         descr
     }
 
+    /// The singleton holding one integer.
+    #[must_use]
+    pub fn integer(value: i64) -> Descr {
+        let mut descr = Descr::nothing();
+        descr.set(Kind::Int, Component::Integers(IntSet::just(value)));
+        descr
+    }
+
+    /// The integers that are multiples of `step`, or `None` where the integer
+    /// set cannot hold that step.
+    ///
+    /// The refusal is carried up rather than absorbed: a descriptor that
+    /// silently widened here would be complemented into one that is wrong the
+    /// other way, and the caller is the one that can decide to keep the step
+    /// opaque instead.
+    #[must_use]
+    pub fn multiple_of(step: i64) -> Option<Descr> {
+        let mut descr = Descr::nothing();
+        descr.set(Kind::Int, Component::Integers(IntSet::multiple_of(step)?));
+        Some(descr)
+    }
+
     fn position(kind: Kind) -> usize {
         Kind::ALL
             .iter()
@@ -221,11 +259,10 @@ impl Descr {
             .unwrap_or(0)
     }
 
-    fn component(&self, kind: Kind) -> Component {
+    fn component(&self, kind: Kind) -> &Component {
         self.kinds
             .get(Descr::position(kind))
-            .copied()
-            .unwrap_or(Component::Coarse(false))
+            .unwrap_or(&Component::Coarse(false))
     }
 
     fn set(&mut self, kind: Kind, component: Component) {
@@ -256,19 +293,19 @@ impl Descr {
     #[must_use]
     pub fn complement(&self) -> Descr {
         Descr {
-            kinds: self.kinds.map(Component::complement),
+            kinds: self.kinds.each_ref().map(Component::complement),
             other: self.other.complement(),
         }
     }
 
     fn zip(&self, other: &Descr, op: Op) -> Descr {
-        let mut kinds = self.kinds;
-        for (slot, theirs) in kinds.iter_mut().zip(other.kinds) {
+        let mut kinds = self.kinds.clone();
+        for (slot, theirs) in kinds.iter_mut().zip(&other.kinds) {
             *slot = slot.combine(theirs, op);
         }
         Descr {
             kinds,
-            other: self.other.combine(other.other, op),
+            other: self.other.combine(&other.other, op),
         }
     }
 
@@ -279,7 +316,7 @@ impl Descr {
     /// admits is a value some component admits.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.kinds.iter().all(|c| c.is_empty()) && self.other.is_empty()
+        self.kinds.iter().all(Component::is_empty) && self.other.is_empty()
     }
 
     /// Whether this set admits `value`.
@@ -287,15 +324,16 @@ impl Descr {
     pub fn admits(&self, value: Value) -> bool {
         let component = match value.kind {
             Some(kind) => self.component(kind),
-            None => self.other,
+            None => &self.other,
         };
-        match (component, value.boolean) {
-            (Component::Coarse(present), _) => present,
-            (Component::Booleans(set), Some(boolean)) => set.holds(boolean),
-            // A boolean component asked about a value that is not a boolean: the
-            // caller built a value whose kind and payload disagree.
-            (Component::Booleans(_), None) => {
-                debug_assert!(false, "a bool-kinded value carries no boolean");
+        match (component, value.boolean, value.integer) {
+            (Component::Coarse(present), _, _) => *present,
+            (Component::Booleans(set), Some(boolean), _) => set.holds(boolean),
+            (Component::Integers(set), _, Some(integer)) => set.holds(integer),
+            // A component asked about a value that carries no payload for it:
+            // the caller built a value whose kind and payload disagree.
+            (Component::Booleans(_) | Component::Integers(_), _, _) => {
+                debug_assert!(false, "a {component:?} component has no payload to read");
                 false
             }
         }
@@ -314,6 +352,8 @@ pub struct Value {
     pub kind: Option<Kind>,
     /// Which boolean, where the kind is [`Kind::Bool`].
     pub boolean: Option<bool>,
+    /// Which integer, where the kind is [`Kind::Int`].
+    pub integer: Option<i64>,
 }
 
 impl Value {
@@ -323,6 +363,7 @@ impl Value {
         Value {
             kind: Some(kind),
             boolean: None,
+            integer: None,
         }
     }
 
@@ -332,6 +373,17 @@ impl Value {
         Value {
             kind: Some(Kind::Bool),
             boolean: Some(value),
+            integer: None,
+        }
+    }
+
+    /// One integer. `bool` is a kind of its own, so this is never a boolean.
+    #[must_use]
+    pub const fn integer(value: i64) -> Value {
+        Value {
+            kind: Some(Kind::Int),
+            boolean: None,
+            integer: Some(value),
         }
     }
 
@@ -341,6 +393,7 @@ impl Value {
         Value {
             kind: None,
             boolean: None,
+            integer: None,
         }
     }
 }
@@ -360,11 +413,14 @@ mod tests {
     fn universe() -> Vec<Value> {
         let mut values: Vec<Value> = Kind::ALL
             .iter()
-            .filter(|kind| **kind != Kind::Bool)
+            .filter(|kind| !matches!(kind, Kind::Bool | Kind::Int))
             .map(|kind| Value::of_kind(*kind))
             .collect();
         values.push(Value::boolean(true));
         values.push(Value::boolean(false));
+        // Enough integers to separate every step and bound the generator uses:
+        // a window narrower than the periods would agree by accident.
+        values.extend((-14i64..=14).map(Value::integer));
         values.push(Value::other());
         values
     }
@@ -525,7 +581,8 @@ mod tests {
         assert!(not_true.admits(Value::boolean(false)));
         assert!(!not_true.admits(Value::boolean(true)));
         // ... while still holding every value of every other kind.
-        assert!(not_true.admits(Value::of_kind(Kind::Int)));
+        assert!(not_true.admits(Value::integer(0)));
+        assert!(not_true.admits(Value::of_kind(Kind::Str)));
         assert!(not_true.admits(Value::other()));
     }
 
@@ -533,13 +590,37 @@ mod tests {
     /// a distinction the descriptor makes.
     #[test]
     fn a_coarse_kind_admits_all_of_its_values_or_none() {
+        let strs = Descr::of_kind(Kind::Str);
+        assert!(strs.admits(Value::of_kind(Kind::Str)));
+        assert!(!strs.admits(Value::of_kind(Kind::Bytes)));
+        assert!(!strs.admits(Value::other()));
+        assert!(!strs.is_empty());
+        assert!(strs.intersect(&Descr::of_kind(Kind::Bytes)).is_empty());
+        assert!(!strs.union(&Descr::of_kind(Kind::Bytes)).is_empty());
+    }
+
+    /// The integers are exact, so a bound conjunction that cannot hold is
+    /// decided rather than declined -- and a step is a set the coarse
+    /// representation had no way to express at all.
+    #[test]
+    fn the_integers_are_a_set_rather_than_a_kind() {
         let ints = Descr::of_kind(Kind::Int);
-        assert!(ints.admits(Value::of_kind(Kind::Int)));
+        assert!(ints.admits(Value::integer(7)));
         assert!(!ints.admits(Value::of_kind(Kind::Str)));
-        assert!(!ints.admits(Value::other()));
-        assert!(!ints.is_empty());
-        assert!(ints.intersect(&Descr::of_kind(Kind::Str)).is_empty());
-        assert!(!ints.union(&Descr::of_kind(Kind::Str)).is_empty());
+        // A boolean is its own kind, so `int` does not admit one.
+        assert!(!ints.admits(Value::boolean(true)));
+
+        let evens = Descr::multiple_of(2).expect("two is inside the bound");
+        assert!(evens.admits(Value::integer(4)));
+        assert!(!evens.admits(Value::integer(3)));
+        assert_eq!(
+            evens.union(&evens.intersect(&ints).complement().intersect(&ints)),
+            ints
+        );
+
+        // Two singletons meet in nothing, and each is inside the kind.
+        assert!(Descr::integer(1).intersect(&Descr::integer(2)).is_empty());
+        assert!(!Descr::integer(1).intersect(&ints).is_empty());
     }
 
     /// The set operations on the two booleans, driven directly: the descriptor

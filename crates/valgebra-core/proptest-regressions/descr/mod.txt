@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 364e9d84b6365ff07f13b88406751fa9e8fbf51c14266a5bdc2b5253682a9033 # shrinks to a = Descr { kinds: [Coarse(false), Booleans(BoolSet(0)), Integers(IntSet { modulus: 1, classes: [IntervalSet { spans: [] }] }), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false)], other: Coarse(false) }
+cc 4d87efd2bb25a735b300c5f9d176ea4664ff0c863454c96640b345c3c4192443 # shrinks to a = Descr { kinds: [Coarse(false), Booleans(BoolSet(3)), Integers(IntSet { modulus: 1, classes: [IntervalSet { spans: [] }] }), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false)], other: Coarse(false) }
+cc 50abf19b80fac03224d5f789b15bca5d6c21b10ded9c094ea8879421e56722f3 # shrinks to a = Descr { kinds: [Coarse(false), Booleans(BoolSet(3)), Integers(IntSet { modulus: 1, classes: [IntervalSet { spans: [] }] }), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false)], other: Coarse(false) }, b = Descr { kinds: [Coarse(false), Booleans(BoolSet(0)), Integers(IntSet { modulus: 1, classes: [IntervalSet { spans: [] }] }), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false), Coarse(false)], other: Coarse(false) }
