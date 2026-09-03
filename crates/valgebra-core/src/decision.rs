@@ -1765,6 +1765,27 @@ pub enum Kind {
 }
 
 impl Kind {
+    /// Every kind, in one place, so a walk over the partition cannot miss one.
+    ///
+    /// A `match` is exhaustive and a list is not, so this array carries a test
+    /// that counts it against the variants rather than a promise that it is
+    /// complete.
+    pub const ALL: [Kind; 11] = [
+        Kind::NoneType,
+        Kind::Bool,
+        Kind::Int,
+        Kind::Float,
+        Kind::Str,
+        Kind::Bytes,
+        Kind::List,
+        Kind::Tuple,
+        Kind::Set,
+        Kind::FrozenSet,
+        Kind::Dict,
+    ];
+}
+
+impl Kind {
     /// The [`Region`] this kind falls in.
     ///
     /// The one place that says where a kind lands, so adding a kind is a change

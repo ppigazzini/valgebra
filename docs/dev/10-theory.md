@@ -187,6 +187,22 @@ Subtyping".** **[PLANNED]** — the interning and automata engine that would dec
 the cases [02-decision.md](02-decision.md) records as conservative. Not built;
 saying so is the point of the tag.
 
+**The descriptor**, the representation the two Castagna papers above give and
+Elixir's `Module.Types.Descr` implements, is **[IN PROGRESS]** in
+`crates/valgebra-core/src/descr.rs`. Where the procedure in `decision.rs` reads a
+schema's syntax and applies inclusion rules, the descriptor gives the *set* a
+representation closed under union, intersection and complement, so a relation is
+decided by emptiness of one combination rather than by whether a rule matched the
+shape a caller wrote.
+
+It is built beside the structural procedure and decides nothing a caller can
+reach. Each kind's component starts *coarse* — every value of the kind, or none —
+and each step replaces one with a representation that separates its values; the
+type says which is which, so what the descriptor can and cannot see is read off
+it. Two properties hold of it already that the structural IR does not have: the
+form is canonical, so admitting the same values *is* being equal, and emptiness
+is a decision rather than a conservative answer over the fragment it covers.
+
 ## Property-based testing
 
 **Claessen & Hughes, QuickCheck (2000)**, and the modern shrinking work behind
