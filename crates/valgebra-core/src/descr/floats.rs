@@ -28,6 +28,31 @@ struct Span {
     hi_closed: bool,
 }
 
+/// Reflexive for the same reason [`FloatSet`]'s is: an endpoint is never `nan`.
+impl Eq for Span {}
+
+/// A stable order on the representation, which is what [`FloatSet`]'s is built
+/// from.
+///
+/// `total_cmp` rather than `partial_cmp`, so the order is total without an arm
+/// that cannot happen, and it agrees with equality: normalisation leaves no
+/// `-0.0`, so two endpoints compare equal here exactly when `==` says so.
+impl Ord for Span {
+    fn cmp(&self, other: &Span) -> core::cmp::Ordering {
+        self.lo
+            .total_cmp(&other.lo)
+            .then(self.lo_closed.cmp(&other.lo_closed))
+            .then(self.hi.total_cmp(&other.hi))
+            .then(self.hi_closed.cmp(&other.hi_closed))
+    }
+}
+
+impl PartialOrd for Span {
+    fn partial_cmp(&self, other: &Span) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl Span {
     /// The interval between two normalised endpoints.
     fn new(lo: f64, lo_closed: bool, hi: f64, hi_closed: bool) -> Span {
@@ -129,6 +154,25 @@ pub struct FloatSet {
 /// and the one value that is not equal to itself lives in the bit beside them,
 /// where it is an ordinary `bool`.
 impl Eq for FloatSet {}
+
+/// Ordered so a float set can be a *guard*, which the sequence automaton sorts
+/// to reach a canonical table.
+///
+/// The order is on the representation, not the sets -- no order on sets is
+/// wanted here, only a stable one. It agrees with equality, which is what a
+/// sort needs of it: `total_cmp` separates two endpoints exactly when `==`
+/// does, because normalisation leaves no `-0.0` and no span holds `nan`.
+impl Ord for FloatSet {
+    fn cmp(&self, other: &FloatSet) -> core::cmp::Ordering {
+        self.spans.cmp(&other.spans).then(self.nan.cmp(&other.nan))
+    }
+}
+
+impl PartialOrd for FloatSet {
+    fn partial_cmp(&self, other: &FloatSet) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 impl FloatSet {
     /// The empty set.
@@ -409,6 +453,19 @@ mod tests {
             max_shrink_time: 2_000,
             ..ProptestConfig::default()
         })]
+
+        /// The order is total and agrees with equality, which is all a sort of
+        /// guards asks of it. Written by hand here because an endpoint is a
+        /// float, so it is the one component whose order needs a law.
+        #[test]
+        fn the_order_is_total_and_agrees_with_equality(a in float_set(), b in float_set()) {
+            prop_assert_eq!(a.partial_cmp(&b), Some(a.cmp(&b)));
+            // The spans carry the order the set's is built from, and a partial
+            // order that declined a pair would leave the set's undefined there.
+            prop_assert_eq!(a.spans.partial_cmp(&b.spans), Some(a.spans.cmp(&b.spans)));
+            prop_assert_eq!(a.cmp(&b) == core::cmp::Ordering::Equal, a == b);
+            prop_assert_eq!(a.cmp(&b), b.cmp(&a).reverse());
+        }
 
         /// The Boolean algebra, checked against the floats.
         #[test]

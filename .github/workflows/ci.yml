@@ -520,6 +520,12 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "core files: ${core:-none}"
           echo "walk files: ${walk:-none}"
+      # `-j 4` runs four test binaries at once, each spawning its own test
+      # threads, while the baseline that sets the timeout is measured alone. A
+      # mutation caught in seconds on an idle machine can take far longer under
+      # that oversubscription, and the ratchet reads a timeout as a survivor --
+      # so the multiplier is what keeps a *slow* catch from reading as an
+      # escape. A mutation that removes termination still reaches it.
       - name: Sweep the core files the change touches
         if: steps.diff.outputs.core != ''
         env:
@@ -530,6 +536,7 @@ jobs:
           set +e
           # shellcheck disable=SC2086  # $args is a built flag list, not input
           cargo mutants --package valgebra-core $args -j 4 \
+            --timeout-multiplier 20 \
             --output core-diff-mutants \
             -- -- --skip deep_subtype_into_bottom_terminates \
             --skip subtyping_terminates_on_a_distributed_tower
@@ -559,7 +566,7 @@ jobs:
           cargo mutants --package valgebra-py \
             --file crates/valgebra-py/src/check/walk.rs \
             --file crates/valgebra-py/src/check/ctx.rs \
-            --features interpreter-tests -j 4 \
+            --features interpreter-tests -j 4 --timeout-multiplier 20 \
             --output walk-diff-mutants \
             -- -- --skip recursion_deeper_than_the_bound_is_refused
           status=$?
@@ -728,7 +735,7 @@ jobs:
           # exists to prove the decision budget's bound, so a mutation removing
           # that bound makes it run without end and the whole run returns no
           # verdict. tests/test_sweep_skips.py holds this list to the sources.
-          cargo mutants --package valgebra-core -j 4 \
+          cargo mutants --package valgebra-core -j 4 --timeout-multiplier 20 \
             -- -- --skip deep_subtype_into_bottom_terminates \
             --skip subtyping_terminates_on_a_distributed_tower
           status=$?
@@ -822,7 +829,8 @@ jobs:
           cargo mutants --package valgebra-py \
             --file crates/valgebra-py/src/check/walk.rs \
             --file crates/valgebra-py/src/check/ctx.rs \
-            --features interpreter-tests -j 4 --output walk-mutants \
+            --features interpreter-tests -j 4 --timeout-multiplier 20 \
+            --output walk-mutants \
             -- -- --skip recursion_deeper_than_the_bound_is_refused
           status=$?
           set -e
