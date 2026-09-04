@@ -25,12 +25,14 @@ pub mod floats;
 pub mod integers;
 pub mod interval;
 pub mod regular;
+pub mod sets;
 pub mod symbolic;
 
 use crate::decision::Kind;
 use floats::FloatSet;
 use integers::IntSet;
 use regular::{Alphabet, RegularSet};
+use sets::SetLattice;
 use symbolic::{Guard, SymbolicDfa};
 
 /// The two booleans, as a subset.
@@ -122,6 +124,12 @@ pub enum Component {
     /// the component is recursive -- through the automaton's *states*, where the
     /// cycle is an edge and every guard stays a finite descriptor.
     Sequences(SymbolicDfa<Descr>),
+    /// The sets this descriptor admits, as a union of powerset lines.
+    ///
+    /// Serves `set` and `frozenset` both. A set is its *members* and nothing
+    /// else -- there is no order for an automaton to walk -- so the component is
+    /// the powerset of a descriptor rather than a language over it.
+    Sets(SetLattice<Descr>),
 }
 
 impl Component {
@@ -133,6 +141,7 @@ impl Component {
             Kind::Float => Component::Floats(FloatSet::all()),
             Kind::Str | Kind::Bytes => Component::Words(RegularSet::all()),
             Kind::List | Kind::Tuple => Component::Sequences(SymbolicDfa::all()),
+            Kind::Set | Kind::FrozenSet => Component::Sets(SetLattice::all()),
             _ => Component::Coarse(true),
         }
     }
@@ -145,6 +154,7 @@ impl Component {
             Kind::Float => Component::Floats(FloatSet::empty()),
             Kind::Str | Kind::Bytes => Component::Words(RegularSet::empty()),
             Kind::List | Kind::Tuple => Component::Sequences(SymbolicDfa::empty()),
+            Kind::Set | Kind::FrozenSet => Component::Sets(SetLattice::empty()),
             _ => Component::Coarse(false),
         }
     }
@@ -158,6 +168,7 @@ impl Component {
             Component::Floats(set) => set.is_empty(),
             Component::Words(set) => set.is_empty(),
             Component::Sequences(set) => set.is_empty(),
+            Component::Sets(set) => set.is_empty(),
         }
     }
 
@@ -208,6 +219,16 @@ impl Component {
                 };
                 Component::Sequences(combined?)
             }
+            (Component::Sets(a), Component::Sets(b)) => {
+                // Refused for the same reason again: a union of powerset lines
+                // multiplies under a meet, and past the bound there is no sound
+                // union to substitute.
+                let combined = match op {
+                    Op::Union => a.union(b),
+                    Op::Intersect => a.intersect(b),
+                };
+                Component::Sets(combined?)
+            }
             (mine, theirs) => {
                 debug_assert!(false, "combining {mine:?} with {theirs:?} of another kind");
                 mine.clone()
@@ -224,6 +245,7 @@ impl Component {
             Component::Floats(set) => Component::Floats(set.complement()),
             Component::Words(set) => Component::Words(set.complement()),
             Component::Sequences(set) => Component::Sequences(set.complement()),
+            Component::Sets(set) => Component::Sets(set.complement()),
         }
     }
 }
@@ -242,11 +264,31 @@ fn alphabet_of(kind: Kind) -> Option<Alphabet> {
     }
 }
 
+/// The values a set may hold: everything but the three kinds Python cannot hash.
+///
+/// A `list`, a `set` and a `dict` are mutable and unhashable, so no set holds
+/// one. Written as the complement of those three rather than as a list of the
+/// rest, so a kind added later is hashable until someone says otherwise -- the
+/// direction that leaves a set *larger*, which declines rather than admits.
+fn hashable() -> Descr {
+    let mut unhashable = Descr::nothing();
+    for kind in [Kind::List, Kind::Set, Kind::Dict] {
+        unhashable.put(kind, Component::top(kind));
+    }
+    unhashable.complement()
+}
+
+/// Whether a kind's values are sets of values, which is what the powerset
+/// component reads.
+fn is_set(kind: Kind) -> bool {
+    matches!(kind, Kind::Set | Kind::FrozenSet)
+}
+
 /// Whether a kind's values are sequences of values, which is what the automaton
 /// component reads.
 ///
-/// `set` and `dict` are containers too, but a set has no order for an automaton
-/// to walk and a dict's elements are pairs, so each wants its own rule.
+/// A dict is a container too, but its elements are pairs, so it wants its own
+/// rule. A set has no order for an automaton to walk and gets [`is_set`].
 fn is_sequence(kind: Kind) -> bool {
     matches!(kind, Kind::List | Kind::Tuple)
 }
@@ -260,11 +302,19 @@ enum Op {
 
 /// A set of values, held as one component per [`Kind`] plus everything else.
 ///
-/// **Canonical by construction.** Each component is canonical for its
-/// representation, and there is exactly one component per kind, so two
-/// descriptors admit the same values exactly when they are equal. Nothing needs
-/// normalising afterwards, which is what makes the three operations total and
-/// their laws structural rather than up-to-equivalence.
+/// **Canonical by construction, with one exception.** Each component is
+/// canonical for its representation, and there is exactly one component per
+/// kind, so two descriptors that differ in a canonical component admit
+/// different values. Nothing needs normalising afterwards, which is what makes
+/// the operations' laws structural rather than up-to-equivalence.
+///
+/// The exception is the set component. A union of powerset lines can hold the
+/// same sets two ways -- `P(A ∪ B)` is also the union of `P(A)`, `P(B)` and the
+/// line subtracting both -- and recognising that costs a search for coverings
+/// [`sets`] does not run. So equality is *finer* than agreeing on values once
+/// sets are involved: equal descriptors still admit the same values, but two
+/// that admit the same values may compare unequal. Every law over a descriptor
+/// that can hold a set is therefore checked against the values.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Descr {
     /// One component per kind, indexed by that kind's position in [`Kind::ALL`].
@@ -301,7 +351,7 @@ impl Descr {
     #[must_use]
     pub fn of_kind(kind: Kind) -> Descr {
         let mut descr = Descr::nothing();
-        descr.set(kind, Component::top(kind));
+        descr.put(kind, Component::top(kind));
         descr
     }
 
@@ -309,7 +359,7 @@ impl Descr {
     #[must_use]
     pub fn boolean(value: bool) -> Descr {
         let mut descr = Descr::nothing();
-        descr.set(Kind::Bool, Component::Booleans(BoolSet::just(value)));
+        descr.put(Kind::Bool, Component::Booleans(BoolSet::just(value)));
         descr
     }
 
@@ -317,7 +367,7 @@ impl Descr {
     #[must_use]
     pub fn integer(value: i64) -> Descr {
         let mut descr = Descr::nothing();
-        descr.set(Kind::Int, Component::Integers(IntSet::just(value)));
+        descr.put(Kind::Int, Component::Integers(IntSet::just(value)));
         descr
     }
 
@@ -325,7 +375,7 @@ impl Descr {
     #[must_use]
     pub fn float(value: f64) -> Descr {
         let mut descr = Descr::nothing();
-        descr.set(Kind::Float, Component::Floats(FloatSet::just(value)));
+        descr.put(Kind::Float, Component::Floats(FloatSet::just(value)));
         descr
     }
 
@@ -338,7 +388,7 @@ impl Descr {
     pub fn pattern(pattern: &str, kind: Kind) -> Option<Descr> {
         let language = RegularSet::pattern(pattern, alphabet_of(kind)?)?;
         let mut descr = Descr::nothing();
-        descr.set(kind, Component::Words(language));
+        descr.put(kind, Component::Words(language));
         Some(descr)
     }
 
@@ -347,7 +397,7 @@ impl Descr {
     pub fn word(word: &[u8], kind: Kind) -> Option<Descr> {
         alphabet_of(kind)?;
         let mut descr = Descr::nothing();
-        descr.set(kind, Component::Words(RegularSet::word(word)));
+        descr.put(kind, Component::Words(RegularSet::word(word)));
         Some(descr)
     }
 
@@ -366,7 +416,34 @@ impl Descr {
             return None;
         }
         let mut descr = Descr::nothing();
-        descr.set(kind, Component::Sequences(SymbolicDfa::shape(prefix, tail)));
+        descr.put(kind, Component::Sequences(SymbolicDfa::shape(prefix, tail)));
+        Some(descr)
+    }
+
+    /// The sets whose members all lie in `elements`, for a set kind.
+    ///
+    /// The members are first cut down to what a set can *hold*. A set's members
+    /// are hashed, and a list, a set and a dict are not hashable, so `elements`
+    /// meets the hashable values before the powerset is taken. That is what makes
+    /// `set[list[int]]` the same set as `set[nothing]`: neither holds a list, so
+    /// both hold exactly one value, the empty set.
+    ///
+    /// The cut is coarser than Python's rule in one place, and coarser in the
+    /// direction that declines rather than admits: a tuple is hashable only when
+    /// its elements are, and this keeps every tuple. So `set[tuple[list[int]]]`
+    /// reads as inhabited by more than the empty set when it is not, which
+    /// leaves a question undecided rather than answering it wrongly.
+    ///
+    /// `None` where the kind's values are not sets, or where a component cannot
+    /// hold the meet.
+    #[must_use]
+    pub fn set(elements: &Descr, kind: Kind) -> Option<Descr> {
+        if !is_set(kind) {
+            return None;
+        }
+        let members = elements.intersect(&hashable())?;
+        let mut descr = Descr::nothing();
+        descr.put(kind, Component::Sets(SetLattice::of(members)));
         Some(descr)
     }
 
@@ -380,7 +457,7 @@ impl Descr {
     #[must_use]
     pub fn multiple_of(step: i64) -> Option<Descr> {
         let mut descr = Descr::nothing();
-        descr.set(Kind::Int, Component::Integers(IntSet::multiple_of(step)?));
+        descr.put(Kind::Int, Component::Integers(IntSet::multiple_of(step)?));
         Some(descr)
     }
 
@@ -397,7 +474,7 @@ impl Descr {
             .unwrap_or(&Component::Coarse(false))
     }
 
-    fn set(&mut self, kind: Kind, component: Component) {
+    fn put(&mut self, kind: Kind, component: Component) {
         if let Some(slot) = self.kinds.get_mut(Descr::position(kind)) {
             *slot = component;
         }
@@ -472,6 +549,7 @@ impl Descr {
             Component::Floats(set) => value.float.is_some_and(|f| set.holds(f)),
             Component::Words(set) => value.word.is_some_and(|w| set.holds(w)),
             Component::Sequences(set) => value.elements.is_some_and(|e| set.holds(e)),
+            Component::Sets(set) => value.elements.is_some_and(|e| set.holds(e)),
         }
     }
 }
@@ -531,10 +609,13 @@ pub struct Value {
     /// Which word, where the kind is [`Kind::Str`] or [`Kind::Bytes`]. A `str`
     /// is its UTF-8 bytes, which is the same alphabet the language is over.
     pub word: Option<&'static [u8]>,
-    /// The elements, where the kind is [`Kind::List`] or [`Kind::Tuple`].
+    /// The elements, where the kind is a sequence or a set kind.
     ///
     /// A value again, which is what makes the question recursive: whether a
     /// sequence is admitted is asked of its elements, one letter at a time.
+    /// For a set kind these are its *members*, in no particular order -- a set
+    /// is its members and the powerset rule reads them as a whole rather than
+    /// as a word.
     pub elements: Option<&'static [Value]>,
 }
 
@@ -658,6 +739,8 @@ mod tests {
                         | Kind::Bytes
                         | Kind::List
                         | Kind::Tuple
+                        | Kind::Set
+                        | Kind::FrozenSet
                 )
             })
             .map(|kind| Value::of_kind(*kind))
@@ -709,6 +792,12 @@ mod tests {
         // one-element sequence and part on the others.
         for kind in [Kind::List, Kind::Tuple] {
             values.extend(SEQUENCES.map(|elements| Value::sequence(elements, kind)));
+        }
+        // The same member lists read as sets, for both set kinds. The empty one
+        // carries the weight here: it inhabits every powerset, so it is what
+        // separates `set[nothing]` from `nothing`.
+        for kind in [Kind::Set, Kind::FrozenSet] {
+            values.extend(SEQUENCES.map(|members| Value::sequence(members, kind)));
         }
         values.push(Value::other());
         values
@@ -805,6 +894,163 @@ mod tests {
         assert!(Descr::sequence(&[], None, Kind::Set).is_none());
     }
 
+    proptest! {
+        // The same bounds, for the same reasons.
+        #![proptest_config(ProptestConfig {
+            cases: 64,
+            max_shrink_time: 2_000,
+            ..ProptestConfig::default()
+        })]
+
+        /// The lattice laws, over descriptors that hold sets.
+        #[test]
+        fn the_lattice_laws_hold_of_the_sets(
+            a in descr_with_sets(),
+            b in descr_with_sets(),
+            c in descr_with_sets(),
+        ) {
+            if let (Some(ab), Some(ba)) = (a.union(&b), b.union(&a)) {
+                prop_assert!(agree_on_values(&ab, &ba), "join commutes");
+            }
+            if let (Some(ab), Some(ba)) = (a.intersect(&b), b.intersect(&a)) {
+                prop_assert!(agree_on_values(&ab, &ba), "meet commutes");
+            }
+            if let (Some(bc), Some(ab)) = (b.union(&c), a.union(&b))
+                && let (Some(left), Some(right)) = (a.union(&bc), ab.union(&c))
+            {
+                prop_assert!(agree_on_values(&left, &right), "join associates");
+            }
+            if let (Some(bc), Some(ac)) = (b.union(&c), a.intersect(&c))
+                && let (Some(ab), Some(left)) = (a.intersect(&b), a.intersect(&bc))
+                && let Some(right) = ab.union(&ac)
+            {
+                prop_assert!(agree_on_values(&left, &right), "meet distributes over join");
+            }
+        }
+
+        /// The complement laws, over descriptors that hold sets.
+        #[test]
+        fn the_complement_laws_hold_of_the_sets(
+            a in descr_with_sets(),
+            b in descr_with_sets(),
+        ) {
+            let not_a = a.complement();
+            if let Some(met) = a.intersect(&not_a) {
+                prop_assert!(met.is_empty(), "a value is in one of the two");
+            }
+            if let Some(joined) = a.union(&not_a) {
+                prop_assert!(
+                    agree_on_values(&joined, &Descr::anything()),
+                    "and in one of them"
+                );
+            }
+            prop_assert!(
+                agree_on_values(&not_a.complement(), &a),
+                "twice is nothing"
+            );
+            let not_b = b.complement();
+            if let (Some(joined), Some(met)) = (a.union(&b), not_a.intersect(&not_b)) {
+                prop_assert!(
+                    agree_on_values(&joined.complement(), &met),
+                    "de Morgan one way"
+                );
+            }
+            if let (Some(met), Some(joined)) = (a.intersect(&b), not_a.union(&not_b)) {
+                prop_assert!(
+                    agree_on_values(&met.complement(), &joined),
+                    "and the other"
+                );
+            }
+        }
+
+        /// A value the descriptor admits is a value its complement does not,
+        /// with the sets in.
+        #[test]
+        fn a_complement_holds_every_set_the_descriptor_does_not(a in descr_with_sets()) {
+            let complement = a.complement();
+            for value in universe() {
+                prop_assert_ne!(a.admits(value), complement.admits(value));
+            }
+        }
+    }
+
+    /// The distinction row 9 of the report asks for.
+    ///
+    /// `set[int] & set[str]` is not empty and is not either operand: a meet of
+    /// two powersets is the powerset of the meet, so it holds exactly the sets
+    /// drawn from `int ∧ str` -- which is the empty set and nothing else.
+    #[test]
+    fn two_sets_of_disjoint_elements_meet_in_the_empty_set() {
+        const NOTHING: &[Value] = &[];
+        const ONE: &[Value] = &[Value::integer(1)];
+
+        let ints = Descr::set(&Descr::of_kind(Kind::Int), Kind::Set).expect("a set kind");
+        let words = Descr::set(&Descr::of_kind(Kind::Str), Kind::Set).expect("a set kind");
+        let none = Descr::set(&Descr::nothing(), Kind::Set).expect("a set kind");
+
+        let shared = ints.intersect(&words).expect("two small powersets");
+        assert!(!shared.is_empty(), "the empty set is drawn from both");
+        assert_eq!(shared, none, "and it is the only one");
+        assert!(shared.admits(Value::sequence(NOTHING, Kind::Set)));
+        assert!(!shared.admits(Value::sequence(ONE, Kind::Set)));
+    }
+
+    /// The distinction row 22 asks for: a set of an unhashable element holds
+    /// only the empty set, because no value of that kind can be a member.
+    #[test]
+    fn a_set_of_an_unhashable_element_is_the_set_of_nothing() {
+        const NOTHING: &[Value] = &[];
+        const A_LIST: &[Value] = &[Value::sequence(&[], Kind::List)];
+
+        let lists = Descr::sequence(&[], Some(&Descr::of_kind(Kind::Int)), Kind::List)
+            .expect("a sequence kind");
+        let of_lists = Descr::set(&lists, Kind::Set).expect("a set kind");
+        let none = Descr::set(&Descr::nothing(), Kind::Set).expect("a set kind");
+
+        assert!(!of_lists.is_empty(), "the empty set is still a set");
+        assert_eq!(of_lists, none);
+        assert!(of_lists.admits(Value::sequence(NOTHING, Kind::Set)));
+        assert!(!of_lists.admits(Value::sequence(A_LIST, Kind::Set)));
+    }
+
+    /// A frozenset is hashable and a set is not, which is the one place the two
+    /// set kinds differ.
+    #[test]
+    fn a_frozenset_is_a_member_and_a_set_is_not() {
+        let frozen = Descr::set(&Descr::of_kind(Kind::Int), Kind::FrozenSet).expect("a set kind");
+        let mutable = Descr::set(&Descr::of_kind(Kind::Int), Kind::Set).expect("a set kind");
+        let none = Descr::set(&Descr::nothing(), Kind::Set).expect("a set kind");
+
+        let of_frozen = Descr::set(&frozen, Kind::Set).expect("a set kind");
+        assert!(
+            !of_frozen.is_empty(),
+            "a set of frozensets holds more than the empty set"
+        );
+        assert_ne!(of_frozen, none);
+        assert_eq!(Descr::set(&mutable, Kind::Set).expect("a set kind"), none);
+    }
+
+    /// The two set kinds are separate components, so a set is never a frozenset.
+    #[test]
+    fn the_two_set_kinds_do_not_meet() {
+        let mutable = Descr::set(&Descr::of_kind(Kind::Int), Kind::Set).expect("a set kind");
+        let frozen = Descr::set(&Descr::of_kind(Kind::Int), Kind::FrozenSet).expect("a set kind");
+
+        assert!(
+            mutable
+                .intersect(&frozen)
+                .expect("two small powersets")
+                .is_empty()
+        );
+    }
+
+    /// A kind whose values are not sets refuses the constructor.
+    #[test]
+    fn a_kind_whose_values_are_not_sets_refuses() {
+        assert!(Descr::set(&Descr::nothing(), Kind::List).is_none());
+        assert!(Descr::set(&Descr::nothing(), Kind::Str).is_none());
+    }
+
     /// The element sequences the universe is built from.
     const SEQUENCES: [&[Value]; 6] = [
         &[],
@@ -873,6 +1119,33 @@ mod tests {
                     .prop_map(|(prefix, tail, kind)| {
                         Descr::sequence(&prefix, tail.as_ref(), kind).unwrap_or_else(Descr::nothing)
                     }),
+            ]
+        })
+    }
+
+    /// The same descriptors, plus the sets a powerset component holds.
+    ///
+    /// A second generator rather than a branch of the first, because the set
+    /// component is the one that is **not canonical**: a union of powerset lines
+    /// can hold the same sets two ways. Every law below is therefore checked
+    /// against the values rather than by equality of the forms, which would fail
+    /// on a difference that is not a difference. The generator above stays free
+    /// of sets so the laws that *can* be checked at full strength still are.
+    fn descr_with_sets() -> impl Strategy<Value = Descr> {
+        let leaf = prop_oneof![
+            2 => descr(),
+            1 => (descr(), prop_oneof![Just(Kind::Set), Just(Kind::FrozenSet)])
+                .prop_map(|(elements, kind)| {
+                    Descr::set(&elements, kind).unwrap_or_else(Descr::nothing)
+                }),
+        ];
+        leaf.prop_recursive(2, 8, 2, |inner| {
+            prop_oneof![
+                (inner.clone(), inner.clone())
+                    .prop_map(|(a, b)| a.union(&b).unwrap_or_else(Descr::anything)),
+                (inner.clone(), inner.clone())
+                    .prop_map(|(a, b)| a.intersect(&b).unwrap_or_else(Descr::nothing)),
+                inner.prop_map(|a| a.complement()),
             ]
         })
     }
@@ -1034,17 +1307,19 @@ mod tests {
     /// a distinction the descriptor makes.
     #[test]
     fn a_coarse_kind_admits_all_of_its_values_or_none() {
-        let sets = Descr::of_kind(Kind::Set);
-        assert!(sets.admits(Value::of_kind(Kind::Set)));
-        assert!(!sets.admits(Value::of_kind(Kind::FrozenSet)));
-        assert!(!sets.admits(Value::other()));
-        assert!(!sets.is_empty());
+        let dicts = Descr::of_kind(Kind::Dict);
+        assert!(dicts.admits(Value::of_kind(Kind::Dict)));
+        assert!(!dicts.admits(Value::of_kind(Kind::NoneType)));
+        assert!(!dicts.admits(Value::other()));
+        assert!(!dicts.is_empty());
         assert!(
-            sets.intersect(&Descr::of_kind(Kind::FrozenSet))
+            dicts
+                .intersect(&Descr::of_kind(Kind::NoneType))
                 .is_some_and(|met| met.is_empty())
         );
         assert!(
-            sets.union(&Descr::of_kind(Kind::FrozenSet))
+            dicts
+                .union(&Descr::of_kind(Kind::NoneType))
                 .is_some_and(|joined| !joined.is_empty())
         );
     }
