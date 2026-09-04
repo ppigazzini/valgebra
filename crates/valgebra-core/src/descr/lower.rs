@@ -258,7 +258,21 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
 /// A length bound counts what the kind's alphabet counts -- code points for a
 /// `str`, bytes for `bytes` -- which is why the pattern is read under the kind
 /// rather than compiled once.
+///
+/// **Refuses unless the base is words and nothing else.** A length is not a
+/// word's alone: a list, a tuple, a set and a dict all have one, and a bound on
+/// them is a constraint the word component cannot express. Lowering the bound as
+/// if it only spoke about words would give a *smaller* set than the schema
+/// denotes -- and a smaller set has a larger complement, which is a subtype
+/// proof that no value supports.
 fn words(pattern: &str, base: &Descr) -> Option<Descr> {
+    let mut alphabets = Descr::nothing();
+    for kind in [Kind::Str, Kind::Bytes] {
+        alphabets = alphabets.union(&Descr::of_kind(kind))?;
+    }
+    if !base.intersect(&alphabets.complement())?.is_empty() {
+        return None;
+    }
     let mut whole = Descr::nothing();
     for kind in [Kind::Str, Kind::Bytes] {
         if Descr::of_kind(kind).intersect(base)?.is_empty() {
@@ -639,6 +653,41 @@ mod tests {
         )
         .expect("two length bounds");
         assert_eq!(impossible.emptiness(), Verdict::Empty);
+    }
+
+    /// A word constraint on a base that is *more* than words refuses too.
+    ///
+    /// A length is not a word's alone -- a list, a set and a dict all have one --
+    /// so a bound over `anything` constrains values the word component cannot
+    /// speak about. Lowering it as if it only spoke about words would give a
+    /// smaller set than the schema denotes, and a smaller set has a *larger*
+    /// complement: `set[anything] <= ~Annotated[anything, MinLen(0)]` would be
+    /// proved, with the empty set standing against it.
+    #[test]
+    fn a_length_bound_over_more_than_words_refuses() {
+        let pool = empty_pool();
+        assert!(
+            lower(
+                &Schema::Refine {
+                    base: Box::new(Schema::Anything),
+                    constraints: vec![Constraint::MinLen(0)],
+                },
+                &pool,
+            )
+            .is_none()
+        );
+
+        // Narrowed to the words first, the same bound lowers.
+        assert!(
+            lower(
+                &Schema::Refine {
+                    base: Box::new(Schema::Str),
+                    constraints: vec![Constraint::MinLen(0)],
+                },
+                &pool,
+            )
+            .is_some()
+        );
     }
 
     /// A word constraint on a base with no words refuses.

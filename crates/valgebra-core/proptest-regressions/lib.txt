@@ -10,3 +10,4 @@ cc 6294e11a16c5e8ec9a7c6089674b104ee584dabfa3ec9a3e37776f9024781bf1 # shrinks to
 cc 0ba347e25b3542f01149671325a4e117f2bf03e48b072d3305bf7adc42e7cbe0 # shrinks to a = Intersection([Union([Int, Bool]), Intersection([Intersection([Str])])])
 cc 002d8f09fdfc461017b16f253ff89183bd62357c126c2fe399154568d0f399da # shrinks to a = KeyedMap { fields: [], defaults: [] }, b = KeyedMap { fields: [Field { name: "a", schema: Anything, required: false }, Field { name: "a", schema: Anything, required: false }], defaults: [] }
 cc faaf45202cd213e43787aae04f690fa7ec678723adb2b890d1d51b0b2cdf870a # shrinks to a = Set(Nothing), b = Set(Seq { container: List, shape: SeqShape { prefix: [], tail: Some(Nothing) } })
+cc bcfdcb3db5d796598544cb9f5c19547160177165bded87664a0a8cffe0b53cb9 # shrinks to a = Set(Anything), b = Complement(Refine { base: Anything, constraints: [MinLen(0)] })
