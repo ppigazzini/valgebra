@@ -18,6 +18,7 @@ use super::classes::Class;
 use super::{Descr, integers::IntSet};
 use crate::decision::Kind;
 use crate::ir::{ConstIx, Constraint, OperandIx, Schema, SeqKind, SeqShape};
+use std::cell::Cell;
 
 /// A pooled value, as far as a descriptor can read one.
 #[derive(Debug, Clone, PartialEq)]
@@ -50,6 +51,46 @@ pub trait Constants {
     fn constant(&self, index: ConstIx) -> Option<Operand>;
 }
 
+/// A pool that knows nothing, for a caller that has none.
+///
+/// The core's own relations have no object table -- the constants live in the
+/// bindings -- so a schema naming one refuses to lower here rather than being
+/// guessed at. What still lowers is everything whose meaning is structural: the
+/// kinds, the sequences, the sets, the three operations, and the length and
+/// pattern constraints, which carry their operand inline.
+pub struct NoConstants;
+
+impl Constants for NoConstants {
+    fn operand(&self, _index: OperandIx) -> Option<Operand> {
+        None
+    }
+
+    fn constant(&self, _index: ConstIx) -> Option<Operand> {
+        None
+    }
+}
+
+/// The nodes this will lower before refusing.
+///
+/// A schema is a tree the caller writes, and lowering both recurses over it and
+/// *builds* at every node -- a sequence node determinises an automaton, a set
+/// node takes a powerset. Without a bound a deep enough schema exhausts the
+/// stack and a wide one exhausts the clock, which is why the procedure beside
+/// this one carries a work budget too.
+///
+/// A refusal past the bound is the same refusal as for a form with nowhere to
+/// land, and it reaches the same place: the caller decides the old way. It is a
+/// bound on the *lowering*, not on the algebra -- the components have their own,
+/// and those are limits of what they can represent rather than of what they will
+/// spend.
+///
+/// Sized by what can be *built* rather than by what can be parsed. Complementing
+/// a descriptor complements the guards inside it, so a chain of complements
+/// deepens the descriptor as well as the schema, and the operations recurse
+/// through that nesting: past roughly a hundred the stack goes rather than the
+/// clock. An annotation anyone writes is orders of magnitude inside this.
+pub const BUDGET: u32 = 64;
+
 /// The set a schema denotes, or `None` where the descriptor cannot yet hold it.
 ///
 /// # Errors
@@ -59,6 +100,12 @@ pub trait Constants {
 /// recursive reference, the gradual `Any` -- and the ones whose operand the pool
 /// could not read.
 pub fn lower(schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
+    descend(schema, pool, &Cell::new(BUDGET))
+}
+
+/// [`lower`] with the nodes left to spend, which every node spends one of.
+fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>) -> Option<Descr> {
+    budget.set(budget.get().checked_sub(1)?);
     match schema {
         Schema::Anything => Some(Descr::anything()),
         Schema::Nothing => Some(Descr::nothing()),
@@ -72,19 +119,21 @@ pub fn lower(schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
         Schema::Str => Some(Descr::of_kind(Kind::Str)),
         Schema::Bytes => Some(Descr::of_kind(Kind::Bytes)),
         Schema::Literal(index) => singleton(&pool.constant(*index)?),
-        Schema::Seq { container, shape } => sequence(*container, shape, pool),
-        Schema::Set(elements) => Descr::set(&lower(elements, pool)?, Kind::Set),
-        Schema::FrozenSet(elements) => Descr::set(&lower(elements, pool)?, Kind::FrozenSet),
+        Schema::Seq { container, shape } => sequence(*container, shape, pool, budget),
+        Schema::Set(elements) => Descr::set(&descend(elements, pool, budget)?, Kind::Set),
+        Schema::FrozenSet(elements) => {
+            Descr::set(&descend(elements, pool, budget)?, Kind::FrozenSet)
+        }
         Schema::Union(members) => members.iter().try_fold(Descr::nothing(), |whole, member| {
-            whole.union(&lower(member, pool)?)
+            whole.union(&descend(member, pool, budget)?)
         }),
         Schema::Intersection(members) => {
             members.iter().try_fold(Descr::anything(), |whole, member| {
-                whole.intersect(&lower(member, pool)?)
+                whole.intersect(&descend(member, pool, budget)?)
             })
         }
-        Schema::Complement(inner) => Some(lower(inner, pool)?.complement()),
-        Schema::Refine { base, constraints } => refine(base, constraints, pool),
+        Schema::Complement(inner) => Some(descend(inner, pool, budget)?.complement()),
+        Schema::Refine { base, constraints } => refine(base, constraints, pool, budget),
         // No component to land in, or none that would mean what the schema does.
         // `Dynamic` is the gradual type and not the top, a dict has no map
         // component yet, an attribute record beside a builtin kind wants a
@@ -114,7 +163,12 @@ fn singleton(constant: &Operand) -> Option<Descr> {
 }
 
 /// The sequences a shape spells, under the kind that reads them.
-fn sequence(container: SeqKind, shape: &SeqShape, pool: &dyn Constants) -> Option<Descr> {
+fn sequence(
+    container: SeqKind,
+    shape: &SeqShape,
+    pool: &dyn Constants,
+    budget: &Cell<u32>,
+) -> Option<Descr> {
     let kind = match container {
         SeqKind::List => Kind::List,
         SeqKind::Tuple => Kind::Tuple,
@@ -122,10 +176,10 @@ fn sequence(container: SeqKind, shape: &SeqShape, pool: &dyn Constants) -> Optio
     let prefix: Option<Vec<Descr>> = shape
         .prefix
         .iter()
-        .map(|element| lower(element, pool))
+        .map(|element| descend(element, pool, budget))
         .collect();
     let tail = match &shape.tail {
-        Some(element) => Some(lower(element, pool)?),
+        Some(element) => Some(descend(element, pool, budget)?),
         None => None,
     };
     Descr::sequence(&prefix?, tail.as_ref(), kind)
@@ -136,8 +190,13 @@ fn sequence(container: SeqKind, shape: &SeqShape, pool: &dyn Constants) -> Optio
 /// Each constraint is a *set* here rather than a test, so narrowing is
 /// intersection and the order the constraints are written in carries no meaning
 /// -- which is what makes `Ge(0) ∧ Lt(0)` decide rather than run.
-fn refine(base: &Schema, constraints: &[Constraint], pool: &dyn Constants) -> Option<Descr> {
-    let mut narrowed = lower(base, pool)?;
+fn refine(
+    base: &Schema,
+    constraints: &[Constraint],
+    pool: &dyn Constants,
+    budget: &Cell<u32>,
+) -> Option<Descr> {
+    let mut narrowed = descend(base, pool, budget)?;
     for constraint in constraints {
         narrowed = narrowed.intersect(&constrained(constraint, &narrowed, pool)?)?;
     }
@@ -212,7 +271,7 @@ fn words(pattern: &str, base: &Descr) -> Option<Descr> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Constants, Operand, lower};
+    use super::{BUDGET, Constants, Operand, lower};
     use crate::decision::{Kind, Verdict};
     use crate::descr::classes::Class;
     use crate::descr::{Descr, Value};
@@ -601,6 +660,29 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    /// A schema past the budget refuses rather than spending without end.
+    ///
+    /// Lowering builds at every node, so a deep schema is both a deep recursion
+    /// and a lot of work. The bound is what keeps a caller that asks about an
+    /// adversarial schema from paying for it -- and refusing is safe, because
+    /// the caller decides the old way.
+    #[test]
+    fn a_schema_past_the_budget_refuses() {
+        let pool = empty_pool();
+        let mut deep = Schema::Int;
+        for _ in 0..BUDGET {
+            deep = Schema::Complement(Box::new(deep));
+        }
+        assert!(lower(&deep, &pool).is_none());
+
+        // Just inside it still lowers, so the bound is a bound and not a wall.
+        let mut shallow = Schema::Int;
+        for _ in 0..(BUDGET / 2) {
+            shallow = Schema::Complement(Box::new(shallow));
+        }
+        assert!(lower(&shallow, &pool).is_some());
     }
 
     /// The map is partial, and it refuses rather than approximating.
