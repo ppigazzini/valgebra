@@ -29,9 +29,10 @@
 //! be pushed onto finitely many labels; an attribute namespace has no such
 //! regions.
 
+use super::classes::Class;
 use super::symbolic::Guard;
 use super::values::Values;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The most atoms a union may hold.
 ///
@@ -83,23 +84,37 @@ impl<G: Guard> Field<G> {
     }
 }
 
-/// One open record: finitely many attributes constrained, the rest free.
+/// One open record: finitely many attributes constrained, the rest free, and
+/// finitely many classes the value must or must not be an instance of.
 ///
-/// The labels are ordered, so two ways of writing one atom compare equal.
+/// The classes sit in the same atom as the attributes rather than beside them,
+/// and that is what keeps the complement finite. A value fails the atom by
+/// holding a named attribute outside its type, by not being an instance of one
+/// of `is_a`, or by being an instance of one of `not_a` -- finitely many ways,
+/// each of them an atom again.
+///
+/// Both maps are ordered, so two ways of writing one atom compare equal.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Atom<G> {
     fields: BTreeMap<String, Field<G>>,
+    /// Classes every value here is an instance of.
+    is_a: BTreeSet<Class>,
+    /// Classes no value here is an instance of.
+    not_a: BTreeSet<Class>,
 }
 
 impl<G: Guard> Atom<G> {
-    /// Every object: no attribute constrained.
+    /// Every object: nothing constrained at all.
     fn top() -> Atom<G> {
         Atom {
             fields: BTreeMap::new(),
+            is_a: BTreeSet::new(),
+            not_a: BTreeSet::new(),
         }
     }
 
-    /// The objects in both: every label of either, met where they share one.
+    /// The objects in both: every label of either, met where they share one,
+    /// and every class constraint of either, which simply collect.
     fn meet(&self, other: &Atom<G>) -> Option<Atom<G>> {
         let mut fields = self.fields.clone();
         for (label, theirs) in &other.fields {
@@ -109,13 +124,34 @@ impl<G: Guard> Atom<G> {
             };
             fields.insert(label.clone(), met);
         }
-        Some(Atom { fields })
+        Some(Atom {
+            fields,
+            is_a: self.is_a.union(&other.is_a).cloned().collect(),
+            not_a: self.not_a.union(&other.not_a).cloned().collect(),
+        })
     }
 
-    /// Whether no object satisfies this atom: some attribute holds nothing and
-    /// may not be missing either.
+    /// Whether no object satisfies this atom.
+    ///
+    /// Three ways to be empty, and each is a pair that cannot both hold. Some
+    /// attribute holds nothing and may not be missing either; some class it must
+    /// be an instance of derives from one it must not; or two it must be an
+    /// instance of are disjoint.
+    ///
+    /// The open world is what is *not* said here. A class in `not_a` that
+    /// nothing in `is_a` derives from leaves the atom inhabited, because some
+    /// class outside both may yet describe a value -- claiming otherwise would
+    /// decide emptiness from a class list that is never complete.
     fn is_empty(&self) -> bool {
         self.fields.values().any(Field::is_empty)
+            || self
+                .is_a
+                .iter()
+                .any(|mine| self.not_a.iter().any(|barred| mine.derives_from(barred)))
+            || self
+                .is_a
+                .iter()
+                .any(|mine| self.is_a.iter().any(|other| mine.disjoint_from(other)))
     }
 
     /// The objects failing this atom, one atom per label.
@@ -124,31 +160,58 @@ impl<G: Guard> Atom<G> {
     /// fails by holding some *named* attribute outside its type, and each label
     /// is one way to fail.
     fn complement(&self) -> Vec<Atom<G>> {
-        self.fields
-            .iter()
-            .map(|(label, field)| Atom {
-                fields: BTreeMap::from([(label.clone(), field.complement())]),
-            })
-            .collect()
+        let attributes = self.fields.iter().map(|(label, field)| Atom {
+            fields: BTreeMap::from([(label.clone(), field.complement())]),
+            ..Atom::top()
+        });
+        let barred = self.is_a.iter().map(|class| Atom {
+            not_a: BTreeSet::from([class.clone()]),
+            ..Atom::top()
+        });
+        let required = self.not_a.iter().map(|class| Atom {
+            is_a: BTreeSet::from([class.clone()]),
+            ..Atom::top()
+        });
+        attributes.chain(barred).chain(required).collect()
     }
 
     /// Whether the object carrying `attributes` satisfies this atom.
     ///
     /// An attribute the object does not carry satisfies the field exactly when
     /// the field admits being missing, which is the `⊥` again.
-    fn holds(&self, attributes: &[(&str, G::Value)]) -> bool {
+    fn holds(&self, class: Option<&Class>, attributes: &[(&str, G::Value)]) -> bool {
+        let instance_of = |wanted: &Class| class.is_some_and(|held| held.derives_from(wanted));
         self.fields.iter().all(|(label, field)| {
             match attributes.iter().find(|(name, _)| name == label) {
                 Some((_, value)) => field.ty.holds(value),
                 None => field.absent,
             }
-        })
+        }) && self.is_a.iter().all(instance_of)
+            && !self.not_a.iter().any(instance_of)
     }
 
-    /// Drop the labels that constrain nothing, so two ways of writing one atom
-    /// compare equal.
+    /// Drop what constrains nothing, so two ways of writing one atom compare
+    /// equal.
+    ///
+    /// A label whose field is the top says nothing. So does a class implied by
+    /// another already there: being an instance of a class implies being one of
+    /// its ancestors, so `is_a` keeps only what derives from nothing else in it;
+    /// and *not* being an instance of a class implies not being one of its
+    /// descendants, so `not_a` keeps only the ancestors.
     fn tidy(mut self) -> Atom<G> {
         self.fields.retain(|_, field| field != &Field::top());
+        let is_a = self.is_a.clone();
+        self.is_a.retain(|mine| {
+            !is_a
+                .iter()
+                .any(|other| other != mine && other.derives_from(mine))
+        });
+        let not_a = self.not_a.clone();
+        self.not_a.retain(|mine| {
+            !not_a
+                .iter()
+                .any(|other| other != mine && mine.derives_from(other))
+        });
         self
     }
 }
@@ -192,6 +255,18 @@ impl<G: Guard> RecordLattice<G> {
         }
     }
 
+    /// The objects that are instances of `class`.
+    #[must_use]
+    pub fn instance_of(class: Class) -> RecordLattice<G> {
+        RecordLattice {
+            atoms: vec![Atom {
+                is_a: BTreeSet::from([class]),
+                ..Atom::top()
+            }],
+            negated: false,
+        }
+    }
+
     /// The objects carrying `label`, whose value is in `ty`.
     ///
     /// `optional` admits the objects that do not carry it at all, which is the
@@ -207,6 +282,7 @@ impl<G: Guard> RecordLattice<G> {
                         absent: optional,
                     },
                 )]),
+                ..Atom::top()
             }],
             negated: false,
         }
@@ -224,6 +300,7 @@ impl<G: Guard> RecordLattice<G> {
                         absent: true,
                     },
                 )]),
+                ..Atom::top()
             }],
             negated: false,
         }
@@ -251,8 +328,8 @@ impl<G: Guard> RecordLattice<G> {
 
     /// Whether the object carrying `attributes` is held.
     #[must_use]
-    pub fn holds(&self, attributes: &[(&str, G::Value)]) -> bool {
-        self.atoms.iter().any(|atom| atom.holds(attributes)) != self.negated
+    pub fn holds(&self, class: Option<&Class>, attributes: &[(&str, G::Value)]) -> bool {
+        self.atoms.iter().any(|atom| atom.holds(class, attributes)) != self.negated
     }
 
     /// The objects in either, or `None` past [`MAX_ATOMS`].
@@ -340,6 +417,7 @@ fn tidy<G: Guard>(atoms: Vec<Atom<G>>) -> Option<Vec<Atom<G>>> {
 #[cfg(test)]
 mod tests {
     use super::{MAX_ATOMS, RecordLattice};
+    use crate::descr::classes::Class;
     use crate::descr::integers::IntSet;
     use proptest::prelude::*;
 
@@ -363,7 +441,7 @@ mod tests {
 
     fn holds(lattice: &RecordLattice<IntSet>, object: &[(&'static str, i64)]) -> bool {
         let attributes: Vec<(&str, i64)> = object.to_vec();
-        lattice.holds(&attributes)
+        lattice.holds(None, &attributes)
     }
 
     fn same(a: &RecordLattice<IntSet>, b: &RecordLattice<IntSet>) -> bool {
@@ -471,16 +549,101 @@ mod tests {
         }
     }
 
+    /// A class constrains a value the way an attribute does, and its complement
+    /// is a constraint again rather than an absence.
+    #[test]
+    fn a_class_and_its_complement_are_both_sets() {
+        let animal = Class::root(1);
+        let dog = Class::new(2, 1, std::slice::from_ref(&animal));
+        let dogs = RecordLattice::<IntSet>::instance_of(dog.clone());
+
+        assert!(dogs.holds(Some(&dog), &[]));
+        assert!(!dogs.holds(Some(&animal), &[]), "a base is not an instance");
+        assert!(!dogs.holds(None, &[]), "a value with no class is not one");
+
+        let others = dogs.complement();
+        assert!(!others.holds(Some(&dog), &[]));
+        assert!(others.holds(Some(&animal), &[]) && others.holds(None, &[]));
+    }
+
+    /// Being an instance of a class is being one of its bases, so a meet with a
+    /// base says nothing new -- and a meet with what a base excludes is empty.
+    #[test]
+    fn deriving_decides_the_meet_and_the_emptiness() {
+        let animal = Class::root(1);
+        let dog = Class::new(2, 1, std::slice::from_ref(&animal));
+        let dogs = RecordLattice::<IntSet>::instance_of(dog.clone());
+        let animals = RecordLattice::instance_of(animal.clone());
+
+        let both = dogs.intersect(&animals).expect("two small atoms");
+        assert!(same(&both, &dogs), "a dog is already an animal");
+
+        let neither = dogs
+            .intersect(&animals.complement())
+            .expect("two small atoms");
+        assert!(neither.is_empty(), "no dog is not an animal");
+    }
+
+    /// The world is open: a class nothing derives from leaves the atom
+    /// inhabited, because a class outside the list may yet describe a value.
+    #[test]
+    fn excluding_an_unrelated_class_leaves_the_atom_inhabited() {
+        let animal = Class::root(1);
+        let mineral = Class::root(2);
+        let animals = RecordLattice::<IntSet>::instance_of(animal.clone());
+
+        let not_mineral = animals
+            .intersect(&RecordLattice::instance_of(mineral).complement())
+            .expect("two small atoms");
+        assert!(!not_mineral.is_empty());
+        assert!(not_mineral.holds(Some(&animal), &[]));
+    }
+
+    /// Two classes that cannot both describe a value make the atom empty, which
+    /// the derivation order alone does not show.
+    #[test]
+    fn two_classes_of_conflicting_layouts_meet_in_nothing() {
+        let ints = Class::root(1);
+        let words = Class::root(2);
+        let unrelated = Class::new(3, 1, &[]);
+
+        let met = RecordLattice::<IntSet>::instance_of(ints.clone())
+            .intersect(&RecordLattice::instance_of(words))
+            .expect("two small atoms");
+        assert!(met.is_empty(), "no value is laid out both ways");
+
+        // Same layout and no derivation between them: a class deriving from both
+        // may exist, so this is *not* empty.
+        let open = RecordLattice::<IntSet>::instance_of(ints)
+            .intersect(&RecordLattice::instance_of(unrelated))
+            .expect("two small atoms");
+        assert!(!open.is_empty());
+    }
+
+    /// A class and an attribute constrain one value together, which is what
+    /// putting them in one atom is for.
+    #[test]
+    fn a_class_and_an_attribute_constrain_one_value() {
+        let dog = Class::root(1);
+        let named = RecordLattice::instance_of(dog.clone())
+            .intersect(&RecordLattice::attribute("x", IntSet::just(1), false))
+            .expect("two small atoms");
+
+        assert!(named.holds(Some(&dog), &[("x", 1)]));
+        assert!(!named.holds(Some(&dog), &[("x", 2)]));
+        assert!(!named.holds(None, &[("x", 1)]));
+    }
+
     /// An atom constrains the attributes it names and no others, which is what
     /// makes the record *open*.
     #[test]
     fn an_atom_ignores_the_attributes_it_does_not_name() {
         let with_x = RecordLattice::attribute("x", IntSet::all(), false);
 
-        assert!(with_x.holds(&[("x", 0)]));
-        assert!(with_x.holds(&[("x", 0), ("z", 9)]), "z is not named");
-        assert!(!with_x.holds(&[("z", 9)]), "x is missing");
-        assert!(!with_x.holds(&[]));
+        assert!(with_x.holds(None, &[("x", 0)]));
+        assert!(with_x.holds(None, &[("x", 0), ("z", 9)]), "z is not named");
+        assert!(!with_x.holds(None, &[("z", 9)]), "x is missing");
+        assert!(!with_x.holds(None, &[]));
     }
 
     /// An optional attribute is the type with `⊥` in it: carried and of the
@@ -491,9 +654,12 @@ mod tests {
         let optional = RecordLattice::attribute("x", evens.clone(), true);
         let required = RecordLattice::attribute("x", evens, false);
 
-        assert!(optional.holds(&[]) && !required.holds(&[]));
-        assert!(optional.holds(&[("x", 2)]) && required.holds(&[("x", 2)]));
-        assert!(!optional.holds(&[("x", 1)]), "carried, so the type decides");
+        assert!(optional.holds(None, &[]) && !required.holds(None, &[]));
+        assert!(optional.holds(None, &[("x", 2)]) && required.holds(None, &[("x", 2)]));
+        assert!(
+            !optional.holds(None, &[("x", 1)]),
+            "carried, so the type decides"
+        );
     }
 
     /// A field that must be missing is the empty type with `⊥` in it, which is
@@ -503,7 +669,7 @@ mod tests {
         let without = RecordLattice::<IntSet>::without("x");
         let with_any = RecordLattice::attribute("x", IntSet::all(), false);
 
-        assert!(without.holds(&[]) && !without.holds(&[("x", 0)]));
+        assert!(without.holds(None, &[]) && !without.holds(None, &[("x", 0)]));
         assert!(same(&with_any.complement(), &without));
     }
 
@@ -516,13 +682,13 @@ mod tests {
             .expect("two small atoms");
         let failing = both.complement();
 
-        assert!(both.holds(&[("x", 0), ("y", 0)]));
-        assert!(!failing.holds(&[("x", 0), ("y", 0)]));
+        assert!(both.holds(None, &[("x", 0), ("y", 0)]));
+        assert!(!failing.holds(None, &[("x", 0), ("y", 0)]));
         // Failing at either label is enough, and so is missing either one.
-        assert!(failing.holds(&[("x", 1), ("y", 0)]));
-        assert!(failing.holds(&[("x", 0), ("y", 1)]));
-        assert!(failing.holds(&[("x", 0)]));
-        assert!(failing.holds(&[]));
+        assert!(failing.holds(None, &[("x", 1), ("y", 0)]));
+        assert!(failing.holds(None, &[("x", 0), ("y", 1)]));
+        assert!(failing.holds(None, &[("x", 0)]));
+        assert!(failing.holds(None, &[]));
     }
 
     /// Two atoms naming different attributes meet in the object carrying both.
@@ -533,8 +699,8 @@ mod tests {
             .expect("two small atoms");
 
         assert!(!met.is_empty());
-        assert!(met.holds(&[("x", 0), ("y", 1)]));
-        assert!(!met.holds(&[("x", 0)]) && !met.holds(&[("y", 1)]));
+        assert!(met.holds(None, &[("x", 0), ("y", 1)]));
+        assert!(!met.holds(None, &[("x", 0)]) && !met.holds(None, &[("y", 1)]));
     }
 
     /// A required attribute whose type is empty admits nothing, which is

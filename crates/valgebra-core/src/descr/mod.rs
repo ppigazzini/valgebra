@@ -21,6 +21,7 @@
 //! which is which, so what the descriptor can and cannot see is read off it
 //! rather than inferred.
 
+pub mod classes;
 pub mod floats;
 pub mod integers;
 pub mod interval;
@@ -31,6 +32,7 @@ pub mod symbolic;
 pub mod values;
 
 use crate::decision::Kind;
+use classes::Class;
 use floats::FloatSet;
 use integers::IntSet;
 use records::RecordLattice;
@@ -494,6 +496,18 @@ impl Descr {
         descr
     }
 
+    /// The objects that are instances of `class`.
+    ///
+    /// Only a **pure** class belongs here -- one whose metaclass leaves
+    /// `isinstance` and `issubclass` alone. A class with a hook answers
+    /// arbitrary code and is not a set this algebra holds.
+    #[must_use]
+    pub fn instance_of(class: Class) -> Descr {
+        let mut descr = Descr::nothing();
+        descr.other = Component::Records(RecordLattice::instance_of(class));
+        descr
+    }
+
     /// The objects that do not carry `label` at all.
     #[must_use]
     pub fn without_attribute(label: &str) -> Descr {
@@ -605,7 +619,7 @@ impl Descr {
             Component::Words(set) => value.word.is_some_and(|w| set.holds(w)),
             Component::Sequences(set) => value.elements.is_some_and(|e| set.holds(e)),
             Component::Sets(set) => value.elements.is_some_and(|e| set.holds(e)),
-            Component::Records(set) => value.attributes.is_some_and(|a| set.holds(a)),
+            Component::Records(set) => value.attributes.is_some_and(|a| set.holds(value.class, a)),
         }
     }
 }
@@ -672,6 +686,12 @@ pub struct Value {
     /// For a set kind these are its *members*, in no particular order -- a set
     /// is its members and the powerset rule reads them as a whole rather than
     /// as a word.
+    /// The class, where the value is of no listed kind.
+    ///
+    /// What the value *is*, as far as the snapshot of the class order can say.
+    /// A value with none is one whose class the core was never told, which every
+    /// class constraint declines rather than admits.
+    pub class: Option<&'static Class>,
     /// The attributes, where the value is of no listed kind.
     ///
     /// What an object *is*, at this resolution: the names it carries and what
@@ -693,6 +713,7 @@ impl Value {
             word: None,
             elements: None,
             attributes: None,
+            class: None,
         }
     }
 
@@ -707,6 +728,7 @@ impl Value {
             word: None,
             elements: None,
             attributes: None,
+            class: None,
         }
     }
 
@@ -721,6 +743,7 @@ impl Value {
             word: None,
             elements: None,
             attributes: None,
+            class: None,
         }
     }
 
@@ -736,6 +759,7 @@ impl Value {
             word: Some(word),
             elements: None,
             attributes: None,
+            class: None,
         }
     }
 
@@ -750,6 +774,7 @@ impl Value {
             word: None,
             elements: None,
             attributes: None,
+            class: None,
         }
     }
 
@@ -757,6 +782,18 @@ impl Value {
     #[must_use]
     pub const fn other() -> Value {
         Value::object(&[])
+    }
+
+    /// An instance of `class`, described by that and the attributes it carries.
+    #[must_use]
+    pub const fn instance(
+        class: &'static Class,
+        attributes: &'static [(&'static str, Value)],
+    ) -> Value {
+        Value {
+            class: Some(class),
+            ..Value::object(attributes)
+        }
     }
 
     /// A value of no listed kind -- a class instance, a callable -- described by
@@ -771,6 +808,7 @@ impl Value {
             word: None,
             elements: None,
             attributes: Some(attributes),
+            class: None,
         }
     }
     /// One sequence, for a sequence kind. The elements are values again, which
@@ -785,13 +823,14 @@ impl Value {
             word: None,
             elements: Some(elements),
             attributes: None,
+            class: None,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{BoolSet, Component, Descr, Value};
+    use super::{BoolSet, Class, Component, Descr, Value};
     use crate::decision::Kind;
     use proptest::prelude::*;
     use std::sync::LazyLock;
@@ -878,8 +917,19 @@ mod tests {
         // Objects of no listed kind, described by the attributes they carry.
         // The one with an attribute nobody names is what holds the record open.
         values.extend(OBJECTS.map(Value::object));
+        // The same objects under each class of the little order below, plus the
+        // one whose class nobody told us.
+        for class in [&ANIMAL, &DOG, &MINERAL] {
+            values.extend(OBJECTS.map(|attributes| Value::instance(class, attributes)));
+        }
         values
     }
+
+    /// A class order small enough to enumerate and wide enough to separate the
+    /// three answers: deriving, unrelated, and laid out apart.
+    static ANIMAL: LazyLock<Class> = LazyLock::new(|| Class::root(1));
+    static DOG: LazyLock<Class> = LazyLock::new(|| Class::new(2, 1, std::slice::from_ref(&ANIMAL)));
+    static MINERAL: LazyLock<Class> = LazyLock::new(|| Class::root(3));
 
     /// The attribute lists the universe's objects carry.
     const OBJECTS: [&[(&str, Value)]; 7] = [
@@ -1140,6 +1190,61 @@ mod tests {
         assert!(Descr::set(&Descr::nothing(), Kind::Str).is_none());
     }
 
+    /// A class is a set, and so is its complement -- which is what the tree
+    /// could not say about an instance schema.
+    #[test]
+    fn a_class_and_its_complement_are_both_descriptors() {
+        let dogs = Descr::instance_of(DOG.clone());
+        let animals = Descr::instance_of(ANIMAL.clone());
+
+        assert!(dogs.admits(Value::instance(&DOG, &[])));
+        assert!(!dogs.admits(Value::instance(&ANIMAL, &[])));
+        assert!(!dogs.admits(Value::other()), "no class is not this class");
+
+        // A dog is an animal, so meeting the two changes nothing and meeting the
+        // complement leaves nothing.
+        assert!(
+            dogs.intersect(&animals)
+                .expect("two small atoms")
+                .admits(Value::instance(&DOG, &[]))
+        );
+        assert!(
+            dogs.intersect(&animals.complement())
+                .expect("two small atoms")
+                .is_empty()
+        );
+    }
+
+    /// The world stays open: excluding a class nothing derives from leaves the
+    /// set inhabited, because the class list is never complete.
+    #[test]
+    fn excluding_an_unrelated_class_decides_nothing() {
+        let animals = Descr::instance_of(ANIMAL.clone());
+        let not_mineral = Descr::instance_of(MINERAL.clone()).complement();
+
+        let met = animals.intersect(&not_mineral).expect("two small atoms");
+        assert!(!met.is_empty());
+        assert!(met.admits(Value::instance(&ANIMAL, &[])));
+    }
+
+    /// A class and an attribute constrain one value, which is why they share an
+    /// atom rather than sitting in two slots a complement would have to split.
+    #[test]
+    fn a_class_meets_an_attribute_in_one_object() {
+        const NAMED: &[(&str, Value)] = &[("x", Value::integer(0))];
+
+        let met = Descr::instance_of(DOG.clone())
+            .intersect(&Descr::attribute("x", &Descr::of_kind(Kind::Int), false))
+            .expect("two small atoms");
+
+        assert!(met.admits(Value::instance(&DOG, NAMED)));
+        assert!(!met.admits(Value::instance(&DOG, &[])));
+        assert!(
+            !met.admits(Value::object(NAMED)),
+            "the class is required too"
+        );
+    }
+
     /// The record the report calls carrier-free: a set of objects fixed by the
     /// attributes alone, with no class in it.
     ///
@@ -1340,6 +1445,12 @@ mod tests {
             )
                 .prop_map(|(label, ty, optional)| Descr::attribute(label, &ty, optional)),
             1 => prop_oneof![Just("x"), Just("y")].prop_map(Descr::without_attribute),
+            1 => prop_oneof![
+                Just(ANIMAL.clone()),
+                Just(DOG.clone()),
+                Just(MINERAL.clone()),
+            ]
+            .prop_map(Descr::instance_of),
         ];
         leaf.prop_recursive(2, 8, 2, |inner| {
             prop_oneof![
