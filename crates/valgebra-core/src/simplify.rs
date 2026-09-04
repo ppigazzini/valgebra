@@ -171,7 +171,10 @@ fn finish_union(mut flat: Vec<Schema>) -> Schema {
         .filter_map(Regions::known)
         .fold(Region::EMPTY, Region::union)
         == Region::ALL;
-    if has_complementary_pair(&flat) || has_disjoint_complement_pair(&flat) || covers_universe {
+    if has_complementary_pair(&flat, &NoLeafRelations)
+        || has_disjoint_complement_pair(&flat)
+        || covers_universe
+    {
         return Schema::Anything;
     }
     match flat.len() {
@@ -231,7 +234,10 @@ fn finish_intersection(mut flat: Vec<Schema>) -> Schema {
         .filter_map(Regions::known)
         .fold(Region::ALL, Region::intersect)
         .is_empty();
-    if has_complementary_pair(&flat) || has_disjoint_pair(&flat, &NoLeafRelations) || region_empty {
+    if has_complementary_pair(&flat, &NoLeafRelations)
+        || has_disjoint_pair(&flat, &NoLeafRelations)
+        || region_empty
+    {
         return Schema::Nothing;
     }
     match flat.len() {

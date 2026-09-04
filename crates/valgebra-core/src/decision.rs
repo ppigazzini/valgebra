@@ -1054,6 +1054,20 @@ pub trait LeafRelations {
         None
     }
 
+    /// Whether an atom the core cannot read denotes a *set* -- the same values
+    /// however often it is asked -- or `None` when the bindings cannot say.
+    ///
+    /// Asked of a class: `isinstance` against a metaclass that overrides
+    /// `__instancecheck__` runs user code, so two occurrences of one class can
+    /// disagree and `A ∩ ¬A` is not empty. Telling a pure class from a hooked one
+    /// needs the class object, which only the bindings hold. The default decides
+    /// nothing, so a core with no oracle treats every such atom as one it cannot
+    /// reason about -- the conservative direction, which declines a law rather
+    /// than applying it where it does not hold.
+    fn atom_denotes_a_set(&self, _atom: &Schema) -> Option<bool> {
+        None
+    }
+
     /// The kind of the pooled constant behind a [`Schema::Literal`], or `None`
     /// when the bindings decline to kind it.
     ///
@@ -1142,7 +1156,7 @@ fn intersection_verdict(
     }
     let empty = any_empty
         || region.known().is_some_and(Region::is_empty)
-        || has_complementary_pair(members)
+        || has_complementary_pair(members, oracle)
         || has_disjoint_pair(members, oracle)
         || intersection_bounds_unsatisfiable(members, oracle)
         || keyed_map_meet_empty(members, oracle, defs, budget);
@@ -1317,17 +1331,83 @@ pub(crate) fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> 
 }
 
 /// Whether the intersection contains a schema and its complement (`A ∩ ¬A = ∅`).
-/// The gradual `Any` is excluded: its complement is not its set complement, so
-/// `Any ∩ ¬Any` is not empty. This is the completeness law `simplify` applies,
-/// decided structurally on the (small) member list. Shared with the simplifier
-/// so both read the same lattice law.
-pub(crate) fn has_complementary_pair(members: &[Schema]) -> bool {
+///
+/// The law is a law **about sets**, and it is applied only where both sides are
+/// one. Two atoms are not: the gradual `Any`, whose complement is not its set
+/// complement, and an atom that runs a callback -- a predicate is arbitrary code
+/// evaluated once per occurrence, so nothing makes the two occurrences agree.
+/// A predicate that alternates puts a value in `A` and in `¬A` at once, and the
+/// law would report the meet empty with that value as a witness against it.
+///
+/// This is the completeness law `simplify` applies, decided structurally on the
+/// (small) member list. Shared with the simplifier so both read the same lattice
+/// law -- and so the simplifier does not rewrite to `nothing` what the decision
+/// declines to call empty.
+pub(crate) fn has_complementary_pair(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
     members.iter().any(|member| match member {
         Schema::Complement(inner) => {
-            !matches!(**inner, Schema::Dynamic) && members.iter().any(|other| other == &**inner)
+            denotes_a_set(inner, oracle) && members.iter().any(|other| other == &**inner)
         }
         _ => false,
     })
+}
+
+/// Whether a schema denotes a *set*: the same values however often it is asked.
+///
+/// Sound rather than complete, and conservative in the direction that declines.
+/// A callback is the atom this rules out: `Predicate` runs user code, so two
+/// occurrences of one schema can disagree, and a law that assumes they agree is
+/// not a law about this. A reference is ruled out for the same reason at one
+/// remove -- what it names is not in hand here, so a callback may hide behind it.
+/// The gradual `Any` is ruled out because its complement is not its set
+/// complement.
+///
+/// A class is referred to the `oracle`: `isinstance` against a metaclass that
+/// overrides `__instancecheck__` is a callback too, and telling a pure class from
+/// a hooked one needs the class object, which only the bindings hold.
+pub(crate) fn denotes_a_set(schema: &Schema, oracle: &dyn LeafRelations) -> bool {
+    let mut pending = vec![schema];
+    while let Some(node) = pending.pop() {
+        match node {
+            Schema::Dynamic | Schema::Ref(_) | Schema::SelfRef(_) => return false,
+            // Only the bindings hold the class, so only they can tell a pure one
+            // from a hooked one. No answer is the conservative answer.
+            Schema::Instance(_) => {
+                if oracle.atom_denotes_a_set(node) != Some(true) {
+                    return false;
+                }
+            }
+            Schema::Refine { base, constraints } => {
+                if constraints
+                    .iter()
+                    .any(|constraint| matches!(constraint, Constraint::Predicate(_)))
+                {
+                    return false;
+                }
+                pending.push(base);
+            }
+            Schema::Seq { shape, .. } => {
+                pending.extend(shape.prefix.iter());
+                pending.extend(shape.tail.as_deref());
+            }
+            Schema::Set(inner) | Schema::FrozenSet(inner) | Schema::Complement(inner) => {
+                pending.push(inner);
+            }
+            Schema::Union(members) | Schema::Intersection(members) => pending.extend(members),
+            Schema::KeyedMap { fields, defaults } => {
+                pending.extend(fields.iter().map(|field| &field.schema));
+                for clause in defaults {
+                    pending.push(&clause.key);
+                    pending.push(&clause.value);
+                }
+            }
+            Schema::Attrs { fields, .. } => {
+                pending.extend(fields.iter().map(|field| &field.schema));
+            }
+            _ => {}
+        }
+    }
+    true
 }
 
 /// Whether the keyed maps meeting in an intersection admit no dict between them.
@@ -2191,6 +2271,106 @@ mod tests {
                 Schema::tuple(SeqShape::homogeneous(Schema::Str)),
             ])
         ));
+    }
+
+    /// A callback hides behind every container, and the walk that looks for one
+    /// must enter each.
+    ///
+    /// `A ∩ ¬A = ∅` is declined for an atom that is not a set, and a predicate
+    /// nested inside a container makes the whole container one -- so each way a
+    /// schema holds another is a way the search must descend.
+    #[test]
+    fn a_callback_is_found_through_every_container() {
+        let predicate = Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))],
+        };
+        let field = |schema: Schema| Field {
+            name: "x".to_owned(),
+            schema,
+            required: true,
+        };
+        let wrappers: [Schema; 11] = [
+            predicate.clone(),
+            Schema::Set(Box::new(predicate.clone())),
+            Schema::FrozenSet(Box::new(predicate.clone())),
+            Schema::Complement(Box::new(predicate.clone())),
+            Schema::union([predicate.clone(), Schema::Int]),
+            Schema::list(SeqShape::fixed([predicate.clone()])),
+            Schema::list(SeqShape::homogeneous(predicate.clone())),
+            Schema::KeyedMap {
+                fields: vec![field(predicate.clone())],
+                defaults: Vec::new(),
+            },
+            Schema::KeyedMap {
+                fields: Vec::new(),
+                defaults: vec![MapClause {
+                    key: Schema::Str,
+                    value: predicate.clone(),
+                }],
+            },
+            Schema::KeyedMap {
+                fields: Vec::new(),
+                defaults: vec![MapClause {
+                    key: predicate.clone(),
+                    value: Schema::Str,
+                }],
+            },
+            Schema::Attrs {
+                class_index: ClassIx::new(0),
+                fields: vec![field(predicate.clone())],
+            },
+        ];
+        for wrapper in wrappers {
+            assert!(
+                !denotes_a_set(&wrapper, &NoLeafRelations),
+                "a predicate inside {wrapper:?} is still a predicate"
+            );
+            let meet = Schema::Intersection(vec![
+                wrapper.clone(),
+                Schema::Complement(Box::new(wrapper.clone())),
+            ]);
+            assert!(
+                !meet.is_empty_under(&[]),
+                "so the law must decline {wrapper:?}"
+            );
+        }
+
+        // Without one, the same shapes are sets and the law still decides.
+        let plain = Schema::Set(Box::new(Schema::Int));
+        assert!(denotes_a_set(&plain, &NoLeafRelations));
+        assert!(
+            Schema::Intersection(vec![plain.clone(), Schema::Complement(Box::new(plain))])
+                .is_empty_under(&[])
+        );
+    }
+
+    /// An oracle that reports every atom it is asked about as a set, standing
+    /// for the bindings' answer about a pure class.
+    struct Pure;
+
+    impl LeafRelations for Pure {
+        fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
+            None
+        }
+
+        fn atom_denotes_a_set(&self, _atom: &Schema) -> Option<bool> {
+            Some(true)
+        }
+    }
+
+    /// A class is referred to the oracle, and a core with none declines it.
+    ///
+    /// The default answers nothing, which is what makes an unwired core
+    /// conservative rather than wrong: `Instance ∩ ¬Instance` is not decided
+    /// empty until the bindings say the class is pure.
+    #[test]
+    fn a_class_without_an_oracle_is_not_a_set() {
+        let class = Schema::Instance(ClassIx::new(0));
+        assert_eq!(NoLeafRelations.atom_denotes_a_set(&class), None);
+        assert!(!denotes_a_set(&class, &NoLeafRelations));
+
+        assert!(denotes_a_set(&class, &Pure));
     }
 
     /// The structural region rules decide without the descriptor, and stay

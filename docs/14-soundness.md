@@ -156,13 +156,25 @@ The soundness is relative to a small, explicit trust base:
   questions through Python — `isinstance`, `__eq__`, a rich comparison, `__len__`,
   `%`, a predicate — and reads the answers as facts about it. A method that
   answers differently on two calls with the same argument is not describing a
-  set, and both the walk and the comparison operators are built on the assumption
-  that none does. Two rules rest on it directly, and neither can check it:
-  `A & ~A` is decided empty for every `A`, which holds only because `A` admits a
-  given value or does not; and a bound conjunction is decided unsatisfiable by
-  comparing the *bounds*, which holds only because a value ordered against one
-  is ordered the same way against the other. A class whose `__instancecheck__`
-  alternates, or a predicate that flips, gets a `True` no value supports.
+  set, and the walk is built on the assumption that none does.
+
+  **`A & ~A` no longer rests on it.** That law is a law about sets, so it is
+  applied only where both sides are one: an atom running a predicate, or a class
+  whose metaclass overrides `__instancecheck__` or `__subclasscheck__`, is
+  declined rather than folded. An `abc.ABC` is declined by the same test, because
+  `ABCMeta` overrides both hooks -- which is how `register` changes the relation
+  after a schema is built. A class whose metaclass leaves the hooks alone is a
+  set, and the law still decides it.
+
+  **A bound conjunction still rests on it.** A contradiction between two bounds
+  is decided by comparing the *bounds*, which holds only because a value ordered
+  against one is ordered the same way against the other. `Annotated[int, Gt(0),
+  Lt(1)]` is decided empty, and an `int` subclass whose comparisons answer `True`
+  satisfies both -- a `True` no value supports. Deciding it soundly means reading
+  the bounds over the *exact* builtin, which needs a schema to distinguish
+  "exactly `int`" from "an `int` or a subclass"; that distinction is not
+  expressible yet. The case is pinned as a known-unsound test rather than left
+  unwritten.
 - **A value's length is the length of what the walk reads.** `MinLen`/`MaxLen`
   call `__len__`, while a sequence schema walks the storage the container holds.
   For every builtin these are the same number; a subclass that overrides one and

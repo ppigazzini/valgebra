@@ -206,6 +206,30 @@ impl PoolRelations<'_, '_> {
 }
 
 impl LeafRelations for PoolRelations<'_, '_> {
+    /// Whether the class behind an `Instance` atom denotes a set.
+    ///
+    /// A class is **pure** when its metaclass leaves both `isinstance` and
+    /// `issubclass` alone. Override either and the answer is user code: two
+    /// occurrences of one class can disagree, so `A ∩ ¬A` is not empty and the
+    /// law that says it is must not fire. `type` itself is the one metaclass
+    /// known to answer from the class hierarchy and nothing else.
+    ///
+    /// An `abc.ABC` is excluded by the same test rather than by a second one:
+    /// `ABCMeta` overrides both hooks, which is how `register` can change the
+    /// relation after a schema is built.
+    fn atom_denotes_a_set(&self, atom: &Schema) -> Option<bool> {
+        let Schema::Instance(index) = atom else {
+            return None;
+        };
+        let class = self.literals.get(index.get())?.bind(self.py);
+        let metaclass = class.get_type();
+        let plain = self.py.get_type::<PyType>();
+        let untouched = |hook: &str| -> Option<bool> {
+            Some(metaclass.getattr(hook).ok()?.is(&plain.getattr(hook).ok()?))
+        };
+        Some(untouched("__instancecheck__")? && untouched("__subclasscheck__")?)
+    }
+
     fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
         match sub {
             // A literal denotes a singleton: `{v}` is a subtype of `sup` exactly

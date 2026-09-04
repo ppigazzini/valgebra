@@ -11,6 +11,7 @@ import json
 from typing import Annotated, Literal
 
 import annotated_types as at
+import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
@@ -159,3 +160,98 @@ def test_membership_walks_and_paths_agree(sa: object, v: object) -> None:
         assert compiled.is_valid_json(text) == compiled.is_valid(json.loads(text))
     if member:
         assert compiled.ensure(v) is v
+
+
+class _Flip(type):
+    """A metaclass whose ``isinstance`` alternates, so the class is not a set."""
+
+    answers = 0
+
+    def __instancecheck__(cls, instance: object) -> bool:
+        _Flip.answers += 1
+        return _Flip.answers % 2 == 1
+
+
+class _Coin(metaclass=_Flip):
+    """A class whose membership is a coin toss rather than a fixed set."""
+
+
+class _Pure:
+    """An ordinary class, whose membership is `isinstance` and nothing else."""
+
+
+def _alternating() -> object:
+    """Build a predicate that answers differently each time it is asked."""
+    state = {"answers": 0}
+
+    def coin(_value: object) -> bool:
+        state["answers"] += 1
+        return state["answers"] % 2 == 1
+
+    return at.Predicate(coin)
+
+
+def test_a_callback_atom_is_not_reported_empty_against_itself() -> None:
+    """``A ∩ ¬A = ∅`` is a law about *sets*, and a predicate is not one.
+
+    The walk evaluates each occurrence separately, so an answer that alternates
+    puts one value in both ``A`` and ``¬A``. Reporting the meet empty would be a
+    proof with a witness standing against it, which is the shape of an unsound
+    verdict rather than a conservative one.
+    """
+    predicate = Annotated[int, _alternating()]
+    meet = Validator(intersection(predicate, complement(predicate)))
+
+    assert meet.is_valid(7), "the alternating answers admit the value"
+    assert not meet.is_empty(), "so the meet is not empty"
+
+
+def test_a_hooked_class_is_not_reported_empty_against_itself() -> None:
+    """The same law, and the same reason, one atom along.
+
+    ``isinstance`` against a metaclass that overrides ``__instancecheck__`` runs
+    user code, so the class is not a fixed set either. A class whose metaclass
+    leaves the hooks alone *is* one, and the law still applies to it -- the
+    restriction is to the atoms it does not hold for, not to the law.
+    """
+    hooked = Validator(intersection(_Coin, complement(_Coin)))
+    assert hooked.is_valid(7), "the alternating answers admit the value"
+    assert not hooked.is_empty(), "so the meet is not empty"
+
+    pure = Validator(intersection(_Pure, complement(_Pure)))
+    assert not pure.is_valid(_Pure()), "no value is in a class and outside it"
+    assert pure.is_empty(), "and the law still decides that"
+
+
+class _WeirdInt(int):
+    """An `int` subclass whose comparisons answer `True` whatever they are asked."""
+
+    def __gt__(self, other: object) -> bool:
+        return True
+
+    def __lt__(self, other: object) -> bool:
+        return True
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "a bound is read as Python's operator, and an int subclass may answer it "
+        "any way it likes, so a contradiction between two bounds is not a proof "
+        "that no value satisfies both"
+    ),
+)
+def test_a_bound_contradiction_is_not_reported_empty_over_a_lying_subclass() -> None:
+    """The third atom that is not a set, and the one still open.
+
+    ``Annotated[int, Gt(0), Lt(1)]`` is decided empty because no integer lies
+    between, and ``int`` admits its subclasses -- one of which answers both
+    bounds. Deciding this soundly means reading the bounds over the *exact*
+    builtin, which needs a schema to say "exactly `int`" apart from "an `int` or
+    a subclass of one". That distinction is a class constraint sitting beside a
+    builtin kind, which the descriptor cannot yet hold.
+    """
+    bounded = Validator(Annotated[int, at.Gt(0), at.Lt(1)])
+
+    assert bounded.is_valid(_WeirdInt(5)), "the subclass answers both bounds"
+    assert not bounded.is_empty(), "so the set is not empty"

@@ -581,7 +581,10 @@ impl Schema {
         // downstream may assume one does. `has_complementary_pair` is the one
         // statement of the law, shared with the simplifier; it reaches a pairwise
         // comparison only for a member that is itself a complement.
-        if crate::decision::has_complementary_pair(&members) {
+        // With no oracle here the law declines for an atom only the bindings can
+        // read, which is the safe direction: a join left unfolded still denotes
+        // what it denotes.
+        if crate::decision::has_complementary_pair(&members, &crate::decision::NoLeafRelations) {
             return Schema::Anything;
         }
         Schema::Union(members)
