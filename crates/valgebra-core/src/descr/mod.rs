@@ -24,13 +24,16 @@
 pub mod floats;
 pub mod integers;
 pub mod interval;
+pub mod records;
 pub mod regular;
 pub mod sets;
 pub mod symbolic;
+pub mod values;
 
 use crate::decision::Kind;
 use floats::FloatSet;
 use integers::IntSet;
+use records::RecordLattice;
 use regular::{Alphabet, RegularSet};
 use sets::SetLattice;
 use symbolic::{Guard, SymbolicDfa};
@@ -130,6 +133,12 @@ pub enum Component {
     /// else -- there is no order for an automaton to walk -- so the component is
     /// the powerset of a descriptor rather than a language over it.
     Sets(SetLattice<Descr>),
+    /// The objects this descriptor admits, as a union of open record atoms.
+    ///
+    /// What describes a value of no listed kind: not its class, which only the
+    /// bindings can compare, but the attributes it carries. Always open, because
+    /// an object may carry attributes no schema mentions.
+    Records(RecordLattice<Descr>),
 }
 
 impl Component {
@@ -169,6 +178,7 @@ impl Component {
             Component::Words(set) => set.is_empty(),
             Component::Sequences(set) => set.is_empty(),
             Component::Sets(set) => set.is_empty(),
+            Component::Records(set) => set.is_empty(),
         }
     }
 
@@ -229,6 +239,15 @@ impl Component {
                 };
                 Component::Sets(combined?)
             }
+            (Component::Records(a), Component::Records(b)) => {
+                // A union of record atoms multiplies under a meet in the same
+                // way, and refuses in the same way past the bound.
+                let combined = match op {
+                    Op::Union => a.union(b),
+                    Op::Intersect => a.intersect(b),
+                };
+                Component::Records(combined?)
+            }
             (mine, theirs) => {
                 debug_assert!(false, "combining {mine:?} with {theirs:?} of another kind");
                 mine.clone()
@@ -246,6 +265,7 @@ impl Component {
             Component::Words(set) => Component::Words(set.complement()),
             Component::Sequences(set) => Component::Sequences(set.complement()),
             Component::Sets(set) => Component::Sets(set.complement()),
+            Component::Records(set) => Component::Records(set.complement()),
         }
     }
 }
@@ -308,23 +328,32 @@ enum Op {
 /// different values. Nothing needs normalising afterwards, which is what makes
 /// the operations' laws structural rather than up-to-equivalence.
 ///
-/// The exception is the set component. A union of powerset lines can hold the
-/// same sets two ways -- `P(A ∪ B)` is also the union of `P(A)`, `P(B)` and the
-/// line subtracting both -- and recognising that costs a search for coverings
-/// [`sets`] does not run. So equality is *finer* than agreeing on values once
-/// sets are involved: equal descriptors still admit the same values, but two
-/// that admit the same values may compare unequal. Every law over a descriptor
-/// that can hold a set is therefore checked against the values.
+/// The exceptions are three. [`sets`] and [`records`] are held as a *union*, and
+/// a union can hold the same values two ways -- `P(A ∪ B)` is also the union of
+/// `P(A)`, `P(B)` and the line subtracting both -- which costs a search for
+/// coverings neither runs. [`symbolic`] is the third once its letters are
+/// descriptors: minimisation asks the guards to join and to say what they leave,
+/// and a descriptor cannot always answer, because answering rebuilds the very
+/// automata being minimised. Each such refusal leaves a coarser table for the
+/// same language.
+///
+/// So equality is *finer* than agreeing on values once any of the three is
+/// involved: equal descriptors still admit the same values, but two that admit
+/// the same values may compare unequal. Every law over a descriptor that can
+/// hold one is therefore checked against the values, and the laws checked by
+/// equality are the ones over the components that are canonical.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Descr {
     /// One component per kind, indexed by that kind's position in [`Kind::ALL`].
     kinds: [Component; Kind::ALL.len()],
     /// The values of no listed kind -- a class instance, a callable, a generator.
     ///
-    /// Coarse and staying that way for now: what separates two such values is
-    /// their class, and a class is something only the bindings can compare. It
-    /// exists so a complement means what it says: the complement of `int` holds
-    /// every non-int value, not merely the ones this partition names.
+    /// Described by the attributes they carry, which is what the core can see of
+    /// them. What it cannot see is their *class*: only the bindings can compare
+    /// two of those, so the class half of a schema like `Attrs` stays outside
+    /// this and meets it from there. The slot exists so a complement means what
+    /// it says: the complement of `int` holds every non-int value, not merely
+    /// the ones this partition names.
     other: Component,
 }
 
@@ -334,7 +363,7 @@ impl Descr {
     pub fn nothing() -> Descr {
         Descr {
             kinds: Kind::ALL.map(Component::bottom),
-            other: Component::Coarse(false),
+            other: Component::Records(RecordLattice::empty()),
         }
     }
 
@@ -343,7 +372,7 @@ impl Descr {
     pub fn anything() -> Descr {
         Descr {
             kinds: Kind::ALL.map(Component::top),
-            other: Component::Coarse(true),
+            other: Component::Records(RecordLattice::all()),
         }
     }
 
@@ -445,6 +474,32 @@ impl Descr {
         let mut descr = Descr::nothing();
         descr.put(kind, Component::Sets(SetLattice::of(members)));
         Some(descr)
+    }
+
+    /// The objects carrying `label`, whose value is in `ty`.
+    ///
+    /// A value of no listed kind is described by the attributes it carries, and
+    /// the record is always **open**: an object may carry attributes no schema
+    /// mentions, so naming one constrains that attribute and no other. That is
+    /// what makes a complement finite -- an object fails by holding a *named*
+    /// attribute outside its type, so the complement splits over the labels.
+    ///
+    /// `optional` admits the objects that do not carry the attribute at all,
+    /// which is membership of the undefined value rather than a rule beside the
+    /// type.
+    #[must_use]
+    pub fn attribute(label: &str, ty: &Descr, optional: bool) -> Descr {
+        let mut descr = Descr::nothing();
+        descr.other = Component::Records(RecordLattice::attribute(label, ty.clone(), optional));
+        descr
+    }
+
+    /// The objects that do not carry `label` at all.
+    #[must_use]
+    pub fn without_attribute(label: &str) -> Descr {
+        let mut descr = Descr::nothing();
+        descr.other = Component::Records(RecordLattice::without(label));
+        descr
     }
 
     /// The integers that are multiples of `step`, or `None` where the integer
@@ -550,6 +605,7 @@ impl Descr {
             Component::Words(set) => value.word.is_some_and(|w| set.holds(w)),
             Component::Sequences(set) => value.elements.is_some_and(|e| set.holds(e)),
             Component::Sets(set) => value.elements.is_some_and(|e| set.holds(e)),
+            Component::Records(set) => value.attributes.is_some_and(|a| set.holds(a)),
         }
     }
 }
@@ -616,6 +672,12 @@ pub struct Value {
     /// For a set kind these are its *members*, in no particular order -- a set
     /// is its members and the powerset rule reads them as a whole rather than
     /// as a word.
+    /// The attributes, where the value is of no listed kind.
+    ///
+    /// What an object *is*, at this resolution: the names it carries and what
+    /// each one holds. An attribute absent from the list is one the object does
+    /// not carry, which an open record reads as the undefined value.
+    pub attributes: Option<&'static [(&'static str, Value)]>,
     pub elements: Option<&'static [Value]>,
 }
 
@@ -630,6 +692,7 @@ impl Value {
             float: None,
             word: None,
             elements: None,
+            attributes: None,
         }
     }
 
@@ -643,6 +706,7 @@ impl Value {
             float: None,
             word: None,
             elements: None,
+            attributes: None,
         }
     }
 
@@ -656,6 +720,7 @@ impl Value {
             float: None,
             word: None,
             elements: None,
+            attributes: None,
         }
     }
 
@@ -670,6 +735,7 @@ impl Value {
             float: None,
             word: Some(word),
             elements: None,
+            attributes: None,
         }
     }
 
@@ -683,12 +749,20 @@ impl Value {
             float: Some(value),
             word: None,
             elements: None,
+            attributes: None,
         }
     }
 
-    /// A value of no listed kind: a class instance, a callable.
+    /// A value of no listed kind carrying no attribute anyone named.
     #[must_use]
     pub const fn other() -> Value {
+        Value::object(&[])
+    }
+
+    /// A value of no listed kind -- a class instance, a callable -- described by
+    /// the attributes it carries.
+    #[must_use]
+    pub const fn object(attributes: &'static [(&'static str, Value)]) -> Value {
         Value {
             kind: None,
             boolean: None,
@@ -696,6 +770,7 @@ impl Value {
             float: None,
             word: None,
             elements: None,
+            attributes: Some(attributes),
         }
     }
     /// One sequence, for a sequence kind. The elements are values again, which
@@ -709,6 +784,7 @@ impl Value {
             float: None,
             word: None,
             elements: Some(elements),
+            attributes: None,
         }
     }
 }
@@ -799,9 +875,22 @@ mod tests {
         for kind in [Kind::Set, Kind::FrozenSet] {
             values.extend(SEQUENCES.map(|members| Value::sequence(members, kind)));
         }
-        values.push(Value::other());
+        // Objects of no listed kind, described by the attributes they carry.
+        // The one with an attribute nobody names is what holds the record open.
+        values.extend(OBJECTS.map(Value::object));
         values
     }
+
+    /// The attribute lists the universe's objects carry.
+    const OBJECTS: [&[(&str, Value)]; 7] = [
+        &[],
+        &[("x", Value::integer(0))],
+        &[("x", Value::integer(1))],
+        &[("y", Value::integer(0))],
+        &[("x", Value::integer(0)), ("y", Value::integer(1))],
+        &[("x", Value::word(b"a", Kind::Str))],
+        &[("z", Value::integer(0))],
+    ];
 
     /// The distinction the coarse component could not make.
     ///
@@ -1051,6 +1140,107 @@ mod tests {
         assert!(Descr::set(&Descr::nothing(), Kind::Str).is_none());
     }
 
+    /// The record the report calls carrier-free: a set of objects fixed by the
+    /// attributes alone, with no class in it.
+    ///
+    /// This is what `Attrs` could not say. A dataclass `D(x: int)` is the meet
+    /// of a class and this record; the record on its own is the half that lives
+    /// in the algebra, and it is the half that makes `¬Attrs` representable --
+    /// the complement of an attribute constraint is another one.
+    #[test]
+    fn an_attribute_record_is_a_set_without_a_class_in_it() {
+        const HAS_INT: &[(&str, Value)] = &[("x", Value::integer(1))];
+        const HAS_WORD: &[(&str, Value)] = &[("x", Value::word(b"a", Kind::Str))];
+        const HAS_NEITHER: &[(&str, Value)] = &[("y", Value::integer(1))];
+
+        let with_int = Descr::attribute("x", &Descr::of_kind(Kind::Int), false);
+
+        assert!(!with_int.is_empty());
+        assert!(with_int.admits(Value::object(HAS_INT)));
+        assert!(!with_int.admits(Value::object(HAS_WORD)));
+        assert!(!with_int.admits(Value::object(HAS_NEITHER)));
+
+        // The complement is a set of the same kind rather than an absence of
+        // one, which is what the tree could not represent.
+        let without_int = with_int.complement();
+        assert!(without_int.admits(Value::object(HAS_WORD)));
+        assert!(without_int.admits(Value::object(HAS_NEITHER)));
+        assert!(!without_int.admits(Value::object(HAS_INT)));
+    }
+
+    /// The record is **open**: it constrains what it names and nothing else.
+    ///
+    /// The only sound reading for a Python object, which may carry attributes no
+    /// schema mentions -- and the reason a complement stays finite, since an
+    /// attribute nobody named cannot make an object fail.
+    #[test]
+    fn a_record_constrains_the_attributes_it_names_and_no_others() {
+        const NAMED: &[(&str, Value)] = &[("x", Value::integer(1))];
+        const AND_MORE: &[(&str, Value)] = &[("x", Value::integer(1)), ("z", Value::integer(9))];
+
+        let with_int = Descr::attribute("x", &Descr::of_kind(Kind::Int), false);
+
+        assert!(with_int.admits(Value::object(NAMED)));
+        assert!(with_int.admits(Value::object(AND_MORE)));
+    }
+
+    /// Meeting two records over different attributes is the object carrying
+    /// both, which is formula (12) pointwise.
+    #[test]
+    fn two_attributes_meet_rather_than_conflict() {
+        const BOTH: &[(&str, Value)] = &[("x", Value::integer(1)), ("y", Value::integer(0))];
+        const ONE: &[(&str, Value)] = &[("x", Value::integer(1))];
+
+        let met = Descr::attribute("x", &Descr::of_kind(Kind::Int), false)
+            .intersect(&Descr::attribute("y", &Descr::of_kind(Kind::Int), false))
+            .expect("two small records");
+
+        assert!(!met.is_empty());
+        assert!(met.admits(Value::object(BOTH)));
+        assert!(!met.admits(Value::object(ONE)));
+    }
+
+    /// An attribute required to hold nothing admits no object at all, which is
+    /// emptiness (11); an optional one still admits the object without it.
+    #[test]
+    fn a_required_attribute_of_no_values_is_empty_and_an_optional_one_is_not() {
+        const NOTHING: &[(&str, Value)] = &[];
+
+        let required = Descr::attribute("x", &Descr::nothing(), false);
+        let optional = Descr::attribute("x", &Descr::nothing(), true);
+
+        assert!(required.is_empty());
+        assert!(!optional.is_empty());
+        assert!(optional.admits(Value::object(NOTHING)));
+        assert_eq!(optional, Descr::without_attribute("x"));
+    }
+
+    /// An object is of no listed kind, so a record never admits one that is.
+    #[test]
+    fn a_record_admits_no_value_of_a_listed_kind() {
+        let with_int = Descr::attribute("x", &Descr::of_kind(Kind::Int), false);
+
+        assert!(!with_int.admits(Value::integer(1)));
+        assert!(!with_int.admits(Value::sequence(&[], Kind::List)));
+    }
+
+    /// A loop guarded by every value *is* the set of every sequence, and has to
+    /// be the same descriptor.
+    ///
+    /// Two spellings of one table, and the reason the row carries an else edge
+    /// rather than a guard for the rest: a guard that leaves nothing leaves the
+    /// else edge dead, and a dead else edge is not written down. Without that,
+    /// two equal languages compare unequal and the lattice laws fail on a
+    /// difference that is not one.
+    #[test]
+    fn a_loop_on_every_value_is_the_set_of_every_sequence() {
+        let anything = Descr::anything();
+        for kind in [Kind::List, Kind::Tuple] {
+            let looped = Descr::sequence(&[], Some(&anything), kind).expect("a sequence kind");
+            assert_eq!(looped, Descr::of_kind(kind), "{kind:?}");
+        }
+    }
+
     /// The element sequences the universe is built from.
     const SEQUENCES: [&[Value]; 6] = [
         &[],
@@ -1085,8 +1275,16 @@ mod tests {
             .collect()
     });
 
-    /// A generator over the descriptors the constructors can build, combined by
-    /// the three operations to a small depth.
+    /// Descriptors whose every component is canonical.
+    ///
+    /// No sequence, set or object: those three are held as a union or as a
+    /// table a guard's own bound can leave coarse, so two of them can admit the
+    /// same values and compare unequal. Keeping them out is what lets the laws
+    /// below be checked *by equality*, which is stronger than any universe can
+    /// be -- two regular languages agree exactly when they agree on every word
+    /// shorter than the product of their state counts, and no list of values
+    /// says that. [`descr_with_sets`] puts them back and checks the same laws
+    /// against the values.
     fn descr() -> impl Strategy<Value = Descr> {
         let leaf = prop_oneof![
             Just(Descr::nothing()),
@@ -1106,38 +1304,42 @@ mod tests {
                     .prop_map(|(a, b)| a.union(&b).unwrap_or_else(Descr::anything)),
                 (inner.clone(), inner.clone())
                     .prop_map(|(a, b)| a.intersect(&b).unwrap_or_else(Descr::nothing)),
-                inner.clone().prop_map(|a| a.complement()),
-                // Both spellings from one constructor: a prefix with no tail is
-                // a chain, a tail is a loop, and the two together are the
-                // variadic form. The letters are descriptors drawn the same way,
-                // so a sequence of sequences is generated too.
-                (
-                    proptest::collection::vec(inner.clone(), 0..=2),
-                    proptest::option::of(inner),
-                    prop_oneof![Just(Kind::List), Just(Kind::Tuple)],
-                )
-                    .prop_map(|(prefix, tail, kind)| {
-                        Descr::sequence(&prefix, tail.as_ref(), kind).unwrap_or_else(Descr::nothing)
-                    }),
+                inner.prop_map(|a| a.complement()),
             ]
         })
     }
 
-    /// The same descriptors, plus the sets a powerset component holds.
+    /// The same descriptors, plus the sequences, sets and objects the three
+    /// non-canonical components hold.
     ///
-    /// A second generator rather than a branch of the first, because the set
-    /// component is the one that is **not canonical**: a union of powerset lines
+    /// A second generator rather than a branch of the first, because those three
+    /// components are the ones that are **not canonical**: a union of powerset lines
     /// can hold the same sets two ways. Every law below is therefore checked
     /// against the values rather than by equality of the forms, which would fail
     /// on a difference that is not a difference. The generator above stays free
     /// of sets so the laws that *can* be checked at full strength still are.
     fn descr_with_sets() -> impl Strategy<Value = Descr> {
         let leaf = prop_oneof![
-            2 => descr(),
-            1 => (descr(), prop_oneof![Just(Kind::Set), Just(Kind::FrozenSet)])
+            4 => descr(),
+            2 => (descr(), prop_oneof![Just(Kind::Set), Just(Kind::FrozenSet)])
                 .prop_map(|(elements, kind)| {
                     Descr::set(&elements, kind).unwrap_or_else(Descr::nothing)
                 }),
+            2 => (
+                proptest::collection::vec(descr(), 0..=2),
+                proptest::option::of(descr()),
+                prop_oneof![Just(Kind::List), Just(Kind::Tuple)],
+            )
+                .prop_map(|(prefix, tail, kind)| {
+                    Descr::sequence(&prefix, tail.as_ref(), kind).unwrap_or_else(Descr::nothing)
+                }),
+            2 => (
+                prop_oneof![Just("x"), Just("y")],
+                descr(),
+                proptest::bool::ANY,
+            )
+                .prop_map(|(label, ty, optional)| Descr::attribute(label, &ty, optional)),
+            1 => prop_oneof![Just("x"), Just("y")].prop_map(Descr::without_attribute),
         ];
         leaf.prop_recursive(2, 8, 2, |inner| {
             prop_oneof![
