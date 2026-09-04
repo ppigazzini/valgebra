@@ -1,6 +1,7 @@
 //! The decision procedures over the IR: emptiness, subtyping, equivalence, and
 //! disjointness, with the leaf-relation oracle and the scalar region partition.
 
+use crate::descr::lower::{NoConstants, lower};
 use crate::ir::{
     ClassIx, ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
 };
@@ -369,7 +370,7 @@ impl Schema {
             &[],
             &mut Vec::new(),
             &Cell::new(DECISION_BUDGET),
-        )
+        ) || self.descriptor_is_empty()
     }
 
     /// Like [`is_empty`](Self::is_empty), but resolving recursive references
@@ -658,6 +659,12 @@ impl Schema {
         defs: &[Schema],
     ) -> bool {
         let budget = Cell::new(DECISION_BUDGET);
+        // The structural rules first, and the descriptor only where they
+        // decline. Both orders give the same answer -- the descriptor only ever
+        // turns a `false` into a `true` -- but only this one is cheap: building
+        // a descriptor determinises automata and takes products, which is work
+        // worth doing to *win* a decision and pure waste beside a `true` the
+        // rules already reached.
         self.is_subtype_rec(
             other,
             SubtypeCx {
@@ -666,7 +673,37 @@ impl Schema {
                 budget: &budget,
             },
             &mut Vec::new(),
-        )
+        ) || self.descriptor_contained_in(other)
+    }
+
+    /// Whether the descriptor proves every value of this schema is one of
+    /// `other`, by proving the difference empty.
+    ///
+    /// A **widening and nothing else**: it can turn a `false` into a `true` and
+    /// never the other way, so the structural procedure below still answers
+    /// everything it answered before. That is what makes it safe to ask first --
+    /// a schema the descriptor cannot hold, or a difference it cannot prove
+    /// empty, falls through untouched.
+    ///
+    /// The pool is the one that knows nothing, because a relation on `Schema`
+    /// has no object table: a schema naming a constant declines here and is
+    /// decided the old way.
+    fn descriptor_contained_in(&self, other: &Schema) -> bool {
+        let pool = NoConstants;
+        let (Some(mine), Some(theirs)) = (lower(self, &pool), lower(other, &pool)) else {
+            return false;
+        };
+        mine.intersect(&theirs.complement())
+            .is_some_and(|difference| difference.emptiness() == Verdict::Empty)
+    }
+
+    /// Whether the descriptor proves this schema admits no value.
+    ///
+    /// The same widening as [`descriptor_contained_in`](Self::descriptor_contained_in),
+    /// and asked in the same place: after the structural rules, never instead of
+    /// them.
+    fn descriptor_is_empty(&self) -> bool {
+        lower(self, &NoConstants).is_some_and(|descr| descr.emptiness() == Verdict::Empty)
     }
 
     fn is_subtype_rec(
@@ -962,8 +999,14 @@ impl Schema {
             defs,
             budget: &budget,
         };
-        self.is_subtype_rec(other, cx, &mut Vec::new())
-            && other.is_subtype_rec(self, cx, &mut Vec::new())
+        // Each direction is widened the same way subtyping is, so equivalence
+        // agrees with the two inclusions it is defined as. Asking the descriptor
+        // per direction rather than once for both is what keeps that identity: a
+        // pair it decides one way round and not the other must still answer.
+        let contained = |mine: &Schema, theirs: &Schema| {
+            mine.is_subtype_rec(theirs, cx, &mut Vec::new()) || mine.descriptor_contained_in(theirs)
+        };
+        contained(self, other) && contained(other, self)
     }
 }
 
@@ -2017,7 +2060,195 @@ mod region_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::ConstIx;
+
+    /// The structural inclusion procedure alone, with no descriptor beside it.
+    ///
+    /// `is_subtype_of_under` asks the descriptor where the rules decline, which
+    /// is what widens the public relations -- and what makes a defect in a rule
+    /// invisible through them, since the answer comes out right for the other
+    /// reason. A rule is pinned by asking it on its own.
+    fn structural(sub: &Schema, sup: &Schema) -> bool {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.is_subtype_rec(
+            sup,
+            SubtypeCx {
+                oracle: &NoLeafRelations,
+                defs: &[],
+                budget: &budget,
+            },
+            &mut Vec::new(),
+        )
+    }
+
+    /// The structural inclusion rules, held to their own work.
+    ///
+    /// The descriptor is asked after these rules and decides much of what they
+    /// do, so a defect in one is invisible through `is_subtype_of` -- the answer
+    /// comes out right for the other reason. `is_subtype_of_under` is the
+    /// structural procedure alone, which is where each rule has to be pinned.
+    #[test]
+    fn the_structural_inclusion_rules_decide_without_the_descriptor() {
+        // Built raw rather than through the smart constructors, which fold a
+        // meet of two kinds before it ever reaches the rule under test.
+        let meet = |members: [Schema; 2]| Schema::Intersection(members.to_vec());
+        let joined = Schema::union([Schema::Int, Schema::Float]);
+
+        // `A ⊆ (Y ∩ Z)` needs both conjuncts.
+        assert!(structural(
+            &Schema::Int,
+            &meet([Schema::Int, joined.clone()])
+        ));
+        assert!(!structural(
+            &Schema::Int,
+            &meet([Schema::Int, Schema::Float])
+        ));
+        // `(A ∩ B) ⊆ C` when some conjunct already is, and when the meet lands
+        // in one branch of a union supertype -- the second half of that arm.
+        assert!(structural(&meet([Schema::Int, Schema::Str]), &Schema::Int));
+        assert!(structural(
+            &meet([Schema::Int, Schema::Bytes]),
+            &Schema::union([Schema::Int, Schema::Str])
+        ));
+        // An inhabited meet that no branch covers: an empty one would be a
+        // subtype of everything and would say nothing about the rule.
+        assert!(!structural(
+            &meet([Schema::Int, joined.clone()]),
+            &Schema::union([Schema::Float, Schema::Str])
+        ));
+
+        // Set and frozenset inclusion reduces to element inclusion, and the two
+        // kinds do not cross.
+        let ints = Schema::Set(Box::new(Schema::Int));
+        assert!(structural(&ints, &Schema::Set(Box::new(joined.clone()))));
+        assert!(!structural(
+            &ints,
+            &Schema::FrozenSet(Box::new(joined.clone()))
+        ));
+        assert!(structural(
+            &Schema::FrozenSet(Box::new(Schema::Int)),
+            &Schema::FrozenSet(Box::new(joined.clone()))
+        ));
+
+        // Each rule above is a *shortcut*: delete it and the general reduction
+        // `A ⊆ B` to `A ∩ ¬B = ∅` decides the same thing. What the shortcut is
+        // for is the case where that reduction declines -- and an atom carrying
+        // a callback is exactly one, since the complement law does not hold of
+        // it. So each rule is pinned over a schema the reduction cannot read.
+        let opaque = Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))],
+        };
+        assert!(structural(&opaque, &meet([opaque.clone(), opaque.clone()])));
+        assert!(structural(&meet([opaque.clone(), Schema::Str]), &opaque));
+        assert!(structural(
+            &meet([opaque.clone(), Schema::Str]),
+            &Schema::union([opaque.clone(), Schema::Float])
+        ));
+
+        // Complement is contravariant: the inclusion under it runs the other way.
+        let wider = Schema::Complement(Box::new(Schema::Int));
+        let narrower = Schema::Complement(Box::new(joined));
+        assert!(structural(&narrower, &wider));
+        assert!(!structural(&wider, &narrower));
+        // And over an atom the reduction cannot read, where nothing else does.
+        assert!(structural(
+            &Schema::Complement(Box::new(opaque.clone())),
+            &Schema::Complement(Box::new(meet([opaque.clone(), Schema::Str])))
+        ));
+    }
+
+    /// A fixed-arity sequence splits across the branches of a union, decided by
+    /// the product rule rather than by the descriptor beside it.
+    #[test]
+    fn a_product_splits_across_a_union_without_the_descriptor() {
+        let pair = |a: Schema, b: Schema| Schema::tuple(SeqShape::fixed([a, b]));
+        let subject = pair(Schema::union([Schema::Int, Schema::Str]), Schema::Int);
+        let split = Schema::union([
+            pair(Schema::Int, Schema::Int),
+            pair(Schema::Str, Schema::Int),
+        ]);
+
+        assert!(structural(&subject, &split), "the branches cover it");
+        assert!(
+            !structural(
+                &subject,
+                &Schema::union([
+                    pair(Schema::Int, Schema::Int),
+                    pair(Schema::Bytes, Schema::Int),
+                ])
+            ),
+            "and branches that do not cover it decide no"
+        );
+        // A repeated tail is not a product, so there is nothing to split.
+        let variadic = Schema::tuple(SeqShape::homogeneous(Schema::union([
+            Schema::Int,
+            Schema::Str,
+        ])));
+        assert!(!structural(
+            &variadic,
+            &Schema::union([
+                Schema::tuple(SeqShape::homogeneous(Schema::Int)),
+                Schema::tuple(SeqShape::homogeneous(Schema::Str)),
+            ])
+        ));
+    }
+
+    /// The structural region rules decide without the descriptor, and stay
+    /// pinned where it would otherwise answer for them.
+    ///
+    /// `is_empty` asks the descriptor after these rules, so a defect in them is
+    /// invisible through it -- the answer comes out right for the other reason.
+    /// `is_empty_under` is the structural procedure alone, which is where a rule
+    /// has to be held to its own work.
+    #[test]
+    fn the_scalar_regions_decide_a_disjoint_meet_without_the_descriptor() {
+        for (left, right) in [
+            (Schema::NoneType, Schema::Str),
+            (Schema::Str, Schema::Float),
+            (Schema::NoneType, Schema::Bytes),
+        ] {
+            let meet = Schema::meet([left.clone(), right.clone()]);
+            assert!(
+                meet.is_empty_under(&[]),
+                "{left:?} and {right:?} share no region"
+            );
+        }
+    }
+
+    /// A sequence with an uninhabited prefix element admits nothing, decided by
+    /// the structural rule rather than by the descriptor beside it.
+    #[test]
+    fn an_uninhabited_prefix_empties_a_sequence_without_the_descriptor() {
+        let empty_element = Schema::list(SeqShape::fixed([Schema::Nothing]));
+        assert!(empty_element.is_empty_under(&[]));
+
+        // The tail is not a prefix: a sequence may stop before it, so an
+        // uninhabited tail leaves the sequence that ends at the prefix.
+        let empty_tail = Schema::list(SeqShape::homogeneous(Schema::Nothing));
+        assert!(!empty_tail.is_empty_under(&[]));
+    }
+
+    /// The descriptor decides an emptiness the structural rules do not, and
+    /// `is_empty` reports it.
+    ///
+    /// A language meet: the words matching `a` that do not match `a|b` are none
+    /// of them. Nothing structural reads a regex as the language it denotes, so
+    /// this is the descriptor's answer or no answer at all.
+    #[test]
+    fn the_descriptor_decides_an_emptiness_the_rules_decline() {
+        let language = |pattern: &str| Schema::Refine {
+            base: Box::new(Schema::Str),
+            constraints: vec![Constraint::Regex(pattern.to_owned())],
+        };
+        let narrower = Schema::meet([language("a"), Schema::Complement(Box::new(language("a|b")))]);
+
+        assert!(narrower.is_empty(), "every `a` is an `a|b`");
+        assert!(
+            !narrower.is_empty_under(&[]),
+            "and the structural rules do not say so"
+        );
+    }
+    use crate::ir::{ClassIx, ConstIx, PredIx};
     use proptest::prelude::*;
 
     /// A generator mixing the scalar-decidable atoms with opaque leaves (the
@@ -2390,8 +2621,12 @@ mod tests {
             Schema::tuple(SeqShape::homogeneous(Schema::Int)),
             Schema::tuple(SeqShape::homogeneous(Schema::Str)),
         ])));
-        // Nor is a branch with a tail a product, so it drops out of the branches.
-        assert!(!subject.is_subtype_of(&Schema::union([
+        // A branch with a tail is not a product either, so it drops out of the
+        // *structural* rule -- and the relation holds anyway: every `(int, int)`
+        // is a tuple of ints, and every `(str, int)` is the second branch. The
+        // descriptor decides it, which is what a language rather than a product
+        // decomposition buys.
+        assert!(subject.is_subtype_of(&Schema::union([
             Schema::tuple(SeqShape::prefix_tail([Schema::Int], Schema::Int)),
             tuple([Schema::Str, Schema::Int]),
         ])));
