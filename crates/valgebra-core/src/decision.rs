@@ -73,7 +73,7 @@ impl Verdict {
     /// absorbs. Otherwise every part must be proven inhabited for the whole to
     /// be, and one `Unknown` leaves it unknown. An empty iterator is `Inhabited`:
     /// nothing is required, so the empty value satisfies it.
-    fn every(parts: impl Iterator<Item = Verdict>) -> Verdict {
+    pub(crate) fn every(parts: impl Iterator<Item = Verdict>) -> Verdict {
         let mut verdict = Verdict::Inhabited;
         for part in parts {
             match part {
@@ -91,7 +91,7 @@ impl Verdict {
     /// so `Inhabited` absorbs; every part must be proven empty for the whole to
     /// be. An empty iterator is `Empty`, which is what a union of no members
     /// denotes.
-    fn any(parts: impl Iterator<Item = Verdict>) -> Verdict {
+    pub(crate) fn any(parts: impl Iterator<Item = Verdict>) -> Verdict {
         let mut verdict = Verdict::Empty;
         for part in parts {
             match part {
