@@ -25,6 +25,7 @@ pub mod classes;
 pub mod floats;
 pub mod integers;
 pub mod interval;
+pub mod lower;
 pub mod records;
 pub mod regular;
 pub mod sets;
@@ -553,6 +554,15 @@ impl Descr {
         self.kinds
             .get(Descr::position(kind))
             .unwrap_or(&Component::Coarse(false))
+    }
+
+    /// Put an integer set in the `int` slot, leaving every other kind empty.
+    ///
+    /// The one place a caller outside this module builds a component directly:
+    /// a refinement is a set of integers before it is anything else, and the
+    /// lowering meets it with whatever the base admits.
+    pub fn integers(&mut self, set: IntSet) {
+        self.put(Kind::Int, Component::Integers(set));
     }
 
     fn put(&mut self, kind: Kind, component: Component) {
