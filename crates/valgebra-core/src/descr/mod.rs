@@ -31,7 +31,7 @@ pub mod sets;
 pub mod symbolic;
 pub mod values;
 
-use crate::decision::Kind;
+use crate::decision::{Kind, Verdict};
 use classes::Class;
 use floats::FloatSet;
 use integers::IntSet;
@@ -170,17 +170,29 @@ impl Component {
         }
     }
 
-    /// Whether this component admits no value at all.
-    fn is_empty(&self) -> bool {
+    /// What is known about this component admitting a value.
+    ///
+    /// Exact for every representation whose emptiness is a computation over a
+    /// finite structure. The two held as a *union* can answer `Unknown`: past
+    /// their bound there is no union to read, and a class constraint can rest on
+    /// a subclass the core cannot enumerate.
+    fn emptiness(&self) -> Verdict {
+        let exact = |empty: bool| {
+            if empty {
+                Verdict::Empty
+            } else {
+                Verdict::Inhabited
+            }
+        };
         match self {
-            Component::Coarse(present) => !present,
-            Component::Booleans(set) => set.is_empty(),
-            Component::Integers(set) => set.is_empty(),
-            Component::Floats(set) => set.is_empty(),
-            Component::Words(set) => set.is_empty(),
-            Component::Sequences(set) => set.is_empty(),
-            Component::Sets(set) => set.is_empty(),
-            Component::Records(set) => set.is_empty(),
+            Component::Coarse(present) => exact(!present),
+            Component::Booleans(set) => exact(set.is_empty()),
+            Component::Integers(set) => exact(set.is_empty()),
+            Component::Floats(set) => exact(set.is_empty()),
+            Component::Words(set) => exact(set.is_empty()),
+            Component::Sequences(set) => exact(set.is_empty()),
+            Component::Sets(set) => set.emptiness(),
+            Component::Records(set) => set.emptiness(),
         }
     }
 
@@ -594,14 +606,31 @@ impl Descr {
         })
     }
 
-    /// Whether this set admits no value.
+    /// Whether this set is **proved** to admit no value.
     ///
-    /// Every component empty, which is the whole emptiness decision at this
-    /// resolution: the kinds partition the universe, so a value the descriptor
-    /// admits is a value some component admits.
+    /// The reduction every relation makes, named once: `Unknown` is not a proof,
+    /// so it answers `false`. [`emptiness`](Descr::emptiness) is what tells a
+    /// proof of inhabitation apart from a failure to prove emptiness.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.kinds.iter().all(Component::is_empty) && self.other.is_empty()
+        self.emptiness() == Verdict::Empty
+    }
+
+    /// What is known about this set admitting a value.
+    ///
+    /// The kinds partition the universe, so a value the descriptor admits is a
+    /// value some component admits: the verdict is the union's, empty only when
+    /// every component is proved empty and inhabited as soon as one is proved
+    /// inhabited. `Unknown` is what is left -- no component proved either way,
+    /// and one of them could not say.
+    #[must_use]
+    pub fn emptiness(&self) -> Verdict {
+        Verdict::any(
+            self.kinds
+                .iter()
+                .chain([&self.other])
+                .map(Component::emptiness),
+        )
     }
 
     /// Whether this set admits `value`.
@@ -653,6 +682,10 @@ impl Guard for Descr {
 
     fn is_empty(&self) -> bool {
         Descr::is_empty(self)
+    }
+
+    fn emptiness(&self) -> Verdict {
+        Descr::emptiness(self)
     }
 
     fn holds(&self, value: &Value) -> bool {
@@ -830,7 +863,7 @@ impl Value {
 
 #[cfg(test)]
 mod tests {
-    use super::{BoolSet, Class, Component, Descr, Value};
+    use super::{BoolSet, Class, Component, Descr, Value, Verdict};
     use crate::decision::Kind;
     use proptest::prelude::*;
     use std::sync::LazyLock;
@@ -930,6 +963,9 @@ mod tests {
     static ANIMAL: LazyLock<Class> = LazyLock::new(|| Class::root(1));
     static DOG: LazyLock<Class> = LazyLock::new(|| Class::new(2, 1, std::slice::from_ref(&ANIMAL)));
     static MINERAL: LazyLock<Class> = LazyLock::new(|| Class::root(3));
+    /// Laid out like an animal and deriving from nothing: the pair whose meet
+    /// only a class outside the order could inhabit.
+    static UNRELATED: LazyLock<Class> = LazyLock::new(|| Class::new(4, 1, &[]));
 
     /// The attribute lists the universe's objects carry.
     const OBJECTS: [&[(&str, Value)]; 7] = [
@@ -1102,6 +1138,46 @@ mod tests {
             }
         }
 
+        /// A verdict is a claim about the values, and each of the three says
+        /// something different.
+        ///
+        /// `Empty` is a proof that no value is admitted, so the universe must
+        /// hold none. `Inhabited` is a proof that one is, and while the universe
+        /// cannot always exhibit it -- a set may live entirely outside a finite
+        /// list -- a value it *does* admit forbids `Empty`. `Unknown` claims
+        /// nothing and so cannot be contradicted.
+        #[test]
+        fn a_verdict_is_a_claim_about_the_values(a in descr_with_sets()) {
+            let admitted = universe().into_iter().filter(|v| a.admits(*v)).count();
+            match a.emptiness() {
+                Verdict::Empty => prop_assert_eq!(admitted, 0, "empty admits nothing"),
+                Verdict::Inhabited | Verdict::Unknown => {}
+            }
+            if admitted > 0 {
+                prop_assert_ne!(a.emptiness(), Verdict::Empty, "a value forbids empty");
+            }
+        }
+
+        /// Subtyping reduces to emptiness, and the reduction is sound.
+        ///
+        /// The property the whole representation is for: proving `a ∧ ¬b` empty
+        /// is proving that every value of `a` is a value of `b`. The converse is
+        /// not asked -- failing to prove it is not a proof that a value escapes.
+        #[test]
+        fn an_empty_difference_is_containment(a in descr_with_sets(), b in descr_with_sets()) {
+            let Some(difference) = a.intersect(&b.complement()) else {
+                return Ok(());
+            };
+            if difference.emptiness() == Verdict::Empty {
+                for value in universe() {
+                    prop_assert!(
+                        !a.admits(value) || b.admits(value),
+                        "an empty difference leaves no value of a outside b"
+                    );
+                }
+            }
+        }
+
         /// A value the descriptor admits is a value its complement does not,
         /// with the sets in.
         #[test]
@@ -1188,6 +1264,58 @@ mod tests {
     fn a_kind_whose_values_are_not_sets_refuses() {
         assert!(Descr::set(&Descr::nothing(), Kind::List).is_none());
         assert!(Descr::set(&Descr::nothing(), Kind::Str).is_none());
+    }
+
+    /// The third answer, and where it comes from.
+    ///
+    /// Two classes a value must both be an instance of, neither deriving from
+    /// the other and neither laid out apart, are satisfied only by a class
+    /// deriving from both. Whether one exists is not something a snapshot of the
+    /// order can say, so the verdict says so rather than guessing.
+    #[test]
+    fn two_unrelated_classes_meet_in_an_unknown() {
+        let met = Descr::instance_of(ANIMAL.clone())
+            .intersect(&Descr::instance_of(UNRELATED.clone()))
+            .expect("two small atoms");
+
+        assert_eq!(met.emptiness(), Verdict::Unknown);
+        assert!(!met.is_empty(), "unknown is not a proof of emptiness");
+    }
+
+    /// The other two answers are proofs, and a proof beats the open world.
+    #[test]
+    fn deriving_and_layout_are_proofs_either_way() {
+        let dogs = Descr::instance_of(DOG.clone());
+
+        // Laid out apart: proved empty, whatever classes exist.
+        assert_eq!(
+            dogs.intersect(&Descr::instance_of(MINERAL.clone()))
+                .expect("two small atoms")
+                .emptiness(),
+            Verdict::Empty
+        );
+        // Deriving: proved inhabited, because the class itself is a witness.
+        assert_eq!(
+            dogs.intersect(&Descr::instance_of(ANIMAL.clone()))
+                .expect("two small atoms")
+                .emptiness(),
+            Verdict::Inhabited
+        );
+    }
+
+    /// An unknown in one kind does not decide the descriptor: a component proved
+    /// inhabited settles the union whatever the others cannot say.
+    #[test]
+    fn a_proof_in_one_kind_outranks_an_unknown_in_another() {
+        let unknown = Descr::instance_of(ANIMAL.clone())
+            .intersect(&Descr::instance_of(UNRELATED.clone()))
+            .expect("two small atoms");
+        assert_eq!(unknown.emptiness(), Verdict::Unknown);
+
+        let joined = unknown
+            .union(&Descr::of_kind(Kind::Int))
+            .expect("a small union");
+        assert_eq!(joined.emptiness(), Verdict::Inhabited);
     }
 
     /// A class is a set, and so is its complement -- which is what the tree
@@ -1737,8 +1865,16 @@ mod tests {
     #[test]
     fn a_component_is_bottom_or_top_of_its_own_kind() {
         for kind in Kind::ALL {
-            assert!(Component::bottom(kind).is_empty(), "{kind:?} bottom");
-            assert!(!Component::top(kind).is_empty(), "{kind:?} top");
+            assert_eq!(
+                Component::bottom(kind).emptiness(),
+                Verdict::Empty,
+                "{kind:?} bottom"
+            );
+            assert_eq!(
+                Component::top(kind).emptiness(),
+                Verdict::Inhabited,
+                "{kind:?} top"
+            );
             assert_eq!(Component::bottom(kind).complement(), Component::top(kind));
             assert_eq!(Component::top(kind).complement(), Component::bottom(kind));
         }

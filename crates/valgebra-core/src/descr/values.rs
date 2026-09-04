@@ -8,6 +8,7 @@
 //! automaton does with its else edge.
 
 use super::symbolic::Guard;
+use crate::decision::Verdict;
 
 /// A set of values: every one, or the ones a guard holds.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -46,9 +47,16 @@ impl<G: Guard> Values<G> {
     /// Whether no value is in here.
     #[must_use]
     pub fn is_empty(&self) -> bool {
+        self.emptiness() == Verdict::Empty
+    }
+
+    /// What is known about a value being in here. The universe holds one
+    /// whatever the guards say.
+    #[must_use]
+    pub fn emptiness(&self) -> Verdict {
         match self {
-            Values::Every => false,
-            Values::Only(guard) => guard.is_empty(),
+            Values::Every => Verdict::Inhabited,
+            Values::Only(guard) => guard.emptiness(),
         }
     }
 

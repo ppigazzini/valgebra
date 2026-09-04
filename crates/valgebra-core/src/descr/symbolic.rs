@@ -24,6 +24,7 @@
 //! `tuple[A, *tuple[B, ...], C]` is a chain with a loop in the middle, which is
 //! why the three spellings need one constructor rather than three nodes.
 
+use crate::decision::Verdict;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 
@@ -80,7 +81,25 @@ pub trait Guard: Clone + Eq + Ord + core::fmt::Debug {
     #[must_use]
     fn complement(&self) -> Self;
     /// Whether the set holds no value.
+    ///
+    /// A *proof*, not a guess: a letter that cannot decide answers `false`, and
+    /// [`emptiness`](Guard::emptiness) is what tells the two apart.
     fn is_empty(&self) -> bool;
+
+    /// What is known about the set holding a value.
+    ///
+    /// Exact for a letter whose emptiness is a computation over a finite
+    /// structure, which is why the default answers from
+    /// [`is_empty`](Guard::is_empty) alone. A letter that carries an open-world
+    /// constraint -- a class the core cannot enumerate the subclasses of -- has
+    /// a third answer and overrides this.
+    fn emptiness(&self) -> Verdict {
+        if self.is_empty() {
+            Verdict::Empty
+        } else {
+            Verdict::Inhabited
+        }
+    }
     /// Whether the set holds `value`.
     fn holds(&self, value: &Self::Value) -> bool;
 }

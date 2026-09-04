@@ -32,6 +32,7 @@
 use super::classes::Class;
 use super::symbolic::Guard;
 use super::values::Values;
+use crate::decision::Verdict;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The most atoms a union may hold.
@@ -78,9 +79,14 @@ impl<G: Guard> Field<G> {
         }
     }
 
-    /// Whether nothing satisfies this field -- no value and not missing either.
-    fn is_empty(&self) -> bool {
-        self.ty.is_empty() && !self.absent
+    /// What is known about something satisfying this field. Being allowed to be
+    /// missing settles it whatever the type says.
+    fn emptiness(&self) -> Verdict {
+        if self.absent {
+            Verdict::Inhabited
+        } else {
+            self.ty.emptiness()
+        }
     }
 }
 
@@ -131,27 +137,46 @@ impl<G: Guard> Atom<G> {
         })
     }
 
-    /// Whether no object satisfies this atom.
+    /// Whether no object satisfies this atom, proved.
+    fn is_empty(&self) -> bool {
+        self.emptiness() == Verdict::Empty
+    }
+
+    /// What is known about an object satisfying this atom.
     ///
     /// Three ways to be empty, and each is a pair that cannot both hold. Some
     /// attribute holds nothing and may not be missing either; some class it must
     /// be an instance of derives from one it must not; or two it must be an
-    /// instance of are disjoint.
+    /// instance of are laid out apart.
     ///
-    /// The open world is what is *not* said here. A class in `not_a` that
-    /// nothing in `is_a` derives from leaves the atom inhabited, because some
-    /// class outside both may yet describe a value -- claiming otherwise would
-    /// decide emptiness from a class list that is never complete.
-    fn is_empty(&self) -> bool {
-        self.fields.values().any(Field::is_empty)
-            || self
-                .is_a
-                .iter()
-                .any(|mine| self.not_a.iter().any(|barred| mine.derives_from(barred)))
+    /// **The open world is what makes the third answer necessary.** Two classes
+    /// it must both be an instance of, neither deriving from the other and
+    /// neither laid out apart, are satisfied only by a class deriving from both
+    /// -- and whether one exists is not something a snapshot of the order can
+    /// say. Reading that as inhabited would be a claim; reading it as empty
+    /// would be a worse one.
+    fn emptiness(&self) -> Verdict {
+        if self
+            .is_a
+            .iter()
+            .any(|mine| self.not_a.iter().any(|barred| mine.derives_from(barred)))
             || self
                 .is_a
                 .iter()
                 .any(|mine| self.is_a.iter().any(|other| mine.disjoint_from(other)))
+        {
+            return Verdict::Empty;
+        }
+        let unrelated = self.is_a.iter().any(|mine| {
+            self.is_a.iter().any(|other| {
+                other != mine && !mine.derives_from(other) && !other.derives_from(mine)
+            })
+        });
+        let fields = Verdict::every(self.fields.values().map(Field::emptiness));
+        if unrelated && fields != Verdict::Empty {
+            return Verdict::Unknown;
+        }
+        fields
     }
 
     /// The objects failing this atom, one atom per label.
@@ -322,8 +347,20 @@ impl<G: Guard> RecordLattice<G> {
     /// that can be wrong.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.positive()
-            .is_some_and(|atoms| atoms.iter().all(Atom::is_empty))
+        self.emptiness() == Verdict::Empty
+    }
+
+    /// What is known about this holding an object.
+    ///
+    /// A negated form has to be expanded first, and a refusal there is
+    /// *unknown* rather than inhabited: past the bound there is no union to
+    /// read, so nothing has been proved either way.
+    #[must_use]
+    pub fn emptiness(&self) -> Verdict {
+        match self.positive() {
+            Some(atoms) => Verdict::any(atoms.iter().map(Atom::emptiness)),
+            None => Verdict::Unknown,
+        }
     }
 
     /// Whether the object carrying `attributes` is held.

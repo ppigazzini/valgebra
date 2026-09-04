@@ -24,6 +24,7 @@
 
 use super::symbolic::Guard;
 use super::values::Values;
+use crate::decision::Verdict;
 
 /// The most lines a union may hold.
 ///
@@ -45,15 +46,27 @@ struct Line<G> {
 }
 
 impl<G: Guard> Line<G> {
-    /// Whether no set satisfies this line: some subtracted powerset covers it.
-    ///
-    /// A refusal reads as *not* empty, which is the safe direction: a line kept
-    /// is a value set that may be inhabited, and one dropped is a claim that it
-    /// is not.
+    /// Whether no set satisfies this line, proved.
     fn is_empty(&self) -> bool {
-        self.minus
-            .iter()
-            .any(|excluded| excluded.covers(&self.elements) == Some(true))
+        self.emptiness() == Verdict::Empty
+    }
+
+    /// What is known about a set satisfying this line.
+    ///
+    /// A subtracted powerset that covers the elements empties it. A guard that
+    /// cannot answer whether it covers leaves the line *unknown* rather than
+    /// inhabited -- the distinction the whole verdict exists to make, since a
+    /// line kept is only a line not disproved.
+    fn emptiness(&self) -> Verdict {
+        let mut verdict = Verdict::Inhabited;
+        for excluded in &self.minus {
+            match excluded.covers(&self.elements) {
+                Some(true) => return Verdict::Empty,
+                Some(false) => {}
+                None => verdict = Verdict::Unknown,
+            }
+        }
+        verdict
     }
 
     /// Whether the set whose members are `members` satisfies this line.
@@ -235,8 +248,20 @@ impl<G: Guard> SetLattice<G> {
     /// direction, since claiming emptiness is the claim that can be wrong.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.positive()
-            .is_some_and(|lines| lines.iter().all(Line::is_empty))
+        self.emptiness() == Verdict::Empty
+    }
+
+    /// What is known about this holding a set.
+    ///
+    /// A negated form has to be expanded first, and a refusal there is
+    /// *unknown* rather than inhabited: past the bound there is no union to
+    /// read, so nothing has been proved either way.
+    #[must_use]
+    pub fn emptiness(&self) -> Verdict {
+        match self.positive() {
+            Some(lines) => Verdict::any(lines.iter().map(Line::emptiness)),
+            None => Verdict::Unknown,
+        }
     }
 
     /// Whether the set whose members are `members` is held.
