@@ -117,3 +117,33 @@ def test_a_nightly_job_is_not_required() -> None:
     assert not (nightly & _needs()), (
         f"schedule-only jobs required of every merge: {sorted(nightly & _needs())}"
     )
+
+
+def test_a_sharded_sweep_covers_every_shard() -> None:
+    """A shard index is zero-based, and an out-of-range one sweeps nothing.
+
+    `cargo mutants --shard k/n` numbers the shards `0..n-1`, so `--shard n/n`
+    selects no mutant at all -- and a sweep of no mutants is a job that passes
+    having tested nothing. The matrix and the divisor are written in two places,
+    so they are held to each other here: the shards a job runs must be exactly
+    the range the divisor names.
+    """
+    sharded = False
+    for name, body in _jobs().items():
+        matrix = re.search(r"^        shard: \[([0-9, ]+)\]$", body, re.MULTILINE)
+        if matrix is None:
+            continue
+        sharded = True
+        shards = sorted(int(piece) for piece in matrix.group(1).split(","))
+        passed = r"--shard \"\$\{\{ matrix\.shard \}\}/([0-9]+)\""
+        divisors = {int(found) for found in re.findall(passed, body)}
+        assert divisors, f"{name} shards its matrix but no step passes --shard"
+        assert len(divisors) == 1, (
+            f"{name} passes more than one shard count: {sorted(divisors)}"
+        )
+        count = divisors.pop()
+        assert shards == list(range(count)), (
+            f"{name} runs shards {shards}; a divisor of {count} covers "
+            f"{list(range(count))}, and anything else leaves mutants unswept"
+        )
+    assert sharded, "no job shards its sweep; this ledger has no subject"
