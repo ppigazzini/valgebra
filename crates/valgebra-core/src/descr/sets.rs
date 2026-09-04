@@ -23,6 +23,7 @@
 //! for free -- there is no `j` to find.
 
 use super::symbolic::Guard;
+use super::values::Values;
 
 /// The most lines a union may hold.
 ///
@@ -32,52 +33,6 @@ use super::symbolic::Guard;
 /// an approximation -- past it there is no sound union to substitute, so the
 /// operation refuses.
 pub const MAX_LINES: usize = 256;
-
-/// A set of values, with a name for the top.
-///
-/// A [`Guard`] has none of its own -- a descriptor that named its own universe
-/// would have to build itself -- so it is carried beside the guard here, the way
-/// the sequence automaton carries its else edge.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum Values<G> {
-    /// Every value.
-    Every,
-    /// The values one guard holds.
-    Only(G),
-}
-
-impl<G: Guard> Values<G> {
-    /// The values in both, or `None` where a guard refuses.
-    fn meet(&self, other: &Values<G>) -> Option<Values<G>> {
-        match (self, other) {
-            (Values::Every, kept) | (kept, Values::Every) => Some(kept.clone()),
-            (Values::Only(a), Values::Only(b)) => Some(Values::Only(a.meet(b)?)),
-        }
-    }
-
-    /// Whether every value in `inner` is in this one, or `None` where a guard
-    /// refuses.
-    ///
-    /// Asked as `inner ∧ ¬self = ∅`, which is the one shape a Boolean algebra
-    /// answers without an order of its own.
-    fn covers(&self, inner: &Values<G>) -> Option<bool> {
-        match (self, inner) {
-            (Values::Every, _) => Some(true),
-            (Values::Only(outer), Values::Every) => Some(outer.complement().is_empty()),
-            (Values::Only(outer), Values::Only(inner)) => {
-                Some(inner.meet(&outer.complement())?.is_empty())
-            }
-        }
-    }
-
-    /// Whether `value` is one of these.
-    fn holds(&self, value: &G::Value) -> bool {
-        match self {
-            Values::Every => true,
-            Values::Only(guard) => guard.holds(value),
-        }
-    }
-}
 
 /// One powerset minus finitely many others.
 ///
