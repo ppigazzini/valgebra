@@ -682,11 +682,13 @@ mod tests {
         fn none() -> Self {
             IntSet::empty()
         }
+        // The two that may refuse, and here they do so for the reason the
+        // trait allows: two periods can meet past the one this holds.
         fn meet(&self, other: &Self) -> Option<Self> {
-            Some(self.intersect(other))
+            self.intersect(other)
         }
         fn join(&self, other: &Self) -> Option<Self> {
-            Some(self.union(other))
+            self.union(other)
         }
         fn complement(&self) -> Self {
             IntSet::complement(self)
@@ -926,7 +928,7 @@ mod tests {
         assert!(!joined.holds(&[]) && !joined.holds(&[0, 1]));
         assert!(agree_on_sequences(
             &joined,
-            &SymbolicDfa::shape(&[zero.union(&one)], None)
+            &SymbolicDfa::shape(&[zero.union(&one).expect("a period of one")], None)
         ));
     }
 
@@ -1073,7 +1075,12 @@ mod tests {
         let difference = SymbolicDfa::shape(std::slice::from_ref(&ints), None)
             .intersect(&SymbolicDfa::shape(std::slice::from_ref(&bools), None).complement())
             .expect("a small meet");
-        let narrowed = SymbolicDfa::shape(&[ints.intersect(&bools.complement())], None);
+        let narrowed = SymbolicDfa::shape(
+            &[ints
+                .intersect(&bools.complement())
+                .expect("a period of one")],
+            None,
+        );
         assert!(agree_on_sequences(&difference, &narrowed));
     }
 }

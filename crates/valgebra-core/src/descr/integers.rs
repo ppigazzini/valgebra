@@ -35,24 +35,32 @@ pub struct IntSet {
 
 /// The largest period this representation materialises.
 ///
-/// A bound on one step, not on their composition: two steps meet at their least
-/// common multiple, so a pair inside the bound can ask for a period past it.
-/// Nothing lowers an annotation to an `IntSet` yet, so no caller can reach that;
-/// the lowering that does must bound the composition as well, and the assertion
-/// in `build` is what names it until then.
-///
 /// A class per residue is what makes the three operations pointwise, and it is
 /// also what makes the cost linear in the period: `MultipleOf(n)` holds `n`
 /// interval sets, and two coprime steps meet at their product. The bound is
 /// generous against what a real annotation asks for -- a step is a divisibility
 /// check, and the ones people write are small -- and it is a **limit of the
-/// representation**, not an approximation: nothing lowers an annotation to an
-/// `IntSet` yet, and the lowering that does must keep a step beyond this bound
-/// opaque rather than round it.
+/// representation**, not an approximation: a step beyond it stays opaque rather
+/// than being rounded to one this can hold.
+///
+/// The bound is on one step *and on their composition*, and the second is the
+/// half that is easy to lose. `MultipleOf` lowers to an `IntSet`
+/// ([`lower`](super::lower)), so two steps a caller may write independently --
+/// each far inside the bound -- meet at their least common multiple, which need
+/// not be: 64 and 81 meet at 5,184. That composition is refused by the
+/// operations rather than rounded, because there is no sound set to substitute
+/// for a period this cannot hold. One too wide is complemented into one too
+/// narrow, so a rounded answer is wrong in one direction or the other, and a
+/// refusal is what every caller of a descriptor operation already handles.
 pub const MAX_PERIOD: i64 = 4096;
 
 impl IntSet {
-    /// A set with one class per residue, built by `of`.
+    /// A set with one class per residue, built by `of`, for a period the
+    /// representation holds.
+    ///
+    /// Only the constructors whose period is one reach this directly; anything
+    /// deriving a period from another set's goes through
+    /// [`try_build`](Self::try_build), which refuses rather than asserting.
     fn build(modulus: i64, of: impl Fn(i64) -> IntervalSet) -> IntSet {
         debug_assert!(modulus >= 1, "a modulus is at least one");
         debug_assert!(
@@ -60,11 +68,20 @@ impl IntSet {
             "a period of {modulus} materialises that many classes, past the \
              {MAX_PERIOD} this representation holds"
         );
-        let modulus = modulus.clamp(1, MAX_PERIOD);
-        IntSet {
-            modulus,
-            classes: (0..modulus).map(of).collect(),
-        }
+        build_unchecked(modulus, of)
+    }
+
+    /// The same, for a period that may be past the bound: `None` where it is.
+    ///
+    /// The refusal is the whole point. Clamping the period here would build a
+    /// table for a *different* set and hand it back as this one -- the shape of
+    /// wrong answer this representation exists to avoid -- and asserting would
+    /// turn a composition a caller is entitled to write into a panic on the
+    /// debug builds every contributor runs.
+    fn try_build(modulus: i64, of: impl Fn(i64) -> IntervalSet) -> Option<IntSet> {
+        (1..=MAX_PERIOD)
+            .contains(&modulus)
+            .then(|| build_unchecked(modulus, of))
     }
 
     /// The empty set.
@@ -141,12 +158,12 @@ impl IntSet {
     /// each keeps the integers of the original that land in it: `r + m*k` is in
     /// the new class `r + m*j` exactly when `k = j + t*k'`, so the new class's
     /// interval set is the preimage of the old one under that map.
-    fn lifted(&self, modulus: i64) -> IntSet {
+    fn lifted(&self, modulus: i64) -> Option<IntSet> {
         if modulus == self.modulus {
-            return self.clone();
+            return Some(self.clone());
         }
         let stride = modulus / self.modulus;
-        IntSet::build(modulus, |residue| {
+        IntSet::try_build(modulus, |residue| {
             let old = residue.rem_euclid(self.modulus);
             let step = (residue - old) / self.modulus;
             self.classes
@@ -160,28 +177,78 @@ impl IntSet {
         lcm(self.modulus, other.modulus)
     }
 
-    /// Combine two sets residue by residue, after lifting both to one period.
-    fn zip(&self, other: &IntSet, op: fn(&IntervalSet, &IntervalSet) -> IntervalSet) -> IntSet {
+    /// Both tables read in the period the two sets share, or `None` where that
+    /// period is past [`MAX_PERIOD`].
+    ///
+    /// What equality and ordering both need, and the one place the bound is a
+    /// limit on *comparing* rather than on building. Lifting is exact, so two
+    /// sets aligned here are equal exactly when they hold the same integers.
+    fn aligned(&self, other: &IntSet) -> Option<(Vec<IntervalSet>, Vec<IntervalSet>)> {
         let modulus = self.common(other);
-        let (mine, theirs) = (self.lifted(modulus), other.lifted(modulus));
-        IntSet::build(modulus, |residue| {
+        Some((
+            self.lifted(modulus)?.classes,
+            other.lifted(modulus)?.classes,
+        ))
+    }
+
+    /// Combine two sets residue by residue, after lifting both to one period,
+    /// or `None` where that period is past [`MAX_PERIOD`].
+    fn zip(
+        &self,
+        other: &IntSet,
+        op: fn(&IntervalSet, &IntervalSet) -> IntervalSet,
+    ) -> Option<IntSet> {
+        let modulus = self.common(other);
+        let (mine, theirs) = (self.lifted(modulus)?, other.lifted(modulus)?);
+        let combined = IntSet::try_build(modulus, |residue| {
             let index = usize::try_from(residue).unwrap_or(0);
             match (mine.classes.get(index), theirs.classes.get(index)) {
                 (Some(a), Some(b)) => op(a, b),
                 _ => IntervalSet::empty(),
             }
-        })
+        })?;
+        Some(combined.without_a_step())
     }
 
-    /// The integers in either set.
+    /// This set written with no step where its classes do not need one.
+    ///
+    /// A step that cancels leaves a table saying the same thing in every
+    /// residue, and carrying the period anyway would make two spellings of one
+    /// set -- `multiple_of(64) | !multiple_of(64)` and [`all`](Self::all) --
+    /// differ in the only place the period is visible. Reading the two back as
+    /// one then needs their common period, and for two steps that cancel
+    /// independently that period can be past the bound, which is the one shape
+    /// where comparison has no answer to give. Dropping a step nothing uses
+    /// keeps such a set at a period of one, where every other set meets it.
+    fn without_a_step(self) -> IntSet {
+        let Some(first) = self.classes.first() else {
+            return self;
+        };
+        if self.modulus == 1 || !self.classes.iter().all(|class| class == first) {
+            return self;
+        }
+        // Every residue holds the same `k`, so the set is the union of
+        // `r + modulus * k` over all `r` -- which is that interval set scaled
+        // back to a period of one only when it is one of the two sets scaling
+        // cannot move: nothing, or everything.
+        if first.is_empty() {
+            IntSet::empty()
+        } else if *first == IntervalSet::all() {
+            IntSet::all()
+        } else {
+            self
+        }
+    }
+
+    /// The integers in either set, or `None` past [`MAX_PERIOD`].
     #[must_use]
-    pub fn union(&self, other: &IntSet) -> IntSet {
+    pub fn union(&self, other: &IntSet) -> Option<IntSet> {
         self.zip(other, IntervalSet::union)
     }
 
-    /// The integers in both sets.
+    /// The integers in both sets, or `None` past [`MAX_PERIOD`].
     #[must_use]
-    pub fn intersect(&self, other: &IntSet) -> IntSet {
+    pub fn intersect(&self, other: &IntSet) -> Option<IntSet> {
         self.zip(other, IntervalSet::intersect)
     }
 
@@ -212,10 +279,14 @@ impl Ord for IntSet {
     /// order itself is arbitrary, and its only use is fixing a canonical
     /// position for a set in a list.
     fn cmp(&self, other: &IntSet) -> core::cmp::Ordering {
-        let modulus = self.common(other);
-        self.lifted(modulus)
-            .classes
-            .cmp(&other.lifted(modulus).classes)
+        match self.aligned(other) {
+            Some((mine, theirs)) => mine.cmp(&theirs),
+            // Past the bound there is no shared period to read the two tables
+            // in, so they are ordered by the tables they carry. Consistent with
+            // `eq`, which refuses the same pair for the same reason, and total
+            // because the period is compared before the classes.
+            None => (self.modulus, &self.classes).cmp(&(other.modulus, &other.classes)),
+        }
     }
 }
 
@@ -232,8 +303,18 @@ impl PartialEq for IntSet {
     /// period where their classes line up settles it, and lifting is exact, so
     /// this is semantic equality rather than a comparison of two spellings.
     fn eq(&self, other: &IntSet) -> bool {
-        let modulus = self.common(other);
-        self.lifted(modulus).classes == other.lifted(modulus).classes
+        match self.aligned(other) {
+            Some((mine, theirs)) => mine == theirs,
+            // The two periods meet past the bound, so neither table can be
+            // read in the other's coordinates and the tables as they stand are
+            // all there is to compare. Conservative rather than wrong: it can
+            // answer `false` for two sets that hold the same integers, and it
+            // reaches that only for a pair whose periods are near-coprime and
+            // large, which `without_a_step` keeps a cancelled step from
+            // producing. What it cannot do is answer `true` for two sets that
+            // differ, which is the direction a decision rests on.
+            None => self.modulus == other.modulus && self.classes == other.classes,
+        }
     }
 }
 
@@ -253,6 +334,18 @@ fn lcm(a: i64, b: i64) -> i64 {
     })
 }
 
+/// One class per residue, with no check on the period.
+///
+/// The two constructors above differ only in how they answer a period the
+/// representation cannot hold -- an assertion, or a refusal -- and share the
+/// table they build once it is known to be one.
+fn build_unchecked(modulus: i64, of: impl Fn(i64) -> IntervalSet) -> IntSet {
+    IntSet {
+        modulus,
+        classes: (0..modulus).map(of).collect(),
+    }
+}
+
 /// The greatest common divisor of two positive integers, by Euclid.
 fn gcd(a: i64, b: i64) -> i64 {
     let (mut a, mut b) = (a, b);
@@ -268,6 +361,19 @@ fn gcd(a: i64, b: i64) -> i64 {
 mod tests {
     use super::{IntSet, MAX_PERIOD, gcd, lcm};
     use proptest::prelude::*;
+
+    /// Union and meet inside the test corpus, where the bound is out of reach.
+    ///
+    /// Every leaf's period is one or a step of at most five, so every period
+    /// these compose divides sixty. A refusal here would be a broken generator
+    /// rather than a law that failed, which is why it is spelled as one.
+    fn or(a: &IntSet, b: &IntSet) -> IntSet {
+        a.union(b).expect("a period inside the bound")
+    }
+
+    fn and(a: &IntSet, b: &IntSet) -> IntSet {
+        a.intersect(b).expect("a period inside the bound")
+    }
 
     /// The outermost endpoint the generator writes. Past it every set it builds
     /// is purely periodic, because union, intersection and complement move no
@@ -310,8 +416,8 @@ mod tests {
         ];
         leaf.prop_recursive(4, 24, 2, |inner| {
             prop_oneof![
-                (inner.clone(), inner.clone()).prop_map(|(a, b)| a.union(&b)),
-                (inner.clone(), inner.clone()).prop_map(|(a, b)| a.intersect(&b)),
+                (inner.clone(), inner.clone()).prop_map(|(a, b)| or(&a, &b)),
+                (inner.clone(), inner.clone()).prop_map(|(a, b)| and(&a, &b)),
                 inner.prop_map(|a| a.complement()),
             ]
         })
@@ -333,34 +439,31 @@ mod tests {
             b in int_set(),
             c in int_set(),
         ) {
-            prop_assert!(same(&a.union(&b), &b.union(&a)));
-            prop_assert!(same(&a.intersect(&b), &b.intersect(&a)));
-            prop_assert!(same(&a.union(&b).union(&c), &a.union(&b.union(&c))));
+            prop_assert!(same(&or(&a, &b), &or(&b, &a)));
+            prop_assert!(same(&and(&a, &b), &and(&b, &a)));
+            prop_assert!(same(&or(&or(&a, &b), &c), &or(&a, &or(&b, &c))));
+            prop_assert!(same(&and(&and(&a, &b), &c), &and(&a, &and(&b, &c))));
+            prop_assert!(same(&or(&a, &and(&a, &b)), &a));
+            prop_assert!(same(&and(&a, &or(&a, &b)), &a));
             prop_assert!(same(
-                &a.intersect(&b).intersect(&c),
-                &a.intersect(&b.intersect(&c))
-            ));
-            prop_assert!(same(&a.union(&a.intersect(&b)), &a));
-            prop_assert!(same(&a.intersect(&a.union(&b)), &a));
-            prop_assert!(same(
-                &a.intersect(&b.union(&c)),
-                &a.intersect(&b).union(&a.intersect(&c))
+                &and(&a, &or(&b, &c)),
+                &or(&and(&a, &b), &and(&a, &c))
             ));
         }
 
         /// The complement laws, and De Morgan both ways.
         #[test]
         fn the_complement_laws_hold_of_the_integers(a in int_set(), b in int_set()) {
-            prop_assert!(a.intersect(&a.complement()).is_empty());
-            prop_assert!(same(&a.union(&a.complement()), &IntSet::all()));
+            prop_assert!(and(&a, &a.complement()).is_empty());
+            prop_assert!(same(&or(&a, &a.complement()), &IntSet::all()));
             prop_assert!(same(&a.complement().complement(), &a));
             prop_assert!(same(
-                &a.union(&b).complement(),
-                &a.complement().intersect(&b.complement())
+                &or(&a, &b).complement(),
+                &and(&a.complement(), &b.complement())
             ));
             prop_assert!(same(
-                &a.intersect(&b).complement(),
-                &a.complement().union(&b.complement())
+                &and(&a, &b).complement(),
+                &or(&a.complement(), &b.complement())
             ));
         }
 
@@ -395,7 +498,12 @@ mod tests {
         /// Lifting a set to a multiple of its period changes no integer.
         #[test]
         fn lifting_a_period_holds_the_same_integers(a in int_set(), factor in 1i64..=6) {
-            let lifted = a.lifted(a.modulus.saturating_mul(factor));
+            // A period of at most sixty times six is inside the bound, so the
+            // lift is available for every draw; a refusal here would be the
+            // generator, not the lift.
+            let lifted = a
+                .lifted(a.modulus.saturating_mul(factor))
+                .expect("a period inside the bound");
             prop_assert!(same(&a, &lifted));
             prop_assert_eq!(&a, &lifted);
         }
@@ -409,10 +517,10 @@ mod tests {
     /// five meet at sixty, and the first member is the period itself.
     #[test]
     fn a_set_whose_members_start_past_a_period_is_seen() {
-        let sixties = step(3)
-            .intersect(&step(4))
-            .intersect(&step(5))
-            .intersect(&IntSet::between(Some(1), None));
+        let sixties = and(
+            &and(&and(&step(3), &step(4)), &step(5)),
+            &IntSet::between(Some(1), None),
+        );
 
         assert!(
             sixties.holds(60) && !sixties.holds(0),
@@ -442,17 +550,17 @@ mod tests {
         for n in -6i64..=6 {
             assert_eq!(odds.holds(n), n % 2 != 0, "{n}");
         }
-        assert!(evens.intersect(&odds).is_empty());
-        assert_eq!(evens.union(&odds), IntSet::all());
+        assert!(and(&evens, &odds).is_empty());
+        assert_eq!(or(&evens, &odds), IntSet::all());
 
         // Two steps meet at their least common multiple, which is what a naive
         // pairwise rule over bounds cannot see.
-        let sixes = step(2).intersect(&step(3));
+        let sixes = and(&step(2), &step(3));
         for n in -12i64..=12 {
             assert_eq!(sixes.holds(n), n % 6 == 0, "{n}");
         }
         // And two steps that share no multiple but zero still meet there.
-        assert!(!step(2).intersect(&step(3)).is_empty());
+        assert!(!and(&step(2), &step(3)).is_empty());
     }
 
     /// A bound conjunction the structural procedure declines, decided here by
@@ -461,21 +569,26 @@ mod tests {
     fn a_bound_conjunction_that_cannot_hold_is_empty() {
         let low = IntSet::between(Some(5), None);
         let high = IntSet::between(None, Some(1));
-        assert!(low.intersect(&high).is_empty());
+        assert!(and(&low, &high).is_empty());
         // Adjacent bounds leave exactly the integers between them, and none is
         // the empty set rather than a negative-width range.
         assert!(
-            IntSet::between(Some(2), None)
-                .intersect(&IntSet::between(None, Some(1)))
-                .is_empty()
+            and(
+                &IntSet::between(Some(2), None),
+                &IntSet::between(None, Some(1))
+            )
+            .is_empty()
         );
         assert_eq!(
-            IntSet::between(Some(1), None).intersect(&IntSet::between(None, Some(1))),
+            and(
+                &IntSet::between(Some(1), None),
+                &IntSet::between(None, Some(1))
+            ),
             IntSet::just(1)
         );
         // An even integer strictly between two consecutive even numbers: the
         // step and the bounds together empty a set neither empties alone.
-        let between = step(2).intersect(&IntSet::between(Some(3), Some(3)));
+        let between = and(&step(2), &IntSet::between(Some(3), Some(3)));
         assert!(between.is_empty());
     }
 
@@ -501,6 +614,71 @@ mod tests {
         assert!(IntSet::multiple_of(MAX_PERIOD + 1).is_none());
         assert!(IntSet::multiple_of(-(MAX_PERIOD + 1)).is_none());
         assert!(IntSet::multiple_of(i64::MAX).is_none());
+    }
+
+    /// Two steps inside the bound can meet past it, and the meet is refused.
+    ///
+    /// The half of the bound that is easy to lose: `multiple_of` refuses a step
+    /// too large, but a caller writing two steps that are each far inside it --
+    /// 64 and 81 -- asks for the period they share, 5,184, which is not. There
+    /// is no set to substitute. A table built at the largest period this holds
+    /// describes the multiples of something else, and handing that back as the
+    /// answer is the wrong verdict this representation exists to avoid; so the
+    /// operation refuses, exactly as the automaton components do, and the
+    /// relation above stays undecided.
+    #[test]
+    fn two_steps_meeting_past_the_period_bound_are_refused() {
+        for (a, b) in [(64, 81), (4093, 4096), (3, MAX_PERIOD), (63, 65)] {
+            let (left, right) = (step(a), step(b));
+            let shared = lcm(a, b);
+            let past = shared > MAX_PERIOD;
+            assert_eq!(
+                left.intersect(&right).is_none(),
+                past,
+                "the meet of {a} and {b}, which share {shared}"
+            );
+            assert_eq!(
+                left.union(&right).is_none(),
+                past,
+                "the join of {a} and {b}, which share {shared}"
+            );
+        }
+    }
+
+    /// A meet inside the bound still answers, which is what the refusal above
+    /// must not cost: 63 and 64 share 4,032, and their multiples are decided.
+    #[test]
+    fn two_steps_meeting_inside_the_period_bound_still_answer() {
+        let met = and(&step(63), &step(64));
+        assert!(met.holds(0) && met.holds(4032) && met.holds(-4032));
+        assert!(!met.holds(63) && !met.holds(64) && !met.holds(4031));
+        assert!(!met.is_empty());
+    }
+
+    /// A step that cancels leaves no step behind.
+    ///
+    /// `a | !a` is the integers however `a` was written, and carrying `a`'s
+    /// period into the answer would leave two spellings of one set. That costs
+    /// more than tidiness: two such sets built from *different* steps could
+    /// then only be compared at a period the representation may not hold, which
+    /// is the one place equality has no answer to give. Dropping a step nothing
+    /// uses keeps them at a period of one, where they meet.
+    #[test]
+    fn a_step_that_cancels_is_not_carried() {
+        for n in [2, 64, 81, MAX_PERIOD] {
+            let set = step(n);
+            let whole = or(&set, &set.complement());
+            assert_eq!(whole, IntSet::all(), "the join over {n}");
+            assert_eq!(whole.modulus, 1, "the join over {n} keeps a period");
+            let nothing = and(&set, &set.complement());
+            assert_eq!(nothing, IntSet::empty(), "the meet over {n}");
+            assert_eq!(nothing.modulus, 1, "the meet over {n} keeps a period");
+        }
+        // And so two of them, from steps whose periods meet past the bound,
+        // are still one set rather than a pair equality cannot align.
+        let from_wide = or(&step(64), &step(64).complement());
+        let from_tall = or(&step(81), &step(81).complement());
+        assert_eq!(from_wide, from_tall);
     }
 
     /// The two number-theoretic helpers, driven directly: the periods meet at

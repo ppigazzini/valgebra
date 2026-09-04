@@ -434,7 +434,8 @@ mod tests {
             let met = SetLattice::of(x.clone())
                 .intersect(&SetLattice::of(y.clone()))
                 .expect("two small powersets");
-            prop_assert!(same(&met, &SetLattice::of(x.intersect(&y))));
+            let meet = x.intersect(&y).expect("two bounds share a period of one");
+            prop_assert!(same(&met, &SetLattice::of(meet)));
         }
     }
 

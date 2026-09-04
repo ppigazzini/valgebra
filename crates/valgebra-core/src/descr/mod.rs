@@ -25,6 +25,7 @@ pub mod classes;
 pub mod floats;
 pub mod integers;
 pub mod interval;
+pub mod lower;
 pub mod records;
 pub mod regular;
 pub mod sets;
@@ -213,10 +214,19 @@ impl Component {
                 Op::Union => a.union(*b),
                 Op::Intersect => a.intersect(*b),
             }),
-            (Component::Integers(a), Component::Integers(b)) => Component::Integers(match op {
-                Op::Union => a.union(b),
-                Op::Intersect => a.intersect(b),
-            }),
+            (Component::Integers(a), Component::Integers(b)) => {
+                // Refused for the reason the languages below are, one
+                // representation over: two steps a caller writes independently
+                // meet at their least common multiple, which can be past the
+                // period this holds even when each step is far inside it. A
+                // rounded period describes a different set, so the descriptor
+                // becomes unbuildable and the relation stays undecided.
+                let combined = match op {
+                    Op::Union => a.union(b),
+                    Op::Intersect => a.intersect(b),
+                };
+                Component::Integers(combined?)
+            }
             (Component::Floats(a), Component::Floats(b)) => Component::Floats(match op {
                 Op::Union => a.union(b),
                 Op::Intersect => a.intersect(b),
@@ -553,6 +563,15 @@ impl Descr {
         self.kinds
             .get(Descr::position(kind))
             .unwrap_or(&Component::Coarse(false))
+    }
+
+    /// Put an integer set in the `int` slot, leaving every other kind empty.
+    ///
+    /// The one place a caller outside this module builds a component directly:
+    /// a refinement is a set of integers before it is anything else, and the
+    /// lowering meets it with whatever the base admits.
+    pub fn integers(&mut self, set: IntSet) {
+        self.put(Kind::Int, Component::Integers(set));
     }
 
     fn put(&mut self, kind: Kind, component: Component) {
