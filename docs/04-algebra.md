@@ -322,33 +322,29 @@ assertions rather than review comments, and they belong in the test suite beside
 the schemas:
 
 ```python
-from typing import Annotated, NotRequired, TypedDict
+from typing import Annotated
 
 import annotated_types as at
 
 from valgebra import Validator
 
-
-class Stored(TypedDict):
-    name: str
-    runs: int
-
-
-class Submitted(TypedDict):
-    name: str
-    runs: int
-    note: NotRequired[str]
-
+stored = {"name": str, "runs": int}
+submitted = {"name": str, "runs": int, "note?": str}
 
 # Every persisted record is a valid submission, or a round trip through storage
 # produces something the endpoint refuses.
-assert Validator(Stored).is_subtype_of(Submitted)
+assert Validator(stored).is_subtype_of(submitted)
 
 # A tightened field stays within the field it tightens.
 assert Validator(Annotated[int, at.Ge(0), at.Le(100)]).is_subtype_of(
     Annotated[int, at.Ge(0)]
 )
 ```
+
+Written as *shapes*, which are closed. The same records spelled as `TypedDict`s
+relate the other way round: a `TypedDict` is [open](03-schema-language.md#a-typeddict-is-open-a-dict-literal-is-closed),
+so the one that names no `note` admits a dict whose `note` is an `int` — which
+the one that names `note: str` does not.
 
 Assert the **positive** direction only. A `True` from `is_subtype_of`,
 `is_equivalent` or `is_empty` is a proof; a `False` is "no, or not yet proven"

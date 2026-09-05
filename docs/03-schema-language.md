@@ -432,7 +432,7 @@ assert fully_open.is_valid({"name": "Ada", "age": "old"})
 
 | Form | How it validates |
 | --- | --- |
-| `TypedDict` | a record; required keys from the class, `Required`/`NotRequired`/`ReadOnly` honored |
+| `TypedDict` | a record, **open** as the typing spec defines one; required keys from the class, `Required`/`NotRequired`/`ReadOnly` honored, `closed=True`/`extra_items` obeyed |
 | dataclass | `isinstance` plus a deep check of each declared field |
 | `NamedTuple` | `isinstance` plus a deep check of each declared field |
 | `Enum` | an instance of the enumeration (any member) |
@@ -470,6 +470,31 @@ attribute of an instance and neither is checked; a field declared
 `NotRequired` and `ReadOnly` qualify the key rather than narrowing its type:
 requiredness is read from the class, and read-only-ness is about writing the key
 back rather than about which values belong.
+
+### A `TypedDict` is open, a dict literal is closed
+
+They denote different sets, and each denotes what its own author's spec says.
+
+```python
+from typing import TypedDict
+
+from valgebra import Validator
+
+
+class User(TypedDict):
+    name: str
+
+
+assert Validator(User).is_valid({"name": "Ada", "note": "extra"})
+assert not Validator({"name": str}).is_valid({"name": "Ada", "note": "extra"})
+```
+
+`Validator(TD)` reads an annotation whose meaning is fixed by the typing spec,
+and the spec makes a `TypedDict` open — reading it as a narrower set would be a
+deviation the class carries no mark of. The dict-literal form is this library's
+own spelling, and a schema written as a *shape* means that shape. Both sets are
+spellable both ways: write `closed=True` (PEP 728) for a closed `TypedDict`, and
+`{"name": str, ...}` for an open shape.
 
 ### Pass the class, not its annotations
 

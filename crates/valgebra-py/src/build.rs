@@ -11,8 +11,7 @@ use pyo3::types::{
     PyTuple, PyType,
 };
 use valgebra_core::{
-    ClassIx, ConstIx, Constraint, DefShift, Field, MapClause, Openness, OperandIx, PredIx, Schema,
-    SeqShape,
+    ClassIx, ConstIx, Constraint, DefShift, Field, MapClause, OperandIx, PredIx, Schema, SeqShape,
 };
 
 use crate::errors::summarize;
@@ -85,6 +84,9 @@ impl Drop for BuildGuard {
 struct Forms {
     any: Py<PyAny>,
     never: Option<Py<PyAny>>,
+    /// The sentinel a `TypedDict` carries in `__extra_items__` when its author
+    /// gave no `extra_items` at all -- absent on a runtime without PEP 728.
+    no_extra_items: Option<Py<PyAny>>,
     noreturn: Option<Py<PyAny>>,
     type_alias_type: Option<Py<PyAny>>,
     union: Py<PyAny>,
@@ -111,6 +113,7 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
         Ok(Forms {
             any: typing.getattr("Any")?.unbind(),
             never: optional_form(&typing, "Never"),
+            no_extra_items: optional_form(&typing, "NoExtraItems"),
             noreturn: optional_form(&typing, "NoReturn"),
             type_alias_type: optional_form(&typing, "TypeAliasType"),
             union: typing.getattr("Union")?.unbind(),
@@ -399,7 +402,19 @@ fn field_name(name: &Bound<'_, PyString>) -> PyResult<String> {
     })
 }
 
-/// Build a closed record from a `TypedDict`, reading its required keys.
+/// Build the record a `TypedDict` denotes: its keys, and what it says about the
+/// ones it does not name.
+///
+/// **Open unless the class says otherwise**, which is the set the typing spec
+/// assigns it -- "By default, `TypedDict`s are open". `Validator(TD)` reads an
+/// annotation whose meaning is fixed elsewhere, and reading it as a narrower set
+/// is a deviation a caller has no way to see, because the class carries no mark
+/// of it. The dict-literal form `{"a": int}` stays closed: it is this library's
+/// own spelling, and a schema written as a *shape* means that shape
+/// (`docs/dev/01-schema-ir.md`, "What a `TypedDict` denotes").
+///
+/// `ReadOnly` needs no arm here. It constrains writers and a value has none, and
+/// `get_type_hints` has already resolved it away.
 fn build_typed_dict(
     ty: &Bound<'_, PyType>,
     lits: &mut Pool,
@@ -416,7 +431,58 @@ fn build_typed_dict(
             required: required.contains(&name)?,
         });
     }
-    Ok(Schema::record(fields, Openness::Closed))
+    Ok(Schema::keyed_map(fields, unnamed_keys(ty, lits, defs)?))
+}
+
+/// Whether `extra_items` carries the sentinel for "the author gave none".
+///
+/// A runtime with PEP 728 fills `__extra_items__` in either way: with the type
+/// its author wrote, or with `NoExtraItems` to say there was none. The sentinel
+/// is not a type and reading it as one makes the record admit exactly the
+/// sentinel -- which is a closed record wearing an open one's spelling, and is
+/// what 3.15 turned this into before the check was here.
+fn gave_no_extra_items(extra: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let Some(sentinel) = forms(extra.py())?.no_extra_items.as_ref() else {
+        return Ok(false);
+    };
+    Ok(extra.is(sentinel.bind(extra.py())))
+}
+
+/// What a `TypedDict` says about the keys it does not name.
+///
+/// `closed=True` shuts them and `extra_items=T` gives them a type -- PEP 728,
+/// which the typing spec carries. Neither marker is in `typing` yet, so both are
+/// read where a runtime that has them puts them and are simply absent otherwise:
+/// a `TypedDict` written for a runtime without PEP 728 cannot have said either,
+/// and the spec's default is what is left.
+fn unnamed_keys(
+    ty: &Bound<'_, PyType>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Vec<MapClause>> {
+    if let Ok(flag) = ty.getattr("__closed__")
+        && flag.is_truthy()?
+    {
+        return Ok(Vec::new());
+    }
+    if let Ok(extra) = ty.getattr("__extra_items__")
+        && !extra.is_none()
+        && !gave_no_extra_items(&extra)?
+    {
+        // A `TypedDict`'s keys are strings, so the type it gives the extra ones
+        // governs the string keys and leaves no other kind admitted.
+        return Ok(vec![MapClause {
+            key: Schema::Str,
+            value: build_schema(&extra, lits, defs)?,
+        }]);
+    }
+    // A `TypedDict`'s keys are strings -- the spec relates one to
+    // `Mapping[str, object]` and to nothing wider -- so being open is being open
+    // to further *string* keys, not to keys of every kind.
+    Ok(vec![MapClause {
+        key: Schema::Str,
+        value: Schema::ANYTHING,
+    }])
 }
 
 /// The attribute names a class declares, in declaration order.

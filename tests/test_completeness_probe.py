@@ -183,16 +183,12 @@ VALUES: list[Any] = [
 # Suspected gaps accepted for now, each with why it is not decided. An entry is
 # an admission, not a design: a gap described as a decision is what keeps it
 # alive. Every one of these has a known route to being decided.
+#
+# `{a:int}` here is a `TypedDict`, which the typing spec makes **open**, so the
+# two entries about a literal-keyed catch-all covering its field are gone: an
+# open record admits a dict carrying a key the catch-all does not name, and a
+# value refutes each relation rather than the procedure failing to decide it.
 ACCEPTED: dict[str, str] = {
-    "{a:int} <= dict[Lit['a'],int]": (
-        "Whether a supertype catch-all covers a field name is asked by matching "
-        "the key against the `Str`/`Anything` atoms rather than by asking whether "
-        "the name belongs to the key's set. A literal-keyed clause therefore never "
-        "covers a field, though it names exactly that key. The field name is a "
-        "bare `String` in the core, so deciding it needs an oracle method that "
-        "compares a pooled constant to a name."
-    ),
-    "{a:int} <= dict[Lit['a','b'],int]": "As above, with the key a union of literals.",
     "str&Regex['a'] <= str&Regex['ab?']": (
         "A regex is opaque to `constraint_entailed`, which gives it no value "
         "entailment, so a refinement relates through one only when the supertype "
