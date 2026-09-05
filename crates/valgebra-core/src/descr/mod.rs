@@ -25,6 +25,7 @@ pub mod classes;
 pub mod floats;
 pub mod integers;
 pub mod interval;
+mod lines;
 pub mod lower;
 pub mod records;
 pub mod regular;
@@ -38,6 +39,7 @@ use crate::decision::{Kind, Verdict};
 use classes::Class;
 use floats::FloatSet;
 use integers::IntSet;
+use lines::Lines;
 use records::RecordLattice;
 use regular::{Alphabet, RegularSet};
 use sets::SetLattice;
@@ -138,12 +140,6 @@ pub enum Component {
     /// else -- there is no order for an automaton to walk -- so the component is
     /// the powerset of a descriptor rather than a language over it.
     Sets(SetLattice<Arc<Descr>>),
-    /// The objects this descriptor admits, as a union of open record atoms.
-    ///
-    /// What describes a value of no listed kind: not its class, which only the
-    /// bindings can compare, but the attributes it carries. Always open, because
-    /// an object may carry attributes no schema mentions.
-    Records(RecordLattice<Arc<Descr>>),
 }
 
 impl Component {
@@ -157,19 +153,6 @@ impl Component {
             Kind::List | Kind::Tuple => Component::Sequences(SymbolicDfa::all()),
             Kind::Set | Kind::FrozenSet => Component::Sets(SetLattice::all()),
             _ => Component::Coarse(true),
-        }
-    }
-
-    /// No value of the kind.
-    fn bottom(kind: Kind) -> Component {
-        match kind {
-            Kind::Bool => Component::Booleans(BoolSet::EMPTY),
-            Kind::Int => Component::Integers(IntSet::empty()),
-            Kind::Float => Component::Floats(FloatSet::empty()),
-            Kind::Str | Kind::Bytes => Component::Words(RegularSet::empty()),
-            Kind::List | Kind::Tuple => Component::Sequences(SymbolicDfa::empty()),
-            Kind::Set | Kind::FrozenSet => Component::Sets(SetLattice::empty()),
-            _ => Component::Coarse(false),
         }
     }
 
@@ -195,7 +178,6 @@ impl Component {
             Component::Words(set) => exact(set.is_empty()),
             Component::Sequences(set) => exact(set.is_empty()),
             Component::Sets(set) => set.emptiness(),
-            Component::Records(set) => set.emptiness(),
         }
     }
 
@@ -265,20 +247,28 @@ impl Component {
                 };
                 Component::Sets(combined?)
             }
-            (Component::Records(a), Component::Records(b)) => {
-                // A union of record atoms multiplies under a meet in the same
-                // way, and refuses in the same way past the bound.
-                let combined = match op {
-                    Op::Union => a.union(b),
-                    Op::Intersect => a.intersect(b),
-                };
-                Component::Records(combined?)
-            }
             (mine, theirs) => {
                 debug_assert!(false, "combining {mine:?} with {theirs:?} of another kind");
                 mine.clone()
             }
         })
+    }
+
+    /// Every value of the kind this component describes a part of.
+    ///
+    /// The kind read off the *representation* rather than passed alongside it: a
+    /// line complementing its structure needs the whole of the kind to put
+    /// beside the other half, and the variant already names which kind that is.
+    fn top_like(&self) -> Component {
+        match self {
+            Component::Coarse(_) => Component::Coarse(true),
+            Component::Booleans(_) => Component::Booleans(BoolSet::BOTH),
+            Component::Integers(_) => Component::Integers(IntSet::all()),
+            Component::Floats(_) => Component::Floats(FloatSet::all()),
+            Component::Words(_) => Component::Words(RegularSet::all()),
+            Component::Sequences(_) => Component::Sequences(SymbolicDfa::all()),
+            Component::Sets(_) => Component::Sets(SetLattice::all()),
+        }
     }
 
     /// Every value of the kind this component does not admit.
@@ -291,7 +281,6 @@ impl Component {
             Component::Words(set) => Component::Words(set.complement()),
             Component::Sequences(set) => Component::Sequences(set.complement()),
             Component::Sets(set) => Component::Sets(set.complement()),
-            Component::Records(set) => Component::Records(set.complement()),
         }
     }
 }
@@ -370,26 +359,34 @@ enum Op {
 /// equality are the ones over the components that are canonical.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Descr {
-    /// One component per kind, indexed by that kind's position in [`Kind::ALL`].
-    kinds: [Component; Kind::ALL.len()],
-    /// The values of no listed kind -- a class instance, a callable, a generator.
+    /// One union of lines per kind, indexed by that kind's position in
+    /// [`Kind::ALL`].
+    kinds: [Lines; Kind::ALL.len()],
+    /// The values of no listed kind -- a callable, a generator, an instance of a
+    /// class that derives from none of the builtins.
     ///
-    /// Described by the attributes they carry, which is what the core can see of
-    /// them. What it cannot see is their *class*: only the bindings can compare
-    /// two of those, so the class half of a schema like `Attrs` stays outside
-    /// this and meets it from there. The slot exists so a complement means what
-    /// it says: the complement of `int` holds every non-int value, not merely
-    /// the ones this partition names.
-    other: Component,
+    /// One more union of lines, over a structure this representation does not
+    /// distinguish, so its lines are told apart by their classes and attributes
+    /// alone. The slot exists so a complement means what it says: the complement
+    /// of `int` holds every non-int value, not merely the ones this partition
+    /// names.
+    other: Lines,
 }
+
+/// The whole of the kindless slot, which its complements are taken against.
+///
+/// A value of no listed kind has no structure this representation distinguishes,
+/// so the slot's every line carries the same coarse one and the classes and
+/// attributes do the work.
+const KINDLESS: Component = Component::Coarse(true);
 
 impl Descr {
     /// The empty set.
     #[must_use]
     pub fn nothing() -> Descr {
         Descr {
-            kinds: Kind::ALL.map(Component::bottom),
-            other: Component::Records(RecordLattice::empty()),
+            kinds: core::array::from_fn(|_| Lines::bottom()),
+            other: Lines::bottom(),
         }
     }
 
@@ -397,8 +394,8 @@ impl Descr {
     #[must_use]
     pub fn anything() -> Descr {
         Descr {
-            kinds: Kind::ALL.map(Component::top),
-            other: Component::Records(RecordLattice::all()),
+            kinds: Kind::ALL.map(|kind| Lines::everything(Component::top(kind))),
+            other: Lines::everything(KINDLESS),
         }
     }
 
@@ -408,6 +405,20 @@ impl Descr {
         let mut descr = Descr::nothing();
         descr.put(kind, Component::top(kind));
         descr
+    }
+
+    /// Every value the objects `constraint` admits, of **any** kind.
+    ///
+    /// A class and an attribute record constrain a value within its kind rather
+    /// than instead of it, so the constraint goes on one line of every kind --
+    /// including the kindless slot. Meeting the result with a kind keeps that
+    /// kind's line and empties the rest, which is how a dataclass deriving from
+    /// `int` keeps both halves of what it is.
+    fn objects(constraint: &RecordLattice<Arc<Descr>>) -> Descr {
+        Descr {
+            kinds: Kind::ALL.map(|kind| Lines::objects(&Component::top(kind), constraint.clone())),
+            other: Lines::objects(&KINDLESS, constraint.clone()),
+        }
     }
 
     /// The singleton holding one boolean.
@@ -510,46 +521,39 @@ impl Descr {
         Some(descr)
     }
 
-    /// The objects carrying `label`, whose value is in `ty`.
+    /// The values carrying `label`, whose value is in `ty`.
     ///
-    /// A value of no listed kind is described by the attributes it carries, and
-    /// the record is always **open**: an object may carry attributes no schema
+    /// The record is always **open**: an object may carry attributes no schema
     /// mentions, so naming one constrains that attribute and no other. That is
     /// what makes a complement finite -- an object fails by holding a *named*
     /// attribute outside its type, so the complement splits over the labels.
     ///
-    /// `optional` admits the objects that do not carry the attribute at all,
+    /// `optional` admits the values that do not carry the attribute at all,
     /// which is membership of the undefined value rather than a rule beside the
     /// type.
     #[must_use]
     pub fn attribute(label: &str, ty: &Descr, optional: bool) -> Descr {
-        let mut descr = Descr::nothing();
-        descr.other = Component::Records(RecordLattice::attribute(
+        Descr::objects(&RecordLattice::attribute(
             label,
             Arc::new(ty.clone()),
             optional,
-        ));
-        descr
+        ))
     }
 
-    /// The objects that are instances of `class`.
+    /// The values that are instances of `class`.
     ///
     /// Only a **pure** class belongs here -- one whose metaclass leaves
     /// `isinstance` and `issubclass` alone. A class with a hook answers
     /// arbitrary code and is not a set this algebra holds.
     #[must_use]
     pub fn instance_of(class: Class) -> Descr {
-        let mut descr = Descr::nothing();
-        descr.other = Component::Records(RecordLattice::instance_of(class));
-        descr
+        Descr::objects(&RecordLattice::instance_of(class))
     }
 
-    /// The objects that do not carry `label` at all.
+    /// The values that do not carry `label` at all.
     #[must_use]
     pub fn without_attribute(label: &str) -> Descr {
-        let mut descr = Descr::nothing();
-        descr.other = Component::Records(RecordLattice::without(label));
-        descr
+        Descr::objects(&RecordLattice::without(label))
     }
 
     /// The integers that are multiples of `step`, or `None` where the integer
@@ -573,10 +577,11 @@ impl Descr {
             .unwrap_or(0)
     }
 
-    fn component(&self, kind: Kind) -> &Component {
+    fn component(&self, kind: Kind) -> &Lines {
+        static EMPTY: OnceLock<Lines> = OnceLock::new();
         self.kinds
             .get(Descr::position(kind))
-            .unwrap_or(&Component::Coarse(false))
+            .unwrap_or_else(|| EMPTY.get_or_init(Lines::bottom))
     }
 
     /// Put an integer set in the `int` slot, leaving every other kind empty.
@@ -588,9 +593,9 @@ impl Descr {
         self.put(Kind::Int, Component::Integers(set));
     }
 
-    fn put(&mut self, kind: Kind, component: Component) {
+    fn put(&mut self, kind: Kind, structure: Component) {
         if let Some(slot) = self.kinds.get_mut(Descr::position(kind)) {
-            *slot = component;
+            *slot = Lines::everything(structure);
         }
     }
 
@@ -622,20 +627,24 @@ impl Descr {
     /// name the rest here, and would name the wrong set the day a kind is added.
     #[must_use]
     pub fn complement(&self) -> Descr {
+        let mut kinds = self.kinds.clone();
+        for (slot, kind) in kinds.iter_mut().zip(Kind::ALL) {
+            *slot = slot.complement(&Component::top(kind));
+        }
         Descr {
-            kinds: self.kinds.each_ref().map(Component::complement),
-            other: self.other.complement(),
+            kinds,
+            other: self.other.complement(&KINDLESS),
         }
     }
 
     fn zip(&self, other: &Descr, op: Op) -> Option<Descr> {
         let mut kinds = self.kinds.clone();
-        for (slot, theirs) in kinds.iter_mut().zip(&other.kinds) {
-            *slot = slot.combine(theirs, op)?;
+        for ((slot, theirs), kind) in kinds.iter_mut().zip(&other.kinds).zip(Kind::ALL) {
+            *slot = slot.combine(theirs, op, &Component::top(kind))?;
         }
         Some(Descr {
             kinds,
-            other: self.other.combine(&other.other, op)?,
+            other: self.other.combine(&other.other, op, &KINDLESS)?,
         })
     }
 
@@ -661,28 +670,37 @@ impl Descr {
         Verdict::any(
             self.kinds
                 .iter()
-                .chain([&self.other])
-                .map(Component::emptiness),
+                .zip(Kind::ALL)
+                .map(|(lines, kind)| lines.emptiness(&Component::top(kind)))
+                .chain([self.other.emptiness(&KINDLESS)]),
         )
     }
 
     /// Whether this set admits `value`.
     #[must_use]
     pub fn admits(&self, value: Value) -> bool {
-        let component = match value.kind {
+        let lines = match value.kind {
             Some(kind) => self.component(kind),
             None => &self.other,
         };
-        match component {
-            Component::Coarse(present) => *present,
-            Component::Booleans(set) => value.boolean.is_some_and(|b| set.holds(b)),
-            Component::Integers(set) => value.integer.is_some_and(|i| set.holds(i)),
-            Component::Floats(set) => value.float.is_some_and(|f| set.holds(f)),
-            Component::Words(set) => value.word.is_some_and(|w| set.holds(w)),
-            Component::Sequences(set) => value.elements.is_some_and(|e| set.holds(e)),
-            Component::Sets(set) => value.elements.is_some_and(|e| set.holds(e)),
-            Component::Records(set) => value.attributes.is_some_and(|a| set.holds(value.class, a)),
-        }
+        lines.admits(
+            &|structure| match structure {
+                Component::Coarse(present) => *present,
+                Component::Booleans(set) => value.boolean.is_some_and(|b| set.holds(b)),
+                Component::Integers(set) => value.integer.is_some_and(|i| set.holds(i)),
+                Component::Floats(set) => value.float.is_some_and(|f| set.holds(f)),
+                Component::Words(set) => value.word.is_some_and(|w| set.holds(w)),
+                Component::Sequences(set) => value.elements.is_some_and(|e| set.holds(e)),
+                Component::Sets(set) => value.elements.is_some_and(|e| set.holds(e)),
+            },
+            // A value the core was told no attributes for is read as one
+            // carrying none, which is what an *open* record already means by an
+            // absent label. So a line with no object constraint admits it and
+            // one naming a class or an attribute declines it -- declines, rather
+            // than admits, being the safe direction for a value nothing is known
+            // about.
+            &|objects| objects.holds(value.class, value.attributes.unwrap_or(&[])),
+        )
     }
 }
 
@@ -885,6 +903,33 @@ impl Value {
         Value::object(&[])
     }
 
+    /// The same value, also carrying `attributes`.
+    ///
+    /// A value has a kind *and* the attributes it carries: an object deriving
+    /// from `int` is an integer and carries its fields both, and the descriptor
+    /// holds the two on one line. This is what lets one be written down to ask a
+    /// law about.
+    #[must_use]
+    pub const fn carrying(self, attributes: &'static [(&'static str, Value)]) -> Value {
+        Value {
+            attributes: Some(attributes),
+            ..self
+        }
+    }
+
+    /// The same value, also seen as an instance of `class`.
+    #[must_use]
+    pub const fn of_class(
+        self,
+        class: &'static Class,
+        attributes: &'static [(&'static str, Value)],
+    ) -> Value {
+        Value {
+            class: Some(class),
+            ..self.carrying(attributes)
+        }
+    }
+
     /// An instance of `class`, described by that and the attributes it carries.
     #[must_use]
     pub const fn instance(
@@ -931,7 +976,7 @@ impl Value {
 
 #[cfg(test)]
 mod tests {
-    use super::{BoolSet, Class, Component, Descr, Value, Verdict};
+    use super::{BoolSet, Class, Component, Descr, Lines, Op, Value, Verdict};
     use crate::decision::Kind;
     use crate::descr::symbolic::{Edge, Guard};
     use core::mem::size_of;
@@ -1074,6 +1119,16 @@ mod tests {
         // one whose class nobody told us.
         for class in [&ANIMAL, &DOG, &MINERAL] {
             values.extend(OBJECTS.map(|attributes| Value::instance(class, attributes)));
+        }
+        // Values that have a kind *and* a class, which is what a line holds and
+        // what the kindless slot could not describe. One per kind whose values
+        // the components tell apart, so a law that reads only the structure and
+        // a law that reads only the class both meet a value the other decides.
+        for class in [&ANIMAL, &DOG] {
+            for base in KINDED {
+                values.push(base.of_class(class, &[]));
+                values.push(base.of_class(class, CARRYING_A));
+            }
         }
         values
     }
@@ -1478,6 +1533,52 @@ mod tests {
     /// A class and an attribute constrain one value, which is why they share an
     /// atom rather than sitting in two slots a complement would have to split.
     #[test]
+    fn a_class_meets_a_builtin_kind() {
+        let dog = Descr::instance_of(DOG.clone());
+        let ints = Descr::of_kind(Kind::Int);
+        let dog_int = Value::integer(1).of_class(&DOG, &[]);
+
+        // A class constrains a value within its kind, so the two meet in the
+        // values that are both -- which is a set the kindless slot could not
+        // name, and which every question about a dataclass deriving from `int`
+        // is asked of.
+        let both = dog.intersect(&ints).expect("an int that is a Dog");
+        assert!(both.admits(dog_int));
+        assert_eq!(both.emptiness(), Verdict::Inhabited);
+
+        // And it is *both*, not either: an integer nobody gave a class to is
+        // outside it, and so is a Dog of no listed kind.
+        assert!(!both.admits(Value::integer(1)));
+        assert!(!both.admits(Value::instance(&DOG, &[])));
+
+        // Each half on its own still admits what it always did.
+        assert!(dog.admits(dog_int) && dog.admits(Value::instance(&DOG, &[])));
+        assert!(ints.admits(dog_int) && ints.admits(Value::integer(1)));
+
+        // The order the classes stand in is read through the kind, not around
+        // it: a Dog is an Animal whatever kind the value also has.
+        let animal_int = Descr::instance_of(ANIMAL.clone())
+            .intersect(&ints)
+            .expect("an int that is an Animal");
+        assert!(animal_int.admits(dog_int));
+        assert!(!animal_int.admits(Value::integer(1).of_class(&MINERAL, &[])));
+    }
+
+    /// An attribute constrains a value of a listed kind, for the same reason a
+    /// class does: it is a narrowing *within* the kind.
+    #[test]
+    fn an_attribute_meets_a_builtin_kind() {
+        let carrying = Descr::attribute("a", &Descr::of_kind(Kind::Int), false);
+        let ints = Descr::of_kind(Kind::Int);
+        let both = ints.intersect(&carrying).expect("an int carrying `a`");
+        assert!(both.admits(Value::integer(1).of_class(&DOG, CARRYING_A)));
+        assert!(!both.admits(Value::integer(1)));
+        // The complement is taken inside the kind too: an integer carrying no
+        // `a` is outside the meet and inside its complement.
+        assert!(both.complement().admits(Value::integer(1)));
+    }
+
+    #[test]
     fn a_class_meets_an_attribute_in_one_object() {
         const NAMED: &[(&str, Value)] = &[("x", Value::integer(0))];
 
@@ -1493,13 +1594,13 @@ mod tests {
         );
     }
 
-    /// The record the report calls carrier-free: a set of objects fixed by the
+    /// The record the report calls carrier-free: a set of values fixed by the
     /// attributes alone, with no class in it.
     ///
-    /// This is what `Attrs` could not say. A dataclass `D(x: int)` is the meet
-    /// of a class and this record; the record on its own is the half that lives
-    /// in the algebra, and it is the half that makes `¬Attrs` representable --
-    /// the complement of an attribute constraint is another one.
+    /// A dataclass `D(x: int)` is the meet of a class and this record -- which is
+    /// what the IR now spells, `Instance(D) ∧ AttrRecord` -- and the record on
+    /// its own is the half that makes the complement representable, because the
+    /// complement of an attribute constraint is another one.
     #[test]
     fn an_attribute_record_is_a_set_without_a_class_in_it() {
         const HAS_INT: &[(&str, Value)] = &[("x", Value::integer(1))];
@@ -1593,6 +1694,23 @@ mod tests {
             assert_eq!(looped, Descr::of_kind(kind), "{kind:?}");
         }
     }
+
+    /// One integer, as the elements of a sequence or the members of a set.
+    const ONE_INT: &[Value] = &[Value::integer(1)];
+
+    /// One value of each kind whose values the components tell apart, for the
+    /// universe to put a class and an attribute beside.
+    const KINDED: [Value; 6] = [
+        Value::boolean(true),
+        Value::integer(1),
+        Value::float(1.0),
+        Value::word(b"a", Kind::Str),
+        Value::sequence(ONE_INT, Kind::List),
+        Value::sequence(ONE_INT, Kind::Set),
+    ];
+
+    /// One attribute, for a value that carries one beside its kind.
+    const CARRYING_A: &[(&str, Value)] = &[("a", Value::integer(1))];
 
     /// The element sequences the universe is built from.
     const SEQUENCES: [&[Value]; 6] = [
@@ -1864,6 +1982,29 @@ mod tests {
         assert!(not_true.admits(Value::other()));
     }
 
+    /// A coarse component combines as the boolean it is.
+    ///
+    /// Read here rather than through a descriptor, because a descriptor cannot
+    /// reach the interesting pair: a line whose structure is proved empty is
+    /// dropped, so a `Coarse(false)` never meets a `Coarse(true)` in a union. The
+    /// arm is still what a union and a meet of two kinds mean, and this is where
+    /// it says so.
+    #[test]
+    fn a_coarse_component_combines_as_a_boolean() {
+        let yes = Component::Coarse(true);
+        let no = Component::Coarse(false);
+        assert_eq!(yes.combine(&no, Op::Union), Some(Component::Coarse(true)));
+        assert_eq!(no.combine(&yes, Op::Union), Some(Component::Coarse(true)));
+        assert_eq!(
+            yes.combine(&no, Op::Intersect),
+            Some(Component::Coarse(false))
+        );
+        assert_eq!(
+            yes.combine(&yes, Op::Intersect),
+            Some(Component::Coarse(true))
+        );
+    }
+
     /// A coarse component is all-or-nothing, and the tests must not read that as
     /// a distinction the descriptor makes.
     #[test]
@@ -1982,21 +2123,21 @@ mod tests {
     }
 
     /// The bottom and top of one kind, which every constructor is written from.
+    ///
+    /// A kind's bottom is *no lines* and its top is one line over the whole of
+    /// the kind with no object constraint on it, and each complements into the
+    /// other. The empty union is what makes the bottom free: a descriptor
+    /// holding one kind carries eleven empty vectors.
     #[test]
-    fn a_component_is_bottom_or_top_of_its_own_kind() {
+    fn a_kind_is_bottom_or_top_of_its_own_lines() {
         for kind in Kind::ALL {
-            assert_eq!(
-                Component::bottom(kind).emptiness(),
-                Verdict::Empty,
-                "{kind:?} bottom"
-            );
-            assert_eq!(
-                Component::top(kind).emptiness(),
-                Verdict::Inhabited,
-                "{kind:?} top"
-            );
-            assert_eq!(Component::bottom(kind).complement(), Component::top(kind));
-            assert_eq!(Component::top(kind).complement(), Component::bottom(kind));
+            let whole = Component::top(kind);
+            let bottom = Lines::bottom();
+            let top = Lines::everything(whole.clone());
+            assert_eq!(bottom.emptiness(&whole), Verdict::Empty, "{kind:?} bottom");
+            assert_eq!(top.emptiness(&whole), Verdict::Inhabited, "{kind:?} top");
+            assert_eq!(bottom.complement(&whole), top, "{kind:?} bottom");
+            assert_eq!(top.complement(&whole), bottom, "{kind:?} top");
         }
     }
 }

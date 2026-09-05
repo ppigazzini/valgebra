@@ -134,15 +134,21 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>) -> Option<
         }
         Schema::Complement(inner) => Some(descend(inner, pool, budget)?.complement()),
         Schema::Refine { base, constraints } => refine(base, constraints, pool, budget),
+        // Every field narrows the same value, so the record is their meet. Each
+        // field's type is a descriptor in its own right, which is what makes the
+        // attribute half recursive; a field the schema does not require admits
+        // the values that do not carry it at all.
+        Schema::AttrRecord { fields } => {
+            fields.iter().try_fold(Descr::anything(), |whole, field| {
+                let ty = descend(&field.schema, pool, budget)?;
+                whole.intersect(&Descr::attribute(&field.name, &ty, !field.required))
+            })
+        }
         // No component to land in, or none that would mean what the schema does.
-        // A dict has no map component yet, an attribute record beside a builtin
-        // kind wants a descriptor that is a union of lines, and a reference is a
-        // cycle a finite descriptor has no room for.
-        Schema::KeyedMap { .. }
-        | Schema::Instance(_)
-        | Schema::AttrRecord { .. }
-        | Schema::Ref(_)
-        | Schema::SelfRef(_) => None,
+        // A dict has no map component yet, a class needs the object pool to say
+        // which classes it derives from, and a reference is a cycle a finite
+        // descriptor has no room for.
+        Schema::KeyedMap { .. } | Schema::Instance(_) | Schema::Ref(_) | Schema::SelfRef(_) => None,
     }
 }
 
@@ -746,6 +752,9 @@ mod tests {
                 fields: Vec::new(),
                 defaults: Vec::new(),
             },
+            // A class needs the object pool to say what it derives from, and the
+            // core has none.
+            Schema::Instance(crate::ir::ClassIx::new(0)),
             Schema::Ref(crate::ir::DefIx::new(0)),
         ] {
             assert!(lower(&schema, &pool).is_none(), "{schema:?}");
@@ -762,6 +771,38 @@ mod tests {
         // `Any` is the top, spelled, so it lowers to the top rather than
         // refusing: the spelling is not a set and the descriptor holds sets.
         assert_eq!(lower(&Schema::ANY, &pool), Some(Descr::anything()));
+    }
+
+    /// An attribute record lowers without the pool, because a field's name and
+    /// its type are the whole of it.
+    ///
+    /// It is the half of an object schema the core can read: the class beside it
+    /// needs the pool, and the two meet once the pool is in reach. The record
+    /// narrows a value of *any* kind, so what lowers here is not scoped to the
+    /// values that have no kind.
+    #[test]
+    fn an_attribute_record_lowers_to_the_values_carrying_it() {
+        const CARRIED: &[(&str, Value)] = &[("a", Value::integer(1))];
+        let pool = empty_pool();
+        let field = |name: &str, schema, required| crate::ir::Field {
+            name: name.to_owned(),
+            schema,
+            required,
+        };
+        let record = Schema::AttrRecord {
+            fields: vec![field("a", Schema::Int, true)],
+        };
+        let lowered = lower(&record, &pool).expect("an attribute record lowers");
+        assert!(lowered.admits(Value::object(CARRIED)));
+        // And it narrows a value that also has a kind, which is the whole point
+        // of holding the record on a line rather than beside the kinds.
+        assert!(lowered.admits(Value::integer(7).carrying(CARRIED)));
+        assert!(!lowered.admits(Value::integer(7)));
+        // A field whose type admits nothing empties the record.
+        let empty = Schema::AttrRecord {
+            fields: vec![field("a", Schema::Nothing, true)],
+        };
+        assert!(lower(&empty, &pool).expect("it lowers").is_empty());
     }
 
     /// An operand the pool cannot read refuses the constraint that names it.
