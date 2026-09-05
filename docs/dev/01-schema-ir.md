@@ -355,10 +355,22 @@ cannot hold both is one that cannot decide it. Per-kind lines keep the
 partition, split a line's complement into at most three atoms, and are the
 shape the record atom already has, so the code exists once.
 
-It waits on two things in order: guards interned so a component may be a union
-without doubling the memory of every automaton that holds one, and a descriptor
-that replaces the procedure rather than shadowing it — because a union is what
-the descriptor cannot afford to build beside a procedure that builds it too.
+It waited on one thing, and that has landed: guards held by handle, so a
+component may be a union without multiplying the memory of every automaton that
+holds one.
+
+What is *not* a precondition, and once read as one, is the descriptor replacing
+the decision procedure. That caution is about **consulting** a DNF descriptor
+beside a procedure that already answers — paying twice for one verdict — and it
+is the rule that withdrew the shadowing widening. It says nothing about building
+the representation, which decides nothing a caller can reach and is checked
+against membership over generated values like every other part of the
+descriptor.
+
+One half does still wait, for a different reason: lowering an `Instance` needs
+the object pool, because only the bindings can say which classes a class derives
+from. The attribute half needs no pool and lowers today. The pool reaches the
+core with the constants, and the class comes with it.
 
 ## What a class with attributes is, on the surface
 
