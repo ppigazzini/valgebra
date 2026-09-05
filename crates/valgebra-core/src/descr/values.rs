@@ -82,3 +82,60 @@ impl<G: Guard> Values<G> {
         }
     }
 }
+
+/// What one key or attribute holds, as a subset of `T⊥`.
+///
+/// `absent` is the `⊥`: whether it is allowed to be missing. An optional field
+/// carries it, a required one does not, and one that must *not* exist carries it
+/// with an empty type.
+///
+/// One type for a record's attributes and a map's labels both: the two ask the
+/// same question of a name -- what it holds, and whether it has to be there --
+/// and the paper's `T⊥` is that question with a name.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Field<G> {
+    /// The type the value must be in.
+    pub ty: Values<G>,
+    /// Whether the key or attribute may be missing altogether.
+    pub absent: bool,
+}
+
+impl<G: Guard> Field<G> {
+    /// Any value, or none at all -- what an attribute no atom names holds.
+    #[must_use]
+    pub fn top() -> Field<G> {
+        Field {
+            ty: Values::Every,
+            absent: true,
+        }
+    }
+
+    /// The values in both, or `None` where a guard refuses.
+    #[must_use]
+    pub fn meet(&self, other: &Field<G>) -> Option<Field<G>> {
+        Some(Field {
+            ty: self.ty.meet(&other.ty)?,
+            absent: self.absent && other.absent,
+        })
+    }
+
+    /// The rest of `T⊥`, which flips the extra element along with the type.
+    #[must_use]
+    pub fn complement(&self) -> Field<G> {
+        Field {
+            ty: self.ty.complement(),
+            absent: !self.absent,
+        }
+    }
+
+    /// What is known about something satisfying this field. Being allowed to be
+    /// missing settles it whatever the type says.
+    #[must_use]
+    pub fn emptiness(&self) -> Verdict {
+        if self.absent {
+            Verdict::Inhabited
+        } else {
+            self.ty.emptiness()
+        }
+    }
+}

@@ -27,6 +27,7 @@ pub mod integers;
 pub mod interval;
 mod lines;
 pub mod lower;
+pub mod maps;
 pub mod records;
 pub mod regular;
 pub mod sets;
@@ -40,6 +41,7 @@ use classes::Class;
 use floats::FloatSet;
 use integers::IntSet;
 use lines::Lines;
+use maps::MapLattice;
 use records::RecordLattice;
 use regular::{Alphabet, RegularSet};
 use sets::SetLattice;
@@ -140,6 +142,12 @@ pub enum Component {
     /// else -- there is no order for an automaton to walk -- so the component is
     /// the powerset of a descriptor rather than a language over it.
     Sets(SetLattice<Arc<Descr>>),
+    /// The dicts this descriptor admits, as a union of map atoms.
+    ///
+    /// A dict is a *quasi-constant function* from keys to values, so the
+    /// component names the finitely many keys it constrains and says what every
+    /// other key of each kind maps to ([`maps`]).
+    Maps(MapLattice<Arc<Descr>>),
 }
 
 impl Component {
@@ -152,7 +160,9 @@ impl Component {
             Kind::Str | Kind::Bytes => Component::Words(RegularSet::all()),
             Kind::List | Kind::Tuple => Component::Sequences(SymbolicDfa::all()),
             Kind::Set | Kind::FrozenSet => Component::Sets(SetLattice::all()),
-            _ => Component::Coarse(true),
+            Kind::Dict => Component::Maps(MapLattice::all()),
+            // `None` has one value, so all-or-nothing is exact for it.
+            Kind::NoneType => Component::Coarse(true),
         }
     }
 
@@ -178,6 +188,7 @@ impl Component {
             Component::Words(set) => exact(set.is_empty()),
             Component::Sequences(set) => exact(set.is_empty()),
             Component::Sets(set) => set.emptiness(),
+            Component::Maps(set) => set.emptiness(),
         }
     }
 
@@ -237,6 +248,16 @@ impl Component {
                 };
                 Component::Sequences(combined?)
             }
+            (Component::Maps(a), Component::Maps(b)) => {
+                // A union of map atoms multiplies under a meet and grows by a
+                // label and a key part under a difference, and refuses past the
+                // bound for the reason the others do.
+                let combined = match op {
+                    Op::Union => a.union(b),
+                    Op::Intersect => a.intersect(b),
+                };
+                Component::Maps(combined?)
+            }
             (Component::Sets(a), Component::Sets(b)) => {
                 // Refused for the same reason again: a union of powerset lines
                 // multiplies under a meet, and past the bound there is no sound
@@ -268,6 +289,7 @@ impl Component {
             Component::Words(_) => Component::Words(RegularSet::all()),
             Component::Sequences(_) => Component::Sequences(SymbolicDfa::all()),
             Component::Sets(_) => Component::Sets(SetLattice::all()),
+            Component::Maps(_) => Component::Maps(MapLattice::all()),
         }
     }
 
@@ -281,6 +303,7 @@ impl Component {
             Component::Words(set) => Component::Words(set.complement()),
             Component::Sequences(set) => Component::Sequences(set.complement()),
             Component::Sets(set) => Component::Sets(set.complement()),
+            Component::Maps(set) => Component::Maps(set.complement()),
         }
     }
 }
@@ -521,6 +544,48 @@ impl Descr {
         Some(descr)
     }
 
+    /// The dicts whose `label` maps into `ty`, every other key free.
+    ///
+    /// `optional` admits the dicts without the key at all, which is the `⊥` in
+    /// the field's type rather than a rule beside it.
+    #[must_use]
+    pub fn field(label: &str, ty: &Descr, optional: bool) -> Descr {
+        let mut descr = Descr::nothing();
+        descr.put(
+            Kind::Dict,
+            Component::Maps(MapLattice::label(label, Arc::new(ty.clone()), optional)),
+        );
+        descr
+    }
+
+    /// The dicts every one of whose keys of `kind` maps into `ty`.
+    ///
+    /// One part of the key partition at a time, which is what makes the default
+    /// a function: `dict[str, int]` says what a `str` key maps to and leaves
+    /// every other kind of key alone, and the two spellings meet rather than
+    /// overlapping.
+    #[must_use]
+    pub fn mapping(kind: Kind, ty: &Descr) -> Descr {
+        let mut descr = Descr::nothing();
+        descr.put(
+            Kind::Dict,
+            Component::Maps(MapLattice::keyed(kind, Arc::new(ty.clone()))),
+        );
+        descr
+    }
+
+    /// The dicts carrying no key of any kind but `kind`.
+    ///
+    /// What closes a map: `dict[str, int]` on its own admits a dict with an
+    /// integer key, because the default for `int` keys is untouched. Meeting it
+    /// with this says the map has string keys and no others.
+    #[must_use]
+    pub fn keys_only_of(kind: Kind) -> Descr {
+        let mut descr = Descr::nothing();
+        descr.put(Kind::Dict, Component::Maps(MapLattice::only_keys_of(kind)));
+        descr
+    }
+
     /// The values carrying `label`, whose value is in `ty`.
     ///
     /// The record is always **open**: an object may carry attributes no schema
@@ -692,6 +757,23 @@ impl Descr {
                 Component::Words(set) => value.word.is_some_and(|w| set.holds(w)),
                 Component::Sequences(set) => value.elements.is_some_and(|e| set.holds(e)),
                 Component::Sets(set) => value.elements.is_some_and(|e| set.holds(e)),
+                Component::Maps(set) => value.entries.is_some_and(|entries| {
+                    // The component is generic over its guard and cannot read a
+                    // value, so the key is decomposed here: its part of the
+                    // partition is its kind, and its label is its text where it
+                    // has one.
+                    let decomposed: Vec<(Option<Kind>, Option<&str>, Value)> = entries
+                        .iter()
+                        .map(|(key, mapped)| {
+                            let text = key
+                                .word
+                                .filter(|_| key.kind == Some(Kind::Str))
+                                .and_then(|word| core::str::from_utf8(word).ok());
+                            (key.kind, text, *mapped)
+                        })
+                        .collect();
+                    set.holds(&decomposed)
+                }),
             },
             // A value the core was told no attributes for is read as one
             // carrying none, which is what an *open* record already means by an
@@ -818,6 +900,13 @@ pub struct Value {
     /// not carry, which an open record reads as the undefined value.
     pub attributes: Option<&'static [(&'static str, Value)]>,
     pub elements: Option<&'static [Value]>,
+    /// The entries, where the kind is [`Kind::Dict`]: each key beside what it
+    /// maps to.
+    ///
+    /// A key is a value again, which is what lets the component read its *kind*
+    /// -- the part of the key partition it falls in -- and, where it is a
+    /// string, the label it may be named by.
+    pub entries: Option<&'static [(Value, Value)]>,
 }
 
 impl Value {
@@ -833,6 +922,7 @@ impl Value {
             elements: None,
             attributes: None,
             class: None,
+            entries: None,
         }
     }
 
@@ -848,6 +938,7 @@ impl Value {
             elements: None,
             attributes: None,
             class: None,
+            entries: None,
         }
     }
 
@@ -863,6 +954,7 @@ impl Value {
             elements: None,
             attributes: None,
             class: None,
+            entries: None,
         }
     }
 
@@ -879,6 +971,7 @@ impl Value {
             elements: None,
             attributes: None,
             class: None,
+            entries: None,
         }
     }
 
@@ -894,6 +987,7 @@ impl Value {
             elements: None,
             attributes: None,
             class: None,
+            entries: None,
         }
     }
 
@@ -955,6 +1049,23 @@ impl Value {
             elements: None,
             attributes: Some(attributes),
             class: None,
+            entries: None,
+        }
+    }
+
+    /// One dict, as its entries: each key beside what it maps to.
+    #[must_use]
+    pub const fn dict(entries: &'static [(Value, Value)]) -> Value {
+        Value {
+            kind: Some(Kind::Dict),
+            boolean: None,
+            integer: None,
+            float: None,
+            word: None,
+            elements: None,
+            attributes: None,
+            class: None,
+            entries: Some(entries),
         }
     }
     /// One sequence, for a sequence kind. The elements are values again, which
@@ -970,6 +1081,7 @@ impl Value {
             elements: Some(elements),
             attributes: None,
             class: None,
+            entries: None,
         }
     }
 }
@@ -1054,6 +1166,7 @@ mod tests {
                         | Kind::Tuple
                         | Kind::Set
                         | Kind::FrozenSet
+                        | Kind::Dict
                 )
             })
             .map(|kind| Value::of_kind(*kind))
@@ -1112,6 +1225,11 @@ mod tests {
         for kind in [Kind::Set, Kind::FrozenSet] {
             values.extend(SEQUENCES.map(|members| Value::sequence(members, kind)));
         }
+        // Dicts, as the entries they carry. The empty one separates a map that
+        // constrains a key from one that forbids it; the two values under one
+        // key separate a label's type from its neighbour's; and the integer key
+        // is what tells one part of the key partition from another.
+        values.extend(DICTS.map(Value::dict));
         // Objects of no listed kind, described by the attributes they carry.
         // The one with an attribute nobody names is what holds the record open.
         values.extend(OBJECTS.map(Value::object));
@@ -1712,6 +1830,24 @@ mod tests {
     /// One attribute, for a value that carries one beside its kind.
     const CARRYING_A: &[(&str, Value)] = &[("a", Value::integer(1))];
 
+    /// Dicts the laws are asked about, as their entries.
+    const DICTS: [&[(Value, Value)]; 8] = [
+        &[],
+        &[(Value::word(b"a", Kind::Str), Value::integer(1))],
+        &[(Value::word(b"a", Kind::Str), Value::word(b"x", Kind::Str))],
+        &[(Value::word(b"b", Kind::Str), Value::integer(1))],
+        &[
+            (Value::word(b"a", Kind::Str), Value::integer(1)),
+            (Value::word(b"b", Kind::Str), Value::integer(1)),
+        ],
+        &[(Value::integer(1), Value::integer(1))],
+        &[(Value::integer(1), Value::word(b"x", Kind::Str))],
+        // A key of no listed kind: an object whose class defines `__hash__`. It
+        // is the part of the key partition that has no kind, and a default that
+        // did not cover it would leave the dict governed by nothing.
+        &[(Value::other(), Value::integer(1))],
+    ];
+
     /// The element sequences the universe is built from.
     const SEQUENCES: [&[Value]; 6] = [
         &[],
@@ -1780,7 +1916,7 @@ mod tests {
         })
     }
 
-    /// The same descriptors, plus the sequences, sets and objects the three
+    /// The same descriptors, plus the sequences, sets, maps and objects the four
     /// non-canonical components hold.
     ///
     /// A second generator rather than a branch of the first, because those three
@@ -1811,6 +1947,18 @@ mod tests {
             )
                 .prop_map(|(label, ty, optional)| Descr::attribute(label, &ty, optional)),
             1 => prop_oneof![Just("x"), Just("y")].prop_map(Descr::without_attribute),
+            2 => (
+                prop_oneof![Just("a"), Just("b")],
+                descr(),
+                proptest::bool::ANY,
+            )
+                .prop_map(|(label, ty, optional)| Descr::field(label, &ty, optional)),
+            2 => (
+                prop_oneof![Just(Kind::Str), Just(Kind::Int)],
+                descr(),
+            )
+                .prop_map(|(kind, ty)| Descr::mapping(kind, &ty)),
+            1 => prop_oneof![Just(Kind::Str), Just(Kind::Int)].prop_map(Descr::keys_only_of),
             1 => prop_oneof![
                 Just(ANIMAL.clone()),
                 Just(DOG.clone()),
@@ -2005,12 +2153,144 @@ mod tests {
         );
     }
 
+    /// The map rows the report calls undecided, decided.
+    ///
+    /// `{"a": int}` and `dict[str, str]` share no dict, because the key `a` must
+    /// map into both and nothing does. The old component was coarse -- every dict
+    /// or none -- so it could not tell one map from another at all, and the two
+    /// met in "some dict".
+    #[test]
+    fn two_maps_that_disagree_about_a_key_share_no_dict() {
+        const A_STR: &[(Value, Value)] =
+            &[(Value::word(b"a", Kind::Str), Value::word(b"x", Kind::Str))];
+        let ints = Descr::of_kind(Kind::Int);
+        let strs = Descr::of_kind(Kind::Str);
+        let a_is_int = Descr::field("a", &ints, false);
+        let strs_to_strs = Descr::mapping(Kind::Str, &strs);
+        let met = a_is_int
+            .intersect(&strs_to_strs)
+            .expect("the two maps meet");
+        assert!(met.is_empty());
+
+        // And two that agree do share one, so the emptiness above is the types
+        // disagreeing rather than the meet collapsing.
+        let a_is_str = Descr::field("a", &strs, false);
+        let agreeing = a_is_str
+            .intersect(&strs_to_strs)
+            .expect("the two maps meet");
+        assert!(!agreeing.is_empty());
+        assert!(agreeing.admits(Value::dict(A_STR)));
+    }
+
+    /// A label's type distributes over the union: a map whose `a` is an `int` or
+    /// a `str` is one of the two maps that say which.
+    ///
+    /// The row the report lists as `{"a": int|str} ≤ {"a": int} ∨ {"a": str}`.
+    /// It holds because the atom is a *function* on the labels -- the union
+    /// splits at the one label rather than having to be searched for.
+    #[test]
+    fn a_label_of_a_union_is_the_union_of_the_labels() {
+        let ints = Descr::of_kind(Kind::Int);
+        let strs = Descr::of_kind(Kind::Str);
+        let either = ints.union(&strs).expect("int or str");
+        let wide = Descr::field("a", &either, false);
+        let split = Descr::field("a", &ints, false)
+            .union(&Descr::field("a", &strs, false))
+            .expect("the two maps join");
+        let outside = wide
+            .intersect(&split.complement())
+            .expect("the difference is a map");
+        assert!(outside.is_empty(), "{outside:?}");
+    }
+
+    /// The key partition is read per part: a map that says what its `str` keys
+    /// map to says nothing about its `int` keys.
+    ///
+    /// The default is a *function* on the parts, which is what Castagna's §4.4
+    /// requires of a key type and what the kind partition supplies. Reading one
+    /// part for another would make `dict[str, int]` a claim about every key.
+    #[test]
+    fn a_map_constrains_one_part_of_the_key_partition() {
+        const INT_KEY: &[(Value, Value)] = &[(Value::integer(1), Value::word(b"x", Kind::Str))];
+        const STR_KEY: &[(Value, Value)] = &[(Value::word(b"a", Kind::Str), Value::integer(1))];
+        let ints = Descr::of_kind(Kind::Int);
+        let str_keys = Descr::mapping(Kind::Str, &ints);
+        let int_keys = Descr::mapping(Kind::Int, &ints);
+
+        // `dict[str, int]` says nothing about an integer key, and the other way
+        // round.
+        assert!(str_keys.admits(Value::dict(INT_KEY)));
+        assert!(!int_keys.admits(Value::dict(INT_KEY)));
+        assert!(int_keys.admits(Value::dict(STR_KEY)));
+        assert!(str_keys.admits(Value::dict(STR_KEY)));
+
+        // And closing the map is a claim about the other parts, not this one.
+        let only_strs = Descr::keys_only_of(Kind::Str);
+        assert!(only_strs.admits(Value::dict(STR_KEY)));
+        assert!(!only_strs.admits(Value::dict(INT_KEY)));
+    }
+
+    /// A constraint made before a label was known keeps its meaning after.
+    ///
+    /// The paper fixes one label set for every atom of a normal form, so its `S`
+    /// is always about a key outside *that* set. Here an atom carries its own
+    /// labels and a meet unions them, so a constraint read against "the atom's
+    /// labels" would quietly strengthen as the atom learned names, and the meet
+    /// would hold fewer dicts than its operands share.
+    #[test]
+    fn a_constraint_keeps_its_meaning_when_a_label_arrives() {
+        const A_IS_INT: &[(Value, Value)] = &[(Value::word(b"a", Kind::Str), Value::integer(1))];
+        const B_IS_STR: &[(Value, Value)] =
+            &[(Value::word(b"b", Kind::Str), Value::word(b"x", Kind::Str))];
+        let ints = Descr::of_kind(Kind::Int);
+        let strs = Descr::of_kind(Kind::Str);
+        // "not every str key maps into int" -- which carries a constraint
+        // wanting some str key outside no labels at all.
+        let some_key_is_not_an_int = Descr::mapping(Kind::Str, &ints).complement();
+        let b_is_str = Descr::field("b", &strs, false);
+        let met = some_key_is_not_an_int
+            .intersect(&b_is_str)
+            .expect("the two maps meet");
+        // `{"b": "x"}` is one: `b` is the key that is not an integer, and it is a
+        // label of the meet rather than a key outside it.
+        assert!(met.admits(Value::dict(B_IS_STR)));
+        assert!(!met.is_empty());
+        // And a union of two maps is a map, rather than a refusal the caller has
+        // to widen away.
+        let ints = Descr::of_kind(Kind::Int);
+        let joined = Descr::field("a", &ints, false)
+            .union(&Descr::field("b", &ints, false))
+            .expect("the two maps join");
+        assert!(!joined.is_empty());
+        assert!(joined.admits(Value::dict(A_IS_INT)));
+    }
+
+    /// A map's complement is a map, which is what the negative set is for.
+    ///
+    /// A dict fails `{"a": int}` by carrying no `a` at all, or by carrying one
+    /// that is not an integer -- and both are dicts the complement holds.
+    #[test]
+    fn a_map_fails_by_a_missing_key_or_a_wrong_one() {
+        const A_INT: &[(Value, Value)] = &[(Value::word(b"a", Kind::Str), Value::integer(1))];
+        const A_STR: &[(Value, Value)] =
+            &[(Value::word(b"a", Kind::Str), Value::word(b"x", Kind::Str))];
+        let ints = Descr::of_kind(Kind::Int);
+        let a_is_int = Descr::field("a", &ints, false);
+        let outside = a_is_int.complement();
+        assert!(a_is_int.admits(Value::dict(A_INT)));
+        assert!(!a_is_int.admits(Value::dict(&[])));
+        assert!(!a_is_int.admits(Value::dict(A_STR)));
+        assert!(!outside.admits(Value::dict(A_INT)));
+        assert!(outside.admits(Value::dict(&[])));
+        assert!(outside.admits(Value::dict(A_STR)));
+    }
+
     /// A coarse component is all-or-nothing, and the tests must not read that as
     /// a distinction the descriptor makes.
     #[test]
     fn a_coarse_kind_admits_all_of_its_values_or_none() {
         let dicts = Descr::of_kind(Kind::Dict);
-        assert!(dicts.admits(Value::of_kind(Kind::Dict)));
+        assert!(dicts.admits(Value::dict(&[])));
         assert!(!dicts.admits(Value::of_kind(Kind::NoneType)));
         assert!(!dicts.admits(Value::other()));
         assert!(!dicts.is_empty());

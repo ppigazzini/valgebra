@@ -31,7 +31,7 @@
 
 use super::classes::Class;
 use super::symbolic::Guard;
-use super::values::Values;
+use super::values::{Field, Values};
 use crate::decision::Verdict;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -42,53 +42,6 @@ use std::collections::{BTreeMap, BTreeSet};
 /// representation rather than an approximation -- past it there is no sound
 /// union to substitute, so the operation refuses.
 pub const MAX_ATOMS: usize = 256;
-
-/// What one attribute holds, as a subset of `T⊥`.
-///
-/// `absent` is the `⊥`: whether the attribute is allowed to be missing. An
-/// optional field carries it, a required one does not, and a field that must not
-/// exist carries it with an empty type.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct Field<G> {
-    ty: Values<G>,
-    absent: bool,
-}
-
-impl<G: Guard> Field<G> {
-    /// Any value, or none at all -- what an attribute no atom names holds.
-    fn top() -> Field<G> {
-        Field {
-            ty: Values::Every,
-            absent: true,
-        }
-    }
-
-    /// The values in both, or `None` where a guard refuses.
-    fn meet(&self, other: &Field<G>) -> Option<Field<G>> {
-        Some(Field {
-            ty: self.ty.meet(&other.ty)?,
-            absent: self.absent && other.absent,
-        })
-    }
-
-    /// The rest of `T⊥`, which flips the extra element along with the type.
-    fn complement(&self) -> Field<G> {
-        Field {
-            ty: self.ty.complement(),
-            absent: !self.absent,
-        }
-    }
-
-    /// What is known about something satisfying this field. Being allowed to be
-    /// missing settles it whatever the type says.
-    fn emptiness(&self) -> Verdict {
-        if self.absent {
-            Verdict::Inhabited
-        } else {
-            self.ty.emptiness()
-        }
-    }
-}
 
 /// One open record: finitely many attributes constrained, the rest free, and
 /// finitely many classes the value must or must not be an instance of.
@@ -167,11 +120,12 @@ impl<G: Guard> Atom<G> {
         {
             return Verdict::Empty;
         }
-        let unrelated = self.is_a.iter().any(|mine| {
-            self.is_a.iter().any(|other| {
-                other != mine && !mine.derives_from(other) && !other.derives_from(mine)
-            })
-        });
+        // Two classes left in `is_a` are incomparable, because [`Atom::tidy`]
+        // drops one that another derives from -- so counting them is the whole
+        // question. Re-testing the order here would be asking what tidying has
+        // already answered, and the mutation sweep says as much: neither guard
+        // can be made to change an answer.
+        let unrelated = self.is_a.len() > 1;
         let fields = Verdict::every(self.fields.values().map(Field::emptiness));
         if unrelated && fields != Verdict::Empty {
             return Verdict::Unknown;
@@ -454,9 +408,62 @@ fn tidy<G: Guard>(atoms: Vec<Atom<G>>) -> Option<Vec<Atom<G>>> {
 #[cfg(test)]
 mod tests {
     use super::{MAX_ATOMS, RecordLattice};
+    use crate::decision::Verdict;
     use crate::descr::classes::Class;
     use crate::descr::integers::IntSet;
     use proptest::prelude::*;
+
+    /// An atom that holds nothing is dropped from a union, and one already there
+    /// is not added twice.
+    ///
+    /// Both keep the union a *name* for the objects it holds: an atom holding
+    /// nothing contributes none, and a repeat contributes none it did not
+    /// already. Left in, two unions holding the same objects would compare
+    /// unequal, which is the equality the lattice laws are asked in.
+    #[test]
+    fn a_union_drops_the_atoms_that_hold_nothing_and_the_ones_it_has() {
+        // An attribute that must be present and holds nothing: no object at all.
+        let barren = RecordLattice::attribute("x", IntSet::empty(), false);
+        assert!(barren.is_empty());
+        let live = RecordLattice::attribute("y", IntSet::just(1), false);
+
+        let joined = barren.union(&live).expect("a union of two records");
+        assert_eq!(joined, live, "the empty atom is dropped");
+        assert_eq!(
+            live.union(&live).expect("a union"),
+            live,
+            "and so is a repeat"
+        );
+    }
+
+    /// A class and one it derives from are one object, and the meet says so
+    /// rather than declining.
+    ///
+    /// The open world makes two *unrelated* classes an `Unknown` -- only a class
+    /// deriving from both satisfies them, and a snapshot of the order cannot say
+    /// whether one exists. A pair where one derives from the other is not that
+    /// case, and reading it as one would decline every dataclass beside its base.
+    #[test]
+    fn a_class_and_its_base_are_one_object() {
+        let animal = Class::root(1);
+        let dog = Class::new(2, 1, std::slice::from_ref(&animal));
+        let mineral = Class::root(3);
+        let of = |class: &Class| RecordLattice::<IntSet>::instance_of(class.clone());
+
+        let both = of(&dog)
+            .intersect(&of(&animal))
+            .expect("a Dog and an Animal");
+        assert_eq!(both.emptiness(), Verdict::Inhabited, "a Dog is an Animal");
+
+        // Laid out apart, so no class derives from both: proved empty.
+        assert_eq!(
+            of(&dog)
+                .intersect(&of(&mineral))
+                .expect("a Dog and a Mineral")
+                .emptiness(),
+            Verdict::Empty
+        );
+    }
 
     /// The objects a law is checked over: the attributes the generator names,
     /// carried or not, holding one of a few integers.
