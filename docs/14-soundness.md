@@ -175,11 +175,6 @@ The soundness is relative to a small, explicit trust base:
   "exactly `int`" from "an `int` or a subclass"; that distinction is not
   expressible yet. The case is pinned as a known-unsound test rather than left
   unwritten.
-- **A value's length is the length of what the walk reads.** `MinLen`/`MaxLen`
-  call `__len__`, while a sequence schema walks the storage the container holds.
-  For every builtin these are the same number; a subclass that overrides one and
-  not the other has two lengths, and the two constraints then describe different
-  sets.
 - The JSON parser (jiter) yields the value `json.loads` would, so the JSON path's
   denotation matches the object path's.
 - The crates contain no `unsafe`, so there is no memory-safety obligation beyond

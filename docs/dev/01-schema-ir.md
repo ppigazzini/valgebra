@@ -229,6 +229,27 @@ it as a comment: the guard absorbs under every structural constructor, and read
 from the top the check agrees exactly with "the reference is reachable through
 algebraic combinators alone".
 
+## What a length is
+
+`MinLen` and `MaxLen` on a `list` or a `tuple` read the number of elements the
+value **holds**. Every other kind answers `__len__`.
+
+The rule exists because a value must have *one* length. A sequence schema walks
+the storage a `list` or `tuple` holds, so `[int, int]` counts elements; a length
+marker used to call `__len__`, which a subclass may override to say anything. A
+value with two lengths belongs to `Annotated[list[int], MinLen(5)]` and not to
+the five-element shape, though both were written to mean the same narrowing —
+and a set whose membership depends on which half of a schema asks is not a set.
+Reading the storage in both places is what makes `MinLen(1)` on `list[T]` the
+same set as a one-element prefix, which is what lets the algebra hold sequence
+lengths structurally at all.
+
+The choice is between *what the value reports* and *what the walk can see*, and
+only the second is available to both halves. `__len__` remains the length of a
+`str`, `bytes`, `set` and `dict`, because the walk reads those through it too:
+the rule is not "distrust `__len__`", it is "one length, and it is the one the
+walk already uses for that kind".
+
 ## The limit
 
 The IR is a tree with back edges, not a graph with sharing. Two structurally

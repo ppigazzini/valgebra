@@ -1304,6 +1304,29 @@ fn check_refine(
     ok
 }
 
+/// The length of a value, read the way the rest of the walk reads it.
+///
+/// A `list` and a `tuple` answer with the items they *hold*, because that is
+/// what a sequence schema counts when it walks them. Everything else answers
+/// `__len__`, which is what a `str`, `bytes`, `set` and `dict` are read through
+/// anyway.
+///
+/// **One value has one length.** A `list` subclass may override `__len__` and
+/// say anything; before this, `MinLen(5)` believed it and the sequence shape
+/// beside it counted the storage, so the two constraints described different
+/// sets and a value could satisfy each in a different sense. A length that two
+/// parts of one schema disagree about is not a property of the value, and a set
+/// defined by one is not a set.
+fn stored_len(value: &Bound<'_, PyAny>) -> PyResult<usize> {
+    if let Ok(list) = value.cast::<PyList>() {
+        return Ok(list.len());
+    }
+    if let Ok(tuple) = value.cast::<PyTuple>() {
+        return Ok(tuple.len());
+    }
+    value.len()
+}
+
 /// What a violation would say, carried unrendered until one is recorded.
 ///
 /// Naming a bound takes the bound's `repr`, and a value that belongs produces no
@@ -1408,12 +1431,12 @@ fn check_constraint<'py>(
             t
         }
         Constraint::MinLen(n) => (
-            fold(value.len().map(|len| len >= *n), py, ctx),
+            fold(stored_len(value).map(|len| len >= *n), py, ctx),
             "too_short",
             Expected::Length(">=", *n),
         ),
         Constraint::MaxLen(n) => (
-            fold(value.len().map(|len| len <= *n), py, ctx),
+            fold(stored_len(value).map(|len| len <= *n), py, ctx),
             "too_long",
             Expected::Length("<=", *n),
         ),
