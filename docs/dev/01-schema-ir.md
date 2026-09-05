@@ -279,6 +279,97 @@ only the second is available to both halves. `__len__` remains the length of a
 the rule is not "distrust `__len__`", it is "one length, and it is the one the
 walk already uses for that kind".
 
+## What `Any` is
+
+`typing.Any` is the top, spelled. The decision layer reads it as `Anything`;
+the term keeps the spelling so that `repr` can give it back.
+
+A runtime validator asks one question of a schema — does this value belong —
+and to that question `Any` answers yes for every value. The walk has always
+said so: `Anything` and `Dynamic` share one arm. Gradual typing (Siek & Taha)
+holds the dynamic type apart from the top for a *second* question, consistency,
+which a static checker asks at every site where a value crosses between typed
+and untyped code. A validator has no such site and never asks it. Keeping the
+atom for a question nobody asks costs a decision that disagrees with the walk:
+`complement(Any)` admits nothing at runtime, so `intersection(Any,
+complement(Any))` is the empty set, and an `is_empty` that declines to say so
+is not conservative about a set — it is describing a set the library does not
+check against.
+
+So `Any` is not a variant. Building it yields `Anything` with a
+`spelled_any` flag; `render` reads the flag and writes `Any`; every relation
+and every law reads the top. The flag is a term fact like a field name, and it
+is not a set: two schemas that differ only in it are equal, and nothing on the
+decision side may branch on it. What is lost is the ability to say "this
+branch was deliberately not checked" *inside the algebra*; what is kept is that
+the reader sees it in `repr`, which is where they looked for it.
+
+Until that lands the IR still carries `Dynamic`, the decision exempts it from
+the complement laws, and [15-decidability.md](../15-decidability.md) says so;
+this is the rule that retires the exemption, not a description of it.
+
+## What a `TypedDict` denotes
+
+A `TypedDict` class denotes the set its typing spec assigns to it: an **open**
+record, unless the class says `closed=True` or gives `extra_items` (PEP 728,
+now in the spec). The dict-literal form `{"a": int}` stays **closed**.
+
+The reason is who wrote the spelling. `Validator(TD)` reads an annotation whose
+meaning is fixed elsewhere, and reading it as a different set — closed, when the
+spec says open — is a deviation a caller has no way to see: the class carries
+no mark of it. The dict-literal form is this library's own, and a schema written
+as a *shape* means that shape. A user who wants an open shape writes the
+open marker; a user who wants a closed `TypedDict` writes `closed=True`. Both
+sets are spellable both ways, so the choice fixes defaults only, and each
+default is the one its author's spec gives.
+
+`ReadOnly` is stripped: it constrains writers, and a value has no writers.
+`total`, `Required` and `NotRequired` set key optionality as today.
+The frontend reads every `TypedDict` closed today; this is the rule it moves
+to, and the map milestone that closes the negative set is where it moves.
+
+## Where a class and an attribute record go
+
+A value's class, and the attributes it must carry, narrow a value **within its
+kind**; they are not a kind. The descriptor therefore holds them as lines of
+the kind's component: each component is a small union of lines
+`structure ∧ classes ∧ attrs`, complemented as a DNF inside the kind, and a
+class beside a builtin kind is one more line of that kind.
+
+The two other shapes were weighed and fail one test each. A DNF over the whole
+descriptor loses the kind partition — every operation becomes a DNF operation
+over every kind, and the cheap disjointness across kinds, which is most of what
+the partition buys, goes with it. Scoping classes to the `other` kind, which is
+what the descriptor does today, fails the value it was built for: a dataclass
+that subclasses `int` has an integer kind and a class, and a component that
+cannot hold both is one that cannot decide it. Per-kind lines keep the
+partition, split a line's complement into at most three atoms, and are the
+shape the record atom already has, so the code exists once.
+
+It waits on two things in order: guards interned so a component may be a union
+without doubling the memory of every automaton that holds one, and a descriptor
+that replaces the procedure rather than shadowing it — because a union is what
+the descriptor cannot afford to build beside a procedure that builds it too.
+
+## What a class with attributes is, on the surface
+
+An object schema is the meet of an instance atom and an attribute record, and
+the surface does not change: `repr(Validator(Pt))` stays `Pt`, and a value that
+is not an instance reports one violation, `instance_type`.
+
+Deriving `Attrs` from `Instance(C) ∧ AttrRecord` is right in the algebra — it
+is what the attribute form *is* — and it would, left alone, change two things a
+user sees: `render` would write the meet as `intersection(Pt, ...)`, and the
+walk's explain mode, which collects every failed member of a meet, would add
+attribute violations about a value that is not an instance. Neither is
+information: the first is the algebra's spelling of a thing the user spelled as
+`Pt`, and the second reports attributes of an object that has no reason to have
+them. So the surface is preserved by construction: `render` matches the pair
+and writes the class name, and the walk stops collecting once a member of a
+meet has failed *at the same path* — a rule that is not specific to classes and
+that also stops `Annotated[int, Gt(0)]` reporting a bound on a string. The
+error snapshot pins both.
+
 ## The limit
 
 The IR is a tree with back edges, not a graph with sharing. Two structurally
