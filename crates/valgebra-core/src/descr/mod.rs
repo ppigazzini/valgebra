@@ -32,6 +32,8 @@ pub mod sets;
 pub mod symbolic;
 pub mod values;
 
+use std::sync::{Arc, OnceLock};
+
 use crate::decision::{Kind, Verdict};
 use classes::Class;
 use floats::FloatSet;
@@ -129,19 +131,19 @@ pub enum Component {
     /// is a chain, which one constructor spells. The letters are descriptors, so
     /// the component is recursive -- through the automaton's *states*, where the
     /// cycle is an edge and every guard stays a finite descriptor.
-    Sequences(SymbolicDfa<Descr>),
+    Sequences(SymbolicDfa<Arc<Descr>>),
     /// The sets this descriptor admits, as a union of powerset lines.
     ///
     /// Serves `set` and `frozenset` both. A set is its *members* and nothing
     /// else -- there is no order for an automaton to walk -- so the component is
     /// the powerset of a descriptor rather than a language over it.
-    Sets(SetLattice<Descr>),
+    Sets(SetLattice<Arc<Descr>>),
     /// The objects this descriptor admits, as a union of open record atoms.
     ///
     /// What describes a value of no listed kind: not its class, which only the
     /// bindings can compare, but the attributes it carries. Always open, because
     /// an object may carry attributes no schema mentions.
-    Records(RecordLattice<Descr>),
+    Records(RecordLattice<Arc<Descr>>),
 }
 
 impl Component {
@@ -459,8 +461,16 @@ impl Descr {
         if !is_sequence(kind) {
             return None;
         }
+        // The shape's letters become the automaton's guards, so they are moved
+        // behind a handle here -- once each, at the one place a caller's
+        // descriptor becomes a letter.
+        let prefix: Vec<Arc<Descr>> = prefix.iter().cloned().map(Arc::new).collect();
+        let tail = tail.cloned().map(Arc::new);
         let mut descr = Descr::nothing();
-        descr.put(kind, Component::Sequences(SymbolicDfa::shape(prefix, tail)));
+        descr.put(
+            kind,
+            Component::Sequences(SymbolicDfa::shape(&prefix, tail.as_ref())),
+        );
         Some(descr)
     }
 
@@ -487,7 +497,7 @@ impl Descr {
         }
         let members = elements.intersect(&hashable())?;
         let mut descr = Descr::nothing();
-        descr.put(kind, Component::Sets(SetLattice::of(members)));
+        descr.put(kind, Component::Sets(SetLattice::of(Arc::new(members))));
         Some(descr)
     }
 
@@ -505,7 +515,11 @@ impl Descr {
     #[must_use]
     pub fn attribute(label: &str, ty: &Descr, optional: bool) -> Descr {
         let mut descr = Descr::nothing();
-        descr.other = Component::Records(RecordLattice::attribute(label, ty.clone(), optional));
+        descr.other = Component::Records(RecordLattice::attribute(
+            label,
+            Arc::new(ty.clone()),
+            optional,
+        ));
         descr
     }
 
@@ -664,30 +678,50 @@ impl Descr {
 }
 
 /// A descriptor is a letter of the sequence automaton, which is what makes the
-/// component recursive.
+/// component recursive -- and it is held **by handle**, which is what keeps that
+/// recursion affordable.
+///
+/// A `Descr` is one component per kind, stored inline, so it is the same size
+/// whatever it describes; an edge holding one by value is that size again, and
+/// an edge's guard has its own automaton with its own edges. Nesting multiplied
+/// rather than added, and cloning a descriptor deep-copied every level of it --
+/// which is what a product of two automata does to their guards, once per pair
+/// of states. Behind an [`Arc`] an edge holds a pointer, a clone is a reference
+/// count, and two guards that came from one are one allocation. Equality gets
+/// the same discount: `Arc` compares pointers before contents, so a guard
+/// compared with itself is settled without a walk.
 ///
 /// The three operations and emptiness are the ones above; the trait is the
 /// interface the automaton asks a letter for, and nothing here is new work. It
 /// is the *fallibility* that shows through: a guard that cannot join leaves the
 /// table coarser rather than wrong, which is why the automaton's minimisation
 /// asks for a join and accepts a refusal.
-impl Guard for Descr {
+impl Guard for Arc<Descr> {
     type Value = Value;
 
-    fn none() -> Descr {
-        Descr::nothing()
+    fn none() -> Arc<Descr> {
+        // The empty guard is asked for once per edge that needs a sink, so it is
+        // built once and shared rather than allocated per ask.
+        static NONE: OnceLock<Arc<Descr>> = OnceLock::new();
+        Arc::clone(NONE.get_or_init(|| Arc::new(Descr::nothing())))
     }
 
-    fn meet(&self, other: &Descr) -> Option<Descr> {
-        self.intersect(other)
+    fn meet(&self, other: &Arc<Descr>) -> Option<Arc<Descr>> {
+        if let Some(same) = idempotent(self, other) {
+            return Some(same);
+        }
+        self.intersect(other).map(Arc::new)
     }
 
-    fn join(&self, other: &Descr) -> Option<Descr> {
-        self.union(other)
+    fn join(&self, other: &Arc<Descr>) -> Option<Arc<Descr>> {
+        if let Some(same) = idempotent(self, other) {
+            return Some(same);
+        }
+        self.union(other).map(Arc::new)
     }
 
-    fn complement(&self) -> Descr {
-        Descr::complement(self)
+    fn complement(&self) -> Arc<Descr> {
+        Arc::new(Descr::complement(self))
     }
 
     fn is_empty(&self) -> bool {
@@ -701,6 +735,21 @@ impl Guard for Descr {
     fn holds(&self, value: &Value) -> bool {
         self.admits(*value)
     }
+}
+
+/// The result of meeting or joining a guard with itself, which is the guard.
+///
+/// Both laws are idempotent, and the automaton's product asks them of every pair
+/// of states that reach on the same letter -- where the two sides are usually
+/// the *same handle*, because they came from one. Reading that off the pointer
+/// settles the pair without walking either side and without allocating a third
+/// descriptor to hold an answer one of them already is.
+///
+/// Sharing rather than equality on purpose: two guards that are equal but
+/// separately allocated are still two sets to compare, and comparing them is the
+/// work this is avoiding.
+fn idempotent(left: &Arc<Descr>, right: &Arc<Descr>) -> Option<Arc<Descr>> {
+    Arc::ptr_eq(left, right).then(|| Arc::clone(left))
 }
 
 /// A value, at the resolution the descriptor distinguishes.
@@ -875,8 +924,60 @@ impl Value {
 mod tests {
     use super::{BoolSet, Class, Component, Descr, Value, Verdict};
     use crate::decision::Kind;
+    use crate::descr::symbolic::{Edge, Guard};
+    use core::mem::size_of;
     use proptest::prelude::*;
-    use std::sync::LazyLock;
+    use std::sync::{Arc, LazyLock};
+
+    /// A guard is held by handle, so an edge pays a pointer for it rather than a
+    /// descriptor.
+    ///
+    /// This is the property the nesting rests on. A `Descr` is one component per
+    /// kind stored inline, so it is the same size whatever it describes; an edge
+    /// holding one *by value* is that size again, and an edge's guard has its own
+    /// automaton with its own edges. Held that way the size multiplied through
+    /// the levels rather than adding, and a clone deep-copied every level --
+    /// which is what a product of two automata does to their guards, once per
+    /// pair of states.
+    ///
+    /// Pinned by size because size is what regressed: a guard stored by value
+    /// again would pass every behavioural law in this file and bring the growth
+    /// back with it.
+    /// A guard met or joined with itself is that guard, and the handle settles
+    /// it without a walk or a third allocation.
+    ///
+    /// The automaton's product asks both laws of every pair of states that reach
+    /// on the same letter, and after a clone the two sides are the same handle --
+    /// which is the case this exists for. Two handles onto equal sets are not the
+    /// same case: comparing them is the work being avoided, so the shortcut is
+    /// about identity and says nothing about equality.
+    #[test]
+    fn a_guard_met_with_itself_is_shared_rather_than_rebuilt() {
+        let guard = Arc::new(Descr::of_kind(Kind::Int));
+        let same = Arc::clone(&guard);
+        let met = Guard::meet(&guard, &same).expect("a meet with itself");
+        assert!(Arc::ptr_eq(&met, &guard));
+        let joined = Guard::join(&guard, &same).expect("a join with itself");
+        assert!(Arc::ptr_eq(&joined, &guard));
+
+        // A separate handle onto the same set takes the long way, and arrives at
+        // the same set.
+        let twin = Arc::new(Descr::of_kind(Kind::Int));
+        let met = Guard::meet(&guard, &twin).expect("a meet with its twin");
+        assert!(!Arc::ptr_eq(&met, &guard));
+        assert_eq!(*met, *guard);
+    }
+
+    #[test]
+    fn an_edge_holds_its_guard_by_handle() {
+        assert_eq!(size_of::<Arc<Descr>>(), size_of::<usize>());
+        assert!(
+            size_of::<Edge<Arc<Descr>>>() * 16 < size_of::<Descr>(),
+            "an edge costs {} bytes against a descriptor's {}, which is not a handle",
+            size_of::<Edge<Arc<Descr>>>(),
+            size_of::<Descr>()
+        );
+    }
 
     /// Every value the descriptor can currently tell apart.
     ///
