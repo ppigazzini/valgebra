@@ -6,6 +6,7 @@ default clause for the rest. Several schema keys give a heterogeneous mapping
 key give a record with a typed catch-all. Named fields take precedence.
 """
 
+from types import GenericAlias
 from typing import Annotated
 
 import annotated_types as at
@@ -75,11 +76,32 @@ def test_optional_field_with_a_catch_all() -> None:
     assert not schema.is_valid({"a": "x"})  # the field still wins: a must be int
 
 
-def test_a_refinement_key_schema() -> None:
-    schema = Validator({Annotated[str, at.MinLen(2)]: int})
-    assert schema.is_valid({"ab": 1})
-    assert not schema.is_valid({"a": 1})  # the key is too short
-    assert not schema.is_valid({"ab": "x"})  # the value must be an int
+def test_a_refinement_key_schema_is_refused() -> None:
+    """A narrowed key names part of a kind, and a clause's key must name whole ones.
+
+    Two such clauses can overlap without either containing the other, and
+    overlapping key domains are a different theory from the one this library's
+    maps are built on. It is refused where it is written, as the zero divisor and
+    the invalid pattern already are.
+    """
+    for spec in (
+        {Annotated[str, at.MinLen(2)]: int},
+        dict[Annotated[str, at.MinLen(2)], int],
+        # Hidden inside a union, which is the same claim spelled longer. The
+        # dict is built at runtime, so the static checker is not asked to read a
+        # combinator as a type expression.
+        GenericAlias(dict, (union(int, Annotated[str, at.MinLen(2)]), int)),
+    ):
+        with pytest.raises(NotImplementedError, match="narrows the keys it governs"):
+            Validator(spec)
+
+    # The spellings that remain: a key type, and the constants a Literal names.
+    every_string = Validator(dict[str, int])
+    assert every_string.is_valid({"ab": 1})
+    assert not every_string.is_valid({"ab": "x"})
+    one_key = Validator({"ab": int})
+    assert one_key.is_valid({"ab": 1})
+    assert not one_key.is_valid({"a": 1})
 
 
 def test_a_non_string_key_in_a_closed_record_is_rejected() -> None:

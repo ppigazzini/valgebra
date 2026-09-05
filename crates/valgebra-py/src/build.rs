@@ -523,8 +523,11 @@ fn build_parametrized(
         }
         // Named rather than positional: `dict[K, V]` compiled with the two
         // transposed is `dict[V, K]`, which typechecks and validates real values.
+        let key_argument = args.get_item(0)?;
+        let key = build_type_argument(&key_argument, lits, defs)?;
+        checked_key(&key, &key_argument)?;
         return Ok(Schema::mapping(MapClause {
-            key: build_type_argument(&args.get_item(0)?, lits, defs)?,
+            key,
             value: build_type_argument(&args.get_item(1)?, lits, defs)?,
         }));
     }
@@ -827,8 +830,10 @@ fn build_dict(
                 required,
             });
         } else {
+            let key_schema = build_schema(&key, lits, defs)?;
+            checked_key(&key_schema, &key)?;
             defaults.push(MapClause {
-                key: build_schema(&key, lits, defs)?,
+                key: key_schema,
                 value: build_schema(&value, lits, defs)?,
             });
         }
@@ -1315,6 +1320,46 @@ impl Pool {
 fn is_ellipsis(obj: &Bound<'_, PyAny>) -> bool {
     let py = obj.py();
     forms(py).is_ok_and(|forms| obj.is(forms.ellipsis.bind(py)))
+}
+
+/// Refuse a map key schema narrowed by a constraint or a predicate.
+///
+/// A clause's key says which keys it governs, and a map reads that as whole
+/// *kinds* of key -- `str`, `int`, and the rest -- or as the constants a
+/// `Literal` names. A key narrowed by a bound, a pattern or a callback is
+/// neither: it names part of a kind, and two such clauses can overlap without
+/// either containing the other. Overlapping key domains are a different theory
+/// from the one this library's maps are built on -- with them "there would not
+/// be any difference between record types and an intersection of function types"
+/// (Castagna, ICFP 2023, §4.5) -- and reading them as this library does, one
+/// clause at a time, answers a question the two spellings do not agree on.
+///
+/// So it is refused where it is written, which is the rule the zero divisor and
+/// the invalid pattern already follow.
+fn checked_key(schema: &Schema, spelling: &Bound<'_, PyAny>) -> PyResult<()> {
+    if !narrows_its_keys(schema) {
+        return Ok(());
+    }
+    Err(not_implemented(&format!(
+        "{} narrows the keys it governs, and a map key must be a key type or a \
+         Literal: write dict[str, V] to key every string, or dict[Literal[\"a\"], V] \
+         (or {{\"a\": V}}) to key one. To constrain the keys themselves, check them \
+         beside the mapping rather than inside it",
+        summarize(spelling)
+    )))
+}
+
+/// Whether a key schema narrows its keys by a constraint or a predicate, at any
+/// depth a union or a complement can hide one.
+fn narrows_its_keys(schema: &Schema) -> bool {
+    match schema {
+        Schema::Refine { constraints, .. } => !constraints.is_empty(),
+        Schema::Union(members) | Schema::Intersection(members) => {
+            members.iter().any(narrows_its_keys)
+        }
+        Schema::Complement(inner) => narrows_its_keys(inner),
+        _ => false,
+    }
 }
 
 pub(crate) fn not_implemented(message: &str) -> PyErr {

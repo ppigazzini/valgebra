@@ -40,6 +40,20 @@ def _refinements() -> st.SearchStrategy[object]:
     )
 
 
+def _key_schemas() -> st.SearchStrategy[object]:
+    """Draw the schemas a map clause may key on.
+
+    A clause's key says which keys it governs, and a map reads that as whole
+    *kinds* of key or as the constants a ``Literal`` names. A key narrowed by a
+    constraint is refused where it is written, so the generator writes what the
+    frontend builds.
+    """
+    return st.one_of(
+        st.sampled_from(_SCALARS),
+        st.sampled_from(_LITERALS).map(lambda value: Literal[value]),  # ty: ignore[invalid-type-form]
+    )
+
+
 def _schemas() -> st.SearchStrategy[object]:
     # A constant is spelled `Literal[v]` rather than bare: these leaves are also
     # used as the *argument* of a generic, where a bare value is a forward
@@ -63,7 +77,7 @@ def _schemas() -> st.SearchStrategy[object]:
             st.tuples(child, child).map(
                 lambda ab: GenericAlias(tuple, (ab[0], ab[1], ...))
             ),  # a prefix-plus-tail tuple
-            st.tuples(child, child).map(lambda ab: GenericAlias(dict, ab)),
+            st.tuples(_key_schemas(), child).map(lambda ab: GenericAlias(dict, ab)),
             st.tuples(child, child).map(lambda ab: {"a": ab[0], "b?": ab[1]}),
             st.tuples(child, child).map(lambda ab: union(ab[0], ab[1])),
             st.tuples(child, child).map(lambda ab: intersection(ab[0], ab[1])),
