@@ -35,6 +35,52 @@ def test_typeddict_requires_all_keys_by_default() -> None:
     assert not schema.is_valid({"name": "Ada", "age": "old"})
 
 
+def test_typeddict_is_open_and_a_dict_literal_is_not() -> None:
+    """A `TypedDict` denotes the set its own spec assigns it, which is open.
+
+    `Validator(TD)` reads an annotation whose meaning is fixed elsewhere, and
+    reading it as a narrower set is a deviation the class carries no mark of. The
+    dict-literal form is this library's own spelling, and a schema written as a
+    *shape* means that shape.
+    """
+    typed = Validator(User)
+    assert typed.is_valid({"name": "Ada", "age": 36, "note": "extra"})
+    # The keys it does name are still checked, and still required.
+    assert not typed.is_valid({"name": "Ada", "note": "extra"})
+    assert not typed.is_valid({"name": "Ada", "age": "old", "note": "extra"})
+
+    shape = Validator({"name": str, "age": int})
+    assert shape.is_valid({"name": "Ada", "age": 36})
+    assert not shape.is_valid({"name": "Ada", "age": 36, "note": "extra"})
+
+
+@pytest.mark.skipif(not hasattr(typing, "NoExtraItems"), reason="PEP 728 markers")
+def test_typeddict_closed_and_extra_items_are_obeyed() -> None:
+    """PEP 728's two markers say what a `TypedDict` allows besides the keys it names.
+
+    A runtime that has them fills `__extra_items__` either way — with the type
+    its author wrote, or with the `NoExtraItems` sentinel to say there was none.
+    The sentinel is not a type, and reading it as one turns the open default into
+    a record admitting exactly the sentinel: a closed record wearing an open
+    one's spelling.
+    """
+    # The functional form, and the markers written past the floor this project
+    # supports: both tools are right that they are 3.15's, and the skip above is
+    # what keeps them from running anywhere they are not.
+    shut = typing.TypedDict("shut", {"a": int}, closed=True)  # noqa: UP013  # ty: ignore[unknown-argument]
+    extra = typing.TypedDict("extra", {"a": int}, extra_items=str)  # noqa: UP013  # ty: ignore[unknown-argument]
+    plain = typing.TypedDict("plain", {"a": int})  # noqa: UP013
+
+    assert not Validator(shut).is_valid({"a": 1, "x": 2})
+    assert Validator(shut).is_valid({"a": 1})
+
+    assert Validator(extra).is_valid({"a": 1, "x": "s"})
+    assert not Validator(extra).is_valid({"a": 1, "x": 2})
+
+    # No marker given is the spec's default, which is open.
+    assert Validator(plain).is_valid({"a": 1, "x": 2})
+
+
 def test_typeddict_total_false_makes_keys_optional() -> None:
     schema = Validator(PartialUser)
     assert schema.is_valid({})

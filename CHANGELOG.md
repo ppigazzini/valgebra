@@ -8,6 +8,15 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Changed
 
+- **A `TypedDict` is open**, which is the set the typing spec assigns it: a dict
+  carrying keys the class does not name is admitted, and the keys it does name
+  are checked and required exactly as before. `closed=True` and `extra_items=T`
+  (PEP 728) are obeyed where the runtime provides them. The dict-literal form
+  `{"name": str}` stays closed — it is this library's own spelling, and a schema
+  written as a shape means that shape. Code relying on `Validator(TD)` to reject
+  an extra key should write the `TypedDict` `closed=True`, or use the dict
+  literal.
+
 - **A map key schema narrowed by a constraint is refused where it is written.**
   A clause's key says which keys it governs, and that must be a type — `str`,
   `int`, a union of them — or a `Literal`, which names the keys one by one.
