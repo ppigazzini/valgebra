@@ -142,7 +142,7 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>) -> Option<
         Schema::Dynamic
         | Schema::KeyedMap { .. }
         | Schema::Instance(_)
-        | Schema::Attrs { .. }
+        | Schema::AttrRecord { .. }
         | Schema::Ref(_)
         | Schema::SelfRef(_) => None,
     }

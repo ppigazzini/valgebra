@@ -121,6 +121,10 @@ def test_repr_of_class_and_recursive_forms() -> None:
 
     assert repr(Validator(Color)) == "Color"
     assert repr(Validator(Point)) == "Point"
+    # A class with attributes is a meet of its class atom and a record of them,
+    # and a later meet flattens beside that pair: the class is still named, and
+    # the other members render as themselves.
+    assert repr(Validator(intersection(Point, int))) == "intersection(Point, int)"
     assert repr(recursive(lambda s: {"v": int, "n?": s})) == "{'v': int, 'n?': ...}"
 
 

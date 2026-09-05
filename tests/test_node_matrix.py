@@ -175,7 +175,9 @@ _IR_SOURCE = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
 # Labels whose node kind is not their own name, and the one variant with no row.
 _LABEL_TO_VARIANT = {
     "Any": "Dynamic",  # the gradual dynamic type; `typing.Any` is its spelling
-    "Object": "Attrs",  # an isinstance atom intersected with an attribute record
+    # A class with declared attributes compiles to `Instance ∧ AttrRecord`, so the
+    # row exercises both variants and is named for the one only it reaches.
+    "Object": "AttrRecord",
     "Recursive": "Ref",  # a fixpoint's back edge is what `recursive` compiles to
 }
 # `SelfRef` is a build-time marker resolved to a `Ref` before a validator is

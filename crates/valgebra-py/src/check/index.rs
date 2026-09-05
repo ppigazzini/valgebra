@@ -14,7 +14,8 @@ pub(crate) struct RecordPlan {
     pub(crate) required: usize,
 }
 
-/// The interned attribute names of one [`Schema::Attrs`] node, in field order.
+/// The interned attribute names of one [`Schema::AttrRecord`] node, in field
+/// order.
 ///
 /// `getattr` takes a name, and passing a Rust `&str` builds a fresh `PyString`
 /// for every attribute of every value checked. The names are a property of the
@@ -174,7 +175,7 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
                 }
             }
         }
-        Schema::Attrs { fields, .. } => {
+        Schema::AttrRecord { fields } => {
             if !fields.is_empty() {
                 index
                     .attrs

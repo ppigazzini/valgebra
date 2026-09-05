@@ -112,7 +112,7 @@ impl DepthMarker for Schema {
     fn depth_marker(&self) -> usize {
         match self {
             Schema::Union(members) | Schema::Intersection(members) => members.len(),
-            Schema::KeyedMap { fields, .. } | Schema::Attrs { fields, .. } => fields.len(),
+            Schema::KeyedMap { fields, .. } | Schema::AttrRecord { fields } => fields.len(),
             Schema::Seq { shape, .. } => 1 + shape_depth(shape),
             Schema::Complement(inner) | Schema::Set(inner) | Schema::FrozenSet(inner) => {
                 1 + inner.depth_marker()

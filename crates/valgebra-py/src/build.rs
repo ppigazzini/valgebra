@@ -445,9 +445,17 @@ fn declared_fields<'py>(ty: &Bound<'py, PyType>) -> PyResult<Vec<Bound<'py, PyAn
     ty.getattr("_fields")?.try_iter()?.collect()
 }
 
-/// Build an Attrs node (isinstance plus per-attribute checks) for a class,
-/// reading the type of each declared field from the resolved hints. Every
-/// attribute an instance declares is required, because an instance carries it.
+/// Build the schema of a class with declared attributes: the meet of its
+/// `isinstance` atom and a record of its fields, whose types come from the
+/// resolved hints. Every attribute an instance declares is required, because an
+/// instance carries it.
+///
+/// A class with no annotated field is the atom alone. The meet is what the form
+/// means, and spelling it out is what lets each half relate on its own; the
+/// surface does not change, because `render` reads the pair back as the class
+/// name and the walk stops at the failing conjunct, which is what
+/// `docs/dev/01-schema-ir.md` records under "What a class with attributes is, on
+/// the surface".
 fn build_object(
     ty: &Bound<'_, PyType>,
     lits: &mut Pool,
@@ -471,10 +479,11 @@ fn build_object(
             required: true,
         });
     }
-    Ok(Schema::Attrs {
-        class_index,
-        fields,
-    })
+    let instance = Schema::Instance(class_index);
+    if fields.is_empty() {
+        return Ok(instance);
+    }
+    Ok(Schema::meet([instance, Schema::AttrRecord { fields }]))
 }
 
 /// Build the IR for a parametrized typing generic given its origin and args.

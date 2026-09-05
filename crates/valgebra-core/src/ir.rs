@@ -145,10 +145,7 @@ pool_index!(
     "a literal's constant"
 );
 pool_index!(
-    /// The pool slot holding the class of a [`Schema::Instance`] or a
-    /// [`Schema::Attrs`]. One type for both: they address the same kind of
-    /// object and no call site carries one of each, so a second type would be a
-    /// distinction with no swap behind it.
+    /// The pool slot holding the class of a [`Schema::Instance`].
     ClassIx,
     "a class"
 );
@@ -443,18 +440,18 @@ pub enum Schema {
     /// Denotes instances of a class, by `isinstance`. The class is held in the
     /// validator's object pool; the payload is its index.
     Instance(ClassIx),
-    /// An instance of a class whose attributes satisfy the given fields — an
-    /// `isinstance` atom intersected with an attribute record (`Instance ∧
-    /// attrs`). Named `Attrs` so it does not collide with `object`, the lattice
-    /// top, which the frontend maps to [`Schema::Anything`].
+    /// Denotes every value whose attributes satisfy the given fields: each
+    /// required field's attribute must be present on the value and belong to the
+    /// field's set.
     ///
-    /// `isinstance` against the pooled class at `class_index` must hold, and
-    /// every field's attribute must be present and match. This is the deep
-    /// check for dataclasses and named tuples.
-    Attrs {
-        /// Index of the class in the validator's object pool.
-        class_index: ClassIx,
-        /// Per-attribute field schemas; all required.
+    /// The record carries **no class**. A class is a separate narrowing, and a
+    /// dataclass is the meet of the two: `build_object` emits
+    /// `Instance(C) ∧ AttrRecord`, which is what the form has always meant.
+    /// Holding them in one node made the pair inseparable, so the algebra could
+    /// neither relate a class to a record nor complement one without the other;
+    /// split, each half is a set the rules already know.
+    AttrRecord {
+        /// Per-attribute field schemas.
         fields: Vec<Field>,
     },
     /// Denotes the subset of the base set satisfying every constraint
@@ -752,7 +749,7 @@ impl MapClause {
     }
 }
 
-/// A named field of a [`Schema::KeyedMap`] or [`Schema::Attrs`].
+/// A named field of a [`Schema::KeyedMap`] or [`Schema::AttrRecord`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Field {
     /// The key name.
@@ -780,6 +777,35 @@ impl Field {
 }
 
 impl Schema {
+    /// The class of an object schema, when this node is one: a meet carrying
+    /// exactly one `isinstance` atom beside exactly one attribute record.
+    ///
+    /// That pair is what the frontend builds for a class with declared
+    /// attributes, so it is what a user who wrote a class name is holding.
+    /// `repr` and a union's branch label both read the class back out of it, and
+    /// a later meet may flatten other members in beside the pair without
+    /// changing which class it is. The shape is recognised here, once, so the
+    /// two readers cannot recognise different shapes.
+    #[must_use]
+    pub fn object_class(&self) -> Option<ClassIx> {
+        let Schema::Intersection(members) = self else {
+            return None;
+        };
+        let mut class = None;
+        let mut records = 0usize;
+        for member in members {
+            match member {
+                // A second atom of either kind is a meet of two objects, not one
+                // object: there is no single class to name.
+                Schema::Instance(_) if class.is_some() => return None,
+                Schema::Instance(index) => class = Some(*index),
+                Schema::AttrRecord { .. } => records += 1,
+                _ => {}
+            }
+        }
+        class.filter(|_| records == 1)
+    }
+
     /// A short, stable label naming the expected set, shown in violations.
     #[must_use]
     pub fn expected(&self) -> &'static str {
@@ -811,7 +837,7 @@ impl Schema {
             Schema::Complement(_) => "complement",
             // The py layer renders the concrete class name; these are fallbacks.
             Schema::Instance(_) => "instance",
-            Schema::Attrs { .. } => "object",
+            Schema::AttrRecord { .. } => "object",
             // A refinement's type is its base; constraints report their own.
             Schema::Refine { base, .. } => base.expected(),
             // A reference reports through its definition at validation time.
@@ -849,7 +875,11 @@ impl Schema {
             Schema::Union(_) => "union_error",
             Schema::Intersection(_) => "intersection_error",
             Schema::Complement(_) => "unexpected_match",
-            Schema::Instance(_) | Schema::Attrs { .. } => "instance_type",
+            Schema::Instance(_) => "instance_type",
+            // A record's failures are its fields' -- a missing attribute, or the
+            // field schema's own code -- so the walk never emits this one; it is
+            // here because every node has a code.
+            Schema::AttrRecord { .. } => "object_type",
             Schema::Refine { base, .. } => base.error_code(),
             Schema::Ref(_) => "recursion",
             Schema::SelfRef(_) => "unresolved_recursion",
@@ -900,11 +930,7 @@ impl Schema {
                 fields: fields.iter().map(field).collect(),
                 defaults: defaults.iter().map(|c| c.map_schemas(f)).collect(),
             },
-            Schema::Attrs {
-                class_index,
-                fields,
-            } => Schema::Attrs {
-                class_index: *class_index,
+            Schema::AttrRecord { fields } => Schema::AttrRecord {
                 fields: fields.iter().map(field).collect(),
             },
             Schema::Refine { base, constraints } => Schema::Refine {
@@ -929,20 +955,6 @@ impl Schema {
             Schema::Literal(index) => Schema::Literal(index.remapped_by(remap)),
             Schema::Instance(index) => Schema::Instance(index.remapped_by(remap)),
             Schema::Ref(index) => Schema::Ref(index.remapped_by(remap)),
-            Schema::Attrs {
-                class_index,
-                fields,
-            } => Schema::Attrs {
-                class_index: class_index.remapped_by(remap),
-                fields: fields
-                    .iter()
-                    .map(|field| Field {
-                        name: field.name.clone(),
-                        schema: field.schema.remapped_by(remap),
-                        required: field.required,
-                    })
-                    .collect(),
-            },
             Schema::Refine { base, constraints } => Schema::Refine {
                 base: Box::new(base.remapped_by(remap)),
                 constraints: constraints
@@ -969,7 +981,8 @@ impl Schema {
             | Schema::Complement(_)
             | Schema::Union(_)
             | Schema::Intersection(_)
-            | Schema::KeyedMap { .. } => self.map_children(&|s| s.remapped_by(remap)),
+            | Schema::KeyedMap { .. }
+            | Schema::AttrRecord { .. } => self.map_children(&|s| s.remapped_by(remap)),
         }
     }
 
@@ -978,8 +991,8 @@ impl Schema {
     ///
     /// Used when composing two compiled validators: their constants pools and
     /// definitions tables are concatenated, so the second schema's
-    /// `Literal`/`Instance`/`Attrs`/`Refine` indices move past the first
-    /// pool's length and its `Ref` indices past the first definitions' length.
+    /// `Literal`/`Instance`/`Refine` indices move past the first pool's length
+    /// and its `Ref` indices past the first definitions' length.
     #[must_use]
     pub fn shifted(&self, pool: PoolShift, defs: DefShift) -> Schema {
         self.remapped_by(Remap::Append { pool, defs })
@@ -1019,7 +1032,7 @@ impl Schema {
                         .flat_map(|clause| [&clause.key, &clause.value].into_iter()),
                 ),
             ),
-            Schema::Attrs { fields, .. } => Box::new(fields.iter().map(|field| &field.schema)),
+            Schema::AttrRecord { fields } => Box::new(fields.iter().map(|field| &field.schema)),
             Schema::Refine { base, .. } => Box::new(core::iter::once(base.as_ref())),
         }
     }
@@ -1111,7 +1124,7 @@ impl Schema {
             | Schema::Set(_)
             | Schema::FrozenSet(_)
             | Schema::KeyedMap { .. }
-            | Schema::Attrs { .. } => Guarded::Yes,
+            | Schema::AttrRecord { .. } => Guarded::Yes,
             Schema::Anything
             | Schema::Dynamic
             | Schema::Nothing

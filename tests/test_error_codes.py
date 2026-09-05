@@ -31,6 +31,12 @@ def _first(spec: object, value: object) -> tuple[str, tuple[str | int, ...]]:
     return info.value.code, info.value.path
 
 
+def _all(spec: object, value: object) -> list[tuple[object, object]]:
+    with pytest.raises(ValidationError) as info:
+        Validator(spec).validate(value)
+    return [(err["code"], err["path"]) for err in info.value.errors]
+
+
 class _Color(enum.Enum):
     RED = 1
 
@@ -111,6 +117,24 @@ def test_combinator_codes() -> None:
     assert _first(union(int, str), 1.5) == ("union_error", ())
     # An intersection reports the member that failed.
     assert _first(intersection(int, complement(bool)), True) == ("unexpected_match", ())
+
+
+def test_a_meet_stops_at_the_member_that_rejects_the_value() -> None:
+    # A member that rejects the value itself settles the meet: what the rest
+    # would say describes a value already known to be the wrong kind of thing.
+    assert _all(intersection(int, str), 1.5) == [("int_type", ())]
+
+    # A class with declared attributes is that meet, so a foreign object reports
+    # the class it is not -- and not the attributes it had no reason to carry.
+    assert _all(_Point, object()) == [("instance_type", ())]
+
+    # A member that fails *inside* the value leaves the others meaningful, and
+    # each is still collected: both records reject the same key for a reason of
+    # their own.
+    assert _all(intersection({"a": int}, {"a": bool}), {"a": "x"}) == [
+        ("int_type", ("a",)),
+        ("bool_type", ("a",)),
+    ]
 
 
 def test_nested_path_reporting() -> None:
