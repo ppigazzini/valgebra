@@ -299,18 +299,22 @@ inverses: `open` on such a record widens any typed catch-all it carries to admit
 every key, and `close` drops the catch-all, so applying either twice changes
 nothing the second time.
 
-Both transforms act on a dict schema that **declares named fields**, and on no
-other: a schema without them carries no field list to open around, so only the
-schemas inside its clauses are visited. That covers `dict[K, V]` and `{}` — which
-declares no field and no clause, and therefore denotes the empty dict alone:
+Both transforms act on a **record**, and a mapping is not one: `dict[K, V]` keys
+a *type* rather than a name, so opening it would say something it does not, and
+only the schemas inside its clauses are visited. Having no named field is not
+what makes a schema a mapping — `{}` has none either, and it is the empty closed
+record. A clause and no field is.
 
 ```python
 from valgebra import Validator
 
-assert repr(Validator({str: int}).open()) == "dict[str, int]"  # unchanged
-assert repr(Validator({}).open()) == "{}"  # unchanged
+assert repr(Validator({str: int}).open()) == "dict[str, int]"  # a mapping
 
-# The same clause is widened once a named field sits beside it.
+# `{}` is a record: closed, it admits the empty dict alone; opened, every dict.
+assert Validator({}).is_valid({}) and not Validator({}).is_valid({"x": 1})
+assert Validator({}).open().is_valid({"x": 1})
+
+# A typed catch-all beside a named field is widened with the record.
 assert repr(Validator({"name": str, str: int}).open()) == "{'name': str, ...}"
 ```
 

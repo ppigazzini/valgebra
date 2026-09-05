@@ -793,6 +793,28 @@ impl MapClause {
     }
 }
 
+/// Whether a record's own clauses already say what this field says.
+///
+/// The paper's `dom` read as a set rather than as a syntax: a field that
+/// constrains its key to exactly what the record gives every key it does not
+/// name adds nothing, and two records differing only in such a field are one
+/// record. A closed record says every unnamed key is absent, which is what an
+/// optional field admitting nothing says; an open one says every unnamed key is
+/// free, which is what an optional field admitting everything says.
+///
+/// A *required* field is never covered: it says the key must be there, and no
+/// clause says that of a key it does not name.
+fn already_said(field: &Field, defaults: &[MapClause]) -> bool {
+    if field.required {
+        return false;
+    }
+    match defaults {
+        [] => field.schema == Schema::Nothing,
+        [clause] if *clause == MapClause::top() => field.schema == Schema::ANYTHING,
+        _ => false,
+    }
+}
+
 /// A named field of a [`Schema::KeyedMap`] or [`Schema::AttrRecord`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Field {
@@ -1282,24 +1304,35 @@ impl Schema {
     ///
     /// This backs the `open`/`close` methods: `open` opens every record in a
     /// subtree (undeclared keys allowed via an `anything` catch-all), `close`
-    /// closes them. A pure mapping (no named fields) is not a record and keeps
-    /// its clauses.
+    /// closes them. A pure mapping keeps its clauses -- it is a map from a key
+    /// *type*, not a record, and opening it would say something it does not.
+    ///
+    /// **The labels are read on the semantic `dom` first**, which is what makes
+    /// this a function on sets. Naming a key and giving it exactly what the
+    /// record already gives every key it does not name says nothing, so
+    /// `{"a?": nothing}` and `{}` are one record -- and unless the redundant name
+    /// is dropped they open to different ones, which would make `open` map equal
+    /// sets to unequal sets and put it outside the algebra.
     #[must_use]
     pub fn with_records_open(&self, open: Openness) -> Schema {
         match self {
-            // The one node this transform is about: a record (named fields)
-            // replaces its catch-all. A pure mapping has no fields, so it is not
-            // a record and falls through to the descent below.
-            Schema::KeyedMap { fields, .. } if !fields.is_empty() => Schema::KeyedMap {
-                fields: fields
-                    .iter()
-                    .map(|field| field.map_schema(&|s| s.with_records_open(open)))
-                    .collect(),
-                defaults: match open {
-                    Openness::Open => vec![MapClause::top()],
-                    Openness::Closed => Vec::new(),
-                },
-            },
+            // The one node this transform is about: a record replaces its
+            // catch-all. Having no field does not make one a mapping -- the empty
+            // *closed* record is a record, and the empty clause list is what says
+            // so; a mapping has a clause and no field.
+            Schema::KeyedMap { fields, defaults } if !fields.is_empty() || defaults.is_empty() => {
+                Schema::KeyedMap {
+                    fields: fields
+                        .iter()
+                        .filter(|field| !already_said(field, defaults))
+                        .map(|field| field.map_schema(&|s| s.with_records_open(open)))
+                        .collect(),
+                    defaults: match open {
+                        Openness::Open => vec![MapClause::top()],
+                        Openness::Closed => Vec::new(),
+                    },
+                }
+            }
             // Every other node carries the transform to its children and keeps
             // its own payloads. Spelling the descent out here again is what let
             // it end in a wildcard, where a new child-carrying variant would be

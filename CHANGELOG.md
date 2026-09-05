@@ -6,6 +6,18 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`open` and `close` are functions on sets.** `{"a?": nothing}` and `{}` admit
+  exactly the empty dict — the field allows the key to be absent and admits no
+  value for it, which is what a closed record already says of every key it does
+  not name — yet `.open()` gave them different sets. The redundant field is now
+  read away first, so equal records open to equal records. Two consequences a
+  caller may see: `Validator({}).open()` now admits every dict, where it used to
+  be left alone (having no field never made `{}` a mapping — a clause and no
+  field does), and a record carrying a field its own clauses already cover loses
+  that field when opened or closed.
+
 ### Changed
 
 - **A `TypedDict` is open**, which is the set the typing spec assigns it: a dict
