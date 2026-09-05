@@ -15,9 +15,10 @@
 //! the pool and answers what a comparison operand or a literal carries.
 
 use super::classes::Class;
+use super::maps::{KEY_KINDS, Label};
 use super::{Descr, integers::IntSet};
 use crate::decision::Kind;
-use crate::ir::{ConstIx, Constraint, OperandIx, Schema, SeqKind, SeqShape};
+use crate::ir::{ConstIx, Constraint, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape};
 use std::cell::Cell;
 
 /// A pooled value, as far as a descriptor can read one.
@@ -144,11 +145,97 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>) -> Option<
                 whole.intersect(&Descr::attribute(&field.name, &ty, !field.required))
             })
         }
+        Schema::KeyedMap { fields, defaults } => map(fields, defaults, pool, budget),
         // No component to land in, or none that would mean what the schema does.
-        // A dict has no map component yet, a class needs the object pool to say
-        // which classes it derives from, and a reference is a cycle a finite
-        // descriptor has no room for.
-        Schema::KeyedMap { .. } | Schema::Instance(_) | Schema::Ref(_) | Schema::SelfRef(_) => None,
+        // A class needs the object pool to say which classes it derives from,
+        // and a reference is a cycle a finite descriptor has no room for.
+        Schema::Instance(_) | Schema::Ref(_) | Schema::SelfRef(_) => None,
+    }
+}
+
+/// The dicts a keyed map spells.
+///
+/// A record's field and a mapping's literal key are one thing -- each names a
+/// key and says what it maps to -- so both become labels. A clause whose key is
+/// a *kind* opens that part of the key partition instead. What no clause opens
+/// stays shut, which is what makes a record with no catch-all closed.
+fn map(
+    fields: &[Field],
+    defaults: &[MapClause],
+    pool: &dyn Constants,
+    budget: &Cell<u32>,
+) -> Option<Descr> {
+    let mut labels: Vec<(Label, Descr, bool)> = Vec::with_capacity(fields.len());
+    for field in fields {
+        let ty = descend(&field.schema, pool, budget)?;
+        labels.push((Label::str(&field.name), ty, !field.required));
+    }
+    let mut opened: Vec<(Option<Kind>, Descr)> = Vec::new();
+    for clause in defaults {
+        let value = descend(&clause.value, pool, budget)?;
+        let (named, parts) = key_cover(&clause.key, pool)?;
+        for label in named {
+            // A clause names a key without requiring it: `dict[Literal["a"], V]`
+            // admits the dict that carries no `a` at all.
+            labels.push((label, value.clone(), true));
+        }
+        for part in parts {
+            opened.push((part, value.clone()));
+        }
+    }
+    Descr::keyed_map(labels, opened)
+}
+
+/// The keys a clause governs: the constants it names, and the parts of the key
+/// partition it covers whole.
+///
+/// `None` where it is neither -- a key schema covering *part* of a kind, such as
+/// a regex over strings, would need the default to hold a set of keys rather
+/// than a part of the partition, and that is the theory of overlapping domains
+/// the paper sets aside: "it is possible to define a theory for maps with
+/// overlapping domains, but in that case, there would not be any difference
+/// between record types and an intersection of function types whose codomain may
+/// contain an undefined value". Refusing is what keeps the default a function.
+fn key_cover(key: &Schema, pool: &dyn Constants) -> Option<(Vec<Label>, Vec<Option<Kind>>)> {
+    let part = |kind: Kind| Some((Vec::new(), vec![Some(kind)]));
+    match key {
+        Schema::Nothing => Some((Vec::new(), Vec::new())),
+        // Every part, the one for a key of no listed kind included.
+        Schema::Anything(_) => Some((
+            Vec::new(),
+            KEY_KINDS.iter().copied().map(Some).chain([None]).collect(),
+        )),
+        Schema::NoneType => part(Kind::NoneType),
+        Schema::Bool => part(Kind::Bool),
+        Schema::Int => part(Kind::Int),
+        Schema::Float => part(Kind::Float),
+        Schema::Str => part(Kind::Str),
+        Schema::Bytes => part(Kind::Bytes),
+        Schema::Literal(index) => Some((vec![label_of(&pool.constant(*index)?)?], Vec::new())),
+        Schema::Union(members) => {
+            let mut labels = Vec::new();
+            let mut parts = Vec::new();
+            for member in members {
+                let (mine, theirs) = key_cover(member, pool)?;
+                labels.extend(mine);
+                parts.extend(theirs);
+            }
+            Some((labels, parts))
+        }
+        _ => None,
+    }
+}
+
+/// The constant a pooled operand is, where a map atom could name it as a key.
+fn label_of(operand: &Operand) -> Option<Label> {
+    match operand {
+        Operand::NoneType => Some(Label::NoneType),
+        Operand::Boolean(value) => Some(Label::Bool(*value)),
+        Operand::Integer(value) => Some(Label::Int(*value)),
+        Operand::Word(word, kind) => Some(Label::Word(word.clone(), *kind)),
+        // A float is not a `Literal` the typing spec allows, and an instance is
+        // not a constant.
+        Operand::Float(_) | Operand::Instance(_) => None,
     }
 }
 
@@ -293,7 +380,7 @@ mod tests {
     use crate::decision::{Kind, Verdict};
     use crate::descr::classes::Class;
     use crate::descr::{Descr, Value};
-    use crate::ir::{ConstIx, Constraint, OperandIx, Schema, SeqKind, SeqShape};
+    use crate::ir::{ConstIx, Constraint, MapClause, OperandIx, Schema, SeqKind, SeqShape};
 
     /// A pool that answers from a list, which is what the bindings do from the
     /// validator's object table.
@@ -748,14 +835,22 @@ mod tests {
     fn the_forms_with_nowhere_to_land_refuse() {
         let pool = empty_pool();
         for schema in [
-            Schema::KeyedMap {
-                fields: Vec::new(),
-                defaults: Vec::new(),
-            },
             // A class needs the object pool to say what it derives from, and the
             // core has none.
             Schema::Instance(crate::ir::ClassIx::new(0)),
             Schema::Ref(crate::ir::DefIx::new(0)),
+            // A key schema that is neither a kind nor a constant covers part of
+            // a part, and the default is a function on the parts.
+            Schema::KeyedMap {
+                fields: Vec::new(),
+                defaults: vec![MapClause {
+                    key: Schema::Refine {
+                        base: Box::new(Schema::Str),
+                        constraints: vec![Constraint::MinLen(1)],
+                    },
+                    value: Schema::Int,
+                }],
+            },
         ] {
             assert!(lower(&schema, &pool).is_none(), "{schema:?}");
         }
@@ -803,6 +898,249 @@ mod tests {
             fields: vec![field("a", Schema::Nothing, true)],
         };
         assert!(lower(&empty, &pool).expect("it lowers").is_empty());
+    }
+
+    /// A map lowers to the atom its keys spell, and the three rows the report
+    /// lists as undecided fall out of the semantic `dom`.
+    ///
+    /// A label whose type its part's default already gives it says nothing, and
+    /// the atom drops it -- so a key that must be absent from a closed record
+    /// leaves the empty map, whichever of the three ways it was written.
+    #[test]
+    fn the_maps_that_name_nothing_are_the_empty_map() {
+        let pool = empty_pool();
+        let closed =
+            |fields: Vec<crate::ir::Field>, defaults| Schema::KeyedMap { fields, defaults };
+        let field = |name: &str, schema, required| crate::ir::Field {
+            name: name.to_owned(),
+            schema,
+            required,
+        };
+        let empty = lower(&closed(Vec::new(), Vec::new()), &pool).expect("`{}` lowers");
+
+        // `{"a?": nothing}`: the key may be absent and holds nothing, which is
+        // what the closed default already says, so the label is absorbed.
+        let optional_nothing = closed(vec![field("a", Schema::Nothing, false)], Vec::new());
+        assert_eq!(lower(&optional_nothing, &pool), Some(empty.clone()));
+
+        // `dict[str, nothing]`: every `str` key maps into nothing, so there are
+        // none, and no other part was opened.
+        let no_str_values = closed(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Nothing,
+            }],
+        );
+        assert_eq!(lower(&no_str_values, &pool), Some(empty.clone()));
+
+        // `dict[nothing, int]`: no key at all is governed, so none is admitted.
+        let no_keys = closed(
+            Vec::new(),
+            vec![MapClause {
+                key: Schema::Nothing,
+                value: Schema::Int,
+            }],
+        );
+        assert_eq!(lower(&no_keys, &pool), Some(empty.clone()));
+
+        // And the empty map is not the empty *set*: it holds one dict.
+        assert!(!empty.is_empty());
+        assert!(empty.admits(Value::dict(&[])));
+    }
+
+    /// A required field is required, and an open record admits the keys it does
+    /// not name.
+    #[test]
+    fn a_record_lowers_closed_and_a_catch_all_opens_it() {
+        const A_IS_INT: &[(Value, Value)] = &[(Value::word(b"a", Kind::Str), Value::integer(1))];
+        const A_AND_B: &[(Value, Value)] = &[
+            (Value::word(b"a", Kind::Str), Value::integer(1)),
+            (Value::word(b"b", Kind::Str), Value::integer(2)),
+        ];
+        let pool = empty_pool();
+        let field = crate::ir::Field {
+            name: "a".to_owned(),
+            schema: Schema::Int,
+            required: true,
+        };
+        let shut = lower(
+            &Schema::KeyedMap {
+                fields: vec![field.clone()],
+                defaults: Vec::new(),
+            },
+            &pool,
+        )
+        .expect("a closed record lowers");
+        assert!(shut.admits(Value::dict(A_IS_INT)));
+        assert!(!shut.admits(Value::dict(&[])), "the field is required");
+        assert!(!shut.admits(Value::dict(A_AND_B)), "and nothing else is");
+
+        let open = lower(
+            &Schema::KeyedMap {
+                fields: vec![field],
+                defaults: vec![MapClause::top()],
+            },
+            &pool,
+        )
+        .expect("an open record lowers");
+        assert!(open.admits(Value::dict(A_IS_INT)));
+        assert!(open.admits(Value::dict(A_AND_B)), "a catch-all opens it");
+        assert!(
+            !open.admits(Value::dict(&[])),
+            "the field is still required"
+        );
+    }
+
+    /// Each key kind is its own part, and a clause opens the one its key names.
+    ///
+    /// The default is a function on the partition, so `dict[int, V]` says what an
+    /// integer key maps to and leaves a string key forbidden -- the map was
+    /// closed, and only the part the clause named was opened.
+    #[test]
+    fn a_clause_opens_the_part_its_key_names() {
+        /// One key of each part, beside the schema that names that part.
+        const KEYS: [(Kind, &[(Value, Value)]); 6] = [
+            (
+                Kind::NoneType,
+                &[(Value::of_kind(Kind::NoneType), Value::integer(1))],
+            ),
+            (Kind::Bool, &[(Value::boolean(true), Value::integer(1))]),
+            (Kind::Int, &[(Value::integer(7), Value::integer(1))]),
+            (Kind::Float, &[(Value::float(1.5), Value::integer(1))]),
+            (
+                Kind::Str,
+                &[(Value::word(b"a", Kind::Str), Value::integer(1))],
+            ),
+            (
+                Kind::Bytes,
+                &[(Value::word(b"a", Kind::Bytes), Value::integer(1))],
+            ),
+        ];
+        let atom = |kind| match kind {
+            Kind::NoneType => Schema::NoneType,
+            Kind::Bool => Schema::Bool,
+            Kind::Int => Schema::Int,
+            Kind::Float => Schema::Float,
+            Kind::Bytes => Schema::Bytes,
+            _ => Schema::Str,
+        };
+        let pool = empty_pool();
+        for (kind, _) in KEYS {
+            let opened = lower(
+                &Schema::KeyedMap {
+                    fields: Vec::new(),
+                    defaults: vec![MapClause {
+                        key: atom(kind),
+                        value: Schema::Int,
+                    }],
+                },
+                &pool,
+            )
+            .expect("a mapping lowers");
+            for (other, entry) in KEYS {
+                assert_eq!(
+                    opened.admits(Value::dict(entry)),
+                    other == kind,
+                    "a {kind:?}-keyed map against a {other:?} key"
+                );
+            }
+        }
+    }
+
+    /// A union of key schemas opens each part it names, and a `Literal` names a
+    /// key rather than a part.
+    #[test]
+    fn a_union_opens_each_part_and_a_literal_names_one_key() {
+        const A: &[(Value, Value)] = &[(Value::word(b"a", Kind::Str), Value::integer(1))];
+        const B: &[(Value, Value)] = &[(Value::word(b"b", Kind::Str), Value::integer(1))];
+        const ONE: &[(Value, Value)] = &[(Value::integer(1), Value::integer(1))];
+        let pool = empty_pool();
+        let either = lower(
+            &Schema::KeyedMap {
+                fields: Vec::new(),
+                defaults: vec![MapClause {
+                    key: Schema::Union(vec![Schema::Str, Schema::Int]),
+                    value: Schema::Int,
+                }],
+            },
+            &pool,
+        )
+        .expect("a union of key kinds lowers");
+        assert!(either.admits(Value::dict(A)));
+        assert!(either.admits(Value::dict(ONE)));
+
+        // A literal key is a label: the key it names is governed, and every
+        // other key of that part is not.
+        let named = Pool(vec![Operand::Word(b"a".to_vec(), Kind::Str)]);
+        let one_key = lower(
+            &Schema::KeyedMap {
+                fields: Vec::new(),
+                defaults: vec![MapClause {
+                    key: Schema::Literal(ConstIx::new(0)),
+                    value: Schema::Int,
+                }],
+            },
+            &named,
+        )
+        .expect("a literal key lowers");
+        assert!(one_key.admits(Value::dict(A)));
+        assert!(
+            one_key.admits(Value::dict(&[])),
+            "a clause does not require it"
+        );
+        assert!(!one_key.admits(Value::dict(B)), "and names no other key");
+    }
+
+    /// A literal key of any constant kind is a label, not only a `str` one.
+    ///
+    /// The descriptor names the key by the constant it is, so reading a *value's*
+    /// key has to answer with the same constant -- and a key it cannot name is
+    /// read through its part's default instead, which a closed map shuts. Each
+    /// kind of constant is its own arm on both sides, and a missing one turns a
+    /// named key into an anonymous one that the map then rejects.
+    #[test]
+    fn a_literal_key_of_every_constant_kind_names_its_key() {
+        const NONE_KEY: &[(Value, Value)] = &[(Value::of_kind(Kind::NoneType), Value::integer(1))];
+        const TRUE_KEY: &[(Value, Value)] = &[(Value::boolean(true), Value::integer(1))];
+        const FALSE_KEY: &[(Value, Value)] = &[(Value::boolean(false), Value::integer(1))];
+        const ONE_KEY: &[(Value, Value)] = &[(Value::integer(1), Value::integer(1))];
+        const TWO_KEY: &[(Value, Value)] = &[(Value::integer(2), Value::integer(1))];
+        const RAW_KEY: &[(Value, Value)] = &[(Value::word(b"a", Kind::Bytes), Value::integer(1))];
+
+        /// One constant, a dict whose key it names, and one of the same part it
+        /// does not.
+        type Case = (
+            Operand,
+            &'static [(Value, Value)],
+            &'static [(Value, Value)],
+        );
+
+        let cases: [Case; 4] = [
+            (Operand::NoneType, NONE_KEY, ONE_KEY),
+            (Operand::Boolean(true), TRUE_KEY, FALSE_KEY),
+            (Operand::Integer(1), ONE_KEY, TWO_KEY),
+            (Operand::Word(b"a".to_vec(), Kind::Bytes), RAW_KEY, ONE_KEY),
+        ];
+        for (constant, named, other) in cases {
+            let pool = Pool(vec![constant.clone()]);
+            let map = lower(
+                &Schema::KeyedMap {
+                    fields: Vec::new(),
+                    defaults: vec![MapClause {
+                        key: Schema::Literal(ConstIx::new(0)),
+                        value: Schema::Int,
+                    }],
+                },
+                &pool,
+            )
+            .expect("a literal key lowers");
+            assert!(map.admits(Value::dict(named)), "{constant:?} names its key");
+            assert!(
+                !map.admits(Value::dict(other)),
+                "{constant:?} names no other"
+            );
+        }
     }
 
     /// An operand the pool cannot read refuses the constraint that names it.

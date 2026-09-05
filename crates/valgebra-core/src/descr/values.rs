@@ -35,6 +35,15 @@ impl<G: Guard> Values<G> {
         }
     }
 
+    /// The values in either, or `None` where a guard refuses.
+    #[must_use]
+    pub fn join(&self, other: &Values<G>) -> Option<Values<G>> {
+        match (self, other) {
+            (Values::Every, _) | (_, Values::Every) => Some(Values::Every),
+            (Values::Only(a), Values::Only(b)) => Some(Values::Only(a.join(b)?)),
+        }
+    }
+
     /// The values in neither, which a guard always answers.
     #[must_use]
     pub fn complement(&self) -> Values<G> {
@@ -119,6 +128,16 @@ impl<G: Guard> Field<G> {
         })
     }
 
+    /// The values in either, or `None` where a guard refuses. Missing on either
+    /// side is missing in the union.
+    #[must_use]
+    pub fn join(&self, other: &Field<G>) -> Option<Field<G>> {
+        Some(Field {
+            ty: self.ty.join(&other.ty)?,
+            absent: self.absent || other.absent,
+        })
+    }
+
     /// The rest of `T⊥`, which flips the extra element along with the type.
     #[must_use]
     pub fn complement(&self) -> Field<G> {
@@ -137,5 +156,68 @@ impl<G: Guard> Field<G> {
         } else {
             self.ty.emptiness()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Field, Values};
+    use crate::descr::integers::IntSet;
+
+    fn only(set: IntSet) -> Values<IntSet> {
+        Values::Only(set)
+    }
+
+    /// The universe absorbs a join and is the unit of a meet, which is what
+    /// carrying it beside the guard is for.
+    #[test]
+    fn the_universe_absorbs_a_join_and_units_a_meet() {
+        let some = only(IntSet::just(1));
+        assert_eq!(Values::Every.join(&some), Some(Values::Every));
+        assert_eq!(some.join(&Values::Every), Some(Values::Every));
+        assert_eq!(Values::Every.meet(&some), Some(some.clone()));
+        assert_eq!(some.meet(&Values::Every), Some(some.clone()));
+        assert_eq!(
+            some.join(&only(IntSet::just(2))),
+            Some(only(
+                IntSet::just(1)
+                    .union(&IntSet::just(2))
+                    .expect("two points share a period of one"),
+            ))
+        );
+    }
+
+    /// A join of two fields is missing where *either* is, and a meet only where
+    /// both are.
+    ///
+    /// `absent` is the `⊥` of `T⊥`, so it joins and meets as the extra element
+    /// it is: a key one side allows to be missing is a key the union allows to
+    /// be missing, and a key the meet allows to be missing is one both did.
+    #[test]
+    fn the_extra_element_joins_and_meets_as_itself() {
+        let required = Field {
+            ty: only(IntSet::just(1)),
+            absent: false,
+        };
+        let optional = Field {
+            ty: only(IntSet::just(2)),
+            absent: true,
+        };
+        let joined = required.join(&optional).expect("two fields join");
+        assert!(joined.absent, "either side missing makes the union missing");
+        let met = required.meet(&optional).expect("two fields meet");
+        assert!(!met.absent, "and the meet only where both allowed it");
+        assert!(
+            optional
+                .join(&optional)
+                .expect("a field joins itself")
+                .absent
+        );
+        assert!(
+            !required
+                .join(&required)
+                .expect("a field joins itself")
+                .absent
+        );
     }
 }

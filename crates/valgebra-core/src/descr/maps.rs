@@ -76,12 +76,6 @@ pub const KEY_KINDS: [Kind; 8] = [
 /// then admit a dict it says nothing about.
 const PARTS: usize = KEY_KINDS.len() + 1;
 
-/// The part a `str` label falls in, which is the part every label belongs to
-/// while a label is its text.
-fn str_slot() -> usize {
-    key_slot(Some(Kind::Str)).unwrap_or(0)
-}
-
 /// The part a key of `kind` falls in, or `None` for a kind no key can have.
 ///
 /// A `list`, a `set` and a `dict` are unhashable, so a dict carrying one as a key
@@ -91,6 +85,62 @@ fn key_slot(kind: Option<Kind>) -> Option<usize> {
         Some(kind) => KEY_KINDS.iter().position(|listed| *listed == kind),
         None => Some(KEY_KINDS.len()),
     }
+}
+
+/// One key a map atom names: a constant, and the part it falls in.
+///
+/// A field of a record and a literal key of a mapping are the same thing --
+/// `{"a": int}` and `dict[Literal["a"], int]` name one key and say what it maps
+/// to -- so one type serves both, and an atom cannot tell which spelling it came
+/// from. Ordered, so two ways of writing an atom compare equal.
+///
+/// A `float` is not here: the typing spec disallows one as a `Literal`, on the
+/// grounds that infinity and `nan` have no clean spelling. Nor is a tuple or a
+/// frozenset, which are hashable but not constants a `Literal` names.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Label {
+    /// `None`.
+    NoneType,
+    /// One of the two booleans.
+    Bool(bool),
+    /// An integer, which is never a boolean: `bool` is its own kind here.
+    Int(i64),
+    /// A word, under the kind that reads it -- a `str` as its UTF-8 bytes.
+    Word(Vec<u8>, Kind),
+}
+
+impl Label {
+    /// A `str` key with this text, which is what a record's field is.
+    #[must_use]
+    pub fn str(text: &str) -> Label {
+        Label::Word(text.as_bytes().to_vec(), Kind::Str)
+    }
+
+    /// The kind of the key, which is the part of the partition it falls in.
+    #[must_use]
+    pub fn kind(&self) -> Kind {
+        match self {
+            Label::NoneType => Kind::NoneType,
+            Label::Bool(_) => Kind::Bool,
+            Label::Int(_) => Kind::Int,
+            Label::Word(_, kind) => *kind,
+        }
+    }
+}
+
+/// One entry of a dict being asked about: its key and what it maps to.
+///
+/// The key is given twice over, because an atom asks two questions of it:
+/// whether it is a key the atom *names*, and which part of the partition it
+/// falls in. A key that is not a constant has no label and only a part.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Entry<V> {
+    /// The key, where it is a constant an atom could name.
+    pub label: Option<Label>,
+    /// The key's kind, or `None` where the key is of no listed kind.
+    pub kind: Option<Kind>,
+    /// What the key maps to.
+    pub value: V,
 }
 
 /// One constraint of `S`: some key outside `besides`, of this part, maps into
@@ -112,7 +162,7 @@ fn key_slot(kind: Option<Kind>) -> Option<usize> {
 struct Wanted<G> {
     slot: usize,
     ty: Values<G>,
-    besides: BTreeSet<String>,
+    besides: BTreeSet<Label>,
 }
 
 /// One map atom, `⟨(τ_ℓ)_{ℓ∈L} ; t₀ ; S⟩`.
@@ -120,10 +170,8 @@ struct Wanted<G> {
 /// Both collections are ordered, so two ways of writing one atom compare equal.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct MapAtom<G> {
-    /// `(τ_ℓ)_{ℓ∈L}`, keyed by the label's text. A label is a `str` key; a
-    /// literal key of another kind reaches here with the frontend that reads
-    /// one.
-    labels: BTreeMap<String, Field<G>>,
+    /// `(τ_ℓ)_{ℓ∈L}`, keyed by the constant each names.
+    labels: BTreeMap<Label, Field<G>>,
     /// `t₀`, one entry per key kind.
     defaults: [Field<G>; PARTS],
     /// `S`.
@@ -141,13 +189,36 @@ impl<G: Guard> MapAtom<G> {
     }
 
     /// What the atom says about a label it may or may not name.
-    fn field(&self, label: &str) -> Field<G> {
+    fn field(&self, label: &Label) -> Field<G> {
         match self.labels.get(label) {
             Some(field) => field.clone(),
             // A label the atom does not name is governed by the default for its
-            // kind, which for a `str` label is the `str` part of the partition.
-            None => self.default_for(Some(Kind::Str)),
+            // own part, which is what Definition 2.2's quasi-constant function
+            // says it maps to -- so reading it here is exact rather than a
+            // widening.
+            None => self.default_for(Some(label.kind())),
         }
+    }
+
+    /// The same atom with every label its part's default already covers dropped.
+    ///
+    /// This is the paper's `dom` read **semantically**. Definition 2.2 notes that
+    /// the notation is "not univocal (unless we require zᵢ ≠ z...)": naming a key
+    /// and giving it exactly what the default already gives it says nothing, and
+    /// two atoms that differ only in such a name are one atom. Dropping them is
+    /// what makes `{"a?": nothing}` and `{}` the same closed map rather than two
+    /// that merely admit the same dicts.
+    fn absorbed(mut self) -> MapAtom<G> {
+        let covered: Vec<Label> = self
+            .labels
+            .iter()
+            .filter(|(label, field)| **field == self.default_for(Some(label.kind())))
+            .map(|(label, _)| label.clone())
+            .collect();
+        for label in covered {
+            self.labels.remove(&label);
+        }
+        self
     }
 
     /// The default for the part a key of `kind` falls in.
@@ -258,7 +329,7 @@ impl<G: Guard> MapAtom<G> {
             }
             atom
         };
-        let named: BTreeSet<String> = self.labels.keys().cloned().collect();
+        let named: BTreeSet<Label> = self.labels.keys().cloned().collect();
         for (slot, default) in self.defaults.iter().enumerate() {
             let mut atom = widened();
             atom.wanted.push(Wanted {
@@ -278,16 +349,23 @@ impl<G: Guard> MapAtom<G> {
                     absent: true,
                 };
             }
-            if want.slot == str_slot() {
-                for label in self.labels.keys().filter(|l| !want.besides.contains(*l)) {
-                    atom.labels.insert(
-                        label.clone(),
-                        Field {
-                            ty: want.ty.complement(),
-                            absent: true,
-                        },
-                    );
-                }
+            let narrowed: Vec<Label> = self
+                .labels
+                .keys()
+                .filter(|label| {
+                    key_slot(Some(label.kind())) == Some(want.slot)
+                        && !want.besides.contains(*label)
+                })
+                .cloned()
+                .collect();
+            for label in narrowed {
+                atom.labels.insert(
+                    label,
+                    Field {
+                        ty: want.ty.complement(),
+                        absent: true,
+                    },
+                );
             }
             atoms.push(atom);
         }
@@ -295,20 +373,16 @@ impl<G: Guard> MapAtom<G> {
     }
 
     /// Whether this atom holds the dict carrying `entries`.
-    ///
-    /// Each entry is a key's kind, its text where the key is a string, and what
-    /// it maps to. The label text is what a named key is matched by; every other
-    /// key is read through the default for its part.
-    fn holds(&self, entries: &[(Option<Kind>, Option<&str>, G::Value)]) -> bool {
-        let named = |label: &String| {
+    fn holds(&self, entries: &[Entry<G::Value>]) -> bool {
+        let named = |label: &Label| {
             entries
                 .iter()
-                .find(|(_, text, _)| *text == Some(label.as_str()))
+                .find(|entry| entry.label.as_ref() == Some(label))
         };
         for (label, field) in &self.labels {
             match named(label) {
-                Some((_, _, value)) => {
-                    if !field.ty.holds(value) {
+                Some(entry) => {
+                    if !field.ty.holds(&entry.value) {
                         return false;
                     }
                 }
@@ -321,20 +395,28 @@ impl<G: Guard> MapAtom<G> {
                 }
             }
         }
-        let unnamed = |text: Option<&str>| !text.is_some_and(|text| self.labels.contains_key(text));
+        let unnamed = |entry: &Entry<G::Value>| {
+            !entry
+                .label
+                .as_ref()
+                .is_some_and(|label| self.labels.contains_key(label))
+        };
         // Every key the labels do not name is governed by its part's default.
-        for (kind, text, value) in entries {
-            if unnamed(*text) && !self.default_for(*kind).ty.holds(value) {
+        for entry in entries {
+            if unnamed(entry) && !self.default_for(entry.kind).ty.holds(&entry.value) {
                 return false;
             }
         }
         // And every constraint of `S` wants a key outside its own exclusion set
         // to witness it.
         self.wanted.iter().all(|want| {
-            entries.iter().any(|(kind, text, value)| {
-                !text.is_some_and(|text| want.besides.contains(text))
-                    && key_slot(*kind) == Some(want.slot)
-                    && want.ty.holds(value)
+            entries.iter().any(|entry| {
+                !entry
+                    .label
+                    .as_ref()
+                    .is_some_and(|label| want.besides.contains(label))
+                    && key_slot(entry.kind) == Some(want.slot)
+                    && want.ty.holds(&entry.value)
             })
         })
     }
@@ -377,19 +459,74 @@ impl<G: Guard> MapLattice<G> {
     /// `optional` admits the dicts without the key at all, which is the `⊥` in
     /// the field's type rather than a rule beside it.
     #[must_use]
-    pub fn label(label: &str, ty: G, optional: bool) -> MapLattice<G> {
+    pub fn label(label: Label, ty: G, optional: bool) -> MapLattice<G> {
         let mut atom = MapAtom::top();
         atom.labels.insert(
-            label.to_owned(),
+            label,
             Field {
                 ty: Values::Only(ty),
                 absent: optional,
             },
         );
         MapLattice {
-            atoms: vec![atom],
+            atoms: vec![atom.absorbed()],
             negated: false,
         }
+    }
+
+    /// The dicts a keyed map spells: the keys it names, and what a key of each
+    /// part may hold besides them.
+    ///
+    /// Built as one atom rather than composed from meets, because closing a map
+    /// and naming a key are not independent: "no keys at all" met with
+    /// `{"a": int}` is empty, since the closing default governs `a` too. Here the
+    /// labels are written after the defaults, which is the order the atom means
+    /// -- `t₀` governs the keys `L` does not name.
+    ///
+    /// A part `opened` does not mention is shut, which is what a record with no
+    /// catch-all forbids. Two clauses over one part join, which is the IR's
+    /// reading of overlapping clauses: a key belongs when *some* clause admits
+    /// it.
+    #[must_use]
+    pub fn record(
+        labels: impl IntoIterator<Item = (Label, G, bool)>,
+        opened: impl IntoIterator<Item = (Option<Kind>, G)>,
+    ) -> Option<MapLattice<G>> {
+        let mut atom = MapAtom::top();
+        for default in &mut atom.defaults {
+            *default = Field {
+                ty: Values::none(),
+                absent: true,
+            };
+        }
+        for (part, ty) in opened {
+            if let Some(slot) = key_slot(part)
+                && let Some(default) = atom.defaults.get_mut(slot)
+            {
+                let widened = Field {
+                    ty: Values::Only(ty),
+                    absent: true,
+                };
+                *default = default.join(&widened)?;
+            }
+        }
+        for (label, ty, optional) in labels {
+            let named = Field {
+                ty: Values::Only(ty),
+                absent: optional,
+            };
+            // Two clauses naming one key both constrain it, so the second meets
+            // the first rather than replacing it.
+            let field = match atom.labels.get(&label) {
+                Some(held) => held.meet(&named)?,
+                None => named,
+            };
+            atom.labels.insert(label, field);
+        }
+        Some(MapLattice {
+            atoms: tidy(vec![atom])?,
+            negated: false,
+        })
     }
 
     /// The dicts every one of whose keys of `kind` maps into `ty`.
@@ -410,14 +547,22 @@ impl<G: Guard> MapLattice<G> {
         }
     }
 
-    /// The dicts with no key of any kind but `kind`.
+    /// The dicts carrying no key outside `parts`.
+    ///
+    /// What *closes* a map. `dict[str, int]` on its own admits a dict with an
+    /// integer key, because the default for the integer part is untouched;
+    /// meeting it with this says the map has string keys and no others. A named
+    /// key is unaffected -- the default governs the keys the labels do not name,
+    /// so closing a part does not shut a label of it.
+    ///
+    /// `None` in `parts` is the part for a key of no listed kind, which a closed
+    /// record has to shut too: an object with a `__hash__` is a key.
     #[must_use]
-    pub fn only_keys_of(kind: Kind) -> MapLattice<G> {
+    pub fn keys_among(parts: &[Option<Kind>]) -> MapLattice<G> {
         let mut atom = MapAtom::top();
-        for (slot, listed) in KEY_KINDS.iter().enumerate() {
-            if *listed != kind
-                && let Some(default) = atom.defaults.get_mut(slot)
-            {
+        for slot in 0..PARTS {
+            let open = parts.iter().any(|part| key_slot(*part) == Some(slot));
+            if !open && let Some(default) = atom.defaults.get_mut(slot) {
                 *default = Field {
                     ty: Values::none(),
                     absent: true,
@@ -453,7 +598,7 @@ impl<G: Guard> MapLattice<G> {
 
     /// Whether the dict carrying `entries` is held.
     #[must_use]
-    pub fn holds(&self, entries: &[(Option<Kind>, Option<&str>, G::Value)]) -> bool {
+    pub fn holds(&self, entries: &[Entry<G::Value>]) -> bool {
         self.atoms.iter().any(|atom| atom.holds(entries)) != self.negated
     }
 
@@ -528,6 +673,7 @@ fn product<G: Guard>(left: &[MapAtom<G>], right: &[MapAtom<G>]) -> Option<Vec<Ma
 fn tidy<G: Guard>(atoms: Vec<MapAtom<G>>) -> Option<Vec<MapAtom<G>>> {
     let mut kept: Vec<MapAtom<G>> = atoms
         .into_iter()
+        .map(MapAtom::absorbed)
         .filter(|atom| atom.emptiness() != Verdict::Empty)
         .collect();
     kept.sort();
@@ -537,13 +683,17 @@ fn tidy<G: Guard>(atoms: Vec<MapAtom<G>>) -> Option<Vec<MapAtom<G>>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{KEY_KINDS, MapLattice, key_slot};
+    use super::{Entry, KEY_KINDS, Label, MapLattice, key_slot};
     use crate::decision::{Kind, Verdict};
     use crate::descr::integers::IntSet;
 
     /// One dict entry: a `str` key with this text, mapping to this integer.
-    fn at(label: &'static str, value: i64) -> (Option<Kind>, Option<&'static str>, i64) {
-        (Some(Kind::Str), Some(label), value)
+    fn at(label: &str, value: i64) -> Entry<i64> {
+        Entry {
+            label: Some(Label::str(label)),
+            kind: Some(Kind::Str),
+            value,
+        }
     }
 
     /// The union holds the dicts of both sides, and is a union rather than a
@@ -556,8 +706,8 @@ mod tests {
     /// form would say so.
     #[test]
     fn a_union_of_maps_holds_the_dicts_of_both() {
-        let a = MapLattice::label("a", IntSet::just(1), false);
-        let b = MapLattice::label("b", IntSet::just(2), false);
+        let a = MapLattice::label(Label::str("a"), IntSet::just(1), false);
+        let b = MapLattice::label(Label::str("b"), IntSet::just(2), false);
         let joined = a.union(&b).expect("two maps join");
         assert_eq!(joined.emptiness(), Verdict::Inhabited);
         assert!(joined.holds(&[at("a", 1)]));
@@ -570,13 +720,13 @@ mod tests {
     /// name off its own default.
     #[test]
     fn a_meet_of_maps_holds_only_the_dicts_of_both() {
-        let a = MapLattice::label("a", IntSet::just(1), false);
-        let b = MapLattice::label("b", IntSet::just(2), false);
+        let a = MapLattice::label(Label::str("a"), IntSet::just(1), false);
+        let b = MapLattice::label(Label::str("b"), IntSet::just(2), false);
         let met = a.intersect(&b).expect("two maps meet");
         assert!(met.holds(&[at("a", 1), at("b", 2)]));
         assert!(!met.holds(&[at("a", 1)]));
         // Two maps that disagree about one label share no dict at all.
-        let other = MapLattice::label("a", IntSet::just(2), false);
+        let other = MapLattice::label(Label::str("a"), IntSet::just(2), false);
         let disagreeing = a.intersect(&other).expect("two maps meet");
         assert_eq!(disagreeing.emptiness(), Verdict::Empty);
     }
@@ -585,7 +735,7 @@ mod tests {
     /// a wrong one.
     #[test]
     fn a_complement_of_a_map_is_a_map() {
-        let a = MapLattice::label("a", IntSet::just(1), false);
+        let a = MapLattice::label(Label::str("a"), IntSet::just(1), false);
         let outside = a.complement();
         assert!(!outside.holds(&[at("a", 1)]));
         assert!(outside.holds(&[at("a", 2)]));
@@ -607,7 +757,7 @@ mod tests {
         // "some integer key maps outside {1}", met with "b maps to 2".
         let int_keys = MapLattice::keyed(Kind::Int, IntSet::just(1));
         let some_other_int = int_keys.complement();
-        let b_is_two = MapLattice::label("b", IntSet::just(2), false);
+        let b_is_two = MapLattice::label(Label::str("b"), IntSet::just(2), false);
         let met = some_other_int.intersect(&b_is_two).expect("the two meet");
         // Its complement holds a dict whose `b` is 2 and whose integer keys are
         // all 1 -- the label is untouched by a constraint about another part.
@@ -627,7 +777,7 @@ mod tests {
         // "some str key maps outside {1}", met with "b maps to 2".
         let str_keys = MapLattice::keyed(Kind::Str, IntSet::just(1));
         let some_other_str = str_keys.complement();
-        let b_is_two = MapLattice::label("b", IntSet::just(2), false);
+        let b_is_two = MapLattice::label(Label::str("b"), IntSet::just(2), false);
         let met = some_other_str.intersect(&b_is_two).expect("the two meet");
         // `{"b": 2}` is in the meet: `b` maps to 2, and `b` is itself the str key
         // that maps outside {1}.
