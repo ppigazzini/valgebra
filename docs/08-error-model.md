@@ -273,10 +273,13 @@ differently, in the same way `repr` renders the schema that was built. Read
 `expected` to see what was asked for; use [`is_equivalent`](04-algebra.md) to ask
 whether two schemas mean the same thing.
 
-*As built* rather than *as written*, because two constructors fold: `complement`
-cancels a complement and `union` collapses a join carrying a schema beside its
-own complement. `complement(complement(int))` is the schema `int`, so it reports
-`int_type` and names `int` — there is no second schema left to report.
+*As built* rather than *as written*, because the constructors fold: `complement`
+cancels a complement, `union` collapses a join carrying a schema beside its own
+complement, and `intersection` collapses the meet of that pair.
+`complement(complement(int))` is the schema `int`, so it reports `int_type` and
+names `int` — there is no second schema left to report. `intersection(int,
+complement(int))` is `nothing`, so it reports `no_match` and names `nothing`,
+for the same reason.
 
 ## Which spelling produces which code
 

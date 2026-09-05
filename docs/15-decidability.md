@@ -101,10 +101,13 @@ conservative](#sound-but-conservative)).
   unfolding, so a `recursive` schema and the body written out around it relate
   in both directions.
 - **The complement laws, where the constructors reach them.** `complement`
-  cancels a complement and `union` folds a join carrying a schema beside its own
-  complement, both where the schema is built. So `complement(complement(int))`
-  **is** `int` — one schema, which `repr` and `==` report and which a comparison
-  is never asked about — and a union covering the universe **is** `anything`.
+  cancels a complement, `union` folds a join carrying a schema beside its own
+  complement, and `intersection` folds the meet of that pair, all where the
+  schema is built. So `complement(complement(int))` **is** `int` — one schema,
+  which `repr` and `==` report and which a comparison is never asked about — a
+  union covering the universe **is** `anything`, and a meet cancelling to
+  nothing **is** `nothing`. A predicate and a hooked class are exempt as well as
+  `Any`: the law holds of sets, and neither is one.
   The decision procedure has no rule for either shape and never meets one built
   this way. A shape the fold does not reach is a different matter and is
   conservative (below). `Any` is exempt: it is an atom, not a set whose
