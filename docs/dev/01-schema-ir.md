@@ -229,6 +229,35 @@ it as a comment: the guard absorbs under every structural constructor, and read
 from the top the check agrees exactly with "the reference is reachable through
 algebraic combinators alone".
 
+## Which laws construction settles
+
+Three, and all three where the schema is built: `~~A` is `A`, `A | ~A` is the
+top, and `A & ~A` is the bottom.
+
+The first holds of anything. A complement is evaluated by negating what is under
+it, so negating twice asks the same question once — even of an atom that answers
+by running code. The other two do not: `A | ~A` and `A & ~A` ask `A` *twice*, and
+a predicate or a class with an `isinstance` hook may answer differently each
+time. Those two folds are therefore asked of the atom first, and decline for one
+that is not a set.
+
+**Both sides or neither.** A law folded in `union` and left standing in
+`intersection` is two answers to one question, and the simplifier already folded
+the meet — so the constructors disagreed with each other and with it. Stating a
+law once, in the place a schema is built, is what lets a rule downstream assume
+no such shape reaches it.
+
+That assumption is why a transform that *descends* must refold. Opening the
+records in `{a: int} | ~{a: int}` maps both sides to one schema beside its own
+complement: a shape construction promises never survives it. Reindexing is the
+exception and stays raw — it relabels pool slots, and a relabelling that changed
+the shape would not be one.
+
+The cost is that `repr`, `==` and the reported error follow the schema as
+*built*, not as written: `intersection(int, complement(int))` is `nothing` and
+reports `no_match`. That is recorded in
+[08-error-model.md](../08-error-model.md), where a reader meets it.
+
 ## What a length is
 
 `MinLen` and `MaxLen` on a `list` or a `tuple` read the number of elements the

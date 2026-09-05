@@ -14,14 +14,17 @@ All notable changes to valgebra are recorded here. The format follows
   their constants separately, and those still meet the decision budget above
   roughly a thousand members, which the completeness ledger records.
 
-- `~~A` is `A` and a union carrying a schema together with its complement is the
-  top, settled where the schema is built. The decision procedure has no rule for
-  either shape and does not meet one built through the constructors; a shape
-  built another way — a recursive definition, a respelling, constants equal but
-  not identical — reaches the procedure and is not decided. `repr`, `==`, and
-  the code a violation reports follow the cancelled form:
-  `complement(complement(int))` reports `int_type` where it reported
-  `unexpected_match`.
+- `~~A` is `A`, a union carrying a schema together with its complement is the
+  top, and a meet of that pair is the bottom, all settled where the schema is
+  built. The decision procedure has no rule for these shapes and does not meet
+  one built through the constructors; a shape built another way — a recursive
+  definition, a respelling, constants equal but not identical — reaches the
+  procedure and is not decided. `repr`, `==`, and the code a violation reports
+  follow the cancelled form: `complement(complement(int))` reports `int_type`
+  where it reported `unexpected_match`, and `intersection(int, complement(int))`
+  reports `no_match` naming `nothing`. A predicate and a class with an
+  `isinstance` hook are exempt from the two cancelling folds: the law is about
+  sets, and an atom that answers by running code is not one.
 
 - A meet of two record schemas is decided empty when a key one side requires
   cannot hold — because the types the two give it share no value, or because the

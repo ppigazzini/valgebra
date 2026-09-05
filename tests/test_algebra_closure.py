@@ -8,7 +8,9 @@ that fails the day it becomes decided; this file holds what does not need one.
 """
 
 import enum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
+
+import annotated_types as at
 
 from valgebra import Validator, anything, complement, intersection, nothing, union
 
@@ -157,3 +159,22 @@ def test_the_gradual_atom_is_exempt_from_the_fold():
     # `Any` is the dynamic type, not a set whose complement completes it.
     assert union(Any, complement(Any)) != Validator(anything)
     assert not Validator(anything).is_subtype_of(union(Any, complement(Any)))
+
+
+def test_a_meet_with_a_complement_is_the_bottom():
+    assert intersection(list[int], complement(list[int])) == Validator(nothing)
+
+
+def test_the_cancelling_folds_decline_an_atom_that_is_not_a_set():
+    """The law is about sets, and an atom that answers by running code is not one.
+
+    ``A | ~A`` and ``A & ~A`` ask ``A`` twice, and a predicate may answer
+    differently each time — so a value can satisfy both sides, or neither, and
+    the join is not the top nor the meet the bottom. ``~~A`` is exempt from the
+    exemption: it asks once, whatever ``A`` is.
+    """
+    coin = Annotated[int, at.Predicate(lambda _v: True)]
+
+    assert union(coin, complement(coin)) != Validator(anything)
+    assert intersection(coin, complement(coin)) != Validator(nothing)
+    assert complement(complement(coin)) == Validator(coin)

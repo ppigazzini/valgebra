@@ -597,10 +597,17 @@ impl Schema {
     pub fn meet(members: impl IntoIterator<Item = Schema>) -> Schema {
         let members: Vec<Schema> = members.into_iter().collect();
         if members.is_empty() {
-            Schema::Anything
-        } else {
-            Schema::Intersection(members)
+            return Schema::Anything;
         }
+        // The dual of the fold in [`union`](Self::union), and the same law read
+        // the other way: a meet carrying a schema together with its complement
+        // is the bottom. Both constructors state it or neither does -- a law
+        // folded on one side and left standing on the other is two answers to
+        // one question, and the simplifier already folds this side.
+        if crate::decision::has_complementary_pair(&members, &crate::decision::NoLeafRelations) {
+            return Schema::Nothing;
+        }
+        Schema::Intersection(members)
     }
 
     /// The complement: every value this schema does not admit.
@@ -1239,7 +1246,29 @@ impl Schema {
             // its own payloads. Spelling the descent out here again is what let
             // it end in a wildcard, where a new child-carrying variant would be
             // cloned unopened rather than failing to compile.
-            _ => self.map_children(&|s| s.with_records_open(open)),
+            // Refolded, because this transform can *make* a shape the
+            // constructors promise never survives them: opening the records in
+            // `{a: int} | ~{a: int}` maps both sides to one schema beside its own
+            // complement, and a rule downstream is entitled to assume no such
+            // shape exists. [`map_children`] itself stays raw -- reindexing uses
+            // it to relabel pool slots, and a relabelling that changed the shape
+            // would not be one.
+            _ => self.map_children(&|s| s.with_records_open(open)).refolded(),
+        }
+    }
+
+    /// This node rebuilt through its own smart constructor.
+    ///
+    /// The children are already whatever they should be; only the node itself
+    /// may have become a shape construction folds. Written as one step so a
+    /// transform can descend with [`map_children`] and still leave the tree in
+    /// the shape the constructors guarantee.
+    fn refolded(self) -> Schema {
+        match self {
+            Schema::Union(members) => Schema::union(members),
+            Schema::Intersection(members) => Schema::meet(members),
+            Schema::Complement(inner) => inner.complement(),
+            other => other,
         }
     }
 }

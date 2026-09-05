@@ -556,6 +556,39 @@ mod tests {
         assert!(!record_is_open(homogeneous_elem(&closed)));
     }
 
+    /// A transform leaves the tree in the shape the constructors guarantee.
+    ///
+    /// Opening the records in `{a: int} | ~{a: int}` maps both sides to one
+    /// schema beside its own complement -- a shape `union` folds away, and one a
+    /// rule downstream is entitled never to meet. The descent refolds for that
+    /// reason; reindexing does not, because a relabelling that changed the shape
+    /// would not be one.
+    #[test]
+    fn with_records_open_refolds_a_pair_it_creates() {
+        let closed = Schema::record(
+            vec![Field {
+                name: "a".to_owned(),
+                schema: Schema::Int,
+                required: true,
+            }],
+            Openness::Closed,
+        );
+        let pair = Schema::Union(vec![
+            closed.clone(),
+            Schema::Complement(Box::new(closed.with_records_open(Openness::Open))),
+        ]);
+
+        assert!(
+            matches!(pair, Schema::Union(_)),
+            "the two differ before the transform"
+        );
+        assert_eq!(
+            pair.with_records_open(Openness::Open),
+            Schema::Anything,
+            "and are one schema and its complement after it"
+        );
+    }
+
     #[test]
     fn with_records_open_leaves_a_pure_mapping_closed() {
         // A KeyedMap with no declared fields is a mapping, not a record: opening
