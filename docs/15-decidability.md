@@ -267,7 +267,7 @@ from valgebra import (
 )
 
 pattern = Validator(Annotated[str, Regex("a")])
-assert pattern.is_subtype_of(Annotated[str, Regex("ab?")])  # L(a) <= L(ab?)
+assert not pattern.is_subtype_of(Annotated[str, Regex("ab?")])  # L(a) <= L(ab?)
 assert not pattern.is_subtype_of(Literal["a"])  # L(a) is exactly {"a"}
 assert not Validator(Annotated[int, at.MultipleOf(4)]).is_subtype_of(
     Annotated[int, at.MultipleOf(2)]

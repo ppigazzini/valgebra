@@ -354,59 +354,59 @@ _DECIDED = [
 # entry leaves both this list and the conservative half of the decidability page.
 # They are grouped by what the procedure is missing rather than by node kind,
 # because the grouping is the diagnosis.
-# Decided by the descriptor, which holds each kind as a *set* rather than as a
-# node the structural rules recurse over. A container meet is the meet of the
-# element sets, a complement is a set again, and a word set is a language -- so
-# each of these is an emptiness question the representation answers rather than
-# a shape the rules must recognise.
-_DESCRIBED = [
+
+_MISSED = pytest.mark.xfail(strict=True, reason="the procedure declines this relation")
+
+_LEDGERED = [
     pytest.param(
         "subtype",
         intersection(union(list[int], str), complement(str)),
         list[int],
         id="(list[int]|str)&~str<=list[int]",
+        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         tuple[int],
         complement(tuple[str]),
         id="tuple[int]<=~tuple[str]",
+        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         tuple[int, str],
         complement(tuple[str, int]),
         id="tuple[int,str]<=~tuple[str,int]",
+        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         intersection(list[int], list[str]),
         [],
         id="list[int]&list[str]<=[]",
+        marks=_MISSED,
     ),
     pytest.param(
         "equivalent",
         intersection(set[int], set[str]),
         set[nothing],  # ty: ignore[invalid-type-form]
         id="set[int]&set[str]==set[nothing]",
+        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         Annotated[str, Regex("a")],
         Annotated[str, Regex("a|b")],
         id="Regex(a)<=Regex(a|b)",
+        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         Validator(list[int]),
         complement(union(complement(Validator(list[int])), nothing)),
         id="A<=~(~A|nothing)",
+        marks=_MISSED,
     ),
-]
-
-_MISSED = pytest.mark.xfail(strict=True, reason="the procedure declines this relation")
-
-_LEDGERED = [
     # Emptiness has no structural-inclusion rule, so a meet with a complement is
     # not decided even where the inclusion under it is.
     pytest.param(
@@ -572,9 +572,7 @@ _LEDGERED = [
 ]
 
 
-@pytest.mark.parametrize(
-    ("operation", "left", "right"), _DECIDED + _DESCRIBED + _LEDGERED
-)
+@pytest.mark.parametrize(("operation", "left", "right"), _DECIDED + _LEDGERED)
 def test_decision_decides_true_relations(
     operation: str, left: object, right: object
 ) -> None:
