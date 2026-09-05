@@ -458,29 +458,134 @@ jobs:
 
   # Single required check for branch protection: green only if every job above
   # succeeds. Mirrors the ruff required-checks and pydantic check aggregators.
-  mutants-diff:
-    name: mutation signal on the diff
-    # The full sweeps are minutes of rebuilds and run nightly, so a regression
-    # they would catch is visible the night after the pull request that caused
-    # it. This runs the same sweep restricted to the lines the diff touches,
-    # which is bounded by the change rather than by the tree, and so fits a push.
-    #
-    # It checks the NEW-survivor direction only. A partial sweep never generates
-    # most of the baseline, so every accepted survivor in a file the change did
-    # not touch is absent by construction and would otherwise read as a whole
-    # baseline gone stale.
+  # The full sweeps are minutes of rebuilds and run nightly, so a regression they
+  # would catch is visible the night after the pull request that caused it. The
+  # two jobs below run the same sweeps restricted to the *files* the diff
+  # touches, which is bounded by the change rather than by the tree, and so fits
+  # a push.
+  #
+  # They check the NEW-survivor direction only. A partial sweep never generates
+  # most of the baseline, so every accepted survivor in a file the change did not
+  # touch is absent by construction and would otherwise read as a whole baseline
+  # gone stale.
+  #
+  # **One sweep, one job.** The two were one job with one shard matrix, and the
+  # core sweep grew until a shard of it spent 27 of the 30 minutes on its own --
+  # leaving the walk sweep, which needs about three, to run past the limit and
+  # take the lane down with it. They are separate sweeps over separate crates
+  # with separate baselines, and their costs differ by an order of magnitude, so
+  # one shard count cannot be right for both: it starves the expensive one and
+  # wastes runners on the cheap one. Each is sized for what it sweeps.
+  #
+  # The shard index is **zero-based**: `--shard 3/3` is out of range and sweeps
+  # nothing at all, which is a job that passes having tested none of its third.
+  # `tests/test_required_jobs.py` holds each matrix to its divisor so the two
+  # cannot drift apart.
+  mutants-diff-core:
+    name: mutants core ${{ matrix.shard }}
+    # Sharded because one large file is more mutants than a push-time job can
+    # carry, and sharded *this* widely because three was measured too few: a
+    # change touching `decision.rs`, `ir.rs` and `lib.rs` together spent 27 of
+    # the 30 minutes on one of its thirds. The shard count is set so a change of
+    # that size uses well under half the limit, because the failure mode is a
+    # red lane rather than a slow one, and a sweep that has to be re-sharded
+    # after every large commit is not a gate. Sharding splits the mutants and
+    # keeps the file granularity, which is the part that matters -- see the note
+    # above on why the lines are not enough. Each shard runs its own baseline,
+    # and the ratchet is already written for a partial sweep.
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Sharded because the sweep is bounded by the *files* the change touches, not
-    # by its lines, and one large file is more mutants than a push-time job can
-    # carry: touching `decision.rs` alone generates enough to outlast the limit.
-    # Sharding splits the mutants and keeps the file granularity, which is the
-    # part that matters -- see the note above on why the lines are not enough.
-    # Each shard runs its own baseline, and the ratchet is already written for a
-    # partial sweep. The shard index is **zero-based**: `--shard 3/3` is out of
-    # range and sweeps nothing at all, which is a job that passes having tested
-    # none of its third. `tests/test_required_jobs.py` holds the matrix to the
-    # divisor so the two cannot drift apart.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge base is what the diff is taken against, so the shallow
+          # default clone is not enough.
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # Pinned for the reason the nightly sweep gives: the mutant set is compared
+      # against a committed baseline.
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
+        with:
+          tool: cargo-mutants@27.1.0
+      - name: List the Rust files the diff touches
+        id: diff
+        # Both values reach the script through the environment rather than
+        # through template expansion, so nothing from the event can be read as
+        # shell.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          base="$BASE_SHA"
+          # A first push to a branch, or a force-push, can leave no usable base;
+          # fall back to the default branch rather than sweeping the whole tree.
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "$DEFAULT_BRANCH"
+            base="$(git rev-parse FETCH_HEAD)"
+          fi
+          # WHOLE FILES, not the diff's lines. `--in-diff` would sweep only the
+          # lines the change touches, and the miss that matters is the other
+          # direction: an edit that stops an EXISTING test from killing a mutant
+          # somewhere else in the same file. That mutant is not in the diff, and
+          # sweeping the file finds it. Every such mutant lives in a file the
+          # change touched, because a Rust test and the code it covers are swept
+          # together here.
+          git diff --name-only --diff-filter=d "$base"...HEAD -- '*.rs' > changed.txt
+          core=$(grep '^crates/valgebra-core/' changed.txt || true)
+          {
+            echo "core<<EOF"; echo "$core"; echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "core files: ${core:-none}"
+      # `-j 2` matches the runner's cores. Oversubscribing turns a mutation
+      # caught in seconds into one that takes far longer, and the ratchet reads a
+      # timeout as a survivor -- so the multiplier below is what keeps a *slow*
+      # catch from reading as an escape. A mutation that removes termination
+      # still reaches it.
+      - name: Sweep the core files the change touches
+        if: steps.diff.outputs.core != ''
+        env:
+          FILES: ${{ steps.diff.outputs.core }}
+        run: |
+          args=""
+          for f in $FILES; do args="$args --file $f"; done
+          set +e
+          # shellcheck disable=SC2086  # $args is a built flag list, not input
+          cargo mutants --package valgebra-core $args -j 2 \
+            --timeout-multiplier 20 --shard "${{ matrix.shard }}/12" \
+            --output core-diff-mutants \
+            -- -- --skip deep_subtype_into_bottom_terminates \
+            --skip subtyping_terminates_on_a_distributed_tower
+          status=$?
+          set -e
+          # A change confined to excluded files generates nothing; that is a clean
+          # result, not a broken detector, so the ratchet is skipped for it.
+          case "$status" in
+            0 | 2 | 3) ;;
+            *) exit "$status" ;;
+          esac
+          if [ -f core-diff-mutants/mutants.out/caught.txt ] \
+            || [ -f core-diff-mutants/mutants.out/missed.txt ]; then
+            python3 scripts/mutation_gate.py --baseline core --new-only \
+              --out core-diff-mutants/mutants.out
+          else
+            echo "no core mutants in the files this change touches"
+          fi
+
+  mutants-diff-walk:
+    name: mutants walk ${{ matrix.shard }}
+    # Three shards: the walk is two files and a few hundred mutants that run
+    # against an embedded interpreter, and a shard of it takes minutes rather
+    # than tens of them.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -526,49 +631,11 @@ jobs:
           # change touched, because a Rust test and the code it covers are swept
           # together here.
           git diff --name-only --diff-filter=d "$base"...HEAD -- '*.rs' > changed.txt
-          core=$(grep '^crates/valgebra-core/' changed.txt || true)
           walk=$(grep -E '^crates/valgebra-py/src/check/(walk|ctx)\.rs$' changed.txt || true)
           {
-            echo "core<<EOF"; echo "$core"; echo "EOF"
             echo "walk<<EOF"; echo "$walk"; echo "EOF"
           } >> "$GITHUB_OUTPUT"
-          echo "core files: ${core:-none}"
           echo "walk files: ${walk:-none}"
-      # `-j 4` runs four test binaries at once, each spawning its own test
-      # threads, while the baseline that sets the timeout is measured alone. A
-      # mutation caught in seconds on an idle machine can take far longer under
-      # that oversubscription, and the ratchet reads a timeout as a survivor --
-      # so the multiplier is what keeps a *slow* catch from reading as an
-      # escape. A mutation that removes termination still reaches it.
-      - name: Sweep the core files the change touches
-        if: steps.diff.outputs.core != ''
-        env:
-          FILES: ${{ steps.diff.outputs.core }}
-        run: |
-          args=""
-          for f in $FILES; do args="$args --file $f"; done
-          set +e
-          # shellcheck disable=SC2086  # $args is a built flag list, not input
-          cargo mutants --package valgebra-core $args -j 4 \
-            --timeout-multiplier 20 --shard "${{ matrix.shard }}/3" \
-            --output core-diff-mutants \
-            -- -- --skip deep_subtype_into_bottom_terminates \
-            --skip subtyping_terminates_on_a_distributed_tower
-          status=$?
-          set -e
-          # A change confined to excluded files generates nothing; that is a clean
-          # result, not a broken detector, so the ratchet is skipped for it.
-          case "$status" in
-            0 | 2 | 3) ;;
-            *) exit "$status" ;;
-          esac
-          if [ -f core-diff-mutants/mutants.out/caught.txt ] \
-            || [ -f core-diff-mutants/mutants.out/missed.txt ]; then
-            python3 scripts/mutation_gate.py --baseline core --new-only \
-              --out core-diff-mutants/mutants.out
-          else
-            echo "no core mutants in the files this change touches"
-          fi
       - name: Sweep the walk when the change touches it
         if: steps.diff.outputs.walk != ''
         run: |
@@ -580,7 +647,7 @@ jobs:
           cargo mutants --package valgebra-py \
             --file crates/valgebra-py/src/check/walk.rs \
             --file crates/valgebra-py/src/check/ctx.rs \
-            --features interpreter-tests -j 4 --timeout-multiplier 20 \
+            --features interpreter-tests -j 2 --timeout-multiplier 20 \
             --shard "${{ matrix.shard }}/3" \
             --output walk-diff-mutants \
             -- -- --skip recursion_deeper_than_the_bound_is_refused
@@ -597,7 +664,6 @@ jobs:
           else
             echo "no walk mutants to judge"
           fi
-
   nightly-fuzz:
     name: nightly deep fuzz
     # The hole-hunting property suites at the deep example budget. Scheduled and
@@ -977,7 +1043,8 @@ jobs:
         bench,
         wheel,
         fuzz-build,
-        mutants-diff,
+        mutants-diff-core,
+        mutants-diff-walk,
         cargo-deny,
         pip-audit,
         zizmor,
@@ -1005,7 +1072,8 @@ jobs:
           needs.bench.result != 'success' ||
           needs.wheel.result != 'success' ||
           needs.fuzz-build.result != 'success' ||
-          needs.mutants-diff.result != 'success' ||
+          needs.mutants-diff-core.result != 'success' ||
+          needs.mutants-diff-walk.result != 'success' ||
           needs.cargo-deny.result != 'success' ||
           needs.pip-audit.result != 'success' ||
           needs.zizmor.result != 'success'
