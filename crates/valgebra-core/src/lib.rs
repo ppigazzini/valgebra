@@ -546,6 +546,126 @@ mod tests {
         assert!(!record_is_open(homogeneous_elem(&closed)));
     }
 
+    /// Opening reads the labels on the semantic `dom`, which is what makes it a
+    /// function on sets.
+    ///
+    /// A field that gives its key exactly what the record already gives every key
+    /// it does not name adds nothing, so two records differing only in such a
+    /// field are one record -- and unless it is dropped they open to different
+    /// ones. `{"a?": nothing}` and `{}` admit the empty dict alone; opened, both
+    /// must admit every dict.
+    #[test]
+    fn opening_drops_a_field_the_record_already_said() {
+        let optional = |schema| {
+            vec![Field {
+                name: "a".to_owned(),
+                schema,
+                required: false,
+            }]
+        };
+        let empty_closed = Schema::record(Vec::new(), Openness::Closed);
+        let redundant = Schema::record(optional(Schema::Nothing), Openness::Closed);
+        assert_eq!(
+            redundant.with_records_open(Openness::Open),
+            empty_closed.with_records_open(Openness::Open)
+        );
+
+        // The dual: an open record's catch-all already frees every unnamed key,
+        // which is what an optional field admitting everything says, so closing
+        // it gives the empty closed record rather than one naming a free key.
+        let free = Schema::record(optional(Schema::ANYTHING), Openness::Open);
+        assert_eq!(free.with_records_open(Openness::Closed), empty_closed);
+
+        // A *typed* catch-all has not said what a free field says: it frees the
+        // keys of one type, and the field frees one key whatever its type.
+        let typed_catch_all = Schema::keyed_map(
+            optional(Schema::ANYTHING),
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        );
+        assert_ne!(
+            typed_catch_all.with_records_open(Openness::Closed),
+            empty_closed
+        );
+
+        // A field that says something is kept, whether by its type or by being
+        // required at all.
+        let typed = Schema::record(optional(Schema::Int), Openness::Closed);
+        assert_ne!(
+            typed.with_records_open(Openness::Open),
+            empty_closed.with_records_open(Openness::Open)
+        );
+        let demanded = Schema::record(
+            vec![Field {
+                name: "a".to_owned(),
+                schema: Schema::Nothing,
+                required: true,
+            }],
+            Openness::Closed,
+        );
+        assert_ne!(
+            demanded.with_records_open(Openness::Open),
+            empty_closed.with_records_open(Openness::Open)
+        );
+    }
+
+    /// What the term rewrite cannot do, pinned so it is not mistaken for done.
+    ///
+    /// `{"a?": anything, ...}` and `dict[anything, anything]` admit exactly the
+    /// same dicts -- every one -- but the second **is** the term
+    /// `KeyedMap { fields: [], defaults: [top] }`, which is also what an open
+    /// record with no field is. The two readings are one term, so `close` has to
+    /// pick: it keeps a mapping's clauses and drops a record's, and whichever it
+    /// picks, one of the two neighbours closes to a different set.
+    ///
+    /// This is not a missing case. It is what makes `open`/`close` *term
+    /// rewrites* rather than operations of the algebra: the term does not record
+    /// whether its author wrote a record or a mapping, and a set does not carry
+    /// the distinction to recover. A lawful `open` lives on the map atom, where
+    /// `dom` is semantic and a label is a key rather than a name -- and whether
+    /// this pair of methods survives to reach it is a question about the public
+    /// surface, not about this transform.
+    #[test]
+    fn closing_cannot_tell_an_open_record_from_a_mapping() {
+        let free = Schema::record(
+            vec![Field {
+                name: "a".to_owned(),
+                schema: Schema::ANYTHING,
+                required: false,
+            }],
+            Openness::Open,
+        );
+        let every_dict = Schema::mapping(MapClause::top());
+        // One term, two readings.
+        assert_eq!(Schema::record(Vec::new(), Openness::Open), every_dict);
+        // And they close apart, though they admit the same dicts.
+        assert_ne!(
+            free.with_records_open(Openness::Closed),
+            every_dict.with_records_open(Openness::Closed)
+        );
+    }
+
+    /// A mapping keys a type rather than a name, so it is not a record to open.
+    ///
+    /// Having no field is not what makes one a mapping: the empty *closed* record
+    /// has none either, and opening it frees every key. A clause and no field is.
+    #[test]
+    fn opening_leaves_a_mapping_alone_and_opens_the_empty_record() {
+        let mapping = Schema::mapping(MapClause {
+            key: Schema::Str,
+            value: Schema::Int,
+        });
+        assert_eq!(mapping.with_records_open(Openness::Open), mapping);
+        assert_eq!(mapping.with_records_open(Openness::Closed), mapping);
+
+        let empty_closed = Schema::record(Vec::new(), Openness::Closed);
+        assert!(record_is_open(
+            &empty_closed.with_records_open(Openness::Open)
+        ));
+    }
+
     /// A transform leaves the tree in the shape the constructors guarantee.
     ///
     /// Opening the records in `{a: int} | ~{a: int}` maps both sides to one

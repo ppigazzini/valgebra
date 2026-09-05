@@ -1,6 +1,6 @@
 import pytest
 
-from valgebra import ValidationError, Validator
+from valgebra import ValidationError, Validator, nothing
 
 
 def test_record_accepts_a_matching_dict() -> None:
@@ -71,6 +71,37 @@ def test_non_string_key_does_not_fill_a_same_named_field() -> None:
     schema = Validator({"0": int})
     assert schema.is_valid({"0": 1})
     assert not schema.is_valid({0: 1})
+
+
+def test_open_is_a_function_on_sets() -> None:
+    """Equal records open to equal records, which is what makes `open` an operation.
+
+    `{"a?": nothing}` and `{}` admit exactly the empty dict: the field allows the
+    key to be absent and admits no value for it, which is what a closed record
+    already says of every key it does not name. So they are one record, and
+    opening them has to give one record — an operation that mapped equal sets to
+    unequal sets would not be part of the algebra at all.
+    """
+    redundant = Validator({"a?": nothing})
+    empty = Validator({})
+    for value in ({}, {"x": 1}, {"a": 1}):
+        assert redundant.is_valid(value) == empty.is_valid(value), value
+        assert redundant.open().is_valid(value) == empty.open().is_valid(value), value
+        assert redundant.close().is_valid(value) == empty.close().is_valid(value), value
+    assert redundant.open().is_equivalent(empty.open())
+    assert redundant.close().is_equivalent(empty.close())
+
+
+def test_open_leaves_a_mapping_alone() -> None:
+    """A mapping keys a *type*, not a name, so it is not a record to open.
+
+    Having no field is not what makes one a mapping — the empty closed record has
+    none either. A clause and no field is.
+    """
+    mapping = Validator(dict[str, int])
+    assert mapping.open() == mapping
+    assert mapping.close() == mapping
+    assert not mapping.open().is_valid({"a": "x"})
 
 
 def test_open_record_explains_a_failing_field() -> None:
