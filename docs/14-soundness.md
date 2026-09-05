@@ -53,9 +53,9 @@ KeyedMap(f, d)   fields present-and-match, and   (named fields ∩ keyed
                  every other key matches a       default clauses)
                  default clause
 Instance(C)      isinstance(x, C)               (class extension)
-Attrs(C, f)      isinstance(x, C) and every      (class extension ∩ its
-                 field attribute present-        attribute record; the
-                 and-match                       dataclass/NamedTuple check)
+AttrRecord(f)    every required field's          (attribute record; no
+                 attribute is present on x       carrier, so a dataclass is
+                 and matches                     `Instance(C) ∧ AttrRecord`)
 ```
 
 `Any` admits every value, exactly as the top does — that is its *runtime*

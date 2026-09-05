@@ -2,7 +2,7 @@
 //! disjointness, with the leaf-relation oracle and the scalar region partition.
 
 use crate::ir::{
-    ClassIx, ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
+    ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
 };
 use rustc_hash::FxHashMap;
 use std::cell::Cell;
@@ -598,22 +598,20 @@ impl Schema {
                 );
                 (verdict, Regions::Unknown)
             }
-            // A structural-attribute schema requires every field, so an empty
-            // required field's schema empties it — the same rule as a keyed map.
-            // An uninhabited dataclass-style schema is detected here; the nominal
-            // `isinstance` part stays opaque, so it never narrows to empty.
-            Schema::Attrs { fields, .. } => {
+            // An attribute record carries no class, so its fields decide it in
+            // both directions -- the same rule as a keyed map, and for the same
+            // reason. A required field admitting nothing empties it, because no
+            // value can carry that attribute; required fields that are all
+            // *proven* inhabited make it inhabited, because an object carrying
+            // one witness per attribute is a value of the record. That second
+            // half is what the class half used to take away: an `isinstance`
+            // atom is opaque, so a node holding both could never be more than
+            // unknown.
+            Schema::AttrRecord { fields } => {
                 let required = fields.iter().filter(|field| field.required);
-                let attributes = Verdict::every(
+                let verdict = Verdict::every(
                     required.map(|field| field.schema.verdict_rec(oracle, defs, visiting, budget)),
                 );
-                // Inhabited attributes are not an inhabited schema: a value must
-                // also be an instance of the class, which the core cannot decide.
-                let verdict = if attributes.is_empty() {
-                    Verdict::Empty
-                } else {
-                    Verdict::Unknown
-                };
                 (verdict, Regions::Unknown)
             }
             // A union is empty when every member is and inhabited when any member
@@ -916,22 +914,11 @@ impl Schema {
                     defaults: db,
                 },
             ) => keyed_map_subtype(fa, da, fb, db, cx, assumptions),
-            // Two structural-attribute schemas relate nominally and by attribute.
-            (
-                Schema::Attrs {
-                    class_index: ca,
-                    fields: fa,
-                },
-                Schema::Attrs {
-                    class_index: cb,
-                    fields: fb,
-                },
-            ) => attrs_subtype(*ca, fa, *cb, fb, cx, assumptions),
-            // An attribute schema is its class's isinstance atom narrowed by an
-            // attribute record, so it is below that atom and below any atom the
-            // atom is below.
-            (Schema::Attrs { class_index, .. }, Schema::Instance(_)) => {
-                Schema::Instance(*class_index).is_subtype_rec(other, cx, assumptions)
+            // Record inclusion on attributes: width and depth, no class in it.
+            // The nominal half of a dataclass is a separate conjunct, and the
+            // lattice rules below relate the meet to the meet.
+            (Schema::AttrRecord { fields: fa }, Schema::AttrRecord { fields: fb }) => {
+                attr_record_subtype(fa, fb, cx, assumptions)
             }
             // Complement is contravariant: ¬A ⊆ ¬B exactly when B ⊆ A.
             (Schema::Complement(a), Schema::Complement(b)) => b.is_subtype_rec(a, cx, assumptions),
@@ -1389,7 +1376,7 @@ pub(crate) fn denotes_a_set(schema: &Schema, oracle: &dyn LeafRelations) -> bool
                     pending.push(&clause.value);
                 }
             }
-            Schema::Attrs { fields, .. } => {
+            Schema::AttrRecord { fields } => {
                 pending.extend(fields.iter().map(|field| &field.schema));
             }
             _ => {}
@@ -1722,38 +1709,31 @@ fn keyed_map_subtype(
     }
 }
 
-/// Whether attribute schema `(ca, fa)` is a subtype of `(cb, fb)`.
+/// Whether the attribute record `fa` is a subtype of `fb`: width and depth.
 ///
-/// Two halves. **Nominally**, the subtype's class must be the supertype's or below
-/// it -- the question the leaf oracle already answers for an isinstance atom, so
-/// it is asked rather than left to a fallthrough that cannot match this variant.
-/// **By attribute**, every attribute the supertype declares must be carried by the
-/// subtype with a narrower schema; all attributes of an attribute schema are
-/// required, so width and depth are the whole of it.
+/// Every attribute the supertype declares must be one the subtype declares, and
+/// no less narrowly. There is no class in it -- a record denotes every value
+/// carrying its attributes, whatever the value is -- so the nominal question the
+/// old node asked first is now a conjunct of its own, and two records that came
+/// from unrelated classes still relate.
 ///
-/// Sound on the same assumption the isinstance atom already makes: that a
-/// subclass's instances are instances of the base.
-fn attrs_subtype(
-    ca: ClassIx,
+/// The rule is set inclusion read off the denotation: an attribute the supertype
+/// does not name constrains nothing, and one it names constrains every value of
+/// the subtype exactly when the subtype names it too, at least as narrowly.
+fn attr_record_subtype(
     fa: &[Field],
-    cb: ClassIx,
     fb: &[Field],
     cx: SubtypeCx<'_>,
     assumptions: &mut Vec<(Schema, Schema)>,
 ) -> bool {
-    let nominal = ca == cb
-        || cx
-            .oracle
-            .leaf_subtype(&Schema::Instance(ca), &Schema::Instance(cb))
-            == Some(true);
-    if !nominal {
-        return false;
-    }
     let a_by_name = field_index(fa);
     fb.iter().all(|b| {
-        a_by_name
-            .get(b.name.as_str())
-            .is_some_and(|a| a.schema.is_subtype_rec(&b.schema, cx, assumptions))
+        a_by_name.get(b.name.as_str()).is_some_and(|a| {
+            // A supertype field the subtype only *may* carry is not a supertype
+            // field: the subtype holds values with the attribute missing, and
+            // those are outside the supertype.
+            (a.required || !b.required) && a.schema.is_subtype_rec(&b.schema, cx, assumptions)
+        })
     })
 }
 
@@ -2340,8 +2320,7 @@ mod tests {
                     value: Schema::Str,
                 }],
             },
-            Schema::Attrs {
-                class_index: ClassIx::new(0),
+            Schema::AttrRecord {
                 fields: vec![field(predicate.clone())],
             },
         ];
@@ -3034,24 +3013,64 @@ mod tests {
         );
     }
 
-    /// An attribute schema is its class's isinstance atom narrowed by an attribute
-    /// record, so it is below that atom. Without the rule the pair reaches the
-    /// leaf oracle, which matches a literal and an instance on the subtype side
-    /// and cannot answer for this variant.
+    /// A dataclass schema is the meet of an `isinstance` atom and an attribute
+    /// record, and each half is reachable through the meet: it is below its own
+    /// class by the conjunct rule, and below a wider record by record inclusion.
+    /// One node holding both halves could do neither -- the pair only ever
+    /// related to another pair.
     #[test]
-    fn an_attribute_schema_is_below_its_own_class() {
-        let attrs = Schema::Attrs {
-            class_index: ClassIx::new(0),
+    fn each_half_of_an_attribute_schema_is_reachable_through_the_meet() {
+        let record = |schema| Schema::AttrRecord {
             fields: vec![Field {
                 name: "a".to_owned(),
-                schema: Schema::Int,
+                schema,
                 required: true,
             }],
         };
-        assert!(attrs.is_subtype_of(&Schema::Instance(ClassIx::new(0))));
+        let object = Schema::meet([Schema::Instance(ClassIx::new(0)), record(Schema::Bool)]);
+        assert!(object.is_subtype_of(&Schema::Instance(ClassIx::new(0))));
         // A different class is a nominal question, and the core's default oracle
         // decides nothing, so it stays conservative.
-        assert!(!attrs.is_subtype_of(&Schema::Instance(ClassIx::new(1))));
+        assert!(!object.is_subtype_of(&Schema::Instance(ClassIx::new(1))));
+        // The record half relates on its own, in both directions: `bool` is below
+        // `int`, so the narrower attribute is the subtype.
+        assert!(object.is_subtype_of(&record(Schema::Int)));
+        assert!(!record(Schema::Int).is_subtype_of(&record(Schema::Bool)));
+    }
+
+    /// An attribute record carries no class, so its fields decide inhabitation
+    /// as well as emptiness: an object carrying one witness per attribute is a
+    /// value of it. The class half is the opaque one, and it is now a separate
+    /// conjunct that only the meet is unknown about.
+    #[test]
+    fn an_attribute_record_is_inhabited_by_its_fields() {
+        let record = |schema| Schema::AttrRecord {
+            fields: vec![Field {
+                name: "a".to_owned(),
+                schema,
+                required: true,
+            }],
+        };
+        assert_eq!(record(Schema::Int).verdict(), Verdict::Inhabited);
+        assert_eq!(record(Schema::Nothing).verdict(), Verdict::Empty);
+        // An optional field admitting nothing does not empty it: a value that
+        // does not carry the attribute is still a value of the record.
+        let optional = Schema::AttrRecord {
+            fields: vec![Field {
+                name: "a".to_owned(),
+                schema: Schema::Nothing,
+                required: false,
+            }],
+        };
+        assert_eq!(optional.verdict(), Verdict::Inhabited);
+        // Meeting it with a class is unknown in the other direction only: the
+        // class may have no instances, and that is what the core cannot read.
+        let object = Schema::meet([Schema::Instance(ClassIx::new(0)), record(Schema::Int)]);
+        assert_eq!(object.verdict(), Verdict::Unknown);
+        assert_eq!(
+            Schema::meet([Schema::Instance(ClassIx::new(0)), record(Schema::Nothing)]).verdict(),
+            Verdict::Empty
+        );
     }
 
     /// A boolean base is bounded to the integers, so it counts them too. Sound but

@@ -97,8 +97,7 @@ mod tests {
                 key: Schema::Str,
                 value: Schema::Int,
             }),
-            Schema::Attrs {
-                class_index: ClassIx::new(0),
+            Schema::AttrRecord {
                 fields: vec![field("a")],
             },
             Schema::Refine {
@@ -184,8 +183,7 @@ mod tests {
             9
         );
         assert_eq!(
-            Schema::Attrs {
-                class_index: ClassIx::new(0),
+            Schema::AttrRecord {
                 fields: vec![
                     Field {
                         name: "a".into(),
@@ -252,8 +250,7 @@ mod tests {
             3
         );
         assert_eq!(
-            Schema::Attrs {
-                class_index: ClassIx::new(0),
+            Schema::AttrRecord {
                 fields: vec![Field {
                     name: "a".into(),
                     schema: Schema::Int,
@@ -318,24 +315,18 @@ mod tests {
             Schema::Ref(DefIx::new(1)).shifted(PoolShift::new(10), DefShift::new(3)),
             Schema::Ref(DefIx::new(4))
         );
-        // An Attrs class index is a pool index and shifts by the pool; its
-        // fields shift with it.
-        let attrs = Schema::Attrs {
-            class_index: ClassIx::new(1),
+        // An attribute record has no index of its own; its fields carry theirs.
+        let record = Schema::AttrRecord {
             fields: vec![Field {
                 name: "a".into(),
                 schema: Schema::Literal(ConstIx::new(2)),
                 required: true,
             }],
         };
-        let Schema::Attrs {
-            class_index,
-            fields,
-        } = attrs.shifted(PoolShift::new(10), DefShift::new(3))
+        let Schema::AttrRecord { fields } = record.shifted(PoolShift::new(10), DefShift::new(3))
         else {
-            panic!("shifted an Attrs into a non-Attrs");
+            panic!("shifted an attribute record into another variant");
         };
-        assert_eq!(class_index, ClassIx::new(11));
         assert_eq!(fields[0].schema, Schema::Literal(ConstIx::new(12)));
     }
 
@@ -710,7 +701,7 @@ mod tests {
                     | Schema::Set(_)
                     | Schema::FrozenSet(_)
                     | Schema::KeyedMap { .. }
-                    | Schema::Attrs { .. }
+                    | Schema::AttrRecord { .. }
             );
             assert_eq!(
                 schema.guards_children(),
@@ -3109,40 +3100,70 @@ mod laws {
         worker.join().expect("deep emptiness worker panicked");
     }
 
-    /// A structural-attribute schema with an uninhabited required attribute is
-    /// empty: no value can carry that attribute, so the dataclass-style schema
-    /// denotes nothing. The symmetric keyed-map rule already held; this closes the
+    /// An attribute record with an uninhabited required attribute is empty: no
+    /// value can carry that attribute, so the dataclass-style schema denotes
+    /// nothing. The symmetric keyed-map rule already held; this closes the
     /// asymmetry.
     #[test]
     fn an_uninhabited_required_attribute_empties_the_schema() {
-        let empty_field = Schema::Attrs {
-            class_index: ClassIx::new(0),
+        let record = |schema| Schema::AttrRecord {
             fields: vec![Field {
                 name: "x".into(),
-                schema: intersection(Schema::Int, Schema::Str),
+                schema,
                 required: true,
             }],
         };
+        let empty_field = record(intersection(Schema::Int, Schema::Str));
         assert!(empty_field.is_empty());
-        let live_field = Schema::Attrs {
-            class_index: ClassIx::new(0),
+        assert!(!record(Schema::Int).is_empty());
+        // The class the frontend meets with the record does not rescue it: an
+        // empty conjunct empties the meet.
+        assert!(Schema::meet([Schema::Instance(ClassIx::new(0)), empty_field]).is_empty());
+    }
+
+    /// A class with declared attributes is read back out of the meet the
+    /// frontend builds it as, so `repr` and a union's branch label can name the
+    /// class the user wrote. A meet that is not that pair names no class, and a
+    /// meet of two objects names neither.
+    #[test]
+    fn an_object_meet_knows_which_class_it_is() {
+        let record = Schema::AttrRecord {
             fields: vec![Field {
                 name: "x".into(),
                 schema: Schema::Int,
                 required: true,
             }],
         };
-        assert!(!live_field.is_empty());
+        let class = |index| Schema::Instance(ClassIx::new(index));
+        let object = Schema::meet([class(3), record.clone()]);
+        assert_eq!(object.object_class(), Some(ClassIx::new(3)));
+        // A later meet may flatten other members in beside the pair; it is still
+        // the same class.
+        assert_eq!(
+            Schema::meet([class(3), record.clone(), Schema::Int]).object_class(),
+            Some(ClassIx::new(3))
+        );
+        // Each half alone, and a meet of two objects, name no single class.
+        assert_eq!(class(3).object_class(), None);
+        assert_eq!(record.object_class(), None);
+        assert_eq!(
+            Schema::meet([class(3), class(4), record.clone()]).object_class(),
+            None
+        );
+        assert_eq!(
+            Schema::meet([class(3), record.clone(), record]).object_class(),
+            None
+        );
     }
 
-    /// Two attribute schemas over the same class relate by attribute width and
-    /// depth: a schema carrying every attribute of the supertype with a narrower
-    /// schema is a subtype. Across different classes the relation stays
-    /// conservative (the nominal hierarchy is not decided in the core).
+    /// Attribute records relate by width and depth: a record carrying every
+    /// attribute of the supertype with a narrower schema is a subtype. The class
+    /// is a separate conjunct, so a record over one class relates to a record
+    /// over another -- and the meets stay conservative, because the nominal
+    /// hierarchy is not decided in the core.
     #[test]
-    fn attribute_schemas_subtype_by_width_and_depth() {
-        let narrow = Schema::Attrs {
-            class_index: ClassIx::new(0),
+    fn attribute_records_subtype_by_width_and_depth() {
+        let narrow = Schema::AttrRecord {
             fields: vec![
                 Field {
                     name: "x".into(),
@@ -3156,8 +3177,7 @@ mod laws {
                 },
             ],
         };
-        let wide = Schema::Attrs {
-            class_index: ClassIx::new(0),
+        let wide = Schema::AttrRecord {
             fields: vec![Field {
                 name: "x".into(),
                 schema: Schema::Int, // bool ⊆ int, and x is narrower; y is extra
@@ -3166,19 +3186,30 @@ mod laws {
         };
         assert!(narrow.is_subtype_of(&wide));
         assert!(!wide.is_subtype_of(&narrow)); // wide lacks y
-        let other_class = Schema::Attrs {
-            class_index: ClassIx::new(1),
-            fields: narrow_fields_clone(&narrow),
+        // Required-ness is part of the relation: a supertype that demands the
+        // attribute is not satisfied by a subtype that only may carry it, and
+        // the values with it missing are what separate them.
+        let maybe_x = Schema::AttrRecord {
+            fields: vec![Field {
+                name: "x".into(),
+                schema: Schema::Bool,
+                required: false,
+            }],
         };
-        // Same fields, different class: conservative (not decided in the core).
-        assert!(!narrow.is_subtype_of(&other_class));
-    }
-
-    fn narrow_fields_clone(schema: &Schema) -> Vec<Field> {
-        match schema {
-            Schema::Attrs { fields, .. } => fields.clone(),
-            _ => unreachable!(),
-        }
+        assert!(!maybe_x.is_subtype_of(&wide));
+        assert!(narrow.is_subtype_of(&Schema::AttrRecord {
+            fields: vec![Field {
+                name: "x".into(),
+                schema: Schema::Int,
+                required: false,
+            }],
+        }));
+        let object =
+            |class, record: &Schema| Schema::meet([Schema::Instance(class), record.clone()]);
+        // Same records, different classes: conservative, and the record half is
+        // what the meet rule reaches for on the way there.
+        assert!(!object(ClassIx::new(0), &narrow).is_subtype_of(&object(ClassIx::new(1), &wide)));
+        assert!(object(ClassIx::new(0), &narrow).is_subtype_of(&wide));
     }
 
     /// A sequence whose repeated tail is empty only under the recursive
@@ -3745,8 +3776,7 @@ mod index_laws {
                 inner
                     .clone()
                     .prop_map(|s| Schema::record(vec![field(s)], Openness::Closed)),
-                inner.clone().prop_map(|s| Schema::Attrs {
-                    class_index: ClassIx::new(4),
+                inner.clone().prop_map(|s| Schema::AttrRecord {
                     fields: vec![field(s)],
                 }),
                 inner.prop_map(|s| Schema::Refine {
@@ -3816,11 +3846,7 @@ mod index_laws {
                     indices(&clause.value, pool, defs);
                 }
             }
-            Schema::Attrs {
-                class_index,
-                fields,
-            } => {
-                pool.push(class_index.get());
+            Schema::AttrRecord { fields } => {
                 for field in fields {
                     indices(&field.schema, pool, defs);
                 }

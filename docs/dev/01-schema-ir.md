@@ -29,17 +29,21 @@ observable from an object of the pooled constant's own type.
 
 A structural node denotes values of a *shape* held by some *carrier* — a Python
 class. The three structural nodes fix their carrier three different ways, and
-the difference decides how large a change is that widens one:
+the difference decides how large a change is that widens one. One of the three
+was widened, by taking the carrier out:
 
 | node | how the carrier is fixed | widening it means |
 |---|---|---|
 | `Seq { container: SeqKind, shape }` | a **parameter** — `SeqKind` is `List \| Tuple` | another variant in an existing enum |
 | `KeyedMap { fields, defaults }` | **the denotation** — the doc comment reads "Denotes dicts…", and there is no carrier field | giving the node a carrier it does not have |
-| `Attrs { class_index, fields }` | a **required field** | making a required field optional, so the node denotes a set it currently cannot |
+| `AttrRecord { fields }` | **not fixed at all** — a record carries no carrier, and a class is a separate `Instance` atom met with it | nothing to widen; the two halves are already separate sets |
 
 Read that table before answering "can valgebra express `Mapping[K, V]`" or "can
-it express *any object* whose `.a` is an `int`". The answer is no in both cases,
-and the three nodes are not one mechanism seen three times.
+it express *any object* whose `.a` is an `int`". The first is still no, and the
+second became yes the day the class came out of the node — which took a
+denotation, a membership rule and a set of relations, not a flag. The three
+nodes are not one mechanism seen three times, and what one of them cost to widen
+is the measure of the other two.
 
 ## Whether to add a variant
 
@@ -78,10 +82,12 @@ Three arguments look like they settle case 1 and do not:
 - **"The behaviour already looks right."** A `Validator` probe shows what the
   walk does. The walk can agree with a denotation by accident, and a node's
   denotation is what the doc comment in this file says.
-- **"The implementation already computes it."** `build_object` computes
-  per-attribute checks on its way to an `Attrs`. That does not put "any object
-  with these attributes" in the closure, because the node it builds denotes
-  instances of a class.
+- **"The implementation already computes it."** `build_object` computed
+  per-attribute checks on its way to a node that denoted instances of a class,
+  and for as long as that was the only node, "any object with these attributes"
+  was not in the closure. It took splitting the node — a commit, a denotation, a
+  membership rule — to put it there. A computation on the way to a set is not
+  that set.
 - **"It only changes which values a constructor sees, not the algebra."**
   Subtyping is defined from the denotation (`[[s ∧ ¬t]] = ∅`), so changing which
   values inhabit a constructor changes the subtyping relation. There is no lever
@@ -111,9 +117,12 @@ constructor. Beyond the admission test, two costs specific to this one:
   fragment with a published decision, which is the part the completeness claim
   rests on.
 
-**A carrier-free attribute form, so "any object whose `.a` is an `int`" builds.**
-Refused. `Attrs` requires its `class_index`; the set is denoted by no type, and
-making the field optional makes the node denote a set it currently cannot.
+**A spelling for the carrier-free attribute record.** Not refused, and not
+opened: the node is in the closure — `AttrRecord` denotes exactly "any object
+whose `.a` is an `int`" — but no annotation builds one on its own, because the
+frontend only ever meets one with the class it read it from. Giving it a
+spelling is a surface question, and it belongs where the surface is decided
+rather than here.
 
 **Records keyed by a non-string.** Refused. A record's fields are named by
 strings, and arbitrary keys are a different labelling than the record model
@@ -357,18 +366,25 @@ An object schema is the meet of an instance atom and an attribute record, and
 the surface does not change: `repr(Validator(Pt))` stays `Pt`, and a value that
 is not an instance reports one violation, `instance_type`.
 
-Deriving `Attrs` from `Instance(C) ∧ AttrRecord` is right in the algebra — it
-is what the attribute form *is* — and it would, left alone, change two things a
-user sees: `render` would write the meet as `intersection(Pt, ...)`, and the
-walk's explain mode, which collects every failed member of a meet, would add
-attribute violations about a value that is not an instance. Neither is
-information: the first is the algebra's spelling of a thing the user spelled as
-`Pt`, and the second reports attributes of an object that has no reason to have
-them. So the surface is preserved by construction: `render` matches the pair
-and writes the class name, and the walk stops collecting once a member of a
-meet has failed *at the same path* — a rule that is not specific to classes and
-that also stops `Annotated[int, Gt(0)]` reporting a bound on a string. The
-error snapshot pins both.
+The meet is right in the algebra — it is what the attribute form *is* — and
+left alone it would change two things a user sees: `render` would write it as
+`intersection(Pt, object(x=int))`, and the walk's explain mode, which collects
+every failed member of a meet, would add attribute violations about a value that
+is not an instance. Neither is information: the first is the algebra's spelling
+of a thing the user spelled as `Pt`, and the second reports attributes of an
+object that has no reason to have them.
+
+So the surface is preserved by construction. `Schema::object_class` recognises
+the pair — exactly one instance atom beside exactly one attribute record, other
+members tolerated — and `render` and a union's branch label both read the class
+out of it, which is why the shape is recognised once rather than matched at each
+of them. The walk stops collecting once a member of a meet has failed *at the
+meet's own path*: a member that rejects the value itself has settled it, and a
+member that fails inside the value leaves the others meaningful. That second
+rule is not specific to classes — it is the one a refinement already applies
+between a base and its constraints, which is why `Annotated[int, Gt(0)]` does
+not report a bound on a string — and it is recorded in
+[08-error-model.md](../08-error-model.md). The error snapshot pins both.
 
 ## The limit
 

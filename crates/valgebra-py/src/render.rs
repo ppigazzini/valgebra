@@ -36,7 +36,6 @@ pub(crate) fn render(
         return "...".to_owned();
     }
     let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
-    let kids = |members: &[Schema]| members.iter().map(&r).collect::<Vec<_>>().join(", ");
     match schema {
         Schema::Anything => "anything".to_owned(),
         Schema::Dynamic => "Any".to_owned(),
@@ -83,11 +82,12 @@ pub(crate) fn render(
             render_keyed_map(py, fields, defaults, pool, defs, active, depth)
         }
         Schema::Union(members) => members.iter().map(&r).collect::<Vec<_>>().join(" | "),
-        Schema::Intersection(members) => format!("intersection({})", kids(members)),
-        Schema::Complement(inner) => format!("complement({})", r(inner)),
-        Schema::Instance(i) | Schema::Attrs { class_index: i, .. } => {
-            pool_class_name(py, pool, i.get())
+        Schema::Intersection(members) => {
+            render_meet(py, schema, members, pool, defs, active, depth)
         }
+        Schema::Complement(inner) => format!("complement({})", r(inner)),
+        Schema::Instance(i) => pool_class_name(py, pool, i.get()),
+        Schema::AttrRecord { fields } => render_attr_record(py, fields, pool, defs, active, depth),
         Schema::Refine { base, constraints } => {
             let mut parts = vec![r(base)];
             parts.extend(constraints.iter().map(|c| render_constraint(py, c, pool)));
@@ -105,6 +105,69 @@ pub(crate) fn render(
         }
         Schema::SelfRef(_) => "...".to_owned(),
     }
+}
+
+/// Render a meet, reading a class's `isinstance` atom beside its attribute
+/// record back as the class name the user wrote.
+///
+/// The pair is [`Schema::object_class`]; the members that are not the pair
+/// render as themselves, so a meet that flattened others in beside a class still
+/// names the class. Without this the annotation `Pt` would print as
+/// `intersection(Pt, object(x=int))` -- the algebra's spelling of a thing the
+/// user spelled with one name.
+fn render_meet(
+    py: Python<'_>,
+    schema: &Schema,
+    members: &[Schema],
+    pool: &[Py<PyAny>],
+    defs: &[Schema],
+    active: &RefCell<FxHashSet<DefIx>>,
+    depth: usize,
+) -> String {
+    let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
+    let Some(class) = schema.object_class() else {
+        let kids = members.iter().map(r).collect::<Vec<_>>().join(", ");
+        return format!("intersection({kids})");
+    };
+    let name = pool_class_name(py, pool, class.get());
+    let mut parts = vec![name];
+    parts.extend(
+        members
+            .iter()
+            .filter(|m| !matches!(m, Schema::Instance(_) | Schema::AttrRecord { .. }))
+            .map(r),
+    );
+    if parts.len() == 1 {
+        parts.remove(0)
+    } else {
+        format!("intersection({})", parts.join(", "))
+    }
+}
+
+/// Render an attribute record on its own: `object(x=int)`.
+///
+/// No annotation builds a record without a class beside it, and no combinator
+/// takes one apart, so nothing a caller can write reaches this today. It is here
+/// because `render` is total over the IR and the node is in it: the day a
+/// spelling arrives, the form is readable rather than re-parsable, like the
+/// `{...}` open-record marker.
+fn render_attr_record(
+    py: Python<'_>,
+    fields: &[Field],
+    pool: &[Py<PyAny>],
+    defs: &[Schema],
+    active: &RefCell<FxHashSet<DefIx>>,
+    depth: usize,
+) -> String {
+    let entries: Vec<String> = fields
+        .iter()
+        .map(|field| {
+            let suffix = if field.required { "" } else { "?" };
+            let schema = render(py, &field.schema, pool, defs, active, depth + 1);
+            format!("{}{}={}", field.name, suffix, schema)
+        })
+        .collect();
+    format!("object({})", entries.join(", "))
 }
 
 fn render_keyed_map(

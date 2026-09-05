@@ -8,6 +8,21 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Added
 
+- A class with declared attributes is the meet of its `isinstance` atom and a
+  record of its attributes, and each half is a set the algebra relates on its
+  own: an object schema is below its own class, an attribute record relates to
+  another by width and depth whatever class it came from, and a record whose
+  required attribute admits nothing is decided empty *and* one whose attributes
+  are inhabited is decided inhabited — which the class half, being opaque, used
+  to take away. The surface is unchanged: `repr(Validator(Point))` is `Point`, a
+  union names the class in its branch list, and a value of the wrong class
+  reports one `instance_type` violation.
+
+- An `intersection` stops collecting violations once a member rejects the value
+  itself rather than something inside it, the rule `Annotated[...]` already
+  applied between a base and its constraints. A member that fails inside the
+  value leaves the others meaningful and they are still collected.
+
 - Widening a literal union is decided by containment rather than by the product
   of the two member counts, so a table whose members are *the same constants* as
   the wider one's relates at any size. Two tables written independently pool

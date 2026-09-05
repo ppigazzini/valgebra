@@ -66,9 +66,9 @@ mints through the mirror-image four (`intern_const`, `intern_class`,
 line that decides what the object is being pooled *as*
 ([03-frontend.md](03-frontend.md)).
 
-`ClassIx` covers both `Schema::Instance` and `Schema::Attrs`: they address the
-same kind of object and no call site carries one of each, so a fifth type would
-be a distinction with no swap behind it.
+`ClassIx` addresses `Schema::Instance`, which is now the only node holding a
+class: an attribute record carries fields and no carrier, and a class with
+declared attributes is the meet of the two.
 
 ### The shifts
 

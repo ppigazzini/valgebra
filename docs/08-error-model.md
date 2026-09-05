@@ -79,6 +79,33 @@ except ValidationError as err:
 A node-level type mismatch (a value that is not a dict where a record is
 expected) is terminal for that subtree: there is nothing to descend into.
 
+An `intersection` follows the same rule across its members. Each member is
+checked and each failure collected, until one rejects the value *itself* rather
+than something inside it — then the rest are not run, because they would
+describe a value already known to be the wrong kind of thing. A class with
+declared attributes is built as `isinstance` met with an attribute record, so a
+value of the wrong class reports `instance_type` alone, not that same value's
+missing attributes as well. A member that fails *inside* the value — an element,
+a field, an attribute — leaves the others meaningful, and they are still
+collected.
+
+```python
+from dataclasses import dataclass
+
+from valgebra import ValidationError, Validator
+
+
+@dataclass
+class Point:
+    x: int
+
+
+try:
+    Validator(Point).validate(object())
+except ValidationError as err:
+    assert [(e["code"], e["path"]) for e in err.errors] == [("instance_type", ())]
+```
+
 ## Unions report the closest branch
 
 When a value matches no branch of a union, valgebra does not dump every branch's

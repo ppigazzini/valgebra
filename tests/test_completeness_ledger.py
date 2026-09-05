@@ -281,12 +281,11 @@ _DECIDED = [
     pytest.param(
         "empty", Annotated[bool, at.Gt(0), at.Lt(1)], None, id="empty:bool-open-(0,1)"
     ),
-    # An attribute schema is a subtype of one over a base class it carries every
-    # attribute of: the nominal question is the one the leaf oracle answers for an
-    # isinstance atom.
+    # An object schema is a class atom met with a record of its attributes, and
+    # the meet relates to the meet a conjunct at a time: the class through the
+    # leaf oracle, the record by attribute width and depth.
     pytest.param("subtype", _Dog, _Animal, id="attrs:Dog<=Animal"),
-    # An attribute schema is its class's isinstance atom narrowed by an attribute
-    # record, so it is below the atom a bare class compiles to.
+    # And it is a subtype of itself however the double complement is spelled.
     pytest.param("subtype", _Dog, complement(complement(_Dog)), id="attrs:Dog<=~~Dog"),
     # An intersection that mixes a recursive reference with a union is a subtype
     # of itself: reflexivity holds even when the meet contains its own supertype.

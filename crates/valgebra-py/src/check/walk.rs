@@ -121,7 +121,7 @@ fn const_at<'a, 'py>(
     pool_slot(ctx, index.get(), py)
 }
 
-/// The class behind a [`Schema::Instance`] or a [`Schema::Attrs`].
+/// The class behind a [`Schema::Instance`].
 fn class_at<'a, 'py>(
     ctx: Ctx<'a>,
     index: ClassIx,
@@ -230,10 +230,7 @@ pub(crate) fn member(
         Schema::Intersection(members) => check_intersection(members, value, path, ctx, out),
         Schema::Complement(inner) => check_complement(inner, value, path, ctx, out),
         Schema::Instance(index) => check_instance(*index, value, path, ctx, out),
-        Schema::Attrs {
-            class_index,
-            fields,
-        } => check_object(*class_index, fields, value, path, ctx, out),
+        Schema::AttrRecord { fields } => check_attr_record(fields, value, path, ctx, out),
         Schema::Refine { base, constraints } => {
             check_refine(base, constraints, value, path, ctx, out)
         }
@@ -1045,19 +1042,25 @@ fn push_branch_label(schema: &Schema, ctx: Ctx<'_>, py: Python<'_>, out: &mut Br
             );
             out.push(label);
         }
-        Schema::Instance(index)
-        | Schema::Attrs {
-            class_index: index, ..
-        } => {
-            let label = class_at(ctx, *index, py)
-                .map_or_else(|| schema.expected().to_owned(), |c| class_label(c));
-            out.push(label);
-        }
+        Schema::Instance(index) => out.push(class_name(*index, schema, ctx, py)),
+        // A class with declared attributes is a meet of an atom and a record, and
+        // the branch names the class the user wrote rather than the algebra's
+        // spelling of it.
+        Schema::Intersection(_) => match schema.object_class() {
+            Some(class) => out.push(class_name(class, schema, ctx, py)),
+            None => out.push(schema.expected().to_owned()),
+        },
         // A refinement's type is its base, matching `Schema::expected`; the
         // constraints report themselves when one of them is what failed.
         Schema::Refine { base, .. } => push_branch_label(base, ctx, py, out),
         other => out.push(other.expected().to_owned()),
     }
+}
+
+/// The pooled class's own name, falling back to the node's kind when the pool
+/// cannot be read.
+fn class_name(index: ClassIx, schema: &Schema, ctx: Ctx<'_>, py: Python<'_>) -> String {
+    class_at(ctx, index, py).map_or_else(|| schema.expected().to_owned(), |c| class_label(c))
 }
 
 fn check_union(
@@ -1144,15 +1147,39 @@ fn check_intersection(
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    // Every member must hold; in explain mode each member's failure is collected.
+    // Every member must hold; in explain mode each member's failure is collected,
+    // until one rejects the value itself.
     let mut ok = true;
     for member_schema in members {
+        let before = out.len();
         ok &= member(member_schema, value, path, ctx, out);
-        if !ok && stop(ctx) {
+        if !ok && (stop(ctx) || rejected_the_value(out, before, path.len())) {
             return false;
         }
     }
     ok
+}
+
+/// Whether the violations recorded since `before` include one about the value at
+/// the current path, rather than about something inside it.
+///
+/// A member that rejects the value *itself* has settled the meet, and what the
+/// remaining members would say describes a value that is already the wrong kind
+/// of thing: an attribute record beside a class atom reports missing attributes
+/// on an object that is not an instance of the class, which is not a second
+/// problem with the value but the same one, said again about a value that never
+/// had to have those attributes. A member that fails *inside* the value -- an
+/// element, a field, an attribute -- leaves the others meaningful, and they are
+/// still collected.
+///
+/// This is the rule [`check_refine`] already applies between a base and its
+/// constraints, said once for the meet: `Annotated[int, Gt(0)]` does not report
+/// a bound on a string.
+fn rejected_the_value(out: &[Violation], before: usize, depth: usize) -> bool {
+    // The walk only appends to `path` as it descends, so a violation whose path
+    // is as long as the current one is at the current one.
+    out.get(before..)
+        .is_some_and(|since| since.iter().any(|v| v.path.len() == depth))
 }
 
 fn check_complement(
@@ -1204,33 +1231,18 @@ fn check_instance(
     ok
 }
 
-fn check_object(
-    class_index: ClassIx,
+fn check_attr_record(
     fields: &[Field],
     value: &Value<'_, '_>,
     path: &mut Vec<PathSegment>,
     ctx: Ctx<'_>,
     out: &mut Vec<Violation>,
 ) -> bool {
-    // A JSON value materializes to a builtin, never an instance of a user class.
+    // Attributes are read off a Python object, so a value that will not
+    // materialize into one carries none and belongs to no record.
     let Ok(obj) = value.to_python() else {
         return false;
     };
-    let Some(class) = class_at(ctx, class_index, value.py()) else {
-        return false;
-    };
-    if !fold(obj.is_instance(class), value.py(), ctx) {
-        // Not an instance: the attribute checks below cannot be trusted.
-        if ctx.mode.explains() {
-            out.push(type_mismatch(
-                "instance_type",
-                &class_label(class),
-                value,
-                path,
-            ));
-        }
-        return false;
-    }
     // The interned names, in field order. A schema absent from the index (an
     // incomplete build traversal) falls back to the field's own text, so
     // correctness never depends on the plan being complete.
@@ -1258,6 +1270,8 @@ fn check_object(
                 record_fatal(err, ctx);
                 return false;
             }
+            // A field the schema does not require is satisfied by its absence.
+            Err(_) if !field.required => {}
             Err(_) => {
                 if ctx.mode.explains() {
                     out.push(located(
@@ -1858,6 +1872,118 @@ mod interpreter {
         });
     }
 
+    /// A meet collects every member's failure until one rejects the value
+    /// *itself*, and then stops: what a later member would say describes a value
+    /// already known to be the wrong kind of thing. A member that fails *inside*
+    /// the value leaves the others meaningful, and they are still collected.
+    ///
+    /// This is what keeps a class with declared attributes -- the meet of an
+    /// `isinstance` atom and an attribute record -- reporting one
+    /// `instance_type` for a foreign object rather than that violation plus the
+    /// attributes the object never had to carry.
+    #[test]
+    fn a_meet_stops_at_the_member_that_rejects_the_value() {
+        Python::attach(|py| {
+            let module = classes(py);
+            let point = module.getattr("Point").expect("Point");
+            let pool: Vec<Py<PyAny>> = vec![point.clone().unbind()];
+            let object = Schema::meet([
+                Schema::Instance(ClassIx::new(0)),
+                Schema::AttrRecord {
+                    fields: vec![field("x", Schema::Int, true)],
+                },
+            ]);
+
+            // Not a Point: the class atom rejects the value at the meet's own
+            // path, so the record is not asked about attributes it does not have.
+            let foreign = PyInt::new(py, 1i64).into_any();
+            let (ok, violations) = explain(py, &object, &foreign, &pool, &[]);
+            assert!(!ok);
+            assert_eq!(violations.len(), 1, "{violations:?}");
+            assert_eq!(violations[0].code, "instance_type");
+            assert!(violations[0].path.is_empty());
+
+            // A Point whose attribute is wrong fails *inside* the value: the
+            // class atom held, and the record reports the attribute.
+            let bad = point
+                .call1((PyString::new(py, "x"), PyInt::new(py, 2i64)))
+                .expect("Point(str, int)");
+            let (ok, violations) = explain(py, &object, &bad, &pool, &[]);
+            assert!(!ok);
+            assert_eq!(violations.len(), 1, "{violations:?}");
+            assert_eq!(violations[0].location(), "x");
+
+            // Two members that each fail inside the value both report: neither
+            // rejected the value itself, so neither silences the other.
+            let deep = |element| Schema::list(SeqShape::homogeneous(element));
+            let both = Schema::Intersection(vec![deep(Schema::Int), deep(Schema::Bool)]);
+            let list = PyList::new(py, [PyString::new(py, "a")]).expect("list");
+            let (ok, violations) = explain(py, &both, &list.into_any(), &[], &[]);
+            assert!(!ok);
+            assert_eq!(violations.len(), 2, "{violations:?}");
+
+            // And a member that rejects the value itself stops the rest even
+            // when no class is involved.
+            let scalars = Schema::Intersection(vec![Schema::Int, Schema::Str]);
+            let number = PyFloat::new(py, 1.5).into_any();
+            let (ok, violations) = explain(py, &scalars, &number, &[], &[]);
+            assert!(!ok);
+            assert_eq!(violations.len(), 1, "{violations:?}");
+            assert_eq!(violations[0].code, "int_type");
+        });
+    }
+
+    /// A class branch names its class, and a class with declared attributes --
+    /// the meet of an atom and a record -- names that same class rather than the
+    /// algebra's spelling of it. A meet that is not an object has no class to
+    /// name and falls back to its kind.
+    #[test]
+    fn a_union_names_a_class_branch_by_its_class() {
+        Python::attach(|py| {
+            let module = classes(py);
+            let point = module.getattr("Point").expect("Point");
+            let other = module.getattr("Other").expect("Other");
+            let pool: Vec<Py<PyAny>> = vec![point.unbind(), other.unbind()];
+            let object = Schema::meet([
+                Schema::Instance(ClassIx::new(0)),
+                Schema::AttrRecord {
+                    fields: vec![Field {
+                        name: "x".to_owned(),
+                        schema: Schema::Int,
+                        required: true,
+                    }],
+                },
+            ]);
+            let schema = Schema::Union(vec![
+                object,
+                Schema::Instance(ClassIx::new(1)),
+                Schema::meet([Schema::Int, Schema::Str]),
+            ]);
+            let index = build_index(py, &schema, &[], &pool);
+            let state = WalkState::new();
+            let ctx = Ctx {
+                pool: &pool,
+                defs: &[],
+                records: &index.records,
+                attrs: &index.attrs,
+                unions: &index.unions,
+                regexes: &index.regexes,
+                guard: &state.guard,
+                depth: &state.depth,
+                fatal: &state.fatal,
+                fatal_seen: &state.fatal_seen,
+                mode: WalkMode::Explain,
+            };
+            let mut labels = BranchLabels::new();
+            push_branch_label(&schema, ctx, py, &mut labels);
+            assert_eq!(
+                labels.render(),
+                "one of: Point, Other, intersection",
+                "an object meet names its class; any other meet names its kind"
+            );
+        });
+    }
+
     /// `(schema, value, expected)` over an empty pool and no definitions.
     fn case(py: Python<'_>, schema: &Schema, value: &Bound<'_, PyAny>, expected: bool) {
         assert_eq!(
@@ -2338,10 +2464,13 @@ mod interpreter {
                 schema,
                 required: true,
             };
-            let schema = Schema::Attrs {
-                class_index: ClassIx::new(0),
-                fields: vec![field("x", Schema::Int), field("y", Schema::Int)],
+            let object = |class, fields| {
+                Schema::meet([
+                    Schema::Instance(ClassIx::new(class)),
+                    Schema::AttrRecord { fields },
+                ])
             };
+            let schema = object(0, vec![field("x", Schema::Int), field("y", Schema::Int)]);
 
             let good = point_class.call1((1i64, 2i64)).expect("Point(1, 2)");
             assert!(decide(py, &schema, &good, &pool, &[]));
@@ -2359,20 +2488,30 @@ mod interpreter {
             assert!(!decide(py, &schema, &impostor, &pool, &[]));
 
             // A missing attribute is a rejection, not a raise.
-            let missing = Schema::Attrs {
-                class_index: ClassIx::new(1),
-                fields: vec![field("absent", Schema::Int)],
-            };
+            let missing = object(1, vec![field("absent", Schema::Int)]);
             let bare = bare_class.call0().expect("NoAttrs()");
             assert!(!decide(py, &missing, &bare, &pool, &[]));
 
-            // An attribute record with no fields is the isinstance atom alone.
-            let nominal = Schema::Attrs {
-                class_index: ClassIx::new(0),
-                fields: Vec::new(),
-            };
+            // The class atom is what the frontend emits when nothing is declared.
+            let nominal = Schema::Instance(ClassIx::new(0));
             assert!(decide(py, &nominal, &good, &pool, &[]));
             assert!(!decide(py, &nominal, &impostor, &pool, &[]));
+
+            // An optional attribute is satisfied by its absence, and still
+            // checked when the value carries it. No annotation builds one -- a
+            // declared attribute is one an instance has -- so the record's own
+            // denotation is what holds the walk to it.
+            let optional = Schema::AttrRecord {
+                fields: vec![Field {
+                    name: "absent".to_owned(),
+                    schema: Schema::Int,
+                    required: false,
+                }],
+            };
+            assert!(decide(py, &optional, &bare, &pool, &[]));
+            bare.setattr("absent", "not an int")
+                .expect("setattr absent");
+            assert!(!decide(py, &optional, &bare, &pool, &[]));
         });
     }
 
@@ -3083,10 +3222,12 @@ mod interpreter {
             .expect("the module compiles");
             let base = module.getattr("Base").expect("Base");
 
-            let attrs = Schema::Attrs {
-                class_index: ClassIx::new(0),
-                fields: vec![field("missing", Schema::Int, true)],
-            };
+            let attrs = Schema::meet([
+                Schema::Instance(ClassIx::new(0)),
+                Schema::AttrRecord {
+                    fields: vec![field("missing", Schema::Int, true)],
+                },
+            ]);
             let pool = vec![base.clone().unbind()];
             for (name, want_fatal) in [("RudeAttr", false), ("StoppingAttr", true)] {
                 let value = module.getattr(name).expect("class").call0().expect("()");

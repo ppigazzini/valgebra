@@ -92,7 +92,7 @@ says what it pooled. That decision is at the mint, not at the read:
 
 ```rust
 lits.intern_const(obj)      // the constant of a typed singleton
-lits.intern_class(ty)       // an isinstance atom, or an attribute record
+lits.intern_class(ty)       // an isinstance atom
 lits.intern_operand(bound)  // a comparison or multiple-of operand
 lits.intern_predicate(func) // a user callback
 ```
