@@ -227,11 +227,19 @@ def test_simplify_decides_the_complement_laws() -> None:
     assert union(complement(int), complement(str)).simplify().is_equivalent(anything)
 
 
-def test_simplify_leaves_the_gradual_any_uncollapsed() -> None:
-    # `Any` is unchecked, not the lattice top, so the complement laws skip it: the
-    # simplified forms are neither the empty set nor the universe.
-    assert not intersection(Any, complement(Any)).simplify().is_empty()
-    assert not union(Any, complement(Any)).simplify().is_equivalent(anything)
+def test_the_complement_laws_hold_of_any_as_of_the_top() -> None:
+    # `Any` is the top, spelled: one node, one set, and the same laws. A rule
+    # cannot tell the spellings apart, so the laws fire across them too.
+    assert intersection(Any, complement(Any)).simplify().is_empty()
+    assert union(Any, complement(Any)).simplify().is_equivalent(anything)
+    assert intersection(Any, complement(anything)).simplify().is_empty()
+    assert Validator(Any) == Validator(anything)
+    assert Validator(Any).is_equivalent(anything)
+
+    # What survives is the spelling, which `repr` gives back.
+    assert repr(Validator(Any)) == "Any"
+    assert repr(Validator(anything)) == "anything"
+    assert repr(complement(Any).simplify()) == "nothing"
 
 
 # Two spellings the procedure itself proves equal, for the law below.

@@ -85,7 +85,9 @@ fn build_shape(u: &mut Unstructured, depth: u32) -> Result<SeqShape> {
 /// Build one schema from the fuzzer's bytes, bounded by `depth` recursion levels.
 pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
     // Atoms are always reachable; composites only while the depth budget holds.
-    let atoms = 11u8;
+    // The universe has one arm, not two: `typing.Any` is the top with a spelling
+    // the term keeps for `repr`, and a fuzz target reads verdicts, not spellings.
+    let atoms = 10u8;
     let composites = 8u8;
     let span = if depth == 0 || u.is_empty() {
         atoms
@@ -93,18 +95,17 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
         atoms + composites
     };
     Ok(match u.arbitrary::<u8>()? % span {
-        0 => Schema::Anything,
-        1 => Schema::Dynamic,
-        2 => Schema::Nothing,
-        3 => Schema::NoneType,
-        4 => Schema::Bool,
-        5 => Schema::Int,
-        6 => Schema::Float,
-        7 => Schema::Str,
-        8 => Schema::Bytes,
-        9 => Schema::Literal(ConstIx::new(small(u)?)),
-        10 => Schema::Instance(ClassIx::new(small(u)?)),
-        11 => {
+        0 => Schema::ANYTHING,
+        1 => Schema::Nothing,
+        2 => Schema::NoneType,
+        3 => Schema::Bool,
+        4 => Schema::Int,
+        5 => Schema::Float,
+        6 => Schema::Str,
+        7 => Schema::Bytes,
+        8 => Schema::Literal(ConstIx::new(small(u)?)),
+        9 => Schema::Instance(ClassIx::new(small(u)?)),
+        10 => {
             let n = 1 + count(u, 3)?;
             let mut members = Vec::with_capacity(n);
             for _ in 0..n {
@@ -112,7 +113,7 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
             }
             Schema::Union(members)
         }
-        12 => {
+        11 => {
             let n = 1 + count(u, 3)?;
             let mut members = Vec::with_capacity(n);
             for _ in 0..n {
@@ -120,8 +121,8 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
             }
             Schema::Intersection(members)
         }
-        13 => Schema::Complement(Box::new(build_schema(u, depth - 1)?)),
-        14 => {
+        12 => Schema::Complement(Box::new(build_schema(u, depth - 1)?)),
+        13 => {
             let base = Box::new(build_schema(u, depth - 1)?);
             let n = count(u, 3)?;
             let mut constraints = Vec::with_capacity(n);
@@ -130,9 +131,9 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
             }
             Schema::Refine { base, constraints }
         }
-        15 => Schema::Set(Box::new(build_schema(u, depth - 1)?)),
-        16 => Schema::FrozenSet(Box::new(build_schema(u, depth - 1)?)),
-        17 => Schema::Seq {
+        14 => Schema::Set(Box::new(build_schema(u, depth - 1)?)),
+        15 => Schema::FrozenSet(Box::new(build_schema(u, depth - 1)?)),
+        16 => Schema::Seq {
             container: if u.arbitrary()? {
                 SeqKind::List
             } else {
@@ -218,7 +219,7 @@ pub fn check_relations(a: &Schema, b: &Schema) {
     assert!(a.is_equivalent(a), "equivalence not reflexive on {a:?}");
     // Top and bottom bound every schema. Stated over the ATOMS...
     assert!(
-        a.is_subtype_of(&Schema::Anything),
+        a.is_subtype_of(&Schema::ANYTHING),
         "{a:?} not below the top"
     );
     assert!(Schema::Nothing.is_subtype_of(a), "bottom not below {a:?}");

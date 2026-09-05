@@ -78,10 +78,10 @@ assert intersection(int, complement(int)).is_empty()  # provably no value
 - **A law-justified simplifier.** `simplify` reduces a schema to a lattice normal
   form that admits **exactly the same values** — it never changes a schema's
   meaning.
-- **`anything` is not `Any`.** Both admit every value at runtime, but in the
-  algebra `anything` is the lattice top (it obeys the laws) while `Any` is the
-  gradual dynamic type — an atom the simplifier never rewrites. "Checked: all
-  values admitted" stays distinct from "deliberately unchecked".
+- **`Any` is the top, spelled.** A validator asks one question — does this
+  value belong — and to it `Any` admits every value, exactly as `anything` does.
+  They are the same schema and obey the same laws; what you wrote is kept for
+  `repr`, not for the algebra.
 - **Check, don't parse.** `validate`/`is_valid` never copy or coerce; the proof
   is about the object you keep, not a reconstructed copy. `ensure` is the
   separate, explicit value-returning mode.

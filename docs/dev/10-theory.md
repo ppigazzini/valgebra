@@ -180,14 +180,14 @@ refused by identity rather than followed ([04-walk.md](04-walk.md)).
 **Siek & Taha, "Gradual Typing for Functional Languages" (2006).** The dynamic
 type is an atom with its own rules, not the top of the lattice, because a static
 checker asks a second question of it — *consistency* at every site where a value
-crosses between typed and untyped code. **[GUIDING, and declining]** — a runtime
-validator asks one question, membership, and to it the dynamic type is the top:
-the walk has one arm for `Anything` and `Dynamic`. Today `Schema::Dynamic` is
-still a distinct atom that the simplifier does not rewrite and the decision
-exempts from the complement laws ([15-decidability.md](../15-decidability.md)).
-That distinction is retired by the rule in
-[01-schema-ir.md](01-schema-ir.md#what-any-is): `Any` becomes the top with a
-spelling the term keeps for `repr`, and the exemption goes with the variant.
+crosses between typed and untyped code. **[GUIDING, and declined]** — a runtime
+validator asks one question, membership, and to it the dynamic type is the top.
+There is no `Dynamic` node: `typing.Any` builds `Schema::Anything` carrying a
+[`Spelling`](../../crates/valgebra-core/src/ir.rs) that `render` reads and
+nothing else does, so every law and every relation sees the top
+([01-schema-ir.md](01-schema-ir.md#what-any-is)). The paper is kept here because
+the reason it separates the two is the reason this project does not: it names
+the question a validator has no site for.
 
 ## Refinement types
 

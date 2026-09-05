@@ -22,7 +22,7 @@ mod violation;
 pub use decision::{Kind, LeafRelations, NoLeafRelations, Verdict};
 pub use ir::{
     ClassIx, ConstIx, Constraint, DefIx, DefShift, Field, Guarded, MapClause, Openness, OperandIx,
-    PathSegment, PoolShift, PredIx, Schema, SeqKind, SeqShape,
+    PathSegment, PoolShift, PredIx, Schema, SeqKind, SeqShape, Spelling,
 };
 pub use violation::Violation;
 
@@ -70,8 +70,7 @@ mod tests {
             required: true,
         };
         vec![
-            Schema::Anything,
-            Schema::Dynamic,
+            Schema::ANYTHING,
             Schema::Nothing,
             Schema::NoneType,
             Schema::Bool,
@@ -423,7 +422,7 @@ mod tests {
     #[test]
     fn labels_and_codes_for_every_variant() {
         let cases = [
-            (Schema::Anything, "anything", "anything"),
+            (Schema::ANYTHING, "anything", "anything"),
             (Schema::Nothing, "nothing", "no_match"),
             (Schema::NoneType, "None", "none_type"),
             (Schema::Bool, "bool", "bool_type"),
@@ -575,7 +574,7 @@ mod tests {
         );
         assert_eq!(
             pair.with_records_open(Openness::Open),
-            Schema::Anything,
+            Schema::ANYTHING,
             "and are one schema and its complement after it"
         );
     }
@@ -622,7 +621,7 @@ mod tests {
     #[test]
     fn the_nullary_operations_are_their_identities() {
         assert_eq!(Schema::union([]), Schema::Nothing);
-        assert_eq!(Schema::meet([]), Schema::Anything);
+        assert_eq!(Schema::meet([]), Schema::ANYTHING);
         // A non-empty list is kept as given: order and repeats are observable
         // through the render and structural equality, and the lattice laws are
         // `simplify`'s job.
@@ -958,7 +957,7 @@ mod tests {
         );
         assert_eq!(
             Schema::Union(vec![Schema::Int, not(Schema::Int)]).simplify(),
-            Schema::Anything
+            Schema::ANYTHING
         );
         // The law is the complementary pair itself, not scalar-region coverage: an
         // opaque member has no region, so `X ∪ ¬X` here is decided only by finding
@@ -966,7 +965,7 @@ mod tests {
         let opaque = Schema::list(SeqShape::homogeneous(Schema::Int));
         assert_eq!(
             Schema::Union(vec![opaque.clone(), not(opaque)]).simplify(),
-            Schema::Anything
+            Schema::ANYTHING
         );
         // Disjoint basics and disjoint container kinds give an empty intersection.
         assert_eq!(
@@ -988,17 +987,106 @@ mod tests {
         );
     }
 
+    /// Every relation answers the same for both spellings of the top, wherever
+    /// the top sits in a schema.
+    ///
+    /// The equality, ordering and hash impls make this hold of any rule keyed on
+    /// them, which is every rule here; what they cannot stop is a rule that
+    /// matches the payload directly, and this is what would catch one.
     #[test]
-    fn simplify_preserves_gradual_any_under_complement() {
-        // The gradual `Any` must not be rewritten by the complement laws.
-        assert_ne!(
-            Schema::Intersection(vec![Schema::Dynamic, not(Schema::Dynamic)]).simplify(),
+    fn no_relation_can_tell_the_two_spellings_apart() {
+        let around = |top: Schema| {
+            [
+                top.clone(),
+                Schema::Union(vec![top.clone(), Schema::Int]),
+                Schema::Intersection(vec![top.clone(), Schema::Str]),
+                Schema::Complement(Box::new(top.clone())),
+                Schema::list(SeqShape::homogeneous(top.clone())),
+                Schema::Set(Box::new(top)),
+            ]
+        };
+        let others = [
+            Schema::ANYTHING,
+            Schema::Nothing,
+            Schema::Int,
+            Schema::Str,
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+        ];
+        // Equality, ordering and hashing agree, which is what every rule that
+        // keys on one of them relies on.
+        let hash_of = |schema: &Schema| {
+            use core::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            schema.hash(&mut hasher);
+            hasher.finish()
+        };
+        assert_eq!(Spelling::Any, Spelling::Top);
+        assert_eq!(
+            Spelling::Any.cmp(&Spelling::Top),
+            core::cmp::Ordering::Equal
+        );
+        assert_eq!(
+            Spelling::Any.partial_cmp(&Spelling::Top),
+            Some(core::cmp::Ordering::Equal)
+        );
+        assert_eq!(
+            Schema::ANY.cmp(&Schema::ANYTHING),
+            core::cmp::Ordering::Equal
+        );
+        assert_eq!(hash_of(&Schema::ANY), hash_of(&Schema::ANYTHING));
+
+        for (any, top) in around(Schema::ANY)
+            .into_iter()
+            .zip(around(Schema::ANYTHING))
+        {
+            assert_eq!(any, top, "the spellings are one schema");
+            assert_eq!(any.simplify(), top.simplify());
+            assert_eq!(any.is_empty(), top.is_empty(), "{any:?}");
+            for other in &others {
+                assert_eq!(
+                    any.is_subtype_of(other),
+                    top.is_subtype_of(other),
+                    "{any:?}"
+                );
+                assert_eq!(
+                    other.is_subtype_of(&any),
+                    other.is_subtype_of(&top),
+                    "{any:?}"
+                );
+                assert_eq!(any.disjoint(other), top.disjoint(other), "{any:?}");
+            }
+        }
+    }
+
+    /// `Any` is the top, spelled, so the complement laws hold of it: it is the
+    /// same node as `anything`, and a rule cannot tell the two apart because the
+    /// spelling compares equal. What survives is the spelling itself, which
+    /// `simplify` carries through an identity so `repr` still gives back what
+    /// the user wrote.
+    #[test]
+    fn the_complement_laws_hold_of_the_top_however_it_is_spelled() {
+        assert_eq!(Schema::ANY, Schema::ANYTHING);
+        for top in [Schema::ANY, Schema::ANYTHING] {
+            assert_eq!(
+                Schema::Intersection(vec![top.clone(), not(top.clone())]).simplify(),
+                Schema::Nothing
+            );
+            assert_eq!(
+                Schema::Union(vec![top.clone(), not(top.clone())]).simplify(),
+                Schema::ANYTHING
+            );
+            assert_eq!(not(top.clone()).simplify(), Schema::Nothing);
+        }
+        // Mixed spellings are one set, so the law fires across them too.
+        assert_eq!(
+            Schema::Intersection(vec![Schema::ANY, not(Schema::ANYTHING)]).simplify(),
             Schema::Nothing
         );
-        assert_ne!(
-            Schema::Union(vec![Schema::Dynamic, not(Schema::Dynamic)]).simplify(),
-            Schema::Anything
-        );
+        // And the spelling survives an identity, which is what `repr` reads.
+        assert!(matches!(
+            Schema::Union(vec![Schema::ANY, Schema::Int]).simplify(),
+            Schema::Anything(Spelling::Any)
+        ));
     }
 
     #[test]
@@ -1031,7 +1119,6 @@ mod tests {
         // Conservative where the core cannot decide soundly.
         assert!(!Schema::Literal(ConstIx::new(0)).disjoint(&Schema::Int));
         assert!(!Schema::Instance(ClassIx::new(0)).disjoint(&Schema::Int));
-        assert!(!Schema::Dynamic.disjoint(&Schema::Int));
         // A refinement is disjoint exactly when its base is.
         let refined = Schema::Refine {
             base: Box::new(Schema::Int),
@@ -1052,9 +1139,9 @@ mod laws {
     /// complement. Pool indices are arbitrary but consistent across a value.
     fn schema() -> impl Strategy<Value = Schema> {
         let atom = prop_oneof![
-            Just(Schema::Anything),
+            Just(Schema::ANYTHING),
             Just(Schema::Nothing),
-            Just(Schema::Dynamic),
+            Just(Schema::ANY),
             Just(Schema::NoneType),
             Just(Schema::Bool),
             Just(Schema::Int),
@@ -1112,7 +1199,7 @@ mod laws {
     /// the region-set decision under test, used as its oracle.
     fn member(schema: &Schema, value: Sample) -> bool {
         match schema {
-            Schema::Anything => true,
+            Schema::Anything(_) => true,
             Schema::Nothing => false,
             Schema::NoneType => matches!(value, Sample::None),
             Schema::Bool => matches!(value, Sample::Bool),
@@ -1131,7 +1218,7 @@ mod laws {
     /// union, intersection, and complement.
     fn scalar_schema() -> impl Strategy<Value = Schema> {
         let atom = prop_oneof![
-            Just(Schema::Anything),
+            Just(Schema::ANYTHING),
             Just(Schema::Nothing),
             Just(Schema::NoneType),
             Just(Schema::Bool),
@@ -1175,7 +1262,6 @@ mod laws {
     #[test]
     fn is_empty_and_subtype_are_sound_off_the_scalar_fragment() {
         // Non-scalar leaves are never decided empty.
-        assert!(!Schema::Dynamic.is_empty());
         assert!(!Schema::Literal(ConstIx::new(0)).is_empty());
         assert!(!Schema::Instance(ClassIx::new(0)).is_empty());
         assert!(!Schema::Set(Box::new(Schema::Int)).is_empty());
@@ -1185,8 +1271,6 @@ mod laws {
         assert!(
             !Schema::Intersection(vec![Schema::Int, Schema::Instance(ClassIx::new(0))]).is_empty()
         );
-        // The gradual `Any` is never collapsed.
-        assert!(!Schema::Intersection(vec![Schema::Dynamic, not(Schema::Dynamic)]).is_empty());
         // Subtyping off the fragment is reflexive only.
         assert!(
             Schema::Instance(ClassIx::new(0)).is_subtype_of(&Schema::Instance(ClassIx::new(0)))
@@ -1593,13 +1677,13 @@ mod laws {
         // non-empty intersection.
         let empty_list = Schema::list(SeqShape::fixed([Schema::Nothing]));
         assert!(empty_list.is_empty());
-        assert!(Schema::Intersection(vec![empty_list.clone(), Schema::Anything]).is_empty());
+        assert!(Schema::Intersection(vec![empty_list.clone(), Schema::ANYTHING]).is_empty());
         // Order does not matter: the fold runs over every member.
-        assert!(Schema::Intersection(vec![Schema::Anything, empty_list]).is_empty());
+        assert!(Schema::Intersection(vec![Schema::ANYTHING, empty_list]).is_empty());
         // And an intersection of two inhabited members with an opaque region is
         // not reported empty, so the fold is not simply answering true.
         let list_of_int = Schema::list(SeqShape::homogeneous(Schema::Int));
-        assert!(!Schema::Intersection(vec![list_of_int, Schema::Anything]).is_empty());
+        assert!(!Schema::Intersection(vec![list_of_int, Schema::ANYTHING]).is_empty());
     }
 
     #[test]
@@ -1624,8 +1708,8 @@ mod laws {
                 key: Schema::Str,
                 value: Schema::Int,
             }),
-            Schema::Anything,
-            Schema::Dynamic,
+            Schema::ANYTHING,
+            Schema::ANY,
         ] {
             assert!(
                 !schema.disjoint(&schema),
@@ -1668,7 +1752,7 @@ mod laws {
         // Bottom-below and top-above on a non-scalar (region_set is None there, so
         // the dedicated arms decide it).
         assert!(Schema::Nothing.is_subtype_of(&list(Schema::Int)));
-        assert!(list(Schema::Int).is_subtype_of(&Schema::Anything));
+        assert!(list(Schema::Int).is_subtype_of(&Schema::ANYTHING));
         // Below a complement, which is the emptiness reduction rather than a
         // structural arm: a list shares no value with an int, so it lies inside
         // the complement of int. Nothing structural can see this -- there is no
@@ -1683,7 +1767,7 @@ mod laws {
         // supertype.
         assert!(list(Schema::Bool).is_subtype_of(&Schema::Intersection(vec![
             list(Schema::Int),
-            Schema::Anything
+            Schema::ANYTHING
         ])));
         assert!(
             Schema::Intersection(vec![list(Schema::Bool), list(Schema::Int)])
@@ -2157,7 +2241,7 @@ mod laws {
             fields: vec![field("a", Schema::Int, true)],
             defaults: vec![MapClause {
                 key: Schema::Str,
-                value: Schema::Anything,
+                value: Schema::ANYTHING,
             }],
         };
         assert!(with_extra.is_subtype_of(&covering));
@@ -2195,7 +2279,7 @@ mod laws {
             fields: vec![field("a", Schema::Int, true)],
             defaults: vec![MapClause {
                 key: Schema::Int,
-                value: Schema::Anything,
+                value: Schema::ANYTHING,
             }],
         };
         assert!(!extra_str.is_subtype_of(&int_catch_all));
@@ -2400,7 +2484,7 @@ mod laws {
     /// structural subtyping decision is checked against.
     fn member_v(schema: &Schema, value: &Val) -> bool {
         match schema {
-            Schema::Anything => true,
+            Schema::Anything(_) => true,
             Schema::Nothing => false,
             Schema::Set(element) => match value {
                 Val::SetOf(elements) => elements.iter().all(|&e| member(element, e)),
@@ -2420,7 +2504,7 @@ mod laws {
     /// combinations — the fragment the `member_v` oracle covers.
     fn scalar_or_set_schema() -> impl Strategy<Value = Schema> {
         let leaf = prop_oneof![
-            Just(Schema::Anything),
+            Just(Schema::ANYTHING),
             Just(Schema::Nothing),
             Just(Schema::NoneType),
             Just(Schema::Bool),
@@ -2457,8 +2541,8 @@ mod laws {
     /// targets explore.
     fn structural_schema() -> impl Strategy<Value = Schema> {
         let leaf = prop_oneof![
-            Just(Schema::Anything),
-            Just(Schema::Dynamic),
+            Just(Schema::ANYTHING),
+            Just(Schema::ANY),
             Just(Schema::Nothing),
             Just(Schema::NoneType),
             Just(Schema::Bool),
@@ -2509,7 +2593,7 @@ mod laws {
             Just(Schema::Ref(DefIx::new(0))),
             Just(Schema::Int),
             Just(Schema::Str),
-            Just(Schema::Anything),
+            Just(Schema::ANYTHING),
         ];
         leaf.prop_recursive(4, 24, 3, |inner| {
             prop_oneof![
@@ -2662,8 +2746,8 @@ mod laws {
             prop_assert!(same(&intersection(a.clone(), a.clone()), &a));
             // The bounds.
             prop_assert!(same(&union(a.clone(), Schema::Nothing), &a));
-            prop_assert!(same(&intersection(a.clone(), Schema::Anything), &a));
-            prop_assert!(same(&union(a.clone(), Schema::Anything), &Schema::Anything));
+            prop_assert!(same(&intersection(a.clone(), Schema::ANYTHING), &a));
+            prop_assert!(same(&union(a.clone(), Schema::ANYTHING), &Schema::ANYTHING));
             prop_assert!(same(&intersection(a.clone(), Schema::Nothing), &Schema::Nothing));
             // Distributivity, which the simplifier does not apply at all, so no
             // structural property below could state it.
@@ -2690,7 +2774,7 @@ mod laws {
                 samples_v().iter().all(|value| member_v(left, value) == member_v(right, value))
             };
             prop_assert!(same(&not(not(a.clone())), &a));
-            prop_assert!(same(&union(a.clone(), not(a.clone())), &Schema::Anything));
+            prop_assert!(same(&union(a.clone(), not(a.clone())), &Schema::ANYTHING));
             prop_assert!(same(&intersection(a.clone(), not(a.clone())), &Schema::Nothing));
             prop_assert!(same(
                 &not(union(a.clone(), b.clone())),
@@ -2731,8 +2815,8 @@ mod laws {
         #[test]
         fn identities(a in schema()) {
             prop_assert_eq!(union(a.clone(), Schema::Nothing).simplify(), a.clone().simplify());
-            prop_assert_eq!(intersection(a.clone(), Schema::Anything).simplify(), a.clone().simplify());
-            prop_assert_eq!(union(a.clone(), Schema::Anything).simplify(), Schema::Anything);
+            prop_assert_eq!(intersection(a.clone(), Schema::ANYTHING).simplify(), a.clone().simplify());
+            prop_assert_eq!(union(a.clone(), Schema::ANYTHING).simplify(), Schema::ANYTHING);
             prop_assert_eq!(intersection(a, Schema::Nothing).simplify(), Schema::Nothing);
         }
 
@@ -2783,7 +2867,7 @@ mod laws {
             prop_assert_eq!(once.clone(), once.simplify());
             prop_assert!(a.is_subtype_of(&a));
             prop_assert!(a.is_equivalent(&a));
-            prop_assert!(a.is_subtype_of(&Schema::Anything));
+            prop_assert!(a.is_subtype_of(&Schema::ANYTHING));
             prop_assert!(Schema::Nothing.is_subtype_of(&a));
             let ab = a.is_subtype_of(&b);
             let ba = b.is_subtype_of(&a);
@@ -3044,7 +3128,7 @@ mod laws {
         // The same cancellation, buried under more Boolean structure, still folds
         // up: the region reaches zero at the outer intersection.
         let nested = intersection(
-            intersection(cancel.clone(), Schema::Anything),
+            intersection(cancel.clone(), Schema::ANYTHING),
             not(Schema::NoneType),
         );
         assert!(nested.is_empty());
@@ -3242,7 +3326,7 @@ mod laws {
     fn a_complement_plus_a_covering_scalar_is_the_universe() {
         // ¬bool covers everything except bools; int adds the bools back.
         let everything = union(not(Schema::Bool), Schema::Int);
-        assert_eq!(everything.simplify(), Schema::Anything);
+        assert_eq!(everything.simplify(), Schema::ANYTHING);
     }
 
     // -- An independent, value-aware denotation oracle ----------------------------
@@ -3364,7 +3448,7 @@ mod laws {
     /// denotation directly.
     fn member_full(schema: &Schema, value: &Obj, pool: &[Obj]) -> bool {
         match schema {
-            Schema::Anything | Schema::Dynamic => true,
+            Schema::Anything(_) => true,
             Schema::Nothing => false,
             Schema::NoneType => matches!(value, Obj::None),
             Schema::Bool => matches!(value, Obj::Bool(_)),
@@ -3499,9 +3583,9 @@ mod laws {
 
     fn decidable_schema() -> impl Strategy<Value = Schema> {
         let leaf = prop_oneof![
-            Just(Schema::Anything),
+            Just(Schema::ANYTHING),
             Just(Schema::Nothing),
-            Just(Schema::Dynamic),
+            Just(Schema::ANY),
             Just(Schema::NoneType),
             Just(Schema::Bool),
             Just(Schema::Int),
@@ -3811,8 +3895,7 @@ mod index_laws {
     /// declared here too.
     fn indices(schema: &Schema, pool: &mut Vec<usize>, defs: &mut Vec<usize>) {
         match schema {
-            Schema::Anything
-            | Schema::Dynamic
+            Schema::Anything(_)
             | Schema::Nothing
             | Schema::NoneType
             | Schema::Bool

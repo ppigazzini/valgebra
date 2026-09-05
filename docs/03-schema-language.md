@@ -66,10 +66,9 @@ assert Validator(float).is_valid(1.0)
 
 ## `Any` versus `object`
 
-`object` is the **top** of the lattice (`anything`): every value. `Any` is the
-gradual dynamic type — at runtime it also admits every value, but it is a
-distinct atom that the [simplifier](04-algebra.md) never rewrites, preserving
-"deliberately unchecked" as different from "checked: all admitted".
+Both are the **top** of the lattice (`anything`): every value. They build the
+same schema, and the only difference is the one `repr` gives back, which is what
+you wrote ([the algebra](04-algebra.md#any-versus-anything)).
 
 ```python
 from typing import Any
@@ -78,6 +77,8 @@ from valgebra import Validator
 
 assert Validator(object).is_valid(["anything", 1, None])
 assert Validator(Any).is_valid(object())
+assert Validator(Any) == Validator(object)
+assert repr(Validator(Any)) == "Any"
 ```
 
 ## Collections

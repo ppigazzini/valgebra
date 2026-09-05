@@ -16,7 +16,7 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **carrier** | the Python class holding a structural node's shape: `list` for a `Seq`, `dict` for a `KeyedMap`. An `AttrRecord` has none — a class is a separate `Instance` atom met with the record — so the carriers are fixed two different ways and widening one is a different size of change per node |
 | **minimality** | the property that makes "the algebra" a claim: the smallest node set whose closure is consistent and complete for the domain. A node is admitted because the domain is unreachable without it, never because it is convenient |
 | **the lattice bounds** | `Anything` (top, every value) and `Nothing` (bottom, no value) |
-| **the gradual atom** | `Dynamic`, which the user spells `typing.Any`. It admits every value at runtime and is a *distinct* atom to the algebra, so the simplifier does not rewrite it by the lattice laws |
+| **the spelling** | how the top was written — `typing.Any` or `anything` — carried by `Anything` and read by `repr` alone. It is not part of the set: two schemas differing only in it are equal, and `Spelling` compares, orders and hashes alike, so every rule keyed on those — which is every rule — sees one value |
 | **region** | one part of the mutually disjoint partition of the value universe that `Region` computes over. Six scalar regions plus one non-scalar remainder |
 | **pool** | the validator's `Vec<Py<PyAny>>`, holding four kinds of object addressed by four index types ([06-type-design.md](06-type-design.md)) |
 | **definition** | an entry in the validator's definitions table; the target of a `Ref` back edge, produced by `recursive` |

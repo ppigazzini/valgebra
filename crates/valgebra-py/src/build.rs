@@ -152,7 +152,7 @@ pub(crate) fn build_schema(
     // checked before the type-object dispatch below because on 3.11+ `Any` is
     // itself a class and would otherwise be taken for an ordinary type.
     if obj.is(forms.any.bind(py)) {
-        return Ok(Schema::Dynamic);
+        return Ok(Schema::ANY);
     }
 
     // `typing.Never`/`NoReturn` are the empty type: the lattice bottom, the
@@ -318,7 +318,7 @@ fn build_type_object(
     }
     let forms = forms(py)?;
     if ty.is(forms.object.bind(py)) {
-        return Ok(Schema::Anything);
+        return Ok(Schema::ANYTHING);
     }
     // A bare typing special form is a class on some Pythons (notably `Union`).
     // It is not a value, so reject it rather than building an instance check that

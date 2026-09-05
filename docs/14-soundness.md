@@ -37,8 +37,8 @@ and the walk's accept condition coincide at every one:
 ```text
 S                accepts x  ⟺  x ∈ ⟦S⟧, by:
 ---------------  -----------------------------------------------------------
-Anything         always                         (⟦Anything⟧ = all values)
-Any (gradual)    always                         (⟦Any⟧ = all values at runtime)
+Anything         always                         (⟦Anything⟧ = all values;
+                                                 `Any` is this node, spelled)
 Nothing          never                          (⟦Nothing⟧ = ∅)
 Bool/Int/...     isinstance(x, T)               (the scalar region)
 Literal(c)       type(x) is type(c) and x == c  (typed singleton)
@@ -58,12 +58,10 @@ AttrRecord(f)    every required field's          (attribute record; no
                  and matches                     `Instance(C) ∧ AttrRecord`)
 ```
 
-`Any` admits every value, exactly as the top does — that is its *runtime*
-denotation, and it is what the walk decides. The algebra treats it as a distinct
-atom all the same, so the simplifier does not rewrite it by the lattice laws and
-the decision procedures do not relate it: see [the gradual `Any` versus the
-lattice top](13-foundations.md#gradual-any-versus-the-lattice-top). Membership is the
-claim this page makes, and on membership the two coincide.
+`Any` admits every value, exactly as the top does, and it *is* the top: one
+node, one denotation, with the spelling kept for `repr` alone (see [`Any` is the
+top, spelled](13-foundations.md#any-is-the-top-spelled)). The row above covers
+both.
 
 For the Boolean nodes the equivalence is the definition of the set operation, so
 the step is immediate given the hypothesis on the children. For the structural

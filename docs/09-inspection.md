@@ -205,8 +205,8 @@ disproven. A recipe that reads `not a.is_subtype_of(b)` as "a narrowing happened
 reports a change that may not have occurred.
 
 The [decidability boundary](15-decidability.md) states where the answers are exact.
-The places that bite an inspection script are the gradual `Any`, a literal union
-of about a thousand members, and a deeply nested Boolean combination.
+The places that bite an inspection script are a literal union of about a
+thousand members and a deeply nested Boolean combination.
 
 ## What this cannot see
 

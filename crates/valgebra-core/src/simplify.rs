@@ -126,7 +126,8 @@ fn simplify_union(members: &[Schema]) -> Schema {
     let mut flat = Vec::new();
     for member in members {
         match member.simplify() {
-            Schema::Anything => return Schema::Anything,
+            // The top absorbs, and keeps the spelling the member it absorbed had.
+            top @ Schema::Anything(_) => return top,
             Schema::Nothing => {}
             Schema::Union(inner) => flat.extend(inner),
             other => flat.push(other),
@@ -144,7 +145,7 @@ fn union_of_simplified(members: Vec<Schema>) -> Schema {
     let mut flat = Vec::new();
     for member in members {
         match member {
-            Schema::Anything => return Schema::Anything,
+            top @ Schema::Anything(_) => return top,
             Schema::Nothing => {}
             Schema::Union(inner) => flat.extend(inner),
             other => flat.push(other),
@@ -175,7 +176,7 @@ fn finish_union(mut flat: Vec<Schema>) -> Schema {
         || has_disjoint_complement_pair(&flat)
         || covers_universe
     {
-        return Schema::Anything;
+        return Schema::ANYTHING;
     }
     match flat.len() {
         0 => Schema::Nothing,
@@ -193,7 +194,7 @@ fn simplify_intersection(members: &[Schema]) -> Schema {
     for member in members {
         match member.simplify() {
             Schema::Nothing => return Schema::Nothing,
-            Schema::Anything => {}
+            Schema::Anything(_) => {}
             Schema::Intersection(inner) => flat.extend(inner),
             other => flat.push(other),
         }
@@ -209,7 +210,7 @@ fn intersection_of_simplified(members: Vec<Schema>) -> Schema {
     for member in members {
         match member {
             Schema::Nothing => return Schema::Nothing,
-            Schema::Anything => {}
+            Schema::Anything(_) => {}
             Schema::Intersection(inner) => flat.extend(inner),
             other => flat.push(other),
         }
@@ -241,7 +242,7 @@ fn finish_intersection(mut flat: Vec<Schema>) -> Schema {
         return Schema::Nothing;
     }
     match flat.len() {
-        0 => Schema::Anything,
+        0 => Schema::ANYTHING,
         1 => flat.swap_remove(0),
         _ => Schema::Intersection(flat),
     }
@@ -263,8 +264,8 @@ fn simplify_complement(inner: &Schema) -> Schema {
 fn complement_of_simplified(inner: Schema) -> Schema {
     match inner {
         Schema::Complement(x) => *x,
-        Schema::Anything => Schema::Nothing,
-        Schema::Nothing => Schema::Anything,
+        Schema::Anything(_) => Schema::Nothing,
+        Schema::Nothing => Schema::ANYTHING,
         Schema::Union(members) => intersection_of_simplified(complement_each(members)),
         Schema::Intersection(members) => union_of_simplified(complement_each(members)),
         other => Schema::Complement(Box::new(other)),

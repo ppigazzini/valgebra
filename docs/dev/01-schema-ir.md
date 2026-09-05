@@ -294,8 +294,8 @@ walk already uses for that kind".
 the term keeps the spelling so that `repr` can give it back.
 
 A runtime validator asks one question of a schema — does this value belong —
-and to that question `Any` answers yes for every value. The walk has always
-said so: `Anything` and `Dynamic` share one arm. Gradual typing (Siek & Taha)
+and to that question `Any` answers yes for every value. The walk always said
+so, with one arm for both. Gradual typing (Siek & Taha)
 holds the dynamic type apart from the top for a *second* question, consistency,
 which a static checker asks at every site where a value crosses between typed
 and untyped code. A validator has no such site and never asks it. Keeping the
@@ -305,17 +305,17 @@ complement(Any))` is the empty set, and an `is_empty` that declines to say so
 is not conservative about a set — it is describing a set the library does not
 check against.
 
-So `Any` is not a variant. Building it yields `Anything` with a
-`spelled_any` flag; `render` reads the flag and writes `Any`; every relation
-and every law reads the top. The flag is a term fact like a field name, and it
-is not a set: two schemas that differ only in it are equal, and nothing on the
-decision side may branch on it. What is lost is the ability to say "this
+So `Any` is not a variant. Building it yields `Anything` carrying a
+`Spelling`; `render` reads it and writes `Any`; every relation and every law
+reads the top. The flag is a term fact like a field name, and it is not a set:
+two schemas that differ only in it are equal. That is not a rule asking to be
+followed — `Spelling` implements `PartialEq`, `Ord` and `Hash` by hand so every
+spelling compares and hashes alike, and a rule that tried to branch on it would
+find two values it cannot tell apart. Nothing in the core reads it; `render` in
+the bindings does, and it is the only thing that may. What is lost is the ability to say "this
 branch was deliberately not checked" *inside the algebra*; what is kept is that
 the reader sees it in `repr`, which is where they looked for it.
 
-Until that lands the IR still carries `Dynamic`, the decision exempts it from
-the complement laws, and [15-decidability.md](../15-decidability.md) says so;
-this is the rule that retires the exemption, not a description of it.
 
 ## What a `TypedDict` denotes
 

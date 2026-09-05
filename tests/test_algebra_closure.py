@@ -155,10 +155,12 @@ def test_the_fold_reaches_a_schema_built_through_the_constructors_only():
     assert not Validator(anything).is_subtype_of(respelled)
 
 
-def test_the_gradual_atom_is_exempt_from_the_fold():
-    # `Any` is the dynamic type, not a set whose complement completes it.
-    assert union(Any, complement(Any)) != Validator(anything)
-    assert not Validator(anything).is_subtype_of(union(Any, complement(Any)))
+def test_any_folds_like_the_top_it_is():
+    # `Any` denotes every value, so the join with its complement is the top and
+    # the construction folds it there like any other set.
+    assert union(Any, complement(Any)) == Validator(anything)
+    assert Validator(anything).is_subtype_of(union(Any, complement(Any)))
+    assert intersection(Any, complement(Any)) == Validator(nothing)
 
 
 def test_a_meet_with_a_complement_is_the_bottom():

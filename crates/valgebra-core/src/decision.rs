@@ -327,7 +327,7 @@ impl Schema {
         }
         Regions::Known(match self {
             Schema::Nothing => Region::EMPTY,
-            Schema::Anything => Region::ALL,
+            Schema::Anything(_) => Region::ALL,
             Schema::Union(members) => {
                 let mut acc = Regions::UNION_UNIT;
                 for member in members {
@@ -519,7 +519,7 @@ impl Schema {
             // The lattice bounds carry a known region, which settles them the
             // same way.
             Schema::Nothing => (Verdict::Empty, Regions::Known(Region::EMPTY)),
-            Schema::Anything => (Verdict::Inhabited, Regions::Known(Region::ALL)),
+            Schema::Anything(_) => (Verdict::Inhabited, Regions::Known(Region::ALL)),
             Schema::Ref(id) => {
                 // A reference reached again while resolving it is a cycle: this
                 // occurrence demands an infinite unfolding, so on its own it has
@@ -1344,7 +1344,7 @@ pub(crate) fn denotes_a_set(schema: &Schema, oracle: &dyn LeafRelations) -> bool
     let mut pending = vec![schema];
     while let Some(node) = pending.pop() {
         match node {
-            Schema::Dynamic | Schema::Ref(_) | Schema::SelfRef(_) => return false,
+            Schema::Ref(_) | Schema::SelfRef(_) => return false,
             // Only the bindings hold the class, so only they can tell a pure one
             // from a hooked one. No answer is the conservative answer.
             Schema::Instance(_) => {
@@ -1691,7 +1691,7 @@ fn keyed_map_subtype(
             .filter(|a_field| !b_by_name.contains_key(a_field.name.as_str()))
             .all(|a_field| {
                 db.iter().any(|clause| {
-                    matches!(clause.key, Schema::Str | Schema::Anything)
+                    matches!(clause.key, Schema::Str | Schema::Anything(_))
                         && a_field
                             .schema
                             .is_subtype_rec(&clause.value, cx, assumptions)
@@ -2139,7 +2139,7 @@ mod tests {
     #[test]
     fn every_set_is_below_the_universe_however_it_is_spelled() {
         let bare = Schema::Refine {
-            base: Box::new(Schema::Anything),
+            base: Box::new(Schema::ANYTHING),
             constraints: Vec::new(),
         };
         // The complement of the universe is empty, which is the same fact read
@@ -2149,12 +2149,12 @@ mod tests {
         assert!(Schema::Complement(Box::new(bare.clone())).is_empty());
         assert!(!bare.is_empty(), "and the universe itself is not");
 
-        for universe in [Schema::Anything, bare.clone(), Schema::Union(vec![bare])] {
+        for universe in [Schema::ANYTHING, bare.clone(), Schema::Union(vec![bare])] {
             for sub in [
-                Schema::Dynamic,
-                Schema::Anything,
+                Schema::ANY,
+                Schema::ANYTHING,
                 Schema::Int,
-                Schema::Union(vec![Schema::Dynamic, Schema::Anything]),
+                Schema::Union(vec![Schema::ANY, Schema::ANYTHING]),
             ] {
                 assert!(
                     sub.is_subtype_of(&universe),
@@ -2362,6 +2362,33 @@ mod tests {
         }
     }
 
+    /// A reference is refused by the fold whatever it stands for. The law asks
+    /// `A` twice, and a back edge is not a set until it is unfolded -- which the
+    /// syntactic fold does not do, and which a self-reference has not yet been
+    /// resolved enough to allow.
+    #[test]
+    fn a_reference_is_not_a_set_the_fold_may_cancel() {
+        for reference in [Schema::Ref(DefIx::new(0)), Schema::SelfRef(0)] {
+            assert!(
+                !denotes_a_set(&reference, &NoLeafRelations),
+                "{reference:?}"
+            );
+            // Nested, so a reference reached through a constructor refuses too.
+            let nested = Schema::Set(Box::new(reference.clone()));
+            assert!(!denotes_a_set(&nested, &NoLeafRelations));
+            // And the constructors decline the two cancelling laws for it.
+            let not = |s: Schema| Schema::Complement(Box::new(s));
+            assert_ne!(
+                Schema::union([reference.clone(), not(reference.clone())]),
+                Schema::ANYTHING
+            );
+            assert_ne!(
+                Schema::meet([reference.clone(), not(reference)]),
+                Schema::Nothing
+            );
+        }
+    }
+
     /// A class is referred to the oracle, and a core with none declines it.
     ///
     /// The default answers nothing, which is what makes an unwired core
@@ -2420,7 +2447,7 @@ mod tests {
     /// their propagation through every combinator are exercised.
     fn schema() -> impl Strategy<Value = Schema> {
         let leaf = prop_oneof![
-            Just(Schema::Anything),
+            Just(Schema::ANYTHING),
             Just(Schema::Nothing),
             Just(Schema::NoneType),
             Just(Schema::Bool),
@@ -2428,7 +2455,7 @@ mod tests {
             Just(Schema::Float),
             Just(Schema::Str),
             Just(Schema::Bytes),
-            Just(Schema::Dynamic),
+            Just(Schema::ANY),
             Just(Schema::Literal(ConstIx::new(0))),
             Just(Schema::Set(Box::new(Schema::Int))),
         ];
@@ -2531,8 +2558,10 @@ mod tests {
         let a = list(Schema::Int);
         assert!(Schema::Intersection(vec![a.clone(), not(a)]).is_empty());
 
-        // The gradual `Any` is exempt: `Any ∩ ¬Any` is not empty.
-        assert!(!Schema::Intersection(vec![Schema::Dynamic, not(Schema::Dynamic)]).is_empty());
+        // `Any` is the top, spelled, so it obeys the law the top obeys: the
+        // spelling is not a set and no rule reads it.
+        assert!(Schema::Intersection(vec![Schema::ANY, not(Schema::ANY)]).is_empty());
+        assert!(Schema::Intersection(vec![Schema::ANY, not(Schema::ANYTHING)]).is_empty());
 
         // Disjoint structural kinds: a list is never a set.
         assert!(
@@ -2635,7 +2664,7 @@ mod tests {
             fields,
             defaults: vec![MapClause {
                 key: Schema::Str,
-                value: Schema::Anything,
+                value: Schema::ANYTHING,
             }],
         }
     }
@@ -2681,7 +2710,7 @@ mod tests {
         // the same walk reading the field list the other way.
         assert!(!meet_is_empty(&[
             closed(vec![field("a", Schema::Int, true)]),
-            closed(vec![field("a", Schema::Anything, true)]),
+            closed(vec![field("a", Schema::ANYTHING, true)]),
         ]));
 
         // Footnote 11: only a REQUIRED key can empty a meet. Two optional fields
@@ -3157,13 +3186,13 @@ mod tests {
             Schema::Complement(Box::new(Schema::Int)),
             Schema::Complement(Box::new(Schema::Str)),
         ]);
-        assert_eq!(disjoint.simplify(), Schema::Anything);
+        assert_eq!(disjoint.simplify(), Schema::ANYTHING);
         // bool is a subtype of int, so int and bool overlap and their complements
         // do not cover the universe.
         let overlapping = Schema::Union(vec![
             Schema::Complement(Box::new(Schema::Int)),
             Schema::Complement(Box::new(Schema::Bool)),
         ]);
-        assert_ne!(overlapping.simplify(), Schema::Anything);
+        assert_ne!(overlapping.simplify(), Schema::ANYTHING);
     }
 }

@@ -45,8 +45,8 @@ non-empty and pairwise disjoint, because either half alone is satisfied by a
 region that collapsed to nothing.
 
 Off that fragment a schema's region is `None` — opaque — and every combination
-containing one is opaque too. The gradual `Dynamic`, literals, instances,
-refinements, content-bearing containers and references are all opaque.
+containing one is opaque too. Literals, instances, refinements,
+content-bearing containers and references are all opaque.
 
 ## What the core cannot decide alone
 
@@ -110,7 +110,7 @@ is how this held a gap for months while every instrument stayed green — the
 fuzzer asserted `Nothing ≤ b` with the atom hardcoded on the left, the property
 suite examined only the consequences of a `true`, and the region check upstream
 decides a scalar right-hand side correctly, so the difference was invisible
-unless the other side was a container, a record, an instance or the gradual atom.
+unless the other side was a container, a record or an instance.
 
 Both laws are now stated over the property, in the fuzz targets and in the core
 property suite, and the enumerated cases are in the completeness ledger.
