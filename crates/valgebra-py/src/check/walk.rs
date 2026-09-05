@@ -185,7 +185,7 @@ pub(crate) fn member(
         return false;
     };
     match schema {
-        Schema::Anything | Schema::Dynamic => true,
+        Schema::Anything(_) => true,
         // Bottom admits nothing; an unresolved self-reference is never a member.
         Schema::Nothing => admit(false, schema, value, path, ctx, out),
         Schema::SelfRef(_) => {
@@ -1796,7 +1796,7 @@ mod interpreter {
         Python::attach(|py| {
             let value = PyDict::new(py);
             let state = WalkState::new();
-            let index = build_index(py, &Schema::Anything, &[], &[]);
+            let index = build_index(py, &Schema::ANYTHING, &[], &[]);
             let ctx = |mode| Ctx {
                 pool: &[],
                 defs: &[],
@@ -2027,10 +2027,12 @@ mod interpreter {
                 }
             }
 
-            // The lattice bounds and the gradual atom, over the same column set.
+            // The lattice bounds, over the same column set. The top is checked
+            // in both spellings: one node admits every value whichever way the
+            // user wrote it.
             for value in values {
-                case(py, &Schema::Anything, value, true);
-                case(py, &Schema::Dynamic, value, true);
+                case(py, &Schema::ANYTHING, value, true);
+                case(py, &Schema::ANY, value, true);
                 case(py, &Schema::Nothing, value, false);
                 // A self-reference never survives compilation, and is never a
                 // member if one is reached anyway.
@@ -3030,7 +3032,7 @@ mod interpreter {
             // The same split at a length bound, which reaches the value through
             // `__len__` rather than `__eq__`.
             let sized = Schema::Refine {
-                base: Box::new(Schema::Anything),
+                base: Box::new(Schema::ANYTHING),
                 constraints: vec![Constraint::MinLen(1)],
             };
             let no_len = module.getattr("NoLen").expect("NoLen").call0().expect("()");

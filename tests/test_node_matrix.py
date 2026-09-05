@@ -174,7 +174,9 @@ _IR_SOURCE = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
 
 # Labels whose node kind is not their own name, and the one variant with no row.
 _LABEL_TO_VARIANT = {
-    "Any": "Dynamic",  # the gradual dynamic type; `typing.Any` is its spelling
+    # `typing.Any` is a spelling of the top, not a node of its own: it compiles
+    # to `Anything` carrying the spelling `repr` gives back.
+    "Any": "Anything",
     # A class with declared attributes compiles to `Instance ∧ AttrRecord`, so the
     # row exercises both variants and is named for the one only it reaches.
     "Object": "AttrRecord",

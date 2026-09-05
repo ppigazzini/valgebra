@@ -248,12 +248,6 @@ def _survey() -> tuple[dict[str, str], list[str], int, int]:
         for name_b, b in SCHEMAS:
             if name_a == name_b:
                 continue
-            # The gradual atom is deliberately never decided as a supertype: it
-            # admits everything at runtime and is a distinct atom to the algebra,
-            # so `X <= Any` staying conservative is the documented policy rather
-            # than a gap. It stays in the universe on the *subtype* side.
-            if name_b == "Any":
-                continue
             relation = f"{name_a} <= {name_b}"
             witness = memberships[name_a] - memberships[name_b]
             if a.is_subtype_of(b):

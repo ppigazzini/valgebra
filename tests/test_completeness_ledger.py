@@ -30,6 +30,7 @@ import dataclasses
 import enum
 from typing import (
     Annotated,
+    Any,
     ClassVar,
     Final,
     Literal,
@@ -48,6 +49,7 @@ from hypothesis import strategies as st
 from valgebra import (
     Regex,
     Validator,
+    anything,
     complement,
     intersection,
     nothing,
@@ -157,6 +159,16 @@ _DECIDED = [
         "subtype", [bool, int, ...], [int, int, ...], id="[bool,int,...]<=[int,int,...]"
     ),
     pytest.param("empty", intersection(int, str), None, id="empty:int&str"),
+    # `Any` is the top, spelled: the same node as `anything`, so every relation
+    # the top decides it decides too. The spelling is not a set, and no rule can
+    # read it.
+    pytest.param("equivalent", Any, anything, id="Any==anything"),
+    pytest.param("subtype", int, Any, id="int<=Any"),
+    pytest.param("subtype", list[int], list[Any], id="list[int]<=list[Any]"),
+    pytest.param(
+        "empty", intersection(Any, complement(Any)), None, id="empty:Any&~Any"
+    ),
+    pytest.param("empty", complement(Any), None, id="empty:~Any"),
     # A union on the right is tried branch by branch, which is lossy: it commits
     # to one branch. Where the subject is one a left-side rule reduces -- a
     # reference to its definition, a refinement to its base -- both rules are

@@ -36,10 +36,9 @@ conservative](#sound-but-conservative)).
 - **Complement and disjointness across kinds.** An intersection that carries a
   schema together with its complement (`A & ~A`), or two members of provably
   disjoint kinds (a list and a set, an `int` and a `str`), is empty — for the
-  structural kinds, not only the scalars. The gradual `Any` is exempt from the
-  rule: `intersection(Any, complement(Any))` is not *decided* empty, because
-  `Any` is held as an atom rather than as the set it admits. At runtime it admits
-  nothing, so the set is empty and the procedure declines to say so.
+  structural kinds, not only the scalars. `Any` is the top, spelled, so the rule
+  reaches it like any other set: `intersection(Any, complement(Any))` is decided
+  empty.
 - **Class and literal inclusion.** A class is a subtype of its base *classes*,
   by `issubclass`, and a literal is a subtype of any schema it is a member of. A
   dataclass or named tuple relates the same way: its schema is below one over a
@@ -106,12 +105,11 @@ conservative](#sound-but-conservative)).
   schema is built. So `complement(complement(int))` **is** `int` — one schema,
   which `repr` and `==` report and which a comparison is never asked about — a
   union covering the universe **is** `anything`, and a meet cancelling to
-  nothing **is** `nothing`. A predicate and a hooked class are exempt as well as
-  `Any`: the law holds of sets, and neither is one.
+  nothing **is** `nothing`. A predicate and a hooked class are exempt: the law
+  holds of sets, and neither is one.
   The decision procedure has no rule for either shape and never meets one built
   this way. A shape the fold does not reach is a different matter and is
-  conservative (below). `Any` is exempt: it is an atom, not a set whose
-  complement completes it.
+  conservative (below).
 
 ```python
 from typing import Annotated, Any
@@ -155,9 +153,9 @@ assert intersection(
 assert intersection(
     list[int], set[int]
 ).is_empty()  # disjoint kinds: a list is never a set
-assert not intersection(
+assert intersection(
     Any, complement(Any)
-).is_empty()  # Any is exempt from the complement law
+).is_empty()  # Any is the top, spelled, so the law reaches it
 
 json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
 assert json_value.is_valid({"a": [1, "x", {"b": None}]})

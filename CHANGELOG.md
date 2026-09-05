@@ -6,6 +6,25 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **`typing.Any` is the lattice top.** It denotes what it always admitted —
+  every value — and it is now the same schema as `anything`, so every law and
+  every relation reaches it: `Validator(Any) == Validator(anything)`,
+  `complement(Any).simplify()` is `nothing`, `intersection(Any,
+  complement(Any))` is decided empty, and `int` is decided below `Any`. A
+  gradual type is held apart from the top for a second question, consistency at
+  the boundary between typed and untyped code, which a validator has no site for
+  and never asked. What is kept is the spelling: `repr(Validator(Any))` is still
+  `Any`, and `repr(Validator(anything))` is still `anything`. The spelling is
+  not part of the set, so two schemas differing only in it are equal and nothing
+  decides anything by it.
+
+  Code that read `intersection(Any, complement(Any)).is_empty()` as `False`, or
+  `Validator(Any).is_equivalent(anything)` as `False`, now sees the opposite.
+  Membership is unchanged: `Any` admitted every value before and admits every
+  value now.
+
 ### Added
 
 - A class with declared attributes is the meet of its `isinstance` atom and a

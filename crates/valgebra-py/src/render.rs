@@ -4,7 +4,7 @@ use std::cell::RefCell;
 
 use pyo3::prelude::*;
 use rustc_hash::FxHashSet;
-use valgebra_core::{Constraint, DefIx, Field, MapClause, Schema, SeqKind};
+use valgebra_core::{Constraint, DefIx, Field, MapClause, Schema, SeqKind, Spelling};
 
 use crate::errors::{class_label, summarize};
 
@@ -37,8 +37,10 @@ pub(crate) fn render(
     }
     let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
     match schema {
-        Schema::Anything => "anything".to_owned(),
-        Schema::Dynamic => "Any".to_owned(),
+        // The one place the spelling is read: `typing.Any` and `anything` are
+        // the same set and the same node, and this gives back what was written.
+        Schema::Anything(Spelling::Any) => "Any".to_owned(),
+        Schema::Anything(Spelling::Top) => "anything".to_owned(),
         Schema::Nothing => "nothing".to_owned(),
         Schema::NoneType => "None".to_owned(),
         Schema::Bool => "bool".to_owned(),

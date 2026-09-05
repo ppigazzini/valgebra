@@ -63,16 +63,25 @@ The same line of work models the structural forms valgebra uses:
   plus key-schema-keyed default clauses — the set-theoretic model of records and
   maps as quasi-constant functions.
 
-## Gradual `Any` versus the lattice top
+## `Any` is the top, spelled
 
-`Any` (the gradual dynamic type) and `anything` (the lattice top) both admit
-every value at runtime, but they are different objects in the algebra. `anything`
-obeys the laws — `complement(anything)` denotes `nothing`, and is decided equal
-to it. `Any` is the **gradual**
-dynamic type: an atom the simplifier never rewrites, so `intersection(Any, s)` is
-not collapsed and "deliberately unchecked" stays distinct from "checked: all
-values admitted". This follows the treatment of the gradual `?` under union and
-intersection types, where the dynamic type is an interval, not the top.
+`Any` and `anything` are the same set — every Python value — and the same node.
+The algebra reads the top for both, and every law that holds of one holds of the
+other: `complement(Any)` denotes `nothing`, and `intersection(Any,
+complement(Any))` is decided empty.
+
+Gradual typing holds the dynamic type apart from the top, and does so for a
+question this library does not ask. A static checker asks *consistency* at every
+site where a value crosses between typed and untyped code, and for that question
+the dynamic type is an interval rather than a point. A validator asks one
+question — does this value belong — and to it `Any` answers yes for every value.
+Holding an atom apart for a question nobody asks costs a decision that disagrees
+with the walk, which has always admitted every value under `Any`.
+
+What is left of the distinction is the spelling, and the schema keeps it:
+`repr(Validator(Any))` is `Any` and `repr(Validator(anything))` is `anything`.
+The spelling is not part of the set — two schemas differing only in it are equal
+— so nothing decides anything by it.
 
 ## What the algebra decides, and the conservative frontier
 
@@ -87,10 +96,11 @@ directly by the walk, not by reducing the schema. So the simplifier implements
 the **soundly decidable fragment** and is honest about the rest:
 
 - **Folded by the simplifier.** The complement laws (`X ∩ ¬X = ⊥`,
-  `X ∪ ¬X = ⊤`) for any `X` except the gradual `Any`, and disjointness of the
-  scalar fragment. So `intersection(int, complement(int)).simplify()` is
-  `nothing` and `intersection(int, str).simplify()` is `nothing`. It never treats
-  `Any` as the top, so a deliberately-unchecked schema is preserved.
+  `X ∪ ¬X = ⊤`) for any `X` that is a set, and disjointness of the scalar
+  fragment. So `intersection(int, complement(int)).simplify()` is `nothing` and
+  `intersection(int, str).simplify()` is `nothing`. A predicate and a class with
+  an `isinstance` hook are the exceptions, because they answer by running code
+  and the law is about sets.
 - **Decided by the comparison operators.** `is_subtype_of`, `is_equivalent`, and
   `is_empty` decide a wider fragment than the simplifier folds — class and literal
   inclusion, refinements (including the emptiness of contradictory bounds like

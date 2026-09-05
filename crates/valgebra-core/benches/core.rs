@@ -25,7 +25,7 @@ fn boolean_corpus(depth: usize) -> Schema {
     for _ in 0..depth {
         node = Schema::Complement(Box::new(Schema::Intersection(vec![
             node.clone(),
-            Schema::Union(vec![Schema::Bool, Schema::Anything, node]),
+            Schema::Union(vec![Schema::Bool, Schema::ANYTHING, node]),
         ])));
     }
     node

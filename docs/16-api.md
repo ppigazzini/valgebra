@@ -63,9 +63,9 @@ is immutable, so the copy shares the pool rather than duplicating it.
 
 Both are ordinary validators: they compose with the combinators, compare with
 `is_subtype_of`, and appear as the reduced form the [simplifier](04-algebra.md)
-produces. `anything` is distinct from `Any`, which is the gradual atom and is
-exempt from the complement law; see the
-[decidability boundary](15-decidability.md).
+produces. `Any` is the same set and the same schema as `anything`, differing
+only in what `repr` gives back; see
+[`Any` versus `anything`](04-algebra.md#any-versus-anything).
 
 ```python
 from valgebra import Validator, anything, complement, intersection, nothing, union

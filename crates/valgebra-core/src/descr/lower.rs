@@ -107,7 +107,7 @@ pub fn lower(schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
 fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>) -> Option<Descr> {
     budget.set(budget.get().checked_sub(1)?);
     match schema {
-        Schema::Anything => Some(Descr::anything()),
+        Schema::Anything(_) => Some(Descr::anything()),
         Schema::Nothing => Some(Descr::nothing()),
         Schema::NoneType => Some(Descr::of_kind(Kind::NoneType)),
         Schema::Bool => Some(Descr::of_kind(Kind::Bool)),
@@ -135,12 +135,10 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>) -> Option<
         Schema::Complement(inner) => Some(descend(inner, pool, budget)?.complement()),
         Schema::Refine { base, constraints } => refine(base, constraints, pool, budget),
         // No component to land in, or none that would mean what the schema does.
-        // `Dynamic` is the gradual type and not the top, a dict has no map
-        // component yet, an attribute record beside a builtin kind wants a
-        // descriptor that is a union of lines, and a reference is a cycle a
-        // finite descriptor has no room for.
-        Schema::Dynamic
-        | Schema::KeyedMap { .. }
+        // A dict has no map component yet, an attribute record beside a builtin
+        // kind wants a descriptor that is a union of lines, and a reference is a
+        // cycle a finite descriptor has no room for.
+        Schema::KeyedMap { .. }
         | Schema::Instance(_)
         | Schema::AttrRecord { .. }
         | Schema::Ref(_)
@@ -315,7 +313,7 @@ mod tests {
         let pool = empty_pool();
         let leaf = |schema| lower(&schema, &pool).expect("a leaf lowers");
 
-        assert_eq!(leaf(Schema::Anything), Descr::anything());
+        assert_eq!(leaf(Schema::ANYTHING), Descr::anything());
         assert_eq!(leaf(Schema::Nothing), Descr::nothing());
         assert_eq!(leaf(Schema::Float), Descr::of_kind(Kind::Float));
         assert_eq!(leaf(Schema::Str), Descr::of_kind(Kind::Str));
@@ -477,7 +475,7 @@ mod tests {
             },
         };
         vec![
-            Schema::Anything,
+            Schema::ANYTHING,
             Schema::Nothing,
             Schema::NoneType,
             Schema::Bool,
@@ -669,7 +667,7 @@ mod tests {
         assert!(
             lower(
                 &Schema::Refine {
-                    base: Box::new(Schema::Anything),
+                    base: Box::new(Schema::ANYTHING),
                     constraints: vec![Constraint::MinLen(0)],
                 },
                 &pool,
@@ -737,14 +735,13 @@ mod tests {
     /// The map is partial, and it refuses rather than approximating.
     ///
     /// Each of these has no component to land in, or none that would mean what
-    /// the schema does: the gradual type is not the top, a dict has no map
-    /// component, an attribute record beside a builtin kind wants a descriptor
-    /// that is a union of lines, and a reference is a cycle.
+    /// the schema does: a dict has no map component, an attribute record beside
+    /// a builtin kind wants a descriptor that is a union of lines, and a
+    /// reference is a cycle.
     #[test]
     fn the_forms_with_nowhere_to_land_refuse() {
         let pool = empty_pool();
         for schema in [
-            Schema::Dynamic,
             Schema::KeyedMap {
                 fields: Vec::new(),
                 defaults: Vec::new(),
@@ -755,7 +752,16 @@ mod tests {
         }
         // A refusal inside a form refuses the whole form rather than dropping
         // the part it could not read.
-        assert!(lower(&Schema::Union(vec![Schema::Str, Schema::Dynamic]), &pool).is_none());
+        assert!(
+            lower(
+                &Schema::Union(vec![Schema::Str, Schema::Ref(crate::ir::DefIx::new(0))]),
+                &pool
+            )
+            .is_none()
+        );
+        // `Any` is the top, spelled, so it lowers to the top rather than
+        // refusing: the spelling is not a set and the descriptor holds sets.
+        assert_eq!(lower(&Schema::ANY, &pool), Some(Descr::anything()));
     }
 
     /// An operand the pool cannot read refuses the constraint that names it.

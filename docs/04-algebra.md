@@ -392,28 +392,29 @@ conservative, and what is undecidable at runtime; see the
 
 ## `Any` versus `anything`
 
-Both admit every value at runtime, but they are different in the algebra:
-
-- `anything` is the lattice **top**. It obeys the laws —
-  `complement(anything)` denotes `nothing`, `intersection(anything, s)` denotes
-  `s`.
-- `Any` is the gradual dynamic type, an **atom** the simplifier never rewrites.
-  Membership does not distinguish the two: `Any` admits every value, so
-  `complement(Any)` admits none and `intersection(Any, complement(Any))` denotes
-  the empty set. What differs is the *algebra*, which holds `Any` as an atom and
-  so does not decide those — a difference the decision reports as "not proven",
-  never as a different set.
+They denote the same set — every value — and they are the same schema. What
+differs is what `repr` gives back.
 
 ```python
 from typing import Any
 
-from valgebra import Validator, anything, complement
+from valgebra import Validator, anything, complement, intersection
 
-assert repr(complement(anything).simplify()) == "nothing"
-assert repr(Validator(Any).simplify()) == "Any"  # left untouched
+assert Validator(Any) == Validator(anything)
+assert repr(Validator(Any)) == "Any"
+assert repr(Validator(anything)) == "anything"
+assert repr(complement(Any).simplify()) == "nothing"
+assert intersection(Any, complement(Any)).is_empty()
 ```
 
-This keeps "checked: every value is admitted" (`anything`) distinct from
-"deliberately not checked" (`Any`) in the schema a reader sees, at the price of
-relations the procedure declines rather than decides
+The lattice laws therefore reach `Any` like any other set: `complement(Any)`
+denotes `nothing`, and a meet of `Any` with its complement is decided empty.
+
+A static type checker holds `Any` apart from the top, and for a reason that does
+not apply here: it asks a second question, *consistency*, at every site where a
+value crosses between typed and untyped code. A validator asks one question —
+does this value belong — and to it `Any` answers yes for every value, which is
+what the walk has always done. Writing `Any` still says something to a reader,
+and the schema keeps it: it is a spelling, not a set, so two schemas that differ
+only in it are equal and nothing decides anything by it
 ([the boundary](15-decidability.md)).

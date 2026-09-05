@@ -139,6 +139,54 @@ macro_rules! pool_index {
     };
 }
 
+/// How the top was written, kept so `repr` can give it back.
+///
+/// `typing.Any` and `anything` denote the same set — every Python value — and
+/// one node holds both. A gradual type is an atom apart from the top for a
+/// *second* question, consistency, which a static checker asks at every site
+/// where a value crosses between typed and untyped code; a validator has no
+/// such site and never asks it (`docs/dev/01-schema-ir.md`, "What `Any` is").
+/// What is left is a spelling, and a spelling is worth giving back.
+///
+/// **It is not part of the set.** `PartialEq`, `Ord` and `Hash` are written by
+/// hand so every spelling compares and hashes alike, which is what keeps the
+/// flag out of the algebra: every rule that keys on equality, ordering or a
+/// hash — which is every rule here — is looking at two values it cannot tell
+/// apart. A direct `match` on the payload still can, and that is the one thing
+/// this type cannot stop; nothing in this crate does it, `render` in the
+/// bindings does, and it is the only thing that may.
+#[derive(Debug, Clone, Copy)]
+pub enum Spelling {
+    /// `anything`, the lattice top written as itself.
+    Top,
+    /// `typing.Any`.
+    Any,
+}
+
+impl PartialEq for Spelling {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for Spelling {}
+
+impl PartialOrd for Spelling {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Spelling {
+    fn cmp(&self, _: &Self) -> core::cmp::Ordering {
+        core::cmp::Ordering::Equal
+    }
+}
+
+impl core::hash::Hash for Spelling {
+    fn hash<H: core::hash::Hasher>(&self, _: &mut H) {}
+}
+
 pool_index!(
     /// The pool slot holding a [`Schema::Literal`]'s constant.
     ConstIx,
@@ -332,14 +380,10 @@ pub enum PathSegment {
 /// walk.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Schema {
-    /// Top. Denotes every Python value; membership always holds.
-    Anything,
-    /// The gradual dynamic type (the user spells it `typing.Any`). At runtime it
-    /// admits every value like the top, but it is a distinct atom: the simplifier
-    /// must not rewrite it by the lattice laws, so `Dynamic` and
-    /// [`Schema::Anything`] are kept separate. Named for the gradual-typing
-    /// term (Siek-Taha; ty's `Dynamic`), not the Python surface spelling.
-    Dynamic,
+    /// Top. Denotes every Python value; membership always holds. The payload
+    /// records how the top was written and is read by `repr` alone
+    /// ([`Spelling`]).
+    Anything(Spelling),
     /// Bottom. Denotes the empty set; membership never holds.
     Nothing,
     /// Denotes the singleton set `{None}`.
@@ -582,7 +626,7 @@ impl Schema {
         // read, which is the safe direction: a join left unfolded still denotes
         // what it denotes.
         if crate::decision::has_complementary_pair(&members, &crate::decision::NoLeafRelations) {
-            return Schema::Anything;
+            return Schema::ANYTHING;
         }
         Schema::Union(members)
     }
@@ -594,7 +638,7 @@ impl Schema {
     pub fn meet(members: impl IntoIterator<Item = Schema>) -> Schema {
         let members: Vec<Schema> = members.into_iter().collect();
         if members.is_empty() {
-            return Schema::Anything;
+            return Schema::ANYTHING;
         }
         // The dual of the fold in [`union`](Self::union), and the same law read
         // the other way: a meet carrying a schema together with its complement
@@ -735,8 +779,8 @@ impl MapClause {
     #[must_use]
     pub fn top() -> MapClause {
         MapClause {
-            key: Schema::Anything,
-            value: Schema::Anything,
+            key: Schema::ANYTHING,
+            value: Schema::ANYTHING,
         }
     }
 
@@ -777,6 +821,13 @@ impl Field {
 }
 
 impl Schema {
+    /// The top, written as itself.
+    pub const ANYTHING: Schema = Schema::Anything(Spelling::Top);
+    /// The top, as the user wrote `typing.Any`. The same set as
+    /// [`ANYTHING`](Self::ANYTHING), and equal to it; the two differ only in
+    /// what `repr` gives back.
+    pub const ANY: Schema = Schema::Anything(Spelling::Any);
+
     /// The class of an object schema, when this node is one: a meet carrying
     /// exactly one `isinstance` atom beside exactly one attribute record.
     ///
@@ -810,8 +861,7 @@ impl Schema {
     #[must_use]
     pub fn expected(&self) -> &'static str {
         match self {
-            Schema::Anything => "anything",
-            Schema::Dynamic => "any",
+            Schema::Anything(_) => "anything",
             Schema::Nothing => "nothing",
             Schema::NoneType => "None",
             Schema::Bool => "bool",
@@ -851,8 +901,7 @@ impl Schema {
     pub fn error_code(&self) -> &'static str {
         match self {
             // Anything and Any never fail; the codes are for completeness.
-            Schema::Anything => "anything",
-            Schema::Dynamic => "any",
+            Schema::Anything(_) => "anything",
             Schema::Nothing => "no_match",
             Schema::NoneType => "none_type",
             Schema::Bool => "bool_type",
@@ -904,8 +953,7 @@ impl Schema {
     pub(crate) fn map_children(&self, f: &impl Fn(&Schema) -> Schema) -> Schema {
         let field = |field: &Field| field.map_schema(f);
         match self {
-            Schema::Anything
-            | Schema::Dynamic
+            Schema::Anything(_)
             | Schema::Nothing
             | Schema::NoneType
             | Schema::Bool
@@ -965,8 +1013,7 @@ impl Schema {
             // No payload of its own: descend, and let the child set live in one
             // place. Spelled out rather than caught by `_` so a new variant with
             // an index cannot arrive here silently.
-            Schema::Anything
-            | Schema::Dynamic
+            Schema::Anything(_)
             | Schema::Nothing
             | Schema::NoneType
             | Schema::Bool
@@ -1007,8 +1054,7 @@ impl Schema {
     /// difference; a test holds the two together.
     pub(crate) fn children(&self) -> Box<dyn Iterator<Item = &Schema> + '_> {
         match self {
-            Schema::Anything
-            | Schema::Dynamic
+            Schema::Anything(_)
             | Schema::Nothing
             | Schema::NoneType
             | Schema::Bool
@@ -1125,8 +1171,7 @@ impl Schema {
             | Schema::FrozenSet(_)
             | Schema::KeyedMap { .. }
             | Schema::AttrRecord { .. } => Guarded::Yes,
-            Schema::Anything
-            | Schema::Dynamic
+            Schema::Anything(_)
             | Schema::Nothing
             | Schema::NoneType
             | Schema::Bool

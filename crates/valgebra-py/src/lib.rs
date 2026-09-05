@@ -190,7 +190,7 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(complement, module)?)?;
     module.add_function(wrap_pyfunction!(recursive, module)?)?;
     // The lattice bounds: top admits every value, bottom admits none.
-    module.add("anything", atom(py, Schema::Anything)?)?;
+    module.add("anything", atom(py, Schema::ANYTHING)?)?;
     module.add("nothing", atom(py, Schema::Nothing)?)?;
     // The construction bounds, published so a caller can size its schemas and a
     // test can assert rejection at the exact edge rather than a hard-coded guess.
