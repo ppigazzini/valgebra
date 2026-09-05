@@ -8,6 +8,16 @@ All notable changes to valgebra are recorded here. The format follows
 
 ### Changed
 
+- **A map key schema narrowed by a constraint is refused where it is written.**
+  A clause's key says which keys it governs, and that must be a type — `str`,
+  `int`, a union of them — or a `Literal`, which names the keys one by one.
+  `{Annotated[str, MinLen(2)]: int}` and `dict[Annotated[int, Ge(0)], str]` now
+  raise at construction. A narrowed key names *part* of a type, and two such
+  clauses can overlap without either containing the other, which is a question
+  this map model does not answer the same way twice. To constrain the keys
+  themselves, check them beside the mapping rather than inside it. Keys that name
+  a whole type are unaffected, `dict[tuple[int, int], V]` included.
+
 - **`typing.Any` is the lattice top.** It denotes what it always admitted —
   every value — and it is now the same schema as `anything`, so every law and
   every relation reaches it: `Validator(Any) == Validator(anything)`,

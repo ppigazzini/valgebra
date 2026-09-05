@@ -377,6 +377,33 @@ assert extensible.is_valid({"name": "Ada", "age": 36})
 assert not extensible.is_valid({"name": "Ada", "age": "old"})
 ```
 
+### A key schema names whole types, not narrowed ones
+
+A clause's key says which keys it governs, and that must be a **type** —
+`str`, `int`, a union of them, `Any` — or a `Literal`, which names the keys one
+by one. A key narrowed by a constraint is refused where it is written:
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+import pytest
+
+from valgebra import Validator
+
+with pytest.raises(NotImplementedError):
+    Validator({Annotated[str, at.MinLen(2)]: int})
+
+# The two spellings that remain: every key of a type, or one key by name.
+assert Validator(dict[str, int]).is_valid({"ab": 1})
+assert Validator({"ab": int}).is_valid({"ab": 1})
+```
+
+A narrowed key names *part* of a type, and two such clauses can overlap without
+either containing the other — which is a question this map model does not answer
+the same way twice. To constrain the keys themselves, check them beside the
+mapping rather than inside it.
+
 ### Constraining some keys and freeing the rest
 
 Because the clauses are a disjunction, a clause that matches every key subsumes

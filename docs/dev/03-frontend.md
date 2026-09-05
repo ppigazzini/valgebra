@@ -102,7 +102,7 @@ by object identity through an address-keyed map, so compiling a wide
 `Literal[...]` or merging many validators stays linear rather than quadratic. The
 address key is stable because every interned value is kept alive by the pool.
 
-## Two rejections that belong at compile time
+## Three rejections that belong at compile time
 
 **A typing construct that carries no runtime value** — a `TypeVar`, a
 `ParamSpec`, a bare `Final` or `ClassVar` — is refused rather than interned as a
@@ -112,6 +112,16 @@ instead of a compile error.
 
 **A zero divisor.** `MultipleOf(0)` is unsatisfiable and checking it would divide
 by zero at validation time, so the error is raised where the schema is built.
+
+**A map key narrowed by a constraint.** A clause's key says which keys it
+governs, and a map reads that as whole *kinds* of key or as the constants a
+`Literal` names. `Annotated[str, MinLen(2)]` is neither: it names part of a kind,
+and two such clauses can overlap without either containing the other. Overlapping
+key domains are a different theory from the one these maps are built on --
+Castagna's §4.5 says that with them "there would not be any difference between
+record types and an intersection of function types" -- and this library reads
+overlapping clauses disjunctively, which answers a question the two theories do
+not agree on. The narrowing is the one user-visible removal of the map work.
 
 The same principle governs the regex: the pattern is compiled and anchored at
 build time, so an invalid expression fails at construction rather than at first
