@@ -216,3 +216,56 @@ def test_refinement_failure_reports_the_path() -> None:
         Validator({"age": Annotated[int, at.Ge(0)]}).validate({"age": -1})
     assert info.value.code == "greater_than_equal"
     assert info.value.path == ("age",)
+
+
+class _LyingList(list):  # type: ignore[type-arg]
+    """A ``list`` whose ``__len__`` disagrees with what it holds."""
+
+    def __len__(self) -> int:
+        return 10
+
+
+class _LyingTuple(tuple):  # type: ignore[type-arg]
+    """The same, for a ``tuple``."""
+
+    __slots__ = ()
+
+    def __len__(self) -> int:
+        return 10
+
+
+def test_a_sequence_length_is_what_the_value_holds() -> None:
+    """A value has one length, and for a sequence it is the storage.
+
+    A ``list`` subclass may override ``__len__`` and say anything. The sequence
+    walk counts what the value holds, so a length marker that believed
+    ``__len__`` instead would put the value in ``MinLen(5)`` and outside the
+    five-element shape though both were written to mean one narrowing. A
+    membership that depends on which half of a schema asks is not a set.
+    """
+    one_item = _LyingList([1])
+    assert list.__len__(one_item) == 1, "it holds one"
+    assert len(one_item) == 10, "and reports ten"
+
+    assert not Validator(Annotated[list[int], at.MinLen(5)]).is_valid(one_item)
+    assert Validator(Annotated[list[int], at.MaxLen(2)]).is_valid(one_item)
+    assert Validator(Annotated[list[int], at.MinLen(1)]).is_valid(one_item)
+    # The shape counts the same items, which is the agreement the rule is for.
+    assert Validator([int]).is_valid(one_item)
+
+    assert not Validator(Annotated[tuple[int, ...], at.MinLen(5)]).is_valid(
+        _LyingTuple((1,))
+    )
+
+
+def test_every_other_kind_still_answers_with_its_dunder() -> None:
+    """The rule is one length per value, not distrust of ``__len__``.
+
+    A ``str``, ``bytes``, ``set`` and ``dict`` are read through ``__len__`` by
+    the rest of the walk too, so that is their length and nothing changes.
+    """
+    assert Validator(Annotated[str, at.MinLen(5)]).is_valid("abcdef")
+    assert not Validator(Annotated[str, at.MinLen(5)]).is_valid("ab")
+    assert Validator(Annotated[bytes, at.MaxLen(2)]).is_valid(b"ab")
+    assert Validator(Annotated[set[int], at.MinLen(2)]).is_valid({1, 2})
+    assert Validator(Annotated[dict[str, int], at.MinLen(2)]).is_valid({"a": 1, "b": 2})

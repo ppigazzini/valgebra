@@ -61,8 +61,8 @@ is one `is_subtype_of` pays for.
 | `Gt(n)` | `value > n` | `greater_than` |
 | `Le(n)` | `value <= n` | `less_than_equal` |
 | `Lt(n)` | `value < n` | `less_than` |
-| `MinLen(n)` | `len(value) >= n` | `too_short` |
-| `MaxLen(n)` | `len(value) <= n` | `too_long` |
+| `MinLen(n)` | the value's length is `>= n` | `too_short` |
+| `MaxLen(n)` | the value's length is `<= n` | `too_long` |
 | `MultipleOf(n)` | `value % n == 0` | `multiple_of` |
 | `Regex(p)` | the string fully matches the regex `p` | `string_pattern_mismatch` |
 | `Predicate(f)` | `f(value)` is truthy | `predicate_failed` |
@@ -72,6 +72,16 @@ predicate. A marker from `annotated_types` that is **not** in this table names a
 constraint valgebra does not check — `Timezone` and `Unit` are the two — and is
 refused when the validator is built rather than ignored: ignoring it would leave
 a schema that admits exactly the values the marker was written to exclude.
+
+**A value has one length.** For a `list` and a `tuple` it is the number of
+elements the value *holds* — the same number a sequence schema counts when it
+walks them. For everything else it is `__len__`, which is how a `str`, `bytes`,
+`set` and `dict` are read anyway. The distinction is visible only for a `list` or
+`tuple` subclass that overrides `__len__`: its `MinLen` is measured against what
+it stores, not against what it reports, so `Annotated[list[int], MinLen(5)]` and
+the shape `[int, int, int, int, int]` narrow by the same count. A length two
+parts of one schema disagreed about would not be a property of the value, and a
+set defined by one would not be a set.
 
 A constraint must also be one the base can answer. Asking an `int` for its length
 raises, and a raise reads as a non-member, so `Annotated[int, MinLen(1)]` would
