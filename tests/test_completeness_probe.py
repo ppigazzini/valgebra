@@ -193,6 +193,13 @@ ACCEPTED: dict[str, str] = {
         "compares a pooled constant to a name."
     ),
     "{a:int} <= dict[Lit['a','b'],int]": "As above, with the key a union of literals.",
+    "str&Regex['a'] <= str&Regex['ab?']": (
+        "A regex is opaque to `constraint_entailed`, which gives it no value "
+        "entailment, so a refinement relates through one only when the supertype "
+        "carries it verbatim. Inclusion of one regular language in another is "
+        "decidable, so the route is a language comparison over the two pooled "
+        "patterns rather than equality of them."
+    ),
     "str&Regex['a'] <= Lit['a']": (
         "The same opacity read the other way: deciding it means computing that "
         "the pattern's language is the singleton the literal denotes, and the "

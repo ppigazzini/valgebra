@@ -1,7 +1,6 @@
 //! The decision procedures over the IR: emptiness, subtyping, equivalence, and
 //! disjointness, with the leaf-relation oracle and the scalar region partition.
 
-use crate::descr::lower::{NoConstants, lower};
 use crate::ir::{
     ClassIx, ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
 };
@@ -128,6 +127,14 @@ impl Regions {
     pub(crate) const MEET_UNIT: Regions = Regions::Known(Region::ALL);
 
     /// Every region in either set, opaque if either side is.
+    ///
+    /// A member naming every region would settle a union whatever the others
+    /// are, and saying so here was tried: it makes the two folds that walk a
+    /// union disagree, because one stops at the first opaque member and the
+    /// other does not. Reading on instead of stopping costs a recursive region
+    /// walk per member and half again the decision budget. So the accumulator
+    /// stays opaque once any member is, and a universe spelled with an opaque
+    /// member beside `Anything` is left undecided rather than paid for.
     pub(crate) fn union(self, other: Regions) -> Regions {
         match (self, other) {
             (Regions::Known(a), Regions::Known(b)) => Regions::Known(a.union(b)),
@@ -136,6 +143,8 @@ impl Regions {
     }
 
     /// Every region in both sets, opaque if either side is.
+    ///
+    /// Opaque for the same reason [`union`](Self::union) is.
     pub(crate) fn intersect(self, other: Regions) -> Regions {
         match (self, other) {
             (Regions::Known(a), Regions::Known(b)) => Regions::Known(a.intersect(b)),
@@ -145,6 +154,7 @@ impl Regions {
 
     /// Whether this value absorbs both operations, so no further member can
     /// change the result and a fold over them may stop here.
+    ///
     pub(crate) const fn is_absorbing(self) -> bool {
         matches!(self, Regions::Unknown)
     }
@@ -342,6 +352,13 @@ impl Schema {
                 Regions::Known(regions) => regions.complement(),
                 Regions::Unknown => return Regions::Unknown,
             },
+            // A refinement with no constraint denotes exactly its base, so it
+            // earns the base's regions. One with a constraint narrows, and a
+            // narrowed region set read back through a complement would report an
+            // inhabited schema empty -- which is why the rest are unknown.
+            Schema::Refine { base, constraints } if constraints.is_empty() => {
+                return base.region_set();
+            }
             _ => return Regions::Unknown,
         })
     }
@@ -370,7 +387,7 @@ impl Schema {
             &[],
             &mut Vec::new(),
             &Cell::new(DECISION_BUDGET),
-        ) || self.descriptor_is_empty()
+        )
     }
 
     /// Like [`is_empty`](Self::is_empty), but resolving recursive references
@@ -535,6 +552,19 @@ impl Schema {
             }
             // A refinement is a subset of its base: an empty base empties it, and
             // so does an unsatisfiable bound conjunction (decided by the oracle).
+            // A refinement with no constraint denotes exactly its base, so it
+            // earns the base's verdict *and* its regions. One with a constraint
+            // narrows, and a narrowed region set is an over-approximation whose
+            // complement would report an inhabited schema empty -- which is why
+            // every other refinement stays unknown.
+            //
+            // The two spellings of the universe were decided differently without
+            // this: `Anything` is below `Refine { base: Anything }` through the
+            // refinement rule, and the gradual `Any` is below `Anything` but was
+            // not below the refinement, because only a region set says so.
+            Schema::Refine { base, constraints } if constraints.is_empty() => {
+                base.empty_and_region(oracle, defs, visiting, budget)
+            }
             Schema::Refine { base, constraints } => {
                 let int_discrete = bounded_to_the_integers([base.as_ref()]);
                 let empty = base.is_empty_rec(oracle, defs, visiting, budget)
@@ -659,12 +689,6 @@ impl Schema {
         defs: &[Schema],
     ) -> bool {
         let budget = Cell::new(DECISION_BUDGET);
-        // The structural rules first, and the descriptor only where they
-        // decline. Both orders give the same answer -- the descriptor only ever
-        // turns a `false` into a `true` -- but only this one is cheap: building
-        // a descriptor determinises automata and takes products, which is work
-        // worth doing to *win* a decision and pure waste beside a `true` the
-        // rules already reached.
         self.is_subtype_rec(
             other,
             SubtypeCx {
@@ -673,37 +697,7 @@ impl Schema {
                 budget: &budget,
             },
             &mut Vec::new(),
-        ) || self.descriptor_contained_in(other)
-    }
-
-    /// Whether the descriptor proves every value of this schema is one of
-    /// `other`, by proving the difference empty.
-    ///
-    /// A **widening and nothing else**: it can turn a `false` into a `true` and
-    /// never the other way, so the structural procedure below still answers
-    /// everything it answered before. That is what makes it safe to ask first --
-    /// a schema the descriptor cannot hold, or a difference it cannot prove
-    /// empty, falls through untouched.
-    ///
-    /// The pool is the one that knows nothing, because a relation on `Schema`
-    /// has no object table: a schema naming a constant declines here and is
-    /// decided the old way.
-    fn descriptor_contained_in(&self, other: &Schema) -> bool {
-        let pool = NoConstants;
-        let (Some(mine), Some(theirs)) = (lower(self, &pool), lower(other, &pool)) else {
-            return false;
-        };
-        mine.intersect(&theirs.complement())
-            .is_some_and(|difference| difference.emptiness() == Verdict::Empty)
-    }
-
-    /// Whether the descriptor proves this schema admits no value.
-    ///
-    /// The same widening as [`descriptor_contained_in`](Self::descriptor_contained_in),
-    /// and asked in the same place: after the structural rules, never instead of
-    /// them.
-    fn descriptor_is_empty(&self) -> bool {
-        lower(self, &NoConstants).is_some_and(|descr| descr.emptiness() == Verdict::Empty)
+        )
     }
 
     fn is_subtype_rec(
@@ -999,14 +993,8 @@ impl Schema {
             defs,
             budget: &budget,
         };
-        // Each direction is widened the same way subtyping is, so equivalence
-        // agrees with the two inclusions it is defined as. Asking the descriptor
-        // per direction rather than once for both is what keeps that identity: a
-        // pair it decides one way round and not the other must still answer.
-        let contained = |mine: &Schema, theirs: &Schema| {
-            mine.is_subtype_rec(theirs, cx, &mut Vec::new()) || mine.descriptor_contained_in(theirs)
-        };
-        contained(self, other) && contained(other, self)
+        self.is_subtype_rec(other, cx, &mut Vec::new())
+            && other.is_subtype_rec(self, cx, &mut Vec::new())
     }
 }
 
@@ -2160,6 +2148,42 @@ mod tests {
         )
     }
 
+    /// Every set is below the universe, however the universe is spelled.
+    ///
+    /// A refinement with no constraint denotes exactly its base, and until it
+    /// said so the two spellings were decided differently: `Anything` reached
+    /// `Refine { base: Anything }` through the refinement rule, and the gradual
+    /// `Any` reached `Anything` through the region bound but not the refinement,
+    /// because only a region set carries that bound. The fuzzer found it as a
+    /// union holding both.
+    #[test]
+    fn every_set_is_below_the_universe_however_it_is_spelled() {
+        let bare = Schema::Refine {
+            base: Box::new(Schema::Anything),
+            constraints: Vec::new(),
+        };
+        // The complement of the universe is empty, which is the same fact read
+        // through the *other* fold: `region_set` decides the inclusion above,
+        // and `empty_and_region` decides this. Both carry the rule, so both are
+        // asked -- a fix in one of two folds is half a fix.
+        assert!(Schema::Complement(Box::new(bare.clone())).is_empty());
+        assert!(!bare.is_empty(), "and the universe itself is not");
+
+        for universe in [Schema::Anything, bare.clone(), Schema::Union(vec![bare])] {
+            for sub in [
+                Schema::Dynamic,
+                Schema::Anything,
+                Schema::Int,
+                Schema::Union(vec![Schema::Dynamic, Schema::Anything]),
+            ] {
+                assert!(
+                    sub.is_subtype_of(&universe),
+                    "{sub:?} is below the universe {universe:?}"
+                );
+            }
+        }
+    }
+
     /// The structural inclusion rules, held to their own work.
     ///
     /// The descriptor is asked after these rules and decides much of what they
@@ -2408,26 +2432,6 @@ mod tests {
         assert!(!empty_tail.is_empty_under(&[]));
     }
 
-    /// The descriptor decides an emptiness the structural rules do not, and
-    /// `is_empty` reports it.
-    ///
-    /// A language meet: the words matching `a` that do not match `a|b` are none
-    /// of them. Nothing structural reads a regex as the language it denotes, so
-    /// this is the descriptor's answer or no answer at all.
-    #[test]
-    fn the_descriptor_decides_an_emptiness_the_rules_decline() {
-        let language = |pattern: &str| Schema::Refine {
-            base: Box::new(Schema::Str),
-            constraints: vec![Constraint::Regex(pattern.to_owned())],
-        };
-        let narrower = Schema::meet([language("a"), Schema::Complement(Box::new(language("a|b")))]);
-
-        assert!(narrower.is_empty(), "every `a` is an `a|b`");
-        assert!(
-            !narrower.is_empty_under(&[]),
-            "and the structural rules do not say so"
-        );
-    }
     use crate::ir::{ClassIx, ConstIx, PredIx};
     use proptest::prelude::*;
 
@@ -2801,12 +2805,8 @@ mod tests {
             Schema::tuple(SeqShape::homogeneous(Schema::Int)),
             Schema::tuple(SeqShape::homogeneous(Schema::Str)),
         ])));
-        // A branch with a tail is not a product either, so it drops out of the
-        // *structural* rule -- and the relation holds anyway: every `(int, int)`
-        // is a tuple of ints, and every `(str, int)` is the second branch. The
-        // descriptor decides it, which is what a language rather than a product
-        // decomposition buys.
-        assert!(subject.is_subtype_of(&Schema::union([
+        // Nor is a branch with a tail a product, so it drops out of the branches.
+        assert!(!subject.is_subtype_of(&Schema::union([
             Schema::tuple(SeqShape::prefix_tail([Schema::Int], Schema::Int)),
             tuple([Schema::Str, Schema::Int]),
         ])));

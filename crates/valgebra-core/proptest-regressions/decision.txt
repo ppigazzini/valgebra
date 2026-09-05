@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 14efc8e3a1c870cd7357d6759cae64fb32a2bc5fabe06bd7e45212bc50cebf05 # shrinks to s = Intersection([Intersection([Intersection([Dynamic, NoneType, Bool]), Complement(Anything)])])
+cc ddbf8c3cfa0ab4b18cd98abb9d0a035d51f6fdc728667a1343f10f59a0df1615 # shrinks to s = Intersection([Dynamic, Nothing])
