@@ -9,12 +9,15 @@ It is not a faster pydantic. pydantic and msgspec own parse-and-ingest; valgebra
 owns check-and-contract. Keep that framing in code, docs, and commits.
 
 **The algebra is minimal, and that is the definition rather than a preference.**
-valgebra is the smallest set of schema nodes whose Boolean closure is consistent
-and complete for its domain. So a proposed node either denotes a set already in
-the closure — and is redundant — or extends the algebra, and then the case for it
-must be that the domain is unreachable without it. Convenience, a downstream
-user's wish, and "the code nearly does it already" are the same argument wearing
-three hats, and none of them is the test.
+The node set is a **generating set plus named representatives**: a generator
+denotes a set no combination of the others reaches, and a representative denotes
+one they do reach, kept because the normal form has to name it — `A & ~A` folds
+to *something*, and `Nothing` is what it folds to. A proposed node is one of
+those two or it does not go in, and the case for a generator must be that the
+domain is unreachable without it. Convenience, a downstream user's wish, and
+"the code nearly does it already" are the same argument wearing three hats, and
+none of them is the test. `tests/test_closure_ledger.py` holds every variant to
+one of the columns, and every representative to the derivation it stands for.
 [docs/dev/01-schema-ir.md](docs/dev/01-schema-ir.md) states the test and the
 three arguments that look like they pass it and do not.
 

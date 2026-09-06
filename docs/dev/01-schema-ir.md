@@ -47,10 +47,26 @@ is the measure of the other two.
 
 ## Whether to add a variant
 
-Before the mechanics below, the admission test. **valgebra is the smallest set
-of schema nodes whose Boolean closure is consistent and complete for its
-domain** — that is the definition, not a preference, and it is what makes
-"the algebra" a claim rather than a collection.
+Before the mechanics below, the admission test. **The node set is a minimal
+generating set plus the representatives the normal form names** — that is the
+definition, not a preference, and it is what makes "the algebra" a claim rather
+than a collection.
+
+Two columns, and `tests/test_closure_ledger.py` holds every variant to one of
+them:
+
+- a **generator** denotes a set no combination of the others reaches. `Int`,
+  `Seq`, `Literal`, `Union`, `Complement` and the rest are here, and admitting a
+  new one is the argument this section is about.
+- a **representative** denotes a set the generators do reach, and is kept because
+  the normal form has to name it. `Nothing` is `complement(anything)`, `Bool` is
+  `Literal[True] | Literal[False]`, `NoneType` is `Literal[None]`, and
+  `Intersection` is De Morgan of the other two — each is checked against its
+  derivation, in both directions, by that ledger.
+
+The distinction is what keeps the claim honest. Read as "no node denotes a set
+another reaches", the sentence was simply false of five variants; read as this,
+it is a statement a test settles.
 
 So a proposed node is one of exactly two things:
 

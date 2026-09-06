@@ -269,6 +269,8 @@ def check_ledger_table() -> list[str]:
         10: "ten",
         11: "eleven",
         12: "twelve",
+        13: "thirteen",
+        14: "fourteen",
     }
     want = spelled.get(len(declared))
     counted = (

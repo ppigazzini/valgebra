@@ -70,6 +70,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a recursive schema is one schema wherever it is combined
 - feat: decide a recursive schema against the kinds its body admits
 - feat: a sequence's length is a property its automaton can state
+- feat: an enumeration is the union of the members it can be
 
 -->
 
