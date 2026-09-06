@@ -174,6 +174,27 @@ except ValidationError as err:
     assert json.dumps(err.errors)  # the whole report is JSON-serializable
 ```
 
+## Construction limits
+
+Three module constants give the bounds every schema-growing call is checked
+against, so a caller sizing a schema reads the number rather than repeating it.
+[Resource limits](10-limits.md) says what each one bounds and why.
+
+| name | value | bounds |
+| --- | --- | --- |
+| `MAX_SCHEMA_DEPTH` | 128 | levels of structural nesting |
+| `MAX_DEFINITIONS` | 128 | recursive definitions in one schema |
+| `MAX_SCHEMA_NODES` | 100,000 | total schema nodes |
+
+```python
+from valgebra import MAX_SCHEMA_DEPTH, Validator, complement
+
+schema = Validator(int)
+for _ in range(MAX_SCHEMA_DEPTH - 1):
+    schema = complement(schema)
+print(schema.is_valid(1))
+```
+
 ## Package version
 
 `valgebra.__version__` is the installed distribution version as a string. It is
@@ -191,9 +212,9 @@ print(valgebra.__version__)
 
 Every name above is public and is reached from the top-level `valgebra`
 namespace. `valgebra.__all__` lists the schema surface — `Validator`, the
-combinators, `Regex`, `recursive`, the two bounds, and `ValidationError`;
-`__version__` is public too and is not in it, being metadata rather than part of
-the algebra.
+combinators, `Regex`, `recursive`, the two lattice bounds, the three
+construction limits, and `ValidationError`; `__version__` is public too and is
+not in it, being metadata rather than part of the algebra.
 
 The compiled extension underneath, `valgebra._valgebra`, is private: its layout,
 its module name, and which names it carries are free to change in any release.

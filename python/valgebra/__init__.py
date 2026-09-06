@@ -2,6 +2,9 @@ from importlib.metadata import PackageNotFoundError, version
 
 from ._markers import Regex
 from ._valgebra import (
+    MAX_DEFINITIONS,
+    MAX_SCHEMA_DEPTH,
+    MAX_SCHEMA_NODES,
     ValidationError,
     Validator,
     anything,
@@ -20,6 +23,9 @@ except PackageNotFoundError:  # pragma: no cover - only when run uninstalled
     __version__ = "0.0.0+unknown"
 
 __all__ = [
+    "MAX_DEFINITIONS",
+    "MAX_SCHEMA_DEPTH",
+    "MAX_SCHEMA_NODES",
     "Regex",
     "ValidationError",
     "Validator",
