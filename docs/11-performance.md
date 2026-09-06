@@ -115,8 +115,9 @@ pydantic and takes the minimum over many repeats rather than a median:
 uv run --group bench python scripts/compare_gate.py
 ```
 
-That script owns the recorded ratio baseline (`scripts/perf_compare.json`) and
-compares against it; the table below is the absolute record. The two estimators
+That script owns the per-shape ratio **ceilings** (`scripts/perf_compare.json`)
+-- what the project claims it stays under rather than what it once measured --
+and the table below is the absolute record. The two estimators
 do not agree to the last digit — a minimum sits below a median by however much
 the run was disturbed — so read a cell here against the same cell, not against
 the gate's output.

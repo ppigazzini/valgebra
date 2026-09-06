@@ -9,22 +9,29 @@ proportion -- so it survives the shared-runner noise that an absolute wall-clock
 budget cannot. Each per-call time is the minimum over many repeats, the stable
 estimator that scheduling jitter inflates but never deflates.
 
-The policy: a shape fails when valgebra's ratio rises past the recorded baseline
-by more than the tolerance -- valgebra became materially slower relative to
-pydantic-core, whether through its own regression or by ceding ground. The
-tolerance is generous so only a gross regression trips the merge gate; the
-recorded numbers, not the gate, are the fine-grained record (see
-``docs/11-performance.md``).
+**The ceiling is a claim, not a measurement.** Each shape carries the ratio it
+must stay under, chosen with headroom over what the shape measures and written
+down as what the project says of itself -- "at most this much of pydantic-core
+here". A recorded measurement would be a fourth number that travels badly: the
+two libraries respond differently to a PGO build, an interpreter version and a
+cache size, so ratios measured on one machine are 1.7x ratios measured on
+another (`large_array`, 0.52 recorded on the bench runner against 0.88 on a
+developer's box). A claim does not move when the machine does, and changing one
+is an edit somebody argues for.
+
+So this gate is the coarse tripwire: it catches ceding ground to pydantic-core,
+on any machine, with no re-recording. The fine-grained work is
+``scripts/perf_gate.py --against``, which compares a change to its own merge
+base under cachegrind at 2%.
 
 Usage:
-    python scripts/compare_gate.py            # check ratios against the baseline
-    python scripts/compare_gate.py --update   # re-record the baseline ratios
+    python scripts/compare_gate.py            # check ratios against the ceilings
 
 Requires the ``bench`` dependency group (pydantic) and the built extension.
 
-Three outcomes, three exit codes: **0** every shape is within tolerance, **1** a
-shape regressed or the shape sets disagree, **2** the gate **could not run** --
-a missing dependency, an unreadable baseline. A gate that could not run has
+Three outcomes, three exit codes: **0** every shape is under its ceiling, **1** a
+shape is over one or the shape sets disagree, **2** the gate **could not run** --
+a missing dependency, an unreadable ceiling file. A gate that could not run has
 proven nothing and must not read as one that passed.
 """
 
@@ -45,7 +52,7 @@ EXIT_FAIL = 1
 EXIT_CANNOT_RUN = 2
 
 ROOT = Path(__file__).resolve().parent.parent
-BASELINE_FILE = ROOT / "scripts" / "perf_compare.json"
+CEILING_FILE = ROOT / "scripts" / "perf_compare.json"
 
 # Per-shape call budget: repeats of `number` calls; the minimum per-call time is
 # kept. Cheap shapes need more calls per repeat to rise above timer granularity.
@@ -59,14 +66,51 @@ class Shape(TypedDict):
     number: int
 
 
+def _building(build: Callable[[], object]) -> Callable[[object], object]:
+    """Time a compile, and answer the rig check the accept shapes answer.
+
+    Both libraries compile a schema ahead of the hot path and a caller waits for
+    it at import, so a regression here is one a user times. `warm_up` asks every
+    valgebra side for `True`, which is what says the work happened rather than
+    an exception being swallowed.
+    """
+
+    def call(_: object) -> bool:
+        build()
+        return True
+
+    return call
+
+
+def _reporting(
+    validate: Callable[[object], object], failure: type[BaseException]
+) -> Callable[[object], object]:
+    """Time the explain path: the walk that says which field, not the bool.
+
+    A value that fails is the whole point, so the callable returns `True` only
+    when the report was actually built -- a shape whose payload started passing
+    would take the accept path and read as a speed-up.
+    """
+
+    def call(value: object) -> bool:
+        try:
+            validate(value)
+        except failure:
+            return True
+        return False
+
+    return call
+
+
 def _shapes() -> dict[str, Shape]:
     # Imported here, not at module scope: pydantic is a benchmark-only dependency
     # and valgebra is the built extension, so a module-level import would make
     # this file unimportable on every lane that has neither -- including the one
     # that drives `judge` to prove this gate can fail.
     from pydantic import TypeAdapter  # noqa: PLC0415
+    from pydantic import ValidationError as PydanticError  # noqa: PLC0415
 
-    from valgebra import Validator  # noqa: PLC0415
+    from valgebra import ValidationError, Validator  # noqa: PLC0415
 
     array_data = list(range(10_000))
     record_fields = {f"f{i}": int for i in range(50)}
@@ -86,6 +130,33 @@ def _shapes() -> dict[str, Shape]:
 
     nested_t = nested_type(25)
     nested_v = nested_value(25)
+
+    # A JSON document of records: the shape a request path carries, and the one
+    # where both libraries parse and check in a single pass.
+    json_fields = {
+        "id": int,
+        "name": str,
+        "email": str,
+        "tags": list[str],
+        "meta": dict[str, str],
+    }
+    json_record = TypedDict("JsonRecord", json_fields)  # type: ignore[operator]
+    json_doc = json.dumps(
+        [
+            {
+                "id": i,
+                "name": "Ada",
+                "email": "a@b.c",
+                "tags": ["x", "y"],
+                "meta": {"k": "v"},
+            }
+            for i in range(200)
+        ]
+    )
+    wide_record_type = TypedDict("Wide", record_fields)  # type: ignore[operator]
+    # One field of fifty holds the wrong type, so both libraries walk again to
+    # say which one.
+    wrong_record = {**record_data, "f7": "not an int"}
 
     # Build every validator and adapter exactly once -- both libraries compile
     # the schema ahead of the hot path, so the per-call comparison must too.
@@ -107,7 +178,7 @@ def _shapes() -> dict[str, Shape]:
         ),
         "wide_record": Shape(
             valgebra=Validator(record_fields).is_valid,
-            pydantic=strict(TypeAdapter(TypedDict("Wide", record_fields))),  # type: ignore[operator]
+            pydantic=strict(TypeAdapter(wide_record_type)),
             data=record_data,
             number=2_000,
         ),
@@ -116,6 +187,26 @@ def _shapes() -> dict[str, Shape]:
             pydantic=strict(TypeAdapter(nested_t)),
             data=nested_v,
             number=20_000,
+        ),
+        "json_document": Shape(
+            valgebra=Validator(list[json_record]).is_valid_json,
+            pydantic=TypeAdapter(list[json_record]).validate_json,
+            data=json_doc,
+            number=200,
+        ),
+        "build": Shape(
+            valgebra=_building(lambda: Validator(record_fields)),
+            pydantic=_building(lambda: TypeAdapter(wide_record_type)),
+            data=None,
+            number=200,
+        ),
+        "error_report": Shape(
+            valgebra=_reporting(Validator(record_fields).validate, ValidationError),
+            pydantic=_reporting(
+                TypeAdapter(wide_record_type).validate_python, PydanticError
+            ),
+            data=wrong_record,
+            number=2_000,
         ),
     }
 
@@ -126,19 +217,19 @@ def _per_call_ns(call: Callable[[object], object], data: object, number: int) ->
     return best / number * 1e9
 
 
-def _prepare() -> tuple[dict, float, dict[str, Shape]] | None:
-    """Read the baseline and build the shapes, or report why neither happened.
+def _prepare() -> tuple[dict[str, float], dict[str, Shape]] | None:
+    """Read the ceilings and build the shapes, or report why neither happened.
 
-    Both are preconditions rather than verdicts: an unreadable baseline and a
-    missing benchmark dependency each mean the comparison did not take place,
+    Both are preconditions rather than verdicts: an unreadable ceiling file and
+    a missing benchmark dependency each mean the comparison did not take place,
     which must not read as "did not regress". `None` is the caller's signal to
     exit 2.
     """
     try:
-        baseline = json.loads(BASELINE_FILE.read_text(encoding="utf-8"))
-        tolerance = float(baseline["tolerance"])
-    except (OSError, ValueError, KeyError) as err:
-        print(f"compare_gate: cannot read the baseline: {err}")
+        recorded = json.loads(CEILING_FILE.read_text(encoding="utf-8"))
+        ceilings = {name: float(v) for name, v in recorded["ceilings"].items()}
+    except (OSError, ValueError, KeyError, TypeError) as err:
+        print(f"compare_gate: cannot read the ceilings: {err}")
         return None
     try:
         shapes = _shapes()
@@ -147,7 +238,7 @@ def _prepare() -> tuple[dict, float, dict[str, Shape]] | None:
         # against.
         print(f"compare_gate: cannot build the comparison shapes: {err}")
         return None
-    return baseline, tolerance, shapes
+    return ceilings, shapes
 
 
 def warm_up(shapes: dict[str, Shape]) -> bool:
@@ -170,12 +261,10 @@ def warm_up(shapes: dict[str, Shape]) -> bool:
 
 
 def main() -> int:
-    update = "--update" in sys.argv[1:]
     prepared = _prepare()
     if prepared is None:
         return EXIT_CANNOT_RUN
-    baseline, tolerance, shapes = prepared
-    recorded: dict[str, float] = baseline.get("ratios", {})
+    ceilings, shapes = prepared
     if not warm_up(shapes):
         return EXIT_FAIL
 
@@ -184,69 +273,60 @@ def main() -> int:
     for name, shape in shapes.items():
         vg = _per_call_ns(shape["valgebra"], shape["data"], shape["number"])
         pyd = _per_call_ns(shape["pydantic"], shape["data"], shape["number"])
-        ratio = vg / pyd
-        measured[name] = ratio
-        rows.append((name, vg, pyd, ratio))
+        measured[name] = vg / pyd
+        rows.append((name, vg, pyd, vg / pyd))
 
+    over, disagree = judge(measured, ceilings)
     width = max(len(name) for name in shapes)
-    header = f"{'shape':<{width}}  {'valgebra':>12}  {'pydantic':>12}  {'ratio':>7}  {'baseline':>9}"  # noqa: E501
-    print(header)
-    failures: list[str] = []
+    print(
+        f"{'shape':<{width}}  {'valgebra':>12}  {'pydantic':>12}  "
+        f"{'ratio':>7}  {'ceiling':>8}"
+    )
     for name, vg, pyd, ratio in rows:
-        base = recorded.get(name)
-        base_str = f"{base:.3f}" if base is not None else "-"
-        status = ""
-        if not update and base is not None:
-            ceiling = base * (1 + tolerance)
-            if name in judge({name: ratio}, {name: base}, tolerance)[0]:
-                status = f"  REGRESSION (> {ceiling:.3f})"
-                failures.append(name)
-        row = f"{name:<{width}}  {vg:>10.1f}ns  {pyd:>10.1f}ns  {ratio:>7.3f}  {base_str:>9}{status}"  # noqa: E501
-        print(row)
-
-    if update:
-        baseline["ratios"] = {name: round(measured[name], 4) for name in shapes}
-        BASELINE_FILE.write_text(
-            json.dumps(baseline, indent=2) + "\n", encoding="utf-8"
-        )
-        print(f"\nrecorded {len(measured)} baseline ratios (tolerance {tolerance:.0%})")
-        return EXIT_OK
-
-    # Every measured shape must have a baseline and vice versa: a shape added
-    # without re-recording, or a stale baseline key, would otherwise pass the gate
-    # unchecked rather than being measured against a recorded ceiling.
-    if set(measured) != set(recorded):
-        missing = ", ".join(sorted(set(measured) - set(recorded))) or "none"
-        stale = ", ".join(sorted(set(recorded) - set(measured))) or "none"
+        ceiling = ceilings.get(name)
+        shown = f"{ceiling:.2f}" if ceiling is not None else "-"
+        status = "  OVER CEILING" if name in over else ""
         print(
-            "\nbaseline shapes do not match measured shapes; re-record with "
-            f"--update (missing baseline: {missing}; stale baseline: {stale})"
+            f"{name:<{width}}  {vg:>10.1f}ns  {pyd:>10.1f}ns  "
+            f"{ratio:>7.3f}  {shown:>8}{status}"
+        )
+
+    # Every measured shape must carry a ceiling and vice versa: a shape added
+    # without one would pass unchecked, and a ceiling for a shape that is gone
+    # is a claim about nothing.
+    if disagree:
+        missing = ", ".join(sorted(set(measured) - set(ceilings))) or "none"
+        stale = ", ".join(sorted(set(ceilings) - set(measured))) or "none"
+        print(
+            f"\nshapes and ceilings disagree (shape with no ceiling: {missing}; "
+            f"ceiling with no shape: {stale})"
         )
         return EXIT_FAIL
-
-    if failures:
-        print(f"\nREGRESSION on: {', '.join(failures)}")
+    if over:
+        print(f"\nOVER CEILING on: {', '.join(over)}")
+        print("valgebra ceded ground to pydantic-core here, or the ceiling was")
+        print("always wrong. Both are edits somebody argues for.")
         return EXIT_FAIL
-    print(f"\nOK: all shapes within {tolerance:.0%} of the recorded ratio.")
+    print(f"\nOK: all {len(measured)} shapes under their ceilings.")
     return EXIT_OK
 
 
 def judge(
-    measured: dict[str, float], recorded: dict[str, float], tolerance: float
+    measured: dict[str, float], ceilings: dict[str, float]
 ) -> tuple[list[str], bool]:
     """Decide the verdict from measured ratios alone, with no timing involved.
 
-    Returns the regressing shapes and whether the shape sets disagree. Extracted
-    from ``main`` so the gate's decision can be driven -- and shown to fail -- in
-    a test, without running pydantic or a timer.
+    Returns the shapes over their ceiling and whether the shape sets disagree.
+    Extracted from ``main`` so the gate's decision can be driven -- and shown to
+    fail -- in a test, without running pydantic or a timer.
     """
-    shapes_disagree = set(measured) != set(recorded)
-    failures = [
+    shapes_disagree = set(measured) != set(ceilings)
+    over = [
         name
         for name, ratio in sorted(measured.items())
-        if name in recorded and ratio > recorded[name] * (1 + tolerance)
+        if name in ceilings and ratio > ceilings[name]
     ]
-    return failures, shapes_disagree
+    return over, shapes_disagree
 
 
 if __name__ == "__main__":

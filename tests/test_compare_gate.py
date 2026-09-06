@@ -44,66 +44,66 @@ def _load_gate() -> ModuleType:
 
 gate = _load_gate()
 
-TOLERANCE = 0.35
-BASE = {"scalars": 1.000, "records": 2.000}
+CEILINGS = {"scalars": 1.000, "records": 2.000}
 
 
-def test_a_ratio_inside_the_tolerance_passes() -> None:
-    failures, disagree = gate.judge(
-        {"scalars": 1.300, "records": 2.600}, BASE, TOLERANCE
-    )
-    assert failures == []
+def test_a_ratio_under_its_ceiling_passes() -> None:
+    over, disagree = gate.judge({"scalars": 0.999, "records": 2.000}, CEILINGS)
+    assert over == []
     assert not disagree
 
 
-def test_a_ratio_past_the_ceiling_fails() -> None:
-    failures, disagree = gate.judge(
-        {"scalars": 1.351, "records": 2.000}, BASE, TOLERANCE
-    )
-    assert failures == ["scalars"]
+def test_a_ratio_over_its_ceiling_fails() -> None:
+    over, disagree = gate.judge({"scalars": 1.001, "records": 2.000}, CEILINGS)
+    assert over == ["scalars"]
     assert not disagree
 
 
-def test_every_regressing_shape_is_named() -> None:
-    failures, _ = gate.judge({"scalars": 9.0, "records": 9.0}, BASE, TOLERANCE)
-    assert failures == ["records", "scalars"]
+def test_every_shape_over_its_ceiling_is_named() -> None:
+    over, _ = gate.judge({"scalars": 9.0, "records": 9.0}, CEILINGS)
+    assert over == ["records", "scalars"]
 
 
-def test_a_measured_shape_with_no_baseline_is_refused() -> None:
-    # A shape added without re-recording has no ceiling to breach, so a
-    # ceiling-only reading passes it having measured nothing against anything.
-    _, disagree = gate.judge(
-        {"scalars": 1.0, "records": 2.0, "unions": 1.0}, BASE, TOLERANCE
-    )
+def test_a_measured_shape_with_no_ceiling_is_refused() -> None:
+    # A shape added without a ceiling has nothing to breach, so a ceiling-only
+    # reading passes it having measured nothing against anything.
+    _, disagree = gate.judge({"scalars": 1.0, "records": 2.0, "unions": 1.0}, CEILINGS)
     assert disagree
 
 
-def test_a_baseline_shape_no_longer_measured_is_refused() -> None:
-    _, disagree = gate.judge({"scalars": 1.0}, BASE, TOLERANCE)
+def test_a_ceiling_for_a_shape_that_is_gone_is_refused() -> None:
+    _, disagree = gate.judge({"scalars": 1.0}, CEILINGS)
     assert disagree
 
 
-def test_the_committed_baseline_carries_a_tolerance_and_shapes() -> None:
-    # The gate reads both from the file; an empty one would make every
-    # comparison vacuous rather than failing.
+def test_every_shape_the_gate_measures_carries_a_ceiling() -> None:
+    # Held to the file rather than to a count: the shapes are built from
+    # pydantic and the extension, so this reads the names the gate would
+    # measure and the names the file claims, in both directions.
     recorded = json.loads(
         (ROOT / "scripts" / "perf_compare.json").read_text(encoding="utf-8")
     )
-    assert float(recorded["tolerance"]) > 0
-    assert len(recorded["ratios"]) >= 2
+    ceilings = recorded["ceilings"]
+    assert len(ceilings) >= 4
+    assert all(float(value) > 0 for value in ceilings.values())
+    # The four paths a claim about speed has to cover: the accept walk, the
+    # JSON walk, compilation, and the report a failure builds.
+    assert {"scalar", "json_document", "build", "error_report"} <= set(ceilings)
 
 
-def test_an_unreadable_baseline_is_could_not_run(tmp_path: Path, monkeypatch) -> None:
-    # A gate that could not read its baseline compared nothing. Exit 2 keeps that
+def test_an_unreadable_ceiling_file_is_could_not_run(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # A gate that could not read its ceilings compared nothing. Exit 2 keeps that
     # distinguishable from a regression, which is exit 1.
-    monkeypatch.setattr(gate, "BASELINE_FILE", tmp_path / "absent.json")
+    monkeypatch.setattr(gate, "CEILING_FILE", tmp_path / "absent.json")
     assert gate.main() == gate.EXIT_CANNOT_RUN
 
 
 def test_a_missing_benchmark_dependency_is_could_not_run(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr(gate, "BASELINE_FILE", ROOT / "scripts" / "perf_compare.json")
+    monkeypatch.setattr(gate, "CEILING_FILE", ROOT / "scripts" / "perf_compare.json")
 
     def no_pydantic() -> dict[str, object]:
         raise ImportError("No module named 'pydantic'")

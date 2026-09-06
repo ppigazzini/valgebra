@@ -120,8 +120,18 @@ moves.
 ### The competitive ratio
 
 `scripts/compare_gate.py` compares per-call time against pydantic-core across a
-shape matrix, as a **ratio** against a recorded baseline. A ratio cancels the
-runner's absolute speed, which is what lets a wall-clock measurement gate at all.
+shape matrix -- the accept walk, a large array, a wide record, deep nesting, a
+JSON document, compilation, and the report a failure builds -- as a **ratio**.
+A ratio cancels the runner's absolute speed, which is what lets a wall-clock
+measurement gate at all.
+
+Each shape's ceiling is a **claim, not a recorded measurement**: the ratio the
+project says it stays under, with headroom. A recorded ratio would be another
+number that travels badly -- the two libraries respond differently to a PGO
+build and an interpreter version, so `large_array` reads 0.52 on the bench
+runner and 0.88 on a developer's box -- and this gate is the coarse tripwire for
+ceding ground, with `perf_gate.py --against` doing the fine-grained work at 2%.
+Changing a ceiling is an edit with an argument in its commit message.
 
 It asserts each payload is **accepted** before timing it. A correctness
 regression that made valgebra reject the data would take the fast reject path and

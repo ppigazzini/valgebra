@@ -1,10 +1,12 @@
 {
-  "_comment": "Competitive wall-clock ratio of valgebra to pydantic-core per shape, a coarse tripwire (the deterministic cachegrind budget in perf_budget.json is the hard gate). Tolerance tightened from 0.5 to 0.35 so a regression past ~1.35x of a recorded ratio trips it; the ratio cancels the runner's absolute speed, but shared-runner noise keeps it coarser than the instruction-count gate. Provisional pending observed CI variance. Re-record after an intentional change.",
-  "tolerance": 0.35,
-  "ratios": {
-    "scalar": 0.1861,
-    "large_array": 0.5157,
-    "wide_record": 0.4586,
-    "deep_nesting": 0.1488
+  "_comment": "The ratio of valgebra to pydantic-core each shape must stay under: a claim the project makes, not a measurement it recorded. Ratios cancel a machine's absolute speed but not its cache, its interpreter or whether the wheel was PGO-built -- large_array measures 0.52 on the bench runner and 0.88 on a developer's box -- so a recorded ratio is a number that must be re-recorded per environment, which is the failure this file exists not to repeat. Each ceiling sits well above what the shape measures in both environments and well below the point where the claim would stop being true. Changing one is an edit with an argument in its commit message; scripts/perf_gate.py --against is the fine-grained gate.",
+  "ceilings": {
+    "scalar": 0.35,
+    "large_array": 1.2,
+    "wide_record": 0.85,
+    "deep_nesting": 0.25,
+    "json_document": 1.2,
+    "build": 0.05,
+    "error_report": 3.5
   }
 }
