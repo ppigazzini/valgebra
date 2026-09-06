@@ -26,6 +26,19 @@ passed. `scripts/perf_gate.py` exits 2 on cachegrind output it cannot parse,
 
 ## The local gate, and the contract inventory
 
+**`scripts/gate.py` runs the lane's steps, not a list that resembles them.** It
+reads every `run:` step of every job the `ci` aggregator waits for out of the
+workflow, and runs them in a fresh **shallow clone of `HEAD` with no tags** --
+which is what `actions/checkout` produces and what a developer's clone is not.
+A step that needs a runner (a PGO wheel, valgrind, a mutation sweep, a second
+interpreter) is named with the reason instead, and `tests/test_local_gate.py`
+holds that list to the workflow in both directions.
+
+The reason it exists is a measurement rather than a principle: a ledger reading
+`git describe` passed locally for a week and turned eight jobs red on one push,
+because the clone shape differed. Everything else on this page is about what the
+gates check; this is about *where* they check it.
+
 A change is not done until every command exits 0. `CONTRIBUTING.md` holds the
 list; read it there rather than here, because a second copy drifts by one entry
 and reads exactly like one that has not.

@@ -39,6 +39,10 @@ dev = [
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
+    # `scripts/gate.py` and the ledger that holds it read the workflow, and a
+    # workflow is YAML: parsing it with a regex is how a gate ends up disagreeing
+    # with the lane it claims to reproduce.
+    "pyyaml>=6.0.3",
     "ruff>=0.16.6",
     "syrupy>=6.0.0",
     "ty>=0.0.78",
