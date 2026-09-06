@@ -73,6 +73,26 @@ constraint valgebra does not check — `Timezone` and `Unit` are the two — and
 refused when the validator is built rather than ignored: ignoring it would leave
 a schema that admits exactly the values the marker was written to exclude.
 
+**A bound excludes `nan`.** Every comparison against a not-a-number is false,
+`>=` included, so a bounded float set never holds one while the bare kind does.
+This is the ordinary reading of the marker rather than a special case, and it is
+worth knowing because it is the one narrowing that removes a value the bound
+does not name.
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import Validator
+
+nan = float("nan")
+
+assert Validator(float).is_valid(nan)
+assert not Validator(Annotated[float, at.Ge(0)]).is_valid(nan)
+assert not Validator(Annotated[float, at.Le(0)]).is_valid(nan)
+```
+
 **A value has one length.** For a `list` and a `tuple` it is the number of
 elements the value *holds* — the same number a sequence schema counts when it
 walks them. For everything else it is `__len__`, which is how a `str`, `bytes`,

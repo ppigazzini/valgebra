@@ -199,6 +199,24 @@ assert not Validator(Literal[1]).is_valid(True)
 assert not Validator(Literal[1]).is_valid(1.0)
 ```
 
+**`Literal[nan]` denotes nothing.** Membership is equality, and a `nan` is equal
+to nothing at all — itself included — so the set has no member. That is not a
+gap in the check: the set is *decided* empty, and a `float` still admits `nan`
+as it always did. Write `float` and a predicate if what you mean is "the not-a-
+number value".
+
+```python
+from typing import Literal
+
+from valgebra import Validator
+
+nan = float("nan")
+
+assert Validator(Literal[nan]).is_empty()  # equality admits nothing
+assert not Validator(Literal[nan]).is_valid(nan)
+assert Validator(float).is_valid(nan)  # the kind still holds it
+```
+
 ### A string inside a generic is a forward reference, and is refused
 
 The fallback reads a bare value as a literal, and that reading stops at the
@@ -474,7 +492,35 @@ assert not Validator(Point).is_valid(Point(1, "y"))
 What a class **declares** is not every annotation on it. A `ClassVar` annotates
 the class and an `InitVar` names a constructor parameter, so neither is an
 attribute of an instance and neither is checked; a field declared
-`init=False` is on the instance and is. On a `TypedDict`, `Required`,
+`init=False` is on the instance and is.
+
+That last one has an edge, and it is the check-only semantics showing through:
+a field with `init=False` and **no default** is not set by the constructor, so
+unless `__post_init__` assigns it the attribute is absent from the instance —
+and an absent attribute is not a value of any type. valgebra reads the object it
+is given rather than the declaration, so such an instance is not a member until
+something assigns the field.
+
+```python
+from dataclasses import dataclass, field
+
+from valgebra import Validator
+
+
+@dataclass
+class Row:
+    key: int
+    seen: bool = field(init=False)  # no default: the constructor sets nothing
+
+    def touch(self) -> None:
+        self.seen = True
+
+
+row = Row(1)
+assert not Validator(Row).is_valid(row)  # `seen` is not there yet
+row.touch()
+assert Validator(Row).is_valid(row)
+``` On a `TypedDict`, `Required`,
 `NotRequired` and `ReadOnly` qualify the key rather than narrowing its type:
 requiredness is read from the class, and read-only-ness is about writing the key
 back rather than about which values belong.
