@@ -263,7 +263,19 @@ pub(crate) fn build_schema(
     let origin = typing.call_method1("get_origin", (obj,))?;
     if !origin.is_none() {
         let args = typing.call_method1("get_args", (obj,))?;
-        return build_parametrized(&origin, args.cast::<PyTuple>()?, lits, defs);
+        let args = args.cast::<PyTuple>()?;
+        // A *bare* legacy alias -- `typing.List`, `typing.Tuple` -- is the class
+        // it aliases, so it is compiled as that class rather than as a
+        // parametrization with no arguments. Both have no type arguments, which
+        // is why `typing.Tuple` came out as `tuple[()]`, the empty tuple, and
+        // `typing.List` was refused for wanting exactly one.
+        if args.is_empty()
+            && !obj.is_instance_of::<pyo3::types::PyGenericAlias>()
+            && let Ok(class) = origin.cast::<PyType>()
+        {
+            return build_type_object(class, lits, defs);
+        }
+        return build_parametrized(&origin, args, lits, defs);
     }
 
     // PEP 695 `type X = ...` alias (3.12+): validate the aliased type, tying

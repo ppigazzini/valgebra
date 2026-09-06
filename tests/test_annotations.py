@@ -1,4 +1,5 @@
 import sys
+import typing
 from types import GenericAlias
 from typing import ForwardRef, Literal, TypedDict
 
@@ -150,3 +151,54 @@ def test_a_deferred_typed_dict_matches_the_same_class_written_plainly() -> None:
         c: Required[str]
 
     assert Validator(_deferred.Deferred) == Validator(Plain)
+
+
+# The deprecated aliases are the *subject* here, and the linters rewrite
+# `typing.List` to `list` on sight -- which would turn each row into a
+# comparison of `list` with itself. Fetching them by name is what keeps the
+# check a check, the same reason `test_closure_ledger.py` builds `Literal[None]`
+# from the value.
+BARE_ALIASES = [
+    (name, getattr(typing, name), origin)
+    for name, origin in [
+        ("List", list),
+        ("Dict", dict),
+        ("Set", set),
+        ("FrozenSet", frozenset),
+        ("Tuple", tuple),
+        ("Type", type),
+    ]
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "alias", "origin"), BARE_ALIASES, ids=[row[0] for row in BARE_ALIASES]
+)
+def test_a_bare_legacy_alias_is_the_class_it_aliases(
+    name: str, alias: object, origin: type
+) -> None:
+    """`typing.Tuple` is `tuple`, and used to be the *empty* tuple.
+
+    A bare legacy alias and a parametrization carry the same thing: no type
+    arguments. `typing.Tuple` was therefore read as `tuple[()]` -- a schema
+    admitting `()` and nothing else -- and `typing.List` was refused for wanting
+    exactly one argument. Silently narrowing to the empty tuple is the worse of
+    the two, and both are wrong: the typing spec says a bare alias is its origin.
+    """
+    assert Validator(alias) == Validator(origin)
+
+
+def test_the_empty_tuple_is_still_the_empty_tuple() -> None:
+    """What the bare alias was mistaken for must keep meaning what it means."""
+    empty = Validator(tuple[()])
+    assert empty.is_valid(())
+    assert not empty.is_valid((1,))
+    assert Validator(tuple) != empty
+    assert Validator(tuple).is_valid((1,))
+
+
+def test_a_parametrized_legacy_alias_is_unaffected() -> None:
+    assert Validator(list[int]) == Validator(list[int])
+    assert Validator(dict[str, int]) == Validator(dict[str, int])
+    assert Validator(tuple[int, str]) == Validator(tuple[int, str])
+    assert Validator(tuple[int, ...]) == Validator(tuple[int, ...])

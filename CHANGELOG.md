@@ -83,9 +83,8 @@ answer of its own, or a repair to a change not yet released.
 - fix: an integer key of any size stays an integer in an error path
 - fix: a literal's hash is the constant's, not its slot's
 - fix: one schema prints one way
-- test: pin why a predicate does not fold against its complement -- internal
 - fix: a required-ness qualifier survives a string annotation
-- fix: a required-ness qualifier survives a string annotation
+- fix: a bare legacy typing alias is the class it aliases
 
 -->
 
@@ -501,6 +500,13 @@ answer of its own, or a repair to a change not yet released.
   not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
+
+- A bare legacy typing alias is the class it aliases. `typing.Tuple` was read as
+  `tuple[()]` — the empty tuple, admitting `()` and nothing else — because a bare
+  alias and a parametrization both carry no type arguments; `typing.List`,
+  `typing.Dict` and `typing.Set` were refused for wanting one. Each is now its
+  origin, so `Validator(typing.Tuple) == Validator(tuple)`. `tuple[()]` keeps
+  meaning the empty tuple, and a parametrized alias is unaffected.
 
 - `NotRequired` and `Required` are read under `from __future__ import
   annotations`. CPython computes a `TypedDict`'s `__required_keys__` when the

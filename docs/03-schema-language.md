@@ -93,6 +93,7 @@ assert repr(Validator(Any)) == "Any"
 | `tuple[T, ...]` | tuples of any length, every element in `T` |
 | `tuple[A, B, ...]` | a fixed prefix `A`, then zero or more `B` (see below) |
 | `tuple[A, *tuple[B, ...]]` | the same, spelled by unpacking (3.11+) |
+| `typing.List`, `typing.Tuple`, ... | the class each aliases, bare or parametrized |
 
 ```python
 from valgebra import Validator
