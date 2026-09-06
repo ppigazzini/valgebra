@@ -308,19 +308,13 @@ pub(crate) fn build_schema(
     // merge), append its definitions, and remap its schema's indices.
     if let Ok(compiled) = obj.cast::<Validator>() {
         let inner = compiled.get();
-        let def_offset = DefShift::new(defs.len());
         let lit_map: Vec<usize> = inner
             .literals
             .iter()
             .map(|o| lits.intern(o.bind(py)))
             .collect();
-        defs.extend(
-            inner
-                .definitions
-                .iter()
-                .map(|d| d.reindexed(&lit_map, def_offset)),
-        );
-        return Ok(inner.schema.reindexed(&lit_map, def_offset));
+        let offset = DefShift::new(place_definitions(&inner.definitions, &lit_map, defs));
+        return Ok(inner.schema.reindexed(&lit_map, offset));
     }
 
     // A type variable or typing special form reaches the constant fallthrough
@@ -357,7 +351,7 @@ fn is_typing_construct(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// Compile arguments into one shared pool and combine them with `make`.
 pub(crate) fn combine(
     args: &Bound<'_, PyTuple>,
-    make: impl FnOnce(Vec<Schema>) -> Schema,
+    make: impl FnOnce(Vec<Schema>, &[Schema]) -> Schema,
 ) -> PyResult<Validator> {
     let mut literals = Pool::default();
     let mut definitions = Vec::new();
@@ -365,7 +359,46 @@ pub(crate) fn combine(
     for arg in args.iter() {
         members.push(build_schema(&arg, &mut literals, &mut definitions)?);
     }
-    Validator::checked(make(members), literals.into_items(), definitions)
+    // The definitions go to the fold as well as to the validator: a member that
+    // is a reference is not a set on its own evidence, and the complement law
+    // needs to read what it names.
+    let schema = make(members, &definitions);
+    Validator::checked(schema, literals.into_items(), definitions)
+}
+
+/// Where a merged validator's definitions live in the target list.
+///
+/// Appended, unless the same definitions are already there -- in which case the
+/// offset they are already at is returned and nothing is added. That is what
+/// makes a recursive schema equal to itself once combined: without it,
+/// `intersection(json, complement(json))` copies one definition twice, the two
+/// occurrences become `Ref(0)` and `Ref(1)`, and the fold that cancels a schema
+/// against its own complement compares terms and sees two. Every law about a
+/// recursive schema failed on that, including the one a reader tries first.
+///
+/// The whole block is matched rather than one definition at a time, because a
+/// definition's body names its siblings by index: a block is self-consistent
+/// only at the offset it was built for, so it is shifted to each candidate
+/// offset and compared there. Quadratic in the definition count, which
+/// `MAX_DEFINITIONS` holds at 128, and paid once per merged validator.
+fn place_definitions(inner: &[Schema], lit_map: &[usize], defs: &mut Vec<Schema>) -> usize {
+    if inner.is_empty() {
+        return defs.len();
+    }
+    let at_offset = |start: usize| -> Vec<Schema> {
+        inner
+            .iter()
+            .map(|d| d.reindexed(lit_map, DefShift::new(start)))
+            .collect()
+    };
+    for start in 0..=defs.len().saturating_sub(inner.len()) {
+        if defs.get(start..start + inner.len()) == Some(at_offset(start).as_slice()) {
+            return start;
+        }
+    }
+    let start = defs.len();
+    defs.extend(at_offset(start));
+    start
 }
 
 /// Build the schema for a Python type object (a builtin, `TypedDict`, `Enum`,
@@ -2347,5 +2380,35 @@ mod tests {
             assert_ne!(second, third);
             assert_eq!(pool.items().len(), 3);
         });
+    }
+
+    /// A definition block is placed once: a block already present at some offset
+    /// is reused at that offset, shifted references included, and a new one is
+    /// appended at the end.
+    #[test]
+    fn a_definition_block_is_placed_once() {
+        let body = |index: usize| {
+            Schema::union([
+                Schema::Int,
+                Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(index)))),
+            ])
+        };
+        let mut defs = Vec::new();
+
+        // Into an empty list: offset zero.
+        assert_eq!(place_definitions(&[Schema::Str], &[], &mut defs), 0);
+        assert_eq!(defs, vec![Schema::Str]);
+
+        // A block whose body names itself is shifted to the offset it lands at.
+        assert_eq!(place_definitions(&[body(0)], &[], &mut defs), 1);
+        assert_eq!(defs, vec![Schema::Str, body(1)]);
+
+        // The same block again is found where it already is, and nothing grows.
+        assert_eq!(place_definitions(&[body(0)], &[], &mut defs), 1);
+        assert_eq!(defs.len(), 2);
+
+        // A block that matches nowhere is appended after the last one.
+        assert_eq!(place_definitions(&[Schema::Bytes], &[], &mut defs), 2);
+        assert_eq!(defs, vec![Schema::Str, body(1), Schema::Bytes]);
     }
 }

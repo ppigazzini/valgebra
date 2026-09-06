@@ -66,7 +66,8 @@ answer of its own, or a repair to a change not yet released.
 - feat: a schema is built in the lattice normal form
 - feat: retire the term rewrites the algebra does not need
 - feat: a type alias that names itself is the fixpoint it writes
-- feat: two spellings of one schema compare equal
+- feat: a schema compares equal in every order it can be written
+- fix: a recursive schema is one schema wherever it is combined
 
 -->
 
@@ -112,6 +113,31 @@ answer of its own, or a repair to a change not yet released.
   conservative one, as before. What stays conservative is recursion, a length
   bound over a shape that is not text, an attribute record beside a builtin kind,
   and a predicate.
+
+- **A recursive schema is one schema wherever it is combined.** Merging a
+  compiled validator used to copy its definitions, so two occurrences of one
+  fixpoint became two definitions and every law that compares terms failed on
+  it: `intersection(json, complement(json))` was not empty and
+  `union(json, complement(json))` was not the top, for the same schema object on
+  both sides. A merge now reuses definitions it already holds, and a fold that
+  leaves one unreachable drops it -- so the top built that way is the top built
+  any other way.
+
+  ```python
+  from valgebra import (
+      Validator,
+      anything,
+      complement,
+      intersection,
+      nothing,
+      recursive,
+      union,
+  )
+
+  json = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+  assert intersection(json, complement(json)) == Validator(nothing)
+  assert union(json, complement(json)) == Validator(anything)
+  ```
 
 - **Two spellings of one schema are one schema.** A record's fields, a map's
   clauses, a refinement's markers and a union's members are sets, so the order

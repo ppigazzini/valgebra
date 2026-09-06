@@ -561,6 +561,12 @@ impl Validator {
         literals: Vec<Py<PyAny>>,
         definitions: Vec<Schema>,
     ) -> PyResult<Self> {
+        // A fold can leave a definition nothing names -- `json | ~json` is the
+        // top and keeps the fixpoint's body -- and a definition no reference
+        // reaches is invisible to the set and visible to `==`, which compares
+        // the definitions too. Dropping it here is what makes the top built that
+        // way the top built any other way.
+        let (schema, definitions) = valgebra_core::pruned(schema, definitions);
         let depth = definitions
             .iter()
             .map(Schema::depth)
@@ -686,7 +692,8 @@ impl Validator {
         } else {
             vec![self.schema.clone(), other_schema]
         };
-        Validator::checked(Schema::union(members), literals.into_items(), definitions)
+        let schema = Schema::union_within(members, &definitions);
+        Validator::checked(schema, literals.into_items(), definitions)
     }
 
     /// Whether the JSON in `bytes` parses and belongs to the schema's set,

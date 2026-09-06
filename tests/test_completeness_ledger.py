@@ -217,6 +217,17 @@ _DECIDED = [
         union(None, {"value": int, "next": _RECURSIVE}),
         id="mu-t<=its-own-body",
     ),
+    # A fixpoint beside its own complement. Two occurrences of one recursive
+    # schema used to compile to two definitions, so the fold that cancels a
+    # schema against its complement compared terms and saw two; a merged
+    # validator now reuses definitions it already holds, and the law reaches a
+    # fixpoint like any other set.
+    pytest.param(
+        "empty",
+        intersection(_RECURSIVE, complement(_RECURSIVE)),
+        None,
+        id="empty:mu-t&~mu-t",
+    ),
     pytest.param(
         "subtype",
         # `int | str` rather than `union(int, str)`: the two build the same
@@ -609,20 +620,6 @@ _LEDGERED = [
         marks=_missed(
             "an attribute record and a sequence kind sit in different components, "
             "and nothing relates a class's layout to the shape its instances have"
-        ),
-    ),
-    # The complement laws are settled by the constructors, so a shape they do not
-    # reach is not decided: a respelling, and a recursive definition whose two
-    # occurrences are separate definitions.
-    pytest.param(
-        "empty",
-        intersection(_RECURSIVE, complement(_RECURSIVE)),
-        None,
-        id="empty:mu-t&~mu-t",
-        marks=_missed(
-            "the complement pair is folded at construction by structural equality, "
-            "and two occurrences of a recursive schema are two definitions; the "
-            "descriptor holds no cycle to decide it instead"
         ),
     ),
 ]

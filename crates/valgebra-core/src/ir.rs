@@ -627,6 +627,21 @@ impl Schema {
     /// downstream may assume the form below and no more.
     #[must_use]
     pub fn union(members: impl IntoIterator<Item = Schema>) -> Schema {
+        Schema::union_within(members, &[])
+    }
+
+    /// The join, with the definitions its members may refer into.
+    ///
+    /// Only the complement law reads them, and only for a recursive member: a
+    /// `Ref` is not a set on its own evidence, so without the definitions
+    /// `json | ~json` is left standing while `int | ~int` folds to the top. A
+    /// caller that holds the definitions -- which is every caller that combines
+    /// two compiled validators -- passes them and gets the law for both.
+    #[must_use]
+    pub fn union_within(
+        members: impl IntoIterator<Item = Schema>,
+        definitions: &[Schema],
+    ) -> Schema {
         let mut flat: Vec<Schema> = Vec::new();
         for member in members {
             match member {
@@ -647,8 +662,14 @@ impl Schema {
         // comparison only for a member that is itself a complement.
         // With no oracle here the law declines for an atom only the bindings can
         // read, which is the safe direction: a join left unfolded still denotes
-        // what it denotes.
-        if crate::decision::has_complementary_pair(&flat, &crate::decision::NoLeafRelations) {
+        // what it denotes. `definitions` is what a *recursive* member needs: a
+        // reference is not a set on its own evidence, so without them the law
+        // declines for every fixpoint, `json | ~json` included.
+        if crate::decision::has_complementary_pair_within(
+            &flat,
+            &crate::decision::NoLeafRelations,
+            definitions,
+        ) {
             return Schema::ANYTHING;
         }
         match flat.len() {
@@ -667,6 +688,16 @@ impl Schema {
     /// `int`.
     #[must_use]
     pub fn meet(members: impl IntoIterator<Item = Schema>) -> Schema {
+        Schema::meet_within(members, &[])
+    }
+
+    /// The meet, with the definitions its members may refer into. The dual of
+    /// [`union_within`](Self::union_within), and for the same reason.
+    #[must_use]
+    pub fn meet_within(
+        members: impl IntoIterator<Item = Schema>,
+        definitions: &[Schema],
+    ) -> Schema {
         let mut flat: Vec<Schema> = Vec::new();
         for member in members {
             match member {
@@ -683,7 +714,11 @@ impl Schema {
         // is the bottom. Both constructors state it or neither does -- a law
         // folded on one side and left standing on the other is two answers to
         // one question.
-        if crate::decision::has_complementary_pair(&flat, &crate::decision::NoLeafRelations) {
+        if crate::decision::has_complementary_pair_within(
+            &flat,
+            &crate::decision::NoLeafRelations,
+            definitions,
+        ) {
             return Schema::Nothing;
         }
         match flat.len() {
@@ -773,6 +808,60 @@ impl Schema {
             constraints,
         }
     }
+}
+
+/// A schema and the definitions it can still reach, with the rest dropped.
+///
+/// A fold can leave a definition behind: `json | ~json` is the top and carries
+/// the fixpoint's body no reference names any more. Dead weight in itself, and
+/// worse than that for equality -- the definitions are part of what two
+/// validators are compared on, so the top built that way was not the top built
+/// any other way. Two schemas differ when their *reachable* definitions differ,
+/// which is what this makes true by leaving nothing else.
+///
+/// The traversal is the reachability of a graph whose edges are `Ref` nodes:
+/// what the schema names, what those name, and no further.
+#[must_use]
+pub fn pruned(schema: Schema, definitions: Vec<Schema>) -> (Schema, Vec<Schema>) {
+    let mut reachable = vec![false; definitions.len()];
+    let mut pending = vec![&schema];
+    while let Some(node) = pending.pop() {
+        // A definition's body may name another, so reaching one puts its body on
+        // the stack and the walk continues from there.
+        if let Schema::Ref(index) = node
+            && let Some(seen) = reachable.get_mut(index.get())
+            && !*seen
+        {
+            *seen = true;
+            if let Some(body) = definitions.get(index.get()) {
+                pending.push(body);
+            }
+        }
+        node.push_children(&mut pending);
+    }
+    if reachable.iter().all(|kept| *kept) {
+        return (schema, definitions);
+    }
+    // The kept definitions keep their relative order, so a validator that loses
+    // none is untouched and one that loses some reads the same way.
+    let mut next = 0;
+    let renumbered: Vec<Option<DefIx>> = reachable
+        .iter()
+        .map(|kept| {
+            kept.then(|| {
+                let moved = DefIx::new(next);
+                next += 1;
+                moved
+            })
+        })
+        .collect();
+    let bodies: Vec<Schema> = definitions
+        .iter()
+        .zip(&reachable)
+        .filter(|(_, kept)| **kept)
+        .map(|(body, _)| body.renumbered(&renumbered))
+        .collect();
+    (schema.renumbered(&renumbered), bodies)
 }
 
 /// Put a record's fields in the order two spellings of one record agree on.
@@ -1080,6 +1169,52 @@ impl Schema {
     /// built on this drops it. A new variant carrying a *pooled index* must also
     /// be handled in [`remapped_by`](Self::remapped_by), which is why that match
     /// takes no wildcard.
+    /// Push every schema this one holds onto `out`, one level down.
+    ///
+    /// The read-only companion of [`map_children`](Self::map_children): a walk
+    /// that only looks does not need to rebuild what it looked at.
+    pub(crate) fn push_children<'a>(&'a self, out: &mut Vec<&'a Schema>) {
+        match self {
+            Schema::Union(members) | Schema::Intersection(members) => out.extend(members),
+            Schema::Complement(inner) | Schema::Set(inner) | Schema::FrozenSet(inner) => {
+                out.push(inner);
+            }
+            Schema::Seq { shape, .. } => {
+                out.extend(shape.prefix.iter());
+                out.extend(shape.tail.as_deref());
+            }
+            Schema::KeyedMap { fields, defaults } => {
+                out.extend(fields.iter().map(|field| &field.schema));
+                for clause in defaults {
+                    out.push(&clause.key);
+                    out.push(&clause.value);
+                }
+            }
+            Schema::AttrRecord { fields } => {
+                out.extend(fields.iter().map(|field| &field.schema));
+            }
+            Schema::Refine { base, .. } => out.push(base),
+            // The leaves: the scalars, the bounds, the pooled atoms and the two
+            // reference forms hold no schema.
+            _ => {}
+        }
+    }
+
+    /// This schema with every definition index rewritten by `table`.
+    ///
+    /// An index the table drops cannot be reached from a schema this is called
+    /// on -- that is what made it droppable -- so it is left as it stands rather
+    /// than guessed at.
+    fn renumbered(&self, table: &[Option<DefIx>]) -> Schema {
+        if let Schema::Ref(index) = self {
+            return match table.get(index.get()).copied().flatten() {
+                Some(moved) => Schema::Ref(moved),
+                None => self.clone(),
+            };
+        }
+        self.map_children(&|child| child.renumbered(table))
+    }
+
     pub(crate) fn map_children(&self, f: &impl Fn(&Schema) -> Schema) -> Schema {
         let field = |field: &Field| field.map_schema(f);
         match self {

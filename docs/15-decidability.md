@@ -181,9 +181,12 @@ decline the **descriptor** is asked: it holds each kind as a set, so `a ≤ b` i
 the shape. What is left below is what the descriptor cannot hold.
 
 - **Recursion.** A reference is a cycle, and a finite descriptor has no room for
-  one, so a recursive schema is decided by the rules alone. `μt. t & ~(μt. t)` is
-  not decided empty, because the two occurrences compile to two definitions and
-  the fold reads structural equality.
+  one, so a recursive schema is decided by the rules alone: the coinductive
+  comparison relates two fixpoints, and what it cannot reach is a relation that
+  needs the *values* a fixpoint admits rather than its shape. A meet of a
+  recursive schema with a disjoint kind -- `bytes` beside a JSON value -- is the
+  case: no rule reads the body's kinds, and the descriptor cannot hold the
+  cycle.
 
 - **A length bound over a shape that is not words.** A length is not a word's
   alone -- a list, a tuple, a set and a dict all have one -- and the descriptor's
@@ -237,10 +240,12 @@ class Pair(NamedTuple):
 assert not Validator(Annotated[tuple[int, int], at.MinLen(3)]).is_empty()
 # An attribute record and the shape its instances have are held apart.
 assert not Validator(Pair).is_subtype_of(tuple[int, int])
-# A recursive schema is decided by the rules alone, and they read the spelling:
-# two writings of one definition are two definitions.
+# A recursive schema is decided by the rules alone. The laws reach it -- a
+# fixpoint beside its own complement is empty -- and what the rules cannot read
+# is the *kinds* a fixpoint's body admits, so a meet with a disjoint kind stands.
 mu = lambda: Validator(recursive(lambda t: union(int, list[t])))  # noqa: E731
-assert not intersection(mu(), complement(mu())).is_empty()
+assert intersection(mu(), complement(mu())).is_empty()
+assert not intersection(mu(), str).is_empty()
 
 # Everything else here decides, on the sets rather than by a rule.
 pattern = Validator(Annotated[str, Regex("a")])

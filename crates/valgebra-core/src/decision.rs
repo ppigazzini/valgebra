@@ -1374,9 +1374,24 @@ pub(crate) fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> 
 /// law -- and so the simplifier does not rewrite to `nothing` what the decision
 /// declines to call empty.
 pub(crate) fn has_complementary_pair(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
+    has_complementary_pair_within(members, oracle, &[])
+}
+
+/// The same, with the definitions a reference in `members` may name.
+///
+/// A `Ref` is not a set on its own evidence -- what it names is elsewhere -- so
+/// with no definitions to read, the fold declines for every recursive schema and
+/// `json & ~json` stands. Given them, the reference is resolved and the law
+/// applies to a fixpoint like any other set.
+pub(crate) fn has_complementary_pair_within(
+    members: &[Schema],
+    oracle: &dyn LeafRelations,
+    definitions: &[Schema],
+) -> bool {
     members.iter().any(|member| match member {
         Schema::Complement(inner) => {
-            denotes_a_set(inner, oracle) && members.iter().any(|other| other == &**inner)
+            denotes_a_set_within(inner, oracle, definitions)
+                && members.iter().any(|other| other == &**inner)
         }
         _ => false,
     })
@@ -1387,19 +1402,38 @@ pub(crate) fn has_complementary_pair(members: &[Schema], oracle: &dyn LeafRelati
 /// Sound rather than complete, and conservative in the direction that declines.
 /// A callback is the atom this rules out: `Predicate` runs user code, so two
 /// occurrences of one schema can disagree, and a law that assumes they agree is
-/// not a law about this. A reference is ruled out for the same reason at one
-/// remove -- what it names is not in hand here, so a callback may hide behind it.
-/// The gradual `Any` is ruled out because its complement is not its set
-/// complement.
+/// not a law about this. The gradual `Any` is ruled out because its complement
+/// is not its set complement.
 ///
 /// A class is referred to the `oracle`: `isinstance` against a metaclass that
 /// overrides `__instancecheck__` is a callback too, and telling a pure class from
 /// a hooked one needs the class object, which only the bindings hold.
-pub(crate) fn denotes_a_set(schema: &Schema, oracle: &dyn LeafRelations) -> bool {
+///
+/// A **reference** is read where `definitions` holds what it names, and refused
+/// where it does not -- a callback may hide behind a body that is not in hand.
+/// Given the body, a reference met again while that body is being walked is
+/// *assumed* to be a set: the greatest-fixpoint reading the rest of the
+/// recursion uses, and the only one that terminates.
+pub(crate) fn denotes_a_set_within(
+    schema: &Schema,
+    oracle: &dyn LeafRelations,
+    definitions: &[Schema],
+) -> bool {
     let mut pending = vec![schema];
+    let mut open: Vec<DefIx> = Vec::new();
     while let Some(node) = pending.pop() {
         match node {
-            Schema::Ref(_) | Schema::SelfRef(_) => return false,
+            Schema::Ref(index) => {
+                if open.contains(index) {
+                    continue;
+                }
+                let Some(body) = definitions.get(index.get()) else {
+                    return false;
+                };
+                open.push(*index);
+                pending.push(body);
+            }
+            Schema::SelfRef(_) => return false,
             // Only the bindings hold the class, so only they can tell a pure one
             // from a hooked one. No answer is the conservative answer.
             Schema::Instance(_) => {
@@ -2381,7 +2415,7 @@ mod tests {
         ];
         for wrapper in wrappers {
             assert!(
-                !denotes_a_set(&wrapper, &NoLeafRelations),
+                !denotes_a_set_within(&wrapper, &NoLeafRelations, &[]),
                 "a predicate inside {wrapper:?} is still a predicate"
             );
             let meet = Schema::Intersection(vec![
@@ -2396,7 +2430,7 @@ mod tests {
 
         // Without one, the same shapes are sets and the law still decides.
         let plain = Schema::Set(Box::new(Schema::Int));
-        assert!(denotes_a_set(&plain, &NoLeafRelations));
+        assert!(denotes_a_set_within(&plain, &NoLeafRelations, &[]));
         assert!(
             Schema::Intersection(vec![plain.clone(), Schema::Complement(Box::new(plain))])
                 .is_empty_under(&[])
@@ -2427,12 +2461,12 @@ mod tests {
     fn a_reference_is_not_a_set_the_fold_may_cancel() {
         for reference in [Schema::Ref(DefIx::new(0)), Schema::SelfRef(0)] {
             assert!(
-                !denotes_a_set(&reference, &NoLeafRelations),
+                !denotes_a_set_within(&reference, &NoLeafRelations, &[]),
                 "{reference:?}"
             );
             // Nested, so a reference reached through a constructor refuses too.
             let nested = Schema::Set(Box::new(reference.clone()));
-            assert!(!denotes_a_set(&nested, &NoLeafRelations));
+            assert!(!denotes_a_set_within(&nested, &NoLeafRelations, &[]));
             // And the constructors decline the two cancelling laws for it.
             let not = |s: Schema| Schema::Complement(Box::new(s));
             assert_ne!(
@@ -2455,9 +2489,9 @@ mod tests {
     fn a_class_without_an_oracle_is_not_a_set() {
         let class = Schema::Instance(ClassIx::new(0));
         assert_eq!(NoLeafRelations.atom_denotes_a_set(&class), None);
-        assert!(!denotes_a_set(&class, &NoLeafRelations));
+        assert!(!denotes_a_set_within(&class, &NoLeafRelations, &[]));
 
-        assert!(denotes_a_set(&class, &Pure));
+        assert!(denotes_a_set_within(&class, &Pure, &[]));
     }
 
     /// The structural region rules decide without the descriptor, and stay

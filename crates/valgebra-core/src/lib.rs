@@ -22,7 +22,7 @@ mod violation;
 pub use decision::{Kind, LeafRelations, NoLeafRelations, Verdict};
 pub use ir::{
     ClassIx, ConstIx, Constraint, DefIx, DefShift, Field, Guarded, MapClause, Openness, OperandIx,
-    PathSegment, PoolShift, PredIx, Schema, SeqKind, SeqShape, Spelling,
+    PathSegment, PoolShift, PredIx, Schema, SeqKind, SeqShape, Spelling, pruned,
 };
 pub use violation::Violation;
 
@@ -4269,5 +4269,41 @@ mod index_laws {
             unreachable!()
         };
         assert_eq!(defaults.len(), 2);
+    }
+
+    /// Pruning keeps every definition the schema reaches -- through other
+    /// definitions included -- and renumbers the survivors in their old order.
+    #[test]
+    fn pruning_keeps_what_is_reached_and_renumbers_the_rest_in_order() {
+        let reference = |index: usize| Schema::Ref(DefIx::new(index));
+
+        // Everything reached: untouched.
+        let (schema, defs) = pruned(reference(0), vec![Schema::Int]);
+        assert_eq!(schema, reference(0));
+        assert_eq!(defs, vec![Schema::Int]);
+
+        // The middle definition is unreachable; the last one moves up by one and
+        // the references to it move with it.
+        let (schema, defs) = pruned(
+            Schema::Union(vec![reference(0), reference(2)]),
+            vec![Schema::Int, Schema::Str, Schema::Bytes],
+        );
+        assert_eq!(schema, Schema::Union(vec![reference(0), reference(1)]));
+        assert_eq!(defs, vec![Schema::Int, Schema::Bytes]);
+
+        // Reached through a definition's body rather than the schema itself.
+        let (schema, defs) = pruned(
+            reference(1),
+            vec![
+                Schema::Str,
+                Schema::Complement(Box::new(reference(2))),
+                Schema::Int,
+            ],
+        );
+        assert_eq!(schema, reference(0));
+        assert_eq!(
+            defs,
+            vec![Schema::Complement(Box::new(reference(1))), Schema::Int]
+        );
     }
 }

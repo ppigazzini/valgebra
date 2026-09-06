@@ -138,14 +138,14 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
 #[pyfunction]
 #[pyo3(signature = (*schemas))]
 fn union(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
-    combine(schemas, Schema::union)
+    combine(schemas, Schema::union_within)
 }
 
 /// The intersection of the given schemas: a value in every one of their sets.
 #[pyfunction]
 #[pyo3(signature = (*schemas))]
 fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
-    combine(schemas, Schema::meet)
+    combine(schemas, Schema::meet_within)
 }
 
 /// The complement of a schema: every value not in its set.
