@@ -81,7 +81,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Fourteen of them:
+for and misses the other. Fifteen of them:
 
 | Ledger | Holds |
 |---|---|
@@ -98,12 +98,25 @@ for and misses the other. Fourteen of them:
 | `tests/test_required_jobs.py` | every pull-request job is required by the merge gate |
 | `tests/test_changelog_ledger.py` | every `feat`/`fix` commit since the last release is on the changelog roll |
 | `tests/test_closure_ledger.py` | every schema variant is a generator, a representative, or a marker |
-| `tests/test_local_gate.py` | every merge-gate step is run by the local gate or excused by name |
+| `tests/test_local_gate.py` | every merge-gate step is planned by the local gate or excused by name |
+| `tests/test_fuzz_lane.py` | the fuzz soak names its allocation ceiling and forks its batches |
+| `tests/test_ledger_plants.py` | every ledger fails on the defect it exists to catch |
 
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are fourteen.
+because a table nothing counts is the one that drifts: there are fifteen.
+
+The last is a ledger over the rest, and it exists because reading a
+ledger cannot tell you whether it can fail. `test_local_gate.py` filtered its
+steps with `not runnable(name) and name not in NEEDS_A_RUNNER`, which is `X and
+not X` -- so its list was empty for every possible workflow and the assertion
+passed on a tree that had already broken the claim. `tests/test_ledger_plants.py`
+plants, for each ledger, the defect that ledger exists to catch: a schema variant
+in no column, a gate script in no lane, a job the merge gate does not require, a
+`feat` commit off the roll. Each is planted in a throwaway clone, that ledger is
+run there, and it must **fail**. A ledger with no plant fails the list, so the
+next one arrives with the evidence that it works.
 
 `tests/test_node_matrix.py` is the same shape one level in: it reads the `Schema`
 variants out of the IR and fails when one carries no row, so the universe is
