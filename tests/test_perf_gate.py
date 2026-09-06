@@ -13,11 +13,15 @@ measures low and reads as an improvement it never earned.
 from __future__ import annotations
 
 import importlib.util
+import os
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+import yaml
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
@@ -27,6 +31,7 @@ if TYPE_CHECKING:
     from types import ModuleType
 
 ROOT = Path(__file__).resolve().parent.parent
+WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 GATE = ROOT / "scripts" / "perf_gate.py"
 
 
@@ -154,3 +159,137 @@ def test_every_mode_names_an_example_the_tree_builds() -> None:
         path = ROOT / "crates" / crate / "examples" / f"{example}.rs"
         assert path.exists(), f"{mode} names {example}, which is not in the tree"
         assert subject
+
+
+def _merge_base_step() -> str:
+    """Read the shell of the workflow's "Name the merge base" step from it."""
+    spec = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    for job in spec["jobs"].values():
+        for step in job.get("steps", []):
+            if step.get("name") == "Name the merge base":
+                return str(step["run"])
+    message = "the workflow has no 'Name the merge base' step"
+    raise AssertionError(message)
+
+
+def _run_step(tree: Path, base_sha: str, branch: str) -> str:
+    """Run the step and read the `sha=` it recorded.
+
+    A fresh output file per run: a step appends to `GITHUB_OUTPUT`, as the
+    runner's does, so a shared one would hold every earlier answer too.
+    """
+    with tempfile.NamedTemporaryFile("w+", delete=False) as output:
+        recorded = Path(output.name)
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+            ["bash", "-euo", "pipefail", "-c", _merge_base_step()],  # noqa: S607
+            cwd=tree,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={
+                **os.environ,
+                "BASE_SHA": base_sha,
+                "DEFAULT_BRANCH": branch,
+                "GITHUB_OUTPUT": str(recorded),
+            },
+        )
+        # Not `check=True`: that raises with the script in the message and the
+        # shell's own words nowhere, which is a failure that cannot be read.
+        assert result.returncode == 0, (
+            f"the step exited {result.returncode}\n{result.stdout}{result.stderr}"
+        )
+        written = recorded.read_text(encoding="utf-8")
+    finally:
+        recorded.unlink(missing_ok=True)
+    lines = [line for line in written.splitlines() if line.startswith("sha=")]
+    assert len(lines) == 1, f"the step recorded {lines}"
+    return lines[0].removeprefix("sha=").strip()
+
+
+def _git(tree: Path, *args: str) -> str:
+    return subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        ["git", "-C", str(tree), *args],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+@pytest.fixture
+def stage(tmp_path: Path) -> tuple[Path, Path]:
+    """Build a checkout whose default branch, `HEAD` and `HEAD~1` differ.
+
+    Built rather than cloned from this tree, for two reasons. A clone inherits
+    whatever `origin/main` last pointed at, which on the lane that runs the
+    suite with full history is `HEAD` itself -- so the fallback to the default
+    branch and the guard against measuring `HEAD` against itself land on the
+    same commit, and an assertion that separates them passes or fails by
+    accident. And a synthetic history needs none of its own, so this runs in the
+    shallow clones the rest of the lanes take rather than skipping there.
+
+    `main` is left behind at the first commit, so the branch the step falls back
+    to is neither the commit under test nor its parent. Returns the upstream and
+    the checkout, because the case this test exists for is the one where the
+    two agree.
+    """
+    upstream, tree = tmp_path / "upstream", tmp_path / "tree"
+    upstream.mkdir()
+    _git(upstream, "init", "--quiet", "--initial-branch=main")
+    _git(upstream, "config", "user.email", "gate@example.invalid")
+    _git(upstream, "config", "user.name", "gate")
+    for step, branch in enumerate(["main", "work", None]):
+        (upstream / "measured.txt").write_text(f"{step}\n", encoding="utf-8")
+        if branch == "work":
+            _git(upstream, "checkout", "--quiet", "-b", branch)
+        _git(upstream, "add", "measured.txt")
+        _git(upstream, "commit", "--quiet", "-m", f"commit {step}")
+    _git(tmp_path, "clone", "--quiet", "--local", "--no-hardlinks", "upstream", "tree")
+    _git(tree, "checkout", "--quiet", "--detach", "origin/work")
+    return upstream, tree
+
+
+#: `bench` is `runs-on: ubuntu-latest`, so this step's shell is that runner's.
+#: Driving it through Git-Bash measures the shell rather than the step, and a
+#: platform the step never reaches cannot say anything about it either way. Every
+#: other lane runs this -- each Linux interpreter and macOS -- so the check is
+#: narrowed to the one platform it says nothing on, not to one that it does.
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the step runs on ubuntu-latest; Git-Bash is a different shell",
+)
+def test_the_merge_base_is_never_the_commit_being_measured(
+    stage: tuple[Path, Path],
+) -> None:
+    """A relative gate that measures a commit against itself passes anything.
+
+    `github.event.before` is unreachable after a force-push, so the step falls
+    back to the default branch -- and on a force-push *to* the default branch
+    that is the very commit under test. The gate then compared a build with
+    itself, reported 0.00%, and passed whatever the change did.
+
+    Driven through the step's own shell, read out of the workflow, so the test
+    cannot agree with a copy that has drifted.
+    """
+    upstream, tree = stage
+    head, parent = _git(tree, "rev-parse", "HEAD"), _git(tree, "rev-parse", "HEAD~1")
+    default = _git(tree, "rev-parse", "refs/remotes/origin/main")
+    assert len({head, parent, default}) == 3, "the three answers must be tellable apart"
+
+    # A pull request naming a real base: that base.
+    assert _run_step(tree, parent, "main") == parent
+    # A force-push whose `before` is gone: the default branch stands in, and it
+    # is neither of the other two answers -- so this says the fallback ran.
+    assert _run_step(tree, "0" * 40, "main") == default
+    # The case this exists for -- a force-push *to* the default branch, where
+    # the fallback fetches the very commit under test. The parent stands in
+    # rather than the commit measuring itself.
+    resolved = _run_step(tree, head, "main")
+    assert resolved != head, "the gate would measure the commit against itself"
+    assert resolved == parent
+    # And the same thing reached the way CI reaches it: `before` is gone *and*
+    # the default branch has been moved onto the commit under test, so the
+    # fallback lands on `HEAD` and the guard is the only thing between the gate
+    # and a comparison with itself.
+    _git(upstream, "branch", "--force", "main", head)
+    assert _run_step(tree, "0" * 40, "main") == parent

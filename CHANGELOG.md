@@ -87,6 +87,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a bare legacy typing alias is the class it aliases
 - fix: refuse a Literal argument the typing spec refuses
 - fix: refuse a bound against nan, which orders nothing
+- fix: the merge base is never the commit being measured -- internal
 
 -->
 

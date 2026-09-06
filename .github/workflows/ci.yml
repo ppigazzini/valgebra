@@ -450,8 +450,18 @@ jobs:
         run: |
           base="$BASE_SHA"
           if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            # The event named no reachable base: a force-push discards the
+            # `before` commit, and a fresh branch has none.
             git fetch --no-tags origin "$DEFAULT_BRANCH"
             base="$(git rev-parse FETCH_HEAD)"
+          fi
+          if [ "$base" = "$(git rev-parse HEAD)" ]; then
+            # Measuring a commit against itself passes whatever it did. That is
+            # what a force-push to the default branch produces, since the
+            # fallback above then fetches the very commit being tested.
+            git fetch --no-tags --deepen=1 origin HEAD || true
+            base="$(git rev-parse HEAD~1)"
+            echo "the base resolved to HEAD; using its parent instead"
           fi
           echo "sha=$base" >> "$GITHUB_OUTPUT"
           echo "measuring against $base"
