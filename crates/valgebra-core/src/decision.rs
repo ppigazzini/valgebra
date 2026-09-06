@@ -6,6 +6,7 @@ use crate::ir::{
     ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
 };
 use rustc_hash::FxHashMap;
+use std::borrow::Cow;
 use std::cell::Cell;
 
 /// The most decision steps one top-level query may take before it stops and
@@ -406,7 +407,7 @@ impl Schema {
     #[must_use]
     pub fn is_empty_with(&self, oracle: &dyn LeafRelations, defs: &[Schema]) -> bool {
         self.is_empty_rec(oracle, defs, &mut Vec::new(), &Cell::new(DECISION_BUDGET))
-            || self.denotes_no_value(oracle)
+            || self.denotes_no_value(oracle, defs)
     }
 
     /// Whether the descriptor proves this schema admits no value.
@@ -422,8 +423,9 @@ impl Schema {
     /// may spend, and past any of those it refuses. A schema the descriptor
     /// cannot hold -- a recursive one -- refuses the same way. Either way the
     /// caller keeps the verdict the rules reached.
-    fn denotes_no_value(&self, pool: &dyn Constants) -> bool {
-        lower(self, pool).is_some_and(|set| set.emptiness() == Verdict::Empty)
+    fn denotes_no_value(&self, pool: &dyn Constants, defs: &[Schema]) -> bool {
+        lower(&unfolded_for(self, defs, true), pool)
+            .is_some_and(|set| set.emptiness() == Verdict::Empty)
     }
 
     /// Whether the descriptor proves every value of this schema is one of
@@ -437,14 +439,22 @@ impl Schema {
     /// the right one at all -- otherwise a schema the descriptor proves empty
     /// would be below nothing whose descriptor it could not build, which is a
     /// pair of answers that contradict each other.
-    fn descriptor_contained_in(&self, other: &Schema, pool: &dyn Constants) -> bool {
-        let Some(mine) = lower(self, pool) else {
+    fn descriptor_contained_in(
+        &self,
+        other: &Schema,
+        pool: &dyn Constants,
+        defs: &[Schema],
+    ) -> bool {
+        // The two sides are unfolded in opposite directions, which is what makes
+        // a difference over a recursive schema sound: the left grows and the
+        // right shrinks, so a difference proved empty here was empty before.
+        let Some(mine) = lower(&unfolded_for(self, defs, true), pool) else {
             return false;
         };
         if mine.emptiness() == Verdict::Empty {
             return true;
         }
-        lower(other, pool).is_some_and(|theirs| {
+        lower(&unfolded_for(other, defs, false), pool).is_some_and(|theirs| {
             mine.intersect(&theirs.complement())
                 .is_some_and(|difference| difference.emptiness() == Verdict::Empty)
         })
@@ -737,7 +747,7 @@ impl Schema {
                 budget: &budget,
             },
             &mut Vec::new(),
-        ) || self.descriptor_contained_in(other, oracle)
+        ) || self.descriptor_contained_in(other, oracle, defs)
     }
 
     fn is_subtype_rec(
@@ -1023,7 +1033,8 @@ impl Schema {
             budget: &budget,
         };
         let within = |sub: &Schema, sup: &Schema| {
-            sub.is_subtype_rec(sup, cx, &mut Vec::new()) || sub.descriptor_contained_in(sup, oracle)
+            sub.is_subtype_rec(sup, cx, &mut Vec::new())
+                || sub.descriptor_contained_in(sup, oracle, defs)
         };
         within(self, other) && within(other, self)
     }
@@ -1395,6 +1406,28 @@ pub(crate) fn has_complementary_pair_within(
         }
         _ => false,
     })
+}
+
+/// How many times a reference is unfolded before the descriptor is asked.
+///
+/// One. A single unfolding puts the fixpoint's own body in front of the
+/// representation, which settles every relation that turns on *what kinds* a
+/// recursive schema admits -- a meet with a disjoint kind, an inclusion in a
+/// wider union -- and that is the whole of what the structural rules cannot
+/// read. Each further unfolding multiplies the schema the descriptor must build
+/// against a bound of 64 nodes, for relations nobody has asked for.
+const UNFOLDS: u32 = 1;
+
+/// A schema the descriptor can hold, standing in for one that may recurse.
+///
+/// Borrowed where there is no reference, which is the common case and the one
+/// that must cost nothing.
+fn unfolded_for<'a>(schema: &'a Schema, defs: &[Schema], positive: bool) -> Cow<'a, Schema> {
+    if schema.has_reference() {
+        Cow::Owned(schema.unfolded(defs, UNFOLDS, positive))
+    } else {
+        Cow::Borrowed(schema)
+    }
 }
 
 /// Whether a schema denotes a *set*: the same values however often it is asked.

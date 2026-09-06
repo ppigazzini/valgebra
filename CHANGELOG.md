@@ -68,6 +68,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a type alias that names itself is the fixpoint it writes
 - feat: a schema compares equal in every order it can be written
 - fix: a recursive schema is one schema wherever it is combined
+- feat: decide a recursive schema against the kinds its body admits
 
 -->
 
@@ -113,6 +114,24 @@ answer of its own, or a repair to a change not yet released.
   conservative one, as before. What stays conservative is recursion, a length
   bound over a shape that is not text, an attribute record beside a builtin kind,
   and a predicate.
+
+- **A recursive schema is decided against the kinds its body admits.** A
+  reference is a cycle and a set representation has no room for one, so every
+  relation over a fixpoint used to fall to the structural rules -- which read
+  shapes, and cannot tell that a JSON value and a `bytes` share no value. The
+  body is now unfolded once before the sets are built, with a bound standing
+  where the reference was: the top where the schema is used positively, the
+  bottom under a complement, which is what keeps a difference sound.
+
+  ```python
+  from valgebra import Validator, anything, complement, intersection, recursive, union
+
+  json = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+  assert intersection(bytes, json).is_empty()
+  assert intersection(tuple, json).is_empty()
+  assert Validator(bytes).is_subtype_of(complement(json))
+  assert json.is_subtype_of(anything)
+  ```
 
 - **A recursive schema is one schema wherever it is combined.** Merging a
   compiled validator used to copy its definitions, so two occurrences of one

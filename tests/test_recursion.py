@@ -6,7 +6,15 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import ValidationError, Validator, complement, recursive, union
+from valgebra import (
+    ValidationError,
+    Validator,
+    anything,
+    complement,
+    intersection,
+    recursive,
+    union,
+)
 
 json_value = recursive(
     lambda j: union(None, bool, int, float, str, [j], {str: j}),
@@ -325,3 +333,52 @@ def test_two_aliases_may_name_each_other() -> None:
 
     assert branch.is_valid([1, [2]])
     assert not branch.is_valid([1, "x"])
+
+
+def test_a_fixpoint_is_decided_against_the_kinds_its_body_admits() -> None:
+    """A meet with a kind the body never names is empty, and provably so.
+
+    The rules read a fixpoint's *shape* and a set representation holds no cycle,
+    so this pair of questions was answered by neither: `bytes` and a JSON value
+    share no value, and nothing could say it. Unfolding the body once puts the
+    kinds it admits in front of the representation, with a bound standing where
+    the reference was.
+    """
+    json = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+
+    assert intersection(bytes, json).is_empty()
+    assert intersection(tuple, json).is_empty()
+    assert intersection(set[int], json).is_empty()
+    assert Validator(bytes).is_subtype_of(complement(json))
+    assert json.is_subtype_of(anything)
+    # And the values still decide the same way, which is what the proofs are
+    # about: the unfolding is a reasoning step, not a change of schema.
+    assert json.is_valid({"a": [1, "x", None]})
+    assert not json.is_valid(b"x")
+    assert not json.is_valid((1,))
+
+
+def test_the_unfolding_is_sound_in_both_directions() -> None:
+    """The over- and under-approximation must each stay on its own side.
+
+    A positive occurrence is unfolded to a *superset* and a negative one to a
+    subset, which is what keeps `a & ~b` sound over a recursive schema. Getting
+    the two the wrong way round would prove a containment that does not hold,
+    and the pairs below are the ones that would show it: each is a true
+    non-relation over a fixpoint, and a wrong polarity turns one into a proof.
+    """
+    json = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+    ints = recursive(lambda t: union(int, [t]))
+
+    # `json` is not below the integer tree, and the tree is below `json`.
+    assert ints.is_subtype_of(json)
+    assert not json.is_subtype_of(ints)
+    # A kind the body *does* admit is not disjoint from it, however deep.
+    assert not intersection(str, json).is_empty()
+    assert not intersection(list[int], json).is_empty()
+    assert not intersection(json, complement(str)).is_empty()
+    # And a witness for each: what the decisions say, the walk agrees with.
+    assert json.is_valid("x")
+    assert not ints.is_valid("x")
+    assert json.is_valid([[1]])
+    assert ints.is_valid([[1]])

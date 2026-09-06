@@ -1154,21 +1154,68 @@ impl Schema {
         }
     }
 
-    /// Rebuild this node with every child schema mapped through `f`, leaving the
-    /// node's own payloads -- the container kind, a field's name and
-    /// required-ness, a pooled index, a constraint -- exactly as they are.
+    /// This schema with its references unfolded, and the cut replaced by the
+    /// bound the position makes sound.
     ///
-    /// **This is the one place the child set of each variant is written down.** A
-    /// walk that only descends -- moving indices, resolving a self-reference --
-    /// used to spell the whole descent out per pass, and the compiler forced an
-    /// arm without being able to check the arm recursed into everything: a
-    /// forgotten child was a silent stale subtree. Written once, every such pass
-    /// inherits the child set.
+    /// A set representation holds no cycle, so a recursive schema could not be
+    /// lowered at all and every relation over one was left to the structural
+    /// rules -- including relations a single unfolding settles, like a meet with
+    /// a kind the body never admits. Unfolding `unfolds` times and putting a
+    /// *bound* where the reference would have been gives a schema the descriptor
+    /// can hold and an answer that still holds of the original, provided the
+    /// bound is chosen for the position.
     ///
-    /// A new variant carrying a child schema must map it here, or every pass
-    /// built on this drops it. A new variant carrying a *pooled index* must also
-    /// be handled in [`remapped_by`](Self::remapped_by), which is why that match
-    /// takes no wildcard.
+    /// `positive` says which. In a positive position the top is the cut, so the
+    /// result denotes a superset: proving *that* empty proves the original
+    /// empty. In a negative one -- under a complement -- the bottom is the cut
+    /// and the result denotes a subset, which is what keeps a difference sound.
+    /// `Complement` is the only node that flips the polarity: every other one is
+    /// monotone in what it holds, a map clause included, since widening a clause
+    /// only makes more dicts covered by it.
+    ///
+    /// A schema with no reference is returned as it stands, so the caller pays
+    /// nothing for the common case.
+    #[must_use]
+    pub fn unfolded(&self, definitions: &[Schema], unfolds: u32, positive: bool) -> Schema {
+        let cut = || {
+            if positive {
+                Schema::ANYTHING
+            } else {
+                Schema::Nothing
+            }
+        };
+        match self {
+            Schema::Ref(index) => match definitions.get(index.get()) {
+                Some(body) if unfolds > 0 => body.unfolded(definitions, unfolds - 1, positive),
+                // Out of unfoldings, or a reference to a definition this caller
+                // does not hold: the bound stands in for what is not read.
+                _ => cut(),
+            },
+            // A marker for a definition still being built. Nothing can be read
+            // from it, so the bound stands in for it too.
+            Schema::SelfRef(_) => cut(),
+            Schema::Complement(inner) => {
+                Schema::Complement(Box::new(inner.unfolded(definitions, unfolds, !positive)))
+            }
+            other => other.map_children(&|child| child.unfolded(definitions, unfolds, positive)),
+        }
+    }
+
+    /// Whether any reference is reachable from here, so a caller can tell the
+    /// schemas [`unfolded`](Self::unfolded) would rebuild from the ones it would
+    /// hand straight back.
+    #[must_use]
+    pub fn has_reference(&self) -> bool {
+        let mut pending = vec![self];
+        while let Some(node) = pending.pop() {
+            if matches!(node, Schema::Ref(_) | Schema::SelfRef(_)) {
+                return true;
+            }
+            node.push_children(&mut pending);
+        }
+        false
+    }
+
     /// Push every schema this one holds onto `out`, one level down.
     ///
     /// The read-only companion of [`map_children`](Self::map_children): a walk
@@ -1215,6 +1262,21 @@ impl Schema {
         self.map_children(&|child| child.renumbered(table))
     }
 
+    /// Rebuild this node with every child schema mapped through `f`, leaving the
+    /// node's own payloads -- the container kind, a field's name and
+    /// required-ness, a pooled index, a constraint -- exactly as they are.
+    ///
+    /// **This is the one place the child set of each variant is written down.** A
+    /// walk that only descends -- moving indices, resolving a self-reference --
+    /// used to spell the whole descent out per pass, and the compiler forced an
+    /// arm without being able to check the arm recursed into everything: a
+    /// forgotten child was a silent stale subtree. Written once, every such pass
+    /// inherits the child set.
+    ///
+    /// A new variant carrying a child schema must map it here, or every pass
+    /// built on this drops it. A new variant carrying a *pooled index* must also
+    /// be handled in [`remapped_by`](Self::remapped_by), which is why that match
+    /// takes no wildcard.
     pub(crate) fn map_children(&self, f: &impl Fn(&Schema) -> Schema) -> Schema {
         let field = |field: &Field| field.map_schema(f);
         match self {

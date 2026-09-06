@@ -4306,4 +4306,109 @@ mod index_laws {
             vec![Schema::Complement(Box::new(reference(1))), Schema::Int]
         );
     }
+
+    /// Unfolding reads the body while it has unfoldings and puts the bound where
+    /// the reference stood once it has none -- the top in a positive position, the
+    /// bottom in a negative one, and a complement is what flips between them.
+    #[test]
+    fn unfolding_reads_the_body_then_stands_in_the_bound_the_position_makes_sound() {
+        let defs = vec![Schema::Int];
+        let reference = Schema::Ref(DefIx::new(0));
+
+        assert_eq!(reference.unfolded(&defs, 1, true), Schema::Int);
+        assert_eq!(reference.unfolded(&defs, 1, false), Schema::Int);
+        assert_eq!(reference.unfolded(&defs, 0, true), Schema::ANYTHING);
+        assert_eq!(reference.unfolded(&defs, 0, false), Schema::Nothing);
+
+        // Under a complement the polarity flips, so the cut inside is the other
+        // bound: `~Ref` in a positive position over-approximates as `~nothing`.
+        let negated = Schema::Complement(Box::new(reference.clone()));
+        assert_eq!(
+            negated.unfolded(&defs, 0, true),
+            Schema::Complement(Box::new(Schema::Nothing))
+        );
+        assert_eq!(
+            negated.unfolded(&defs, 0, false),
+            Schema::Complement(Box::new(Schema::ANYTHING))
+        );
+
+        // A schema with no reference comes back as it stands.
+        assert_eq!(Schema::Int.unfolded(&defs, 1, true), Schema::Int);
+    }
+
+    /// A reference is found under every variant that holds a child, so the caller
+    /// that skips the rebuild for reference-free schemas skips none that need it.
+    #[test]
+    fn a_reference_is_found_under_every_child_holding_variant() {
+        let reference = Schema::Ref(DefIx::new(0));
+        let field = |schema: Schema| Field {
+            name: "a".to_owned(),
+            schema,
+            required: true,
+        };
+        let holders = [
+            Schema::Union(vec![Schema::Int, reference.clone()]),
+            Schema::Intersection(vec![Schema::Int, reference.clone()]),
+            Schema::Complement(Box::new(reference.clone())),
+            Schema::list(SeqShape::fixed([Schema::Int, reference.clone()])),
+            Schema::list(SeqShape::prefix_tail([Schema::Int], reference.clone())),
+            Schema::record(vec![field(reference.clone())], Openness::Closed),
+            Schema::mapping(MapClause {
+                key: reference.clone(),
+                value: Schema::Int,
+            }),
+            Schema::mapping(MapClause {
+                key: Schema::Str,
+                value: reference.clone(),
+            }),
+            Schema::AttrRecord {
+                fields: vec![field(reference.clone())],
+            },
+            Schema::Refine {
+                base: Box::new(reference.clone()),
+                constraints: vec![Constraint::MinLen(1)],
+            },
+        ];
+        for holder in &holders {
+            assert!(holder.has_reference(), "{holder:?} holds a reference");
+        }
+        assert!(Schema::SelfRef(0).has_reference());
+        assert!(!Schema::Int.has_reference());
+        assert!(!Schema::list(SeqShape::homogeneous(Schema::Int)).has_reference());
+    }
+
+    /// A union member that is proven empty but whose region is opaque does not
+    /// end the fold: the stop is on "not proven empty", and an empty member with
+    /// an unknown region is neither absorbing nor a verdict on the union.
+    #[test]
+    fn an_empty_member_with_an_opaque_region_does_not_decide_the_union() {
+        // A refinement over an empty base is empty with an unknown region.
+        let emptied = Schema::Refine {
+            base: Box::new(Schema::Intersection(vec![Schema::Int, Schema::Str])),
+            constraints: vec![Constraint::MinLen(1)],
+        };
+        assert!(emptied.is_empty());
+        let union = Schema::Union(vec![emptied, Schema::Str]);
+        assert!(!union.is_empty());
+    }
+
+    /// A reference on the left is unfolded before the arms that read the right
+    /// side's shape: against a refinement, whose arm reads the subject's own
+    /// constraints, a reference is decided through its body rather than declined.
+    #[test]
+    fn a_reference_on_the_left_is_read_through_its_body_against_any_right_side() {
+        let narrowed = Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints: vec![Constraint::Ge(OperandIx::new(0))],
+        };
+        let defs = vec![narrowed.clone()];
+        let reference = Schema::Ref(DefIx::new(0));
+        assert!(reference.is_subtype_of_under(&narrowed, &NoLeafRelations, &defs));
+        // And through nothing else: a bound the body does not carry is not entailed.
+        let other = Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints: vec![Constraint::Gt(OperandIx::new(0))],
+        };
+        assert!(!reference.is_subtype_of_under(&other, &NoLeafRelations, &defs));
+    }
 }

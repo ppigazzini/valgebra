@@ -59,6 +59,10 @@ from valgebra import (
 
 # A recursive schema, reused below to record a reflexivity hole.
 _RECURSIVE = recursive(lambda t: union(None, {"value": int, "next": t}))
+# The JSON value, which is the recursive schema a reader writes: every scalar,
+# and lists and dicts of itself. Its body names six kinds and no other, which is
+# what makes a meet with a seventh decidable once the body is unfolded.
+_JSON = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
 
 
 class _Pair(NamedTuple):
@@ -217,6 +221,17 @@ _DECIDED = [
         union(None, {"value": int, "next": _RECURSIVE}),
         id="mu-t<=its-own-body",
     ),
+    # A fixpoint met with a kind its body never admits. The rules read the
+    # shape and a set representation holds no cycle, so this was undecided in
+    # both; unfolding the body once puts the kinds it admits in front of the
+    # representation, and a bound stands where the reference was.
+    pytest.param("empty", intersection(bytes, _JSON), None, id="empty:bytes&json"),
+    pytest.param("empty", intersection(tuple, _JSON), None, id="empty:tuple&json"),
+    pytest.param(
+        "empty", intersection(set[int], _JSON), None, id="empty:set[int]&json"
+    ),
+    pytest.param("subtype", _JSON, anything, id="json<=anything"),
+    pytest.param("subtype", bytes, complement(_JSON), id="bytes<=~json"),
     # A fixpoint beside its own complement. Two occurrences of one recursive
     # schema used to compile to two definitions, so the fold that cancels a
     # schema against its complement compared terms and saw two; a merged
