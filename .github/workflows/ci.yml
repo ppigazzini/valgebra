@@ -208,12 +208,23 @@ jobs:
     # supported lane: the extension declares `gil_used = false`, imports without
     # re-enabling the GIL, and the concurrency test exercises true parallel
     # validation there.
+    #
+    # A push runs the ends and the odd ones: the supported floor, the current
+    # release, the free-threaded build and the prerelease. The interpreters
+    # between the ends -- 3.11, 3.12, 3.13 -- differ from their neighbours in
+    # ways this extension does not read: it is a compiled module against a
+    # version-specific ABI, and what breaks between two of them breaks at the
+    # floor or at the current release first. They run nightly, where a surprise
+    # is found within the day rather than within the minute, and where nobody
+    # waits for them.
     continue-on-error: ${{ matrix.python-version == '3.15' }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t", "3.15"]
+        python-version: ${{ github.event_name == 'schedule'
+          && fromJSON('["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t", "3.15"]')
+          || fromJSON('["3.10", "3.14", "3.14t", "3.15"]') }}
         # One representative interpreter on macOS and Windows, so the binding, the
         # membership walk, the JSON path, and the error model are exercised on
         # every OS the release ships wheels for, not only Linux.

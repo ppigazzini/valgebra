@@ -26,6 +26,7 @@ LEDGER: every pull-request job is required by the merge gate
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -159,3 +160,36 @@ def test_a_sharded_sweep_covers_every_shard() -> None:
             f"{list(range(count))}, and anything else leaves mutants unswept"
         )
     assert sharded, "no job shards its sweep; this ledger has no subject"
+
+
+def test_the_push_matrix_is_the_ends_and_the_odd_ones() -> None:
+    """What a push runs across interpreters is a decision, not a list.
+
+    Seven interpreters on every push is fifty-eight job-minutes for a change
+    that cannot see most of them: the extension is compiled against a
+    version-specific ABI, and what breaks between 3.11 and 3.12 breaks at the
+    floor or at the current release first. So a push runs the ends and the odd
+    ones -- the supported floor, the current release, the free-threaded build,
+    the prerelease -- and the interpreters between the ends run nightly.
+
+    Held here because a matrix grows by one line and nobody re-measures.
+    """
+    text = _text()
+    matrix = re.search(
+        r"python-version: \$\{\{ github\.event_name == 'schedule'\s*"
+        r"&& fromJSON\('(\[[^\]]*\])'\)\s*\|\| fromJSON\('(\[[^\]]*\])'\)",
+        text,
+    )
+    assert matrix, "the python matrix is no longer split by event"
+    nightly = json.loads(matrix.group(1))
+    push = json.loads(matrix.group(2))
+
+    assert set(push) <= set(nightly), "a push runs an interpreter the nightly does not"
+    assert len(push) <= 4, f"the push matrix grew to {push}"
+    # The four are the ones a compiled extension can actually differ on.
+    assert {"3.10", "3.14t"} <= set(push), (
+        "the floor and the free-threaded build are the two legs a push cannot "
+        f"drop: {push}"
+    )
+    # And the nightly keeps the ones the push gave up, or they run nowhere.
+    assert set(nightly) - set(push), "the nightly runs nothing extra"
