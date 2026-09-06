@@ -122,6 +122,21 @@ do not agree to the last digit — a minimum sits below a median by however much
 the run was disturbed — so read a cell here against the same cell, not against
 the gate's output.
 
+### The cheapest door, and where the floor is
+
+`x in v` is `v.is_valid(x)` through the container protocol, and it is the
+cheaper call: **30 ns against 40 ns** for a scalar on the machine below, because
+the interpreter reaches a container slot directly and a method by its call
+protocol. Neither number is the check. `Validator(anything).is_valid(1)` -- the
+schema that answers `True` without looking -- costs 38 ns, so the *walk* for an
+`int` is about 4 ns and everything else is the boundary a Python call crosses.
+For reference on the same run, `isinstance(1, int)` is 21 ns and an empty Python
+function call is 29 ns.
+
+Read that as the floor it is: a per-call check cannot be much cheaper than a
+Python call, and the way to spend less is to make fewer calls -- validate the
+list, not each element -- rather than to look for a faster scalar.
+
 ### Results
 
 End-to-end validation of a value that passes (lower is better):

@@ -1,8 +1,9 @@
 //! Error construction: violation summaries, value labels, and the Python
 //! `ValidationError` raised from a [`valgebra_core::Violation`].
 
+use pyo3::intern;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyTuple};
+use pyo3::types::{PyDict, PyString, PyTuple};
 use valgebra_core::{PathSegment, Violation};
 
 use crate::exception::ValidationError;
@@ -19,18 +20,27 @@ pub(crate) fn class_label(class: &Bound<'_, PyAny>) -> String {
 /// A short repr-style summary of a value for error messages.
 pub(crate) fn summarize(value: &Bound<'_, PyAny>) -> String {
     match value.repr() {
-        Ok(repr) => truncate(&repr.to_string(), 80),
+        Ok(repr) => shorten(repr.to_string(), 80),
         Err(_) => "<unrepresentable>".to_owned(),
     }
 }
 
-pub(crate) fn truncate(text: &str, max_chars: usize) -> String {
-    if text.chars().count() <= max_chars {
-        text.to_owned()
-    } else {
-        let head: String = text.chars().take(max_chars).collect();
-        format!("{head}...")
+/// Truncate a string this code already owns, keeping it where it is short.
+///
+/// The short case is every case in practice, and copying it was a second
+/// allocation per violation on top of the one the repr already made: a value
+/// summary is built for every failure a wide record reports.
+pub(crate) fn shorten(text: String, max_chars: usize) -> String {
+    // Counting stops at the limit rather than walking a long repr to the end.
+    if text.chars().nth(max_chars).is_none() {
+        return text;
     }
+    let head: String = text.chars().take(max_chars).collect();
+    format!("{head}...")
+}
+
+pub(crate) fn truncate(text: &str, max_chars: usize) -> String {
+    shorten(text.to_owned(), max_chars)
 }
 
 /// Build a [`ValidationError`] for input that is not valid JSON.
@@ -80,27 +90,64 @@ pub(crate) fn into_pyerr(py: Python<'_>, violations: &[Violation]) -> PyErr {
     }
 }
 
+/// The five keys of an error item, and the six attributes of the exception.
+///
+/// Interned rather than passed as `&str`. A `set_item("code", ..)` builds a
+/// fresh Python string for the key on every call, and one failing `validate`
+/// writes eleven of them -- five per item plus the six attributes -- which is
+/// most of what raising used to cost. `intern!` caches one object per call site
+/// for the interpreter's life, so the write is a hash of a string that already
+/// knows its hash.
+struct Keys<'py> {
+    code: &'py Bound<'py, PyString>,
+    path: &'py Bound<'py, PyString>,
+    message: &'py Bound<'py, PyString>,
+    expected: &'py Bound<'py, PyString>,
+    value: &'py Bound<'py, PyString>,
+}
+
+impl<'py> Keys<'py> {
+    fn get(py: Python<'py>) -> Keys<'py> {
+        Keys {
+            code: intern!(py, "code"),
+            path: intern!(py, "path"),
+            message: intern!(py, "message"),
+            expected: intern!(py, "expected"),
+            value: intern!(py, "value"),
+        }
+    }
+}
+
 fn build_validation_error(
     py: Python<'_>,
     first: &Violation,
     rest: &[Violation],
 ) -> PyResult<PyErr> {
-    let err = ValidationError::new_err(summary_message(first, rest));
+    // The first violation's message and path are each read twice -- once for the
+    // scalar attribute that mirrors it, once inside its own error item -- and
+    // both cost an allocation, so each is built once and shared.
+    let message = first.to_string();
+    let path = build_path(py, &first.path)?;
+    let keys = Keys::get(py);
+    let err = ValidationError::new_err(summary_message(&message, first, rest));
     let instance = err.value(py);
-    instance.setattr("code", first.code)?;
-    instance.setattr("expected", first.expected.as_str())?;
-    instance.setattr("value", first.value_summary.as_str())?;
-    instance.setattr("message", first.to_string())?;
-    instance.setattr("path", build_path(py, &first.path)?)?;
-    instance.setattr("errors", error_items(py, first, rest)?)?;
+    instance.setattr(keys.code, first.code)?;
+    instance.setattr(keys.expected, first.expected.as_str())?;
+    instance.setattr(keys.value, first.value_summary.as_str())?;
+    instance.setattr(keys.message, message.as_str())?;
+    instance.setattr(keys.path, &path)?;
+    instance.setattr(
+        intern!(py, "errors"),
+        error_items(py, &keys, &message, &path, first, rest)?,
+    )?;
     Ok(err)
 }
 
 /// The exception's `str()`: the single message for one failure, or a counted,
 /// newline-joined summary for several.
-fn summary_message(first: &Violation, rest: &[Violation]) -> String {
+fn summary_message(message: &str, first: &Violation, rest: &[Violation]) -> String {
     if rest.is_empty() {
-        return first.to_string();
+        return message.to_owned();
     }
     let mut summary = format!("{} validation errors:", rest.len() + 1);
     for violation in core::iter::once(first).chain(rest) {
@@ -114,17 +161,25 @@ fn summary_message(first: &Violation, rest: &[Violation]) -> String {
 /// order.
 fn error_items<'py>(
     py: Python<'py>,
+    keys: &Keys<'py>,
+    first_message: &str,
+    first_path: &Bound<'py, PyTuple>,
     first: &Violation,
     rest: &[Violation],
 ) -> PyResult<Bound<'py, PyTuple>> {
     let mut items = Vec::with_capacity(rest.len() + 1);
-    for violation in core::iter::once(first).chain(rest) {
+    for (at, violation) in core::iter::once(first).chain(rest).enumerate() {
         let item = PyDict::new(py);
-        item.set_item("code", violation.code)?;
-        item.set_item("path", build_path(py, &violation.path)?)?;
-        item.set_item("message", violation.to_string())?;
-        item.set_item("expected", violation.expected.as_str())?;
-        item.set_item("value", violation.value_summary.as_str())?;
+        item.set_item(keys.code, violation.code)?;
+        if at == 0 {
+            item.set_item(keys.path, first_path)?;
+            item.set_item(keys.message, first_message)?;
+        } else {
+            item.set_item(keys.path, build_path(py, &violation.path)?)?;
+            item.set_item(keys.message, violation.to_string())?;
+        }
+        item.set_item(keys.expected, violation.expected.as_str())?;
+        item.set_item(keys.value, violation.value_summary.as_str())?;
         items.push(item);
     }
     PyTuple::new(py, items)

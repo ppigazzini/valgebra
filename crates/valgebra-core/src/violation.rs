@@ -1,8 +1,6 @@
 //! The structured validation failure: the [`Violation`] value produced when a
 //! value does not belong to a schema's set, and its rendering.
 
-use std::fmt::Write as _;
-
 use crate::ir::PathSegment;
 
 /// A validation failure: a value did not belong to a schema's set.
@@ -23,39 +21,47 @@ impl Violation {
     #[must_use]
     pub fn location(&self) -> String {
         let mut out = String::new();
+        // Infallible: a `String` writer never errors.
+        let _ = self.write_location(&mut out);
+        out
+    }
+
+    /// Write the location into any formatter, so the message need not build one.
+    ///
+    /// A failing `validate` formats a message per violation, and formatting it
+    /// through an owned location string is an allocation per violation that only
+    /// ever feeds another allocation. Aggregating a wide record's failures makes
+    /// that a per-field cost.
+    fn write_location(&self, out: &mut impl core::fmt::Write) -> core::fmt::Result {
+        let mut first = true;
         for segment in &self.path {
             match segment {
                 PathSegment::Key(key) => {
-                    if !out.is_empty() {
-                        out.push('.');
+                    if !first {
+                        out.write_char('.')?;
                     }
-                    out.push_str(key);
+                    out.write_str(key)?;
                 }
-                PathSegment::Index(index) => {
-                    let _ = write!(out, "[{index}]");
-                }
+                PathSegment::Index(index) => write!(out, "[{index}]")?,
             }
+            first = false;
         }
-        out
+        Ok(())
     }
 }
 
 impl std::fmt::Display for Violation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let location = self.location();
-        if location.is_empty() {
-            write!(
-                f,
-                "expected {}, got {} [{}]",
-                self.expected, self.value_summary, self.code
-            )
-        } else {
-            write!(
-                f,
-                "at {}: expected {}, got {} [{}]",
-                location, self.expected, self.value_summary, self.code
-            )
+        if !self.path.is_empty() {
+            f.write_str("at ")?;
+            self.write_location(f)?;
+            f.write_str(": ")?;
         }
+        write!(
+            f,
+            "expected {}, got {} [{}]",
+            self.expected, self.value_summary, self.code
+        )
     }
 }
 
