@@ -504,7 +504,13 @@ impl LeafRelations for PoolRelations<'_, '_> {
 /// is never copied or coerced. A validator never changes after it is built and
 /// is safe to share across threads. Its `repr` is the annotation that produces
 /// it, and it can be copied with `copy.copy`/`copy.deepcopy`.
-#[pyclass(frozen, module = "valgebra._valgebra")]
+///
+/// The class names the **public** package rather than the extension underneath
+/// it, which is the path a user imports it from and the one the API reference
+/// keeps true. It cannot be subclassed: every method reads a schema this type
+/// built, and a subclass overriding one would be a validator whose answers are
+/// not the algebra's.
+#[pyclass(frozen, module = "valgebra")]
 pub struct Validator {
     pub(crate) schema: Schema,
     pub(crate) literals: Vec<Py<PyAny>>,
@@ -714,6 +720,7 @@ impl Validator {
     ///     NotImplementedError: If the schema uses an unsupported form (for
     ///         example a recursive class, which must be written with `recursive`).
     #[new]
+    #[pyo3(signature = (schema, /))]
     fn py_new(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
         let mut literals = Pool::default();
         let mut definitions = Vec::new();
@@ -735,7 +742,7 @@ impl Validator {
     /// Raises:
     ///     ValidationError: If `obj` is not a member; its `errors` lists each
     ///         failure with a code and a path.
-    #[pyo3(signature = (obj, *, fail_fast = false))]
+    #[pyo3(signature = (obj, /, *, fail_fast = false))]
     fn validate(&self, obj: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
         let state = WalkState::new();
         let mut path = Vec::new();
@@ -774,6 +781,7 @@ impl Validator {
     /// Raises:
     ///     BaseException: If a membership comparison raises a fatal interpreter
     ///         signal, it propagates rather than being read as a non-member.
+    #[pyo3(signature = (obj, /))]
     fn is_valid(&self, obj: &Bound<'_, PyAny>) -> PyResult<bool> {
         let state = WalkState::new();
         let ok = member(
@@ -801,6 +809,7 @@ impl Validator {
     ///
     /// Raises:
     ///     ValidationError: If `obj` is not a member of the schema's set.
+    #[pyo3(signature = (obj, /))]
     fn ensure<'py>(&self, obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         self.validate(obj, false)?;
         Ok(obj.clone())
@@ -824,7 +833,7 @@ impl Validator {
     ///     ValidationError: If the document is malformed or undecodable JSON
     ///         (code `json_invalid`) or is not a member of the schema's set.
     ///     TypeError: If `data` is not `str` or `bytes`.
-    #[pyo3(signature = (data, *, fail_fast = false))]
+    #[pyo3(signature = (data, /, *, fail_fast = false))]
     fn validate_json(&self, data: &Bound<'_, PyAny>, fail_fast: bool) -> PyResult<()> {
         let parsed = parse_json(data)?;
         self.validate(&parsed, fail_fast)
@@ -848,7 +857,7 @@ impl Validator {
     ///     ValidationError: If the document is malformed or undecodable JSON
     ///         (code `json_invalid`) or is not a member of the schema's set.
     ///     TypeError: If `data` is not `str` or `bytes`.
-    #[pyo3(signature = (data, *, fail_fast = false))]
+    #[pyo3(signature = (data, /, *, fail_fast = false))]
     fn load<'py>(&self, data: &Bound<'py, PyAny>, fail_fast: bool) -> PyResult<Bound<'py, PyAny>> {
         let parsed = parse_json(data)?;
         self.validate(&parsed, fail_fast)?;
@@ -875,6 +884,7 @@ impl Validator {
     /// Raises:
     ///     BaseException: If a membership comparison raises a fatal interpreter
     ///         signal, it propagates rather than being read as a non-member.
+    #[pyo3(signature = (data, /))]
     fn is_valid_json(&self, data: &Bound<'_, PyAny>) -> PyResult<bool> {
         let py = data.py();
         match decode_json_input(data) {
@@ -937,6 +947,7 @@ impl Validator {
     ///
     /// Returns:
     ///     `True` if this schema is a subtype of `other`, else `False`.
+    #[pyo3(signature = (other, /))]
     fn is_subtype_of(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         let mut literals =
             Pool::seeded(py, self.literals.iter().map(|o| o.clone_ref(py)).collect());
@@ -969,6 +980,7 @@ impl Validator {
     ///
     /// Returns:
     ///     `True` if the two schemas are equivalent, else `False`.
+    #[pyo3(signature = (other, /))]
     fn is_equivalent(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
         let mut literals =
             Pool::seeded(py, self.literals.iter().map(|o| o.clone_ref(py)).collect());

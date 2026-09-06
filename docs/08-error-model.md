@@ -27,6 +27,20 @@ A `ValidationError` exposes:
 - `message`, `code`, `path`, `expected`, `value` — scalar convenience
   attributes mirroring the first item. `str(exc)` is a summary of every failure.
 
+Every one of the six is present on every `ValidationError`, however it was made.
+The model describes *failures*, so an error you construct yourself reports none
+and reads as empty — empty strings and empty tuples — rather than raising
+`AttributeError` for an attribute the type declares:
+
+```python
+from valgebra import ValidationError
+
+error = ValidationError("something went wrong")
+assert str(error) == "something went wrong"
+assert error.code == ""
+assert error.errors == ()
+```
+
 ## Crossing a process boundary
 
 The exception pickles, and the structured model travels with it. A worker that

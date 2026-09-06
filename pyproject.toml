@@ -35,6 +35,7 @@ dev = [
     "annotated-types>=0.8",
     "hypothesis>=6.165.9",
     "maturin>=1.14.1,<2",
+    "mypy>=1.19",
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",

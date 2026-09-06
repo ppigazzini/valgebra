@@ -264,6 +264,13 @@ jobs:
       - name: ty type check
         if: ${{ matrix.python-version == '3.10' }}
         run: uv run ty check
+      # The stub is checked against the *built* extension, so this one is not
+      # runner-independent the way the two above are: it imports the module and
+      # compares every signature, and a mismatch is a stub that type-checks code
+      # the runtime rejects. Run on the floor, where the wheel is already built.
+      - name: Stub matches the extension
+        if: ${{ matrix.python-version == '3.10' }}
+        run: uv run python -m mypy.stubtest valgebra._valgebra
 
   differential:
     name: differential
