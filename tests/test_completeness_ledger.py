@@ -118,6 +118,10 @@ _UNIVERSE = [
     {"a": 1, "k": "x"},
     {"a": 1, "b": "y"},
     {"a": 1, "b": "y", "k": "z"},
+    # Instances of the two builtin subclasses, which is what witnesses a class
+    # placed on its kind: `_MyInt(3)` is an int and is not the integer 3.
+    _MyInt(3),
+    _MyStr("a"),
 ]
 
 
@@ -720,8 +724,38 @@ _RECURSIVE_FAMILY = [
     recursive(lambda t: union(int, [t])),
     recursive(lambda t: union(None, bool, int, str, [t], {str: t})),
 ]
+# Every atom the decided fragment reaches, so the search covers the components
+# that carry it: a bare container names its kind, a builtin subclass narrows one,
+# a pattern is a regular language and a step an integer set. An atom the search
+# never draws is a component the soundness direction is never asked about, which
+# is how the one unsoundness found here reached a release.
 _atoms = st.sampled_from(
-    [int, str, bool, float, bytes, None, _GE0, _GE0_LE10, 0, 1, "a", *_RECURSIVE_FAMILY]
+    [
+        int,
+        str,
+        bool,
+        float,
+        bytes,
+        None,
+        _GE0,
+        _GE0_LE10,
+        0,
+        1,
+        # Spelled `Literal["a"]` rather than `"a"`: a bare string inside a
+        # generic is a forward reference, which the frontend refuses, and the
+        # composers below put every atom inside one.
+        Literal["a"],
+        list,
+        tuple,
+        set,
+        frozenset,
+        dict,
+        _MyInt,
+        _MyStr,
+        Annotated[str, Regex("a+")],
+        Annotated[int, at.MultipleOf(2)],
+        *_RECURSIVE_FAMILY,
+    ]
 )
 
 
@@ -729,6 +763,9 @@ def _compose(children: st.SearchStrategy) -> st.SearchStrategy:
     pair = st.tuples(children, children)
     return st.one_of(
         children.map(lambda c: [c]),
+        children.map(lambda c: set[c]),
+        children.map(lambda c: frozenset[c]),
+        pair.map(lambda p: tuple[p[0], p[1]]),  # ty: ignore[invalid-type-form]
         children.map(lambda c: {str: c}),
         pair.map(lambda p: {str: p[0], int: p[1]}),  # multi-clause mapping
         pair.map(lambda p: {"a": p[0], str: p[1]}),  # record mixed with a catch-all
