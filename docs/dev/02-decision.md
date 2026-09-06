@@ -147,6 +147,29 @@ simply stay undecided. `tests/test_enums.py` holds each refused kind to the valu
 that would refute the union reading, so a kind read as its members again fails
 there.
 
+## The two routes to a subtype answer, and where they part
+
+`a <= b` is `a & ~b` admitting no value, and there are two procedures that reach
+it: the structural rules, and the emptiness of the difference through the
+descriptor. Both are sound and neither subsumes the other, so `is_subtype_of`
+asks the rules and then the descriptor, and `is_empty` asks its own pair.
+
+They do not always agree, and the disagreement is *incompleteness* rather than a
+wrong answer: `a.is_subtype_of(b)` can be `True` while
+`intersection(a, complement(b)).is_empty()` is `False`. Every case measured is a
+**fixpoint**. The rules carry a coinductive hypothesis -- a goal already being
+proven on the path is assumed -- which decides a recursive schema against itself
+and against its own body; the emptiness route unfolds a reference once and asks
+the descriptor, which settles what kinds a body admits and not what a fixpoint
+equals.
+
+`tests/test_completeness_probe.py` measures the gap over the survey corpus and
+holds it at **three pairs**, each carrying a fixpoint. That is a ratchet rather
+than a target: a change making either route less complete widens it, and a
+disagreement over anything but a fixpoint is a new fact that fails on arrival.
+The same test checks the emptiness route for soundness against the value
+universe, which the survey beside it does not walk.
+
 ## Four bounds, each measured
 
 The rules bound their own work with a step counter, and a build is held to three

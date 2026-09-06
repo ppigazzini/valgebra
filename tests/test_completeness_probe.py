@@ -298,3 +298,82 @@ def test_the_ledger_is_serialisable_for_a_report() -> None:
         "procedure stops being the thing its docs describe."
     )
     json.dumps(ACCEPTED)
+
+
+def _disagreements() -> list[str]:
+    """Pairs where `a <= b` and `a & ~b is empty` give different answers.
+
+    `docs/dev/02-decision.md` defines `a <= b` as "`a & ~b` admitting no value",
+    and `docs/15-decidability.md` decides by `a ∧ ¬b = ∅`. Both procedures are
+    sound, so a disagreement is one of them being *less complete* than the
+    definition the pages give -- not an unsoundness, and not something a caller
+    reading the identity would expect.
+    """
+    found = []
+    for name_a, a in SCHEMAS:
+        for name_b, b in SCHEMAS:
+            if name_a == name_b:
+                continue
+            by_rule = a.is_subtype_of(b)
+            by_emptiness = intersection(a, complement(b)).is_empty()
+            if by_rule != by_emptiness:
+                found.append(
+                    f"{name_a} <= {name_b}: is_subtype_of={by_rule} "
+                    f"(a & ~b).is_empty()={by_emptiness}"
+                )
+    return found
+
+
+@pytest.fixture(scope="module")
+def disagreements() -> list[str]:
+    return _disagreements()
+
+
+def test_the_two_deciders_are_measured_against_each_other(
+    disagreements: list[str],
+) -> None:
+    """The count is recorded, so it can only shrink.
+
+    Neither decider is wrong where they differ: `is_subtype_of` carries a
+    coinductive rule for recursion that the emptiness route reaches by a single
+    unfolding, so the rule side proves more about a fixpoint. What the number
+    holds is that the gap does not *grow* -- a change that made either less
+    complete would show up here rather than in a caller's undecided relation.
+    """
+    assert len(disagreements) <= 3, (
+        f"{len(disagreements)} pairs where the two deciders disagree, up from "
+        "the recorded 3:\n" + "\n".join(disagreements[:10])
+    )
+    # Every one of them is about a fixpoint, which is the whole of the known
+    # gap: a rule that assumes its goal decides more about a recursive schema
+    # than one unfolding of it does. A disagreement over anything else is a new
+    # fact and fails the line above by arriving.
+    assert all("mu t" in row for row in disagreements), disagreements
+
+
+def test_neither_decider_is_unsound_where_they_disagree(
+    disagreements: list[str], survey: tuple[dict[str, str], list[str], int, int]
+) -> None:
+    """A disagreement must be incompleteness, never a wrong `True`.
+
+    Both routes claiming `a <= b` are checked against the value universe by
+    `test_no_decided_relation_is_refuted_by_a_value`; this asks the same of the
+    emptiness route, which that survey does not walk.
+    """
+    memberships = {name: _members(schema) for name, schema in SCHEMAS}
+    refuted = []
+    for name_a, a in SCHEMAS:
+        for name_b, b in SCHEMAS:
+            if name_a == name_b:
+                continue
+            if not intersection(a, complement(b)).is_empty():
+                continue
+            witness = memberships[name_a] - memberships[name_b]
+            if witness:
+                example = repr(VALUES[min(witness)])
+                refuted.append(
+                    f"{name_a} & ~{name_b} decided empty, refuted by {example}"
+                )
+    assert not refuted, refuted
+    # And the survey ran, so an empty `refuted` is not an empty universe.
+    assert survey[2] > 50
