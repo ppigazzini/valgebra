@@ -4411,4 +4411,48 @@ mod index_laws {
         };
         assert!(!reference.is_subtype_of_under(&other, &NoLeafRelations, &defs));
     }
+
+    /// An oracle that claims every relation against a union, standing for the one
+    /// question the union rule may ask it: whether an *instance* is below the union.
+    struct BelowAnyUnion;
+
+    impl crate::descr::lower::Constants for BelowAnyUnion {}
+
+    impl LeafRelations for BelowAnyUnion {
+        fn leaf_subtype(&self, _sub: &Schema, sup: &Schema) -> Option<bool> {
+            matches!(sup, Schema::Union(_)).then_some(true)
+        }
+    }
+
+    /// The union rule asks the oracle about an `Instance` subject and about
+    /// nothing else: a subject the rules already declined is not handed to an
+    /// oracle that would say yes.
+    #[test]
+    fn the_union_rule_asks_the_oracle_only_about_an_instance() {
+        let union = Schema::union([Schema::Str, Schema::Bytes]);
+        // A subject the region partition cannot settle, so the union rule is the
+        // one that answers.
+        let narrowed = Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints: vec![Constraint::MinLen(1)],
+        };
+        assert!(!narrowed.is_subtype_of_under(&union, &BelowAnyUnion, &[]));
+        assert!(Schema::Instance(ClassIx::new(0)).is_subtype_of_under(&union, &BelowAnyUnion, &[]));
+    }
+
+    /// A meet with a recursive schema is decided by unfolding it once: the body
+    /// names the kinds it admits, and a kind it never admits is disjoint from it.
+    #[test]
+    fn a_meet_with_a_recursive_schema_is_decided_by_one_unfolding() {
+        let defs = vec![Schema::union([
+            Schema::Int,
+            Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+        ])];
+        let meet = Schema::Intersection(vec![Schema::Ref(DefIx::new(0)), Schema::Bytes]);
+        assert!(meet.is_empty_under(&defs));
+        // And the unfolding is sound in the other direction: a kind the body does
+        // admit is not proven disjoint.
+        let meet = Schema::Intersection(vec![Schema::Ref(DefIx::new(0)), Schema::Int]);
+        assert!(!meet.is_empty_under(&defs));
+    }
 }

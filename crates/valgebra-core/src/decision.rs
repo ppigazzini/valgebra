@@ -924,6 +924,16 @@ impl Schema {
                         .any(|m| self.is_subtype_rec(m, cx, assumptions))
                     || seq_splits_across_union(self, members, cx, assumptions)
                     || self.left_reduces_below(other, cx, assumptions)
+                    // Last, and only for the one subject the oracle can answer
+                    // about here: an `Instance` whose *values* the bindings can
+                    // enumerate is below a union when each of them is, which is
+                    // what makes an enumeration and the union of its members one
+                    // set. Asked here because a union on the right never reaches
+                    // the leaf arm below, and asked for nothing else because
+                    // every other subject would pay a call that always declines
+                    // -- ten percent of the decision workload, measured.
+                    || (matches!(self, Schema::Instance(_))
+                        && cx.oracle.leaf_subtype(self, other).unwrap_or(false))
             }
             // Unfold a recursive reference — after the lattice rules, so an
             // intersection or union meeting a reference decomposes first (which
@@ -1423,7 +1433,12 @@ const UNFOLDS: u32 = 1;
 /// Borrowed where there is no reference, which is the common case and the one
 /// that must cost nothing.
 fn unfolded_for<'a>(schema: &'a Schema, defs: &[Schema], positive: bool) -> Cow<'a, Schema> {
-    if schema.has_reference() {
+    // The empty check first: it is one comparison, and it is true for every
+    // schema that carries no fixpoint at all -- which is almost all of them, and
+    // all of the ones on the workload the decision budget is measured over. The
+    // walk that follows costs a pass over the tree, and paying it per relation
+    // for a schema with no definitions was ten percent of that workload.
+    if !defs.is_empty() && schema.has_reference() {
         Cow::Owned(schema.unfolded(defs, UNFOLDS, positive))
     } else {
         Cow::Borrowed(schema)

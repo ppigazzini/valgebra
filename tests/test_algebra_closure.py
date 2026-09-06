@@ -32,14 +32,21 @@ def test_a_literal_int_is_disjoint_from_a_literal_bool():
     assert intersection(Literal[1], Literal[True]).is_empty()
 
 
-def test_an_enum_literal_meet_stays_conservative():
-    # An enum member carries user-defined equality, so two of them may share a
-    # value. The rule must decline rather than guess.
+def test_an_enum_literal_meet_is_decided_by_how_the_members_compare():
+    # An enumeration's members compare by identity unless the class says
+    # otherwise, and two distinct objects are then two values -- so the meet is
+    # empty. An `IntEnum` says otherwise: its members equal the integers they
+    # carry, and two of them may share a value with one, so the rule declines.
     class Colour(enum.Enum):
         RED = 1
         BLUE = 2
 
-    assert not intersection(Literal[Colour.RED], Literal[Colour.BLUE]).is_empty()
+    class Level(enum.IntEnum):
+        LOW = 1
+        HIGH = 2
+
+    assert intersection(Literal[Colour.RED], Literal[Colour.BLUE]).is_empty()
+    assert not intersection(Literal[Level.LOW], Literal[Level.HIGH]).is_empty()
 
 
 def test_a_literal_is_still_a_member_of_its_own_kind():
@@ -191,3 +198,36 @@ def test_the_cancelling_folds_decline_an_atom_that_is_not_a_set():
     assert union(coin, complement(coin)) != Validator(anything)
     assert intersection(coin, complement(coin)) != Validator(nothing)
     assert complement(complement(coin)) == Validator(coin)
+
+
+def test_an_enumeration_is_the_union_of_its_members():
+    """A class whose values the bindings can enumerate is those values.
+
+    Three facts make it: an enumeration's members are fixed when the class is
+    created, a class with any member cannot be subclassed, and every instance is
+    one of them. The fourth -- that two members are two values -- is the identity
+    check, so an `IntEnum` is left as the atom it was: its members equal the
+    integers behind them, and a literal of one is not disjoint from a literal of
+    another.
+    """
+
+    class Colour(enum.Enum):
+        RED = 1
+        GREEN = 2
+        BLUE = 3
+
+    class Level(enum.IntEnum):
+        LOW = 1
+        HIGH = 2
+
+    members = Literal[Colour.RED, Colour.GREEN, Colour.BLUE]
+    assert Validator(Colour).is_equivalent(members)
+    assert Validator(Colour).is_subtype_of(union(members, int))
+    # Not every union: a member left out is a value the class still admits.
+    assert not Validator(Colour).is_subtype_of(Literal[Colour.RED, Colour.GREEN])
+    # The `IntEnum` stays an atom, in both directions.
+    assert not Validator(Level).is_equivalent(Literal[Level.LOW, Level.HIGH])
+    # And membership is unchanged: the class is still what the walk checks.
+    assert Validator(Colour).is_valid(Colour.RED)
+    assert not Validator(Colour).is_valid(1)
+    assert repr(Validator(Colour)) == "Colour"

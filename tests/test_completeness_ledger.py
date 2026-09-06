@@ -59,6 +59,15 @@ from valgebra import (
 
 # A recursive schema, reused below to record a reflexivity hole.
 _RECURSIVE = recursive(lambda t: union(None, {"value": int, "next": t}))
+
+
+class _Colour(enum.Enum):
+    """An enumeration whose members compare by identity, which is the default."""
+
+    RED = 1
+    GREEN = 2
+
+
 # The JSON value, which is the recursive schema a reader writes: every scalar,
 # and lists and dicts of itself. Its body names six kinds and no other, which is
 # what makes a meet with a seventh decidable once the body is unfolded.
@@ -231,6 +240,18 @@ _DECIDED = [
         "empty", intersection(set[int], _JSON), None, id="empty:set[int]&json"
     ),
     pytest.param("subtype", _JSON, anything, id="json<=anything"),
+    # An enumeration whose members compare by identity is the union of them:
+    # the members are fixed at class creation, a class with any cannot be
+    # subclassed, and every instance is one of them.
+    pytest.param(
+        "equivalent", _Colour, Literal[_Colour.RED, _Colour.GREEN], id="Colour==members"
+    ),
+    pytest.param(
+        "empty",
+        intersection(Literal[_Colour.RED], Literal[_Colour.GREEN]),
+        None,
+        id="empty:RED&GREEN",
+    ),
     # A length is a regular property of a sequence -- "any element, that many
     # times" -- so the component that holds sequences holds a bound on them too.
     pytest.param(

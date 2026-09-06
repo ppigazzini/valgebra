@@ -12,6 +12,7 @@ use std::sync::OnceLock;
 use jiter::{JsonValue, PythonParse};
 use pyo3::PyTypeInfo;
 use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
@@ -185,7 +186,76 @@ struct PoolRelations<'py, 'pool> {
     classes: RefCell<FxHashMap<usize, u32>>,
 }
 
+/// `enum.EnumMeta`, imported once per interpreter rather than per question.
+///
+/// The subtype rule asks whether a class is an enumeration for *every* class it
+/// cannot place in a union, so importing a module there would put an import on
+/// a decision path.
+static ENUM_META: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
+fn enum_meta(py: Python<'_>) -> Option<&Py<PyAny>> {
+    ENUM_META
+        .get_or_try_init(py, || {
+            py.import("enum")
+                .and_then(|module| module.getattr(intern!(py, "EnumMeta")))
+                .map(pyo3::Bound::unbind)
+        })
+        .ok()
+}
+
+/// The most members an enumeration may have before it is read as an atom.
+///
+/// Reading one asks a membership question per member, so a class with thousands
+/// would turn one relation into thousands of walks. Far past any enumeration
+/// anybody writes -- the ones in a contract are error codes and states -- and
+/// past it the class stays what it was: an `isinstance` atom, decided as one.
+const MAX_ENUM_MEMBERS: usize = 512;
+
+/// Whether values of this type are equal only when they are the same object.
+///
+/// `object.__eq__` is identity, so a type that neither defines `__eq__` nor
+/// inherits one from a type that does compares by identity -- and then two
+/// distinct constants of it are two values, which is what a literal needs to be
+/// decided against another literal. An `IntEnum` inherits `int.__eq__` and is
+/// refused here, which is right: its members are equal to the integers they
+/// carry.
+fn compares_by_identity(ty: &Bound<'_, PyType>) -> bool {
+    let py = ty.py();
+    let Ok(theirs) = ty.getattr(intern!(py, "__eq__")) else {
+        return false;
+    };
+    PyAny::type_object(py)
+        .getattr(intern!(py, "__eq__"))
+        .is_ok_and(|inherited| theirs.is(&inherited))
+}
+
 impl PoolRelations<'_, '_> {
+    /// The members of an enumeration whose values compare by identity, if this
+    /// class is one.
+    ///
+    /// Three things make an enumeration readable as the union of its members:
+    /// the members are fixed when the class is created, a class that has any
+    /// cannot be subclassed, and every instance is one of them. The fourth --
+    /// that two members are two values -- is the identity check, which an
+    /// `IntEnum` fails because its members equal the integers behind them.
+    fn enum_members<'py>(class: &Bound<'py, PyAny>) -> Option<Vec<Bound<'py, PyAny>>> {
+        let py = class.py();
+        let class = class.cast::<PyType>().ok()?;
+        if !class.is_instance(enum_meta(py)?.bind(py)).ok()? {
+            return None;
+        }
+        if !compares_by_identity(class) {
+            return None;
+        }
+        let members: Vec<Bound<'py, PyAny>> = class
+            .try_iter()
+            .ok()?
+            .take(MAX_ENUM_MEMBERS + 1)
+            .collect::<Result<_, _>>()
+            .ok()?;
+        (members.len() <= MAX_ENUM_MEMBERS).then_some(members)
+    }
+
     fn is_member(&self, schema: &Schema, value: &Bound<'_, PyAny>) -> bool {
         // These leaf-subtype probes run on transient schemas during compilation,
         // not on a finished validator, so they carry no precomputed index; the
@@ -393,19 +463,26 @@ impl LeafRelations for PoolRelations<'_, '_> {
             }
             // The `isinstance(., C)` values are a subset of the `isinstance(., D)`
             // values exactly when `C` is a subclass of `D`.
-            Schema::Instance(index) => match sup {
-                Schema::Instance(superindex) => {
-                    let class = self.literals.get(index.get())?.bind(self.py);
+            Schema::Instance(index) => {
+                let class = self.literals.get(index.get())?.bind(self.py);
+                if let Schema::Instance(superindex) = sup {
                     let superclass = self.literals.get(superindex.get())?.bind(self.py);
                     let decided = class
                         .cast::<PyType>()
                         .ok()
                         .and_then(|class| class.is_subclass(superclass).ok())
                         .unwrap_or(false);
-                    Some(decided)
+                    return Some(decided);
                 }
-                _ => None,
-            },
+                // An enumeration whose members compare by identity is the union
+                // of them: the members are fixed when the class is defined, a
+                // class with any cannot be subclassed, and no other value is an
+                // instance. So the inclusion is asked of each member, which is
+                // what makes `Color` and `Literal[Color.RED, Color.GREEN]` one
+                // set rather than two the procedure cannot relate.
+                let members = Self::enum_members(class)?;
+                Some(members.iter().all(|member| self.is_member(sup, member)))
+            }
             _ => None,
         }
     }
@@ -443,9 +520,12 @@ impl LeafRelations for PoolRelations<'_, '_> {
         // Same type, so the singletons are disjoint exactly when the constants
         // differ. `==` is the value's own, and a type carrying user-defined
         // equality can admit one value for two distinct constants, so this is
-        // asked only where the type is one this oracle kinds -- a builtin scalar
-        // whose equality is Python's. An `Enum` member declines here.
-        self.literal_kind(left)?;
+        // asked only where the type's equality is one this oracle can trust: a
+        // builtin scalar, whose equality is Python's, or a type that compares by
+        // identity, where two distinct objects are two values by definition.
+        if self.literal_kind(left).is_none() && !compares_by_identity(&left_value.get_type()) {
+            return None;
+        }
         left_value.eq(right_value).ok().map(|equal| !equal)
     }
 

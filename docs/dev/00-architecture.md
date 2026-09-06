@@ -105,6 +105,7 @@ fails too.
 | `crates/valgebra-py/src/render.rs` | `MAX_RENDER_DEPTH` | `200` | `repr` overflowing the stack on a chain of definitions | `tests/test_adversarial_bounds.py` |
 | `crates/valgebra-py/src/check/ctx.rs` | `MAX_WALK_DEPTH` | `512` | a walk overflowing the smallest thread stack a platform gives | its own tests, and `tests/test_adversarial_bounds.py` |
 | `crates/valgebra-py/src/check/walk.rs` | `MAX_RECURSION_DEPTH` | `128` | a pathologically deep *value* overflowing the stack | its own tests, and `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/validator.rs` | `MAX_ENUM_MEMBERS` | `512` | one relation turning into a membership question per member of an enumeration | its own tests, and `tests/test_algebra_closure.py` |
 | `crates/valgebra-py/src/check/walk.rs` | `CLOSEST_BRANCH_PROBE_LIMIT` | `64` | the error path's second walk costing the branch count | `tests/test_union_messages.py` |
 | `crates/valgebra-py/src/check/walk.rs` | `UNION_LABEL_LIMIT` | `64` | a union naming a thousand labels in one `expected` | its own tests |
 | `crates/valgebra-core/src/decision.rs` | `DECISION_BUDGET` | `1_000_000` | one query spending unbounded work before answering conservatively | its own tests, and `tests/test_decision_adversarial.py` |

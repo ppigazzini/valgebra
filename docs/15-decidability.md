@@ -60,8 +60,16 @@ conservative](#sound-but-conservative)).
   `Literal["a"]` is below `~int`, and `Literal["a"] & Literal["b"]` is empty.
   `Literal[1]` and `Literal[True]` are disjoint although `1 == True`, because the
   two pin different types. The rule reads the constant's type and applies only to
-  the builtin scalars, whose equality is Python's own; an `Enum` member carries
-  user-defined equality, so a meet of two of them stays conservative.
+  the builtin scalars, whose equality is Python's own, and to any type that
+  compares by *identity* -- which an enumeration does unless it says otherwise,
+  so two of its members are two values and a meet of them is empty. An `IntEnum`
+  says otherwise: its members equal the integers they carry, and a meet of two of
+  them stays conservative.
+- **An enumeration against the union of its members.** They are fixed when the
+  class is created, a class with any member cannot be subclassed, and every
+  instance is one of them -- so `Colour` and `Literal[Colour.RED,
+  Colour.GREEN]` are one set, decided in both directions. The class is still
+  what `repr` prints and what a failure names.
 - **Refinements.** A refinement is a subtype of its base and of a refinement with
   looser bounds — a tighter numeric or length bound entails a looser one, not only
   a verbatim-contained constraint set; a bound conjunction that cannot be satisfied
