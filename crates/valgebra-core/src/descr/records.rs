@@ -467,9 +467,9 @@ mod tests {
     /// case, and reading it as one would decline every dataclass beside its base.
     #[test]
     fn a_class_and_its_base_are_one_object() {
-        let animal = Class::root(1);
+        let animal = Class::laid_out(1, 1);
         let dog = Class::new(2, 1, std::slice::from_ref(&animal));
-        let mineral = Class::root(3);
+        let mineral = Class::laid_out(3, 3);
         let of = |class: &Class| RecordLattice::<IntSet>::instance_of(class.clone());
 
         let both = of(&dog)
@@ -619,7 +619,7 @@ mod tests {
     /// is a constraint again rather than an absence.
     #[test]
     fn a_class_and_its_complement_are_both_sets() {
-        let animal = Class::root(1);
+        let animal = Class::laid_out(1, 1);
         let dog = Class::new(2, 1, std::slice::from_ref(&animal));
         let dogs = RecordLattice::<IntSet>::instance_of(dog.clone());
 
@@ -636,7 +636,7 @@ mod tests {
     /// base says nothing new -- and a meet with what a base excludes is empty.
     #[test]
     fn deriving_decides_the_meet_and_the_emptiness() {
-        let animal = Class::root(1);
+        let animal = Class::laid_out(1, 1);
         let dog = Class::new(2, 1, std::slice::from_ref(&animal));
         let dogs = RecordLattice::<IntSet>::instance_of(dog.clone());
         let animals = RecordLattice::instance_of(animal.clone());
@@ -654,8 +654,8 @@ mod tests {
     /// inhabited, because a class outside the list may yet describe a value.
     #[test]
     fn excluding_an_unrelated_class_leaves_the_atom_inhabited() {
-        let animal = Class::root(1);
-        let mineral = Class::root(2);
+        let animal = Class::laid_out(1, 1);
+        let mineral = Class::laid_out(2, 2);
         let animals = RecordLattice::<IntSet>::instance_of(animal.clone());
 
         let not_mineral = animals
@@ -669,8 +669,8 @@ mod tests {
     /// the derivation order alone does not show.
     #[test]
     fn two_classes_of_conflicting_layouts_meet_in_nothing() {
-        let ints = Class::root(1);
-        let words = Class::root(2);
+        let ints = Class::laid_out(1, 1);
+        let words = Class::laid_out(2, 2);
         let unrelated = Class::new(3, 1, &[]);
 
         let met = RecordLattice::<IntSet>::instance_of(ints.clone())
@@ -690,7 +690,7 @@ mod tests {
     /// putting them in one atom is for.
     #[test]
     fn a_class_and_an_attribute_constrain_one_value() {
-        let dog = Class::root(1);
+        let dog = Class::laid_out(1, 1);
         let named = RecordLattice::instance_of(dog.clone())
             .intersect(&RecordLattice::attribute("x", IntSet::just(1), false))
             .expect("two small atoms");

@@ -283,12 +283,14 @@ impl PoolRelations<'_, '_> {
             // reads is which classes an instance is one of, and `__mro__` answers
             // that whatever the metaclass does at a check.
             //
-            // Each base enters as a root because `__mro__` is already closed
-            // under derivation -- every ancestor is on this list -- so the union
-            // over the list is the whole order, and no base's own layout is
-            // read.
+            // Each base enters laying down no layout of its own, because
+            // `__mro__` is already closed under derivation -- every ancestor is
+            // on this list -- so the union over the list is the whole order, and
+            // no base's own layout is read. Reading a base as *plain* rather
+            // than as laid out on its own is what says that: a layout here would
+            // be a claim about disjointness that this loop is not making.
             if !base.is(ty) {
-                bases.push(Class::root(self.class_id(&base)));
+                bases.push(Class::plain(self.class_id(&base)));
             }
         }
         let (layout, kind) = layout_of(ty);

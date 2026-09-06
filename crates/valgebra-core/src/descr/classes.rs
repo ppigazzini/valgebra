@@ -92,10 +92,29 @@ impl Class {
         self.kind
     }
 
-    /// A class deriving from nothing, laid out on its own.
+    /// A class deriving from nothing and laying down no layout of its own.
+    ///
+    /// The one to reach for when nothing is known but the identity: it conflicts
+    /// with no layout, so it is disjoint from nothing and a class deriving from
+    /// it and from anything else may exist. That is what an ordinary Python
+    /// class is.
     #[must_use]
-    pub fn root(id: u32) -> Class {
-        Class::new(id, id, &[])
+    pub fn plain(id: u32) -> Class {
+        Class::new(id, Class::PLAIN, &[])
+    }
+
+    /// A class deriving from nothing and laid out as `layout`.
+    ///
+    /// Named for the half that decides disjointness. This was `root`, which read
+    /// as a statement about *derivation* -- and the derivation is the half that
+    /// decides nothing here, since a class deriving from nothing is disjoint
+    /// from nothing on that ground alone. What made two such classes disjoint
+    /// was the layout the old constructor quietly set to the id, so two calls
+    /// with different ids meant "these can share no value" without ever saying
+    /// so.
+    #[must_use]
+    pub fn laid_out(id: u32, layout: u32) -> Class {
+        Class::new(id, layout, &[])
     }
 
     /// Whether every instance of this class is an instance of `other`.
@@ -149,7 +168,7 @@ mod tests {
     /// The order is the one the bases give, closed over.
     #[test]
     fn a_class_derives_from_its_bases_and_from_theirs() {
-        let animal = Class::root(1);
+        let animal = Class::laid_out(1, 1);
         let dog = Class::new(2, 1, std::slice::from_ref(&animal));
         let puppy = Class::new(3, 1, std::slice::from_ref(&dog));
 
@@ -163,7 +182,7 @@ mod tests {
     /// the other is not disjointness.
     #[test]
     fn unrelated_classes_of_one_layout_are_not_disjoint() {
-        let left = Class::root(1);
+        let left = Class::laid_out(1, 1);
         let right = Class::new(2, 1, &[]);
 
         assert!(!left.derives_from(&right) && !right.derives_from(&left));
@@ -173,8 +192,8 @@ mod tests {
     /// A layout conflict is disjointness, because no class can derive from both.
     #[test]
     fn classes_of_conflicting_layouts_are_disjoint() {
-        let ints = Class::root(1);
-        let words = Class::root(2);
+        let ints = Class::laid_out(1, 1);
+        let words = Class::laid_out(2, 2);
         let counter = Class::new(3, 1, std::slice::from_ref(&ints));
 
         assert!(ints.disjoint_from(&words) && words.disjoint_from(&ints));
@@ -184,30 +203,38 @@ mod tests {
 
     /// The plain layout is not a layout: every other extends it, so a class
     /// carrying it can still meet any other in a common subclass.
+    ///
+    /// Asked of [`Class::plain`] rather than of the layout constant, because the
+    /// constructor is the thing a caller reaches for and the contract is its
+    /// own: a class built this way is disjoint from nothing, and the pair of
+    /// constructors is a choice between saying that and saying the opposite.
     #[test]
     fn the_plain_layout_conflicts_with_nothing() {
-        let plain = Class::new(1, Class::PLAIN, &[]);
-        let words = Class::root(2);
+        let plain = Class::plain(1);
+        let words = Class::laid_out(2, 2);
 
         assert!(
             !plain.disjoint_from(&words),
             "`class Both(plain, str)` builds"
         );
         assert!(!words.disjoint_from(&plain));
-        assert!(!plain.disjoint_from(&Class::new(3, Class::PLAIN, &[])));
+        assert!(!plain.disjoint_from(&Class::plain(3)));
+        // The other constructor says the opposite of the same two ids, which is
+        // the whole reason there are two of them.
+        assert!(Class::laid_out(1, 1).disjoint_from(&Class::laid_out(3, 3)));
     }
 
     /// Identity is the id: the order and the layout are what a class *knows*,
     /// not what it *is*.
     #[test]
     fn a_class_is_its_id() {
-        let root = Class::root(1);
-        let same = Class::new(1, 9, &[Class::root(7)]);
+        let one = Class::laid_out(1, 1);
+        let same = Class::new(1, 9, &[Class::laid_out(7, 7)]);
 
-        assert_eq!(root, same);
-        assert_eq!(root.cmp(&same), core::cmp::Ordering::Equal);
+        assert_eq!(one, same);
+        assert_eq!(one.cmp(&same), core::cmp::Ordering::Equal);
         // Total, and by id: the sets below hold classes in a `BTreeSet`, and a
         // pair the order cannot compare is a pair that set would hold twice.
-        assert!(Class::root(1) < Class::root(2));
+        assert!(Class::laid_out(1, 1) < Class::laid_out(2, 2));
     }
 }

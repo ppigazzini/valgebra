@@ -1386,9 +1386,9 @@ mod tests {
 
     /// A class order small enough to enumerate and wide enough to separate the
     /// three answers: deriving, unrelated, and laid out apart.
-    static ANIMAL: LazyLock<Class> = LazyLock::new(|| Class::root(1));
+    static ANIMAL: LazyLock<Class> = LazyLock::new(|| Class::laid_out(1, 1));
     static DOG: LazyLock<Class> = LazyLock::new(|| Class::new(2, 1, std::slice::from_ref(&ANIMAL)));
-    static MINERAL: LazyLock<Class> = LazyLock::new(|| Class::root(3));
+    static MINERAL: LazyLock<Class> = LazyLock::new(|| Class::laid_out(3, 3));
     /// Laid out like an animal and deriving from nothing: the pair whose meet
     /// only a class outside the order could inhabit.
     static UNRELATED: LazyLock<Class> = LazyLock::new(|| Class::new(4, 1, &[]));

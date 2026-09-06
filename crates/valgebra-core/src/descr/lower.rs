@@ -990,7 +990,7 @@ mod tests {
     /// and the literal pins *which* instance, which the descriptor cannot say.
     #[test]
     fn a_literal_naming_an_instance_refuses() {
-        let pool = Pool(vec![Operand::Instance(Class::root(1))]);
+        let pool = Pool(vec![Operand::Instance(Class::laid_out(1, 1))]);
         assert!(lower(&Schema::Literal(ConstIx::new(0)), &pool).is_none());
     }
 
