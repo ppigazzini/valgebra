@@ -2104,6 +2104,29 @@ mod tests {
                 .prop_map(|(kind, ty)| Descr::mapping(kind, &ty)),
             1 => prop_oneof![Just(Kind::Str), Just(Kind::Int)]
                 .prop_map(|kind| Descr::keys_among(&[Some(kind)])),
+            // A record: named keys, and a *closed* rest. The shape the two above
+            // cannot reach between them -- a label leaves every other key free
+            // and `keys_among` names no key -- and the one whose complement is
+            // hardest, because closing is what puts a negative constraint on
+            // every part at once. A record complemented twice came back
+            // forbidding the key it is about, and no law here saw it in twenty
+            // thousand draws until this leaf existed.
+            3 => (
+                proptest::collection::vec(
+                    (prop_oneof![Just("a"), Just("b")], descr(), proptest::bool::ANY),
+                    0..=2,
+                ),
+                proptest::option::of((prop_oneof![Just(Kind::Str), Just(Kind::Int)], descr())),
+            )
+                .prop_map(|(labels, opened)| {
+                    Descr::keyed_map(
+                        labels
+                            .into_iter()
+                            .map(|(name, ty, optional)| (Label::str(name), ty, optional)),
+                        opened.map(|(kind, ty)| (Some(kind), ty)),
+                    )
+                    .unwrap_or_else(Descr::nothing)
+                }),
             1 => prop_oneof![
                 Just(ANIMAL.clone()),
                 Just(DOG.clone()),
