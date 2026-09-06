@@ -105,10 +105,13 @@ def test_double_complement_preserves_membership(spec: object) -> None:
     # comparison below would be vacuous.
     partner = Validator({"__absorbs__": int})
     doubled = union(spec, intersection(spec, partner))
-    # The two lattice bounds absorb the partner outright, so for them the fold
-    # does reach it and the comparison below is trivially true rather than
-    # vacuous. Every other schema keeps the respelling.
-    if compiled not in (Validator(anything), Validator(nothing)):
+    # A schema that *denotes* a lattice bound absorbs the partner outright, so
+    # for those the fold does reach the respelling and the comparison below is
+    # trivially true rather than vacuous. The test is semantic because the
+    # absorption is: a recursive reference whose body is the top denotes the top
+    # while comparing unequal to it, and it absorbs just the same.
+    at_a_bound = compiled.is_empty() or compiled.is_equivalent(anything)
+    if not at_a_bound:
         assert doubled != compiled
     for value in _UNIVERSE:
         assert doubled.is_valid(value) == compiled.is_valid(value)
