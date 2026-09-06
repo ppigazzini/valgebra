@@ -475,13 +475,63 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
             };
             integers(IntSet::multiple_of(step)?)
         }
-        Constraint::MinLen(least) => words(&format!(".{{{least},}}"), base),
-        Constraint::MaxLen(most) => words(&format!(".{{0,{most}}}"), base),
+        Constraint::MinLen(least) => lengths(base, &format!(".{{{least},}}"), &|kind| {
+            Descr::sequences_at_least(*least, kind)
+        }),
+        Constraint::MaxLen(most) => lengths(base, &format!(".{{0,{most}}}"), &|kind| {
+            Descr::sequences_at_most(*most, kind)
+        }),
         Constraint::Regex(pattern) => words(pattern, base),
         // A callback is a leaf the core cannot read, which is what makes it
         // opaque to the procedure beside this one too.
         Constraint::Predicate(_) => None,
     }
+}
+
+/// The values of the base's kinds whose length the bound admits.
+///
+/// A length is not a word's alone, and for two of the kinds that have one it is
+/// a property the representation can state: a word's length is a pattern over
+/// its alphabet, and a sequence's is "any element, that many times", which is
+/// as regular as any other shape the automaton holds. Both are built here and
+/// unioned, so a base admitting words *and* sequences is bounded on each.
+///
+/// **Refuses for a base admitting anything else.** A set and a dict have a
+/// length their components do not count, and a value with no length at all
+/// fails the bound by raising -- which the walk reads as a non-member and this
+/// cannot express. Lowering the bound while ignoring those kinds would give a
+/// set larger than the schema denotes, and a larger set has a smaller
+/// complement: a subtype proof no value supports.
+fn lengths(
+    base: &Descr,
+    pattern: &str,
+    sequences: &dyn Fn(Kind) -> Option<Descr>,
+) -> Option<Descr> {
+    const WORDS: [Kind; 2] = [Kind::Str, Kind::Bytes];
+    const SEQUENCES: [Kind; 2] = [Kind::List, Kind::Tuple];
+
+    let mut counted = Descr::nothing();
+    for kind in WORDS.into_iter().chain(SEQUENCES) {
+        counted = counted.union(&Descr::of_kind(kind))?;
+    }
+    if !base.intersect(&counted.complement())?.is_empty() {
+        return None;
+    }
+    let mut whole = Descr::nothing();
+    for kind in WORDS {
+        if !Descr::of_kind(kind).intersect(base)?.is_empty() {
+            whole = whole.union(&Descr::pattern(pattern, kind)?)?;
+        }
+    }
+    for kind in SEQUENCES {
+        if !Descr::of_kind(kind).intersect(base)?.is_empty() {
+            whole = whole.union(&sequences(kind)?)?;
+        }
+    }
+    // The base lies within the counted kinds, so `whole` is empty exactly when
+    // the base is -- and a bound over an empty base denotes the empty set, which
+    // is an answer rather than a refusal.
+    Some(whole)
 }
 
 /// The words a pattern matches, under whichever word kind the base admits.
@@ -1542,5 +1592,35 @@ mod tests {
             .is_none(),
             "a float bound is not an integer set"
         );
+    }
+
+    /// A length bound lands in the kinds the base has and in no other: the bound
+    /// over a word admits no sequence, and the bound over a sequence no word.
+    #[test]
+    fn a_length_bound_stays_within_the_kinds_of_its_base() {
+        const ONE: &[Value] = &[Value::integer(1)];
+        let pool = empty_pool();
+        let over_words = lower(
+            &Schema::Refine {
+                base: Box::new(Schema::Str),
+                constraints: vec![Constraint::MinLen(1)],
+            },
+            &pool,
+        )
+        .expect("a bound over words lowers");
+        assert!(over_words.admits(Value::word(b"a", Kind::Str)));
+        assert!(!over_words.admits(Value::sequence(ONE, Kind::List)));
+
+        let over_lists = lower(
+            &Schema::Refine {
+                base: Box::new(Schema::list(SeqShape::homogeneous(Schema::ANYTHING))),
+                constraints: vec![Constraint::MinLen(1)],
+            },
+            &pool,
+        )
+        .expect("a bound over sequences lowers");
+        assert!(over_lists.admits(Value::sequence(ONE, Kind::List)));
+        assert!(!over_lists.admits(Value::word(b"a", Kind::Str)));
+        assert!(!over_lists.admits(Value::sequence(ONE, Kind::Tuple)));
     }
 }

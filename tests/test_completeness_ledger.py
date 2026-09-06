@@ -231,6 +231,38 @@ _DECIDED = [
         "empty", intersection(set[int], _JSON), None, id="empty:set[int]&json"
     ),
     pytest.param("subtype", _JSON, anything, id="json<=anything"),
+    # A length is a regular property of a sequence -- "any element, that many
+    # times" -- so the component that holds sequences holds a bound on them too.
+    pytest.param(
+        "empty",
+        Annotated[tuple[int, int], at.MinLen(3)],
+        None,
+        id="empty:2-tuple&MinLen(3)",
+    ),
+    pytest.param(
+        "empty",
+        Annotated[list[nothing], at.MinLen(1)],  # ty: ignore[invalid-type-form]
+        None,
+        id="empty:list[nothing]&MinLen(1)",
+    ),
+    pytest.param(
+        "empty",
+        Annotated[list[int], at.MinLen(3), at.MaxLen(2)],
+        None,
+        id="empty:list&MinLen(3)&MaxLen(2)",
+    ),
+    pytest.param(
+        "equivalent",
+        Annotated[list[int], at.MinLen(2)],
+        [int, int, int, ...],
+        id="MinLen(2)list[int]==[int,int,int,...]",
+    ),
+    pytest.param(
+        "equivalent",
+        Annotated[list[int], at.MaxLen(0)],
+        [],
+        id="MaxLen(0)list[int]==[]",
+    ),
     pytest.param("subtype", bytes, complement(_JSON), id="bytes<=~json"),
     # A fixpoint beside its own complement. Two occurrences of one recursive
     # schema used to compile to two definitions, so the fold that cancels a
@@ -594,27 +626,6 @@ def _missed(why: str) -> pytest.MarkDecorator:
 
 
 _LEDGERED = [
-    # A length bound is opaque to the shape it bounds.
-    pytest.param(
-        "empty",
-        Annotated[tuple[int, int], at.MinLen(3)],
-        None,
-        id="empty:2-tuple&MinLen(3)",
-        marks=_missed(
-            "a length bound lowers only for words, so it is opaque to the tuple "
-            "it bounds"
-        ),
-    ),
-    pytest.param(
-        "empty",
-        Annotated[list[nothing], at.MinLen(1)],  # ty: ignore[invalid-type-form]
-        None,
-        id="empty:list[nothing]&MinLen(1)",
-        marks=_missed(
-            "the element type and the length bound are read apart: nothing joins "
-            '"no element is possible" to "at least one is required"'
-        ),
-    ),
     pytest.param(
         "empty",
         recursive(lambda t: Annotated[list[t], at.MinLen(1)]),  # ty: ignore[invalid-type-form]

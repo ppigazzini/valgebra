@@ -191,11 +191,13 @@ the shape. What is left below is what the descriptor cannot hold.
   bodies only agree after two steps — and there the coinductive rule is the
   whole of the answer.
 
-- **A length bound over a shape that is not words.** A length is not a word's
-  alone -- a list, a tuple, a set and a dict all have one -- and the descriptor's
-  word component speaks only for words, so a bound over anything else refuses
-  rather than being lowered as if it did. A two-tuple is not decided empty under
-  `MinLen(3)`.
+- **A length bound over a set or a dict.** A length is not a word's alone, and
+  two of the kinds that have one now state it: a word's length is a pattern over
+  its alphabet, and a *sequence's* is "any element, that many times", which the
+  automaton holds like any other shape. So `Annotated[tuple[int, int],
+  MinLen(3)]` is decided empty and `Annotated[list[int], MaxLen(0)]` is the
+  empty list. A set and a dict have a length their components do not count, and
+  a bound over one of those refuses rather than being lowered as if it did.
 
 - **An attribute record beside a builtin kind.** An object schema is a class met
   with a record of attributes, and the shape a `NamedTuple`'s instances have is a
@@ -239,8 +241,10 @@ class Pair(NamedTuple):
     y: int
 
 
-# A length bound over a shape that is not words is opaque to it.
-assert not Validator(Annotated[tuple[int, int], at.MinLen(3)]).is_empty()
+# A length bound over a set or a dict is opaque: their representations do not
+# count one. Over a word or a sequence it is decided.
+assert not Validator(Annotated[set[int], at.MinLen(3)]).is_empty()
+assert Validator(Annotated[tuple[int, int], at.MinLen(3)]).is_empty()
 # An attribute record and the shape its instances have are held apart.
 assert not Validator(Pair).is_subtype_of(tuple[int, int])
 # A recursive schema: the laws reach it, and one unfolding decides the kinds its

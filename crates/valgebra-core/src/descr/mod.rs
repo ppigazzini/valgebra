@@ -532,6 +532,43 @@ impl Descr {
         Some(descr)
     }
 
+    /// The sequences of `kind` holding at least `least` elements.
+    ///
+    /// A length is a *regular* property of a sequence -- "any letter, at least
+    /// this many times" -- so the component that already holds sequences holds
+    /// this too, and a length bound over a list stops being opaque. The letters
+    /// are the top because the bound says nothing about what the elements are;
+    /// the caller meets this with the shape that does.
+    ///
+    /// Refuses past the state bound rather than building an automaton with one
+    /// state per element a caller asked for: `MinLen(100_000)` is a schema
+    /// nobody writes and an automaton nobody can hold.
+    #[must_use]
+    pub fn sequences_at_least(least: usize, kind: Kind) -> Option<Descr> {
+        Descr::sequences_at_least_within(least, symbolic::MAX_STATES, kind)
+    }
+
+    /// [`sequences_at_least`](Self::sequences_at_least) with the bound named,
+    /// so the edge can be tested without building an automaton the size of
+    /// the real one.
+    fn sequences_at_least_within(least: usize, bound: usize, kind: Kind) -> Option<Descr> {
+        if least > bound {
+            return None;
+        }
+        let anything = Descr::anything();
+        Descr::sequence(&vec![anything.clone(); least], Some(&anything), kind)
+    }
+
+    /// The sequences of `kind` holding at most `most` elements.
+    ///
+    /// The complement of "at least one more", taken inside the kind so the other
+    /// ten kinds are not swept in with it.
+    #[must_use]
+    pub fn sequences_at_most(most: usize, kind: Kind) -> Option<Descr> {
+        let longer = Descr::sequences_at_least(most.checked_add(1)?, kind)?;
+        Descr::of_kind(kind).intersect(&longer.complement())
+    }
+
     /// The sets whose members all lie in `elements`, for a set kind.
     ///
     /// The members are first cut down to what a set can *hold*. A set's members
@@ -2614,5 +2651,33 @@ mod tests {
             assert_eq!(bottom.complement(&whole), top, "{kind:?} bottom");
             assert_eq!(top.complement(&whole), bottom, "{kind:?} top");
         }
+    }
+
+    /// A length bound over a sequence kind is the sequences of that length: "at
+    /// least n" admits n and more, "at most n" admits n and fewer, and the bound
+    /// past the state budget refuses rather than building one state per element.
+    #[test]
+    fn a_length_bound_over_a_sequence_kind_counts_its_elements() {
+        const NONE: &[Value] = &[];
+        const ONE: &[Value] = &[Value::integer(1)];
+        const TWO: &[Value] = &[Value::integer(1), Value::integer(1)];
+
+        let at_least_one = Descr::sequences_at_least(1, Kind::List).expect("a small bound");
+        assert!(!at_least_one.admits(Value::sequence(NONE, Kind::List)));
+        assert!(at_least_one.admits(Value::sequence(ONE, Kind::List)));
+        assert!(at_least_one.admits(Value::sequence(TWO, Kind::List)));
+
+        let at_most_one = Descr::sequences_at_most(1, Kind::List).expect("a small bound");
+        assert!(at_most_one.admits(Value::sequence(NONE, Kind::List)));
+        assert!(at_most_one.admits(Value::sequence(ONE, Kind::List)));
+        assert!(!at_most_one.admits(Value::sequence(TWO, Kind::List)));
+        // Inside the kind: a tuple of one is not a list of one.
+        assert!(!at_most_one.admits(Value::sequence(ONE, Kind::Tuple)));
+
+        // The bound is inclusive and refuses one past it -- checked with a bound
+        // small enough to build, since the real one is an automaton of 4,096 states.
+        assert!(Descr::sequences_at_least_within(3, 3, Kind::List).is_some());
+        assert!(Descr::sequences_at_least_within(4, 3, Kind::List).is_none());
+        assert!(Descr::sequences_at_least_within(0, 0, Kind::List).is_some());
     }
 }

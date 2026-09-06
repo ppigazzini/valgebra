@@ -69,6 +69,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a schema compares equal in every order it can be written
 - fix: a recursive schema is one schema wherever it is combined
 - feat: decide a recursive schema against the kinds its body admits
+- feat: a sequence's length is a property its automaton can state
 
 -->
 
@@ -114,6 +115,27 @@ answer of its own, or a repair to a change not yet released.
   conservative one, as before. What stays conservative is recursion, a length
   bound over a shape that is not text, an attribute record beside a builtin kind,
   and a predicate.
+
+- **A length bound on a list or a tuple is decided.** A length is a regular
+  property of a sequence -- "any element, that many times" -- so the
+  representation that holds sequences holds a bound on them, and a bound that
+  used to be opaque to everything but a string is now part of the algebra.
+
+  ```python
+  from typing import Annotated
+
+  import annotated_types as at
+
+  from valgebra import Validator
+
+  assert Validator(Annotated[tuple[int, int], at.MinLen(3)]).is_empty()
+  assert Validator(Annotated[list[int], at.MinLen(3), at.MaxLen(2)]).is_empty()
+  assert Validator(Annotated[list[int], at.MaxLen(0)]).is_equivalent([])
+  assert Validator(Annotated[list[int], at.MinLen(2)]).is_equivalent([int, int, int, ...])
+  ```
+
+  A set and a dict have a length their representations do not count, so a bound
+  over one of those still stands.
 
 - **A recursive schema is decided against the kinds its body admits.** A
   reference is a cycle and a set representation has no room for one, so every
