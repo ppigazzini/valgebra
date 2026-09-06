@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use pyo3::prelude::*;
-use rustc_hash::FxHashSet;
+use rustc_hash::FxHashMap;
 use valgebra_core::{Constraint, DefIx, Field, MapClause, Schema, SeqKind, Spelling};
 
 use crate::errors::{class_label, summarize};
@@ -20,16 +20,18 @@ use crate::errors::{class_label, summarize};
 const MAX_RENDER_DEPTH: usize = 200;
 
 /// Render a schema back to the annotation/combinator expression that produces
-/// it. A recursive `Ref` is unfolded once; the back edge to a reference already
-/// being rendered shows as `...`, so the printed form stays finite. `depth` is
-/// the current recursion level; past [`MAX_RENDER_DEPTH`] the walk prints `...`
-/// so a pathological definition chain cannot overflow the native stack.
+/// it. A recursive `Ref` renders as the `recursive` call that builds it, with
+/// the back edge as the lambda's own parameter, so the printed form is finite
+/// *and* rebuilds the schema. `depth` is the current recursion level; past
+/// [`MAX_RENDER_DEPTH`] the walk prints `...`, which is the one form that does
+/// not rebuild -- a pathological definition chain would otherwise overflow the
+/// native stack, and a truncated render says so by being unreadable as Python.
 pub(crate) fn render(
     py: Python<'_>,
     schema: &Schema,
     pool: &[Py<PyAny>],
     defs: &[Schema],
-    active: &RefCell<FxHashSet<DefIx>>,
+    active: &RefCell<FxHashMap<DefIx, String>>,
     depth: usize,
 ) -> String {
     if depth > MAX_RENDER_DEPTH {
@@ -60,6 +62,11 @@ pub(crate) fn render(
                     let body = ps.iter().map(r).collect::<Vec<_>>().join(", ");
                     if list {
                         format!("[{body}]")
+                    } else if ps.is_empty() {
+                        // The nullary product, whose one member is `()`. Python
+                        // spells the empty subscript `tuple[()]`; `tuple[]` is
+                        // not an expression at all.
+                        "tuple[()]".to_owned()
                     } else {
                         format!("tuple[{body}]")
                     }
@@ -96,16 +103,39 @@ pub(crate) fn render(
             format!("Annotated[{}]", parts.join(", "))
         }
         Schema::Ref(id) => {
-            // Unfold the definition once; a back-edge to a reference already
-            // being rendered shows as `...`, so the form stays finite.
-            if !active.borrow_mut().insert(*id) {
-                return "...".to_owned();
+            // A back edge into a definition already being rendered is the
+            // lambda's parameter, which is what makes the form finite without
+            // an ellipsis nothing can rebuild.
+            if let Some(name) = active.borrow().get(id) {
+                return name.clone();
             }
+            let name = binder(active.borrow().len());
+            active.borrow_mut().insert(*id, name.clone());
             let body = defs.get(id.get()).map_or_else(|| "...".to_owned(), &r);
             active.borrow_mut().remove(id);
-            body
+            format!("recursive(lambda {name}: {body})")
         }
+        // The transient marker `recursive` uses while its own body is being
+        // built. A compiled validator holds no such node, so nothing a caller
+        // can print reaches this; it renders as an ellipsis because there is no
+        // definition to name yet.
         Schema::SelfRef(_) => "...".to_owned(),
+    }
+}
+
+/// The name a recursive definition's back edge is bound to, by how many are
+/// already open.
+///
+/// Single letters while they last, because one definition is the ordinary case
+/// and `X` reads as a type variable does. Past them the letter carries the depth,
+/// which keeps two nested definitions apart -- a name reused inside its own
+/// scope would render a schema that rebuilds a different one.
+fn binder(open: usize) -> String {
+    match open {
+        0 => "X".to_owned(),
+        1 => "Y".to_owned(),
+        2 => "Z".to_owned(),
+        n => format!("T{n}"),
     }
 }
 
@@ -123,7 +153,7 @@ fn render_meet(
     members: &[Schema],
     pool: &[Py<PyAny>],
     defs: &[Schema],
-    active: &RefCell<FxHashSet<DefIx>>,
+    active: &RefCell<FxHashMap<DefIx, String>>,
     depth: usize,
 ) -> String {
     let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
@@ -158,7 +188,7 @@ fn render_attr_record(
     fields: &[Field],
     pool: &[Py<PyAny>],
     defs: &[Schema],
-    active: &RefCell<FxHashSet<DefIx>>,
+    active: &RefCell<FxHashMap<DefIx, String>>,
     depth: usize,
 ) -> String {
     let entries: Vec<String> = fields
@@ -178,7 +208,7 @@ fn render_keyed_map(
     defaults: &[MapClause],
     pool: &[Py<PyAny>],
     defs: &[Schema],
-    active: &RefCell<FxHashSet<DefIx>>,
+    active: &RefCell<FxHashMap<DefIx, String>>,
     depth: usize,
 ) -> String {
     let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
@@ -197,12 +227,12 @@ fn render_keyed_map(
         })
         .collect();
     for clause in defaults {
-        // An anything-to-anything catch-all reads as the open-record marker.
-        if *clause == MapClause::top() {
-            entries.push("...".to_owned());
-        } else {
-            entries.push(format!("{}: {}", r(&clause.key), r(&clause.value)));
-        }
+        // Every clause renders as the key-to-value entry it is, the catch-all
+        // included. `{'a': int, ...}` read better and rebuilt a *different*
+        // schema: `...` is a dict key like any other, so the frontend reads it
+        // back as `Literal[Ellipsis]` and the record is closed with an odd
+        // field rather than open.
+        entries.push(format!("{}: {}", r(&clause.key), r(&clause.value)));
     }
     format!("{{{}}}", entries.join(", "))
 }

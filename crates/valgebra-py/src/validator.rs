@@ -17,7 +17,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
 };
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use valgebra_core::descr::classes::Class;
 use valgebra_core::descr::lower::{Constants, Operand};
 use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, Openness, OperandIx, Schema};
@@ -1000,7 +1000,7 @@ impl Validator {
     /// Render the compiled schema back as the annotation expression that
     /// produces it.
     fn __repr__(&self, py: Python<'_>) -> String {
-        let active = RefCell::new(FxHashSet::default());
+        let active = RefCell::new(FxHashMap::default());
         render(
             py,
             &self.schema,
