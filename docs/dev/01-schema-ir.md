@@ -240,8 +240,26 @@ algebraic combinators alone".
 
 ## Which laws construction settles
 
-Three, and all three where the schema is built: `~~A` is `A`, `A | ~A` is the
+All of them: a schema is built in the lattice normal form. Members of a union or
+a meet are flattened, ordered and deduplicated; the two identities are applied
+(`A | nothing` is `A`, `A & anything` is `A`) and the two absorbing elements too;
+absorption removes a member that contains another; `~~A` is `A`, `A | ~A` is the
 top, and `A & ~A` is the bottom.
+
+The three complement laws differ from the rest in what they need. `~~A` holds of
+anything, because a complement is evaluated by negating what is under it, so
+negating twice asks the same question once -- even of an atom that answers by
+running code. The other two ask `A` *twice*, and a predicate or a class with an
+`isinstance` hook may answer differently each time; those two folds are asked of
+the atom first, and decline for one that is not a set.
+
+**Why the normal form rather than a free term.** A constructor that folds some
+laws and not others is neither: `union(int, int)` rendered `int | int` and
+compared unequal to `int` while `union(int, complement(int))` rendered
+`anything`, so `==` was equality of nothing in particular and `repr` showed a
+shape no rule was written for. Normalising at construction makes `==` equality of
+a canonical form -- which is what the API reference already calls it -- and makes
+the shape every rule downstream may assume the shape it gets.
 
 The first holds of anything. A complement is evaluated by negating what is under
 it, so negating twice asks the same question once — even of an atom that answers
@@ -498,6 +516,93 @@ builds two descriptors. That is a testing-capability cost rather than a
 user-facing one, and the route out of it is a target that asks the rules
 directly for the high-volume properties, with the descriptor on a target of its
 own.
+
+## What a bare builtin class denotes
+
+`list` and `list[object]` admit exactly the same values -- every list, a
+subclass instance included -- and neither was decided below the other. The two
+were different sorts of thing: `list[object]` is a sequence node in the `List`
+kind, and `list` was an `isinstance` atom in no kind at all, so the two never met
+on a line.
+
+**A bare builtin container is its kind.** The frontend maps `list`, `tuple`,
+`set`, `frozenset` and `dict` to the kind's own top -- `list[anything]`,
+`tuple[anything, ...]`, `set[anything]`, `frozenset[anything]`,
+`dict[anything, anything]` -- which is the set the typing spec assigns an
+unparameterised generic, and the set the walk already checked. The two spellings
+build one schema and compare as one. `str`, `bytes`, `int`, `float` and `bool`
+were already their kinds; this is the rest of that rule.
+
+**A class laying down a builtin layout goes on that kind's line.** Every
+instance of a `str` subclass is a `str`, so the class constrains a value *within*
+the `Str` kind rather than instead of it, and putting it there is exact: it is
+where `MyInt ≤ int` and `MyStr ≤ str` are decided. The layout is what says which
+kind, and it is the layout the class lays down rather than the one it inherits,
+because a subclass keeps it.
+
+**A class laying down no layout of its own goes on every kind, and must.**
+`class Both(Plain, MyStr)` builds and its instances are strings, so a plain
+class's instances are not confined to the kindless slot -- a subclass may add any
+layout. Placing such a class narrowly would be the one direction that is unsound:
+claiming a value does not exist. It stays on every line, which is what it was.
+
+## Which representation decides
+
+Two decide, and the order between them is a cost measurement rather than a
+preference.
+
+The **descriptor** is the definition: a schema denotes a set, `a ≤ b` is
+`a ∧ ¬b = ∅`, and each kind carries a representation closed under the three
+operations so that question can be asked literally. Everything it can hold, it
+decides.
+
+The **structural rules** are the fast path. Building a descriptor costs about
+two orders of magnitude more than a rule that already answers, which is measured
+under "What it costs to build a descriptor" above; a shape the rules settle in
+nanoseconds is not worth a set representation. So the rules answer first, and the
+descriptor answers where they decline.
+
+What that ordering is *not* is a second opinion. Both are asked of the same
+question and the descriptor can only turn "not proved" into "proved", so the pair
+gives the descriptor's answers wherever the descriptor can build -- the rules
+never overturn one. The rules are an optimisation of a relation the descriptor
+defines, and the page that describes the decision says so in that order.
+
+**A rule earns its place by answering a shape the descriptor refuses, or by
+answering a common one far more cheaply.** A rule that only repeats what the
+descriptor decides is dead weight that the mutation sweep can no longer see
+through the public relations, and it goes. Each rule that stays is named on
+[02-decision.md](02-decision.md) with which of the two reasons it has.
+
+**Every bound is measured.** A numeric bound in the decision -- the nodes a
+lowering reads, the nesting it descends, the work a build spends, the steps the
+rules take -- is admitted only with a workload in the tree that reproduces the
+number it was set from. A bound whose number lives only in a comment cannot be
+re-derived on another machine, and cannot fail when the shape it guards against
+changes.
+
+## Which whole-schema operations stay
+
+`open`, `close` and `ensure` stay; `simplify` goes.
+
+The test is the one this page states for a node, applied to a method: a method is
+justified by what neither typing nor the algebra can express. `open` and `close`
+rewrite **every record a schema declares, at any depth, inside its recursive
+definitions** -- the sets they produce are spellable one at a time
+(`{"a": int, anything: anything}`), and the traversal is not. They are the
+whole-schema operations the contract admits, and they are functions on sets: two
+records denoting one set open to one set, which is a law with a test.
+
+`ensure` is `validate(x); return x` and is kept for what it reads as, typed as
+the identity it is. That is a judgement about the surface rather than about the
+algebra, and it is the only one here.
+
+`simplify` was the lattice normal form of a term the constructors left
+un-normalised. Once construction settles the laws -- see the next section -- the
+schema a caller holds *is* that normal form, `repr` shows it and `==` compares
+it, and `simplify` is the identity under another name. It is deprecated rather
+than removed at once, because a method that quietly starts returning its
+argument is worse than one that says it is going.
 
 ## The limit
 
