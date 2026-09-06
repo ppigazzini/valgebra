@@ -82,6 +82,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a validator takes part in the cycle collector
 - fix: an integer key of any size stays an integer in an error path
 - fix: a literal's hash is the constant's, not its slot's
+- fix: one schema prints one way
 
 -->
 
@@ -497,6 +498,23 @@ answer of its own, or a repair to a change not yet released.
   not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
+
+- Two spellings of one schema print the same way. A union's members are ordered
+  by the IR's own order and a literal sorts there by its **pool slot** -- the
+  order the constants were first seen -- so `Literal[1, 2]` and `Literal[2, 1]`
+  were one schema by `==` and by `hash` and two by `repr`, against
+  `docs/04-algebra.md`'s "`repr` shows it and `==` compares it". The literals in
+  a union are now ordered by what they print; members that are not literals keep
+  the place the normal form gives them.
+
+- Two validators that differ only in a constant no longer share a hash.
+  `__hash__` skipped every pool slot, so `Literal[1]` through `Literal[1000]`
+  were one hash and a dictionary keyed by validators -- the reason the method
+  exists -- degenerated into a linear scan, at 98 microseconds per lookup over
+  ten thousand entries. The constant behind a slot is now folded in, which is
+  10,000 distinct hashes and 0.065 microseconds for the same registry. A
+  constant with no hash contributes nothing, so a validator stays usable as a
+  key whatever it pools.
 
 - An integer key of any size reaches an error path as an integer, and so does a
   `bool`. `docs/08-error-model.md` promises a path a caller can walk back down to

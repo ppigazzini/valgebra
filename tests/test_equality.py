@@ -35,6 +35,7 @@ from valgebra import (
     Regex,
     Validator,
     anything,
+    complement,
     intersection,
     nothing,
     recursive,
@@ -272,3 +273,47 @@ def test_equal_validators_still_hash_alike_when_the_constant_is_read() -> None:
         assert hash(left) == hash(right), (
             f"{left!r} and {right!r} are equal and must hash alike"
         )
+
+
+@pytest.mark.parametrize(("name", "left", "right"), SAME, ids=[row[0] for row in SAME])
+def test_one_schema_prints_one_way(name: str, left: object, right: object) -> None:
+    """`docs/04` says `repr` shows the schema and `==` compares it.
+
+    Construction sorts a union's members with the IR's own order, and a literal
+    sorts there by its **pool slot** -- the order the constants were first seen.
+    So `Literal[1, 2]` and `Literal[2, 1]` were one schema by `==` and by `hash`
+    and printed two ways, which made `repr` show something that was not the
+    schema. Every pair the suite calls equal must print alike.
+    """
+    assert repr(Validator(left)) == repr(Validator(right)), name
+
+
+def test_a_union_of_literals_prints_in_one_order_however_it_is_built() -> None:
+    # The two ways a union of literals arrives: written as one `Literal[...]`,
+    # and combined from validators whose pools number the constants differently.
+    assert repr(Validator(Literal[3, 1, 2])) == repr(Validator(Literal[1, 2, 3]))
+    combined = union(_integer_literal(3), _integer_literal(1), _integer_literal(2))
+    assert repr(combined) == repr(Validator(Literal[1, 2, 3]))
+    # Members that are not literals keep the place the normal form gives them,
+    # so only the run this reorders moves.
+    assert repr(Validator(str | Literal[2, 1])) == "str | Literal[1] | Literal[2]"
+
+
+def test_the_rendered_order_still_rebuilds_the_schema() -> None:
+    """Reordering what is printed must not print something that is not it."""
+    environment = {
+        "Validator": Validator,
+        "Literal": Literal,
+        "Annotated": Annotated,
+        "Regex": Regex,
+        "at": at,
+        "anything": anything,
+        "nothing": nothing,
+        "union": union,
+        "intersection": intersection,
+        "complement": complement,
+        "recursive": recursive,
+    }
+    for spelling in (Literal[3, 1, 2], str | Literal[2, 1], {"k": Literal["b", "a"]}):
+        validator = Validator(spelling)
+        assert Validator(eval(repr(validator), environment)) == validator  # noqa: S307

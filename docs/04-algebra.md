@@ -239,6 +239,10 @@ assert len({Validator(Literal[1, 2]), Validator(Literal[2, 1])}) == 1
 # Two schemas that differ only in a constant are two keys, not one bucket:
 # `hash` reads the constant a slot names, as `==` does.
 assert len({Validator(Literal[n]) for n in range(100)}) == 100
+
+# And one schema prints one way: a union's literals are ordered by what they
+# are, not by the slot construction happened to give them.
+assert repr(Validator(Literal[2, 1])) == repr(Validator(Literal[1, 2]))
 ```
 
 **`==` is not `is_equivalent`.** Equality is what the constructors settle:

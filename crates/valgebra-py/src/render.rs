@@ -92,7 +92,7 @@ pub(crate) fn render(
         Schema::KeyedMap { fields, defaults } => {
             render_keyed_map(py, fields, defaults, pool, defs, active, depth)
         }
-        Schema::Union(members) => members.iter().map(&r).collect::<Vec<_>>().join(" | "),
+        Schema::Union(members) => render_union(members, &r),
         Schema::Intersection(members) => {
             render_meet(py, schema, members, pool, defs, active, depth)
         }
@@ -149,6 +149,43 @@ fn binder(open: usize) -> String {
 /// names the class. Without this the annotation `Pt` would print as
 /// `intersection(Pt, object(x=int))` -- the algebra's spelling of a thing the
 /// user spelled with one name.
+/// Render a union's members, ordering the literals among them by what they are.
+///
+/// Construction sorts a union's members with the IR's own `Ord`, and a
+/// `Literal` sorts there by its **pool slot** -- which is the order the
+/// constants were first seen, not a property of the schema. So `Literal[1, 2]`
+/// and `Literal[2, 1]` are one schema by `==` and by `hash`, and printed as
+/// `Literal[1] | Literal[2]` and `Literal[2] | Literal[1]`. `docs/04-algebra.md`
+/// says "`repr` shows it and `==` compares it", and there were two `repr`s of
+/// one *it*.
+///
+/// The sort puts every `Literal` in one contiguous run -- the IR's `Ord` orders
+/// by variant first -- so ordering that run by the constant's own rendering
+/// leaves every other member exactly where it was. The rendering is the sort
+/// key because it is what the reader sees: two members that print the same
+/// print the same wherever they sit.
+fn render_union(members: &[Schema], render: &impl Fn(&Schema) -> String) -> String {
+    let mut rendered: Vec<(bool, String)> = members
+        .iter()
+        .map(|member| (matches!(member, Schema::Literal(_)), render(member)))
+        .collect();
+    if let Some(start) = rendered.iter().position(|(literal, _)| *literal) {
+        let end = rendered
+            .iter()
+            .skip(start)
+            .position(|(literal, _)| !*literal)
+            .map_or(rendered.len(), |offset| start + offset);
+        if let Some(run) = rendered.get_mut(start..end) {
+            run.sort_by(|a, b| a.1.cmp(&b.1));
+        }
+    }
+    rendered
+        .into_iter()
+        .map(|(_, text)| text)
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
 fn render_meet(
     py: Python<'_>,
     schema: &Schema,
