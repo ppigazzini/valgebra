@@ -151,11 +151,13 @@ jobs:
       # Run the workspace tests under nextest and enforce a core line-coverage
       # floor. The binding crate is measured by its own lane (which ignores the
       # core), so scope this floor to the core and ignore valgebra-py here. The
-      # floor sits a few points below the current number so erosion fails the lane
-      # rather than eroding silently; ratchet it up as coverage improves.
+      # floor sits five points below the measured number -- 98.3% of lines today
+      # -- so erosion fails the lane rather than eroding silently, and the gap is
+      # small enough that losing a file's worth of tests is caught. Ratchet it up
+      # with the measurement, not ahead of it.
       - run: >
           cargo llvm-cov nextest --locked --workspace --summary-only
-          --ignore-filename-regex 'valgebra-py' --fail-under-lines 88
+          --ignore-filename-regex 'valgebra-py' --fail-under-lines 93
 
   binding-coverage:
     name: binding coverage
@@ -195,6 +197,8 @@ jobs:
           # Scope the floor to the binding crate: the instrumented build also
           # covers valgebra-core (the .so links it), but the core has its own
           # coverage lane, so including it here would dilute the binding number.
+          # 96.7% of lines measured, so this floor is already inside the five
+          # points the core's now sits at.
           cargo llvm-cov report --summary-only \
             --ignore-filename-regex 'valgebra-core' --fail-under-lines 95
 
