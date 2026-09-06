@@ -45,6 +45,23 @@ use std::collections::VecDeque;
 /// returning an automaton for a different language.
 pub const MAX_STATES: usize = 4096;
 
+/// What `regex-automata` may spend building one pattern's table, in bytes.
+///
+/// [`MAX_STATES`] bounds the automaton this module keeps; this bounds the one
+/// the builder makes on the way to it, which is a different quantity and the
+/// larger of the two. A dense table is a row of 256 byte-classes per state, so
+/// four thousand states is a few megabytes and eight is generous headroom --
+/// while a pattern whose determinisation is exponential passes right through
+/// `MAX_STATES` because it never reaches the check.
+///
+/// Both limits are set: `determinize_size_limit` bounds the scratch space the
+/// subset construction uses, and `dfa_size_limit` the table it produces. A
+/// pattern past either is `None` here, which is a refusal every caller of a
+/// descriptor operation already handles -- the relation stays undecided and the
+/// walk still matches the pattern, since the walk runs the regex rather than
+/// the automaton.
+pub const BUILD_SIZE_LIMIT: usize = 8 * 1024 * 1024;
+
 /// A byte's equivalence class. Two bytes share a class when no state's
 /// transition tells them apart.
 type Class = u16;
@@ -406,17 +423,31 @@ impl RegularSet {
     }
 
     /// The language of one pattern, matched whole, or `None` where the pattern
-    /// does not build or its automaton is past [`MAX_STATES`].
+    /// does not build, exceeds [`BUILD_SIZE_LIMIT`], or its automaton is past
+    /// [`MAX_STATES`].
     ///
     /// Anchored at both ends, because that is what a `Regex` constraint means:
     /// the walk matches a pattern against the whole text, not a substring of it.
+    ///
+    /// The size limits are the load-bearing part. `MAX_STATES` is checked in
+    /// [`Dfa::from_automaton`], which runs *after* `regex-automata` has built
+    /// the complete dense table -- so a pattern whose determinisation is
+    /// exponential allocated gigabytes and then refused, or aborted the process
+    /// trying. `(a|b)*a(a|b){k}` is the family: every `k` doubles the states,
+    /// and at 20 the build reached 668 MB before valgebra saw a single state.
+    /// Handing the limits to the builder makes the refusal happen where the
+    /// memory would be spent.
     #[must_use]
     pub fn pattern(pattern: &str, alphabet: Alphabet) -> Option<RegularSet> {
         let anchored = format!("(?:{pattern})");
         let syntax = syntax::Config::new().utf8(alphabet == Alphabet::Text);
+        let config = dense::Config::new()
+            .start_kind(regex_automata::dfa::StartKind::Anchored)
+            .dfa_size_limit(Some(BUILD_SIZE_LIMIT))
+            .determinize_size_limit(Some(BUILD_SIZE_LIMIT));
         let built = dense::Builder::new()
             .syntax(syntax)
-            .configure(dense::Config::new().start_kind(regex_automata::dfa::StartKind::Anchored))
+            .configure(config)
             .build(&anchored)
             .ok()?;
         Dfa::from_automaton(&built).map(|dfa| RegularSet { dfa: dfa.minimal() })
@@ -891,6 +922,34 @@ mod tests {
             .intersect(&two_text)
             .expect("a small meet");
         assert!(impossible.is_empty());
+    }
+
+    /// A pattern whose determinisation is exponential refuses at the builder,
+    /// not after it.
+    ///
+    /// `(a|b)*a(a|b){k}` doubles its DFA states for every `k`: the automaton
+    /// must remember the last `k` letters to know whether an `a` sat `k` back.
+    /// `MAX_STATES` is checked in `from_automaton`, which runs after
+    /// `regex-automata` has built the whole dense table, so before the size
+    /// limits this family allocated until it either answered slowly or aborted
+    /// the process -- 668 MB at `k = 20`, and a failed four-gigabyte allocation
+    /// at 25. The limits move the refusal to where the memory would be spent.
+    ///
+    /// The small `k` still answers, so the bound is not a blanket refusal of
+    /// the shape.
+    #[test]
+    fn a_pattern_whose_determinisation_explodes_refuses_at_the_builder() {
+        let family = |k: u32| format!("(a|b)*a(a|b){{{k}}}");
+        assert!(RegularSet::pattern(&family(4), Alphabet::Text).is_some());
+        for k in [24, 40, 64] {
+            assert!(
+                RegularSet::pattern(&family(k), Alphabet::Text).is_none(),
+                "k = {k} must refuse rather than allocate"
+            );
+        }
+        // A long pattern that stays small determinised is unaffected: the limit
+        // is on the table, not on the source.
+        assert!(RegularSet::pattern(&"a".repeat(2000), Alphabet::Text).is_some());
     }
 
     /// A pattern that does not build, and one whose automaton is too large, are

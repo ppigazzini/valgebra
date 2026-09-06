@@ -24,7 +24,8 @@ from __future__ import annotations
 import subprocess
 import sys
 import textwrap
-from typing import TYPE_CHECKING, Literal
+import time
+from typing import TYPE_CHECKING, Annotated, Literal
 
 import pytest
 
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 from valgebra import (
+    Regex,
     ValidationError,
     Validator,
     complement,
@@ -354,3 +356,40 @@ def test_no_whole_schema_transform_escapes_the_node_bound(transform: str) -> Non
         assert "too large" not in message, (
             f"{transform}() returned a validator already past the node bound: {message}"
         )
+
+
+def test_a_pattern_whose_determinisation_explodes_answers_in_bounded_time() -> None:
+    """A subtype question must not be a way to exhaust the process's memory.
+
+    `(a|b)*a(a|b){k}` doubles its DFA states for every `k`: the automaton has to
+    remember the last `k` letters to know whether an `a` sat `k` back. The
+    descriptor bounds the automaton it keeps, but that bound is checked after
+    the regex engine has built the whole dense table -- so `k = 20` spent six
+    seconds and 668 MB reaching a refusal, and `k = 25` aborted the interpreter
+    on a four-gigabyte allocation. A caller who lets a user supply a pattern had
+    handed that user the process.
+
+    The engine is now given the size limit, so the refusal happens where the
+    memory would be spent. Timed rather than merely answered: a bound that only
+    stops the allocation would still leave the question taking minutes.
+    """
+    started = time.perf_counter()
+    for exponent in (16, 20, 25, 40):
+        pattern = Annotated[str, Regex(f"(a|b)*a(a|b){{{exponent}}}")]
+        # Undecided is the honest answer: the descriptor refused the pattern, so
+        # no relation over it is proved either way.
+        assert not Validator(pattern).is_subtype_of(Annotated[str, Regex("(a|b)*")])
+        # And membership is unaffected -- the walk runs the regex, not the
+        # automaton, so the schema still accepts and rejects.
+        assert Validator(pattern).is_valid("a" * (exponent + 1))
+        assert not Validator(pattern).is_valid("b")
+    elapsed = time.perf_counter() - started
+    assert elapsed < 30, f"four relations took {elapsed:.1f}s; the bound is not biting"
+
+
+def test_a_pattern_that_stays_small_is_still_decided() -> None:
+    """The bound is on the table, not on the shape or the length of the source."""
+    small = Annotated[str, Regex("(a|b)*a(a|b){4}")]
+    assert Validator(small).is_subtype_of(Annotated[str, Regex("(a|b)*")])
+    long_but_simple = Annotated[str, Regex("a" * 2000)]
+    assert Validator(long_but_simple).is_subtype_of(Annotated[str, Regex("a*")])

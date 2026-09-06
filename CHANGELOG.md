@@ -78,6 +78,8 @@ answer of its own, or a repair to a change not yet released.
 - fix: report a list that resizes under the walk, as a dict already is
 - fix: a test that names a script as a subject is not a lane that runs it -- internal
 - fix: an enumeration is the union of its members only when it is one
+- fix: refuse a pattern before its automaton is built, not after
+- fix: refuse a pattern before its automaton is built, not after
 
 -->
 
@@ -493,6 +495,15 @@ answer of its own, or a repair to a change not yet released.
   not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
+
+- A relation over a pattern whose determinisation is exponential refuses instead
+  of exhausting memory. `Annotated[str, Regex("(a|b)*a(a|b){20}")]` against
+  `Regex("(a|b)*")` spent six seconds and 668 MB, and two more repetitions
+  aborted the process on a four-gigabyte allocation: the automaton bound was
+  checked after the regex engine had built the whole dense table. The engine now
+  carries the size limit, so the family answers in under 100 ms at any
+  repetition count. Membership is unaffected — the walk runs the pattern, not
+  the automaton — and a pattern that stays small is still decided.
 
 - A `Flag`, an `IntFlag` and an `Enum` with no members are no longer read as the
   union of the members they list. A flag's `|` builds instances the class never

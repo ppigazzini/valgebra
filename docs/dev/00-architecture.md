@@ -118,7 +118,9 @@ fails too.
 | `crates/valgebra-core/src/descr/records.rs` | `MAX_ATOMS` | `256` | the atoms a record union holds, which a complement multiplies | its own tests |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_STATES` | `4096` | a product of two automata multiplying past memory | its own tests |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_ROW` | `MAX_STATES` | one row of a product growing past the alternatives a shape has | its own tests |
+| `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_EDGES` | `1 << 16` | a table inside both dimensions and still too large: 4,096 states each with a 4,096-wide row is sixteen million edges | its own tests |
 | `crates/valgebra-core/src/descr/regular.rs` | `MAX_STATES` | `4096` | a pattern product doubling the exponent twice | its own tests |
+| `crates/valgebra-core/src/descr/regular.rs` | `BUILD_SIZE_LIMIT` | `8 * 1024 * 1024` | a pattern whose determinisation is exponential, which reaches `MAX_STATES` only after the table it refuses has been built | its own tests |
 | `crates/valgebra-core/src/descr/integers.rs` | `MAX_PERIOD` | `4096` | a step set holding one interval set per residue | its own tests |
 
 Two of them are the same number for different reasons, and the difference

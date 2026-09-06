@@ -49,6 +49,24 @@ pub const MAX_STATES: usize = 4096;
 /// representation rather than approximations, so a shape past either refuses.
 pub const MAX_ROW: usize = MAX_STATES;
 
+/// The most edges a product's whole table may hold.
+///
+/// [`MAX_STATES`] and [`MAX_ROW`] bound the two dimensions *separately*, and a
+/// table can sit inside both while being far too large to hold: four thousand
+/// states each carrying a four-thousand-wide row is sixteen million edges, which
+/// is gigabytes. Neither bound sees that, because neither is exceeded -- so
+/// `Annotated[str, Regex("(a|b)*a(a|b){20}")]` against `Regex("(a|b)*")` spent
+/// six seconds and 668 MB answering, and two more repetitions aborted the
+/// process on a four-gigabyte allocation. A subtype question is not allowed to
+/// do that.
+///
+/// This bounds the product of the two, which is where the memory is. Sixty-four
+/// thousand edges is a table of a few megabytes, past anything an annotation
+/// writes -- a pattern in a contract distinguishes tens of positions, not
+/// thousands -- and reaching it refuses, which every caller of a descriptor
+/// operation already handles.
+pub const MAX_EDGES: usize = 1 << 16;
+
 /// A Boolean algebra of value sets, which is what an automaton's guards must
 /// form.
 ///
@@ -296,8 +314,8 @@ impl<G: Guard> SymbolicDfa<G> {
         .minimal()
     }
 
-    /// The sequences in either language, or `None` past [`MAX_STATES`] or
-    /// [`MAX_ROW`], or where a guard operation refuses.
+    /// The sequences in either language, or `None` past [`MAX_STATES`],
+    /// [`MAX_ROW`] or [`MAX_EDGES`], or where a guard operation refuses.
     #[must_use]
     pub fn union(&self, other: &SymbolicDfa<G>) -> Option<SymbolicDfa<G>> {
         self.product(other, |a, b| a || b)
@@ -325,6 +343,7 @@ impl<G: Guard> SymbolicDfa<G> {
         ids.insert((0, 0), 0);
         let mut edges: Vec<Vec<Edge<G>>> = Vec::new();
         let mut accepting: Vec<bool> = Vec::new();
+        let mut held = 0usize;
         while let Some((mine, theirs)) = pending.pop_front() {
             accepting.push(accept(self.accepts(mine), other.accepts(theirs)));
             let (ours, yours) = (self.outgoing(mine), other.outgoing(theirs));
@@ -387,6 +406,12 @@ impl<G: Guard> SymbolicDfa<G> {
                 if let Some(last) = row.last_mut() {
                     last.guard = None;
                 }
+            }
+            // The two dimensions are bounded above; this bounds their product,
+            // which is the quantity that is actually allocated.
+            held += row.len();
+            if held > MAX_EDGES {
+                return None;
             }
             edges.push(row);
         }
@@ -666,7 +691,7 @@ fn rest_of<G: Guard>(row: &[Edge<G>]) -> Option<G> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Edge, Guard, MAX_ROW, MAX_STATES, SymbolicDfa};
+    use super::{Edge, Guard, MAX_EDGES, MAX_ROW, MAX_STATES, SymbolicDfa};
     use crate::descr::integers::IntSet;
     use proptest::prelude::*;
 
@@ -995,6 +1020,56 @@ mod tests {
         assert!(
             wide(2).intersect(&wide(2)).is_some(),
             "a narrow one still answers"
+        );
+    }
+
+    /// A product whose whole table is too large refuses, and one that fills it
+    /// exactly does not.
+    ///
+    /// [`MAX_ROW`] and [`MAX_STATES`] bound the two dimensions separately, and a
+    /// table inside both can still be far past what may be allocated, so
+    /// [`MAX_EDGES`] bounds the running total as the rows are built. The bound
+    /// is asserted from both sides: the largest table it admits is built, and
+    /// one row more is refused. Reading the total as anything but a sum, or the
+    /// comparison as anything but strict, moves one of the two answers.
+    #[test]
+    fn a_product_past_the_edge_bound_refuses() {
+        // Each state leaves by this many overlapping guards, so every pair of
+        // guards meets and a row of the product is the two rows multiplied.
+        const WIDTH: usize = 16;
+        const ROW: usize = WIDTH * WIDTH;
+        // A chain of `states`, the last looping on itself. Written directly:
+        // the constructors keep both dimensions far below the bound, and one
+        // side of a product is what carries the table's height.
+        let chain = |states: usize| SymbolicDfa {
+            edges: (0..states)
+                .map(|state| {
+                    let next =
+                        u32::try_from(state + usize::from(state + 1 < states)).unwrap_or(u32::MAX);
+                    (0..WIDTH)
+                        .map(|n| Edge {
+                            guard: Some(IntSet::between(
+                                Some(-i64::try_from(n).unwrap_or(0)),
+                                None,
+                            )),
+                            target: next,
+                        })
+                        .collect()
+                })
+                .collect(),
+            accepting: vec![true; states],
+        };
+        // The other side is one looping state, so the product has one state per
+        // link of the chain and each row holds `ROW` edges.
+        let held = chain(1);
+
+        assert!(
+            chain(MAX_EDGES / ROW).intersect(&held).is_some(),
+            "a table filled to the bound is held"
+        );
+        assert!(
+            chain(MAX_EDGES / ROW + 1).intersect(&held).is_none(),
+            "one row past it is refused"
         );
     }
 
