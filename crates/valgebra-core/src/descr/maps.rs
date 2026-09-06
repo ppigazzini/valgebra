@@ -360,11 +360,23 @@ impl<G: Guard> MapAtom<G> {
         // that part *and* every label the exclusion set does not cover.
         for want in &self.wanted {
             let mut atom = widened();
+            let outside = Field {
+                ty: want.ty.complement(),
+                absent: true,
+            };
             if let Some(default) = atom.defaults.get_mut(want.slot) {
-                *default = Field {
-                    ty: want.ty.complement(),
-                    absent: true,
-                };
+                *default = outside.clone();
+            }
+            // A default governs the keys the atom does not name, so tightening
+            // one reaches every key of the part -- the exclusion set included,
+            // which is the one group the want says nothing about. Naming each of
+            // them takes it back out of the default's reach. Without this, `¬¬A`
+            // came out *smaller* than `A`: the record `{a: int}` complemented
+            // twice forbade the key it is about.
+            for label in &want.besides {
+                if key_slot(Some(label.kind())) == Some(want.slot) {
+                    atom.labels.entry(label.clone()).or_insert_with(Field::top);
+                }
             }
             let narrowed: Vec<Label> = self
                 .labels
@@ -376,13 +388,7 @@ impl<G: Guard> MapAtom<G> {
                 .cloned()
                 .collect();
             for label in narrowed {
-                atom.labels.insert(
-                    label,
-                    Field {
-                        ty: want.ty.complement(),
-                        absent: true,
-                    },
-                );
+                atom.labels.insert(label, outside.clone());
             }
             atoms.push(atom);
         }
@@ -758,6 +764,43 @@ mod tests {
                 .expect("a small difference")
                 .emptiness(),
             Verdict::Empty
+        );
+    }
+
+    /// Complementing twice gives the set back.
+    ///
+    /// `¬A` names the ways to fail `A`, and one of them is "no key of this part,
+    /// other than the ones `A` names, maps anywhere". Negating *that* tightens
+    /// the part's default -- which governs every key the atom does not name, the
+    /// excluded ones included, so the record `{a: int}` came back forbidding the
+    /// key it is about and `¬¬A` was empty.
+    ///
+    /// Checked against a value as well as against the verdict, because an atom
+    /// set that is merely spelled differently is fine and one that holds
+    /// different dicts is not.
+    #[test]
+    fn complementing_twice_gives_the_dicts_back() {
+        let record = MapLattice::record(
+            vec![(Label::str("a"), IntSet::just(1), false)],
+            core::iter::empty(),
+        )
+        .expect("a record");
+        let twice = record.complement().complement();
+
+        assert_eq!(twice.emptiness(), Verdict::Inhabited);
+        assert!(twice.holds(&[at("a", 1)]));
+        assert!(
+            !twice.holds(&[at("a", 2)]),
+            "and no more than the record does"
+        );
+        assert!(!twice.holds(&[at("a", 1), at("b", 1)]));
+        // And the meet with a mapping that admits the same dict is inhabited,
+        // which is the relation the unsoundness was found through: `dict[str,
+        // int]` was decided a subtype of `¬{a: int}`.
+        let mapping = MapLattice::keyed(Kind::Str, IntSet::just(1));
+        assert_eq!(
+            mapping.intersect(&twice).expect("a meet").emptiness(),
+            Verdict::Inhabited
         );
     }
 
