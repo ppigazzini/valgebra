@@ -29,6 +29,7 @@
 //! be pushed onto finitely many labels; an attribute namespace has no such
 //! regions.
 
+use super::budget;
 use super::classes::Class;
 use super::symbolic::Guard;
 use super::values::{Field, Values};
@@ -375,11 +376,15 @@ fn complement_atoms<G: Guard>(atoms: &[Atom<G>]) -> Option<Vec<Atom<G>>> {
 }
 
 /// The atoms of a meet, which is a meet of every pair.
+///
+/// Every pair charges the build's allowance: the count is the product of the
+/// two, and a meet of a guard against a guard descends a level of nesting for
+/// each pair. See [`budget`](super::budget).
 fn product<G: Guard>(left: &[Atom<G>], right: &[Atom<G>]) -> Option<Vec<Atom<G>>> {
     let mut atoms = Vec::new();
     for mine in left {
         for theirs in right {
-            if atoms.len() >= MAX_ATOMS {
+            if atoms.len() >= MAX_ATOMS || !budget::spend() {
                 return None;
             }
             atoms.push(mine.meet(theirs)?);

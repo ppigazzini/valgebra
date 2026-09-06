@@ -40,6 +40,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::budget;
 use super::symbolic::Guard;
 use super::values::{Field, Values};
 use crate::decision::{Kind, Verdict};
@@ -655,11 +656,14 @@ fn complement_atoms<G: Guard>(atoms: &[MapAtom<G>]) -> Option<Vec<MapAtom<G>>> {
 }
 
 /// The atoms of a meet, which is a meet of every pair.
+///
+/// Every pair charges the build's allowance, for the reason the record atoms'
+/// product does. See [`budget`](super::budget).
 fn product<G: Guard>(left: &[MapAtom<G>], right: &[MapAtom<G>]) -> Option<Vec<MapAtom<G>>> {
     let mut atoms = Vec::new();
     for mine in left {
         for theirs in right {
-            if atoms.len() >= MAX_ATOMS {
+            if atoms.len() >= MAX_ATOMS || !budget::spend() {
                 return None;
             }
             atoms.push(mine.meet(theirs)?);

@@ -431,6 +431,48 @@ declines rather than one it kinds wrongly. Declining refuses the lowering, which
 leaves the schema to the decision procedure; kinding it wrongly would put a value
 in a set it is not in.
 
+## What it costs to build a descriptor
+
+`a ≤ b` is `a ∧ ¬b = ∅`, and the descriptor answers that question for schemas the
+decision procedure declines. Whether it may be *asked* is a cost question, and
+the cost was measured on the shapes the two disagree about.
+
+The wins are cheap. Each of the differences the descriptor decides and the rules
+do not -- a container meet, a double complement, one regular language inside
+another -- builds in 130 to 330 microseconds.
+
+Building is exponential in nesting depth. A record nested behind a list, at
+depths 0, 2, 4, 6 and 8: 7 microseconds, 280 microseconds, 1.8 milliseconds, 8
+milliseconds, 37 milliseconds. Bounding the depth does not bound the cost,
+because breadth multiplies too: a union of four records at depth three builds in
+2.7 milliseconds, and that union minus a union of its siblings spends **345
+milliseconds** and then *refuses*, because the result exceeded the line bound.
+
+That last number is the shape of the problem. `MAX_LINES`, `MAX_ATOMS` and
+`MAX_STATES` bound the descriptor a build may **produce**; nothing bounds the
+work a build may **do**, so refusing costs as much as succeeding and a caller
+cannot buy safety by being asked to accept less. This is what the nightly fuzzer
+reported as an out-of-memory that four separate bound reductions did not move,
+and what took its throughput from three million runs to two thousand three
+hundred: not a bound set too high, but a quantity with no bound at all.
+
+So the decision is:
+
+**The descriptor may be asked only under a budget on the work a build does, and
+a build that would exceed it refuses before spending it.** The budget is spent
+where the recursion is -- the three closure operations, and a guard's own meet,
+join and complement -- so a build that is about to be expensive stops while it is
+still cheap. Outside a build there is no budget and nothing is charged, which is
+what leaves the laws and the tests measuring the algebra rather than the meter.
+
+Two things follow, and they are the reason this is recorded rather than assumed.
+The descriptor **does not replace the decision procedure**. A schema whose build
+runs out of budget still has to be decided, as does a recursive one, which no
+finite descriptor holds. And the descriptor is asked **after** the rules, not
+before: it can only turn "not proved" into "proved", so both orders give the same
+answers, and building a descriptor beside a verdict the rules already reached is
+work whose result is discarded.
+
 ## The limit
 
 The IR is a tree with back edges, not a graph with sharing. Two structurally

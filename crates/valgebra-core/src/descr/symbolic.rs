@@ -24,6 +24,7 @@
 //! `tuple[A, *tuple[B, ...], C]` is a chain with a loop in the middle, which is
 //! why the three spellings need one constructor rather than three nodes.
 
+use super::budget;
 use crate::decision::Verdict;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
@@ -364,7 +365,7 @@ impl<G: Guard> SymbolicDfa<G> {
                     let target = if let Some(id) = ids.get(&pair) {
                         *id
                     } else {
-                        if ids.len() >= MAX_STATES {
+                        if ids.len() >= MAX_STATES || !budget::spend() {
                             return None;
                         }
                         let id = u32::try_from(ids.len()).ok()?;

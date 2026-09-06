@@ -21,6 +21,7 @@
 //! which is which, so what the descriptor can and cannot see is read off it
 //! rather than inferred.
 
+pub mod budget;
 pub mod classes;
 pub mod floats;
 pub mod integers;
@@ -732,7 +733,12 @@ impl Descr {
         }
     }
 
+    /// Charges the build's allowance: a meet of two descriptors multiplies each
+    /// kind's lines against the other's, and a union then has both to carry.
     fn zip(&self, other: &Descr, op: Op) -> Option<Descr> {
+        if !budget::spend() {
+            return None;
+        }
         let mut kinds = self.kinds.clone();
         for ((slot, theirs), kind) in kinds.iter_mut().zip(&other.kinds).zip(Kind::ALL) {
             *slot = slot.combine(theirs, op, &Component::top(kind))?;
@@ -842,6 +848,10 @@ impl Guard for Arc<Descr> {
         Arc::clone(NONE.get_or_init(|| Arc::new(Descr::nothing())))
     }
 
+    /// The allowance is charged by the descriptor meet underneath, so descending a
+    /// level of nesting costs a unit whether it is spent here or one deeper.
+    /// The shortcut above it is why an idempotent meet costs nothing: there is
+    /// no product to take.
     fn meet(&self, other: &Arc<Descr>) -> Option<Arc<Descr>> {
         if let Some(same) = idempotent(self, other) {
             return Some(same);
@@ -856,7 +866,12 @@ impl Guard for Arc<Descr> {
         self.union(other).map(Arc::new)
     }
 
+    /// Charges a unit of its own, because complementing is the one operation
+    /// that recurses through every guard without taking a product.
+    /// It cannot refuse -- the [`Guard`] contract has it total -- so the charge
+    /// is what makes the *next* operation refuse instead.
     fn complement(&self) -> Arc<Descr> {
+        budget::spend();
         Arc::new(Descr::complement(self))
     }
 

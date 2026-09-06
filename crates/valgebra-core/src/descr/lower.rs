@@ -14,6 +14,7 @@
 //! into a pool the bindings keep. [`Constants`] is the way in: the caller reads
 //! the pool and answers what a comparison operand or a literal carries.
 
+use super::budget;
 use super::classes::Class;
 use super::maps::{KEY_KINDS, Label};
 use super::{Descr, integers::IntSet};
@@ -115,7 +116,37 @@ pub const BUDGET: u32 = 64;
 /// recursive reference, the gradual `Any` -- and the ones whose operand the pool
 /// could not read.
 pub fn lower(schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
-    descend(schema, pool, &Cell::new(BUDGET))
+    lower_within(WORK, schema, pool)
+}
+
+/// The work a build may spend before it refuses.
+///
+/// [`BUDGET`] bounds the schema this reads; this bounds what reading it costs,
+/// and the two are different quantities. A schema of a dozen nodes can spend a
+/// third of a second and then refuse anyway, because the bounds on a descriptor
+/// say how large a result may be and say nothing about the work of reaching one.
+///
+/// Sized from the shapes on both sides of the question. The differences the
+/// descriptor decides and the structural rules do not -- a container meet, a
+/// double complement, one regular language inside another -- each spend under
+/// 256 units. The shapes that blow up spend tens or hundreds of thousands: a
+/// record nested eight deep spends 22,806, and a union of four records nested
+/// three deep minus a union of its siblings spends 170,597. Held to this, every
+/// one of them builds or refuses in under two and a half milliseconds, against
+/// the third of a second the last costs unheld.
+pub const WORK: u64 = 1024;
+
+/// [`lower`] under an explicit allowance, for a caller measuring the bound
+/// itself.
+///
+/// # Errors
+///
+/// Refuses what [`lower`] refuses, and also a build that would spend more than
+/// `work` units. That refusal is not a statement about the schema: the same
+/// schema lowers under a larger allowance. It is what makes the cost of asking
+/// bounded, which is the only thing that makes asking safe.
+pub fn lower_within(work: u64, schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
+    budget::under(work, || descend(schema, pool, &Cell::new(BUDGET)))
 }
 
 /// [`lower`] with the nodes left to spend, which every node spends one of.
@@ -389,12 +420,13 @@ fn words(pattern: &str, base: &Descr) -> Option<Descr> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BUDGET, Constants, Operand, lower};
+    use super::{BUDGET, Constants, Operand, WORK, lower, lower_within};
     use crate::decision::{Kind, Verdict};
     use crate::descr::classes::Class;
     use crate::descr::{Descr, Value};
     use crate::ir::{
-        ClassIx, ConstIx, Constraint, MapClause, OperandIx, Schema, SeqKind, SeqShape,
+        ClassIx, ConstIx, Constraint, Field, MapClause, Openness, OperandIx, Schema, SeqKind,
+        SeqShape,
     };
 
     /// A pool that answers from a list, which is what the bindings do from the
@@ -939,6 +971,65 @@ mod tests {
             shallow = Schema::Complement(Box::new(shallow));
         }
         assert!(lower(&shallow, &pool).is_some());
+    }
+
+    /// A build that would cost too much refuses, and the same schema lowers
+    /// under an allowance that covers it.
+    ///
+    /// The refusal is about the *work*, not about the schema: nothing here is a
+    /// form the descriptor cannot hold. Which is why it is asserted in both
+    /// directions -- an allowance that only ever refuses would pass half of it.
+    #[test]
+    fn a_build_past_its_allowance_refuses() {
+        let pool = empty_pool();
+        let meet = Schema::Intersection(vec![
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Schema::list(SeqShape::homogeneous(Schema::Str)),
+        ]);
+
+        assert!(lower_within(0, &meet, &pool).is_none(), "nothing to spend");
+        assert!(lower_within(WORK, &meet, &pool).is_some());
+        // A leaf takes no product, so it costs nothing and lowers on an empty
+        // allowance: the budget bounds what multiplies, not what is read. `int`
+        // is not one of those -- it is the union of two kinds -- which is why
+        // this says `str`.
+        assert!(lower_within(0, &Schema::Str, &pool).is_some());
+        assert!(lower_within(0, &Schema::Int, &pool).is_none(), "a union");
+    }
+
+    /// The allowance a lowering is given is its own: an expensive one does not
+    /// leave the next one poorer.
+    #[test]
+    fn a_build_does_not_spend_the_next_one_s_allowance() {
+        let pool = empty_pool();
+        let deep = (0..6).fold(
+            Schema::record(
+                vec![Field {
+                    name: "leaf".to_owned(),
+                    schema: Schema::Int,
+                    required: true,
+                }],
+                Openness::Closed,
+            ),
+            |inner, _| {
+                Schema::record(
+                    vec![Field {
+                        name: "child".to_owned(),
+                        schema: Schema::list(SeqShape::homogeneous(inner)),
+                        required: true,
+                    }],
+                    Openness::Closed,
+                )
+            },
+        );
+
+        for _ in 0..3 {
+            let _ = lower(&deep, &pool);
+            assert!(
+                lower(&Schema::Set(Box::new(Schema::Int)), &pool).is_some(),
+                "the allowance came back"
+            );
+        }
     }
 
     /// The map is partial, and it refuses rather than approximating.
