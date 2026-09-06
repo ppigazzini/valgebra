@@ -61,10 +61,6 @@ exclude_re = [
     # non-empty only by conservatism -- and the source carries the
     # `match_same_arms` allow that says so. Deleting it cannot change a result.
     "delete match arm Schema::Coll\\{..\\} in Schema::empty_and_region",
-    # The walk's own interpreter-backed corpus lives in the file being swept, so
-    # its helpers are mutated too. A mutation of a test helper says nothing about
-    # the product's tests -- it makes the harness wrong, not the walk untested.
-    "interpreter::",
 ]
 
 # A few mutants run longer than the baseline; give generous headroom over it.

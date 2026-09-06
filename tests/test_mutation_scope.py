@@ -110,9 +110,48 @@ def _every_mutant() -> list[str]:
 
 
 def _binding_sources() -> set[str]:
+    """Read the binding's source files: what a sweep could mutate, tests aside.
+
+    A test module is not a subject. The long ones live in sibling files now --
+    declared `#[cfg(test)] mod tests;` in the file they test -- and mutating one
+    says nothing about the product: it makes the harness wrong, not the code
+    untested.
+    """
+    test_only = _test_module_files()
     return {
-        str(path.relative_to(ROOT)).replace("\\", "/") for path in BINDING.rglob("*.rs")
+        path
+        for path in (
+            str(path.relative_to(ROOT)).replace("\\", "/")
+            for path in BINDING.rglob("*.rs")
+        )
+        if path not in test_only
     }
+
+
+def _test_module_files() -> set[str]:
+    """Every `.rs` file some parent module declares under a `#[cfg(test)]`.
+
+    A test module used to be a block inside the file it tested; the long ones
+    are now sibling files, declared as `#[cfg(test)] mod tests;`. The file is
+    still test-only -- it is not compiled into the wheel -- and reading the
+    declaration is how that is known from the tree rather than from a naming
+    convention.
+    """
+    declared: set[str] = set()
+    for source in ROOT.rglob("*.rs"):
+        if "target" in source.parts:
+            continue
+        text = source.read_text(encoding="utf-8")
+        for name in re.findall(
+            r"#\[cfg\((?:test|all\(test[^\n]*)\)\]\s*\nmod (\w+);", text
+        ):
+            for candidate in (
+                source.parent / f"{name}.rs",
+                source.parent / source.stem / f"{name}.rs",
+            ):
+                if candidate.exists():
+                    declared.add(str(candidate.relative_to(ROOT)).replace("\\", "/"))
+    return declared
 
 
 def _matches(glob: str, path: str) -> bool:

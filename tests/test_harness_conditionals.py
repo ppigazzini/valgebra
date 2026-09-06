@@ -67,6 +67,32 @@ def _cfg_sites() -> list[tuple[str, str, str]]:
     return sites
 
 
+def _test_module_files() -> set[str]:
+    """Every `.rs` file some parent module declares under a `#[cfg(test)]`.
+
+    A test module used to be a block inside the file it tested; the long ones
+    are now sibling files, declared as `#[cfg(test)] mod tests;`. The file is
+    still test-only -- it is not compiled into the wheel -- and reading the
+    declaration is how that is known from the tree rather than from a naming
+    convention.
+    """
+    declared: set[str] = set()
+    for source in ROOT.rglob("*.rs"):
+        if "target" in source.parts:
+            continue
+        text = source.read_text(encoding="utf-8")
+        for name in re.findall(
+            r"#\[cfg\((?:test|all\(test[^\n]*)\)\]\s*\nmod (\w+);", text
+        ):
+            for candidate in (
+                source.parent / f"{name}.rs",
+                source.parent / source.stem / f"{name}.rs",
+            ):
+                if candidate.exists():
+                    declared.add(str(candidate.relative_to(ROOT)).replace("\\", "/"))
+    return declared
+
+
 def _inside_test_module(path: str, feature: str) -> bool:
     """Whether every site of `feature` in `path` sits under a `#[cfg(test)]`.
 
@@ -94,11 +120,13 @@ def test_every_feature_site_is_test_only_or_named() -> None:
     # The scan is the detector: no sites at all would pass having read nothing.
     assert sites, "no cfg(feature = ...) site found in any Rust source"
 
+    test_only = _test_module_files()
     leaked = sorted(
         {
             (path, feature)
             for path, feature, _ in sites
             if feature not in PRODUCTION_FEATURES
+            and path not in test_only
             and not _inside_test_module(path, feature)
         }
     )

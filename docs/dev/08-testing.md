@@ -111,6 +111,26 @@ derived from the tree rather than restated.
 Each ledger asserts it read something. A check over an empty universe passes
 having checked nothing, which is worse than a bare failure.
 
+## Where a test module lives
+
+A test module that is more than a screen long sits in a **sibling file**, not in
+the file it tests: `decision.rs` declares `#[cfg(test)] mod tests;` and the body
+is `decision/tests.rs`. It is still a child module -- it reaches private items
+through `use super::*`, which an integration test in `tests/` cannot -- and it is
+still compiled only under `cfg(test)`, so nothing about the shipped build
+changes.
+
+What changes is reading. `decision.rs` was 3,570 lines of which 1,500 were
+tests, and `lib.rs` was 4,211 of which nearly all were: a reader looking for the
+subtype rules scrolled past a thousand lines of assertions to find them, and a
+bound had to be told apart from a test fixture by its indentation.
+
+The two ledgers that read the tree know the shape: `tests/test_mutation_scope.py`
+does not ask a test module to be swept, and `tests/test_harness_conditionals.py`
+does not read a feature gate inside one as reaching production. Both find them
+the same way -- by the `#[cfg(test)] mod NAME;` that declares them -- rather than
+by a naming convention.
+
 ## The binding's own corpora
 
 `cargo test` cannot reach the binding without an interpreter, so the two files

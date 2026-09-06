@@ -302,6 +302,30 @@ BOUND = re.compile(
     re.MULTILINE,
 )
 BOUND_ROW = re.compile(r"^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|", re.MULTILINE)
+#: `#[cfg(test)] mod name;` -- a module whose body is a sibling file.
+TEST_MODULE = re.compile(r"#\[cfg\((?:test|all\(test[^\n]*)\)\]\s*\nmod (\w+);")
+
+
+def test_module_files(sources: list[Path]) -> set[str]:
+    """The `.rs` files some parent module declares under a `#[cfg(test)]`.
+
+    A long test module lives in a sibling file now -- `decision.rs` declares
+    `#[cfg(test)] mod tests;` and the body is `decision/tests.rs` -- so a file
+    with no `#[cfg(test)]` in it can still be test-only. Read from the
+    declaration rather than from a naming convention, since `tests.rs` is a
+    name a production module could take.
+    """
+    declared: set[str] = set()
+    for source in sources:
+        text = source.read_text(encoding="utf-8")
+        for name in TEST_MODULE.findall(text):
+            for candidate in (
+                source.parent / f"{name}.rs",
+                source.parent / source.stem / f"{name}.rs",
+            ):
+                if candidate.exists():
+                    declared.add(candidate.relative_to(ROOT).as_posix())
+    return declared
 
 
 def check_bounds_ledger() -> list[str]:
@@ -326,14 +350,21 @@ def check_bounds_ledger() -> list[str]:
     page = ROOT / "docs" / "dev" / "00-architecture.md"
     if not page.exists():
         return []
+    sources = [
+        source
+        for source in tracked_files("*.rs")
+        # A bench, a fuzz target and a build script hold no bound.
+        if "/src/" in source.relative_to(ROOT).as_posix()
+    ]
+    test_only = test_module_files(sources)
     tree: dict[tuple[str, str], str] = {}
-    for source in tracked_files("*.rs"):
+    for source in sources:
         # Spelled the way the page spells it. A `Path` prints with the host's
         # separator, and on Windows that is a backslash the table never carries,
         # so every row read as naming no constant there.
         where = source.relative_to(ROOT).as_posix()
-        if "/src/" not in where:
-            continue  # a bench, a fuzz target and a build script hold no bound
+        if where in test_only:
+            continue  # a test module's constants are fixtures, not bounds
         text = source.read_text(encoding="utf-8").partition("#[cfg(test)]")[0]
         for name, value in BOUND.findall(text):
             tree[where, name] = value.strip()
