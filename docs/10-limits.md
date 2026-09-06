@@ -40,6 +40,15 @@ fields) is written by the developer and is trusted.
 
   A real schema stays far under all three. Structural recursion belongs in
   [`recursive`](06-recursion.md), whose back edge does not count toward the depth.
+
+  The three numbers are importable, so code that sizes a schema against them
+  reads them rather than repeating them.
+
+```python
+from valgebra import MAX_DEFINITIONS, MAX_SCHEMA_DEPTH, MAX_SCHEMA_NODES
+
+assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_000)
+```
 - **Value-walk depth.** Two bounds hold the walk inside the stack, and reaching
   either fails with `recursion_limit`: at most 128 levels of **recursive
   unfolding**, and at most 512 levels of **descent** in total. The second is what

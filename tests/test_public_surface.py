@@ -109,3 +109,21 @@ def test_a_copy_is_the_same_validator() -> None:
     schema = Validator({"a": int})
     assert copy.copy(schema) == schema
     assert copy.deepcopy(schema) == schema
+
+
+def test_the_construction_limits_are_importable_from_the_package() -> None:
+    # The changelog says these are published, and the API reference says the
+    # extension underneath is private -- so publishing them means naming them
+    # here, not only on the module a caller is told not to import.
+    limits = ("MAX_SCHEMA_DEPTH", "MAX_DEFINITIONS", "MAX_SCHEMA_NODES")
+    for name in limits:
+        assert name in valgebra.__all__
+        assert isinstance(getattr(valgebra, name), int)
+
+
+def test_every_exported_name_exists() -> None:
+    # `__all__` is what `from valgebra import *` reads and what the API
+    # reference's "what is public" section describes, so a name in one and not
+    # the other is a claim with nothing behind it.
+    for name in valgebra.__all__:
+        assert hasattr(valgebra, name), name
