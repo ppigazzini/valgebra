@@ -294,6 +294,77 @@ def check_ledger_table() -> list[str]:
     return problems
 
 
+BOUND = re.compile(
+    r"^(?:pub(?:\([a-z()]+\))? )?const ([A-Z][A-Z0-9_]*): "
+    r"(?:usize|u8|u16|u32|u64|i32|i64) = (.+);$",
+    re.MULTILINE,
+)
+BOUND_ROW = re.compile(r"^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|", re.MULTILINE)
+
+
+def check_bounds_ledger() -> list[str]:
+    """Hold the table of bounds to the constants, in both directions and by value.
+
+    Every limit in this tree is a number somebody chose, and they accumulated one
+    at a time across eight files with no list anywhere. A reader could not tell a
+    measured bound from a guessed one, and a new one cost nothing to add, which is
+    how a project ends up refusing schemas for reasons nobody can restate.
+
+    The universe is mechanical: a **file-scope integer constant** in a crate's
+    source. That reads a couple of things that are not bounds -- an arity, say --
+    and the table carries them with a row saying so, which is cheaper than an
+    exclusion list nobody maintains and honest about what the rule can see. A
+    constant inside a test module is not in it: the scan stops at the first
+    ``#[cfg(test)]``, so a fixture is not a bound.
+
+    Values are compared too, verbatim. A bound whose figure moves in the source
+    and not on the page is the failure this exists to catch, and it is the one a
+    both-directions name check would miss.
+    """
+    page = ROOT / "docs" / "dev" / "00-architecture.md"
+    if not page.exists():
+        return []
+    tree: dict[tuple[str, str], str] = {}
+    for source in tracked_files("*.rs"):
+        # Spelled the way the page spells it. A `Path` prints with the host's
+        # separator, and on Windows that is a backslash the table never carries,
+        # so every row read as naming no constant there.
+        where = source.relative_to(ROOT).as_posix()
+        if "/src/" not in where:
+            continue  # a bench, a fuzz target and a build script hold no bound
+        text = source.read_text(encoding="utf-8").partition("#[cfg(test)]")[0]
+        for name, value in BOUND.findall(text):
+            tree[where, name] = value.strip()
+    listed = {
+        (where, name): value
+        for where, name, value in BOUND_ROW.findall(page.read_text(encoding="utf-8"))
+    }
+    problems = [
+        f"docs/dev/00-architecture.md: {where} defines {name}, which has no row"
+        for where, name in sorted(tree)
+        if (where, name) not in listed
+    ]
+    problems += [
+        f"docs/dev/00-architecture.md: names {name} in {where}, which defines no "
+        "such constant"
+        for where, name in sorted(listed)
+        if (where, name) not in tree
+    ]
+    problems += [
+        f"docs/dev/00-architecture.md: says {name} is `{listed[where, name]}`; "
+        f"{where} says `{tree[where, name]}`"
+        for where, name in sorted(listed.keys() & tree.keys())
+        if listed[where, name] != tree[where, name]
+    ]
+    # The scan is the detector: a table read as empty would pass one direction
+    # having found nothing, and a tree read as empty would pass the other.
+    if not tree or not listed:
+        problems.append(
+            "docs/dev/00-architecture.md: the bounds table or the scan reads as empty"
+        )
+    return problems
+
+
 def check_llms_manifest() -> list[str]:
     """Hold the machine-readable manifest to the nav, in both directions.
 
@@ -373,6 +444,7 @@ def main() -> int:
         ]
     failures += check_index("docs/dev") + check_index("docs")
     failures += check_ledger_table()
+    failures += check_bounds_ledger()
     failures += check_llms_manifest()
 
     if failures:

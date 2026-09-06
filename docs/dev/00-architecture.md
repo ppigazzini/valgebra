@@ -82,6 +82,50 @@ already holds, and no value is copied or converted on the accept path. No I/O
 except the JSON parse, which `jiter` owns and which validates in place without
 materialising Python objects first.
 
+## Every bound, and what holds it
+
+Nothing here is unbounded. A schema is built under limits, a walk descends under
+one, a decision spends a budget, and every representation in the descriptor
+refuses past a size rather than returning a set it cannot hold. They accumulated
+one at a time, in eight files, and the list was nowhere -- so a reader could not
+tell a measured number from a guessed one, and a new bound cost nothing to add.
+
+The rule now is: **no bound without a gate that measures it.** Adding one means
+adding a row here and a test that reaches it. The table is held to the tree in
+both directions by `scripts/docs_lint.py`, values included, so a number that
+moves in the source and not here fails, and a row naming a constant that is gone
+fails too.
+
+| where | bound | value | what it stops | what measures it |
+|---|---|---|---|---|
+| `crates/valgebra-py/src/validator.rs` | `MAX_SCHEMA_DEPTH` | `128` | nesting in a constructed schema | `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/validator.rs` | `MAX_DEFINITIONS` | `128` | recursive definitions chained in one schema | `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/validator.rs` | `MAX_SCHEMA_NODES` | `100_000` | a schema that is shallow and exponentially wide | `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/build.rs` | `MAX_BUILD_DEPTH` | `crate::validator::MAX_SCHEMA_DEPTH + 1` | the frontend descending past what `checked` will accept, so the schema past the bound is built and refused by name | `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/render.rs` | `MAX_RENDER_DEPTH` | `200` | `repr` overflowing the stack on a chain of definitions | `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/check/ctx.rs` | `MAX_WALK_DEPTH` | `512` | a walk overflowing the smallest thread stack a platform gives | its own tests, and `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/check/walk.rs` | `MAX_RECURSION_DEPTH` | `128` | a pathologically deep *value* overflowing the stack | its own tests, and `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/check/walk.rs` | `CLOSEST_BRANCH_PROBE_LIMIT` | `64` | the error path's second walk costing the branch count | `tests/test_union_messages.py` |
+| `crates/valgebra-py/src/check/walk.rs` | `UNION_LABEL_LIMIT` | `64` | a union naming a thousand labels in one `expected` | its own tests |
+| `crates/valgebra-core/src/decision.rs` | `DECISION_BUDGET` | `1_000_000` | one query spending unbounded work before answering conservatively | its own tests, and `tests/test_decision_adversarial.py` |
+| `crates/valgebra-core/src/descr/lower.rs` | `BUDGET` | `64` | the schema nodes one lowering reads | its own tests, and `crates/valgebra-core/benches/core.rs` |
+| `crates/valgebra-core/src/descr/lower.rs` | `DEPTH` | `5` | the nesting one lowering descends, which is the exponential | its own tests, and `crates/valgebra-core/benches/core.rs` |
+| `crates/valgebra-core/src/descr/lower.rs` | `WORK` | `1024` | the multiplying work one build spends before refusing | its own tests, and `crates/valgebra-core/benches/core.rs` |
+| `crates/valgebra-core/src/descr/lines.rs` | `MAX_LINES` | `256` | the lines one kind carries, which a meet multiplies and a complement doubles | `crates/valgebra-core/src/descr/mod.rs` tests |
+| `crates/valgebra-core/src/descr/sets.rs` | `MAX_LINES` | `256` | the lines a set lattice holds | its own tests |
+| `crates/valgebra-core/src/descr/maps.rs` | `MAX_ATOMS` | `256` | the atoms a map union holds | its own tests |
+| `crates/valgebra-core/src/descr/maps.rs` | `PARTS` | `KEY_KINDS.len() + 1` | nothing -- it is the key-kind partition's width, listed because it is a file-scope integer constant and the check that reads this table cannot tell the two apart | its own tests |
+| `crates/valgebra-core/src/descr/records.rs` | `MAX_ATOMS` | `256` | the atoms a record union holds, which a complement multiplies | its own tests |
+| `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_STATES` | `4096` | a product of two automata multiplying past memory | its own tests |
+| `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_ROW` | `MAX_STATES` | one row of a product growing past the alternatives a shape has | its own tests |
+| `crates/valgebra-core/src/descr/regular.rs` | `MAX_STATES` | `4096` | a pattern product doubling the exponent twice | its own tests |
+| `crates/valgebra-core/src/descr/integers.rs` | `MAX_PERIOD` | `4096` | a step set holding one interval set per residue | its own tests |
+
+Two of them are the same number for different reasons, and the difference
+matters when one moves: `MAX_SCHEMA_DEPTH` is what a *caller* may build, and
+`DEPTH` is what a *lowering* will descend. A schema at the first is refused by
+the second, and answered by the structural rules instead.
+
 ## Where to look next
 
 A change to what a schema *means* is [01-schema-ir.md](01-schema-ir.md) and

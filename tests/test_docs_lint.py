@@ -163,3 +163,18 @@ def test_each_index_is_held_in_both_directions(relative: str) -> None:
     pages = {p.name for p in (ROOT / relative).glob("*.md")}
     assert "README.md" in pages
     assert len(pages) >= 10, f"{relative} holds only {sorted(pages)}"
+
+
+def test_the_bounds_ledger_is_held_in_both_directions() -> None:
+    # Driven against the real tree, since the check reads a fixed page. The
+    # value comparison is the half a name check would miss, so it is the one
+    # exercised here with a control: the row is edited on disk in a copy of the
+    # page's text, not in the tree.
+    assert lint.check_bounds_ledger() == []
+    page = (ROOT / "docs" / "dev" / "00-architecture.md").read_text(encoding="utf-8")
+    rows = lint.BOUND_ROW.findall(page)
+    assert len(rows) >= 20, f"the table lists only {len(rows)} bounds"
+    where, name, value = rows[0]
+    assert (ROOT / where).exists(), where
+    assert f"const {name}" in (ROOT / where).read_text(encoding="utf-8")
+    assert value
