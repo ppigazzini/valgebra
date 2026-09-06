@@ -284,6 +284,20 @@ jobs:
       - name: Stub matches the extension
         if: ${{ matrix.python-version == '3.10' }}
         run: uv run python -m mypy.stubtest valgebra._valgebra
+      # And the stub is checked from the other side: a caller's own strictly
+      # typed code, which is what a typed downstream project runs. stubtest says
+      # the stub matches the runtime; this says the surface can be *used*
+      # without an ignore. Both target versions, because a stub can be right for
+      # one and wrong for the other -- the checker's own view of the standard
+      # library moves between them. Static, so the runner is the floor and the
+      # `--python-version` flag is what varies.
+      - name: A caller's strict types, on the floor and on the current
+        if: ${{ matrix.python-version == '3.10' }}
+        run: |
+          for target in 3.10 3.14; do
+            uv run mypy --strict --python-version="$target" \
+              tests/typing/consumer.py python/valgebra
+          done
 
   differential:
     name: differential
