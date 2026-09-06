@@ -4,10 +4,13 @@ __DEV/
 # Rust build output
 /target/
 
-# Python packaging and build artefacts
-*.egg-info/
-dist/
-build/
+# Python packaging and build artefacts. Anchored, because an unanchored rule
+# matches a directory of that name at any depth: `build/` quietly ignored
+# `crates/valgebra-py/src/build/`, the frontend's test module, and the tree
+# compiled here and nowhere else.
+/*.egg-info/
+/dist/
+/build/
 __pycache__/
 *.pyc
 *.pyo
