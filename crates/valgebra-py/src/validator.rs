@@ -1068,12 +1068,18 @@ impl Validator {
         self.map_schemas(py, |schema| schema.with_records_open(Openness::Closed))
     }
 
-    /// An equivalent validator reduced by the lattice laws.
+    /// An equivalent validator reduced by the lattice laws. **Deprecated.**
     ///
-    /// The result admits exactly the same values in a simpler form (flattened
-    /// and deduplicated unions and intersections, identities applied,
-    /// complements in negation-normal form), throughout the schema and every
-    /// recursive definition. Returns a new validator; this one is unchanged.
+    /// A schema is built in the lattice normal form, so the reduction this
+    /// promises is the schema a caller already holds: `repr` shows it and `==`
+    /// compares it. What remains here is a handful of folds that are not laws
+    /// but *decisions* -- a meet of two disjoint kinds is the bottom, a join
+    /// covering every region is the top -- and `is_empty`, `is_subtype_of` and
+    /// `is_equivalent` decide those, and more, without rewriting the term.
+    ///
+    /// Deprecated in this release and removed in the next minor version. Ask the
+    /// relation the question instead: `intersection(int, str).is_empty()` rather
+    /// than `repr(intersection(int, str).simplify()) == "nothing"`.
     ///
     /// Returns:
     ///     A validator denoting the same set in negation-normal form.
@@ -1083,6 +1089,15 @@ impl Validator {
     ///         bound (distributing a complement over a wide union can grow the
     ///         node count); a schema built within the bounds does not hit this.
     fn simplify(&self, py: Python<'_>) -> PyResult<Validator> {
+        PyErr::warn(
+            py,
+            &py.get_type::<pyo3::exceptions::PyDeprecationWarning>(),
+            c"Validator.simplify is deprecated and is removed in the next minor \
+              version: a schema is built in the lattice normal form, so `repr` \
+              already shows it, and `is_empty`/`is_subtype_of`/`is_equivalent` \
+              decide what this folds and more.",
+            1,
+        )?;
         self.map_schemas(py, Schema::simplify)
     }
 

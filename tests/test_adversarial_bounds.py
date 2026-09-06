@@ -45,6 +45,12 @@ from valgebra._valgebra import (
     MAX_SCHEMA_NODES,
 )
 
+# `simplify` is deprecated and these exercise it deliberately: the folds it
+# still performs are its own, and they are checked until it goes.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:Validator.simplify is deprecated:DeprecationWarning"
+)
+
 
 def _run_construction_loop(body: str) -> subprocess.CompletedProcess[str]:
     """Run a schema-construction loop in a fresh interpreter.

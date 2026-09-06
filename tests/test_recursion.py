@@ -11,6 +11,12 @@ json_value = recursive(
     lambda j: union(None, bool, int, float, str, [j], {str: j}),
 )
 
+# `simplify` is deprecated and these exercise it deliberately: the folds it
+# still performs are its own, and they are checked until it goes.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:Validator.simplify is deprecated:DeprecationWarning"
+)
+
 
 def _is_json(value: object) -> bool:
     """Independent reference denotation for `json_value`, by structural recursion."""

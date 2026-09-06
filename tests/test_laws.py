@@ -26,6 +26,12 @@ from valgebra import (
     union,
 )
 
+# `simplify` is deprecated and these exercise it deliberately: the folds it
+# still performs are its own, and they are checked until it goes.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:Validator.simplify is deprecated:DeprecationWarning"
+)
+
 # Schema specs: each is an annotation or native form valgebra can compile. The
 # container and sequence forms make the laws (and the simplifier) recurse into a
 # Seq/Coll/Mapping node, not just scalars.

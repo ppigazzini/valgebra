@@ -64,6 +64,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: render a schema as an expression that rebuilds it
 - feat: a bare container class is its kind
 - feat: a schema is built in the lattice normal form
+- feat: retire the term rewrites the algebra does not need
 
 -->
 
@@ -328,6 +329,22 @@ answer of its own, or a repair to a change not yet released.
   cannot go unnoticed. Four atoms — two order bounds and two regexes — put it in
   reach, and the four suspected gaps they surface are on the ledger with the
   route to deciding each. No answer changed; nothing was found unsound.
+
+### Deprecated
+
+- **`Validator.simplify` is deprecated and is removed in the next minor
+  version.** Calling it raises a `DeprecationWarning`. A schema is built in the
+  lattice normal form, so the reduction it promises is the schema a caller
+  already holds: `repr` shows it and `==` compares it. What it does beyond that
+  is not a law but a decision — a meet of two provably disjoint kinds is the
+  bottom, a join covering every region is the top — and `is_empty`,
+  `is_subtype_of` and `is_equivalent` decide those and more without rewriting a
+  term. Write `intersection(int, str).is_empty()` rather than
+  `repr(intersection(int, str).simplify()) == "nothing"`.
+
+  `open`, `close` and `ensure` stay. The first two rewrite every record a schema
+  declares at any depth, inside its recursive definitions — a traversal that is
+  not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
 

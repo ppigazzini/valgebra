@@ -75,9 +75,9 @@ assert intersection(int, complement(int)).is_empty()  # provably no value
   decides a wide fragment completely and stays conservative beyond it — never a
   wrong answer. Keep `is_equivalent` (semantic) distinct from `==` (the schema's
   normal form).
-- **A law-justified simplifier.** `simplify` reduces a schema to a lattice normal
-  form that admits **exactly the same values** — it never changes a schema's
-  meaning.
+- **A normal form by construction.** A schema is built in the lattice normal
+  form, so `repr` shows it and `==` compares it: `union(int, int)` is `int` and
+  `union(str, int)` is the schema `union(int, str)` is.
 - **`Any` is the top, spelled.** A validator asks one question — does this
   value belong — and to it `Any` admits every value, exactly as `anything` does.
   They are the same schema and obey the same laws; what you wrote is kept for
@@ -95,13 +95,14 @@ from typing import Any
 
 from valgebra import Validator, anything, complement, union
 
-# A law-justified simplifier: a lattice normal form with the same value set.
-assert repr(complement(complement(int)).simplify()) == "int"  # double negation
-assert repr(union(int, int).simplify()) == "int"  # idempotence
+# A schema is built in the lattice normal form, so `repr` shows it.
+assert repr(complement(complement(int))) == "int"  # double negation
+assert repr(union(int, int)) == "int"  # idempotence
+assert repr(union(str, int)) == "int | str"  # commutativity
 
-# `anything` is the lattice top; `Any` means "deliberately unchecked".
-assert repr(complement(anything).simplify()) == "nothing"  # top obeys the laws
-assert repr(Validator(Any).simplify()) == "Any"  # left untouched
+# `anything` is the lattice top, and `Any` is the same set under another name.
+assert repr(complement(anything)) == "nothing"  # top obeys the laws
+assert repr(Validator(Any)) == "Any"  # the spelling is kept
 
 # Union has typing's `|`; intersection and complement stay spelled out.
 assert (Validator(int) | str | None).is_equivalent(union(int, str, None))
@@ -284,7 +285,7 @@ assert not is_config.is_valid(config)  # the same question, asked again
 ```
 
 **Schemas answer questions with no value involved.** `is_subtype_of`,
-`is_equivalent`, `is_empty` and `simplify` take no value at all, so a contract
+`is_equivalent` and `is_empty` take no value at all, so a contract
 no value satisfies is decided from the schemas: `intersection(int, str)` reports
 empty without a test case reaching it. Neither `TypeAdapter` nor
 `msgspec.inspect` exposes any of the three, and the suite asserts that by

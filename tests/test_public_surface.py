@@ -15,7 +15,7 @@ import copy
 import pytest
 
 import valgebra
-from valgebra import ValidationError, Validator
+from valgebra import ValidationError, Validator, nothing
 
 
 def test_a_validator_names_the_package_a_user_imports_it_from() -> None:
@@ -127,3 +127,32 @@ def test_every_exported_name_exists() -> None:
     # the other is a claim with nothing behind it.
     for name in valgebra.__all__:
         assert hasattr(valgebra, name), name
+
+
+def test_simplify_warns_that_it_is_going() -> None:
+    """The reduction it promises is the schema a caller already holds.
+
+    A schema is built in the lattice normal form, so `repr` shows it and `==`
+    compares it. What is left here is a handful of folds that are decisions
+    rather than laws, and the three relations decide those and more without
+    rewriting the term.
+    """
+    with pytest.deprecated_call(match="simplify is deprecated"):
+        Validator(int).simplify()
+
+
+def test_the_whole_schema_rewrites_stay() -> None:
+    """`open` and `close` reach every record a schema declares, at any depth.
+
+    The sets they produce are spellable one at a time; the traversal is not,
+    which is what a whole-schema operation is and why these two stay. They are
+    functions on sets: two records denoting one set open to one set.
+    """
+    nested = Validator({"outer": {"inner": int}})
+    assert nested.open().is_valid({"outer": {"inner": 1, "x": 2}, "y": 3})
+    assert not nested.is_valid({"outer": {"inner": 1, "x": 2}})
+    assert nested.open().close() == nested
+
+    # Equal records open to equal records, which is the law that makes them
+    # functions on sets rather than rewrites of a spelling.
+    assert Validator({"a?": nothing}).open() == Validator({}).open()

@@ -26,6 +26,12 @@ from valgebra import (
     union,
 )
 
+# `simplify` is deprecated and these exercise it deliberately: the folds it
+# still performs are its own, and they are checked until it goes.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:Validator.simplify is deprecated:DeprecationWarning"
+)
+
 ROOT = Path(__file__).resolve().parent.parent
 
 

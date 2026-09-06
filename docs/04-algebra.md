@@ -209,75 +209,37 @@ small = Validator(Annotated[list[int], at.MaxLen(3)])
 assert small.is_valid([1, 2, 3]) and not small.is_valid([1, 2, 3, 4])
 ```
 
-## The simplifier
+## The simplifier is going
 
-`simplify` is a method that reduces a schema by the lattice laws while admitting
-**exactly the same values**. It flattens nested unions and
-intersections, drops duplicates and identities, and pushes complements to
-negation-normal form:
+`simplify` is **deprecated** and is removed in the next minor version. Calling it
+raises a `DeprecationWarning`.
 
-```python
-from valgebra import complement, union
-
-assert repr(complement(complement(int)).simplify()) == "int"
-assert repr(union(int, int).simplify()) == "int"
-```
-
-A refinement is reduced to a single normal form too: nested refinements flatten
-onto their shared base, and the constraint list is sorted and deduplicated, so a
-repeated or reordered constraint does not change the result:
+A schema is built in the lattice normal form, so the reduction `simplify`
+promises is the schema you already hold: `repr` shows it and `==` compares it.
 
 ```python
-from typing import Annotated
+from valgebra import Validator, complement, intersection, union
 
-from annotated_types import Ge
-
-from valgebra import Validator
-
-assert (
-    repr(Validator(Annotated[int, Ge(0), Ge(0)]).simplify()) == "Annotated[int, Ge(0)]"
-)
+assert repr(complement(complement(int))) == "int"
+assert repr(union(int, int)) == "int"
+assert repr(intersection(int, complement(int))) == "nothing"
 ```
 
-It also decides the **complement laws** and provable **disjointness**: a schema
-met with its complement, or with a provably disjoint type, is empty; a schema
-joined with its complement, or with the complement of a disjoint type, is
-everything.
+What `simplify` still does beyond that is not a law but a **decision**: a meet of
+two provably disjoint kinds is the bottom, a join whose members cover every
+region is the top. The three relations decide those and a great deal more,
+without rewriting a term:
 
 ```python
-from valgebra import complement, intersection, union
+from valgebra import Validator, complement, intersection, union
 
-assert repr(intersection(int, complement(int)).simplify()) == "nothing"
-assert repr(union(int, complement(int)).simplify()) == "anything"
-assert repr(intersection(int, str).simplify()) == "nothing"  # disjoint types
+assert intersection(int, str).is_empty()  # disjoint kinds
+assert union(int, complement(bool), Validator(1)).is_equivalent(object)
 ```
 
-The simplifier folds the scalar Boolean fragment — the builtin scalars (with
-`bool` a subtype of `int`) and the complement laws — so
-`intersection(int, str).simplify()` is `nothing`. It never treats `Any` as the
-top, so a deliberately-unchecked
-schema is preserved. The comparison operators below decide a wider fragment than
-the simplifier folds; the [decidability boundary](15-decidability.md) maps exactly
-what is decided.
-
-`simplify` applies the lattice laws only; it does not run the emptiness
-decision. An intersection that is empty by a deeper argument — contradictory
-refinement bounds, for instance — is left as written, even though `is_empty`
-reports it empty. So a simplified schema is a lattice normal form, not a fully
-reduced one: use `is_empty`, `is_subtype_of`, and `is_equivalent` to decide
-membership relations rather than reading them off the simplified structure.
-
-```python
-from typing import Annotated
-
-from annotated_types import Ge, Le
-
-from valgebra import Validator, intersection
-
-contradiction = intersection(Annotated[int, Ge(10)], Annotated[int, Le(0)])
-assert contradiction.is_empty()  # decided empty
-assert repr(contradiction.simplify()) != "nothing"  # but simplify leaves it
-```
+Ask the relation the question. A schema is a set, and `is_empty`,
+`is_subtype_of` and `is_equivalent` are how you ask about one; a smaller term
+that denotes the same set answers nothing a relation does not answer better.
 
 ## Subtyping, equivalence, and emptiness
 
@@ -425,7 +387,7 @@ from valgebra import Validator, anything, complement, intersection
 assert Validator(Any) == Validator(anything)
 assert repr(Validator(Any)) == "Any"
 assert repr(Validator(anything)) == "anything"
-assert repr(complement(Any).simplify()) == "nothing"
+assert repr(complement(Any)) == "nothing"
 assert intersection(Any, complement(Any)).is_empty()
 ```
 
