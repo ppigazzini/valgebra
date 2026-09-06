@@ -114,7 +114,7 @@ impl DepthMarker for Schema {
             Schema::Union(members) | Schema::Intersection(members) => members.len(),
             Schema::KeyedMap { fields, .. } | Schema::AttrRecord { fields } => fields.len(),
             Schema::Seq { shape, .. } => 1 + shape_depth(shape),
-            Schema::Complement(inner) | Schema::Set(inner) | Schema::FrozenSet(inner) => {
+            Schema::Complement(inner) | Schema::Coll { element: inner, .. } => {
                 1 + inner.depth_marker()
             }
             _ => 0,

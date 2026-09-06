@@ -131,8 +131,8 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
             }
             Schema::Refine { base, constraints }
         }
-        14 => Schema::Set(Box::new(build_schema(u, depth - 1)?)),
-        15 => Schema::FrozenSet(Box::new(build_schema(u, depth - 1)?)),
+        14 => Schema::set(build_schema(u, depth - 1)?),
+        15 => Schema::frozen_set(build_schema(u, depth - 1)?),
         16 => Schema::Seq {
             container: if u.arbitrary()? {
                 SeqKind::List
@@ -289,8 +289,7 @@ mod tests {
                 members.iter().for_each(assert_unique_field_names);
             }
             Schema::Complement(inner)
-            | Schema::Set(inner)
-            | Schema::FrozenSet(inner)
+            | Schema::Coll { element: inner, .. }
             | Schema::Refine { base: inner, .. } => assert_unique_field_names(inner),
             Schema::Seq { shape, .. } => {
                 for element in shape.prefix.iter().chain(shape.tail.as_deref()) {

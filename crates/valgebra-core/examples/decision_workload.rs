@@ -71,7 +71,7 @@ fn main() {
     let not_int = Schema::Complement(Box::new(Schema::Int));
     let disjoint = Schema::Intersection(vec![
         Schema::list(SeqShape::homogeneous(Schema::Int)),
-        Schema::Set(Box::new(Schema::Int)),
+        Schema::set(Schema::Int),
     ]);
 
     // Fold a checksum through each verdict so nothing is optimized away.

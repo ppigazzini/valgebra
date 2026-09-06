@@ -440,10 +440,10 @@ fn build_type_object(
         return Ok(Schema::tuple(SeqShape::homogeneous(Schema::ANYTHING)));
     }
     if ty.is(py.get_type::<PySet>()) {
-        return Ok(Schema::Set(Box::new(Schema::ANYTHING)));
+        return Ok(Schema::set(Schema::ANYTHING));
     }
     if ty.is(py.get_type::<PyFrozenSet>()) {
-        return Ok(Schema::FrozenSet(Box::new(Schema::ANYTHING)));
+        return Ok(Schema::frozen_set(Schema::ANYTHING));
     }
     if ty.is(py.get_type::<PyDict>()) {
         return Ok(Schema::KeyedMap {
@@ -700,18 +700,18 @@ fn build_parametrized(
         )?)));
     }
     if origin.is(py.get_type::<PySet>()) {
-        return Ok(Schema::Set(Box::new(build_type_argument(
+        return Ok(Schema::set(build_type_argument(
             &single_arg(args)?,
             lits,
             defs,
-        )?)));
+        )?));
     }
     if origin.is(py.get_type::<PyFrozenSet>()) {
-        return Ok(Schema::FrozenSet(Box::new(build_type_argument(
+        return Ok(Schema::frozen_set(build_type_argument(
             &single_arg(args)?,
             lits,
             defs,
-        )?)));
+        )?));
     }
     if origin.is(py.get_type::<PyDict>()) {
         if args.len() != 2 {
@@ -1118,8 +1118,7 @@ fn carries_length(base: &Schema) -> Carries {
         Schema::Str
         | Schema::Bytes
         | Schema::Seq { .. }
-        | Schema::Set(_)
-        | Schema::FrozenSet(_)
+        | Schema::Coll { .. }
         | Schema::KeyedMap { .. } => Carries::Yes,
         Schema::NoneType | Schema::Bool | Schema::Int | Schema::Float => Carries::No,
         _ => Carries::Maybe,
@@ -1139,8 +1138,7 @@ fn carries_pattern(base: &Schema) -> Carries {
         | Schema::Float
         | Schema::Bytes
         | Schema::Seq { .. }
-        | Schema::Set(_)
-        | Schema::FrozenSet(_)
+        | Schema::Coll { .. }
         | Schema::KeyedMap { .. } => Carries::No,
         _ => Carries::Maybe,
     }
@@ -1157,8 +1155,7 @@ fn carries_division(base: &Schema) -> Carries {
         | Schema::Str
         | Schema::Bytes
         | Schema::Seq { .. }
-        | Schema::Set(_)
-        | Schema::FrozenSet(_)
+        | Schema::Coll { .. }
         | Schema::KeyedMap { .. } => Carries::No,
         _ => Carries::Maybe,
     }
@@ -1893,8 +1890,8 @@ mod interpreter {
                 (Schema::Str, Carries::Yes),
                 (Schema::Bytes, Carries::Yes),
                 (seq.clone(), Carries::Yes),
-                (Schema::Set(Box::new(Schema::Int)), Carries::Yes),
-                (Schema::FrozenSet(Box::new(Schema::Int)), Carries::Yes),
+                (Schema::set(Schema::Int), Carries::Yes),
+                (Schema::frozen_set(Schema::Int), Carries::Yes),
                 (map.clone(), Carries::Yes),
                 (Schema::Int, Carries::No),
                 (Schema::Bool, Carries::No),

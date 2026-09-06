@@ -70,8 +70,7 @@ GENERATORS = {
     # The structural constructors. Each denotes a shape no Boolean combination
     # of the others expresses, which is the whole reason the algebra has them.
     "Seq",
-    "Set",
-    "FrozenSet",
+    "Coll",
     "KeyedMap",
     "AttrRecord",
     # A base narrowed by constraints a set-theoretic combination cannot state.

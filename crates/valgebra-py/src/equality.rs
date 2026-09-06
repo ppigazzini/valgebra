@@ -175,9 +175,16 @@ fn equal(
             same_multiset(a, b, |x, y| recur(x, y))
         }
         (Schema::Complement(a), Schema::Complement(b)) => recur(a, b),
-        (Schema::Set(a), Schema::Set(b)) | (Schema::FrozenSet(a), Schema::FrozenSet(b)) => {
-            recur(a, b)
-        }
+        (
+            Schema::Coll {
+                container: a_kind,
+                element: a,
+            },
+            Schema::Coll {
+                container: b_kind,
+                element: b,
+            },
+        ) => a_kind == b_kind && recur(a, b),
         (
             Schema::Seq {
                 container: a_kind,
@@ -253,8 +260,10 @@ pub(crate) fn hash_shape<H: Hasher>(schema: &Schema, hasher: &mut H) {
             members.len().hash(hasher);
             unordered(members, hasher, hash_shape);
         }
-        Schema::Complement(inner) | Schema::Set(inner) | Schema::FrozenSet(inner) => {
-            hash_shape(inner, hasher);
+        Schema::Complement(inner) => hash_shape(inner, hasher),
+        Schema::Coll { container, element } => {
+            container.hash(hasher);
+            hash_shape(element, hasher);
         }
         Schema::Seq { container, shape } => {
             container.hash(hasher);
@@ -550,8 +559,8 @@ mod interpreter {
             assert_ne!(left, right, "the two sides must differ structurally");
             let wrappers: [(&str, Wrap); 8] = [
                 ("complement", |s| Schema::Complement(Box::new(s))),
-                ("set", |s| Schema::Set(Box::new(s))),
-                ("frozenset", |s| Schema::FrozenSet(Box::new(s))),
+                ("set", |s| Schema::set(s)),
+                ("frozenset", |s| Schema::frozen_set(s)),
                 ("homogeneous list", |s| {
                     Schema::list(valgebra_core::SeqShape::homogeneous(s))
                 }),

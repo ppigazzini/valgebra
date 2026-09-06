@@ -3,7 +3,7 @@
 
 use crate::descr::lower::{Constants, lower};
 use crate::ir::{
-    ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
+    CollKind, ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
 };
 use rustc_hash::FxHashMap;
 use std::borrow::Cow;
@@ -282,8 +282,10 @@ impl Schema {
                 container: SeqKind::Tuple,
                 ..
             } => Kind::Tuple,
-            Schema::Set(_) => Kind::Set,
-            Schema::FrozenSet(_) => Kind::FrozenSet,
+            Schema::Coll { container, .. } => match container {
+                CollKind::Set => Kind::Set,
+                CollKind::FrozenSet => Kind::FrozenSet,
+            },
             Schema::KeyedMap { .. } => Kind::Dict,
             // A refinement is a subset of its base, so its base's disjointness
             // is sound for it.
@@ -636,7 +638,7 @@ impl Schema {
             // element schema is, so it is *proven* inhabited -- which two values
             // could not say apart from the opaque wildcard below, where the same
             // `false` meant only that nothing proved emptiness.
-            Schema::Set(_) | Schema::FrozenSet(_) => (Verdict::Inhabited, Regions::Unknown),
+            Schema::Coll { .. } => (Verdict::Inhabited, Regions::Unknown),
             // A map is emptied by a required field that admits nothing, and
             // admits the empty dict when it requires nothing at all.
             Schema::KeyedMap { fields, .. } => {
@@ -951,9 +953,16 @@ impl Schema {
                 None => false,
             },
             // Set and frozenset inclusion reduces to element inclusion.
-            (Schema::Set(a), Schema::Set(b)) | (Schema::FrozenSet(a), Schema::FrozenSet(b)) => {
-                a.is_subtype_rec(b, cx, assumptions)
-            }
+            (
+                Schema::Coll {
+                    container: a_kind,
+                    element: a,
+                },
+                Schema::Coll {
+                    container: b_kind,
+                    element: b,
+                },
+            ) if a_kind == b_kind => a.is_subtype_rec(b, cx, assumptions),
             // Same-kind sequence inclusion is language inclusion on the shapes.
             (
                 Schema::Seq {
@@ -1502,7 +1511,7 @@ pub(crate) fn denotes_a_set_within(
                 pending.extend(shape.prefix.iter());
                 pending.extend(shape.tail.as_deref());
             }
-            Schema::Set(inner) | Schema::FrozenSet(inner) | Schema::Complement(inner) => {
+            Schema::Coll { element: inner, .. } | Schema::Complement(inner) => {
                 pending.push(inner);
             }
             Schema::Union(members) | Schema::Intersection(members) => pending.extend(members),
@@ -2339,15 +2348,12 @@ mod tests {
 
         // Set and frozenset inclusion reduces to element inclusion, and the two
         // kinds do not cross.
-        let ints = Schema::Set(Box::new(Schema::Int));
-        assert!(structural(&ints, &Schema::Set(Box::new(joined.clone()))));
-        assert!(!structural(
-            &ints,
-            &Schema::FrozenSet(Box::new(joined.clone()))
-        ));
+        let ints = Schema::set(Schema::Int);
+        assert!(structural(&ints, &Schema::set(joined.clone())));
+        assert!(!structural(&ints, &Schema::frozen_set(joined.clone())));
         assert!(structural(
-            &Schema::FrozenSet(Box::new(Schema::Int)),
-            &Schema::FrozenSet(Box::new(joined.clone()))
+            &Schema::frozen_set(Schema::Int),
+            &Schema::frozen_set(joined.clone())
         ));
 
         // Each rule above is a *shortcut*: delete it and the general reduction
@@ -2433,8 +2439,8 @@ mod tests {
         };
         let wrappers: [Schema; 11] = [
             predicate.clone(),
-            Schema::Set(Box::new(predicate.clone())),
-            Schema::FrozenSet(Box::new(predicate.clone())),
+            Schema::set(predicate.clone()),
+            Schema::frozen_set(predicate.clone()),
             Schema::Complement(Box::new(predicate.clone())),
             Schema::union([predicate.clone(), Schema::Int]),
             Schema::list(SeqShape::fixed([predicate.clone()])),
@@ -2477,7 +2483,7 @@ mod tests {
         }
 
         // Without one, the same shapes are sets and the law still decides.
-        let plain = Schema::Set(Box::new(Schema::Int));
+        let plain = Schema::set(Schema::Int);
         assert!(denotes_a_set_within(&plain, &NoLeafRelations, &[]));
         assert!(
             Schema::Intersection(vec![plain.clone(), Schema::Complement(Box::new(plain))])
@@ -2513,7 +2519,7 @@ mod tests {
                 "{reference:?}"
             );
             // Nested, so a reference reached through a constructor refuses too.
-            let nested = Schema::Set(Box::new(reference.clone()));
+            let nested = Schema::set(reference.clone());
             assert!(!denotes_a_set_within(&nested, &NoLeafRelations, &[]));
             // And the constructors decline the two cancelling laws for it.
             let not = |s: Schema| Schema::Complement(Box::new(s));
@@ -2596,7 +2602,7 @@ mod tests {
             Just(Schema::Bytes),
             Just(Schema::ANY),
             Just(Schema::Literal(ConstIx::new(0))),
-            Just(Schema::Set(Box::new(Schema::Int))),
+            Just(Schema::set(Schema::Int)),
         ];
         leaf.prop_recursive(4, 24, 3, |inner| {
             prop_oneof![
@@ -2703,10 +2709,7 @@ mod tests {
         assert!(Schema::Intersection(vec![Schema::ANY, not(Schema::ANYTHING)]).is_empty());
 
         // Disjoint structural kinds: a list is never a set.
-        assert!(
-            Schema::Intersection(vec![list(Schema::Int), Schema::Set(Box::new(Schema::Int))])
-                .is_empty()
-        );
+        assert!(Schema::Intersection(vec![list(Schema::Int), Schema::set(Schema::Int)]).is_empty());
 
         // A refined int is still an int, disjoint from str.
         assert!(

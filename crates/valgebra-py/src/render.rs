@@ -4,7 +4,7 @@ use std::cell::RefCell;
 
 use pyo3::prelude::*;
 use rustc_hash::FxHashMap;
-use valgebra_core::{Constraint, DefIx, Field, MapClause, Schema, SeqKind, Spelling};
+use valgebra_core::{CollKind, Constraint, DefIx, Field, MapClause, Schema, SeqKind, Spelling};
 
 use crate::errors::{class_label, summarize};
 
@@ -85,8 +85,10 @@ pub(crate) fn render(
                 }
             }
         }
-        Schema::Set(e) => format!("set[{}]", r(e)),
-        Schema::FrozenSet(e) => format!("frozenset[{}]", r(e)),
+        Schema::Coll { container, element } => match container {
+            CollKind::Set => format!("set[{}]", r(element)),
+            CollKind::FrozenSet => format!("frozenset[{}]", r(element)),
+        },
         Schema::KeyedMap { fields, defaults } => {
             render_keyed_map(py, fields, defaults, pool, defs, active, depth)
         }

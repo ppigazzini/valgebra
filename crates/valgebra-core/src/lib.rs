@@ -21,8 +21,8 @@ mod violation;
 
 pub use decision::{Kind, LeafRelations, NoLeafRelations, Verdict};
 pub use ir::{
-    ClassIx, ConstIx, Constraint, DefIx, DefShift, Field, Guarded, MapClause, Openness, OperandIx,
-    PathSegment, PoolShift, PredIx, Schema, SeqKind, SeqShape, Spelling, pruned,
+    ClassIx, CollKind, ConstIx, Constraint, DefIx, DefShift, Field, Guarded, MapClause, Openness,
+    OperandIx, PathSegment, PoolShift, PredIx, Schema, SeqKind, SeqShape, Spelling, pruned,
 };
 pub use violation::Violation;
 
@@ -86,8 +86,8 @@ mod tests {
             Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Str])),
             Schema::list(SeqShape::prefix_tail([Schema::Int], Schema::Str)),
             Schema::list(SeqShape::fixed([])),
-            Schema::Set(Box::new(Schema::Int)),
-            Schema::FrozenSet(Box::new(Schema::Int)),
+            Schema::set(Schema::Int),
+            Schema::frozen_set(Schema::Int),
             Schema::Complement(Box::new(Schema::Int)),
             Schema::Union(vec![Schema::Int, Schema::Str]),
             Schema::Intersection(vec![Schema::Int, Schema::Str]),
@@ -115,8 +115,8 @@ mod tests {
         assert_eq!(Schema::Int.node_count(), 1);
         assert_eq!(Schema::Ref(DefIx::new(0)).node_count(), 1);
         assert_eq!(Schema::Complement(Box::new(Schema::Int)).node_count(), 2);
-        assert_eq!(Schema::Set(Box::new(Schema::Str)).node_count(), 2);
-        assert_eq!(Schema::FrozenSet(Box::new(Schema::Str)).node_count(), 2);
+        assert_eq!(Schema::set(Schema::Str).node_count(), 2);
+        assert_eq!(Schema::frozen_set(Schema::Str).node_count(), 2);
         // Union counts every member, not the deepest: three members, not one.
         assert_eq!(
             Schema::Union(vec![Schema::Int, Schema::Str, Schema::Bytes]).node_count(),
@@ -206,8 +206,8 @@ mod tests {
     /// are covered above; these are the container arms.
     #[test]
     fn depth_descends_every_container_arm() {
-        assert_eq!(Schema::Set(Box::new(Schema::Int)).depth(), 2);
-        assert_eq!(Schema::FrozenSet(Box::new(Schema::Int)).depth(), 2);
+        assert_eq!(Schema::set(Schema::Int).depth(), 2);
+        assert_eq!(Schema::frozen_set(Schema::Int).depth(), 2);
         // A sequence is one level, whichever shape it holds: the elements sit
         // directly in the shape, so reaching one is a single descent. While the
         // body was a regular expression the constructors above an element were
@@ -369,11 +369,10 @@ mod tests {
         );
         // Structural constructors guard.
         assert!(
-            !Schema::Set(Box::new(Schema::Ref(DefIx::new(0))))
-                .occurs_unguarded(DefIx::new(0), Guarded::No)
+            !Schema::set(Schema::Ref(DefIx::new(0))).occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         assert!(
-            !Schema::FrozenSet(Box::new(Schema::Ref(DefIx::new(0))))
+            !Schema::frozen_set(Schema::Ref(DefIx::new(0)))
                 .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
         assert!(
@@ -382,7 +381,7 @@ mod tests {
         );
         // A guarded reference under a combinator is still guarded.
         assert!(
-            !Schema::Complement(Box::new(Schema::Set(Box::new(Schema::Ref(DefIx::new(0))))))
+            !Schema::Complement(Box::new(Schema::set(Schema::Ref(DefIx::new(0)))))
                 .occurs_unguarded(DefIx::new(0), Guarded::No)
         );
     }
@@ -441,7 +440,7 @@ mod tests {
                 "tuple",
                 "tuple_type",
             ),
-            (Schema::Set(Box::new(Schema::Int)), "set", "set_type"),
+            (Schema::set(Schema::Int), "set", "set_type"),
             (
                 Schema::mapping(MapClause {
                     key: Schema::Str,
@@ -823,8 +822,7 @@ mod tests {
             let guards = matches!(
                 schema,
                 Schema::Seq { .. }
-                    | Schema::Set(_)
-                    | Schema::FrozenSet(_)
+                    | Schema::Coll { .. }
                     | Schema::KeyedMap { .. }
                     | Schema::AttrRecord { .. }
             );
@@ -967,7 +965,7 @@ mod tests {
             Schema::Int,
             Schema::list(SeqShape::prefix_tail(
                 [Schema::Str],
-                Schema::Set(Box::new(Schema::SelfRef(9))),
+                Schema::set(Schema::SelfRef(9)),
             )),
         ]);
         assert!(buried.has_escaped_self_ref(open_none));
@@ -1101,7 +1099,7 @@ mod tests {
         assert_eq!(
             Schema::Intersection(vec![
                 Schema::list(SeqShape::homogeneous(Schema::Int)),
-                Schema::Set(Box::new(Schema::Int)),
+                Schema::set(Schema::Int),
             ])
             .simplify(),
             Schema::Nothing
@@ -1128,7 +1126,7 @@ mod tests {
                 Schema::Intersection(vec![top.clone(), Schema::Str]),
                 Schema::Complement(Box::new(top.clone())),
                 Schema::list(SeqShape::homogeneous(top.clone())),
-                Schema::Set(Box::new(top)),
+                Schema::set(top),
             ]
         };
         let others = [
@@ -1225,9 +1223,7 @@ mod tests {
         let list_int = Schema::list(SeqShape::homogeneous(Schema::Int));
         let tuple_empty = Schema::tuple(SeqShape::fixed([]));
         assert!(tuple_empty.disjoint(&list_int)); // tuple vs list
-        assert!(
-            Schema::FrozenSet(Box::new(Schema::Int)).disjoint(&Schema::Set(Box::new(Schema::Int)))
-        );
+        assert!(Schema::frozen_set(Schema::Int).disjoint(&Schema::set(Schema::Int)));
         assert!(
             Schema::mapping(MapClause {
                 key: Schema::Str,
@@ -1390,7 +1386,7 @@ mod laws {
         // Non-scalar leaves are never decided empty.
         assert!(!Schema::Literal(ConstIx::new(0)).is_empty());
         assert!(!Schema::Instance(ClassIx::new(0)).is_empty());
-        assert!(!Schema::Set(Box::new(Schema::Int)).is_empty());
+        assert!(!Schema::set(Schema::Int).is_empty());
         assert!(!Schema::list(SeqShape::homogeneous(Schema::Int)).is_empty());
         // A scalar mixed with a non-scalar leaf is undecidable here, so it is
         // never claimed empty (an instance could subclass the scalar's type).
@@ -1415,8 +1411,8 @@ mod laws {
         assert!(!Schema::list(SeqShape::homogeneous(Schema::Nothing)).is_empty());
         assert!(!Schema::tuple(SeqShape::fixed([Schema::Int])).is_empty());
         // A set or frozenset is never empty: the empty collection is a member.
-        assert!(!Schema::Set(Box::new(Schema::Nothing)).is_empty());
-        assert!(!Schema::FrozenSet(Box::new(Schema::Nothing)).is_empty());
+        assert!(!Schema::set(Schema::Nothing).is_empty());
+        assert!(!Schema::frozen_set(Schema::Nothing).is_empty());
         // A keyed map is empty exactly when a required field is impossible.
         let field = |required| Field {
             name: "x".to_owned(),
@@ -1444,8 +1440,8 @@ mod laws {
 
     #[test]
     fn decides_structural_subtyping_between_containers() {
-        let set = |s| Schema::Set(Box::new(s));
-        let frozenset = |s| Schema::FrozenSet(Box::new(s));
+        let set = |s| Schema::set(s);
+        let frozenset = |s| Schema::frozen_set(s);
         // Sets and frozensets reduce to element inclusion (bool ⊆ int).
         assert!(set(Schema::Bool).is_subtype_of(&set(Schema::Int)));
         assert!(!set(Schema::Int).is_subtype_of(&set(Schema::Bool)));
@@ -1832,8 +1828,8 @@ mod laws {
             Schema::Bytes,
             Schema::list(SeqShape::homogeneous(Schema::Int)),
             Schema::tuple(SeqShape::fixed([Schema::Int])),
-            Schema::Set(Box::new(Schema::Int)),
-            Schema::FrozenSet(Box::new(Schema::Int)),
+            Schema::set(Schema::Int),
+            Schema::frozen_set(Schema::Int),
             Schema::mapping(MapClause {
                 key: Schema::Str,
                 value: Schema::Int,
@@ -2121,7 +2117,7 @@ mod laws {
             Schema::Literal(ConstIx::new(0)),
             Schema::Instance(ClassIx::new(1)),
             Schema::Ref(DefIx::new(0)),
-            Schema::Set(Box::new(Schema::Literal(ConstIx::new(1)))),
+            Schema::set(Schema::Literal(ConstIx::new(1))),
         ]);
         // The second pool interned into the first: old 0 -> 5, old 1 -> 6.
         let lit_map = [5, 6];
@@ -2132,7 +2128,7 @@ mod laws {
                 Schema::Literal(ConstIx::new(5)),
                 Schema::Instance(ClassIx::new(6)),
                 Schema::Ref(DefIx::new(3)),
-                Schema::Set(Box::new(Schema::Literal(ConstIx::new(6)))),
+                Schema::set(Schema::Literal(ConstIx::new(6))),
             ])
         );
 
@@ -2144,7 +2140,7 @@ mod laws {
                 Schema::Literal(ConstIx::new(5)),
                 Schema::Instance(ClassIx::new(6)),
                 Schema::Ref(DefIx::new(3)),
-                Schema::Set(Box::new(Schema::Literal(ConstIx::new(6)))),
+                Schema::set(Schema::Literal(ConstIx::new(6))),
             ])
         );
         // A constraint operand index is remapped too.
@@ -2620,7 +2616,7 @@ mod laws {
         match schema {
             Schema::Anything(_) => true,
             Schema::Nothing => false,
-            Schema::Set(element) => match value {
+            Schema::Coll { element, .. } => match value {
                 Val::SetOf(elements) => elements.iter().all(|&e| member(element, e)),
                 Val::Scalar(_) => false,
             },
@@ -2646,7 +2642,7 @@ mod laws {
             Just(Schema::Float),
             Just(Schema::Str),
             Just(Schema::Bytes),
-            scalar_schema().prop_map(|s| Schema::Set(Box::new(s))),
+            scalar_schema().prop_map(Schema::set),
         ];
         leaf.prop_recursive(3, 16, 3, |inner| {
             prop_oneof![
@@ -2692,8 +2688,8 @@ mod laws {
                 proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Union),
                 proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Intersection),
                 inner.clone().prop_map(|s| Schema::Complement(Box::new(s))),
-                inner.clone().prop_map(|s| Schema::Set(Box::new(s))),
-                inner.clone().prop_map(|s| Schema::FrozenSet(Box::new(s))),
+                inner.clone().prop_map(Schema::set),
+                inner.clone().prop_map(Schema::frozen_set),
                 (inner.clone(), proptest::collection::vec(constraint(), 0..3)).prop_map(
                     |(base, constraints)| Schema::Refine {
                         base: Box::new(base),
@@ -2738,7 +2734,7 @@ mod laws {
                     base: Box::new(s),
                     constraints: vec![Constraint::MinLen(1)],
                 }),
-                inner.clone().prop_map(|s| Schema::Set(Box::new(s))),
+                inner.clone().prop_map(Schema::set),
                 inner
                     .clone()
                     .prop_map(|s| Schema::list(SeqShape::homogeneous(s))),
@@ -3037,11 +3033,11 @@ mod laws {
     /// re-explored shared subtrees before the goal memo. The leaves are sets so
     /// the scalar region fast path does not short-circuit the descent.
     fn intersection_of_unions_tower(depth: usize, leaf: Schema) -> Schema {
-        let mut node = Schema::Set(Box::new(leaf));
+        let mut node = Schema::set(leaf);
         for _ in 0..depth {
             node = Schema::Intersection(vec![
-                Schema::Union(vec![node.clone(), Schema::Set(Box::new(Schema::Str))]),
-                Schema::Union(vec![node, Schema::Set(Box::new(Schema::Bytes))]),
+                Schema::Union(vec![node.clone(), Schema::set(Schema::Str)]),
+                Schema::Union(vec![node, Schema::set(Schema::Bytes)]),
             ]);
         }
         node
@@ -3604,12 +3600,10 @@ mod laws {
             Schema::Str => matches!(value, Obj::Str(_)),
             Schema::Bytes => matches!(value, Obj::Bytes),
             Schema::Literal(index) => typed_eq(&pool[index.get()], value),
-            Schema::Set(element) => match value {
-                Obj::Set(items) => items.iter().all(|item| member_full(element, item, pool)),
-                _ => false,
-            },
-            Schema::FrozenSet(element) => match value {
-                Obj::FrozenSet(items) => items.iter().all(|item| member_full(element, item, pool)),
+            Schema::Coll { container, element } => match (container, value) {
+                (CollKind::Set, Obj::Set(items)) | (CollKind::FrozenSet, Obj::FrozenSet(items)) => {
+                    items.iter().all(|item| member_full(element, item, pool))
+                }
                 _ => false,
             },
             Schema::Seq { container, shape } => match (container, value) {
@@ -3764,8 +3758,8 @@ mod laws {
                     }],
                 });
             prop_oneof![
-                inner.clone().prop_map(|s| Schema::Set(Box::new(s))),
-                inner.clone().prop_map(|s| Schema::FrozenSet(Box::new(s))),
+                inner.clone().prop_map(Schema::set),
+                inner.clone().prop_map(Schema::frozen_set),
                 inner.clone().prop_map(|s| Schema::Seq {
                     container: SeqKind::List,
                     shape: SeqShape::homogeneous(s),
@@ -3849,7 +3843,7 @@ mod laws {
             &pool
         ));
         // A frozenset is distinct from a set.
-        let frozen_int = Schema::FrozenSet(Box::new(Schema::Int));
+        let frozen_int = Schema::frozen_set(Schema::Int);
         assert!(member_full(
             &frozen_int,
             &Obj::FrozenSet(vec![Obj::Int(1)]),
@@ -3990,8 +3984,8 @@ mod index_laws {
         ];
         leaf.prop_recursive(4, 48, 3, |inner| {
             prop_oneof![
-                inner.clone().prop_map(|s| Schema::Set(Box::new(s))),
-                inner.clone().prop_map(|s| Schema::FrozenSet(Box::new(s))),
+                inner.clone().prop_map(Schema::set),
+                inner.clone().prop_map(Schema::frozen_set),
                 inner.clone().prop_map(|s| Schema::Complement(Box::new(s))),
                 proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Union),
                 proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Intersection),
@@ -4054,7 +4048,7 @@ mod index_laws {
             Schema::Literal(index) => pool.push(index.get()),
             Schema::Instance(index) => pool.push(index.get()),
             Schema::Ref(index) => defs.push(index.get()),
-            Schema::Set(inner) | Schema::FrozenSet(inner) | Schema::Complement(inner) => {
+            Schema::Coll { element: inner, .. } | Schema::Complement(inner) => {
                 indices(inner, pool, defs);
             }
             Schema::Union(members) | Schema::Intersection(members) => {

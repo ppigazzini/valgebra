@@ -55,12 +55,12 @@ exclude_re = [
     "replace <impl LeafRelations for NoLeafRelations>::leaf_subtype -> Option<bool> with Some\\(false\\)",
     "replace LeafRelations::no_int_between -> Option<bool> with Some\\(false\\)",
     "replace LeafRelations::literals_disjoint -> Option<bool> with Some\\(false\\)",
-    # The `Set`/`FrozenSet` arm of `empty_and_region` returns exactly what the
-    # match's default returns. It is written out because the two answer the same
-    # thing for OPPOSITE reasons -- a collection is known non-empty, the default
-    # is non-empty only by conservatism -- and the source carries the
+    # The collection arm of `empty_and_region` returns exactly what the match's
+    # default returns. It is written out because the two answer the same thing
+    # for OPPOSITE reasons -- a collection is known non-empty, the default is
+    # non-empty only by conservatism -- and the source carries the
     # `match_same_arms` allow that says so. Deleting it cannot change a result.
-    "delete match arm Schema::Set\\(_\\) \\| Schema::FrozenSet\\(_\\) in Schema::empty_and_region",
+    "delete match arm Schema::Coll\\{..\\} in Schema::empty_and_region",
     # The walk's own interpreter-backed corpus lives in the file being swept, so
     # its helpers are mutated too. A mutation of a test helper says nothing about
     # the product's tests -- it makes the harness wrong, not the walk untested.

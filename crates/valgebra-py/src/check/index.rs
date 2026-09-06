@@ -162,7 +162,7 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
                 collect(py, member, pool, index);
             }
         }
-        Schema::Set(inner) | Schema::FrozenSet(inner) | Schema::Complement(inner) => {
+        Schema::Coll { element: inner, .. } | Schema::Complement(inner) => {
             collect(py, inner, pool, index);
         }
         Schema::Refine { base, constraints } => {

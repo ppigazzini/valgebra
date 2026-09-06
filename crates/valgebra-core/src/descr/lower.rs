@@ -20,7 +20,7 @@ use super::maps::{KEY_KINDS, Label};
 use super::{BoolSet, Descr, integers::IntSet};
 use crate::decision::Kind;
 use crate::ir::{
-    ClassIx, ConstIx, Constraint, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
+    ClassIx, CollKind, ConstIx, Constraint, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
 };
 use std::cell::Cell;
 
@@ -236,9 +236,12 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>, depth: u32
         Schema::Bytes => Some(Descr::of_kind(Kind::Bytes)),
         Schema::Literal(index) => singleton(&pool.constant(*index)?),
         Schema::Seq { container, shape } => sequence(*container, shape, pool, budget, depth),
-        Schema::Set(elements) => Descr::set(&descend(elements, pool, budget, depth)?, Kind::Set),
-        Schema::FrozenSet(elements) => {
-            Descr::set(&descend(elements, pool, budget, depth)?, Kind::FrozenSet)
+        Schema::Coll { container, element } => {
+            let kind = match container {
+                CollKind::Set => Kind::Set,
+                CollKind::FrozenSet => Kind::FrozenSet,
+            };
+            Descr::set(&descend(element, pool, budget, depth)?, kind)
         }
         Schema::Union(members) => members.iter().try_fold(Descr::nothing(), |whole, member| {
             whole.union(&descend(member, pool, budget, depth)?)
@@ -842,13 +845,13 @@ mod tests {
 
         let pool = empty_pool();
         let of_lists = lower(
-            &Schema::Set(Box::new(Schema::Seq {
+            &Schema::set(Schema::Seq {
                 container: SeqKind::List,
                 shape: SeqShape {
                     prefix: Vec::new(),
                     tail: Some(Box::new(Schema::Int)),
                 },
-            })),
+            }),
             &pool,
         )
         .expect("a small set");
@@ -882,7 +885,7 @@ mod tests {
             Schema::Bytes,
             seq(Schema::Int),
             seq(Schema::Str),
-            Schema::Set(Box::new(Schema::Int)),
+            Schema::set(Schema::Int),
         ]
     }
 
@@ -1253,7 +1256,7 @@ mod tests {
         for _ in 0..3 {
             let _ = lower(&deep, &pool);
             assert!(
-                lower(&Schema::Set(Box::new(Schema::Int)), &pool).is_some(),
+                lower(&Schema::set(Schema::Int), &pool).is_some(),
                 "the allowance came back"
             );
         }

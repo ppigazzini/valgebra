@@ -39,8 +39,8 @@ use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
 use rustc_hash::{FxHashMap, FxHashSet};
 use valgebra_core::{
-    ClassIx, ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, PathSegment, PredIx, Schema,
-    SeqKind, SeqShape, Violation,
+    ClassIx, CollKind, ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, PathSegment,
+    PredIx, Schema, SeqKind, SeqShape, Violation,
 };
 
 use crate::check::ctx::{Ctx, MAX_WALK_DEPTH, WalkMode};
@@ -208,8 +208,10 @@ pub(crate) fn member(
         Schema::Bytes => admit(value.is_bytes(), schema, value, path, ctx, out),
         Schema::Literal(index) => check_literal(*index, value, path, ctx, out),
         Schema::Seq { container, shape } => check_seq(*container, shape, value, path, ctx, out),
-        Schema::Set(element) => check_set(element, value, path, ctx, out),
-        Schema::FrozenSet(element) => check_frozenset(element, value, path, ctx, out),
+        Schema::Coll { container, element } => match container {
+            CollKind::Set => check_set(element, value, path, ctx, out),
+            CollKind::FrozenSet => check_frozenset(element, value, path, ctx, out),
+        },
         Schema::KeyedMap { fields, defaults } => {
             // Membership is the single-pass fast check; on failure the explain
             // pass re-walks in declared order to aggregate ordered violations.
@@ -2121,8 +2123,8 @@ mod interpreter {
     #[test]
     fn a_set_and_a_frozenset_are_distinct_containers() {
         Python::attach(|py| {
-            let set_of_int = Schema::Set(Box::new(Schema::Int));
-            let frozen_of_int = Schema::FrozenSet(Box::new(Schema::Int));
+            let set_of_int = Schema::set(Schema::Int);
+            let frozen_of_int = Schema::frozen_set(Schema::Int);
             let set = PySet::new(py, [1i64, 2]).expect("a set builds").into_any();
             let frozen = PyFrozenSet::new(py, [1i64, 2])
                 .expect("a frozenset builds")
@@ -2715,26 +2717,16 @@ mod interpreter {
             mixed_set.add(PyString::new(py, "x")).expect("add");
             case(
                 py,
-                &Schema::Set(Box::new(Schema::Int)),
+                &Schema::set(Schema::Int),
                 &mixed_set.clone().into_any(),
                 false,
             );
             let mixed_frozen = PyFrozenSet::new(py, mixed_set.iter())
                 .expect("builds")
                 .into_any();
-            case(
-                py,
-                &Schema::FrozenSet(Box::new(Schema::Int)),
-                &mixed_frozen,
-                false,
-            );
+            case(py, &Schema::frozen_set(Schema::Int), &mixed_frozen, false);
             let good_frozen = PyFrozenSet::new(py, [1i64, 2]).expect("builds").into_any();
-            case(
-                py,
-                &Schema::FrozenSet(Box::new(Schema::Int)),
-                &good_frozen,
-                true,
-            );
+            case(py, &Schema::frozen_set(Schema::Int), &good_frozen, true);
         });
     }
 
@@ -2927,7 +2919,7 @@ mod interpreter {
             assert_eq!(run_mode(py, &schema, &value, WalkMode::Fast), (false, 0));
 
             // The same for a set, whose fold is a separate arm.
-            let set_schema = Schema::Set(Box::new(Schema::Int));
+            let set_schema = Schema::set(Schema::Int);
             let set = PySet::new(py, [1i64]).expect("builds");
             set.add(PyString::new(py, "a")).expect("add");
             set.add(PyString::new(py, "b")).expect("add");

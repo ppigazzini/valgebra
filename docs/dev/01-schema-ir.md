@@ -35,6 +35,7 @@ was widened, by taking the carrier out:
 | node | how the carrier is fixed | widening it means |
 |---|---|---|
 | `Seq { container: SeqKind, shape }` | a **parameter** — `SeqKind` is `List \| Tuple` | another variant in an existing enum |
+| `Coll { container: CollKind, element }` | a **parameter**, as above — `CollKind` is `Set \| FrozenSet` | another variant in an existing enum |
 | `KeyedMap { fields, defaults }` | **the denotation** — the doc comment reads "Denotes dicts…", and there is no carrier field | giving the node a carrier it does not have |
 | `AttrRecord { fields }` | **not fixed at all** — a record carries no carrier, and a class is a separate `Instance` atom met with it | nothing to widen; the two halves are already separate sets |
 

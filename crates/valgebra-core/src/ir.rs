@@ -441,10 +441,18 @@ pub enum Schema {
         /// The prefix and optional tail the value's elements must take.
         shape: SeqShape,
     },
-    /// Denotes sets whose every element belongs to the inner schema.
-    Set(Box<Schema>),
-    /// Denotes frozensets whose every element belongs to the inner schema.
-    FrozenSet(Box<Schema>),
+    /// Denotes sets or frozensets whose every element belongs to `element`.
+    ///
+    /// One node with a kind, as [`Schema::Seq`] is: the two containers hold
+    /// their members the same way and differ only in which class a value has, so
+    /// two variants meant every walk over the node set carried the pair
+    /// together and every arm had to remember to name both.
+    Coll {
+        /// Whether the value is a set or a frozenset.
+        container: CollKind,
+        /// The set every member of the value must belong to.
+        element: Box<Schema>,
+    },
     /// Denotes dicts with named fields and key-schema-keyed defaults for the
     /// rest.
     ///
@@ -514,6 +522,18 @@ pub enum Schema {
     /// being built; it is resolved to a [`Schema::Ref`] before the validator is
     /// returned and never appears in a finished schema.
     SelfRef(u64),
+}
+
+/// Whether a [`Schema::Coll`] denotes sets or frozensets.
+///
+/// The container is part of the value: a `set` is never a `frozenset`, so the
+/// two are disjoint and this is what says which one a schema names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CollKind {
+    /// `set` values.
+    Set,
+    /// `frozenset` values.
+    FrozenSet,
 }
 
 /// Whether a [`Schema::Seq`] denotes lists or tuples.
@@ -588,6 +608,24 @@ impl Schema {
         Schema::Seq {
             container: SeqKind::Tuple,
             shape,
+        }
+    }
+
+    /// A set whose every member belongs to `element`.
+    #[must_use]
+    pub fn set(element: Schema) -> Schema {
+        Schema::Coll {
+            container: CollKind::Set,
+            element: Box::new(element),
+        }
+    }
+
+    /// A frozenset whose every member belongs to `element`.
+    #[must_use]
+    pub fn frozen_set(element: Schema) -> Schema {
+        Schema::Coll {
+            container: CollKind::FrozenSet,
+            element: Box::new(element),
         }
     }
 
@@ -1098,8 +1136,10 @@ impl Schema {
                 container: SeqKind::Tuple,
                 ..
             } => "tuple",
-            Schema::Set(_) => "set",
-            Schema::FrozenSet(_) => "frozenset",
+            Schema::Coll { container, .. } => match container {
+                CollKind::Set => "set",
+                CollKind::FrozenSet => "frozenset",
+            },
             Schema::KeyedMap { .. } => "dict",
             Schema::Union(_) => "union",
             Schema::Intersection(_) => "intersection",
@@ -1137,8 +1177,10 @@ impl Schema {
                 container: SeqKind::Tuple,
                 ..
             } => "tuple_type",
-            Schema::Set(_) => "set_type",
-            Schema::FrozenSet(_) => "frozen_set_type",
+            Schema::Coll { container, .. } => match container {
+                CollKind::Set => "set_type",
+                CollKind::FrozenSet => "frozen_set_type",
+            },
             Schema::KeyedMap { .. } => "dict_type",
             Schema::Union(_) => "union_error",
             Schema::Intersection(_) => "intersection_error",
@@ -1223,7 +1265,7 @@ impl Schema {
     pub(crate) fn push_children<'a>(&'a self, out: &mut Vec<&'a Schema>) {
         match self {
             Schema::Union(members) | Schema::Intersection(members) => out.extend(members),
-            Schema::Complement(inner) | Schema::Set(inner) | Schema::FrozenSet(inner) => {
+            Schema::Complement(inner) | Schema::Coll { element: inner, .. } => {
                 out.push(inner);
             }
             Schema::Seq { shape, .. } => {
@@ -1296,8 +1338,10 @@ impl Schema {
                 container: *container,
                 shape: shape.map_elems(f),
             },
-            Schema::Set(inner) => Schema::Set(Box::new(f(inner))),
-            Schema::FrozenSet(inner) => Schema::FrozenSet(Box::new(f(inner))),
+            Schema::Coll { container, element } => Schema::Coll {
+                container: *container,
+                element: Box::new(f(element)),
+            },
             Schema::Complement(inner) => Schema::Complement(Box::new(f(inner))),
             Schema::Union(members) => Schema::Union(members.iter().map(f).collect()),
             Schema::Intersection(members) => Schema::Intersection(members.iter().map(f).collect()),
@@ -1350,8 +1394,7 @@ impl Schema {
             | Schema::Bytes
             | Schema::SelfRef(_)
             | Schema::Seq { .. }
-            | Schema::Set(_)
-            | Schema::FrozenSet(_)
+            | Schema::Coll { .. }
             | Schema::Complement(_)
             | Schema::Union(_)
             | Schema::Intersection(_)
@@ -1394,7 +1437,7 @@ impl Schema {
             | Schema::Ref(_)
             | Schema::SelfRef(_) => Box::new(core::iter::empty()),
             Schema::Seq { shape, .. } => Box::new(shape.elements()),
-            Schema::Set(inner) | Schema::FrozenSet(inner) | Schema::Complement(inner) => {
+            Schema::Coll { element: inner, .. } | Schema::Complement(inner) => {
                 Box::new(core::iter::once(inner.as_ref()))
             }
             Schema::Union(members) | Schema::Intersection(members) => Box::new(members.iter()),
@@ -1494,8 +1537,7 @@ impl Schema {
     pub(crate) fn guards_children(&self) -> Guarded {
         match self {
             Schema::Seq { .. }
-            | Schema::Set(_)
-            | Schema::FrozenSet(_)
+            | Schema::Coll { .. }
             | Schema::KeyedMap { .. }
             | Schema::AttrRecord { .. } => Guarded::Yes,
             Schema::Anything(_)

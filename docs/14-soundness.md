@@ -52,7 +52,7 @@ Complement(A)    A does not accept x            (¬: set complement)
 Refine(B, c_j)   B accepts x and every c_j      (base ∩ constraints)
 Seq(kind, r)     x is a kind whose elements     (regular language over
                  match the regex r                element denotations)
-Set/FrozenSet(A) every element accepts A        (homogeneous container)
+Coll{kind, A}     every element accepts A        (homogeneous container)
 KeyedMap(f, d)   fields present-and-match, and   (named fields ∩ keyed
                  every other key matches a       default clauses)
                  default clause
