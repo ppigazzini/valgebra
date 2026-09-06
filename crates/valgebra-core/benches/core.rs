@@ -10,7 +10,11 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use valgebra_core::{ConstIx, DefShift, Field, Openness, PoolShift, Schema, SeqShape};
+use valgebra_core::descr::classes::Class;
+use valgebra_core::descr::lower::{Bounds, Constants, Operand, lower, lower_within};
+use valgebra_core::{
+    ClassIx, ConstIx, Constraint, DefShift, Field, Openness, OperandIx, PoolShift, Schema, SeqShape,
+};
 
 /// A redundant Boolean expression that exercises every simplifier rewrite:
 /// nested unions and intersections, duplicate members, top/bottom identities,
@@ -134,11 +138,106 @@ fn bench_decision(c: &mut Criterion) {
     });
 }
 
+/// A pool that reads every operand as its own index, so a bound and a step have
+/// values to be built from without an interpreter.
+struct Indexed;
+
+impl Constants for Indexed {
+    fn operand(&self, index: OperandIx) -> Option<Operand> {
+        i64::try_from(index.get()).ok().map(Operand::Integer)
+    }
+
+    fn constant(&self, index: ConstIx) -> Option<Operand> {
+        i64::try_from(index.get()).ok().map(Operand::Integer)
+    }
+
+    fn class(&self, _index: ClassIx) -> Option<Class> {
+        None
+    }
+}
+
+/// What a *build* costs, which is the quantity the lowering's three bounds are
+/// set from and the reason the structural rules answer first.
+///
+/// The four relations the descriptor decides and the rules do not are the cheap
+/// side; the nested and sibling shapes are the expensive one. A bound whose
+/// number lives only in a comment cannot be re-derived on another machine, and
+/// cannot fail when the shape it guards against changes -- these are that
+/// number's workload.
+fn bench_lowering(c: &mut Criterion) {
+    let list = |element| Schema::list(SeqShape::homogeneous(element));
+    let pattern = |text: &str| Schema::Refine {
+        base: Box::new(Schema::Str),
+        constraints: vec![Constraint::Regex(text.to_owned())],
+    };
+    let step = |at| Schema::Refine {
+        base: Box::new(Schema::Int),
+        constraints: vec![Constraint::MultipleOf(OperandIx::new(at))],
+    };
+
+    // The wins: each is a difference the structural rules decline and the sets
+    // decide, and each is what `WORK` has to leave room for.
+    let wins: [(&str, Schema); 4] = [
+        (
+            "container_meet",
+            Schema::meet([list(Schema::Int), list(Schema::Str)]),
+        ),
+        (
+            "double_complement",
+            Schema::meet([
+                Schema::tuple(SeqShape::fixed([Schema::Int])),
+                Schema::tuple(SeqShape::fixed([Schema::Str]))
+                    .complement()
+                    .complement(),
+            ]),
+        ),
+        (
+            "regular_language",
+            Schema::meet([pattern("a"), pattern("ab?").complement()]),
+        ),
+        (
+            "step_divides",
+            Schema::meet([step(4), step(2).complement()]),
+        ),
+    ];
+    for (name, schema) in &wins {
+        c.bench_function(&format!("lower_{name}"), |b| {
+            b.iter(|| lower(black_box(schema), &Indexed));
+        });
+    }
+
+    // The blow-up: cost is exponential in nesting, which is what `DEPTH` bounds.
+    // Measured unheld, so the growth is visible rather than clipped.
+    for depth in [0usize, 2, 4, 6] {
+        let schema = nested_records(depth);
+        c.bench_function(&format!("lower_nested_records_depth{depth}"), |b| {
+            b.iter(|| lower_within(Bounds::UNHELD, black_box(&schema), &Indexed));
+        });
+    }
+
+    // Breadth multiplies too: a union of records minus a union of its siblings
+    // is the shape that spent a third of a second and then refused because the
+    // result was too wide.
+    let members: Vec<Schema> = (0..4).map(|_| nested_records(3)).collect();
+    let whole = Schema::Union(members.clone());
+    let siblings = Schema::Union(members.into_iter().skip(1).collect());
+    let difference = Schema::Intersection(vec![whole, siblings.complement()]);
+    c.bench_function("lower_sibling_union_difference_unheld", |b| {
+        b.iter(|| lower_within(Bounds::UNHELD, black_box(&difference), &Indexed));
+    });
+    // And the same shape under the allowance the tree ships, which is the number
+    // this pair of benchmarks exists to justify.
+    c.bench_function("lower_sibling_union_difference_held", |b| {
+        b.iter(|| lower(black_box(&difference), &Indexed));
+    });
+}
+
 criterion_group!(
     benches,
     bench_simplify,
     bench_shifted,
     bench_with_records_open,
-    bench_decision
+    bench_decision,
+    bench_lowering
 );
 criterion_main!(benches);

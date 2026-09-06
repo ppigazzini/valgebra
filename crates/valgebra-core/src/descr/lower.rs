@@ -116,7 +116,47 @@ pub const BUDGET: u32 = 64;
 /// recursive reference, the gradual `Any` -- and the ones whose operand the pool
 /// could not read.
 pub fn lower(schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
-    lower_within(WORK, schema, pool)
+    lower_within(Bounds::DEFAULT, schema, pool)
+}
+
+/// What a lowering may spend, in the three quantities it can run out of.
+///
+/// They are three because a build can be too big in three ways, and no one of
+/// them implies another: a schema of a dozen nodes can nest ten deep, a shallow
+/// one can be a hundred wide, and either can spend a third of a second inside a
+/// product and then refuse anyway. Named together so a caller measuring one can
+/// lift the other two, which is what the benchmark behind these numbers does --
+/// a bound whose figure lives only in a comment cannot be re-derived on another
+/// machine, and cannot fail when the shape it guards against changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Bounds {
+    /// The schema nodes a lowering will read.
+    pub nodes: u32,
+    /// The schema nesting a lowering will descend.
+    pub depth: u32,
+    /// The units of multiplying work a build may spend.
+    pub work: u64,
+}
+
+impl Bounds {
+    /// The bounds every relation lowers under. See the three constants for what
+    /// each number is measured from.
+    pub const DEFAULT: Bounds = Bounds {
+        nodes: BUDGET,
+        depth: DEPTH,
+        work: WORK,
+    };
+
+    /// Bounds no build reaches, for measuring what one costs unheld.
+    ///
+    /// Not a mode the library runs in: an unheld build is the thing the three
+    /// numbers above exist to prevent, and this exists so a benchmark can show
+    /// what they prevent.
+    pub const UNHELD: Bounds = Bounds {
+        nodes: u32::MAX,
+        depth: u32::MAX,
+        work: u64::MAX,
+    };
 }
 
 /// The work a build may spend before it refuses.
@@ -131,9 +171,13 @@ pub fn lower(schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
 /// double complement, one regular language inside another -- each spend under
 /// 256 units. The shapes that blow up spend tens or hundreds of thousands: a
 /// record nested eight deep spends 22,806, and a union of four records nested
-/// three deep minus a union of its siblings spends 170,597. Held to this, every
-/// one of them builds or refuses in under two and a half milliseconds, against
-/// the third of a second the last costs unheld.
+/// three deep minus a union of its siblings spends 170,597.
+///
+/// On the shapes reachable today [`DEPTH`] refuses first, so this number is
+/// rarely what stops a build -- `lower_sibling_union_difference_held` in
+/// `benches/core.rs` is refused for nesting, not for work. It is the bound that
+/// remains when a shape is shallow and wide, which is the one nesting cannot
+/// catch, and it is kept for that.
 pub const WORK: u64 = 1024;
 
 /// The schema nesting this will descend before refusing.
@@ -146,31 +190,32 @@ pub const WORK: u64 = 1024;
 /// build that will not pay for itself has to be refused *before* it is walked,
 /// and depth is what says which.
 ///
-/// Nesting is the exponential: a record behind a list, at depths 0, 2, 4, 6 and
-/// 8, builds in 7 microseconds, 280 microseconds, 1.8 milliseconds, 8
-/// milliseconds and 37 milliseconds. Breadth is not -- a record of sixteen
-/// fields builds in 13 microseconds -- and what breadth costs is bounded by
-/// [`BUDGET`] instead.
+/// Nesting is the exponential, and `benches/core.rs` measures it:
+/// `lower_nested_records_depth{0,2,4,6}`, run under [`Bounds::UNHELD`], grows
+/// 1.7 microseconds, 198 microseconds, 1.5 milliseconds, 7.2 milliseconds.
+/// Breadth is not the exponential and is bounded by [`BUDGET`] instead.
 ///
 /// Set from both sides. Every relation the descriptor decides and the rules do
-/// not nests five deep or less; the shapes that blow up nest ten and deeper.
-/// Held here, a schema past it is refused having walked five nodes, and the
-/// whole widening costs the decision path eleven percent. Unheld, one relation
-/// over an eight-deep record costs more than the rules spend on the entire
-/// workload -- seventeen hundred times its budget.
+/// not nests five deep or less -- `lower_container_meet`,
+/// `lower_double_complement`, `lower_regular_language` and `lower_step_divides`
+/// are those four, and each builds in 49 to 188 microseconds. The shapes that
+/// blow up nest ten and deeper. `lower_sibling_union_difference_{unheld,held}`
+/// is the pair that shows what the bound buys: 9.0 milliseconds against 1.35
+/// microseconds, on one shape, from this number alone.
 pub const DEPTH: u32 = 5;
 
-/// [`lower`] under an explicit allowance, for a caller measuring the bound
-/// itself.
+/// [`lower`] under explicit bounds, for a caller measuring one of them.
 ///
 /// # Errors
 ///
-/// Refuses what [`lower`] refuses, and also a build that would spend more than
-/// `work` units. That refusal is not a statement about the schema: the same
-/// schema lowers under a larger allowance. It is what makes the cost of asking
-/// bounded, which is the only thing that makes asking safe.
-pub fn lower_within(work: u64, schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
-    budget::under(work, || descend(schema, pool, &Cell::new(BUDGET), DEPTH))
+/// Refuses what [`lower`] refuses, and also a build that would exceed any of
+/// `bounds`. That refusal is not a statement about the schema: the same schema
+/// lowers under larger bounds. It is what makes the cost of asking bounded,
+/// which is the only thing that makes asking safe.
+pub fn lower_within(bounds: Bounds, schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
+    budget::under(bounds.work, || {
+        descend(schema, pool, &Cell::new(bounds.nodes), bounds.depth)
+    })
 }
 
 /// [`lower`] with the nodes left to spend, which every node spends one of.
@@ -471,7 +516,7 @@ fn words(pattern: &str, base: &Descr) -> Option<Descr> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BUDGET, Constants, DEPTH, Operand, WORK, lower, lower_within};
+    use super::{BUDGET, Bounds, Constants, DEPTH, Operand, lower, lower_within};
     use crate::decision::{Kind, Verdict};
     use crate::descr::classes::Class;
     use crate::descr::{Descr, Value};
@@ -1087,14 +1132,46 @@ mod tests {
             Schema::list(SeqShape::homogeneous(Schema::Str)),
         ]);
 
-        assert!(lower_within(0, &meet, &pool).is_none(), "nothing to spend");
-        assert!(lower_within(WORK, &meet, &pool).is_some());
+        assert!(
+            lower_within(
+                Bounds {
+                    work: 0,
+                    ..Bounds::DEFAULT
+                },
+                &meet,
+                &pool
+            )
+            .is_none(),
+            "nothing to spend"
+        );
+        assert!(lower_within(Bounds::DEFAULT, &meet, &pool).is_some());
         // A leaf takes no product, so it costs nothing and lowers on an empty
         // allowance: the budget bounds what multiplies, not what is read. `int`
         // is not one of those -- it is the union of two kinds -- which is why
         // this says `str`.
-        assert!(lower_within(0, &Schema::Str, &pool).is_some());
-        assert!(lower_within(0, &Schema::Int, &pool).is_none(), "a union");
+        assert!(
+            lower_within(
+                Bounds {
+                    work: 0,
+                    ..Bounds::DEFAULT
+                },
+                &Schema::Str,
+                &pool
+            )
+            .is_some()
+        );
+        assert!(
+            lower_within(
+                Bounds {
+                    work: 0,
+                    ..Bounds::DEFAULT
+                },
+                &Schema::Int,
+                &pool
+            )
+            .is_none(),
+            "a union"
+        );
     }
 
     /// The allowance a lowering is given is its own: an expensive one does not

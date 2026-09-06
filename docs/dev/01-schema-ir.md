@@ -579,7 +579,16 @@ lowering reads, the nesting it descends, the work a build spends, the steps the
 rules take -- is admitted only with a workload in the tree that reproduces the
 number it was set from. A bound whose number lives only in a comment cannot be
 re-derived on another machine, and cannot fail when the shape it guards against
-changes.
+changes. The three a lowering can run out of are named together as `Bounds`, and
+`crates/valgebra-core/benches/core.rs` measures each against the shapes it was
+set from, with
+`Bounds::UNHELD` to show what a build costs without them.
+
+That measurement corrected a guess. The descriptor was thought to allocate a
+component per kind, eleven of them, to fill one; it does not -- an empty
+component is an empty `Vec`, which allocates nothing, and a whole descriptor is
+384 bytes moved by value. The cost is in the products, which is what the three
+bounds already hold.
 
 ## Which whole-schema operations stay
 
