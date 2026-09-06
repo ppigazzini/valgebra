@@ -90,6 +90,7 @@ pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
 /// to a back edge, and a non-contractive body — one whose recursive reference
 /// is not under a structural constructor — is rejected.
 #[pyfunction]
+#[pyo3(signature = (builder, /))]
 fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
     let py = builder.py();
     let token = fresh_self_token();
@@ -156,6 +157,7 @@ fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
 /// methods can raise should not rely on the complement alone to exclude them;
 /// intersect with a positive type that pins the shape instead.
 #[pyfunction]
+#[pyo3(signature = (schema, /))]
 fn complement(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
     let mut literals = Pool::default();
     let mut definitions = Vec::new();
@@ -183,7 +185,19 @@ fn atom(py: Python<'_>, schema: Schema) -> PyResult<Py<Validator>> {
 #[pymodule(gil_used = false)]
 fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = module.py();
-    module.add("ValidationError", py.get_type::<ValidationError>())?;
+    let failure = py.get_type::<ValidationError>();
+    // The structured model describes *failures*, and an error built by hand has
+    // none. Class defaults are what make that the honest answer rather than an
+    // `AttributeError`: every instance carries the six attributes the model
+    // documents, a raised one shadowing them per instance with the failure it
+    // reports. Without these the type has two shapes and the stub describes one.
+    failure.setattr("code", "")?;
+    failure.setattr("path", PyTuple::empty(py))?;
+    failure.setattr("message", "")?;
+    failure.setattr("expected", "")?;
+    failure.setattr("value", "")?;
+    failure.setattr("errors", PyTuple::empty(py))?;
+    module.add("ValidationError", failure)?;
     module.add_class::<Validator>()?;
     module.add_function(wrap_pyfunction!(union, module)?)?;
     module.add_function(wrap_pyfunction!(intersection, module)?)?;
