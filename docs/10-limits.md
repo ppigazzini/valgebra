@@ -21,7 +21,7 @@ fields) is written by the developer and is trusted.
   refused by the construction bound below, which says so by name.
 - **Schema construction size.** Every way of growing a schema — the `Validator`
   constructor, the `|` operator, `union`, `intersection`, `complement`,
-  `recursive`, and `simplify` — is bounded at construction, so no sequence of
+  `recursive`, and the record transforms — is bounded at construction, so no sequence of
   calls can build a schema that overflows the stack or exhausts memory on a later
   walk. Three bounds apply, and passing any one raises `ValueError`:
     - **depth** — at most 128 levels of structural nesting (a chain built in a

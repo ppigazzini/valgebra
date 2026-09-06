@@ -18,7 +18,11 @@ Write `⟦S⟧` for the set of Python values a schema `S` denotes (its
    `x` if and only if `x ∈ ⟦S⟧`. The "only if" half is *soundness of acceptance*
    — the property downstream code relies on; the "if" half is completeness of the
    check.
-2. **Simplification preserves meaning.** `⟦simplify(S)⟧ = ⟦S⟧`.
+2. **Construction preserves meaning.** The normal form a constructor builds
+   denotes the set the spelling names: `⟦union(A, B)⟧ = ⟦A⟧ ∪ ⟦B⟧` however the
+   members are flattened, absorbed, ordered or folded on the way in. (`simplify`
+   was the pass that reduced a term afterwards; it is deprecated, and while it
+   remains it preserves meaning for the same reason.)
 3. **Decisions are sound.** If `is_subtype_of(A, B)` is `True` then `⟦A⟧ ⊆ ⟦B⟧`;
    if `is_empty(S)` is `True` then `⟦S⟧ = ∅`. The converses are *not* claimed —
    the decision is deliberately conservative.
@@ -89,15 +93,15 @@ On the inhabitants — the finite values — the guarded unfolding accepts exact
 the members, which is why a coinductive *comparison* at the greatest fixpoint
 never contradicts a membership answer (see [recursion](06-recursion.md)).
 
-## Why simplification preserves meaning
+## Why construction preserves meaning
 
-Every rewrite `simplify` performs is a law of the Boolean algebra of sets —
-flattening associative nodes, dropping identities and duplicates, pushing
-complement to negation-normal form, folding `X ∩ ¬X` to `⊥` and `X ∪ ¬X` to `⊤`,
-and using scalar disjointness — each of which holds of the *sets*, so it cannot
-change `⟦S⟧`. The simplifier is held to this one invariant and to nothing
-stronger: it is a lattice normal form, not a decision, so membership relations
-are read off the decision procedures, never off simplified structure.
+Every fold a constructor applies is a law of the Boolean algebra of sets —
+flattening associative nodes, dropping identities and duplicates, absorbing a
+member that contains another, ordering the members, and folding `X ∩ ¬X` to `⊥`
+and `X ∪ ¬X` to `⊤` — each of which holds of the *sets*, so none can change
+`⟦S⟧`. The form is held to this one invariant and to nothing stronger: it is a
+lattice normal form, not a decision, so membership relations are read off the
+decision procedures, never off the shape of a term.
 
 ## Why the decisions are sound (and only sound)
 
@@ -132,8 +136,8 @@ The argument is checked, not just asserted, by four independent test layers:
 - **Denotation oracle.** Each node's `⟦S⟧` is written as a reference predicate
   over a value generator, and the walk is property-tested to agree with it — this
   is the membership-exactness claim, checked on generated values.
-- **Algebra laws.** Every law `simplify` relies on is property-tested against the
-  membership relation, in Rust (proptest) and Python (Hypothesis).
+- **Algebra laws.** Every law construction relies on is property-tested against
+  the membership relation, in Rust (proptest) and Python (Hypothesis).
 - **External ground truth.** The same schemas and values run through
   pydantic-core and jsonschema; a divergence is a bug or a documented intentional
   difference — an independent check that the *reference predicates themselves* are

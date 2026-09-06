@@ -19,9 +19,11 @@ from the top-level `valgebra` namespace.
 
 ::: valgebra.complement
 
-The whole-schema transforms `simplify` (reduce by the lattice laws), `open`, and
-`close` (a record's key set) are methods on the compiled validator
-(`Validator.simplify`/`open`/`close`), documented above. A fixed-length list is
+The whole-schema transforms `open` and `close` (a record's key set) are methods
+on the compiled validator (`Validator.open`/`close`), documented above. So is
+`simplify`, which is **deprecated**: a schema is built in the lattice normal
+form, so the reduction it promised is the schema a caller already holds
+([the algebra guide](04-algebra.md)). A fixed-length list is
 the native `[A, B]` literal (see the [schema language](03-schema-language.md)).
 
 ## Refinement markers
@@ -99,7 +101,7 @@ three, and which one says what went wrong:
 | --- | --- | --- |
 | `NotImplementedError` | The spec names a form with no decidable runtime membership. | `Sequence[int]`, `Mapping[str, int]`, a `TypeVar`, `Final`, `ClassVar` |
 | `NotImplementedError` | Compiling descends 128 levels without reaching a leaf. | a self-referential class, whose field type names the class |
-| `ValueError` | A constructed schema crosses a size bound: depth, definitions, or nodes. | growing a schema in a loop with `\|`, `union`, `intersection`, `open`, `simplify` |
+| `ValueError` | A constructed schema crosses a size bound: depth, definitions, or nodes. | growing a schema in a loop with `\|`, `union`, `intersection`, `open` |
 | `ValueError` | A marker's value cannot denote a set. | `MultipleOf(0)` |
 | `ValueError` | A `recursive` body is not contractive — its back edge is not under a structural constructor. | `recursive(lambda s: s)` |
 | `TypeError` | An argument is the wrong Python type for the call. | `validate_json(123)`, `load(123)` |

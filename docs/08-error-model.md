@@ -347,10 +347,9 @@ assert report("active") == ("literal_error", "the literal 'active'")
 assert report(Literal["active"]) == ("literal_error", "the literal 'active'")
 ```
 
-`Literal[...]` builds a union of its constants — of one branch, when there is one
-constant — and a union reports `union_error`. The bare constant builds a literal
-leaf and reports `literal_error`. `simplify()` reduces the one-branch union to
-the leaf, so `Validator(Literal["active"]).simplify()` reports `literal_error`
-and compares equal to `Validator("active")` under `==`.
+`Literal[...]` builds a union of its constants, and a union of several reports
+`union_error`. A union of **one** is that one, folded where the schema is built,
+so `Literal["active"]` is the literal leaf: it reports `literal_error` and
+compares equal to `Validator("active")` under `==`.
 
 Branch on the code you actually observe for the spelling you actually write.

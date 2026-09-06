@@ -38,9 +38,13 @@ distributivity, De Morgan, and double negation — and valgebra property-tests e
 against the membership relation rather than asserting it (see the
 [algebra guide](04-algebra.md)).
 
-`simplify` rewrites a schema by these laws while admitting **exactly the same
-values**. That soundness — simplification never changes the value-set — is the
-single invariant the simplifier is held to.
+The laws hold of the schema a caller **builds**, not of a pass over it
+afterwards: `union`, `intersection` and `complement` produce the lattice normal
+form, so `union(int, int)` *is* `Validator(int)`, an absorbed member is gone
+before anyone asks, and a schema beside its own complement folds to a bound.
+`repr` shows that form and `==` compares it. (`simplify` was the pass that used
+to do this and is deprecated; [the algebra guide](04-algebra.md) says what it
+still does.)
 
 ## Semantic (set-theoretic) subtyping
 
@@ -92,17 +96,22 @@ work is Hosoya, Vouillon & Pierce's, and is stated of their regular tree types, 
 narrower language.
 
 valgebra does not need that decision to validate: membership is answered
-directly by the walk, not by reducing the schema. So the simplifier implements
-the **soundly decidable fragment** and is honest about the rest:
+directly by the walk, not by reducing the schema. So the library is honest about
+which fragment each part settles:
 
-- **Folded by the simplifier.** The complement laws (`X ∩ ¬X = ⊥`,
-  `X ∪ ¬X = ⊤`) for any `X` that is a set, and disjointness of the scalar
-  fragment. So `intersection(int, complement(int)).simplify()` is `nothing` and
-  `intersection(int, str).simplify()` is `nothing`. A predicate and a class with
-  an `isinstance` hook are the exceptions, because they answer by running code
-  and the law is about sets.
+- **Settled by construction.** The lattice laws, and the complement laws
+  (`X ∩ ¬X = ⊥`, `X ∪ ¬X = ⊤`) for any `X` that is a set. So
+  `intersection(int, complement(int))` **is** `nothing` — one schema, which
+  `repr` prints and `==` compares, and which no later call is needed to reach. A
+  predicate and a class with an `isinstance` hook are the exceptions, because
+  they answer by running code and the law is about sets.
+- **Decided rather than folded.** A meet of two disjoint kinds keeps its
+  spelling: `intersection(int, str)` reprs as itself, and
+  `intersection(int, str).is_empty()` is `True`. Emptiness is a question about
+  the set, and answering it is not the same as rewriting the term that names
+  it.
 - **Decided by the comparison operators.** `is_subtype_of`, `is_equivalent`, and
-  `is_empty` decide a wider fragment than the simplifier folds — class and literal
+  `is_empty` decide a wider fragment than construction folds — class and literal
   inclusion, refinements (including the emptiness of contradictory bounds like
   `Ge(10) & Le(0)`), sequences, sets, records and mappings, and recursion at its
   greatest fixpoint. The [decidability boundary](15-decidability.md) lists exactly
