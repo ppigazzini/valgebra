@@ -769,11 +769,35 @@ jobs:
           mkdir -p fuzz/corpus/simplify
           cargo fuzz run --target x86_64-unknown-linux-gnu simplify \
             fuzz/corpus/simplify fuzz/seeds/simplify -- -max_total_time=180
+      # Twice the simplifier's budget, because a run costs roughly seventy times
+      # what it did: every relation the structural rules decline is asked again
+      # of the *sets* the two schemas denote, and building those is the work.
+      # Measured at 143 executions a second against 10,544 before, and CPU-bound
+      # throughout, so the only thing that buys back reach is time.
+      #
+      # Each batch runs in a child process, and the two memory ceilings are
+      # named rather than left to the default. The soak's resident memory grows
+      # with the number of executions it has done -- measured on the tracked
+      # corpus at 660 MB after 512 executions, 1,207 after 4,096 and 2,377 after
+      # 16,384, still climbing -- because the sanitizer does not return freed
+      # memory and this target allocates heavily. libFuzzer's unnamed default
+      # ceiling is 2,048 MB, so a run of any length crosses it eventually and
+      # reports an out-of-memory against whatever input happened to be running:
+      # a 24-byte input that replays in 25 ms. `-fork=1` puts the ceiling on a
+      # child, which starts fresh, so the ceiling bounds one batch rather than
+      # the whole soak.
+      #
+      # `-malloc_limit_mb` is the check that names a defect: no single
+      # allocation may reach 64 MB. It is what the default ceiling was standing
+      # in for and could not enforce, since it fires on the process rather than
+      # on an allocation. The largest block this code can ask for is the regex
+      # builder's, bounded at 8 MB, and a full soak makes none above 1 MB.
       - name: Fuzz the decision procedures
         run: |
           mkdir -p fuzz/corpus/decision
           cargo fuzz run --target x86_64-unknown-linux-gnu decision \
-            fuzz/corpus/decision fuzz/seeds/decision -- -max_total_time=180
+            fuzz/corpus/decision fuzz/seeds/decision -- \
+            -max_total_time=360 -fork=1 -malloc_limit_mb=64
       # Minimize before saving, so the cache holds the smallest input set that
       # keeps the coverage rather than growing without bound. A failure here is
       # not a finding -- the soak above already reported one -- so it does not
