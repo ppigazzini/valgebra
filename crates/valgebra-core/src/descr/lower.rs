@@ -506,6 +506,64 @@ mod tests {
         assert!(!non_negative.admits(Value::integer(-1)));
     }
 
+    /// The relations a decision procedure cannot reach, decided on the sets.
+    ///
+    /// Each is a *value* fact the term layer has no rule for: a step divides
+    /// another, a literal misses a kind, a kind is exhausted by its literals, a
+    /// set is its own hole plus what fills it. Lowering them puts each in the
+    /// kind set it denotes, where the answer is `a ∧ ¬b = ∅` and nothing else.
+    #[test]
+    fn the_value_relations_decide_on_the_sets() {
+        let pool = Pool(vec![
+            Operand::Integer(4),
+            Operand::Integer(2),
+            Operand::Integer(1),
+            Operand::Boolean(true),
+            Operand::Boolean(false),
+        ]);
+        let set = |schema| lower(&schema, &pool).expect("a small schema");
+        let step = |at| {
+            set(Schema::Refine {
+                base: Box::new(Schema::Int),
+                constraints: vec![Constraint::MultipleOf(OperandIx::new(at))],
+            })
+        };
+        let literal = |at| set(Schema::Literal(ConstIx::new(at)));
+        let within = |a: &Descr, b: &Descr| {
+            a.intersect(&b.complement())
+                .expect("two small sets")
+                .emptiness()
+        };
+
+        // A step is a subset of the steps it is a multiple of, and of no other.
+        assert_eq!(within(&step(0), &step(1)), Verdict::Empty);
+        assert_eq!(within(&step(1), &step(0)), Verdict::Inhabited);
+
+        // `bool` is its own kind, so an integer literal is never a boolean.
+        let no_bool = set(Schema::Complement(Box::new(Schema::Bool)));
+        assert_eq!(within(&literal(2), &no_bool), Verdict::Empty);
+
+        // A kind with finitely many values is exhausted by naming them all.
+        let both = set(Schema::Union(vec![
+            Schema::Literal(ConstIx::new(3)),
+            Schema::Literal(ConstIx::new(4)),
+        ]));
+        assert_eq!(within(&set(Schema::Bool), &both), Verdict::Empty);
+        assert_eq!(within(&both, &set(Schema::Bool)), Verdict::Empty);
+
+        // A set is the hole punched in it, put back: `a = (a ∧ ¬v) ∨ v` for a
+        // value `a` holds.
+        let split = set(Schema::Union(vec![
+            Schema::meet(vec![
+                Schema::Int,
+                Schema::Complement(Box::new(Schema::Literal(ConstIx::new(2)))),
+            ]),
+            Schema::Literal(ConstIx::new(2)),
+        ]));
+        assert_eq!(within(&set(Schema::Int), &split), Verdict::Empty);
+        assert_eq!(within(&split, &set(Schema::Int)), Verdict::Empty);
+    }
+
     /// A step is the constraint no union of intervals can spell, and it meets
     /// the bounds rather than being checked beside them.
     #[test]

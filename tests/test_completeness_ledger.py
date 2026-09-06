@@ -602,32 +602,25 @@ def _codes(members: int, *, extra: bool = False) -> Validator:
     return union(*[Validator(code) for code in codes])
 
 
-@pytest.mark.parametrize("members", [8, 64, 256, 512])
+@pytest.mark.parametrize("members", [8, 64, 256, 512, 1024, 4096])
 def test_widening_a_table_is_decided_at_the_sizes_a_table_reaches(
     members: int,
 ) -> None:
     # Two tables written out separately, which is how a codebase with a schema in
-    # two modules has them: neither is built from the other, so they share no
-    # constant and the containment shortcut does not fire.
-    assert _codes(members).is_subtype_of(_codes(members, extra=True))
-
-
-@pytest.mark.parametrize("members", [1024, 4096])
-@pytest.mark.xfail(
-    strict=True,
-    reason="two independently written tables distribute over each other, and the "
-    "product of the member counts spends the decision budget",
-)
-def test_widening_two_separate_tables_stops_at_the_budget(members: int) -> None:
+    # two modules has them: neither is built from the other, and the strings are
+    # built at run time, so no two are one object. A constant is a value rather
+    # than an object, so they pool together anyway, the narrow union's branches
+    # are branches of the wide one, and containment settles it without
+    # distributing. Before constants were pooled by value the two largest sizes
+    # spent the decision budget instead.
     assert _codes(members).is_subtype_of(_codes(members, extra=True))
 
 
 @pytest.mark.parametrize("members", [1024, 4096])
 def test_widening_a_table_by_a_member_is_decided_at_every_size(members: int) -> None:
-    # The wider table built *from* the narrower one shares its constants, so the
-    # narrow union is a branch of the wide one and containment settles it without
-    # distributing. This is the shape the shortcut is for, and it is not the shape
-    # above.
+    # The same relation with the wide table built *from* the narrow one, which
+    # reaches containment through sharing the schema node rather than through
+    # sharing the constants under it.
     narrow = _codes(members)
     assert narrow.is_subtype_of(union(narrow, Validator("extra")))
 

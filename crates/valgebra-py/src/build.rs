@@ -3,6 +3,7 @@
 
 use std::cell::Cell;
 
+use pyo3::PyTypeInfo;
 use pyo3::exceptions::{PyNotImplementedError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
@@ -1310,8 +1311,66 @@ fn parse_constraint(
     Ok(())
 }
 
-/// The constants pool a compile builds, plus an identity index into it. Pooling
-/// deduplicates by object identity; the index makes each `intern` a hash lookup
+/// What two pooled objects have to agree on to be one constant.
+///
+/// A builtin scalar is keyed by its exact type and its value, which is the rule
+/// a literal is read by everywhere else: `Literal[1]` and `Literal[True]` name
+/// different singletons although `1 == True`, and two equal strings name one
+/// however they were built. Anything else is keyed by address, because `==` on
+/// it is the object's own and an object that answers it inconsistently would
+/// merge two constants that are not one.
+#[derive(PartialEq, Eq, Hash)]
+enum Constant {
+    /// An object this cannot read by value: a class, a callable, a container, a
+    /// scalar too wide for the key below.
+    Address(usize),
+    NoneType,
+    Bool(bool),
+    Int(i64),
+    /// A float by its bits, with the one value whose bits are not its identity
+    /// folded: `0.0 == -0.0`, so the two are one constant. A `nan` never reaches
+    /// here -- it equals nothing, itself included, so it is keyed by address.
+    Float(u64),
+    Str(String),
+    Bytes(Vec<u8>),
+}
+
+/// The key an object interns under.
+fn constant_of(obj: &Bound<'_, PyAny>) -> Constant {
+    let py = obj.py();
+    let address = Constant::Address(obj.as_ptr() as usize);
+    if obj.is_none() {
+        return Constant::NoneType;
+    }
+    // Exact types only. A subclass carries its own `__eq__`, so two of its
+    // instances comparing equal is not the literal rule holding of them.
+    let ty = obj.get_type();
+    let is = |exact: Bound<'_, PyType>| ty.is(&exact);
+    if is(PyBool::type_object(py)) {
+        return obj.extract::<bool>().map_or(address, Constant::Bool);
+    }
+    if is(PyInt::type_object(py)) {
+        // An `int` wider than the key falls back to its address, which pools it
+        // once per object rather than once per value -- correct, just coarser.
+        return obj.extract::<i64>().map_or(address, Constant::Int);
+    }
+    if is(PyFloat::type_object(py)) {
+        return match obj.extract::<f64>() {
+            Ok(value) if !value.is_nan() => Constant::Float((value + 0.0).to_bits()),
+            _ => address,
+        };
+    }
+    if is(PyString::type_object(py)) {
+        return obj.extract::<String>().map_or(address, Constant::Str);
+    }
+    if is(PyBytes::type_object(py)) {
+        return obj.extract::<Vec<u8>>().map_or(address, Constant::Bytes);
+    }
+    address
+}
+
+/// The constants pool a compile builds, plus an index into it. Pooling
+/// deduplicates by [`Constant`]; the index makes each `intern` a hash lookup
 /// rather than a linear scan, so compiling a wide `Literal[...]` or merging many
 /// validators stays linear in the number of constants instead of quadratic.
 ///
@@ -1321,34 +1380,42 @@ fn parse_constraint(
 #[derive(Default)]
 pub(crate) struct Pool {
     items: Vec<Py<PyAny>>,
-    index: rustc_hash::FxHashMap<usize, usize>,
+    index: rustc_hash::FxHashMap<Constant, usize>,
 }
 
 impl Pool {
-    /// Seed a pool with an existing validator's constants, rebuilding the identity
-    /// index, so a second schema interns into the same pool when validators merge.
-    pub(crate) fn seeded(items: Vec<Py<PyAny>>) -> Self {
+    /// Seed a pool with an existing validator's constants, rebuilding the index,
+    /// so a second schema interns into the same pool when validators merge.
+    ///
+    /// A seeded pool can hold two slots under one key -- the constants were
+    /// pooled before this rule, or by another pool -- and the later slot wins the
+    /// key. Both stay in `items`, because a compiled schema already names the
+    /// earlier one; what the key decides is only which slot a *new* occurrence
+    /// joins.
+    pub(crate) fn seeded(py: Python<'_>, items: Vec<Py<PyAny>>) -> Self {
         let index = items
             .iter()
             .enumerate()
-            .map(|(i, obj)| (obj.as_ptr() as usize, i))
+            .map(|(at, obj)| (constant_of(obj.bind(py)), at))
             .collect();
         Pool { items, index }
     }
 
-    /// Pool `obj` and return its slot, deduplicating by object identity.
+    /// Pool `obj` and return its slot, deduplicating by [`Constant`].
     ///
     /// Private, and reached only through the four typed forms below. One pool
     /// serves four index spaces, so the slot acquires its meaning here, at the
-    /// line that decides what the object is being pooled *as*.
+    /// line that decides what the object is being pooled *as*. Two occurrences
+    /// of one constant land in one slot whichever space they arrive through,
+    /// which is what makes two spellings of a literal one schema node.
     fn intern(&mut self, obj: &Bound<'_, PyAny>) -> usize {
-        let ptr = obj.as_ptr() as usize;
-        if let Some(&index) = self.index.get(&ptr) {
+        let key = constant_of(obj);
+        if let Some(&index) = self.index.get(&key) {
             return index;
         }
         let index = self.items.len();
         self.items.push(obj.clone().unbind());
-        self.index.insert(ptr, index);
+        self.index.insert(key, index);
         index
     }
 
