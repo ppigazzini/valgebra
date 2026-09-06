@@ -72,11 +72,18 @@ def names_script(text: str, script: str) -> bool:
     return re.search(pattern, text) is not None
 
 
+#: Test files that name scripts without running them, so reading one as a lane
+#: would report coverage nothing provides. Each names scripts as *subjects*: this
+#: ledger enumerates them, and `test_ledger_plants.py` plants one in a throwaway
+#: clone to prove a ledger catches it.
+NAMES_BUT_DOES_NOT_DRIVE = frozenset({"test_lane_coverage.py", "test_ledger_plants.py"})
+
+
 def _drivers_of(script: str) -> list[str]:
     hits = []
     for path in _driver_files():
-        if path.name == "test_lane_coverage.py":
-            continue  # this file names every script; it drives none of them
+        if path.name in NAMES_BUT_DOES_NOT_DRIVE:
+            continue
         if names_script(strip_comments(path.read_text(encoding="utf-8")), script):
             hits.append(str(path.relative_to(ROOT)))
     return hits
