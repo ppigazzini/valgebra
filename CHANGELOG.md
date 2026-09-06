@@ -180,6 +180,24 @@ answer of its own, or a repair to a change not yet released.
 
 ### Changed
 
+- **A bare container class is its kind.** `list` and `list[object]` admit the
+  same values — every list, a subclass instance included — and were different
+  sorts of thing: a sequence node in one case, an `isinstance` atom in no kind at
+  all in the other, so neither spelling was decided below the other and
+  `repr(Validator(list))` said `list` where the schema said otherwise. `list`,
+  `tuple`, `set`, `frozenset` and `dict` name their kind's whole set, which is
+  what the typing spec assigns an unparameterised generic and what the membership
+  check always performed; the two spellings are one schema and compare equal.
+  `str`, `bytes`, `int` and `float` always read this way. `repr` follows the
+  schema, so `Validator(list)` renders `list[anything]`.
+
+  A class built on a builtin narrows that kind rather than standing beside it, so
+  it relates to it: `Validator(MyInt)` is below `Validator(int)` and
+  `Validator(MyStr)` below `Validator(str)`, and a meet of the two is empty. A
+  class built on no builtin narrows nothing and relates to a kind in neither
+  direction — `class Both(Plain, MyStr)` builds and its instances are strings, so
+  a plain class's instances are not confined to any kind.
+
 - **Every argument the compiled surface takes is positional.** `Validator`, the
   combinators, and every method on a validator declare their parameters
   positional-only, matching the stub that already wrote them that way: a call

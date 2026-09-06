@@ -217,35 +217,39 @@ impl PoolRelations<'_, '_> {
     }
 }
 
-/// The builtin base a class is built on, as the layout tag [`Class`] reads.
+/// The builtin base a class is built on: the layout tag [`Class`] reads, and the
+/// kind that layout confines an instance to.
 ///
 /// Python refuses `class C(int, str)` -- "multiple bases have instance lay-out
 /// conflict" -- so a class built on one of these derives from no other, and two
 /// classes built on different ones share no instance. A class built on none of
-/// them lays down no layout of its own and takes [`Class::PLAIN`], which
-/// conflicts with nothing: `class Both(Plain, MyStr)` builds, so a plain class
-/// and a `str` subclass do share instances.
-fn layout_of(ty: &Bound<'_, PyType>) -> u32 {
+/// them lays down no layout of its own and takes [`Class::PLAIN`] and no kind,
+/// which conflicts with nothing and confines nothing: `class Both(Plain, MyStr)`
+/// builds, so a plain class and a `str` subclass do share instances, and those
+/// instances are strings.
+fn layout_of(ty: &Bound<'_, PyType>) -> (u32, Option<Kind>) {
     let py = ty.py();
     [
-        PyInt::type_object(py),
-        PyString::type_object(py),
-        PyBytes::type_object(py),
-        PyFloat::type_object(py),
-        PyTuple::type_object(py),
-        PyFrozenSet::type_object(py),
-        PyList::type_object(py),
-        PySet::type_object(py),
-        PyDict::type_object(py),
+        (PyInt::type_object(py), Kind::Int),
+        (PyString::type_object(py), Kind::Str),
+        (PyBytes::type_object(py), Kind::Bytes),
+        (PyFloat::type_object(py), Kind::Float),
+        (PyTuple::type_object(py), Kind::Tuple),
+        (PyFrozenSet::type_object(py), Kind::FrozenSet),
+        (PyList::type_object(py), Kind::List),
+        (PySet::type_object(py), Kind::Set),
+        (PyDict::type_object(py), Kind::Dict),
     ]
     .into_iter()
     .enumerate()
     // `bool` derives from `int` and shares its layout, so a `bool` and an
     // `int` subclass land in one part rather than two -- which is right: the
-    // pair is disjoint for a reason this tag does not carry.
-    .find(|(_, builtin)| ty.is_subclass(builtin).unwrap_or(false))
-    .and_then(|(at, _)| u32::try_from(at).ok())
-    .map_or(Class::PLAIN, |at| at + 1)
+    // pair is disjoint for a reason this tag does not carry. It is also why the
+    // kind beside the tag is `Int` and not `Bool`: `bool` is final, so an `int`
+    // subclass is never a boolean.
+    .find(|(_, (builtin, _))| ty.is_subclass(builtin).unwrap_or(false))
+    .and_then(|(at, (_, kind))| u32::try_from(at).ok().map(|at| (at + 1, Some(kind))))
+    .unwrap_or((Class::PLAIN, None))
 }
 
 impl PoolRelations<'_, '_> {
@@ -287,7 +291,12 @@ impl PoolRelations<'_, '_> {
                 bases.push(Class::root(self.class_id(&base)));
             }
         }
-        Some(Class::new(self.class_id(ty), layout_of(ty), &bases))
+        let (layout, kind) = layout_of(ty);
+        let class = Class::new(self.class_id(ty), layout, &bases);
+        Some(match kind {
+            Some(kind) => class.of_kind(kind),
+            None => class,
+        })
     }
 
     /// A pooled object as the descriptor reads one, or `None` for a value whose

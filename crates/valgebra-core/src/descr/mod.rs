@@ -652,7 +652,21 @@ impl Descr {
     /// arbitrary code and is not a set this algebra holds.
     #[must_use]
     pub fn instance_of(class: Class) -> Descr {
-        Descr::objects(&RecordLattice::instance_of(class))
+        // A class that confines its instances to a kind belongs on that kind's
+        // line alone, which is exact: every instance of a `str` subclass is a
+        // string, so the class narrows the `Str` kind rather than standing
+        // outside it, and that is where `MyStr <= str` is decided. A class that
+        // confines nothing stays on every line, because a subclass of it may lay
+        // down any layout at all.
+        let Some(kind) = class.kind() else {
+            return Descr::objects(&RecordLattice::instance_of(class));
+        };
+        let lattice = RecordLattice::instance_of(class);
+        let mut descr = Descr::nothing();
+        if let Some(slot) = descr.kinds.get_mut(Descr::position(kind)) {
+            *slot = Lines::objects(&Component::top(kind), lattice);
+        }
+        descr
     }
 
     /// The values that do not carry `label` at all.
@@ -1351,6 +1365,8 @@ mod tests {
     /// Laid out like an animal and deriving from nothing: the pair whose meet
     /// only a class outside the order could inhabit.
     static UNRELATED: LazyLock<Class> = LazyLock::new(|| Class::new(4, 1, &[]));
+    /// A class whose instances are strings, which is what `Class::of_kind` says.
+    static SUBSTR: LazyLock<Class> = LazyLock::new(|| Class::new(5, 5, &[]).of_kind(Kind::Str));
 
     /// The attribute lists the universe's objects carry.
     const OBJECTS: [&[(&str, Value)]; 7] = [
@@ -1772,6 +1788,42 @@ mod tests {
             .expect("an int that is an Animal");
         assert!(animal_int.admits(dog_int));
         assert!(!animal_int.admits(Value::integer(1).of_class(&MINERAL, &[])));
+    }
+
+    /// A class that confines its instances to a kind stands on that kind's line
+    /// alone; one that confines none stands on every line.
+    ///
+    /// `Class::of_kind` is the only thing that separates the two, and the pair
+    /// below is what it buys: `MyStr <= str` is decided here, and it is decided
+    /// because the class said which kind its instances have. Without that the
+    /// class would keep the open world's answer -- a subclass may lay down any
+    /// layout, so it might be an integer -- and no meet with a kind would ever be
+    /// a proof.
+    #[test]
+    fn a_class_confined_to_a_kind_is_on_that_kind_alone() {
+        let words = Descr::instance_of(SUBSTR.clone());
+        let ints = Descr::of_kind(Kind::Int);
+
+        // A value of the class that is a string is one of its instances.
+        assert!(words.admits(Value::word(b"x", Kind::Str).of_class(&SUBSTR, &[])));
+        // The same class carried by a value of another kind is not, because the
+        // class named the kind its instances have.
+        assert!(!words.admits(Value::integer(1).of_class(&SUBSTR, &[])));
+
+        // So the meet with another kind is *proved* empty rather than left open.
+        assert_eq!(
+            words.intersect(&ints).expect("two small atoms").emptiness(),
+            Verdict::Empty
+        );
+        // And the class that confines nothing keeps the open world's answer, which
+        // is the contrast the confinement is for.
+        assert!(
+            !Descr::instance_of(ANIMAL.clone())
+                .intersect(&ints)
+                .expect("two small atoms")
+                .is_empty(),
+            "an Animal may yet be laid out as an int"
+        );
     }
 
     /// An attribute constrains a value of a listed kind, for the same reason a

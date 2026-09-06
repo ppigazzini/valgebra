@@ -68,6 +68,20 @@ class _Pair(NamedTuple):
     right: int
 
 
+class _MyInt(int):
+    """An `int` subclass: every instance is an int, and 5 is not one of them."""
+
+
+class _MyStr(str):
+    """A `str` subclass, for the same relation over a different kind."""
+
+    __slots__ = ()
+
+
+class _Plain:
+    """A class laying down no layout, whose subclasses may lay down any."""
+
+
 # A region-complete value universe whose numbers straddle the bounds the ledger
 # uses, so a subset relation over it reflects the true relation on those cases.
 _UNIVERSE = [
@@ -169,6 +183,25 @@ _DECIDED = [
         "empty", intersection(Any, complement(Any)), None, id="empty:Any&~Any"
     ),
     pytest.param("empty", complement(Any), None, id="empty:~Any"),
+    # A bare container class is its kind, so the two spellings are one schema and
+    # each is below the other.
+    pytest.param("equivalent", list, list[object], id="list==list[object]"),
+    pytest.param(
+        "equivalent", tuple, tuple[object, ...], id="tuple==tuple[object,...]"
+    ),
+    pytest.param("equivalent", set, set[object], id="set==set[object]"),
+    pytest.param(
+        "equivalent", frozenset, frozenset[object], id="frozenset==frozenset[object]"
+    ),
+    pytest.param(
+        "equivalent", dict, dict[object, object], id="dict==dict[object,object]"
+    ),
+    # A class built on a builtin narrows that builtin's kind, so it is below it.
+    pytest.param("subtype", _MyInt, int, id="MyInt<=int"),
+    pytest.param("subtype", _MyStr, str, id="MyStr<=str"),
+    pytest.param("subtype", _MyInt, union(int, str), id="MyInt<=int|str"),
+    pytest.param("empty", intersection(_MyInt, _MyStr), None, id="empty:MyInt&MyStr"),
+    pytest.param("subtype", _MyStr, complement(int), id="MyStr<=~int"),
     # A union on the right is tried branch by branch, which is lossy: it commits
     # to one branch. Where the subject is one a left-side rule reduces -- a
     # reference to its definition, a refinement to its base -- both rules are

@@ -15,6 +15,8 @@
 
 use std::collections::BTreeSet;
 
+use crate::decision::Kind;
+
 /// One class, with the order it stands in.
 ///
 /// Identity is the `id` alone: two values with one id are one class, whatever
@@ -31,6 +33,17 @@ pub struct Class {
     /// value -- Python refuses to build a class deriving from both -- which is a
     /// disjointness the derivation order alone does not show.
     layout: u32,
+    /// The kind every instance of this class has, or `None` for a class whose
+    /// instances may be of any kind.
+    ///
+    /// A class laying down a builtin layout confines its instances to that
+    /// builtin's kind, and every subclass keeps the layout -- so a `str`
+    /// subclass constrains a value *within* the `Str` kind rather than instead
+    /// of it, and belongs on that kind's line alone. A class laying down no
+    /// layout of its own confines nothing: `class Both(Plain, MyStr)` builds and
+    /// its instances are strings, so placing such a class narrowly would claim a
+    /// value does not exist. `None` is that case, and it is the default.
+    kind: Option<Kind>,
 }
 
 impl Class {
@@ -56,7 +69,27 @@ impl Class {
             id,
             ancestors,
             layout,
+            kind: None,
         }
+    }
+
+    /// The same class, confined to the kind its instances have.
+    ///
+    /// Only a caller that can see the class object knows this, so it is set
+    /// beside the constructor rather than derived from the layout tag, which is
+    /// a number the caller chose.
+    #[must_use]
+    pub fn of_kind(self, kind: Kind) -> Class {
+        Class {
+            kind: Some(kind),
+            ..self
+        }
+    }
+
+    /// The kind every instance of this class has, where the class confines it.
+    #[must_use]
+    pub fn kind(&self) -> Option<Kind> {
+        self.kind
     }
 
     /// A class deriving from nothing, laid out on its own.

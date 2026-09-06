@@ -320,6 +320,30 @@ fn build_type_object(
     if ty.is(py.None().bind(py).get_type()) {
         return Ok(Schema::NoneType);
     }
+    // A bare container class is its kind: `list` admits every list, which is the
+    // set `list[object]` names and the set the typing spec assigns an
+    // unparameterised generic. Read as an `isinstance` atom it was a different
+    // sort of thing from the sequence node beside it -- in no kind at all -- and
+    // neither spelling was decided below the other. See "What a bare builtin
+    // class denotes" in `docs/dev/01-schema-ir.md`.
+    if ty.is(py.get_type::<PyList>()) {
+        return Ok(Schema::list(SeqShape::homogeneous(Schema::ANYTHING)));
+    }
+    if ty.is(py.get_type::<PyTuple>()) {
+        return Ok(Schema::tuple(SeqShape::homogeneous(Schema::ANYTHING)));
+    }
+    if ty.is(py.get_type::<PySet>()) {
+        return Ok(Schema::Set(Box::new(Schema::ANYTHING)));
+    }
+    if ty.is(py.get_type::<PyFrozenSet>()) {
+        return Ok(Schema::FrozenSet(Box::new(Schema::ANYTHING)));
+    }
+    if ty.is(py.get_type::<PyDict>()) {
+        return Ok(Schema::KeyedMap {
+            fields: Vec::new(),
+            defaults: vec![MapClause::top()],
+        });
+    }
     let forms = forms(py)?;
     if ty.is(forms.object.bind(py)) {
         return Ok(Schema::ANYTHING);

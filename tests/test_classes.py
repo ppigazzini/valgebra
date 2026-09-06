@@ -15,7 +15,7 @@ from typing import (
 import annotated_types as at
 import pytest
 
-from valgebra import ValidationError, Validator
+from valgebra import ValidationError, Validator, complement, intersection
 
 
 class User(TypedDict):
@@ -329,3 +329,81 @@ def test_a_read_only_typed_dict_field_is_the_type_it_qualifies() -> None:
     assert schema.is_valid({"name": "a", "port": 1})
     assert not schema.is_valid({"name": "a", "port": "no"})
     assert not schema.is_valid({})
+
+
+def test_a_bare_container_class_is_its_kind() -> None:
+    """`list` and `list[object]` admit the same values, so they are one schema.
+
+    An unparameterised generic names its kind's whole set — what the typing spec
+    assigns it, and what the membership check always performed. Read as an
+    `isinstance` atom it was a different sort of thing from the sequence node
+    beside it, and neither spelling was decided below the other.
+    """
+    for bare, parameterised in (
+        (list, list[object]),
+        (tuple, tuple[object, ...]),
+        (set, set[object]),
+        (frozenset, frozenset[object]),
+        (dict, dict[object, object]),
+    ):
+        assert Validator(bare) == Validator(parameterised), bare
+        assert Validator(bare).is_equivalent(parameterised), bare
+
+
+def test_a_bare_container_class_admits_what_it_did() -> None:
+    class Sub(list):
+        pass
+
+    assert Validator(list).is_valid([])
+    assert Validator(list).is_valid([1, "a"])
+    assert Validator(list).is_valid(Sub([1]))
+    assert not Validator(list).is_valid(())
+    assert not Validator(list).is_valid({1: 2})
+    assert Validator(dict).is_valid({})
+    assert not Validator(dict).is_valid([])
+
+
+def test_a_class_built_on_a_builtin_narrows_that_kind() -> None:
+    """Every instance of a `str` subclass is a string, so the class is below it.
+
+    The class constrains a value *within* the kind rather than standing beside
+    it, which is what makes the relation decidable in one direction and refutes
+    it in the other: `int` is not below `MyInt`, and `5` is not a `MyInt`.
+    """
+
+    class MyInt(int):
+        pass
+
+    class MyStr(str):
+        __slots__ = ()
+
+    assert Validator(MyInt).is_subtype_of(int)
+    assert Validator(MyStr).is_subtype_of(str)
+    assert Validator(MyStr).is_subtype_of(complement(int))
+    assert intersection(MyInt, MyStr).is_empty()
+
+    assert not Validator(int).is_subtype_of(MyInt)
+    assert not Validator(MyInt).is_valid(5)
+    assert Validator(MyInt).is_valid(MyInt(5))
+
+
+def test_a_class_built_on_no_builtin_narrows_nothing() -> None:
+    """A subclass of a plain class may lay down any layout, so it confines none.
+
+    Placing such a class on one kind would be the one unsound direction — a
+    claim that a value does not exist — and `Both` is that value.
+    """
+
+    class Plain:
+        pass
+
+    class MyStr(str):
+        __slots__ = ()
+
+    class Both(Plain, MyStr):
+        pass
+
+    assert Validator(Plain).is_valid(Both("x"))
+    assert not intersection(Plain, str).is_empty()
+    assert not Validator(Plain).is_subtype_of(str)
+    assert not Validator(str).is_subtype_of(Plain)

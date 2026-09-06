@@ -39,14 +39,22 @@ conservative](#sound-but-conservative)).
   structural kinds, not only the scalars. `Any` is the top, spelled, so the rule
   reaches it like any other set: `intersection(Any, complement(Any))` is decided
   empty.
+- **A bare container class and its parameterised form.** `list` and
+  `list[object]` are one schema: an unparameterised generic names its kind's
+  whole set, which is what the typing spec assigns it and what the check has
+  always performed. `tuple`, `set`, `frozenset` and `dict` read the same way, as
+  `str` and `int` always did.
 - **Class and literal inclusion.** A class is a subtype of its base *classes*,
   by `issubclass`, and a literal is a subtype of any schema it is a member of. A
   dataclass or named tuple relates the same way: its schema is below one over a
   base class it carries every attribute of, each with a narrower schema, and below
-  the bare class it is an instance of. The relation is between two class atoms:
-  a scalar or a container is a node of its own rather than a class, so
-  `Validator(MyInt)` is not decided below `Validator(int)` for an `int`
-  subclass, though every value of the first is a value of the second.
+  the bare class it is an instance of. A class built on a builtin relates to that
+  builtin too: `Validator(MyInt)` is below `Validator(int)` and
+  `Validator(MyStr)` below `Validator(str)`, because every instance of such a
+  class is a value of that kind and the class narrows the kind rather than
+  standing beside it. A class built on no builtin narrows nothing — an instance
+  of a subclass of it may be a string — so it relates to a kind in neither
+  direction.
 - **Literals against other kinds.** A literal pins `type(x)` exactly, so it
   carries the kind of its constant and is decided against another kind:
   `Literal["a"]` is below `~int`, and `Literal["a"] & Literal["b"]` is empty.
