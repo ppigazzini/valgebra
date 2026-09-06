@@ -315,7 +315,9 @@ assert Validator({}).is_valid({}) and not Validator({}).is_valid({"x": 1})
 assert Validator({}).open().is_valid({"x": 1})
 
 # A typed catch-all beside a named field is widened with the record.
-assert repr(Validator({"name": str, str: int}).open()) == "{'name': str, ...}"
+assert repr(Validator({"name": str, str: int}).open()) == (
+    "{'name': str, anything: anything}"
+)
 ```
 
 So whether a typed catch-all is freed depends on whether the schema also
@@ -340,7 +342,9 @@ assert schema.is_valid(value)
 
 # Opening admits it to the inner record, so it leaves the complement.
 assert not schema.open().is_valid(value)
-assert repr(schema.open()) == "{'x': complement({'k': anything, ...}), ...}"
+assert repr(schema.open()) == (
+    "{'x': complement({'k': anything, anything: anything}), anything: anything}"
+)
 ```
 
 `close` reverses under a complement for the same reason: it narrows the inner
@@ -556,12 +560,30 @@ multiples, and predicates. See the [refinements guide](05-refinements.md).
 
 ## Stable repr
 
-A compiled validator prints back as the annotation that produces it, which makes
-schemas inspectable:
+A compiled validator prints back as an expression that builds it, which makes
+schemas inspectable — and makes what is printed something you can paste into a
+session and get the same schema from:
 
 ```python
-from valgebra import Validator
+from valgebra import Validator, anything, recursive
 
 assert repr(Validator(list[dict[str, int]])) == "list[dict[str, int]]"
 assert repr(Validator({"name": str, "age?": int})) == "{'name': str, 'age?': int}"
+
+# A recursive schema prints as the call that builds it, the back edge as the
+# lambda's own parameter.
+tree = recursive(lambda t: {"value": int, "left?": t})
+assert repr(tree) == "recursive(lambda X: {'value': int, 'left?': X})"
+assert recursive(lambda X: {"value": int, "left?": X}) == tree
+
+# An open record prints the catch-all it carries, so it reads back as itself.
+opened = Validator({"name": str}).open()
+assert repr(opened) == "{'name': str, anything: anything}"
+assert Validator({"name": str, anything: anything}) == opened
 ```
+
+It is a **rendering**, not a serialization. Two forms cannot be written as an
+expression and do not read back: a class, which is an object rather than syntax
+and prints as its name, and a schema deeper than the renderer's own bound, which
+truncates with `...`. Do not parse a repr to recover structure — see
+[inspection](09-inspection.md) for asking a schema questions instead.

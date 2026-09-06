@@ -44,10 +44,19 @@ the dunder behind a type slot and that is what introspection would show.
 | `a \| b` | `__or__`, `__ror__` | The union of the two schemas. `\|` is the operator typing already uses for a union; intersection and complement have no typing operator and stay named calls. The reflected form is what makes `None \| validator` work. |
 | `a == b` | `__eq__` | **Syntactic** equality: the schema trees, recursive definitions, and pooled constants all match. Ask `is_equivalent` for the semantic question — whether two schemas denote the same set however they are spelled. |
 | `hash(validator)` | `__hash__` | Consistent with `==`, so a validator is a dict key or a set member. It digests the schema shape and definitions only, never the pooled constants, so an unhashable constant cannot break it. |
-| `repr(validator)` | `__repr__` | The annotation expression that produces the schema. |
+| `repr(validator)` | `__repr__` | A rendering of the schema as an expression that builds it. |
 
 `copy.copy` and `copy.deepcopy` both return an equivalent validator; a validator
 is immutable, so the copy shares the pool rather than duplicating it.
+
+`repr` is a **rendering**, not a serialization. What it gives back is an
+expression that builds the same schema — a recursive schema as the `recursive`
+call it is, an open record as the catch-all entry it carries, the nullary product
+as `tuple[()]` — so it can be pasted into a session and read back. Two things it
+cannot render as an expression: a class, which is an object rather than syntax
+and appears as its name, and a schema past the renderer's own depth bound, which
+truncates with `...`. Do not parse it: it is for a person to read, and
+[inspection](09-inspection.md) says how to ask a schema questions instead.
 
 ## Lattice bounds
 

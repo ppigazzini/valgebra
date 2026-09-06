@@ -219,9 +219,13 @@ def test_deeply_nested_value_fails_cleanly() -> None:
     assert not chain.is_valid(value)
 
 
-def test_recursive_schema_renders_finitely() -> None:
+def test_recursive_schema_renders_as_the_call_that_builds_it() -> None:
+    # Finite, and rebuildable: the back edge is the lambda's own parameter
+    # rather than an ellipsis, which is a dict value the frontend reads as
+    # `Literal[Ellipsis]`.
     tree = recursive(lambda t: {"value": int, "left?": t})
-    assert repr(tree) == "{'value': int, 'left?': ...}"
+    assert repr(tree) == "recursive(lambda X: {'value': int, 'left?': X})"
+    assert recursive(lambda x: {"value": int, "left?": x}) == tree
 
 
 # --- Whole-schema transforms reach the definitions table ----------------------

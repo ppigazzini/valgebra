@@ -41,6 +41,9 @@ from valgebra import (
         ({"name": str, "age?": int}, "{'name': str, 'age?': int}"),
         (Annotated[int, at.Ge(0)], "Annotated[int, Ge(0)]"),
         (Annotated[str, at.MinLen(1)], "Annotated[str, MinLen(1)]"),
+        # The nullary product. Python spells the empty subscript `tuple[()]`;
+        # `tuple[]` is not an expression at all.
+        (tuple[()], "tuple[()]"),
     ],
 )
 def test_repr_renders_the_annotation(schema: object, expected: str) -> None:
@@ -74,12 +77,14 @@ _ROUNDTRIP_NS = {
     "union": union,
     "intersection": intersection,
     "complement": complement,
+    "recursive": recursive,
 }
 
 # The round-trippable subset: every form whose repr re-parses to the same schema.
-# Class and predicate nodes are excluded by design - an instance/object renders
-# only its class name and a predicate renders as `Predicate(...)`, neither of
-# which reconstructs the original schema.
+# Two are excluded by design and no more: a class renders only its name and a
+# predicate renders as `Predicate(...)`, and neither is an expression that
+# rebuilds what it names -- a class is an object, and a predicate is a callable.
+# Everything else here is, the recursive form and the open record included.
 ROUNDTRIP_SCHEMAS = [
     int,
     bool,
@@ -106,12 +111,19 @@ ROUNDTRIP_SCHEMAS = [
     union(int, str),
     intersection(int, complement(bool)),
     complement(int),
+    # The three forms 21.4 fixed: each rendered as something that was not an
+    # expression, or was one that built a different schema.
+    tuple[()],
+    recursive(lambda t: int | list[t]),  # ty: ignore[invalid-type-form]
+    Validator({"name": str}).open(),
+    recursive(lambda t: {"value": int, "left?": t}),
 ]
 
 
 def test_repr_of_class_and_recursive_forms() -> None:
-    # The lossy forms still render readably: a class renders as its name, a
-    # recursive reference unfolds once and shows the back edge as `...`.
+    # A class renders as its name, which names the class rather than rebuilding
+    # it -- the one form that stays a rendering, because a class is an object
+    # and not an expression.
     class Color(enum.Enum):
         RED = 1
 
@@ -125,7 +137,10 @@ def test_repr_of_class_and_recursive_forms() -> None:
     # and a later meet flattens beside that pair: the class is still named, and
     # the other members render as themselves.
     assert repr(Validator(intersection(Point, int))) == "intersection(Point, int)"
-    assert repr(recursive(lambda s: {"v": int, "n?": s})) == "{'v': int, 'n?': ...}"
+    assert (
+        repr(recursive(lambda s: {"v": int, "n?": s}))
+        == "recursive(lambda X: {'v': int, 'n?': X})"
+    )
 
 
 # A spread of values to witness that two validators accept the same set, rather
