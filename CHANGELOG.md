@@ -84,6 +84,8 @@ answer of its own, or a repair to a change not yet released.
 - fix: a literal's hash is the constant's, not its slot's
 - fix: one schema prints one way
 - test: pin why a predicate does not fold against its complement -- internal
+- fix: a required-ness qualifier survives a string annotation
+- fix: a required-ness qualifier survives a string annotation
 
 -->
 
@@ -499,6 +501,14 @@ answer of its own, or a repair to a change not yet released.
   not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
+
+- `NotRequired` and `Required` are read under `from __future__ import
+  annotations`. CPython computes a `TypedDict`'s `__required_keys__` when the
+  class is created, from the annotations as written — under PEP 563 those are
+  strings, so the qualifier was invisible to it and every optional key in every
+  module using the future import compiled as **required**, failing correct data
+  with `missing_key`. The resolved hint carries the qualifier and is now what
+  answers, so a class means the same thing with the future import as without it.
 
 - Two spellings of one schema print the same way. A union's members are ordered
   by the IR's own order and a literal sorts there by its **pool slot** -- the

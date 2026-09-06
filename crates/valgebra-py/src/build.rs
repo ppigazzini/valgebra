@@ -560,10 +560,55 @@ fn build_typed_dict(
         fields.push(Field {
             name: field_name(&name.str()?)?,
             schema: build_schema(&hint, lits, defs)?,
-            required: required.contains(&name)?,
+            // The qualifier on the *resolved* hint wins over the class's key
+            // sets. CPython fills `__required_keys__` when the class is created,
+            // from the annotations as written -- and under `from __future__
+            // import annotations` those are strings, so `NotRequired[...]` is
+            // invisible to it and every optional key was compiled required.
+            // `get_type_hints` resolves the string and keeps the qualifier, so
+            // reading it there is reading what the author wrote.
+            required: match qualified_required(&hint)? {
+                Some(stated) => stated,
+                None => required.contains(&name)?,
+            },
         });
     }
     Ok(Schema::keyed_map(fields, unnamed_keys(ty, lits, defs)?))
+}
+
+/// Whether a resolved hint states its own required-ness, and which.
+///
+/// `Required[T]` and `NotRequired[T]` say it; every other form, `ReadOnly[T]`
+/// included, says nothing and leaves the class's key sets to answer. A qualifier
+/// may wrap another -- `ReadOnly[NotRequired[T]]` is legal -- so the search goes
+/// through the ones that carry no answer rather than stopping at the first.
+fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<bool>> {
+    let py = hint.py();
+    let typing = py.import("typing")?;
+    let mut current = hint.clone();
+    for _ in 0..MAX_BUILD_DEPTH {
+        let Ok(origin) = current.getattr("__origin__") else {
+            return Ok(None);
+        };
+        for (name, answer) in [("Required", true), ("NotRequired", false)] {
+            if let Ok(marker) = typing.getattr(name)
+                && origin.is(&marker)
+            {
+                return Ok(Some(answer));
+            }
+        }
+        if !is_field_qualifier(&origin)? {
+            return Ok(None);
+        }
+        let Ok(args) = current.getattr("__args__") else {
+            return Ok(None);
+        };
+        let Ok(inner) = args.get_item(0) else {
+            return Ok(None);
+        };
+        current = inner;
+    }
+    Ok(None)
 }
 
 /// Whether `extra_items` carries the sentinel for "the author gave none".
@@ -784,11 +829,11 @@ fn is_literal_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// True if `origin` is one of the `TypedDict` field qualifiers, which
 /// `include_extras` keeps in the resolved hints.
 ///
-/// `Required`/`NotRequired` say whether the key must be present, which is read
-/// from the class's own `__required_keys__` rather than from the annotation, and
-/// `ReadOnly` says whether a consumer may write the key back — a statement about
-/// use, not about which values belong. None of the three narrows the field's set,
-/// so each is unwrapped to the type it qualifies.
+/// `Required`/`NotRequired` say whether the key must be present, which
+/// [`qualified_required`] reads from here, and `ReadOnly` says whether a
+/// consumer may write the key back — a statement about use, not about which
+/// values belong. None of the three narrows the field's *set*, so each is
+/// unwrapped to the type it qualifies.
 fn is_field_qualifier(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
     let typing = origin.py().import("typing")?;
     for name in ["Required", "NotRequired", "ReadOnly"] {

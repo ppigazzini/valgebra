@@ -695,3 +695,52 @@ fn a_class_is_read_through_what_it_declares() {
         }
     });
 }
+/// A qualifier states required-ness only from the outside of the hint.
+///
+/// `qualified_required` walks a hint outward-in, unwrapping the qualifiers that
+/// carry no answer of their own -- `ReadOnly[NotRequired[T]]` is legal -- and
+/// stopping at anything else. The stop is what this pins. A form that is *not*
+/// a field qualifier ends the search whatever it wraps, so `list[Required[int]]`
+/// says nothing about its key: the `Required` inside it qualifies the list's
+/// element position, where required-ness has no meaning, and reading it as the
+/// field's would make a key required because of the shape of its value.
+///
+/// Written against the walk rather than through a `TypedDict`, because the
+/// distinction is one step of the walk and a class would reach it only if the
+/// spec allowed the spelling. The unqualified rows are the other direction: a
+/// hint that never reaches a qualifier answers `None` by running out, not by
+/// stopping early, and a search that stopped at the wrong sign would swap them.
+#[test]
+fn a_qualifier_states_required_ness_only_from_the_outside() {
+    Python::attach(|py| {
+        let namespace = namespace(py).expect("the namespace builds");
+        let answer = |expression: &str| {
+            let hint = py
+                .eval(
+                    &CString::new(expression).expect("no interior nul"),
+                    Some(&namespace),
+                    None,
+                )
+                .unwrap_or_else(|error| panic!("{expression} does not evaluate: {error}"));
+            qualified_required(&hint).expect("the walk answers")
+        };
+        for (expression, wanted) in [
+            // Stated, and read.
+            ("typing.Required[int]", Some(true)),
+            ("typing.NotRequired[int]", Some(false)),
+            // Stated behind a qualifier that carries no answer of its own.
+            ("typing.Required[typing.Annotated[int, 1]]", Some(true)),
+            // Not stated: nothing here is a field qualifier.
+            ("int", None),
+            ("list[int]", None),
+            ("typing.Annotated[int, 1]", None),
+            // The one the walk must not read through: `list` is not a field
+            // qualifier, so the search ends at it and never sees the
+            // `Required` it holds.
+            ("list[typing.Required[int]]", None),
+            ("dict[str, typing.NotRequired[int]]", None),
+        ] {
+            assert_eq!(answer(expression), wanted, "{expression}");
+        }
+    });
+}

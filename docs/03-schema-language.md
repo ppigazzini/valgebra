@@ -458,7 +458,7 @@ assert fully_open.is_valid({"name": "Ada", "age": "old"})
 
 | Form | How it validates |
 | --- | --- |
-| `TypedDict` | a record, **open** as the typing spec defines one; required keys from the class, `Required`/`NotRequired`/`ReadOnly` honored, `closed=True`/`extra_items` obeyed |
+| `TypedDict` | a record, **open** as the typing spec defines one; `Required`/`NotRequired`/`ReadOnly` honored, `closed=True`/`extra_items` obeyed |
 | dataclass | `isinstance` plus a deep check of each declared field |
 | `NamedTuple` | `isinstance` plus a deep check of each declared field |
 | `Enum` | an instance of the enumeration (any member) |
@@ -522,8 +522,11 @@ row.touch()
 assert Validator(Row).is_valid(row)
 ``` On a `TypedDict`, `Required`,
 `NotRequired` and `ReadOnly` qualify the key rather than narrowing its type:
-requiredness is read from the class, and read-only-ness is about writing the key
-back rather than about which values belong.
+required-ness is read from the qualifier where the field carries one and from
+the class otherwise, and read-only-ness is about writing the key back rather
+than about which values belong. Reading the qualifier is what makes a class mean
+the same thing under `from __future__ import annotations`, where the class's own
+key sets are computed from strings and cannot see it.
 
 ### A `TypedDict` is open, a dict literal is closed
 
