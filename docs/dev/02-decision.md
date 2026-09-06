@@ -110,6 +110,13 @@ trait is how it asks:
 
 - `leaf_subtype` — is this literal a member of that set, is this class a subclass
   of that one;
+- `literal_sets_disjoint` — do these two *sets* of constants share a value. The
+  same relation `literals_disjoint` answers for one pair, asked of every pair at
+  once: the core compares a union with a union member by member, which is
+  quadratic in the oracle, and two twenty-thousand-member literal unions were
+  four hundred million calls and six seconds. An implementor that can hash its
+  constants answers in one pass; the default declines and the member walk
+  stands;
 - `compare` — order two pooled refinement bounds;
 - `no_int_between` — does the open interval between two bounds admit no integer.
 

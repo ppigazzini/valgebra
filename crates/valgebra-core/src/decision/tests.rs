@@ -999,6 +999,81 @@ fn a_literal_is_disjoint_by_its_constants_then_by_its_kind() {
     assert!(Schema::union(Vec::new()).disjoint_with(&Schema::Int, &Kinded));
 }
 
+/// An oracle that answers the *set* question, recording what it was handed.
+///
+/// `literal_sets_disjoint` is the whole-question form of `literals_disjoint`:
+/// an implementor that holds its constants settles two unions in one pass,
+/// where the member walk asks it once per pair. Which sets it is handed is
+/// therefore part of the contract and not an implementation detail, so this
+/// records them for a test to read back.
+#[derive(Default)]
+struct Sets {
+    asked: core::cell::RefCell<Vec<(Vec<usize>, Vec<usize>)>>,
+}
+impl Constants for Sets {}
+
+impl LeafRelations for Sets {
+    fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+        None
+    }
+    fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+        Some(left != right)
+    }
+    fn literal_sets_disjoint(&self, left: &[ConstIx], right: &[ConstIx]) -> Option<bool> {
+        let indices = |set: &[ConstIx]| {
+            set.iter()
+                .map(|constant| constant.get())
+                .collect::<Vec<_>>()
+        };
+        self.asked
+            .borrow_mut()
+            .push((indices(left), indices(right)));
+        Some(left.iter().all(|constant| !right.contains(constant)))
+    }
+}
+
+/// Two sets of literals are one question, and both sets reach the oracle whole.
+///
+/// The member walk asks once per pair, which is quadratic across the binding
+/// boundary: two twenty-thousand-member unions were four hundred million calls.
+/// So where both sides are nothing but literals the constants are gathered and
+/// handed over together. Both halves of that are asserted, because the verdict
+/// alone cannot tell the two readings apart -- they agree, which is the point
+/// -- and what the optimisation *is* is which question gets asked.
+#[test]
+fn two_sets_of_literals_are_asked_as_sets() {
+    let lit = |i: usize| Schema::Literal(ConstIx::new(i));
+    let oracle = Sets::default();
+
+    // A bare literal is a one-constant set, and the verdict is the oracle's.
+    assert!(lit(0).disjoint_with(&lit(1), &oracle));
+    assert!(!lit(0).disjoint_with(&lit(0), &oracle));
+    assert_eq!(
+        oracle.asked.take(),
+        vec![(vec![0], vec![1]), (vec![0], vec![0])]
+    );
+
+    // A union of literals is its members' constants, on either side of the
+    // question. `Schema::union` orders its members, so these read in order.
+    let table = Schema::union([lit(0), lit(2)]);
+    assert!(table.disjoint_with(&Schema::union([lit(1), lit(3)]), &oracle));
+    assert!(!table.disjoint_with(&lit(2), &oracle));
+    assert_eq!(
+        oracle.asked.take(),
+        vec![(vec![0, 2], vec![1, 3]), (vec![0, 2], vec![2])]
+    );
+
+    // A union carrying a member that is not a literal has no set of constants
+    // standing for it, so the question is not asked and the walk stands.
+    assert!(!Schema::union([lit(0), Schema::Str]).disjoint_with(&lit(1), &oracle));
+    // Nor is it asked of a union with no members. That schema denotes nothing
+    // and is disjoint from everything, which the arm below these settles; an
+    // empty set of constants would be a different question, and one this oracle
+    // would answer `true` for whatever stood against it.
+    assert!(!Schema::Union(Vec::new()).disjoint_with(&lit(0), &oracle));
+    assert!(oracle.asked.take().is_empty());
+}
+
 /// An oracle treating each pool index as its own value, so comparing indices
 /// orders the bound values they stand for.
 struct ByIndex;

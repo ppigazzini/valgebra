@@ -556,6 +556,41 @@ impl LeafRelations for PoolRelations<'_, '_> {
         left_value.eq(right_value).ok().map(|equal| !equal)
     }
 
+    fn literal_sets_disjoint(&self, left: &[ConstIx], right: &[ConstIx]) -> Option<bool> {
+        // Hash the smaller side and probe with the larger, which turns the
+        // core's member-by-member walk into one pass. Keyed by `(type, value)`
+        // because a literal pins `type(x)` exactly: `Literal[1]` and
+        // `Literal[True]` are disjoint although `1 == True`, and a set keyed by
+        // the value alone would call them equal.
+        let (probe, held) = if left.len() <= right.len() {
+            (right, left)
+        } else {
+            (left, right)
+        };
+        let seen = PySet::empty(self.py).ok()?;
+        for index in held {
+            let value = self.literals.get(index.get())?.bind(self.py);
+            // Only where the type's equality is one this oracle can trust,
+            // which is the condition `literals_disjoint` applies per pair: a
+            // builtin scalar, whose equality is Python's, or a type comparing by
+            // identity, where two distinct objects are two values.
+            if self.literal_kind(*index).is_none() && !compares_by_identity(&value.get_type()) {
+                return None;
+            }
+            seen.add((value.get_type(), value)).ok()?;
+        }
+        for index in probe {
+            let value = self.literals.get(index.get())?.bind(self.py);
+            if self.literal_kind(*index).is_none() && !compares_by_identity(&value.get_type()) {
+                return None;
+            }
+            if seen.contains((value.get_type(), value)).ok()? {
+                return Some(false);
+            }
+        }
+        Some(true)
+    }
+
     fn compare(&self, left: OperandIx, right: OperandIx) -> Option<core::cmp::Ordering> {
         // Order two refinement-bound values by Python's own comparison, so the
         // core can decide an unsatisfiable bound conjunction. An incomparable

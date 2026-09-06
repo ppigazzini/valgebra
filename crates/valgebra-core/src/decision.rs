@@ -228,6 +228,17 @@ impl Schema {
         if matches!(self, Schema::Nothing) || matches!(other, Schema::Nothing) {
             return true;
         }
+        // Two sets of literals are compared as *sets*. The recursion below is a
+        // member-by-member walk, so a union of literals against another is
+        // quadratic in the oracle: two twenty-thousand-member unions were four
+        // hundred million calls into the bindings, and six seconds. The oracle
+        // can answer the whole question at once where it holds the constants,
+        // and declines -- leaving the walk to run -- where it cannot.
+        if let (Some(left), Some(right)) = (literal_constants(self), literal_constants(other))
+            && let Some(answer) = oracle.literal_sets_disjoint(&left, &right)
+        {
+            return answer;
+        }
         // A union shares no value with a schema when none of its members does.
         // The frontend builds `Literal[...]` as a union of its constants, so a
         // single-constant literal arrives wrapped and the pair rule below would
@@ -1094,6 +1105,19 @@ pub trait LeafRelations: Constants {
         None
     }
 
+    /// Whether two *sets* of literal constants share no value, or `None` to
+    /// leave it to the pairwise question.
+    ///
+    /// The same relation [`literals_disjoint`](Self::literals_disjoint) answers
+    /// for one pair, asked of every pair at once. The core walks members against
+    /// members, which is quadratic in the oracle for two wide literal unions --
+    /// a shape a contract really writes, since an enumeration of codes is one.
+    /// An implementor that can hash its constants answers in one pass; the
+    /// default declines, and the walk stands.
+    fn literal_sets_disjoint(&self, _left: &[ConstIx], _right: &[ConstIx]) -> Option<bool> {
+        None
+    }
+
     /// Whether no integer lies between the pool values at `lo` and `hi`, under the
     /// strictness of each bound (`lo_strict` excludes `lo`, `hi_strict` excludes
     /// `hi`). The core asks this only for an integer-discrete refinement base, so a
@@ -1703,6 +1727,26 @@ fn seq_splits_across_union(
 /// int` aside), so the intersection is empty. This decides the structural-kind
 /// disjointness (a list is never a set) the scalar region bitset cannot see.
 /// Shared with the simplifier so both read the same lattice law.
+/// The constants of a schema that is a literal, or a union of nothing but
+/// literals; `None` for anything else.
+///
+/// What makes the set question askable: a union carrying one non-literal member
+/// has no set of constants standing for it, and the member walk is then the
+/// only reading.
+fn literal_constants(schema: &Schema) -> Option<Vec<ConstIx>> {
+    match schema {
+        Schema::Literal(index) => Some(vec![*index]),
+        Schema::Union(members) if !members.is_empty() => members
+            .iter()
+            .map(|member| match member {
+                Schema::Literal(index) => Some(*index),
+                _ => None,
+            })
+            .collect(),
+        _ => None,
+    }
+}
+
 pub(crate) fn has_disjoint_pair(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
     unordered_pairs(members).any(|(a, b)| a.disjoint_with(b, oracle))
 }

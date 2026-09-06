@@ -16,6 +16,7 @@ would make them agree while both being wrong. The denotation oracle in
 
 from __future__ import annotations
 
+import time
 from types import GenericAlias
 from typing import Annotated, Literal
 
@@ -122,3 +123,65 @@ def test_is_valid_agrees_with_validate(spec: object, value: object) -> None:
     except ValidationError:
         slow = False
     assert fast == slow
+
+
+def test_two_wide_literal_sets_are_decided_as_sets_not_pair_by_pair() -> None:
+    """A member-by-member walk is quadratic in the oracle, and it showed.
+
+    The core decides a union against a union by asking each member about each
+    member, so two 20,000-member literal unions were 400 million calls into the
+    bindings: six seconds for a question about two sets of integers, on a shape
+    a contract really writes -- an enumeration of codes is one.
+
+    Timed against size rather than against a constant, because the defect was
+    the *growth*: quadratic passes any bound generous enough for the small case.
+    """
+
+    def disjointness(count: int) -> float:
+        left = Validator(Literal[tuple(range(count))])  # ty: ignore[invalid-type-form]
+        right = Validator(Literal[tuple(range(count, 2 * count))])  # ty: ignore[invalid-type-form]
+        started = time.perf_counter()
+        assert intersection(left, right).is_empty()
+        return time.perf_counter() - started
+
+    small, large = disjointness(1_000), disjointness(8_000)
+    assert large < small * 24 + 0.05, (
+        f"8,000 members took {large:.3f}s against {small:.3f}s for 1,000; "
+        "the decision is scaling with the square of the set"
+    )
+
+
+def test_the_set_decision_answers_what_the_pairwise_one_did() -> None:
+    """Every edge the per-pair rule reads, asked of the set rule.
+
+    A literal pins `type(x)` exactly, so the join is keyed by `(type, value)`:
+    a set keyed by the value alone would call `Literal[1]` and `Literal[True]`
+    equal, and a rule that answered `disjoint` for an overlapping pair would be
+    unsound rather than merely slow.
+    """
+
+    def disjoint(left: object, right: object) -> bool:
+        return intersection(left, right).is_empty()
+
+    assert disjoint(Literal[1, 2, 3], Literal[4, 5, 6])
+    assert not disjoint(Literal[1, 2, 3], Literal[3, 4, 5])
+    assert intersection(Literal[1, 2, 3], Literal[3, 4, 5]).is_valid(3)
+    # A shared value across types is not shared: the literal pins the type.
+    assert disjoint(Literal[1], Literal[True])
+    assert disjoint(Literal[1.0], Literal[1])  # ty: ignore[invalid-type-form]
+    assert disjoint(Literal["1"], Literal[1])
+    assert disjoint(Literal[b"a"], Literal["a"])
+    # And the same constant is the same value.
+    assert not disjoint(Literal[7], Literal[7])
+    # `None` rather than `Literal[None]`: the linters rewrite the second on
+    # sight, and the frontend builds the same node from either.
+    assert not disjoint(None, None)
+    assert not disjoint(Literal[1, "a"] | None, Literal["a", 2])
+
+
+def test_a_union_with_a_non_literal_member_falls_back_to_the_member_walk() -> None:
+    """The set question needs a set of constants; a kind is not one."""
+    assert intersection(Literal[1, 2] | bytes, Literal[3, 4]).is_empty()
+    assert not intersection(Literal[1, 2] | bytes, Literal[3, 4] | bytes).is_empty()
+    # A kind on one side only: the walk asks each literal against `bytes`.
+    assert intersection(Literal[1, 2], Literal[3, 4] | bytes).is_empty()

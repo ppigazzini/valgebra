@@ -89,6 +89,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: refuse a bound against nan, which orders nothing
 - fix: the merge base is never the commit being measured -- internal
 - fix: take the version from the crate, not from the metadata reader
+- fix: decide two sets of literals as sets, not pair by pair
 
 -->
 
@@ -504,6 +505,13 @@ answer of its own, or a repair to a change not yet released.
   not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
+
+- Two wide literal unions are decided as sets. The core compares a union with a
+  union member by member, so `intersection(Literal[*range(20_000)],
+  Literal[*range(20_000, 40_000)]).is_empty()` was 400 million calls into the
+  bindings and **six seconds**; it is now 10 ms. The bindings answer the whole
+  disjointness question in one pass where they can hash the constants, and
+  decline — leaving the member walk — where they cannot.
 
 - `import valgebra` costs **0.9 ms**, down from 32. `__version__` was read with
   `importlib.metadata.version()`, which pulls `email`, `zipfile`, `inspect` and
