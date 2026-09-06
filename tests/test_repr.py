@@ -38,7 +38,7 @@ from valgebra import (
         (int | str, "int | str"),
         (Literal["a"], "Literal['a']"),
         (Literal["a", "b"], "Literal['a'] | Literal['b']"),
-        ({"name": str, "age?": int}, "{'name': str, 'age?': int}"),
+        ({"name": str, "age?": int}, "{'age?': int, 'name': str}"),
         (Annotated[int, at.Ge(0)], "Annotated[int, Ge(0)]"),
         (Annotated[str, at.MinLen(1)], "Annotated[str, MinLen(1)]"),
         # The nullary product. Python spells the empty subscript `tuple[()]`;
@@ -139,7 +139,7 @@ def test_repr_of_class_and_recursive_forms() -> None:
     assert repr(Validator(intersection(Point, int))) == "intersection(Point, int)"
     assert (
         repr(recursive(lambda s: {"v": int, "n?": s}))
-        == "recursive(lambda X: {'v': int, 'n?': X})"
+        == "recursive(lambda X: {'n?': X, 'v': int})"
     )
 
 

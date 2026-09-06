@@ -4214,4 +4214,60 @@ mod index_laws {
             );
         }
     }
+
+    /// Two spellings of one record, and of one map, are one term: fields are
+    /// ordered by name and clauses by their own order, with a repeat dropped.
+    #[test]
+    fn a_record_and_a_map_are_one_term_however_their_parts_are_written() {
+        let field = |name: &str, schema: Schema| Field {
+            name: name.to_owned(),
+            schema,
+            required: true,
+        };
+        assert_eq!(
+            Schema::record(
+                vec![field("b", Schema::Str), field("a", Schema::Int)],
+                Openness::Closed
+            ),
+            Schema::record(
+                vec![field("a", Schema::Int), field("b", Schema::Str)],
+                Openness::Closed
+            )
+        );
+        assert_eq!(
+            Schema::attr_record(vec![field("b", Schema::Str), field("a", Schema::Int)]),
+            Schema::attr_record(vec![field("a", Schema::Int), field("b", Schema::Str)])
+        );
+
+        let clause = |key: Schema, value: Schema| MapClause { key, value };
+        let one_way = Schema::keyed_map(
+            vec![],
+            vec![
+                clause(Schema::Str, Schema::Int),
+                clause(Schema::Int, Schema::Bool),
+            ],
+        );
+        let other_way = Schema::keyed_map(
+            vec![],
+            vec![
+                clause(Schema::Int, Schema::Bool),
+                clause(Schema::Str, Schema::Int),
+            ],
+        );
+        let repeated = Schema::keyed_map(
+            vec![],
+            vec![
+                clause(Schema::Int, Schema::Bool),
+                clause(Schema::Str, Schema::Int),
+                clause(Schema::Int, Schema::Bool),
+            ],
+        );
+        assert_eq!(one_way, other_way);
+        assert_eq!(one_way, repeated);
+        // And the order is a real one: the two clauses are still two.
+        let Schema::KeyedMap { defaults, .. } = &one_way else {
+            unreachable!()
+        };
+        assert_eq!(defaults.len(), 2);
+    }
 }

@@ -15,6 +15,7 @@
 
 mod build;
 mod check;
+mod equality;
 mod errors;
 mod exception;
 mod input;

@@ -648,7 +648,7 @@ fn build_object(
     if fields.is_empty() {
         return Ok(instance);
     }
-    Ok(Schema::meet([instance, Schema::AttrRecord { fields }]))
+    Ok(Schema::meet([instance, Schema::attr_record(fields)]))
 }
 
 /// Build the IR for a parametrized typing generic given its origin and args.
@@ -1027,14 +1027,7 @@ fn build_refine(
     for constraint in &constraints {
         check_constraint_fits(&base_schema, constraint, lits)?;
     }
-    if constraints.is_empty() {
-        Ok(base_schema)
-    } else {
-        Ok(Schema::Refine {
-            base: Box::new(base_schema),
-            constraints,
-        })
-    }
+    Ok(Schema::refine(base_schema, constraints))
 }
 
 /// Whether the values a base admits can answer a constraint.

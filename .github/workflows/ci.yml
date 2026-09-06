@@ -705,7 +705,7 @@ jobs:
           # change touched, because a Rust test and the code it covers are swept
           # together here.
           git diff --name-only --diff-filter=d "$base"...HEAD -- '*.rs' > changed.txt
-          walk=$(grep -E '^crates/valgebra-py/src/(check/(walk|ctx)|build)\.rs$' changed.txt || true)
+          walk=$(grep -E '^crates/valgebra-py/src/(check/(walk|ctx)|build|equality)\.rs$' changed.txt || true)
           {
             echo "walk<<EOF"; echo "$walk"; echo "EOF"
           } >> "$GITHUB_OUTPUT"
@@ -722,6 +722,7 @@ jobs:
             --file crates/valgebra-py/src/check/walk.rs \
             --file crates/valgebra-py/src/check/ctx.rs \
             --file crates/valgebra-py/src/build.rs \
+            --file crates/valgebra-py/src/equality.rs \
             --features interpreter-tests -j 2 --timeout-multiplier 20 \
             --shard "${{ matrix.shard }}/3" \
             --output walk-diff-mutants \

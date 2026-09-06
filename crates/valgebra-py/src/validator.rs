@@ -1143,32 +1143,41 @@ impl Validator {
             return py.NotImplemented().into_bound(py);
         };
         let other = bound.get();
-        let equal = self.schema == other.schema
-            && self.definitions == other.definitions
-            && self.literals.len() == other.literals.len()
-            // Identity first, so a validator equals itself even when it pools a
-            // value that is not equal to itself, such as NaN.
-            && self
-                .literals
-                .iter()
-                .zip(&other.literals)
-                .all(|(a, b)| {
-                    let (a, b) = (a.bind(py), b.bind(py));
-                    a.is(b)
-                        || (a.get_type().is(b.get_type()) && a.eq(b).unwrap_or(false))
-                });
+        let equal = crate::equality::schemas_equal(
+            py,
+            &self.schema,
+            &crate::equality::Side {
+                definitions: &self.definitions,
+                pool: &self.literals,
+            },
+            &other.schema,
+            &crate::equality::Side {
+                definitions: &other.definitions,
+                pool: &other.literals,
+            },
+        );
         PyBool::new(py, equal).to_owned().into_any()
     }
 
-    /// A hash consistent with structural equality. It digests the schema shape
-    /// and definitions only, never the pooled constant values, so it stays total
-    /// (an unhashable pooled constant cannot break it) and equal validators hash
-    /// alike.
+    /// A hash consistent with equality, which is equality modulo the pool.
+    ///
+    /// So it digests the schema's **shape**: the node kinds and the parts of
+    /// them a pool slot cannot reach. Not the slots themselves, because two
+    /// equal validators may index one constant at different slots; not the
+    /// pooled values either, because an equal pair must hash alike and reading a
+    /// value would need the interpreter and a hashable constant, and a validator
+    /// must stay usable as a key whatever it pools. A union's members are folded
+    /// with a commutative operation, since their order is not part of the
+    /// schema. The result is coarse -- `Literal[1]` and `Literal[2]` land
+    /// together -- and coarse is the safe direction: equality separates them.
     fn __hash__(&self) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        self.schema.hash(&mut hasher);
-        self.definitions.hash(&mut hasher);
+        crate::equality::hash_shape(&self.schema, &mut hasher);
+        self.definitions.len().hash(&mut hasher);
+        for definition in &self.definitions {
+            crate::equality::hash_shape(definition, &mut hasher);
+        }
         hasher.finish()
     }
 }

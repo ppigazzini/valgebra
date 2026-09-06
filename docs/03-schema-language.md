@@ -614,12 +614,17 @@ session and get the same schema from:
 from valgebra import Validator, anything, recursive
 
 assert repr(Validator(list[dict[str, int]])) == "list[dict[str, int]]"
-assert repr(Validator({"name": str, "age?": int})) == "{'name': str, 'age?': int}"
+
+# A record's fields print in name order, whatever order they were written in:
+# they are a *map*, so the order is not part of the schema, and two spellings of
+# one record are one schema.
+assert repr(Validator({"name": str, "age?": int})) == "{'age?': int, 'name': str}"
+assert Validator({"name": str, "age?": int}) == Validator({"age?": int, "name": str})
 
 # A recursive schema prints as the call that builds it, the back edge as the
 # lambda's own parameter.
 tree = recursive(lambda t: {"value": int, "left?": t})
-assert repr(tree) == "recursive(lambda X: {'value': int, 'left?': X})"
+assert repr(tree) == "recursive(lambda X: {'left?': X, 'value': int})"
 assert recursive(lambda X: {"value": int, "left?": X}) == tree
 
 # An open record prints the catch-all it carries, so it reads back as itself.

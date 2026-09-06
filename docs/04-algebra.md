@@ -209,6 +209,50 @@ small = Validator(Annotated[list[int], at.MaxLen(3)])
 assert small.is_valid([1, 2, 3]) and not small.is_valid([1, 2, 3, 4])
 ```
 
+## What `==` compares
+
+`==` asks whether two validators are the **same schema**, and two spellings of
+one schema are one schema: a record's fields, a map's clauses, a refinement's
+markers and a union's members are sets, so the order they were written in is not
+part of what they name.
+
+```python
+from typing import Annotated, Literal
+
+import annotated_types as at
+
+from valgebra import Validator, union
+
+assert Validator({"a": int, "b": str}) == Validator({"b": str, "a": int})
+assert Validator(Literal[1, 2]) == Validator(Literal[2, 1])
+assert Validator(Annotated[int, at.Ge(0), at.Le(9)]) == Validator(
+    Annotated[int, at.Le(9), at.Ge(0)]
+)
+
+# So a union of two spellings folds to one member, and a validator is a usable
+# dictionary key however the schema behind it was written.
+assert union({"a": int, "b": str}, {"b": str, "a": int}) == Validator(
+    {"a": int, "b": str}
+)
+assert len({Validator(Literal[1, 2]), Validator(Literal[2, 1])}) == 1
+```
+
+**`==` is not `is_equivalent`.** Equality is what the constructors settle:
+flattening, identities, absorption, the complement laws, and the orders above.
+Equivalence is what the decision procedures *prove*, and it decides a great deal
+more — `bool` and `Literal[True, False]` are one set and two terms.
+
+```python
+from typing import Literal
+
+from valgebra import Validator, intersection, nothing
+
+assert Validator(bool).is_equivalent(Literal[True, False])
+assert Validator(bool) != Validator(Literal[True, False])
+assert intersection(int, str).is_equivalent(nothing)
+assert intersection(int, str) != Validator(nothing)
+```
+
 ## The simplifier is going
 
 `simplify` is **deprecated** and is removed in the next minor version. Calling it

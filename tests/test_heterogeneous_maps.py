@@ -42,7 +42,10 @@ def test_named_field_takes_precedence_over_the_catch_all() -> None:
 
 
 def test_repr_round_trips_the_forms() -> None:
-    assert repr(Validator({str: int, int: str})) == "{str: int, int: str}"
+    # Clause order is not part of the schema -- the clauses are unordered, so
+    # the two spellings are one map and the canonical one is what prints.
+    assert repr(Validator({str: int, int: str})) == "{int: str, str: int}"
+    assert Validator({str: int, int: str}) == Validator({int: str, str: int})
     assert repr(Validator({"name": str, str: int})) == "{'name': str, str: int}"
 
 

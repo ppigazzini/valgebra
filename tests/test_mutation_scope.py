@@ -50,6 +50,7 @@ SWEPT = {
     "crates/valgebra-py/src/check/walk.rs",
     "crates/valgebra-py/src/check/ctx.rs",
     "crates/valgebra-py/src/build.rs",
+    "crates/valgebra-py/src/equality.rs",
 }
 
 

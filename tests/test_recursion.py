@@ -231,7 +231,7 @@ def test_recursive_schema_renders_as_the_call_that_builds_it() -> None:
     # rather than an ellipsis, which is a dict value the frontend reads as
     # `Literal[Ellipsis]`.
     tree = recursive(lambda t: {"value": int, "left?": t})
-    assert repr(tree) == "recursive(lambda X: {'value': int, 'left?': X})"
+    assert repr(tree) == "recursive(lambda X: {'left?': X, 'value': int})"
     assert recursive(lambda x: {"value": int, "left?": x}) == tree
 
 

@@ -66,6 +66,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a schema is built in the lattice normal form
 - feat: retire the term rewrites the algebra does not need
 - feat: a type alias that names itself is the fixpoint it writes
+- feat: two spellings of one schema compare equal
 
 -->
 
@@ -111,6 +112,35 @@ answer of its own, or a repair to a change not yet released.
   conservative one, as before. What stays conservative is recursion, a length
   bound over a shape that is not text, an attribute record beside a builtin kind,
   and a predicate.
+
+- **Two spellings of one schema are one schema.** A record's fields, a map's
+  clauses, a refinement's markers and a union's members are sets, so the order
+  they were written in is no longer part of the term: `==` says so, `hash`
+  agrees, a union of two spellings folds to one member, and a validator is a
+  usable dictionary key whatever order its schema was written in. A repeated
+  marker is dropped, since a constraint written twice narrows once.
+
+  ```python
+  from typing import Annotated, Literal
+
+  import annotated_types as at
+
+  from valgebra import Validator, union
+
+  assert Validator({"a": int, "b": str}) == Validator({"b": str, "a": int})
+  assert Validator(Literal[1, 2]) == Validator(Literal[2, 1])
+  assert Validator(Annotated[int, at.Ge(0), at.Le(9)]) == Validator(
+      Annotated[int, at.Le(9), at.Ge(0)]
+  )
+  assert union({"a": int}, {"a": int}) == Validator({"a": int})
+  ```
+
+  **`repr` prints the canonical order rather than the written one**, which is
+  the visible half: `{"name": str, "age?": int}` renders as `{'age?': int,
+  'name': str}`. It still rebuilds the schema. A test pinning the written order
+  of a record's fields, a map's clauses or a refinement's markers needs
+  updating; one pinning a union's or a literal's does not, since those keep the
+  order they were built in.
 
 - **A PEP 695 `type` alias that names itself builds the fixpoint it writes.**
   The alias is the binder: it is reached again while its own body is read, and

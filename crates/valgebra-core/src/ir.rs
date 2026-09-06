@@ -739,9 +739,66 @@ impl Schema {
     /// frontend spells; this is the general one they are special cases of, and a
     /// mixed record-and-catch-all needs it.
     #[must_use]
-    pub fn keyed_map(fields: Vec<Field>, defaults: Vec<MapClause>) -> Schema {
+    pub fn keyed_map(mut fields: Vec<Field>, mut defaults: Vec<MapClause>) -> Schema {
+        canonical_fields(&mut fields);
+        canonical_clauses(&mut defaults);
         Schema::KeyedMap { fields, defaults }
     }
+
+    /// An object node: the attributes an instance must carry, in canonical order.
+    ///
+    /// The record half of a class schema, met with the `Instance` atom that
+    /// names the class. Named fields, like a dict record's, so the same
+    /// canonical order applies for the same reason.
+    #[must_use]
+    pub fn attr_record(mut fields: Vec<Field>) -> Schema {
+        canonical_fields(&mut fields);
+        Schema::AttrRecord { fields }
+    }
+
+    /// A refinement node: `base` narrowed by `constraints`, in canonical order.
+    ///
+    /// With no constraint there is nothing to narrow, so the base is returned as
+    /// it stands rather than wrapped in a node that says nothing -- which is the
+    /// identity law, settled where the schema is built like the others.
+    #[must_use]
+    pub fn refine(base: Schema, mut constraints: Vec<Constraint>) -> Schema {
+        constraints.sort();
+        constraints.dedup();
+        if constraints.is_empty() {
+            return base;
+        }
+        Schema::Refine {
+            base: Box::new(base),
+            constraints,
+        }
+    }
+}
+
+/// Put a record's fields in the order two spellings of one record agree on.
+///
+/// A record's fields are a *map*: `{"a": int, "b": str}` and `{"b": str, "a":
+/// int}` admit exactly the same dicts, and until they were ordered here the two
+/// were different terms -- `==` said so, `hash` said so, and a union of the pair
+/// kept both members because the dedup that folds a repeated member compares
+/// terms. Ordering by name is what makes the written order stop being part of
+/// the schema.
+///
+/// The name alone is the key: a record cannot declare one name twice (the
+/// frontend refuses it, and a dict literal cannot express it), so the order is
+/// total and the sort is stable in the only way it needs to be.
+fn canonical_fields(fields: &mut [Field]) {
+    fields.sort_by(|a, b| a.name.cmp(&b.name));
+}
+
+/// Put a map's catch-all clauses in the order two spellings agree on.
+///
+/// The clauses are unordered here -- a deliberate narrowing of the model, which
+/// orders them -- so `{str: int, int: bool}` and `{int: bool, str: int}` govern
+/// exactly the same dicts and are one schema.
+fn canonical_clauses(defaults: &mut Vec<MapClause>) {
+    defaults.sort();
+    defaults.dedup();
 }
 
 impl SeqShape {
@@ -1372,17 +1429,17 @@ impl Schema {
             // *closed* record is a record, and the empty clause list is what says
             // so; a mapping has a clause and no field.
             Schema::KeyedMap { fields, defaults } if !fields.is_empty() || defaults.is_empty() => {
-                Schema::KeyedMap {
-                    fields: fields
+                Schema::keyed_map(
+                    fields
                         .iter()
                         .filter(|field| !already_said(field, defaults))
                         .map(|field| field.map_schema(&|s| s.with_records_open(open)))
                         .collect(),
-                    defaults: match open {
+                    match open {
                         Openness::Open => vec![MapClause::top()],
                         Openness::Closed => Vec::new(),
                     },
-                }
+                )
             }
             // Every other node carries the transform to its children and keeps
             // its own payloads. Spelling the descent out here again is what let
