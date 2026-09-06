@@ -351,8 +351,16 @@ impl Guarded {
 /// tuples, sets, mappings) push a segment per level as they descend.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PathSegment {
-    /// A mapping or record key.
+    /// A mapping or record key that is a string.
     Key(String),
+    /// A mapping key that is an integer.
+    ///
+    /// Separate from [`PathSegment::Key`] because the path is what a caller
+    /// walks back down to the value, and `d[2]` and `d["2"]` are different
+    /// entries of the same dict: rendering an integer key as its text made the
+    /// two indistinguishable and the path unusable on a dict keyed by numbers.
+    /// Separate from [`PathSegment::Index`] because it is not a position.
+    IntKey(i64),
     /// A sequence, tuple, or set position.
     Index(usize),
 }

@@ -44,3 +44,38 @@ def test_str_is_the_single_message_for_one_failure() -> None:
     with pytest.raises(ValidationError) as info:
         Validator(int).validate("x")
     assert str(info.value) == info.value.message
+
+
+def test_an_integer_key_stays_an_integer_in_the_path() -> None:
+    """`d[2]` and `d["2"]` are different entries, and the path says which.
+
+    The path is what a caller walks back down to the offending value, and every
+    key used to arrive as text -- so a dict keyed by numbers reported a location
+    that indexed nothing. A string key is still itself; anything that is neither
+    a string nor an integer has no spelling in a path made of the two, and
+    appears as its repr.
+    """
+    numbered = Validator(dict[int, int])
+    with pytest.raises(ValidationError) as failure:
+        numbered.validate({1: 1, 2: "x"})
+    (error,) = failure.value.errors
+    assert error["path"] == (2,)
+    assert "at [2]" in error["message"]
+
+    # And the value the path names is reachable by walking it.
+    value = {1: 1, 2: "x"}
+    walked = value
+    for step in error["path"]:
+        walked = walked[step]
+    assert walked == "x"
+
+    # A string key is unchanged, and the two do not collide.
+    text = Validator(dict[str, int])
+    with pytest.raises(ValidationError) as failure:
+        text.validate({"2": "x"})
+    assert failure.value.errors[0]["path"] == ("2",)
+
+    # A key that is neither names itself without pretending to be walkable.
+    with pytest.raises(ValidationError) as failure:
+        text.validate({1.5: 1})
+    assert failure.value.errors[0]["path"] == ("1.5",)

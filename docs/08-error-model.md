@@ -17,10 +17,12 @@ A `ValidationError` exposes:
   - `code` — a stable, machine-readable code (e.g. `int_type`, `missing_key`,
     `too_short`).
   - `path` — the location of the offending value from the root, a tuple of
-    string keys and integer indices (empty at the root). A dict key that is not
-    a string has no spelling here, so it appears as its `repr`: the segment names
-    the key rather than being one a caller can index back with. A string key is
-    itself, in full.
+    string keys, integer keys and integer indices (empty at the root). A string
+    key is itself, in full, and an **integer key is itself as an integer**, so
+    walking the path back down reaches the value: `d[2]` and `d["2"]` are
+    different entries and the path says which. A key that is neither has no
+    spelling here and appears as its `repr` — naming the key rather than being
+    one a caller can index back with.
   - `message` — the rendered one-line human message.
   - `expected` — a short label of the expected set (e.g. `int`).
   - `value` — a repr-style summary of the offending value.

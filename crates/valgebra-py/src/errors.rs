@@ -190,6 +190,7 @@ fn build_path<'py>(py: Python<'py>, path: &[PathSegment]) -> PyResult<Bound<'py,
     for segment in path {
         let item = match segment {
             PathSegment::Key(key) => key.as_str().into_pyobject(py)?.into_any(),
+            PathSegment::IntKey(key) => (*key).into_pyobject(py)?.into_any(),
             PathSegment::Index(index) => (*index).into_pyobject(py)?.into_any(),
         };
         items.push(item);

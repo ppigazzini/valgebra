@@ -71,6 +71,8 @@ answer of its own, or a repair to a change not yet released.
 - feat: decide a recursive schema against the kinds its body admits
 - feat: a sequence's length is a property its automaton can state
 - feat: an enumeration is the union of the members it can be
+- feat: refuse to pickle a validator with a message that says what to send
+- fix: an integer key stays an integer in an error path
 
 -->
 
@@ -116,6 +118,27 @@ answer of its own, or a repair to a change not yet released.
   conservative one, as before. What stays conservative is recursion, a length
   bound over a shape that is not text, an attribute record beside a builtin kind,
   and a predicate.
+
+- **An integer key stays an integer in an error path.** The `path` a failure
+  reports is what a caller walks back down to the offending value, and every
+  mapping key arrived as text -- so a dict keyed by numbers reported a location
+  that indexed nothing, and `d[2]` and `d["2"]` were indistinguishable. A key
+  that is a string or an integer is now itself; anything else has no spelling in
+  a path made of those two and appears as its repr, as before.
+
+  ```python
+  from valgebra import ValidationError, Validator
+
+  try:
+      Validator(dict[int, int]).validate({1: 1, 2: "x"})
+  except ValidationError as error:
+      assert error.errors[0]["path"] == (2,)
+  ```
+
+- **A validator cannot be pickled, and says what to send instead.** It holds the
+  classes and callables its schema names, so the schema is what travels;
+  rebuilding is about as cheap as unpickling would be. `ValidationError` pickles
+  as before.
 
 - **A length bound on a list or a tuple is decided.** A length is a regular
   property of a sequence -- "any element, that many times" -- so the

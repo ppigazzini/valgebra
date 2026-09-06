@@ -46,7 +46,7 @@ use valgebra_core::{
 use crate::check::ctx::{Ctx, MAX_WALK_DEPTH, WalkMode};
 use crate::check::index::compile_pattern;
 use crate::check::violation::{
-    key_label, located, mismatch, summarize_value, type_fail, type_mismatch,
+    key_segment, located, mismatch, summarize_value, type_fail, type_mismatch,
 };
 use crate::errors::{class_label, summarize};
 use crate::input::Value;
@@ -937,7 +937,7 @@ fn keyed_map_explain(
         if let Some(clause) = defaults.first() {
             // A clause exists but did not cover this key: surface the key and
             // value violations against it (the homogeneous-mapping error).
-            path.push(PathSegment::Key(key_label(key)));
+            path.push(key_segment(key));
             member(&clause.key, &Value::Py(key), path, ctx, out);
             member(&clause.value, &Value::Py(val), path, ctx, out);
             path.pop();
