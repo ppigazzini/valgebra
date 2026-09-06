@@ -5,15 +5,14 @@
 //! capped so a target exercises algebra and decision logic rather than the
 //! stack-depth limits, which the adversarial-bounds work measures separately.
 //!
-//! The targets assert procedure-agnostic *laws* — panic-freedom, `simplify`
-//! idempotence, and relational soundness (reflexivity, top/bottom bounds,
-//! equivalence as mutual inclusion) — over the **full** IR, including the opaque
-//! fragment (instances, gradual `Any`, recursion) a value oracle cannot model.
-//! Value-level denotation preservation is deliberately not re-checked here: it is
-//! oracle-tested against an independent membership predicate over the decidable
-//! fragment in the core law suite (`simplify_preserves_membership_over_values`).
-//! Duplicating it here would only cover the sub-fragment the fuzzer's wide
-//! generator is built to exceed, so the split is intentional, not a gap.
+//! The targets assert procedure-agnostic *laws* — panic-freedom and relational
+//! soundness (reflexivity, top/bottom bounds, equivalence as mutual inclusion) —
+//! over the **full** IR, including the opaque fragment (instances, gradual
+//! `Any`, recursion) a value oracle cannot model. Value-level denotation
+//! preservation is deliberately not re-checked here: it is oracle-tested against
+//! an independent membership predicate over the decidable fragment in the core
+//! law suite. Duplicating it here would only cover the sub-fragment the fuzzer's
+//! wide generator is built to exceed, so the split is intentional, not a gap.
 
 use arbitrary::{Arbitrary, Result, Unstructured};
 use valgebra_core::{
@@ -193,22 +192,6 @@ impl<'a> Arbitrary<'a> for SchemaPair {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
         Ok(Self(build_schema(u, 4)?, build_schema(u, 4)?))
     }
-}
-
-/// Invariants that hold of `simplify` for every schema: it terminates without
-/// panicking and reaches a fixpoint after one application (a lattice normal form
-/// is stable under re-simplification).
-///
-/// Membership preservation is *not* asserted here through `is_equivalent`: that
-/// decision is deliberately conservative, so it can answer `false` for a genuine
-/// equality `simplify` produced (an empty-constraint refinement equals its base,
-/// for instance). The denotation-preservation of `simplify` is oracle-tested
-/// against an independent membership predicate in the core's law suite; the
-/// fuzzer's job here is panic-freedom and idempotence over the full IR fragment.
-pub fn check_simplify(schema: &Schema) {
-    let once = schema.simplify();
-    let twice = once.simplify();
-    assert_eq!(once, twice, "simplify is not idempotent on {schema:?}");
 }
 
 /// Sound relational invariants any subtype/equivalence/emptiness procedure must

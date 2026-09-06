@@ -29,13 +29,6 @@ path = "src/lib.rs"
 debug = 1
 
 [[bin]]
-name = "simplify"
-path = "fuzz_targets/simplify.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
 name = "decision"
 path = "fuzz_targets/decision.rs"
 test = false

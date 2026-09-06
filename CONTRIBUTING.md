@@ -143,13 +143,13 @@ has six layers:
 - **Snapshots.** Error messages and `repr` output are pinned with insta and
   syrupy so a wording change is a deliberate, reviewed diff.
 - **Coverage-guided fuzzing.** libFuzzer targets in `fuzz/` drive the simplifier
-  and the decision procedures with `arbitrary`-built schemas, asserting the sound
-  invariants (no panic, idempotent normalization, the order laws). The same
-  invariants run on the merge gate as structural property tests; the fuzz soak
-  runs nightly, and its corpus is cached across runs and minimized after each,
-  so the fuzzer accumulates the inputs it has learned reach new code instead of
-  restarting cold from the committed seeds. Build and run a target with
-  `cargo +nightly fuzz run simplify fuzz/corpus/simplify fuzz/seeds/simplify`
+  the decision procedures with `arbitrary`-built schemas, asserting the sound
+  invariants (no panic, the order laws). The same invariants run on the merge
+  gate as structural property tests; the fuzz soak runs nightly, and its corpus
+  is cached across runs and minimized after each, so the fuzzer accumulates the
+  inputs it has learned reach new code instead of restarting cold from the
+  committed seeds. Build and run the target with
+  `cargo +nightly fuzz run decision fuzz/corpus/decision fuzz/seeds/decision`
   (needs `cargo-fuzz`); the corpus directory is named first, so what the run
   learns lands there rather than in the tracked seeds.
 

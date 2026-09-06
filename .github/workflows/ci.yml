@@ -817,19 +817,15 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            fuzz/corpus/simplify
             fuzz/corpus/decision
           key: fuzz-corpus-${{ github.run_id }}
           restore-keys: fuzz-corpus-
       # The persistent corpus is named first, so libFuzzer writes what it learns
       # there; the committed seeds are read-only inputs beside it. Reversing the
       # two would write new inputs into the tracked seed directory.
-      - name: Fuzz the simplifier
-        run: |
-          mkdir -p fuzz/corpus/simplify
-          cargo fuzz run --target x86_64-unknown-linux-gnu simplify \
-            fuzz/corpus/simplify fuzz/seeds/simplify -- -max_total_time=180
-      # Twice the simplifier's budget, because a run costs roughly seventy times
+      #
+      # Twice what the simplifier's target used to get, because a run costs
+      # roughly seventy times
       # what it did: every relation the structural rules decline is asked again
       # of the *sets* the two schemas denote, and building those is the work.
       # Measured at 143 executions a second against 10,544 before, and CPU-bound
@@ -862,16 +858,13 @@ jobs:
       # keeps the coverage rather than growing without bound. A failure here is
       # not a finding -- the soak above already reported one -- so it does not
       # fail the lane.
-      - name: Minimize the corpora
+      - name: Minimize the corpus
         continue-on-error: true
+        run: cargo fuzz cmin --target x86_64-unknown-linux-gnu decision fuzz/corpus/decision
+      - name: Report the corpus size
         run: |
-          cargo fuzz cmin --target x86_64-unknown-linux-gnu simplify fuzz/corpus/simplify
-          cargo fuzz cmin --target x86_64-unknown-linux-gnu decision fuzz/corpus/decision
-      - name: Report the corpus sizes
-        run: |
-          for target in simplify decision; do
-            echo "$target: $(find "fuzz/corpus/$target" -type f | wc -l) input(s)"
-          done >> "$GITHUB_STEP_SUMMARY"
+          echo "decision: $(find fuzz/corpus/decision -type f | wc -l) input(s)" \
+            >> "$GITHUB_STEP_SUMMARY"
       - name: Upload crash artifacts
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

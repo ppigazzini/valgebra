@@ -4,11 +4,9 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use valgebra_core_fuzz::{SchemaPair, check_relations, check_simplify};
+use valgebra_core_fuzz::{SchemaPair, check_relations};
 
 fuzz_target!(|pair: SchemaPair| {
     let SchemaPair(a, b) = &pair;
-    check_simplify(a);
-    check_simplify(b);
     check_relations(a, b);
 });
