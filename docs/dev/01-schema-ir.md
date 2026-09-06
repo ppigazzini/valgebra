@@ -628,6 +628,14 @@ records denoting one set open to one set, which is a law with a test.
 the identity it is. That is a judgement about the surface rather than about the
 algebra, and it is the only one here.
 
+**And the operator surface stops at `|`.** It is there because Python's own type
+syntax writes a union that way -- `int | str` is a union before this library
+sees it, and `__ror__` is what lets `None | validator` work -- so answering `|`
+is answering the language. `&` and `~` would be second spellings of
+`intersection` and `complement`, which the ship-versus-recipe rule refuses:
+shorter is not a reason. A validator does not pickle either, and the refusal
+says what to send instead ([docs/17-boundaries.md](../17-boundaries.md)).
+
 `simplify` was the lattice normal form of a term the constructors left
 un-normalised. Once construction settles the laws -- see the next section -- the
 schema a caller holds *is* that normal form, `repr` shows it and `==` compares

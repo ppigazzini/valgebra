@@ -100,6 +100,50 @@ applied to it.
   are complementary, and the [foundations](13-foundations.md) page says where
   their models agree and where they part.
 
+## One operator, and it is the one typing already uses
+
+`a | b` builds a union, because `|` is what Python's own type syntax uses for
+one — `int | str` is a union before valgebra sees it, and `__ror__` is what
+makes `None | validator` work. There is no `&` and no `~`.
+
+That is the ship-versus-recipe rule rather than an oversight: `intersection` and
+`complement` are functions that already exist and say what they do, and an
+operator spelling for them would be a second way to write the same thing whose
+only argument is that it is shorter. `|` is not a second way to write `union` —
+it is the way the language spells it.
+
+```python
+from valgebra import Validator, complement, intersection
+
+assert (Validator(int) | str).is_equivalent(int | str)
+assert not hasattr(Validator(int), "__and__")
+assert intersection(int, str).is_empty()
+assert complement(int).is_valid("x")
+```
+
+## A validator does not pickle
+
+It holds the classes an `isinstance` atom names and the callables a predicate
+runs, so pickling one would have to pickle those — a different question with a
+different answer per object. Send the **schema** instead and rebuild on the
+other side: compiling is cheap (a fifty-field record takes about eleven
+microseconds), and `repr(validator)` gives an expression that rebuilds every
+form except a class or a predicate, which are objects rather than syntax.
+
+```python
+import pickle
+
+from valgebra import Validator
+
+try:
+    pickle.dumps(Validator(int))
+except TypeError as error:
+    assert "cannot be pickled" in str(error)
+```
+
+A `ValidationError` **does** pickle, because a failure has to be able to cross a
+process boundary back to whatever started the work.
+
 ## It does not enforce ordering between separate checks
 
 Two validators are two questions. A constraint that relates *two* values — this

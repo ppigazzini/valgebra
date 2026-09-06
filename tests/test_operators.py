@@ -5,6 +5,8 @@ typing already uses for it); `==`/`hash` are *syntactic* (schema shape), distinc
 from the semantic `is_equivalent`.
 """
 
+import copy
+import pickle
 from typing import Any, Literal
 
 import pytest
@@ -138,3 +140,38 @@ def test_any_atom_supports_the_operators() -> None:
     v = Validator(Any)
     assert object() in v
     assert (v | int).is_valid("anything")
+
+
+def test_the_operator_surface_is_the_one_typing_spells() -> None:
+    """`|` and nothing else, which is a decision rather than an omission.
+
+    `|` is how Python's own type syntax writes a union, so a validator has to
+    answer it -- `int | str` is a union before valgebra sees it, and `__ror__` is
+    what makes `None | validator` work. `&` and `~` would be second spellings of
+    `intersection` and `complement`, which already exist and say what they do;
+    the rule against shipping a second way to write one thing is what keeps them
+    off.
+    """
+    v = Validator(int)
+    assert (v | str).is_equivalent(int | str)
+    assert (None | v).is_equivalent(int | None)
+    assert not hasattr(v, "__and__")
+    assert not hasattr(v, "__invert__")
+    # And the two that are spelled out do the same work.
+    assert intersection(int, str).is_empty()
+    assert complement(int).is_valid("x")
+
+
+def test_a_validator_refuses_to_pickle_and_says_what_to_do() -> None:
+    """The refusal is the surface: what would have to travel is the schema.
+
+    A validator holds the classes and callables its schema names, so pickling
+    one would have to pickle those. The message says to send the schema instead,
+    because the default message -- "cannot pickle 'valgebra.Validator' object" --
+    leaves a reader to guess.
+    """
+    with pytest.raises(TypeError, match="cannot be pickled"):
+        pickle.dumps(Validator({"a": int}))
+    # Copying is a different question and still works: it shares the pool.
+    assert copy.copy(Validator(int)) == Validator(int)
+    assert copy.deepcopy(Validator({"a": int})) == Validator({"a": int})

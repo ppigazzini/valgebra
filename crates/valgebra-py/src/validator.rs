@@ -1109,6 +1109,31 @@ impl Validator {
         )
     }
 
+    /// Refuse to pickle, and say what to do instead.
+    ///
+    /// A validator is a compiled tree over a pool of live Python objects -- the
+    /// classes an `isinstance` atom names, the callables a predicate runs -- and
+    /// pickling it would have to pickle those, which is a different question
+    /// with a different answer per object. The schema it was built from is the
+    /// thing that travels, and rebuilding from it costs about as much as
+    /// unpickling would: a fifty-field record compiles in eleven microseconds.
+    ///
+    /// Written out rather than left to the default, because the default says
+    /// "cannot pickle 'valgebra.Validator' object" and stops there.
+    #[expect(
+        clippy::unused_self,
+        reason = "a dunder pyo3 exposes: the signature is Python's, not ours"
+    )]
+    fn __reduce__(&self) -> PyResult<()> {
+        Err(PyTypeError::new_err(
+            "a Validator cannot be pickled: it holds the classes and callables \
+             its schema names, and those are what would have to travel. Send the \
+             schema instead and rebuild with Validator(...) on the other side; \
+             compiling is cheap, and `repr(validator)` gives an expression that \
+             rebuilds every form but a class or a predicate.",
+        ))
+    }
+
     /// Return an equivalent validator. The validator is immutable, so the copy
     /// shares the pooled constants, classes, and predicates rather than
     /// duplicating them.

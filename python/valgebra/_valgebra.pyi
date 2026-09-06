@@ -12,7 +12,7 @@
 # is the exception, and is written as one.
 
 from collections.abc import Callable
-from typing import TypeVar, final
+from typing import NoReturn, TypeVar, final
 
 _T = TypeVar("_T")
 
@@ -60,6 +60,10 @@ class Validator:
     def __ror__(self, other: object, /) -> Validator: ...
     def __eq__(self, other: object, /) -> bool: ...
     def __hash__(self) -> int: ...
+    # Raises `TypeError`: a validator holds the classes and callables its
+    # schema names, so the schema is what travels. `NoReturn` rather than
+    # `Never`, which the floor interpreter's `typing` does not carry.
+    def __reduce__(self) -> NoReturn: ...
     def __copy__(self) -> Validator: ...
     def __deepcopy__(self, memo: object, /) -> Validator: ...
 
