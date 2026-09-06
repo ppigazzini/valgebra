@@ -98,7 +98,9 @@ def test_every_integer_key_reaches_its_value_from_the_path() -> None:
         holder = {key: "not an int"}
         with pytest.raises(ValidationError) as info:
             Validator(dict[int, int]).validate(holder)
-        (segment,) = info.value.errors[0]["path"]
+        path = info.value.errors[0]["path"]
+        assert isinstance(path, tuple)
+        (segment,) = path
         assert isinstance(segment, int), f"{key!r} left the path as {segment!r}"
         assert holder[segment] == "not an int", f"{key!r} does not index back"
 
@@ -107,7 +109,9 @@ def test_a_key_that_is_neither_a_string_nor_an_integer_is_named_not_spelled() ->
     """The other half: a path is strings and integers, so the rest is a name."""
     with pytest.raises(ValidationError) as info:
         Validator(dict[float, int]).validate({1.5: "x"})
-    (segment,) = info.value.errors[0]["path"]
+    path = info.value.errors[0]["path"]
+    assert isinstance(path, tuple)
+    (segment,) = path
     assert segment == "1.5"
     # A string key that looks like a number stays a string, which is the
     # distinction the integer path exists to preserve.

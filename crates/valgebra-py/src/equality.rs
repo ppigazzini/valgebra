@@ -243,50 +243,85 @@ fn equal(
     }
 }
 
-/// Digest a schema's shape: everything about it a pool slot cannot reach.
+/// Fold the constant a pool slot names into the digest, where it has a hash.
 ///
-/// The companion of [`schemas_equal`], and coarser on purpose. Equality reads
-/// pooled *values*, which a hash cannot: reading one needs the interpreter, and
-/// a constant that is not hashable would leave a validator that cannot be a
-/// dictionary key. So the slots are skipped and their nodes contribute their
-/// kind alone -- `Literal[1]` and `Literal[2]` hash together and equality tells
-/// them apart, which is the direction a hash is allowed to be wrong in.
-pub(crate) fn hash_shape<H: Hasher>(schema: &Schema, hasher: &mut H) {
+/// Equality reads the *value* behind a slot, so the hash must too or two
+/// schemas that differ only in a constant land on one bucket. They did:
+/// `Literal[1]` through `Literal[1000]` were one hash, and a dictionary keyed by
+/// validators -- the reason `__hash__` exists -- degenerated into a list, at
+/// 98 microseconds per lookup over ten thousand entries.
+///
+/// [`objects_equal`] is `a is b`, or `type(a) is type(b)` and `a == b`, so
+/// folding the constant's own hash beside its type's keeps the two consistent
+/// for every type whose `__eq__` and `__hash__` agree -- which is the contract
+/// Python's own dictionaries already require.
+///
+/// A constant with no hash contributes nothing and the shape stands alone. That
+/// is the old behaviour for the one case that needed it: a validator must be
+/// usable as a key whatever it pools, and refusing to hash would be worse than
+/// a collision.
+fn hash_constant<H: Hasher>(py: Python<'_>, slot: usize, pool: &[Py<PyAny>], hasher: &mut H) {
+    let Some(object) = pool.get(slot) else {
+        return;
+    };
+    let bound = object.bind(py);
+    if let Ok(hash) = bound.hash() {
+        hash.hash(hasher);
+        if let Ok(kind) = bound.get_type().hash() {
+            kind.hash(hasher);
+        }
+    }
+}
+
+/// Digest a schema, reading the constants its pool slots name.
+///
+/// The companion of [`schemas_equal`]: every node equality separates is a node
+/// this may separate, and the two are consistent where the constants behave.
+/// What it does *not* read is the slot index -- that is construction order, and
+/// two spellings of one schema pool their constants in different slots.
+pub(crate) fn hash_shape<H: Hasher>(
+    py: Python<'_>,
+    schema: &Schema,
+    pool: &[Py<PyAny>],
+    hasher: &mut H,
+) {
     core::mem::discriminant(schema).hash(hasher);
     match schema {
         // The lists whose order is not part of the schema fold commutatively,
         // so two spellings of one set hash alike.
         Schema::Union(members) | Schema::Intersection(members) => {
             members.len().hash(hasher);
-            unordered(members, hasher, hash_shape);
+            unordered(members, hasher, |member, one| {
+                hash_shape(py, member, pool, one);
+            });
         }
-        Schema::Complement(inner) => hash_shape(inner, hasher),
+        Schema::Complement(inner) => hash_shape(py, inner, pool, hasher),
         Schema::Coll { container, element } => {
             container.hash(hasher);
-            hash_shape(element, hasher);
+            hash_shape(py, element, pool, hasher);
         }
         Schema::Seq { container, shape } => {
             container.hash(hasher);
             shape.prefix.len().hash(hasher);
             for element in &shape.prefix {
-                hash_shape(element, hasher);
+                hash_shape(py, element, pool, hasher);
             }
             shape.tail.is_some().hash(hasher);
             if let Some(tail) = &shape.tail {
-                hash_shape(tail, hasher);
+                hash_shape(py, tail, pool, hasher);
             }
         }
         Schema::KeyedMap { fields, defaults } => {
-            hash_fields(fields, hasher);
+            hash_fields(py, fields, pool, hasher);
             defaults.len().hash(hasher);
             unordered(defaults, hasher, |clause, one| {
-                hash_shape(&clause.key, one);
-                hash_shape(&clause.value, one);
+                hash_shape(py, &clause.key, pool, one);
+                hash_shape(py, &clause.value, pool, one);
             });
         }
-        Schema::AttrRecord { fields } => hash_fields(fields, hasher),
+        Schema::AttrRecord { fields } => hash_fields(py, fields, pool, hasher),
         Schema::Refine { base, constraints } => {
-            hash_shape(base, hasher);
+            hash_shape(py, base, pool, hasher);
             constraints.len().hash(hasher);
             unordered(constraints, hasher, |constraint, one| {
                 core::mem::discriminant(constraint).hash(one);
@@ -295,24 +330,34 @@ pub(crate) fn hash_shape<H: Hasher>(schema: &Schema, hasher: &mut H) {
                 match constraint {
                     Constraint::MinLen(n) | Constraint::MaxLen(n) => n.hash(one),
                     Constraint::Regex(pattern) => pattern.hash(one),
-                    _ => {}
+                    // A bound names its operand through the pool, and equality
+                    // reads it, so `Ge(0)` and `Ge(1)` must not hash alike.
+                    Constraint::Ge(i)
+                    | Constraint::Gt(i)
+                    | Constraint::Le(i)
+                    | Constraint::Lt(i)
+                    | Constraint::MultipleOf(i) => hash_constant(py, i.get(), pool, one),
+                    Constraint::Predicate(i) => hash_constant(py, i.get(), pool, one),
                 }
             });
         }
         Schema::Ref(index) => index.hash(hasher),
-        // The scalars, the two bounds, the pooled leaves and the build-time
-        // marker: the discriminant above is the whole of their shape.
+        // The pooled leaves: the constant behind the slot, not the slot.
+        Schema::Literal(index) => hash_constant(py, index.get(), pool, hasher),
+        Schema::Instance(index) => hash_constant(py, index.get(), pool, hasher),
+        // The scalars, the two bounds and the build-time marker: the
+        // discriminant above is the whole of their shape.
         _ => {}
     }
 }
 
-fn hash_fields<H: Hasher>(fields: &[Field], hasher: &mut H) {
+fn hash_fields<H: Hasher>(py: Python<'_>, fields: &[Field], pool: &[Py<PyAny>], hasher: &mut H) {
     // Ordered, because construction orders them by name.
     fields.len().hash(hasher);
     for field in fields {
         field.name.hash(hasher);
         field.required.hash(hasher);
-        hash_shape(&field.schema, hasher);
+        hash_shape(py, &field.schema, pool, hasher);
     }
 }
 

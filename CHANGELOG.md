@@ -80,9 +80,8 @@ answer of its own, or a repair to a change not yet released.
 - fix: an enumeration is the union of its members only when it is one
 - fix: refuse a pattern before its automaton is built, not after
 - fix: a validator takes part in the cycle collector
-- perf: bound a value summary while it is built, not after
 - fix: an integer key of any size stays an integer in an error path
-- fix: an integer key of any size stays an integer in an error path
+- fix: a literal's hash is the constant's, not its slot's
 
 -->
 

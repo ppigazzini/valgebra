@@ -4,7 +4,7 @@ use super::*;
 type Wrap = fn(Schema) -> Schema;
 
 use crate::build::Pool;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyInt};
 use std::ffi::CString;
 use valgebra_core::ConstIx;
 
@@ -323,6 +323,81 @@ fn a_record_and_a_definition_are_read_through_the_pool_too() {
     });
 }
 
+/// The hash reads the *constant*, never the slot it sits in, and never the
+/// order of a list whose order is not part of the schema.
+#[test]
+fn the_hash_is_blind_to_the_slot_and_to_the_order() {
+    Python::attach(|py| {
+        let one = PyInt::new(py, 1).into_any().unbind();
+        let digest = |schema: &Schema, pool: &[Py<PyAny>]| {
+            let mut hasher = DefaultHasher::new();
+            hash_shape(py, schema, pool, &mut hasher);
+            hasher.finish()
+        };
+        let literal = |at: usize| Schema::Literal(valgebra_core::ConstIx::new(at));
+        // One constant, two slots: equality reads through a slot to the value, so
+        // a hash that read the slot would deny two equal validators one bucket.
+        let padded: Vec<Py<PyAny>> = (0..8).map(|_| one.clone_ref(py)).collect();
+        assert_eq!(
+            digest(&literal(0), std::slice::from_ref(&one)),
+            digest(&literal(7), &padded)
+        );
+        // Order is not part of a union, so the fold over its members is not
+        // allowed to see one.
+        let left = Schema::Union(vec![Schema::Int, Schema::Str]);
+        let right = Schema::Union(vec![Schema::Str, Schema::Int]);
+        assert_eq!(digest(&left, &[]), digest(&right, &[]));
+        // And a hash that ignored everything would pass the two lines above
+        // having read nothing.
+        assert_ne!(digest(&Schema::Int, &[]), digest(&Schema::Str, &[]));
+        assert_ne!(
+            digest(&left, &[]),
+            digest(&Schema::Union(vec![Schema::Int]), &[])
+        );
+        // What a complement holds is part of its shape, and so is which collection
+        // kind a node names.
+        let not_int = Schema::Complement(Box::new(Schema::Int));
+        let not_str = Schema::Complement(Box::new(Schema::Str));
+        assert_ne!(digest(&not_int, &[]), digest(&not_str, &[]));
+        assert_ne!(digest(&not_int, &[]), digest(&Schema::Int, &[]));
+        assert_ne!(
+            digest(&Schema::set(Schema::Int), &[]),
+            digest(&Schema::frozen_set(Schema::Int), &[])
+        );
+        assert_ne!(
+            digest(&Schema::set(Schema::Int), &[]),
+            digest(&Schema::set(Schema::Str), &[])
+        );
+        // A reference names a definition, and two references to different ones
+        // are different shapes.
+        assert_ne!(
+            digest(&Schema::Ref(valgebra_core::DefIx::new(0)), &[]),
+            digest(&Schema::Ref(valgebra_core::DefIx::new(1)), &[])
+        );
+        // An attribute record's fields are its shape. No annotation builds one
+        // without a class, so it is built here.
+        let attributes = |name: &str, schema: Schema| {
+            Schema::attr_record(vec![Field {
+                name: name.to_owned(),
+                schema,
+                required: true,
+            }])
+        };
+        assert_ne!(
+            digest(&attributes("x", Schema::Int), &[]),
+            digest(&attributes("y", Schema::Int), &[])
+        );
+        assert_ne!(
+            digest(&attributes("x", Schema::Int), &[]),
+            digest(&attributes("x", Schema::Str), &[])
+        );
+        assert_eq!(
+            digest(&attributes("x", Schema::Int), &[]),
+            digest(&attributes("x", Schema::Int), &[])
+        );
+    });
+}
+
 /// The shapes a hash must keep apart, one per node that holds another.
 ///
 /// The companion of the case above: a digest that stopped reading a node's
@@ -332,9 +407,9 @@ fn a_record_and_a_definition_are_read_through_the_pool_too() {
 fn the_shape_hash_reads_what_each_node_holds() {
     Python::attach(|py| {
         let digest = |expression: &str| {
-            let (schema, _) = compile(py, expression);
+            let (schema, pool) = compile(py, expression);
             let mut hasher = DefaultHasher::new();
-            hash_shape(&schema, &mut hasher);
+            hash_shape(py, &schema, &pool, &mut hasher);
             hasher.finish()
         };
         for (left, right) in [
@@ -360,6 +435,16 @@ fn the_shape_hash_reads_what_each_node_holds() {
                 "typing.Annotated[str, types.SimpleNamespace(pattern='b+')]",
             ),
             ("int | str", "int | bytes"),
+            // The two pooled leaves. Every pair above differs in a node's
+            // *shape*, which the discriminant alone tells apart, so none of them
+            // asks whether the digest reads the constant behind a slot -- and
+            // these two nodes are nothing but that constant. A literal and a
+            // class are the whole of what `hash_constant` exists for: drop
+            // either arm, or stop hashing the object it names, and each pair
+            // here collides while every pair above still passes.
+            ("typing.Literal[1]", "typing.Literal[2]"),
+            ("typing.Literal['a']", "typing.Literal['b']"),
+            ("types.SimpleNamespace", "types.ModuleType"),
         ] {
             assert_ne!(digest(left), digest(right), "{left} hashes as {right}");
         }

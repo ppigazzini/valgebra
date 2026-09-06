@@ -23,10 +23,13 @@ that asserts it stays separate is the one that says so.
 from __future__ import annotations
 
 import math
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 import annotated_types as at
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from valgebra import (
     Regex,
@@ -178,3 +181,94 @@ def test_a_validator_is_usable_as_a_dictionary_key() -> None:
     registry[Validator({"b": str, "a": int})] = "row again"
     assert len(registry) == 1
     assert registry[Validator({"a": int, "b": str})] == "row again"
+
+
+# Schemas that differ only in a constant. `==` has always told these apart;
+# `__hash__` skipped every pool slot, so all of them shared one bucket and a
+# registry keyed by validators was a linear scan.
+def _integer_literal(i: int) -> Validator:
+    return Validator(Literal[i])  # ty: ignore[invalid-type-form]
+
+
+def _string_literal(i: int) -> Validator:
+    return Validator(Literal[f"s{i}"])  # ty: ignore[invalid-type-form]
+
+
+def _literal_in_a_record(i: int) -> Validator:
+    return Validator({"k": Literal[i]})  # ty: ignore[invalid-type-form]
+
+
+def _literal_in_a_union(i: int) -> Validator:
+    return Validator(Literal[i, "shared"])  # ty: ignore[invalid-type-form]
+
+
+BY_CONSTANT: list[tuple[str, Callable[[int], Validator]]] = [
+    ("integer literals", _integer_literal),
+    ("string literals", _string_literal),
+    ("a literal in a record", _literal_in_a_record),
+    ("a literal in a union", _literal_in_a_union),
+    ("lower bounds", lambda i: Validator(Annotated[int, at.Ge(i)])),
+    ("upper bounds", lambda i: Validator(Annotated[int, at.Le(i)])),
+    ("multiples", lambda i: Validator(Annotated[int, at.MultipleOf(i + 1)])),
+    ("patterns", lambda i: Validator(Annotated[str, Regex(f"a{{{i + 1}}}")])),
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "build"), BY_CONSTANT, ids=[row[0] for row in BY_CONSTANT]
+)
+def test_schemas_that_differ_only_in_a_constant_hash_apart(
+    name: str, build: Callable[[int], Validator]
+) -> None:
+    made = [build(i) for i in range(200)]
+    assert len({hash(one) for one in made}) > 190, (
+        f"{name}: {len({hash(one) for one in made})} distinct hashes over 200 "
+        "schemas. A hash that ignores the constant makes a registry of them a list."
+    )
+    # And they are still 200 distinct schemas, which is what the hash must track.
+    assert len({repr(one) for one in made}) == 200
+
+
+def test_a_registry_of_ten_thousand_validators_is_a_lookup_not_a_scan() -> None:
+    registry = {_integer_literal(i): i for i in range(10_000)}
+    assert len({hash(key) for key in registry}) == 10_000
+    assert registry[_integer_literal(5_000)] == 5_000
+
+
+def test_an_unhashable_constant_leaves_the_schema_hashable() -> None:
+    """A validator must be usable as a key whatever its schema names.
+
+    A class defining `__eq__` without `__hash__` is unhashable, and a schema may
+    name one. The constant then contributes nothing and the shape stands alone,
+    which is a collision rather than a refusal.
+    """
+
+    class Unhashable:
+        __hash__ = None  # type: ignore[assignment]
+
+        def __eq__(self, other: object) -> bool:
+            return isinstance(other, Unhashable)
+
+    sentinel = Unhashable()
+    validator = Validator(Literal[sentinel])  # ty: ignore[invalid-type-form]
+    assert isinstance(hash(validator), int)
+    assert {validator: 1}[validator] == 1
+
+
+def test_equal_validators_still_hash_alike_when_the_constant_is_read() -> None:
+    """The contract the fold must not break, over the pairs `==` calls equal."""
+    same = [
+        (Validator(Literal[1, 2]), Validator(Literal[2, 1])),
+        (Validator({"a": Literal[1]}), Validator({"a": Literal[1]})),
+        (
+            Validator(Annotated[int, at.Ge(0), at.Le(9)]),
+            Validator(Annotated[int, at.Le(9), at.Ge(0)]),
+        ),
+        (union(Validator(Literal[1]), Validator(Literal[2])), Validator(Literal[1, 2])),
+        (_integer_literal(10**30), _integer_literal(10**30)),
+    ]
+    for left, right in same:
+        assert left == right, repr(left)
+        assert hash(left) == hash(right), (
+            f"{left!r} and {right!r} are equal and must hash alike"
+        )

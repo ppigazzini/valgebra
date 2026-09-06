@@ -1339,22 +1339,27 @@ impl Validator {
 
     /// A hash consistent with equality, which is equality modulo the pool.
     ///
-    /// So it digests the schema's **shape**: the node kinds and the parts of
-    /// them a pool slot cannot reach. Not the slots themselves, because two
-    /// equal validators may index one constant at different slots; not the
-    /// pooled values either, because an equal pair must hash alike and reading a
-    /// value would need the interpreter and a hashable constant, and a validator
-    /// must stay usable as a key whatever it pools. A union's members are folded
-    /// with a commutative operation, since their order is not part of the
-    /// schema. The result is coarse -- `Literal[1]` and `Literal[2]` land
-    /// together -- and coarse is the safe direction: equality separates them.
-    fn __hash__(&self) -> u64 {
+    /// It digests the schema's node kinds, the parts of them no pool slot
+    /// reaches, and the **constant behind each slot that has one**. Not the
+    /// slot itself: two equal validators may index one constant at different
+    /// slots, so the index is construction order and not part of the schema.
+    ///
+    /// Reading the constants is what makes two schemas differing only in one
+    /// two keys rather than one bucket. Skipping them put `Literal[1]` through
+    /// `Literal[1000]` on a single hash and turned a registry of validators --
+    /// the reason this method exists -- into a linear scan.
+    ///
+    /// A union's members are folded commutatively, since their order is not
+    /// part of the schema, and a constant with no hash contributes nothing:
+    /// that is a collision, so a validator stays usable as a key whatever it
+    /// pools.
+    fn __hash__(&self, py: Python<'_>) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        crate::equality::hash_shape(&self.schema, &mut hasher);
+        crate::equality::hash_shape(py, &self.schema, &self.literals, &mut hasher);
         self.definitions.len().hash(&mut hasher);
         for definition in &self.definitions {
-            crate::equality::hash_shape(definition, &mut hasher);
+            crate::equality::hash_shape(py, definition, &self.literals, &mut hasher);
         }
         hasher.finish()
     }

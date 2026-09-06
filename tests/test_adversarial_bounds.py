@@ -28,6 +28,7 @@ import time
 from typing import TYPE_CHECKING, Annotated, Literal
 
 import pytest
+from annotated_types import MultipleOf
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -435,7 +436,7 @@ def test_a_bounded_summary_still_names_a_small_value_exactly() -> None:
     def message(schema: object, value: object) -> str:
         with pytest.raises(ValidationError) as info:
             Validator(schema).validate(value)
-        return info.value.errors[0]["message"]
+        return str(info.value.errors[0]["message"])
 
     assert message(int, [1, 2, 3]) == "expected int, got [1, 2, 3] [int_type]"
     assert message(int, {"a": 1}) == "expected int, got {'a': 1} [int_type]"
@@ -443,3 +444,50 @@ def test_a_bounded_summary_still_names_a_small_value_exactly() -> None:
     assert message(int, "text") == "expected int, got 'text' [int_type]"
     # And a value too large to print is cut rather than printed.
     assert len(message(int, list(range(10_000)))) < 200
+
+
+def test_two_steps_that_meet_past_the_period_bound_are_refused() -> None:
+    """A pair of ordinary steps must not be a way to crash or to lie.
+
+    A `MultipleOf` lowers to a set held as one interval set per residue, so its
+    period is the step, and the representation caps that period. The cap was on
+    one step and not on two: `MultipleOf(64)` and `MultipleOf(81)` are each far
+    inside it and meet at 5,184, which is past it. Asking whether their meet was
+    empty then materialised a table at the largest period the representation
+    holds -- the multiples of something else -- and answered from it, or, on a
+    build with debug assertions (which is what `maturin develop` produces),
+    raised a panic across the language boundary that no caller catches as a
+    validation failure.
+
+    Composition is now bounded like the automaton components are: past the
+    shared period the operation refuses, the descriptor becomes unbuildable and
+    the relation stays undecided. Membership is unaffected either way, because
+    the walk runs the modulo rather than the set.
+    """
+
+    def step(n: int) -> Validator:
+        return Validator(Annotated[int, MultipleOf(n)])
+
+    for left, right, shared in [
+        (64, 81, 5184),
+        (4093, 4096, 16764928),
+        (3, 4096, 12288),
+    ]:
+        met = intersection(step(left), step(right))
+        # Undecided, not empty: the two steps do share their multiples, and a
+        # `True` here would be the wrong verdict the refusal exists to avoid.
+        assert not met.is_empty(), f"{left} and {right} meet at {shared}"
+        assert met.is_valid(shared)
+        assert not met.is_valid(shared + left)
+        assert not met.is_valid(shared + right)
+
+    # A pair whose shared period is inside the bound still answers, so the
+    # refusal costs only what it must.
+    inside = intersection(step(63), step(64))
+    assert inside.is_valid(4032)
+    assert not inside.is_valid(63)
+    assert not inside.is_empty()
+    # And a step against itself is decided, whatever the step.
+    for n in (2, 64, 81, 4096):
+        assert step(n).is_subtype_of(step(n))
+        assert intersection(step(n), complement(step(n))).is_empty()
