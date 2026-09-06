@@ -357,66 +357,55 @@ _DECIDED = [
         "subtype", dict[str, int], complement(str), id="complement:dict<=~str"
     ),
     pytest.param("subtype", int, complement(str), id="complement:int<=~str"),
-]
-
-# Known decision-completeness misses: true relations the procedure declines.
-#
-# Each is marked strict, so the day a rule decides one the mark fails and the
-# entry leaves both this list and the conservative half of the decidability page.
-# They are grouped by what the procedure is missing rather than by node kind,
-# because the grouping is the diagnosis.
-
-_MISSED = pytest.mark.xfail(strict=True, reason="the procedure declines this relation")
-
-_LEDGERED = [
+    # Decided on the *sets* rather than by a rule: each is a fact about values
+    # that no recursion over the schema tree reaches, and each was ledgered as a
+    # miss until the descriptor was asked where the rules decline. A container
+    # meet is the meet of the element sets, a complement is a set again, a word
+    # set is a language, a dict is a union of atoms with a default per key kind,
+    # and a bound is a set of whole numbers -- so container meets, double
+    # complements, regular-language inclusion, dict emptiness and the ordering of
+    # two steps all come out of one question: is the difference empty?
     pytest.param(
         "subtype",
         intersection(union(list[int], str), complement(str)),
         list[int],
         id="(list[int]|str)&~str<=list[int]",
-        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         tuple[int],
         complement(tuple[str]),
         id="tuple[int]<=~tuple[str]",
-        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         tuple[int, str],
         complement(tuple[str, int]),
         id="tuple[int,str]<=~tuple[str,int]",
-        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         intersection(list[int], list[str]),
         [],
         id="list[int]&list[str]<=[]",
-        marks=_MISSED,
     ),
     pytest.param(
         "equivalent",
         intersection(set[int], set[str]),
         set[nothing],  # ty: ignore[invalid-type-form]
         id="set[int]&set[str]==set[nothing]",
-        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         Annotated[str, Regex("a")],
         Annotated[str, Regex("a|b")],
         id="Regex(a)<=Regex(a|b)",
-        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         Validator(list[int]),
         complement(union(complement(Validator(list[int])), nothing)),
         id="A<=~(~A|nothing)",
-        marks=_MISSED,
     ),
     # Emptiness has no structural-inclusion rule, so a meet with a complement is
     # not decided even where the inclusion under it is.
@@ -425,65 +414,116 @@ _LEDGERED = [
         intersection(list[bool], complement(list[int])),
         None,
         id="empty:list[bool]&~list[int]",
-        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         intersection(Literal["a", "b"], complement(Validator(Literal["a"]))),
         Literal["b"],
         id="L[a,b]&~L[a]<=L[b]",
-        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         {"a": union(int, str)},
         union(Validator({"a": int}), Validator({"a": str})),
         id="{a:int|str}<={a:int}|{a:str}",
-        marks=_MISSED,
     ),
     # A container meet is not intersected componentwise, so a meet that is the
     # empty container is not recognised as one.
     # A scalar kind is a region bit rather than a set of its values, so a finite
     # kind is not the union of its members and a negated literal has nowhere to go.
-    pytest.param(
-        "subtype", bool, Literal[True, False], id="bool<=L[True,False]", marks=_MISSED
-    ),
+    pytest.param("subtype", bool, Literal[True, False], id="bool<=L[True,False]"),
     pytest.param(
         "subtype",
         Literal[1],
         intersection(int, complement(bool)),
         id="L[1]<=int&~bool",
-        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         int,
         union(intersection(int, complement(Validator(Literal[1]))), Literal[1]),
         id="int<=(int&~L[1])|L[1]",
-        marks=_MISSED,
     ),
     # A refinement's bounds are compared, and the values under them are not, so a
     # base that is not itself a refinement does not reach them.
-    pytest.param(
-        "subtype", bool, Annotated[int, at.Ge(0)], id="bool<=int&Ge(0)", marks=_MISSED
-    ),
+    pytest.param("subtype", bool, Annotated[int, at.Ge(0)], id="bool<=int&Ge(0)"),
     pytest.param(
         "subtype",
         _GT0,
         Annotated[int, at.Ge(1)],
         id="int&Gt(0)<=int&Ge(1)",
-        marks=_MISSED,
     ),
     pytest.param(
         "subtype",
         intersection(_GT0, Annotated[int, at.Lt(10)]),
         Annotated[int, at.Gt(0), at.Lt(10)],
         id="meet-of-refinements<=joint-refinement",
-        marks=_MISSED,
+    ),
+    pytest.param("empty", Annotated[bool, at.Ge(2)], None, id="empty:bool&Ge(2)"),
+    # A pattern and a divisor are related only by being written alike, so neither
+    # the language nor the divisibility is read.
+    pytest.param(
+        "subtype",
+        Annotated[int, at.MultipleOf(4)],
+        Annotated[int, at.MultipleOf(2)],
+        id="MultipleOf(4)<=MultipleOf(2)",
+    ),
+    # A map's domain is the field list as written, and a key type is matched
+    # against the string atom rather than asked whether it admits the name.
+    pytest.param(
+        "subtype",
+        {"a": int},
+        {Literal["a"]: int},
+        id="{a:int}<=dict[L[a],int]",
+    ),
+    pytest.param("equivalent", {"a?": nothing}, {}, id="{a?:nothing}=={}"),
+    pytest.param(
+        "equivalent",
+        dict[str, nothing],  # ty: ignore[invalid-type-form]
+        {},
+        id="dict[str,nothing]=={}",
     ),
     pytest.param(
-        "empty", Annotated[bool, at.Ge(2)], None, id="empty:bool&Ge(2)", marks=_MISSED
+        "equivalent",
+        dict[nothing, int],  # ty: ignore[invalid-type-form]
+        {},
+        id="dict[nothing,int]=={}",
     ),
+    pytest.param(
+        "empty",
+        intersection({"a": int}, dict[str, str]),
+        None,
+        id="empty:{a:int}&dict[str,str]",
+    ),
+    pytest.param(
+        "empty",
+        intersection({"a": int}, dict[int, str]),
+        None,
+        id="empty:{a:int}&dict[int,str]",
+    ),
+    pytest.param(
+        "equivalent",
+        intersection({"a?": int}, {"b?": int}),
+        {},
+        id="{a?:int}&{b?:int}=={}",
+    ),
+]
+
+# Known decision-completeness misses: true relations neither the rules nor the
+# descriptor decides.
+#
+# Each is marked strict, so the day one is decided the mark fails and the entry
+# leaves both this list and the conservative half of the decidability page --
+# which is how the entries above it left. What is left is what the descriptor
+# cannot hold: a length bound over a shape that is not words, an attribute
+# record beside a builtin kind, and recursion, which no finite descriptor has
+# room for.
+
+_MISSED = pytest.mark.xfail(
+    strict=True, reason="neither the rules nor the descriptor decides this relation"
+)
+
+_LEDGERED = [
     # A length bound is opaque to the shape it bounds.
     pytest.param(
         "empty",
@@ -504,62 +544,6 @@ _LEDGERED = [
         recursive(lambda t: Annotated[list[t], at.MinLen(1)]),  # ty: ignore[invalid-type-form]
         None,
         id="empty:mu-t.list[t]&MinLen(1)",
-        marks=_MISSED,
-    ),
-    # A pattern and a divisor are related only by being written alike, so neither
-    # the language nor the divisibility is read.
-    pytest.param(
-        "subtype",
-        Annotated[int, at.MultipleOf(4)],
-        Annotated[int, at.MultipleOf(2)],
-        id="MultipleOf(4)<=MultipleOf(2)",
-        marks=_MISSED,
-    ),
-    # A map's domain is the field list as written, and a key type is matched
-    # against the string atom rather than asked whether it admits the name.
-    pytest.param(
-        "subtype",
-        {"a": int},
-        {Literal["a"]: int},
-        id="{a:int}<=dict[L[a],int]",
-        marks=_MISSED,
-    ),
-    pytest.param(
-        "equivalent", {"a?": nothing}, {}, id="{a?:nothing}=={}", marks=_MISSED
-    ),
-    pytest.param(
-        "equivalent",
-        dict[str, nothing],  # ty: ignore[invalid-type-form]
-        {},
-        id="dict[str,nothing]=={}",
-        marks=_MISSED,
-    ),
-    pytest.param(
-        "equivalent",
-        dict[nothing, int],  # ty: ignore[invalid-type-form]
-        {},
-        id="dict[nothing,int]=={}",
-        marks=_MISSED,
-    ),
-    pytest.param(
-        "empty",
-        intersection({"a": int}, dict[str, str]),
-        None,
-        id="empty:{a:int}&dict[str,str]",
-        marks=_MISSED,
-    ),
-    pytest.param(
-        "empty",
-        intersection({"a": int}, dict[int, str]),
-        None,
-        id="empty:{a:int}&dict[int,str]",
-        marks=_MISSED,
-    ),
-    pytest.param(
-        "equivalent",
-        intersection({"a?": int}, {"b?": int}),
-        {},
-        id="{a?:int}&{b?:int}=={}",
         marks=_MISSED,
     ),
     # An attribute schema and the shape its instances have are unrelated.

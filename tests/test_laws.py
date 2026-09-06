@@ -250,27 +250,19 @@ _RESPELLINGS = [
 ]
 
 
-# LEDGER: the decision reads the spelling, not the set.
+# The complement laws hold of the *set*, not of the spelling.
 #
-# The laws above are checked as membership, and hold. The *decision* about them
-# does not follow: a complement cancels and a join collapses to the top by
-# structural equality, so `A | ~A` covers the universe and `A | ~B` does not --
-# for a `B` the procedure itself decides equivalent to `A`.
-#
-# The answer stays sound, since a `False` is "not proven". What it costs is
-# composition: every rule the procedure gains is keyed the same way, so two of
-# them meet only where the caller spelled both operands alike. Measured over 200
-# random schemas, the complement laws decide for every schema against its own
-# spelling and for roughly two in five against an equal one.
-#
-# Closing it wants the operands compared as sets where the rules read equality,
-# which is what a representation closed under the Boolean operations gives: one
-# per kind, so a negated atom of that kind lands somewhere. Strict, so the entry
-# fails the day it stops being true.
+# This was a ledger entry, and the reason it gave is the reason it is one no
+# longer. The rules cancel a complement and collapse a join by structural
+# equality, so `A | ~A` covered the universe and `A | ~B` did not -- for a `B`
+# the procedure itself decides equivalent to `A`. What it asked for was the
+# operands compared as sets where the rules read equality, which is what a
+# representation closed under the Boolean operations gives, and the descriptor
+# is that representation: it holds each kind as a set, so a respelling and the
+# thing it respells build the same one.
 @pytest.mark.parametrize(
     ("name", "respell"), _RESPELLINGS, ids=[name for name, _ in _RESPELLINGS]
 )
-@pytest.mark.xfail(strict=True, reason="the rules are keyed on structural equality")
 def test_the_complement_laws_survive_a_respelling(
     name: str, respell: Callable[[Validator], Validator]
 ) -> None:

@@ -252,16 +252,32 @@ impl<G: Guard> MapAtom<G> {
     /// the commit that introduces one.
     fn emptiness(&self) -> Verdict {
         let labels = self.labels.values().map(Field::emptiness);
+        // A want asks for *some* key of its part, outside its exclusion set, to
+        // map into `ty`. Any such key can be the witness, so the verdict is the
+        // union over the candidates: the part's default, which governs the keys
+        // no label names, and every label of the part the exclusion set leaves
+        // out. Reading the default alone reports an atom empty that
+        // [`holds`](Self::holds) admits a dict for -- a labelled key satisfies a
+        // want there -- and an atom wrongly empty is a complement wrongly wide.
         let wanted = self.wanted.iter().map(|want| {
             let Some(default) = self.defaults.get(want.slot) else {
                 return Verdict::Empty;
             };
-            match default.ty.meet(&want.ty) {
+            let witnesses = self
+                .labels
+                .iter()
+                .filter(|(label, _)| {
+                    key_slot(Some(label.kind())) == Some(want.slot)
+                        && !want.besides.contains(*label)
+                })
+                .map(|(_, field)| &field.ty)
+                .chain([&default.ty]);
+            Verdict::any(witnesses.map(|ty| match ty.meet(&want.ty) {
                 Some(shared) => shared.emptiness(),
                 // Past a guard's own bound there is no set to read, so nothing is
                 // proved either way.
                 None => Verdict::Unknown,
-            }
+            }))
         });
         Verdict::every(labels.chain(wanted))
     }
@@ -689,6 +705,7 @@ fn tidy<G: Guard>(atoms: Vec<MapAtom<G>>) -> Option<Vec<MapAtom<G>>> {
 mod tests {
     use super::{Entry, KEY_KINDS, Label, MapLattice, key_slot};
     use crate::decision::{Kind, Verdict};
+    use crate::descr::budget;
     use crate::descr::integers::IntSet;
 
     /// One dict entry: a `str` key with this text, mapping to this integer.
@@ -698,6 +715,66 @@ mod tests {
             kind: Some(Kind::Str),
             value,
         }
+    }
+
+    /// A wanted key is witnessed by a *labelled* key too, not by the part's
+    /// default alone.
+    ///
+    /// `S` asks for some key of a part, outside its exclusion set, to map into
+    /// a type. A label of that part is such a key, and reading only the default
+    /// reports an atom empty that [`MapAtom::holds`] admits dicts for -- which
+    /// makes a difference come out empty when it is not, and a subtype proof
+    /// out of nothing.
+    ///
+    /// Both directions, because each is a different way to get the witness
+    /// scan wrong: taking labels of the wrong part, and taking labels the
+    /// exclusion set names.
+    #[test]
+    fn a_labelled_key_witnesses_a_wanted_key() {
+        let words = |labels: Vec<(Label, IntSet, bool)>| {
+            MapLattice::record(labels, [(Some(Kind::Str), IntSet::just(1))])
+                .expect("a small record")
+        };
+        // `{a: 1, b: 2}` with every other string key mapping to 1, minus `{a: 1}`
+        // with the same default. `b` maps to 2, which the default forbids, so the
+        // difference holds that dict -- and `b` is the key that witnesses it.
+        let wide = words(vec![
+            (Label::str("a"), IntSet::just(1), false),
+            (Label::str("b"), IntSet::just(2), false),
+        ]);
+        let narrow = words(vec![(Label::str("a"), IntSet::just(1), false)]);
+        let outside = wide
+            .intersect(&narrow.complement())
+            .expect("a small difference");
+        assert_eq!(outside.emptiness(), Verdict::Inhabited);
+        assert!(outside.holds(&[at("a", 1), at("b", 2)]));
+
+        // The same shape with nothing outside the exclusion set: `{a: 2}` minus
+        // itself. `a` is named on both sides, so it cannot be the key that maps
+        // outside the default, and the difference is empty.
+        let same = words(vec![(Label::str("a"), IntSet::just(2), false)]);
+        assert_eq!(
+            same.intersect(&same.complement())
+                .expect("a small difference")
+                .emptiness(),
+            Verdict::Empty
+        );
+    }
+
+    /// A meet past the build's allowance refuses, and the same meet succeeds
+    /// under one that covers it.
+    ///
+    /// The atom product is a loop over every pair, so it is one of the places a
+    /// build multiplies and one of the places the allowance is charged. Both
+    /// directions are asserted: an allowance that only ever refuses would pass
+    /// half of this, and so would one that never does.
+    #[test]
+    fn a_meet_past_the_allowance_refuses() {
+        let a = MapLattice::label(Label::str("a"), IntSet::just(1), false);
+        let b = MapLattice::label(Label::str("b"), IntSet::just(2), false);
+
+        assert!(budget::under(0, || a.intersect(&b)).is_none());
+        assert!(budget::under(64, || a.intersect(&b)).is_some());
     }
 
     /// The union holds the dicts of both sides, and is a union rather than a

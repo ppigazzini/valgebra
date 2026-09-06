@@ -46,7 +46,7 @@
   "~int&~str": true,
   "~~int": true
  },
- "commit": "7e278b84ee7516a930445c21bf80aaef04902f22",
+ "commit": "1083a4ec0c506773cc3847eb20766f47b5078c6c",
  "decisions": {
   "(int|str)&~str <= (int|str)&~str": "y",
   "(int|str)&~str <= anything": "y",
@@ -149,8 +149,8 @@
   "bool <= int": "y",
   "bool <= int&str": "n",
   "bool <= int&~int": "n",
-  "bool <= int-ge-0": "n",
-  "bool <= int-ge-0-le-9": "n",
+  "bool <= int-ge-0": "y",
+  "bool <= int-ge-0-le-9": "y",
   "bool <= int-ge-5-le-1": "n",
   "bool <= int|bool": "y",
   "bool <= int|str": "y",

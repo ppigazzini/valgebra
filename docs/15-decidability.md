@@ -164,96 +164,47 @@ assert json_value.is_valid({"a": [1, "x", {"b": None}]})
 ## Sound but conservative
 
 Here valgebra is correct but not complete: it may answer `False` or "not empty"
-for a relation that does in fact hold. These are decidable in principle and are
-tracked as future work.
+for a relation that does in fact hold.
 
-- **Mixed maps where the supertype declares a _required_ field the subtype
-  lacks.** When the missing field is optional, the subtype's catch-all covers it
-  and the case is decided; a required field is not, because a catch-all over the
-  key space does not prove that field is present. Deciding it in general needs
-  the full quasi-constant-function comparison.
+The list is short, and it is short for one reason. Two representations answer
+these questions. The **rules** recurse over the schema tree, and where they
+decline the **descriptor** is asked: it holds each kind as a set, so `a ≤ b` is
+`a ∧ ¬b = ∅` and the answer comes out of the sets rather than out of a rule about
+the shape. What is left below is what the descriptor cannot hold.
 
-  The reachable half of this is decided: a subtype that denotes the **empty set**
-  is below every schema, including one declaring a field it lacks, because the
-  empty set is a subset of every set. That case does not need the comparison
-  above, and both lattice bounds are decided by emptiness rather than by the
-  shape of the atom — a schema that denotes nothing without being spelled
-  `nothing`, and one that covers the universe without being spelled `anything`,
-  are both recognised.
+- **Recursion.** A reference is a cycle, and a finite descriptor has no room for
+  one, so a recursive schema is decided by the rules alone. `μt. t & ~(μt. t)` is
+  not decided empty, because the two occurrences compile to two definitions and
+  the fold reads structural equality.
 
-- **A catch-all keyed by literals covering a field name.** Whether a supertype's
-  catch-all clause governs a field the subtype declares is asked by matching the
-  clause's key against `str` and `object`, rather than by asking whether the
-  field's name belongs to the key's set. So `{"a": int}` is decided below
-  `dict[str, int]` but not below `dict[Literal["a"], int]`, which names exactly
-  that key. Deciding it needs the core to compare a field name against a pooled
-  constant, which is a question only the binding can answer today.
+- **A length bound over a shape that is not words.** A length is not a word's
+  alone -- a list, a tuple, a set and a dict all have one -- and the descriptor's
+  word component speaks only for words, so a bound over anything else refuses
+  rather than being lowered as if it did. A two-tuple is not decided empty under
+  `MinLen(3)`.
 
-- **A relation against a respelled operand.** The rules that settle the
-  complement laws read structural equality, so `A | ~A` is recognised as the
-  universe and `A | ~B` is not — for a `B` that `is_equivalent` proves equal to
-  `A`, such as `A | nothing`. The same holds of every rule the decision applies:
-  two of them compose only where the operands are spelled alike. Deciding it in
-  general wants the operands compared as sets wherever a rule reads equality.
+- **An attribute record beside a builtin kind.** An object schema is a class met
+  with a record of attributes, and the shape a `NamedTuple`'s instances have is a
+  tuple, so relating the two means relating an attribute record to a sequence
+  kind. The descriptor holds each in a different place and does not relate them.
 
-- **A constraint with no value entailment.** A bound (`Ge`, `Gt`, `Le`, `Lt`,
-  `MinLen`, `MaxLen`) entails a looser one through the ordering oracle, so a
-  tighter bound is decided below a looser one. The other three kinds — `Regex`,
-  `MultipleOf` and a predicate — are opaque: nothing is read out of them, so a
-  refinement carrying one relates to another schema only when that schema carries
-  the same constraint verbatim. A regex is never turned into the language it
-  denotes, so neither `Regex("a")` below `Regex("ab?")` nor `Regex("a")` below
-  the singleton `Literal["a"]` is decided, and `MultipleOf(4)` is not decided
-  below `MultipleOf(2)`. A predicate has no route to being decided (its
-  satisfiability is undecidable, below). The other two do — regular-language
-  inclusion is decidable, and so is divisibility of one integer by another — and
-  each needs the core to reason about a pooled constant rather than test it for
-  equality.
+- **A schema too large to build.** The descriptor is bounded three ways: the
+  nodes it will read, the nesting it will descend, and the work a build may
+  spend. Past any of them it refuses, and the caller keeps the rules' answer.
+  None of these is a statement about the schema -- the same schema decides under
+  a larger bound -- and each exists because building a descriptor beside a
+  verdict the rules already reached is work whose result is discarded. Reading
+  `dev/01-schema-ir.md` gives the measurements the bounds are set from.
 
-- **A schema that is not itself a refinement, against one that is.** Only a
-  literal reaches the value oracle, which answers by running the membership.
-  `Literal[5]` is decided below `Annotated[int, Ge(0)]`; `bool` is not, though
-  every `bool` is an `int` at or above zero. Deciding it needs the bound compared
-  against the subtype's own value range, which the core reads from a scalar
-  region rather than from an enumerated set.
-
-- **A shape the complement fold does not reach.** The fold reads structural
-  equality inside one validator's constants, so it settles a join written
-  `union(A, complement(A))` and not one written any other way: a respelling such
-  as `union(A, complement(union(A, nothing)))`, a recursive schema whose two
-  occurrences compile to two definitions, or two constants that are equal without
-  being the same object. The procedure has no rule for those, so they are not
-  decided.
-
-- **An emptiness that needs an inclusion.** `is_empty` decides the regions, the
-  complement law and the bounds directly, and never asks whether one member of a
-  meet is below another. So `list[bool] & ~list[int]` is not decided empty, even
-  though `list[bool] <= list[int]` is decided — and a container meet is not met
-  componentwise, so `list[int] & list[str]` is not decided to be the empty list.
-
-- **A scalar kind against its own values.** A kind is a region bit rather than a
-  set of the values in it, so `bool` is not decided below `Literal[True, False]`,
-  `Literal[1]` is not decided below `int & ~bool`, and a negated literal is not
-  subtracted from the kind that holds it.
-
-- **A refinement against a base that is not one.** A bound is compared against
-  another bound, and a base that is not itself a refinement reaches one only
-  through the value oracle, which answers for a literal and not for a class or a
-  kind. A length bound is opaque to the shape it bounds, so a two-tuple is not
-  decided empty under `MinLen(3)`.
-
-- **A map's domain as written.** The field list is the domain, so a field whose
-  type is empty is not absorbed and `{"a?": nothing}` is not decided equal to
-  `{}`; and a key type is matched against the string and top atoms rather than
-  asked whether it admits a name, so `{"a": int}` is not decided below
-  `dict[Literal["a"], int]`.
+- **A predicate.** Its satisfiability is undecidable (below), so neither
+  representation reasons about one.
 
 Every relation named here is a strict expected failure in
-`tests/test_completeness_ledger.py`, so the day a rule decides one the mark fails
-and the entry leaves both the ledger and this list.
+`tests/test_completeness_ledger.py`, so the day one is decided the mark fails and
+the entry leaves both the ledger and this list.
 
 ```python
-from typing import Annotated, Literal
+from typing import Annotated, Literal, NamedTuple
 
 import annotated_types as at
 
@@ -264,35 +215,42 @@ from valgebra import (
     complement,
     intersection,
     nothing,
+    recursive,
     union,
 )
 
+
+class Pair(NamedTuple):
+    x: int
+    y: int
+
+
+# A length bound over a shape that is not words is opaque to it.
+assert not Validator(Annotated[tuple[int, int], at.MinLen(3)]).is_empty()
+# An attribute record and the shape its instances have are held apart.
+assert not Validator(Pair).is_subtype_of(tuple[int, int])
+# A recursive schema is decided by the rules alone, and they read the spelling:
+# two writings of one definition are two definitions.
+mu = lambda: Validator(recursive(lambda t: union(int, list[t])))  # noqa: E731
+assert not intersection(mu(), complement(mu())).is_empty()
+
+# Everything else here decides, on the sets rather than by a rule.
 pattern = Validator(Annotated[str, Regex("a")])
-assert not pattern.is_subtype_of(Annotated[str, Regex("ab?")])  # L(a) <= L(ab?)
-assert not pattern.is_subtype_of(Literal["a"])  # L(a) is exactly {"a"}
-assert not Validator(Annotated[int, at.MultipleOf(4)]).is_subtype_of(
+assert pattern.is_subtype_of(Annotated[str, Regex("ab?")])  # L(a) <= L(ab?)
+assert pattern.is_subtype_of(Literal["a"])  # L(a) is exactly {"a"}
+assert Validator(Annotated[int, at.MultipleOf(4)]).is_subtype_of(
     Annotated[int, at.MultipleOf(2)]
 )
+assert Validator(bool).is_subtype_of(Annotated[int, at.Ge(0)])
+assert Validator(bool).is_subtype_of(Literal[True, False])
+assert Validator({"a": int}).is_subtype_of(dict[Literal["a"], int])
 
-# A literal reaches the value oracle; a class does not.
-assert Validator(Literal[5]).is_subtype_of(Annotated[int, at.Ge(0)])
-assert not Validator(bool).is_subtype_of(Annotated[int, at.Ge(0)])
-
-# A literal carries its constant's kind.
-assert Validator(Literal["a"]).is_subtype_of(complement(int))
-assert intersection(Literal["a"], Literal["b"]).is_empty()
-assert intersection(Literal[1], Literal[True]).is_empty()  # 1 == True, types differ
-
-# The complement fold is a construction, so `~~A` is `A` -- one schema, not two
-# the procedure relates.
+# A respelling denotes the same set, and the sets are what the relation reads --
+# even though the fold, which is a construction over the term, does not reach it.
 record = Validator({"a": int})
-assert complement(complement(record)) == record
-
-# Written another way, the same set is a shape the fold does not reach and the
-# procedure does not decide.
 respelled = union(record, complement(union(record, nothing)))
 assert respelled != Validator(anything)
-assert not Validator(anything).is_subtype_of(respelled)
+assert Validator(anything).is_subtype_of(respelled)
 ```
 
 Two instruments hold this list to the tree. `tests/test_completeness_ledger.py`

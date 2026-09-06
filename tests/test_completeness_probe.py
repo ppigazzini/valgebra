@@ -184,34 +184,18 @@ VALUES: list[Any] = [
 # an admission, not a design: a gap described as a decision is what keeps it
 # alive. Every one of these has a known route to being decided.
 #
+# **It is empty.** The probe's universe holds no relation that is true, answered
+# False, and not decided. The four that were here took the route each of them
+# named: three asked for one regular language to be compared against another,
+# and the fourth for `bool` to be read as the two values it denotes rather than
+# as a scalar region. All four are what the descriptor holds a kind as -- a set
+# -- so asking it where the rules decline decided them together.
+#
 # `{a:int}` here is a `TypedDict`, which the typing spec makes **open**, so the
 # two entries about a literal-keyed catch-all covering its field are gone: an
 # open record admits a dict carrying a key the catch-all does not name, and a
 # value refutes each relation rather than the procedure failing to decide it.
-ACCEPTED: dict[str, str] = {
-    "str&Regex['a'] <= str&Regex['ab?']": (
-        "A regex is opaque to `constraint_entailed`, which gives it no value "
-        "entailment, so a refinement relates through one only when the supertype "
-        "carries it verbatim. Inclusion of one regular language in another is "
-        "decidable, so the route is a language comparison over the two pooled "
-        "patterns rather than equality of them."
-    ),
-    "str&Regex['a'] <= Lit['a']": (
-        "The same opacity read the other way: deciding it means computing that "
-        "the pattern's language is the singleton the literal denotes, and the "
-        "pattern is never turned into a language at all."
-    ),
-    "str&Regex['a'] <= Lit['a','b']": (
-        "As above, with the supertype a union of literals."
-    ),
-    "bool <= int&Ge(0)": (
-        "A subtype that is not itself a refinement reaches one only through the "
-        "value oracle, which answers for a literal and not for a class. Deciding "
-        "it means comparing the bound against the subtype's own value range -- "
-        "`bool` denotes exactly `{False, True}` -- where the core reads a scalar "
-        "region rather than an enumerated set."
-    ),
-}
+ACCEPTED: dict[str, str] = {}
 
 
 def _admits(schema: Validator, value: Any) -> bool:

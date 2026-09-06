@@ -81,7 +81,7 @@ impl BoolSet {
         self.0 & BoolSet::just(value).0 != 0
     }
 
-    const fn union(self, other: BoolSet) -> BoolSet {
+    pub(crate) const fn union(self, other: BoolSet) -> BoolSet {
         BoolSet(self.0 | other.0)
     }
 
@@ -696,6 +696,15 @@ impl Descr {
     /// lowering meets it with whatever the base admits.
     pub fn integers(&mut self, set: IntSet) {
         self.put(Kind::Int, Component::Integers(set));
+    }
+
+    /// Put a boolean set in the `bool` slot, leaving every other kind empty.
+    ///
+    /// Beside [`integers`](Self::integers) and for the same caller: `bool` is a
+    /// kind of its own here, so a bound that orders the integers orders these
+    /// two as well and has to say so in both slots.
+    pub fn booleans(&mut self, set: BoolSet) {
+        self.put(Kind::Bool, Component::Booleans(set));
     }
 
     fn put(&mut self, kind: Kind, structure: Component) {

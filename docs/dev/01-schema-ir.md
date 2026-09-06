@@ -473,6 +473,32 @@ before: it can only turn "not proved" into "proved", so both orders give the sam
 answers, and building a descriptor beside a verdict the rules already reached is
 work whose result is discarded.
 
+There is a second bound, and the allowance does not replace it. An allowance
+bounds what a build spends once it has started; it cannot bound what starting
+costs. A lowering builds an automaton at every sequence node and a powerset at
+every set node, and none of that is a product to charge for. Held to 1024 units
+and nothing else, one `is_empty` over a record nested eight deep costs **more
+than the structural rules spend on the entire decision workload**: seventeen
+hundred times its instruction budget, which is not a budget to re-record but a
+workload no lane can run.
+
+So a build that will not pay for itself is refused *before* it is walked, and
+**nesting** is what says which. Depth is the exponential -- 7 microseconds, 280
+microseconds, 1.8 milliseconds, 8 milliseconds, 37 milliseconds at depths 0, 2,
+4, 6 and 8 -- while breadth is not, a record of sixteen fields building in 13
+microseconds. Every relation the descriptor decides and the rules do not nests
+five deep or less; the shapes that blow up nest ten and deeper. Bounded at five,
+the whole widening costs the decision path **eleven percent**, and the
+validation path, which no relation is on, is unchanged.
+
+What it does cost is the fuzzer. The decision target runs at 139 executions a
+second against 10,544, over five times the covered features and twice the
+resident memory: every input the fuzzer generates that the rules decline now
+builds two descriptors. That is a testing-capability cost rather than a
+user-facing one, and the route out of it is a target that asks the rules
+directly for the high-volume properties, with the descriptor on a target of its
+own.
+
 ## The limit
 
 The IR is a tree with back edges, not a graph with sharing. Two structurally
