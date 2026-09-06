@@ -87,6 +87,51 @@ The same holds of a class whose metaclass answers `isinstance` by running code:
 what it admits is not a set that stands still, so the complement laws are not
 applied to it.
 
+## Your code runs inside the check, and may call back in
+
+A predicate, an `__eq__` behind a `Literal`, an `isinstance` hook, a `keys()`
+— membership runs your code at almost every entry of a container, and while it
+runs the check is on the stack. That code may call valgebra again. It may build
+a schema, ask a decision, or re-enter the very validator that called it: the
+walk keeps its recursion guard in a per-call local, so a nested check is an
+ordinary one and does not disturb the outer.
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import Validator
+
+rows = Validator({"id": int})
+
+
+def every_row(value: object) -> bool:
+    return all(rows.is_valid(row) for row in value)  # type: ignore[union-attr]
+
+
+page = Validator(Annotated[list, at.Predicate(every_row)])
+assert page.is_valid([{"id": 1}, {"id": 2}])
+assert not page.is_valid([{"id": 1}, {"id": "two"}])
+```
+
+What bounds it is Python's own recursion limit, not a valgebra one: a predicate
+that re-enters without a base case raises `RecursionError` where an ordinary
+Python function would. Two exceptions are **not** turned into a verdict —
+`KeyboardInterrupt` and `SystemExit` propagate, because a check that swallowed
+them would make the process unstoppable from inside a loop. Everything else a
+predicate raises is reported as `predicate_error` rather than as a rejected
+value ([refinements](05-refinements.md)), so a bug in your callable is not
+mistaken for data that failed.
+
+The one thing your code must not do is **resize the container being checked**.
+That is not refused — it is reported: the walk reads every container against a
+count taken once, and a count that moved makes the reading cover no state the
+value was ever in, so the answer is `mutated_during_validation` and a non-member
+([error model](08-error-model.md)). It applies equally to another thread on a
+free-threaded interpreter, which is the case that cannot be written out of a
+program by discipline.
+
 ## It does not generate, infer, or export
 
 - **No schema inference from values or code.** A schema is written, not guessed.
