@@ -181,7 +181,12 @@ runs, so pickling one would have to pickle those — a different question with a
 different answer per object. Send the **schema** instead and rebuild on the
 other side: compiling is cheap (a fifty-field record takes about eleven
 microseconds), and `repr(validator)` gives an expression that rebuilds every
-form except a class or a predicate, which are objects rather than syntax.
+form except three: a class and a predicate, which are objects rather than
+syntax, and a **required record key whose name ends in `?`**, which the dict
+literal cannot spell because every trailing `?` there marks the key optional
+([schema language](03-schema-language.md)). The first two rebuild into
+something that raises; the third rebuilds quietly into the optional key, so a
+schema carrying one is a schema to send as itself rather than as its `repr`.
 
 ```python
 import pickle

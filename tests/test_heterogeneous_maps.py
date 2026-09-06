@@ -7,12 +7,12 @@ key give a record with a typed catch-all. Named fields take precedence.
 """
 
 from types import GenericAlias
-from typing import Annotated
+from typing import Annotated, TypedDict
 
 import annotated_types as at
 import pytest
 
-from valgebra import ValidationError, Validator, recursive, union
+from valgebra import ValidationError, Validator, anything, recursive, union
 
 
 def test_heterogeneous_mapping_by_key_schema() -> None:
@@ -123,3 +123,55 @@ def test_recursion_through_a_field_and_a_catch_all() -> None:
     cyclic: dict[str, object] = {"v": 1}
     cyclic["self"] = cyclic
     assert not tree.is_valid(cyclic)  # a cyclic value is rejected, never looping
+
+
+def test_a_key_name_ending_in_a_question_mark_is_written_with_one_more() -> None:
+    """The suffix is stripped once, so the escape is doubling it.
+
+    Undocumented until now, and the sort of rule a reader guesses wrong: they
+    would expect `{"page?": int}` to be the key `page?`, and it is the optional
+    key `page`.
+    """
+    optional_page = Validator({"page?": int})
+    assert optional_page.is_valid({"page": 1})
+    assert optional_page.is_valid({})
+    assert not optional_page.is_valid({"page?": 1})
+
+    optional_page_query = Validator({"page??": int})
+    assert optional_page_query.is_valid({"page?": 1})
+    assert optional_page_query.is_valid({})
+    assert not optional_page_query.is_valid({"page": 1})
+
+
+def test_a_required_key_ending_in_a_question_mark_is_written_as_a_typed_dict() -> None:
+    """The dict literal cannot spell it; the functional `TypedDict` can.
+
+    Every trailing `?` in a dict-literal key is the optional marker, so no
+    string reads back as a *required* key ending in one. A `TypedDict` takes its
+    key names literally and its required-ness from the class, so it says what
+    the literal cannot.
+    """
+    query = Validator(TypedDict("Query", {"page?": int}))
+    assert query.is_valid({"page?": 1})
+    assert not query.is_valid({}), "the key is required"
+    assert not query.is_valid({"page": 1})
+
+
+def test_that_key_is_the_one_form_repr_does_not_rebuild() -> None:
+    """`docs/17` names it, so the exception is pinned rather than discovered.
+
+    `repr` renders the field as `{'page?': int, ...}`, which reads back as the
+    *optional* key `page` -- quietly a different set, where a class or a
+    predicate at least rebuilds into something that raises.
+    """
+    query = Validator(TypedDict("Query", {"page?": int}))
+    environment = {"Validator": Validator, "anything": anything}
+    rebuilt = Validator(eval(repr(query), environment))  # noqa: S307
+    assert rebuilt != query
+    assert rebuilt.is_valid({}), "the rebuilt key is optional"
+    assert not query.is_valid({})
+
+    # And the forms that do round-trip still do, including the doubled escape.
+    for spelling in ({"page?": int}, {"page??": int}, {"a": int, "b?": str}):
+        made = Validator(spelling)
+        assert Validator(eval(repr(made), environment)) == made  # noqa: S307

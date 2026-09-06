@@ -301,6 +301,37 @@ assert user.is_valid({"name": "Ada", "age": 36})
 assert not user.is_valid({"name": "Ada", "x": 1})  # closed: no extra keys
 ```
 
+### A key name that ends in a question mark
+
+The suffix is stripped once, so a name that ends in `?` is written with one
+more: `{"page??": int}` is the **optional** key `page?`.
+
+```python
+from valgebra import Validator
+
+assert Validator({"page??": int}).is_valid({"page?": 1})
+assert Validator({"page??": int}).is_valid({})  # still optional
+```
+
+A **required** key ending in `?` has no dict-literal spelling: every trailing
+`?` is the marker, so there is no string that reads back as one. Write it as a
+`TypedDict` through the functional syntax, where the key is taken literally and
+required-ness comes from the class:
+
+```python
+from typing import TypedDict
+
+from valgebra import Validator
+
+Query = TypedDict("Query", {"page?": int})
+assert Validator(Query).is_valid({"page?": 1})
+assert not Validator(Query).is_valid({})  # required
+```
+
+That is the one form `repr` cannot round-trip: it renders the field as
+`{'page?': int, ...}`, which reads back as the optional key `page`
+([boundaries](17-boundaries.md)).
+
 Open the record with `open` (undeclared keys admitted) or re-close it with
 `close`:
 

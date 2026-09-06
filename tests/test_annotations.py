@@ -241,7 +241,7 @@ def test_the_literal_arguments_the_spec_allows_still_build() -> None:
     # it is a *constant*, which this library pools like any other.
     assert Validator(Literal[1.5]).is_valid(1.5)  # ty: ignore[invalid-type-form]
     # A tuple is the spelling for several arguments, not an argument.
-    assert Validator(Literal[(1, 2)]).is_valid(2)
+    assert Validator(Literal[(1, 2)]).is_valid(2)  # ty: ignore[invalid-type-form]
     # And the containers still mean what they mean outside a `Literal`.
     assert Validator(list[int]).is_valid([1])
     assert Validator({}).is_valid({})
@@ -259,5 +259,5 @@ def test_a_bare_forward_reference_is_refused_like_one_in_an_argument() -> None:
     assert "forward reference" in str(info.value)
     # The same refusal, reached the other way.
     with pytest.raises(NotImplementedError) as inner:
-        Validator(list[ForwardRef("int")])
+        Validator(list[ForwardRef("int")])  # ty: ignore[invalid-type-form]
     assert "forward reference" in str(inner.value)
