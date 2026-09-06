@@ -51,6 +51,12 @@ release waits for whatever reviewers those environments require.
    and add its compare and tag links. Land it on `main`, so the merge gates run
    against the tree that is about to be published.
 
+   The changelog ledger (`tests/test_changelog_ledger.py`) reads the *page* for
+   which version is released and measures the roll against that version's tag.
+   Between this step and step 6 the section names a version no tag resolves yet,
+   so the ledger skips: there is nothing left to account for, and the roll is
+   empty because it was just emptied. It resumes the moment the tag lands.
+
    ```bash
    cargo metadata --format-version 1 --offline >/dev/null    # refresh Cargo.lock
    cargo metadata --format-version 1 --offline --manifest-path fuzz/Cargo.toml >/dev/null

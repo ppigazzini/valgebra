@@ -25,10 +25,11 @@ missing. A commit that deserves no line stays on the roll with `-- internal`
 after it.
 
 A shallow clone cannot answer any of this: it carries the tip and no tags, so
-there is no range to read. That is a property of the clone rather than of the
-tree, so the checks skip there -- and because a ledger that skips in every lane
-is a ledger nobody runs, one lane takes the whole history and a fourth check
-holds it there.
+there is no range to read. Nor can the release window, where the entries have
+been rolled into a dated section and the tag for it is not pushed yet. Neither
+is a property of the tree, so the checks skip in both -- and because a ledger
+that skips in every lane is a ledger nobody runs, one lane takes the whole
+history and a fourth check holds it there.
 
 The roll expires in its own direction too: an entry naming a commit that is not
 in the range is a stale line, and it fails, because a roll nobody prunes is a
@@ -77,26 +78,43 @@ def _git(*args: str) -> str:
     ).stdout
 
 
-def _last_tag() -> str | None:
-    """Read the last release tag, or `None` where this clone cannot see one.
+#: The first released section of the changelog, which names the version the
+#: unreleased entries are measured against.
+RELEASED = re.compile(r"^## \[(\d+\.\d+\.\d+)\]", re.MULTILINE)
 
-    A CI checkout is shallow by default: it carries the tip and no tags, so
-    there is no range to read and `git describe` exits non-zero. That is a
-    property of the *clone*, not of the tree, so it skips rather than fails --
-    and one lane takes the full history so the ledger is actually run
-    (`test_the_workflow_runs_this_ledger_with_full_history` below holds it
-    there).
+
+def _range_start() -> str | None:
+    """Read the tag the roll is measured from, or `None` if this clone lacks it.
+
+    The changelog says which version is released -- its first dated section --
+    and the roll accounts for what has happened since. Reading it from the page
+    rather than from `git describe` is what makes the *release window* work: the
+    bump commit rolls the unreleased entries into a dated section and the tag is
+    pushed several steps later, so for that window the section names a version
+    no tag resolves yet. There is then nothing to account for, and skipping is
+    the honest answer rather than failing on a page that is correct.
+
+    A shallow checkout takes the same path for the same reason: it carries the
+    tip and no tags, so the range is not there to read. That is a property of
+    the clone, not of the tree, and one lane takes the full history so the
+    ledger is actually run (`test_the_workflow_runs_this_ledger_with_full_history`
+    below holds it there).
     """
+    released = RELEASED.search(CHANGELOG.read_text(encoding="utf-8"))
+    if released is None:
+        return None
+    tag = f"v{released.group(1)}"
     try:
-        return _git("describe", "--tags", "--abbrev=0").strip() or None
+        _git("rev-parse", "--verify", f"{tag}^{{commit}}")
     except (subprocess.CalledProcessError, OSError):
         return None
+    return tag
 
 
-LAST_TAG = _last_tag()
+LAST_TAG = _range_start()
 SHALLOW = pytest.mark.skipif(
     LAST_TAG is None,
-    reason="this clone has no history back to the last release tag",
+    reason="the tag this roll is measured from is not in this clone",
 )
 
 
