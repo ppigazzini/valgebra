@@ -65,6 +65,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a bare container class is its kind
 - feat: a schema is built in the lattice normal form
 - feat: retire the term rewrites the algebra does not need
+- feat: a type alias that names itself is the fixpoint it writes
 
 -->
 
@@ -110,6 +111,25 @@ answer of its own, or a repair to a change not yet released.
   conservative one, as before. What stays conservative is recursion, a length
   bound over a shape that is not text, an attribute record beside a builtin kind,
   and a predicate.
+
+- **A PEP 695 `type` alias that names itself builds the fixpoint it writes.**
+  The alias is the binder: it is reached again while its own body is read, and
+  there is no lambda to carry the fixpoint, so the alias carries it. What it
+  builds is what the explicit call builds, and mutual recursion is two aliases
+  naming each other. An alias naming itself outside a structural constructor
+  denotes no set and is refused when the validator is built, as an unguarded
+  `recursive` already was. Before, such an alias was refused as a schema too
+  deep to compile.
+
+  ```python
+  from valgebra import Validator, recursive, union
+
+  type Json = None | bool | int | float | str | list[Json] | dict[str, Json]
+
+  assert Validator(Json).is_equivalent(
+      recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+  )
+  ```
 
 - The three construction bounds are importable: `MAX_SCHEMA_DEPTH`,
   `MAX_DEFINITIONS` and `MAX_SCHEMA_NODES` are exported from `valgebra` and

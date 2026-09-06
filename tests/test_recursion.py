@@ -1,3 +1,4 @@
+import sys
 import threading
 from collections.abc import Callable
 
@@ -269,3 +270,58 @@ def test_simplify_reduces_a_recursive_definition() -> None:
         lambda n: Validator({"a": union(int, int, int), "n": union(None, n)})
     )
     assert repr(node.simplify()).count("int") == 1
+
+
+# PEP 695 is 3.12+ syntax, so the alias is written in a source string rather than
+# in this module: a `type` statement here would be a SyntaxError on 3.10 before
+# any skip could apply.
+def _alias(source: str, name: str) -> object:
+    namespace: dict[str, object] = {}
+    exec(source, namespace)  # noqa: S102 - the syntax under test, not user input
+    return namespace[name]
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="PEP 695 type aliases")
+def test_a_recursive_type_alias_is_the_fixpoint_it_writes() -> None:
+    """`type X = ... X ...` is the standard spelling of a recursive schema.
+
+    The alias is the binder: it is reached again while its own body is being
+    read, and there is no lambda to carry the fixpoint. So it builds the same
+    schema the explicit `recursive` call builds, which is what this asserts --
+    equivalence rather than a repr, because the two spellings are one set.
+    """
+    alias = _alias(
+        "type Json = None | bool | int | float | str | list[Json] | dict[str, Json]",
+        "Json",
+    )
+    compiled = Validator(alias)
+
+    assert compiled.is_equivalent(json_value)
+    assert compiled.is_valid({"a": [1, "x", {"b": None}]})
+    assert not compiled.is_valid({"a": {1: 2}})
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="PEP 695 type aliases")
+def test_an_alias_that_never_names_itself_builds_what_it_always_did() -> None:
+    # The fixpoint is tied only where the knot exists: an ordinary alias is the
+    # schema its value builds, with no definition and nothing to resolve.
+    assert repr(Validator(_alias("type Plain = int | str", "Plain"))) == "int | str"
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="PEP 695 type aliases")
+def test_an_alias_naming_itself_outside_a_constructor_is_refused() -> None:
+    # `type X = int | X` names a set no value settles, which is the same refusal
+    # an unguarded `recursive` gets, for the same reason.
+    with pytest.raises(ValueError, match="not contractive"):
+        Validator(_alias("type Bad = int | Bad", "Bad"))
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="PEP 695 type aliases")
+def test_two_aliases_may_name_each_other() -> None:
+    # Mutual recursion is two definitions, and each alias is the binder of its
+    # own: the pair is a system, not one fixpoint seen twice.
+    source = "type Branch = list[Leaf]\ntype Leaf = int | Branch"
+    branch = Validator(_alias(source, "Branch"))
+
+    assert branch.is_valid([1, [2]])
+    assert not branch.is_valid([1, "x"])

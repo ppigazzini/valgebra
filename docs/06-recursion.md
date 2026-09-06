@@ -36,6 +36,34 @@ forest = Validator([tree])
 assert forest.is_valid([{"value": 1}, {"value": 2, "right": {"value": 3}}])
 ```
 
+## A `type` alias is a fixpoint too
+
+A PEP 695 alias that names itself is the standard typing spelling of a recursive
+schema, and it builds one. The alias is the binder: it is reached again while its
+own body is read, and the schema it builds is the schema the explicit call
+builds — the two are one set, and `is_equivalent` says so.
+
+```python
+from valgebra import Validator, recursive, union
+
+type Json = None | bool | int | float | str | list[Json] | dict[str, Json]
+
+alias = Validator(Json)
+assert alias.is_valid({"a": [1, "x", {"b": None}]})
+assert alias.is_equivalent(
+    recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
+)
+```
+
+Mutual recursion works the same way, since each alias binds its own fixpoint:
+`type Branch = list[Leaf]` beside `type Leaf = int | Branch` is two definitions
+naming each other. An alias that names itself **outside** a structural
+constructor — `type Bad = int | Bad` — is refused when the validator is built,
+for the reason the next section gives: it denotes no set a value settles.
+
+The syntax is Python 3.12 and later. On 3.10 and 3.11, write the fixpoint with
+`recursive`.
+
 ## Why classes need it
 
 A class whose own type appears in a field is recursive in the same way, but a

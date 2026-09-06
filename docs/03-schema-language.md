@@ -464,7 +464,7 @@ assert fully_open.is_valid({"name": "Ada", "age": "old"})
 | `Enum` | an instance of the enumeration (any member) |
 | runtime-checkable `Protocol` | `isinstance` against the protocol |
 | `NewType` | validates the supertype it wraps |
-| PEP 695 `type` alias | validates the aliased type |
+| PEP 695 `type` alias | validates the aliased type, and ties the fixpoint where the alias names itself ([recursion](06-recursion.md)) |
 
 ```python
 import enum

@@ -1,7 +1,7 @@
 //! The schema frontend: build the IR from Python types, typing annotations,
 //! native container forms, and already-compiled validators.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use pyo3::PyTypeInfo;
 use pyo3::exceptions::{PyNotImplementedError, PyValueError};
@@ -12,7 +12,8 @@ use pyo3::types::{
     PyTuple, PyType,
 };
 use valgebra_core::{
-    ClassIx, ConstIx, Constraint, DefShift, Field, MapClause, OperandIx, PredIx, Schema, SeqShape,
+    ClassIx, ConstIx, Constraint, DefIx, DefShift, Field, Guarded, MapClause, OperandIx, PredIx,
+    Schema, SeqShape, fresh_self_token,
 };
 
 use crate::errors::summarize;
@@ -23,6 +24,78 @@ thread_local! {
     /// self-referential class (whose field type names the class) fails cleanly
     /// instead of recursing until the native stack overflows.
     static BUILD_DEPTH: Cell<usize> = const { Cell::new(0) };
+
+    /// The PEP 695 aliases whose bodies are being built on this thread.
+    ///
+    /// One entry per alias, holding the object's address, the self-reference
+    /// token standing for it while its body is read, and whether that token was
+    /// handed out. An alias reached again while its own body is being built is
+    /// the fixpoint's back edge, and this is what tells the two apart -- the
+    /// address, because an alias is one object and `__value__` yields the same
+    /// one however many times it is read.
+    static OPEN_ALIASES: RefCell<Vec<(usize, u64, Cell<bool>)>> =
+        const { RefCell::new(Vec::new()) };
+}
+
+/// Build the body of a PEP 695 alias, tying the knot where it names itself.
+///
+/// `type Json = int | str | list[Json] | dict[str, Json]` is the standard
+/// spelling of a recursive type, and the annotation is the whole definition: the
+/// alias object is reached again while its own body is being read, and there is
+/// no lambda to carry the fixpoint. So the alias *is* the binder. A token stands
+/// for it while the body is built, every occurrence of the token becomes a
+/// reference to the definition the body turns into, and an alias that never
+/// names itself builds exactly what it did before -- one schema, no definition,
+/// nothing to resolve.
+///
+/// The contractivity check is the same one `recursive` runs, for the same
+/// reason: `type X = int | X` names a set no value settles, and a walk over it
+/// would not terminate.
+fn build_alias(
+    obj: &Bound<'_, PyAny>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
+    let address = obj.as_ptr() as usize;
+    if let Some(token) = OPEN_ALIASES.with_borrow(|open| {
+        open.iter()
+            .find(|(at, _, _)| *at == address)
+            .map(|(_, token, used)| {
+                used.set(true);
+                *token
+            })
+    }) {
+        return Ok(Schema::SelfRef(token));
+    }
+
+    let token = fresh_self_token();
+    OPEN_ALIASES.with_borrow_mut(|open| open.push((address, token, Cell::new(false))));
+    let body = build_schema(&obj.getattr("__value__")?, lits, defs);
+    let recursive = OPEN_ALIASES
+        .with_borrow_mut(Vec::pop)
+        .is_some_and(|(_, _, used)| used.get());
+    let body = body?;
+    if !recursive {
+        return Ok(body);
+    }
+
+    // The body becomes a definition and every occurrence of the token becomes a
+    // reference to it -- in the body, and in any definition the body's own build
+    // appended, since an inner fixpoint may name this one.
+    let ref_id = DefIx::new(defs.len());
+    for definition in defs.iter_mut() {
+        *definition = definition.resolve_self(token, ref_id);
+    }
+    let resolved = body.resolve_self(token, ref_id);
+    if resolved.occurs_unguarded_under(ref_id, Guarded::No, defs) {
+        return Err(PyValueError::new_err(
+            "recursive type alias is not contractive: the alias names itself \
+             outside any structural constructor, so it denotes no set. Put the \
+             self-reference under a list, tuple, set, dict, record, or object",
+        ));
+    }
+    defs.push(resolved);
+    Ok(Schema::Ref(ref_id))
 }
 
 /// The most levels of schema nesting the frontend descends while compiling.
@@ -193,11 +266,12 @@ pub(crate) fn build_schema(
         return build_parametrized(&origin, args.cast::<PyTuple>()?, lits, defs);
     }
 
-    // PEP 695 `type X = ...` alias (3.12+): validate the aliased type.
+    // PEP 695 `type X = ...` alias (3.12+): validate the aliased type, tying
+    // the fixpoint where the alias names itself.
     if let Some(alias_type) = &forms.type_alias_type
         && obj.is_instance(alias_type.bind(py))?
     {
-        return build_schema(&obj.getattr("__value__")?, lits, defs);
+        return build_alias(obj, lits, defs);
     }
 
     // NewType: validate the supertype it wraps.
