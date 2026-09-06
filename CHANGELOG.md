@@ -88,6 +88,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: refuse a Literal argument the typing spec refuses
 - fix: refuse a bound against nan, which orders nothing
 - fix: the merge base is never the commit being measured -- internal
+- fix: take the version from the crate, not from the metadata reader
 
 -->
 
@@ -503,6 +504,13 @@ answer of its own, or a repair to a change not yet released.
   not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
+
+- `import valgebra` costs **0.9 ms**, down from 32. `__version__` was read with
+  `importlib.metadata.version()`, which pulls `email`, `zipfile`, `inspect` and
+  the compression modules to read a file that says what `Cargo.toml` already
+  said — 20 of those 32 milliseconds, and a dozen modules dragged into any
+  process that imports valgebra. The extension carries the crate's version
+  instead; `tests/test_version.py` holds it to the installed distribution's.
 
 - A bound against `nan` is refused. Every comparison with `nan` is false, so
   `Annotated[float, Ge(nan)]` admitted no value at all — the empty set written as

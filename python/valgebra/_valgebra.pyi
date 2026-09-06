@@ -16,6 +16,10 @@ from typing import NoReturn, TypeVar, final
 
 _T = TypeVar("_T")
 
+#: The distribution version, taken from the crate manifest the wheel is built
+#: from rather than read back out of the installed metadata.
+__version__: str
+
 class ValidationError(Exception):
     # The structured, machine-readable error model. `errors` is a tuple of
     # per-failure items, each a JSON-serializable dict with the keys
@@ -89,6 +93,7 @@ __all__ = [
     "MAX_SCHEMA_NODES",
     "ValidationError",
     "Validator",
+    "__version__",
     "anything",
     "complement",
     "intersection",

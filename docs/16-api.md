@@ -208,10 +208,12 @@ print(schema.is_valid(1))
 
 ## Package version
 
-`valgebra.__version__` is the installed distribution version as a string. It is
-read from the package metadata maturin derives from the Cargo workspace
-manifest, so it always matches the built wheel and never drifts from a
-hand-maintained literal.
+`valgebra.__version__` is the distribution version as a string. It comes from
+the Cargo workspace manifest, which is what maturin derives the wheel's metadata
+from — so it matches the built wheel and never drifts from a hand-maintained
+literal. Taken from the compiled extension rather than read back out of the
+installed metadata, because the metadata reader costs twenty milliseconds of
+import time for a string the manifest already carries.
 
 ```python
 import valgebra

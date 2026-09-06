@@ -186,6 +186,15 @@ fn atom(py: Python<'_>, schema: Schema) -> PyResult<Py<Validator>> {
 #[pymodule(gil_used = false)]
 fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = module.py();
+    // The distribution version, from the crate the wheel is built from.
+    //
+    // `importlib.metadata.version()` answers the same question and costs 20 ms
+    // of the 32 ms `import valgebra` took: it pulls `email`, `zipfile`,
+    // `inspect` and the compression modules to read a file that says what
+    // `Cargo.toml` already said. `maturin` builds the wheel from that manifest,
+    // so the two cannot disagree -- and `tests/test_version.py` holds them to
+    // each other rather than trusting that.
+    module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     let failure = py.get_type::<ValidationError>();
     // The structured model describes *failures*, and an error built by hand has
     // none. Class defaults are what make that the honest answer rather than an
