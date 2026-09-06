@@ -367,10 +367,10 @@ the representation, which decides nothing a caller can reach and is checked
 against membership over generated values like every other part of the
 descriptor.
 
-One half does still wait, for a different reason: lowering an `Instance` needs
-the object pool, because only the bindings can say which classes a class derives
-from. The attribute half needs no pool and lowers today. The pool reaches the
-core with the constants, and the class comes with it.
+The half that waited on the object pool -- lowering an `Instance`, which needs
+the bindings to say which classes a class derives from -- no longer does. The
+pool answers three questions now: what an operand is, what a literal names, and
+what order a class carries. See "How a class reaches the core" below.
 
 ## What a class with attributes is, on the surface
 
@@ -397,6 +397,39 @@ rule is not specific to classes — it is the one a refinement already applies
 between a base and its constraints, which is why `Annotated[int, Gt(0)]` does
 not report a bound on a string — and it is recorded in
 [08-error-model.md](../08-error-model.md). The error snapshot pins both.
+
+## How a class reaches the core
+
+The core holds no Python objects, so a schema names each one by an index into the
+validator's table and the lowering asks the bindings to read it. `Constants` is
+that question, in three parts: what a comparison operand is, what a literal
+names, and -- since a class is a set the descriptor holds -- what order a class
+carries.
+
+A class answers as a snapshot: an id, the ids of the classes its `__mro__` lists,
+and a layout tag. The snapshot is taken once, at lowering, rather than by asking
+`issubclass` again later, because `abc.ABC.register` rewrites the subclass
+relation after a schema is built and a relation that moves is not an order to
+reason in. A class whose metaclass answers `isinstance` or `issubclass` itself is
+declined outright, on the test the decision procedure already applied: two
+occurrences of one such class can disagree, so `A ∧ ¬A` is not empty and the law
+that says it is must not fire.
+
+The layout tag is how disjointness is *proved* rather than guessed. Python
+refuses `class C(int, str)` -- "multiple bases have instance lay-out conflict" --
+so two classes built on different builtins share no value, and no class can
+derive from both. A class built on no builtin lays down no layout of its own and
+takes the plain tag, which conflicts with nothing: `class Both(Plain, MyStr)`
+builds, so a plain class and a `str` subclass do share values. Everything else is
+undecided, which is the honest answer -- two unrelated classes may still meet in
+a subclass nobody has written yet.
+
+An operand is read by its **exact** type. A subclass of `int` carries its own
+`__eq__` and its own `__hash__`, and the sets the descriptor holds are Python's
+equality on the builtin scalars alone, so a subclass instance is a value the pool
+declines rather than one it kinds wrongly. Declining refuses the lowering, which
+leaves the schema to the decision procedure; kinding it wrongly would put a value
+in a set it is not in.
 
 ## The limit
 

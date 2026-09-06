@@ -24,15 +24,24 @@ pub struct Class {
     id: u32,
     /// This class and every class it derives from, transitively.
     ancestors: BTreeSet<u32>,
-    /// The instance layout this class lays down.
+    /// The instance layout this class lays down, or [`Class::PLAIN`] for one
+    /// that lays down none of its own.
     ///
-    /// Two classes whose layouts conflict cannot both describe one value --
-    /// Python refuses to build a class deriving from both -- which is a
+    /// Two classes laying down *different* layouts cannot both describe one
+    /// value -- Python refuses to build a class deriving from both -- which is a
     /// disjointness the derivation order alone does not show.
     layout: u32,
 }
 
 impl Class {
+    /// The layout of a class that lays down none of its own.
+    ///
+    /// Every other layout extends this one, so it conflicts with nothing: a
+    /// plain class and a `str` subclass meet in a class deriving from both. It
+    /// is the layout to give a class whose own is unknown, which is why it is
+    /// zero -- the value a caller reaches for when it has nothing to say.
+    pub const PLAIN: u32 = 0;
+
     /// A class deriving from `bases`, laid out as `layout`.
     ///
     /// The ancestors are closed here rather than walked later: `bases` carries
@@ -67,10 +76,15 @@ impl Class {
     /// Sound rather than complete: two classes neither of which derives from the
     /// other *may* still share an instance through a class deriving from both,
     /// unless their layouts conflict -- and a conflicting pair cannot have one,
-    /// because no class can derive from both.
+    /// because no class can derive from both. [`Class::PLAIN`] conflicts with no
+    /// layout at all, so a class carrying it is disjoint from nothing here.
     #[must_use]
     pub fn disjoint_from(&self, other: &Class) -> bool {
-        self.layout != other.layout && !self.derives_from(other) && !other.derives_from(self)
+        self.layout != other.layout
+            && self.layout != Class::PLAIN
+            && other.layout != Class::PLAIN
+            && !self.derives_from(other)
+            && !other.derives_from(self)
     }
 }
 
@@ -135,6 +149,21 @@ mod tests {
         assert!(counter.disjoint_from(&words));
     }
 
+    /// The plain layout is not a layout: every other extends it, so a class
+    /// carrying it can still meet any other in a common subclass.
+    #[test]
+    fn the_plain_layout_conflicts_with_nothing() {
+        let plain = Class::new(1, Class::PLAIN, &[]);
+        let words = Class::root(2);
+
+        assert!(
+            !plain.disjoint_from(&words),
+            "`class Both(plain, str)` builds"
+        );
+        assert!(!words.disjoint_from(&plain));
+        assert!(!plain.disjoint_from(&Class::new(3, Class::PLAIN, &[])));
+    }
+
     /// Identity is the id: the order and the layout are what a class *knows*,
     /// not what it *is*.
     #[test]
@@ -144,5 +173,8 @@ mod tests {
 
         assert_eq!(root, same);
         assert_eq!(root.cmp(&same), core::cmp::Ordering::Equal);
+        // Total, and by id: the sets below hold classes in a `BTreeSet`, and a
+        // pair the order cannot compare is a pair that set would hold twice.
+        assert!(Class::root(1) < Class::root(2));
     }
 }

@@ -14,9 +14,13 @@ use pyo3::PyTypeInfo;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyBool, PyBytes, PyFloat, PyInt, PyString, PyType};
-use rustc_hash::FxHashSet;
-use valgebra_core::{ConstIx, Kind, LeafRelations, Openness, OperandIx, Schema};
+use pyo3::types::{
+    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
+};
+use rustc_hash::{FxHashMap, FxHashSet};
+use valgebra_core::descr::classes::Class;
+use valgebra_core::descr::lower::{Constants, Operand};
+use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, Openness, OperandIx, Schema};
 
 use crate::build::{Pool, build_schema};
 use crate::check::{Ctx, ValidatorIndex, WalkMode, WalkState, build_index, member};
@@ -171,6 +175,14 @@ struct PoolRelations<'py, 'pool> {
     py: Python<'py>,
     literals: &'pool [Py<PyAny>],
     definitions: &'pool [Schema],
+    /// The dense id each class has been given, keyed by the type object.
+    ///
+    /// [`Class`] identifies a class by a small integer, and the only stable name
+    /// a Python class has is its address -- which does not fit one. So an id is
+    /// handed out on first sight and remembered for the rest of the query, which
+    /// is as long as any descriptor built from it lives. The pool holds every
+    /// class it names alive, so an address cannot be reused under us.
+    classes: RefCell<FxHashMap<usize, u32>>,
 }
 
 impl PoolRelations<'_, '_> {
@@ -205,8 +217,114 @@ impl PoolRelations<'_, '_> {
     }
 }
 
-impl LeafRelations for PoolRelations<'_, '_> {
-    /// Whether the class behind an `Instance` atom denotes a set.
+/// The builtin base a class is built on, as the layout tag [`Class`] reads.
+///
+/// Python refuses `class C(int, str)` -- "multiple bases have instance lay-out
+/// conflict" -- so a class built on one of these derives from no other, and two
+/// classes built on different ones share no instance. A class built on none of
+/// them lays down no layout of its own and takes [`Class::PLAIN`], which
+/// conflicts with nothing: `class Both(Plain, MyStr)` builds, so a plain class
+/// and a `str` subclass do share instances.
+fn layout_of(ty: &Bound<'_, PyType>) -> u32 {
+    let py = ty.py();
+    [
+        PyInt::type_object(py),
+        PyString::type_object(py),
+        PyBytes::type_object(py),
+        PyFloat::type_object(py),
+        PyTuple::type_object(py),
+        PyFrozenSet::type_object(py),
+        PyList::type_object(py),
+        PySet::type_object(py),
+        PyDict::type_object(py),
+    ]
+    .into_iter()
+    .enumerate()
+    // `bool` derives from `int` and shares its layout, so a `bool` and an
+    // `int` subclass land in one part rather than two -- which is right: the
+    // pair is disjoint for a reason this tag does not carry.
+    .find(|(_, builtin)| ty.is_subclass(builtin).unwrap_or(false))
+    .and_then(|(at, _)| u32::try_from(at).ok())
+    .map_or(Class::PLAIN, |at| at + 1)
+}
+
+impl PoolRelations<'_, '_> {
+    /// The dense id this class carries for the rest of the query.
+    fn class_id(&self, ty: &Bound<'_, PyType>) -> u32 {
+        let mut seen = self.classes.borrow_mut();
+        let next = u32::try_from(seen.len()).unwrap_or(u32::MAX);
+        *seen.entry(ty.as_ptr() as usize).or_insert(next)
+    }
+
+    /// The order snapshot for a class: its own id, its layout, and the id of
+    /// every class it derives from.
+    ///
+    /// Read off `__mro__` once, rather than by asking `issubclass` again later,
+    /// because the relation can move -- `ABC.register` rewrites it after a schema
+    /// is built -- and a relation that moves is not an order to reason in. The
+    /// snapshot is what the descriptor carries instead.
+    ///
+    /// Declines for a class that does not denote a set, on the same test
+    /// [`Self::atom_denotes_a_set`] applies, so an impure class refuses the
+    /// lowering rather than entering it as a set it is not.
+    fn snapshot(&self, ty: &Bound<'_, PyType>) -> Option<Class> {
+        if !self.denotes_a_set(ty)? {
+            return None;
+        }
+        let mut bases = Vec::new();
+        for base in ty.getattr("__mro__").ok()?.try_iter().ok()? {
+            let base = base.ok()?;
+            let base = base.cast_into::<PyType>().ok()?;
+            // A base need not denote a set for the order to hold: what `is_a`
+            // reads is which classes an instance is one of, and `__mro__` answers
+            // that whatever the metaclass does at a check.
+            //
+            // Each base enters as a root because `__mro__` is already closed
+            // under derivation -- every ancestor is on this list -- so the union
+            // over the list is the whole order, and no base's own layout is
+            // read.
+            if !base.is(ty) {
+                bases.push(Class::root(self.class_id(&base)));
+            }
+        }
+        Some(Class::new(self.class_id(ty), layout_of(ty), &bases))
+    }
+
+    /// A pooled object as the descriptor reads one, or `None` for a value whose
+    /// equality this cannot answer for.
+    fn pooled(&self, slot: usize) -> Option<Operand> {
+        let value = self.literals.get(slot)?.bind(self.py);
+        if value.is_none() {
+            return Some(Operand::NoneType);
+        }
+        if let Ok(ty) = value.cast::<PyType>() {
+            return self.snapshot(ty).map(Operand::Instance);
+        }
+        // Exact types only, as `literal_kind` reads them: a subclass carries its
+        // own `__eq__` and its own `__hash__`, and the sets the descriptor holds
+        // are equality on the builtin scalars alone.
+        let ty = value.get_type();
+        if ty.is(PyBool::type_object(self.py)) {
+            return value.extract::<bool>().ok().map(Operand::Boolean);
+        }
+        if ty.is(PyInt::type_object(self.py)) {
+            return value.extract::<i64>().ok().map(Operand::Integer);
+        }
+        if ty.is(PyFloat::type_object(self.py)) {
+            return value.extract::<f64>().ok().map(Operand::Float);
+        }
+        if ty.is(PyString::type_object(self.py)) {
+            let text = value.extract::<String>().ok()?;
+            return Some(Operand::Word(text.into_bytes(), Kind::Str));
+        }
+        if ty.is(PyBytes::type_object(self.py)) {
+            let raw = value.extract::<Vec<u8>>().ok()?;
+            return Some(Operand::Word(raw, Kind::Bytes));
+        }
+        None
+    }
+
+    /// Whether a class denotes a set.
     ///
     /// A class is **pure** when its metaclass leaves both `isinstance` and
     /// `issubclass` alone. Override either and the answer is user code: two
@@ -217,17 +335,41 @@ impl LeafRelations for PoolRelations<'_, '_> {
     /// An `abc.ABC` is excluded by the same test rather than by a second one:
     /// `ABCMeta` overrides both hooks, which is how `register` can change the
     /// relation after a schema is built.
-    fn atom_denotes_a_set(&self, atom: &Schema) -> Option<bool> {
-        let Schema::Instance(index) = atom else {
-            return None;
-        };
-        let class = self.literals.get(index.get())?.bind(self.py);
+    fn denotes_a_set(&self, class: &Bound<'_, PyAny>) -> Option<bool> {
         let metaclass = class.get_type();
         let plain = self.py.get_type::<PyType>();
         let untouched = |hook: &str| -> Option<bool> {
             Some(metaclass.getattr(hook).ok()?.is(&plain.getattr(hook).ok()?))
         };
         Some(untouched("__instancecheck__")? && untouched("__subclasscheck__")?)
+    }
+}
+
+/// The descriptor reads the object pool through the bindings, the one place a
+/// Python object can be read at all.
+impl Constants for PoolRelations<'_, '_> {
+    fn operand(&self, index: OperandIx) -> Option<Operand> {
+        self.pooled(index.get())
+    }
+
+    fn constant(&self, index: ConstIx) -> Option<Operand> {
+        self.pooled(index.get())
+    }
+
+    fn class(&self, index: ClassIx) -> Option<Class> {
+        let value = self.literals.get(index.get())?.bind(self.py);
+        self.snapshot(value.cast::<PyType>().ok()?)
+    }
+}
+
+impl LeafRelations for PoolRelations<'_, '_> {
+    /// Whether the class behind an `Instance` atom denotes a set, on the test
+    /// [`PoolRelations::denotes_a_set`] states.
+    fn atom_denotes_a_set(&self, atom: &Schema) -> Option<bool> {
+        let Schema::Instance(index) = atom else {
+            return None;
+        };
+        self.denotes_a_set(self.literals.get(index.get())?.bind(self.py))
     }
 
     fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
@@ -766,6 +908,7 @@ impl Validator {
             py,
             literals: &self.literals,
             definitions: &self.definitions,
+            classes: RefCell::default(),
         };
         self.schema.is_empty_with(&oracle, &self.definitions)
     }
@@ -801,6 +944,7 @@ impl Validator {
             py,
             literals: literals.items(),
             definitions: &definitions,
+            classes: RefCell::default(),
         };
         Ok(self
             .schema
@@ -831,6 +975,7 @@ impl Validator {
             py,
             literals: literals.items(),
             definitions: &definitions,
+            classes: RefCell::default(),
         };
         Ok(self
             .schema
@@ -1010,6 +1155,149 @@ mod tests {
                 Openness::Closed,
             )],
         )
+    }
+
+    /// An oracle over a pool of objects, for the reader the descriptor uses.
+    fn pooled_over(literals: Vec<Py<PyAny>>) -> Validator {
+        Validator::new(Schema::ANYTHING, literals, Vec::new())
+    }
+
+    #[test]
+    fn the_pool_reads_a_scalar_by_its_exact_type() {
+        Python::attach(|py| {
+            let literals = [
+                py.None(),
+                true.into_pyobject(py)
+                    .unwrap()
+                    .to_owned()
+                    .into_any()
+                    .unbind(),
+                7i64.into_pyobject(py).unwrap().into_any().unbind(),
+                0.5f64.into_pyobject(py).unwrap().into_any().unbind(),
+                "ab".into_pyobject(py).unwrap().into_any().unbind(),
+                PyBytes::new(py, b"ab").into_any().unbind(),
+            ];
+            let held = pooled_over(literals.into_iter().collect());
+            let oracle = PoolRelations {
+                py,
+                literals: &held.literals,
+                definitions: &held.definitions,
+                classes: RefCell::default(),
+            };
+            let read: Vec<_> = (0..6)
+                .map(|slot| oracle.constant(ConstIx::new(slot)))
+                .collect();
+            assert_eq!(
+                read,
+                [
+                    Some(Operand::NoneType),
+                    // `True` is a `bool`, not the integer 1: the two are distinct
+                    // operands although they compare equal.
+                    Some(Operand::Boolean(true)),
+                    Some(Operand::Integer(7)),
+                    Some(Operand::Float(0.5)),
+                    Some(Operand::Word(b"ab".to_vec(), Kind::Str)),
+                    Some(Operand::Word(b"ab".to_vec(), Kind::Bytes)),
+                ]
+            );
+        });
+    }
+
+    #[test]
+    fn the_pool_declines_a_value_it_cannot_kind() {
+        Python::attach(|py| {
+            let scope = PyDict::new(py);
+            py.run(c"class Odd(int): pass\nodd = Odd(1)", None, Some(&scope))
+                .expect("an int subclass");
+            let held = pooled_over(vec![scope.get_item("odd").unwrap().unwrap().unbind()]);
+            let oracle = PoolRelations {
+                py,
+                literals: &held.literals,
+                definitions: &held.definitions,
+                classes: RefCell::default(),
+            };
+            // An `int` subclass carries its own `__eq__`, so its equality is not
+            // the one the descriptor's integer sets are built on.
+            assert_eq!(oracle.constant(ConstIx::new(0)), None);
+        });
+    }
+
+    #[test]
+    fn a_class_carries_the_bases_its_mro_lists() {
+        Python::attach(|py| {
+            let scope = PyDict::new(py);
+            py.run(
+                c"class A: pass\nclass B(A): pass\nclass C: pass",
+                None,
+                Some(&scope),
+            )
+            .expect("three plain classes");
+            let named = |name: &str| scope.get_item(name).unwrap().unwrap().unbind();
+            let held = pooled_over(vec![named("A"), named("B"), named("C")]);
+            let oracle = PoolRelations {
+                py,
+                literals: &held.literals,
+                definitions: &held.definitions,
+                classes: RefCell::default(),
+            };
+            let a = oracle.class(ClassIx::new(0)).expect("A denotes a set");
+            let b = oracle.class(ClassIx::new(1)).expect("B denotes a set");
+            let c = oracle.class(ClassIx::new(2)).expect("C denotes a set");
+            assert!(b.derives_from(&a), "B lists A in its `__mro__`");
+            assert!(!a.derives_from(&b));
+            // Two unrelated pure classes still share `object`, and neither is
+            // built on a builtin, so nothing here proves them disjoint.
+            assert!(!a.disjoint_from(&c));
+        });
+    }
+
+    #[test]
+    fn a_class_built_on_a_builtin_is_disjoint_from_one_built_on_another() {
+        Python::attach(|py| {
+            let scope = PyDict::new(py);
+            py.run(
+                c"class S(str): pass\nclass L(list): pass",
+                None,
+                Some(&scope),
+            )
+            .expect("two classes on conflicting layouts");
+            let named = |name: &str| scope.get_item(name).unwrap().unwrap().unbind();
+            let held = pooled_over(vec![named("S"), named("L")]);
+            let oracle = PoolRelations {
+                py,
+                literals: &held.literals,
+                definitions: &held.definitions,
+                classes: RefCell::default(),
+            };
+            let s = oracle.class(ClassIx::new(0)).expect("S denotes a set");
+            let l = oracle.class(ClassIx::new(1)).expect("L denotes a set");
+            // Python refuses `class Both(S, L)`, so no value is an instance of
+            // both and the two carry no common instance for the core to hold.
+            assert!(s.disjoint_from(&l));
+        });
+    }
+
+    #[test]
+    fn a_class_that_answers_isinstance_itself_refuses_the_lowering() {
+        Python::attach(|py| {
+            let scope = PyDict::new(py);
+            py.run(
+                c"import abc\nclass Hooked(abc.ABC): pass",
+                None,
+                Some(&scope),
+            )
+            .expect("an abstract base class");
+            let held = pooled_over(vec![scope.get_item("Hooked").unwrap().unwrap().unbind()]);
+            let oracle = PoolRelations {
+                py,
+                literals: &held.literals,
+                definitions: &held.definitions,
+                classes: RefCell::default(),
+            };
+            // `ABCMeta.register` can add a subclass after the schema is built, so
+            // the class names no fixed set and the lowering declines it.
+            assert_eq!(oracle.class(ClassIx::new(0)), None);
+        });
     }
 
     #[test]

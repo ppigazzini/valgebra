@@ -18,7 +18,9 @@ use super::classes::Class;
 use super::maps::{KEY_KINDS, Label};
 use super::{Descr, integers::IntSet};
 use crate::decision::Kind;
-use crate::ir::{ConstIx, Constraint, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape};
+use crate::ir::{
+    ClassIx, ConstIx, Constraint, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
+};
 use std::cell::Cell;
 
 /// A pooled value, as far as a descriptor can read one.
@@ -50,6 +52,14 @@ pub trait Constants {
 
     /// What a `Literal` names.
     fn constant(&self, index: ConstIx) -> Option<Operand>;
+
+    /// The class an `Instance` atom names, as the order snapshot the core reads.
+    ///
+    /// Only the bindings can walk an `__mro__`, and only they can tell a **pure**
+    /// class from one whose metaclass answers `isinstance` by running code. A
+    /// hooked class is not a set this algebra holds, so answering `None` for one
+    /// refuses the lowering rather than describing a set the class does not have.
+    fn class(&self, index: ClassIx) -> Option<Class>;
 }
 
 /// A pool that knows nothing, for a caller that has none.
@@ -67,6 +77,10 @@ impl Constants for NoConstants {
     }
 
     fn constant(&self, _index: ConstIx) -> Option<Operand> {
+        None
+    }
+
+    fn class(&self, _index: ClassIx) -> Option<Class> {
         None
     }
 }
@@ -146,10 +160,9 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>) -> Option<
             })
         }
         Schema::KeyedMap { fields, defaults } => map(fields, defaults, pool, budget),
-        // No component to land in, or none that would mean what the schema does.
-        // A class needs the object pool to say which classes it derives from,
-        // and a reference is a cycle a finite descriptor has no room for.
-        Schema::Instance(_) | Schema::Ref(_) | Schema::SelfRef(_) => None,
+        Schema::Instance(index) => Some(Descr::instance_of(pool.class(*index)?)),
+        // A reference is a cycle a finite descriptor has no room for.
+        Schema::Ref(_) | Schema::SelfRef(_) => None,
     }
 }
 
@@ -380,7 +393,9 @@ mod tests {
     use crate::decision::{Kind, Verdict};
     use crate::descr::classes::Class;
     use crate::descr::{Descr, Value};
-    use crate::ir::{ConstIx, Constraint, MapClause, OperandIx, Schema, SeqKind, SeqShape};
+    use crate::ir::{
+        ClassIx, ConstIx, Constraint, MapClause, OperandIx, Schema, SeqKind, SeqShape,
+    };
 
     /// A pool that answers from a list, which is what the bindings do from the
     /// validator's object table.
@@ -393,6 +408,15 @@ mod tests {
 
         fn constant(&self, index: ConstIx) -> Option<Operand> {
             self.0.get(index.get()).cloned()
+        }
+
+        /// A class reaches the core through the bindings, and these tests have
+        /// none: a pooled `Instance` reads as one this pool cannot see.
+        fn class(&self, index: ClassIx) -> Option<Class> {
+            match self.0.get(index.get()) {
+                Some(Operand::Instance(class)) => Some(class.clone()),
+                _ => None,
+            }
         }
     }
 
@@ -696,6 +720,40 @@ mod tests {
                 "{left} and {right}"
             );
         }
+    }
+
+    /// A class the pool can see lowers to the set of its instances, carrying the
+    /// order it was given: the subclass is a subtype, and the two ends are not.
+    #[test]
+    fn a_class_the_pool_knows_lowers_to_its_instances() {
+        let animal = Class::new(0, Class::PLAIN, &[]);
+        let dog = Class::new(1, Class::PLAIN, std::slice::from_ref(&animal));
+        let pool = Pool(vec![
+            Operand::Instance(animal),
+            Operand::Instance(dog),
+            Operand::Instance(Class::new(2, Class::PLAIN, &[])),
+        ]);
+        let instances = |at| lower(&Schema::Instance(ClassIx::new(at)), &pool).expect("a class");
+        let (animals, dogs, others) = (instances(0), instances(1), instances(2));
+
+        // `a ≤ b` is `a ∧ ¬b = ∅`, which is the whole of the subtyping test.
+        let within = |a: &Descr, b: &Descr| {
+            a.intersect(&b.complement())
+                .expect("two classes")
+                .emptiness()
+        };
+        assert_eq!(within(&dogs, &animals), Verdict::Empty);
+        // The converse is not merely undecided: an animal that is not a dog is
+        // a value the descriptor can name.
+        assert_eq!(within(&animals, &dogs), Verdict::Inhabited);
+        // Two unrelated classes share `object`, so nothing here proves them
+        // disjoint -- only that neither contains the other.
+        assert_eq!(
+            animals.intersect(&others).expect("two classes").emptiness(),
+            Verdict::Unknown
+        );
+        // A class is a set of objects and nothing else: no scalar is one.
+        assert!(!animals.admits(Value::integer(0)));
     }
 
     /// A literal naming a class instance refuses: a class is a set of objects,
