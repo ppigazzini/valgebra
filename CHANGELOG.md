@@ -73,6 +73,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: an enumeration is the union of the members it can be
 - feat: refuse to pickle a validator with a message that says what to send
 - fix: an integer key stays an integer in an error path
+- fix: the changelog ledger survives the window a release passes through -- internal
 
 -->
 

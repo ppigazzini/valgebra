@@ -59,13 +59,17 @@ def test_an_integer_key_stays_an_integer_in_the_path() -> None:
     with pytest.raises(ValidationError) as failure:
         numbered.validate({1: 1, 2: "x"})
     (error,) = failure.value.errors
-    assert error["path"] == (2,)
-    assert "at [2]" in error["message"]
+    path = error["path"]
+    assert path == (2,)
+    assert "at [2]" in str(error["message"])
 
-    # And the value the path names is reachable by walking it.
-    value = {1: 1, 2: "x"}
-    walked = value
-    for step in error["path"]:
+    # And the value the path names is reachable by walking it, which is the
+    # whole claim: the items are typed `object` in the error model, so the walk
+    # is written the way a caller writes it.
+    walked: object = {1: 1, 2: "x"}
+    assert isinstance(path, tuple)
+    for step in path:
+        assert isinstance(walked, dict)
         walked = walked[step]
     assert walked == "x"
 

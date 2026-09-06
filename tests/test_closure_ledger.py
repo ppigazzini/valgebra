@@ -88,7 +88,7 @@ REPRESENTATIVES = {
     # `Literal[None]` is the derivation, and the linters rewrite that spelling
     # to `None` on sight -- which is the claim rather than a check of it. The
     # literal is built from the value instead, which is the same node.
-    "NoneType": (Validator(None), Validator(Literal[_NONE])),
+    "NoneType": (Validator(None), Validator(Literal[_NONE])),  # ty: ignore[invalid-type-form]
     "Bool": (Validator(bool), union(Literal[True], Literal[False])),
     "Intersection": (
         intersection(int, str),

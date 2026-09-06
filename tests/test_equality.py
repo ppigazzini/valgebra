@@ -82,7 +82,9 @@ DIFFERENT = [
     ("different constants", Literal[1], Literal[2]),
     ("a different member", Literal[1, 2], Literal[1, 3]),
     ("a literal is typed", Literal[1], Literal[True]),
-    ("a literal is typed, floats", Literal[1], Literal[1.0]),
+    # A float is not a `Literal` argument the typing spec allows, and is a
+    # constant this library pools like any other: the pair is the point.
+    ("a literal is typed, floats", Literal[1], Literal[1.0]),  # ty: ignore[invalid-type-form]
     ("a field's type", {"a": int}, {"a": str}),
     ("a missing field", {"a": int, "b": int}, {"a": int}),
     ("required against optional", {"a": int}, {"a?": int}),
@@ -116,15 +118,25 @@ def test_two_sets_stay_two_schemas(name: str, left: object, right: object) -> No
 
 
 def test_a_validator_equals_itself_over_a_value_that_equals_nothing() -> None:
-    """Identity before value, or a `nan` literal would not equal itself."""
-    nan = Validator(Literal[math.nan])
+    """Identity before value, or a `nan` literal would not equal itself.
+
+    The literals are built through a variable rather than written out: a float
+    is not an argument the typing spec allows `Literal` to take, and a checker
+    reading the annotation says so. This library pools the constant either way,
+    which is what the case is about.
+    """
+    quiet = math.nan
+    nan = Validator(Literal[quiet])  # ty: ignore[invalid-type-form]
     assert nan == nan  # noqa: PLR0124 - the identity is the subject
     # `math.nan` is one object, so a second validator over it pools the same
     # constant and the two are one schema.
-    assert Validator(Literal[math.nan]) == nan
+    assert Validator(Literal[quiet]) == nan  # ty: ignore[invalid-type-form]
     # Two *different* nan objects are two constants: a nan is equal to no value,
     # itself included, so nothing but identity can join them.
-    assert Validator(Literal[float("nan")]) != Validator(Literal[float("nan")])
+    first, second = float("nan"), float("nan")
+    assert Validator(Literal[first]) != Validator(  # ty: ignore[invalid-type-form]
+        Literal[second]  # ty: ignore[invalid-type-form]
+    )
 
 
 def test_equality_is_not_a_decision() -> None:
