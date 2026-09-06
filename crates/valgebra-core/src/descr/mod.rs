@@ -1165,6 +1165,8 @@ mod tests {
     use super::{BoolSet, Class, Component, Descr, Label, Lines, Op, Value, Verdict};
     use crate::decision::Kind;
     use crate::descr::budget;
+    use crate::descr::lines;
+    use crate::descr::records::RecordLattice;
     use crate::descr::symbolic::{Edge, Guard};
     use core::mem::size_of;
     use proptest::prelude::*;
@@ -1249,6 +1251,31 @@ mod tests {
         // charge and so would not say which one is here.
         assert!(budget::under(1, meet).is_none());
         assert!(budget::under(8, meet).is_some());
+    }
+
+    /// A kind's union past the line bound refuses rather than holding a form it
+    /// cannot complement.
+    ///
+    /// Asked of the lines directly, because no schema builds this: a kind
+    /// reaches the bound through lines that differ in their *objects*, and the
+    /// bound is what keeps the complement -- which doubles the count -- from
+    /// returning a set narrower than the one it was asked for.
+    #[test]
+    fn a_kind_past_its_line_bound_refuses() {
+        let whole = Component::top(Kind::Dict);
+        let line = |n: i64| {
+            Lines::objects(
+                &whole,
+                RecordLattice::attribute("x", Arc::new(Descr::integer(n)), false),
+            )
+        };
+        let mut wide = line(0);
+        for n in 1..i64::try_from(lines::MAX_LINES).unwrap_or(i64::MAX) {
+            wide = wide
+                .combine(&line(n), Op::Union, &whole)
+                .expect("inside the bound");
+        }
+        assert!(wide.combine(&line(-1), Op::Union, &whole).is_none());
     }
 
     /// Every value the descriptor can currently tell apart.

@@ -666,7 +666,7 @@ fn rest_of<G: Guard>(row: &[Edge<G>]) -> Option<G> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Edge, Guard, MAX_ROW, SymbolicDfa};
+    use super::{Edge, Guard, MAX_ROW, MAX_STATES, SymbolicDfa};
     use crate::descr::integers::IntSet;
     use proptest::prelude::*;
 
@@ -1100,5 +1100,44 @@ mod tests {
             None,
         );
         assert!(agree_on_sequences(&difference, &narrowed));
+    }
+
+    /// A product past the state bound refuses rather than answering about
+    /// another language.
+    ///
+    /// The row bound above catches a product that is *wide*; this one catches a
+    /// product that is *long*, and the two are independent. Two cycles of
+    /// coprime lengths advance together for their product before they agree
+    /// again, so a pair well inside the bound apiece is past it together: the
+    /// language is "a length divisible by both", and no smaller machine reads
+    /// it.
+    #[test]
+    fn a_product_past_the_state_bound_refuses() {
+        // Every letter steps once around a cycle of `n`, accepting where the
+        // count is back at nought.
+        let cycle = |n: u32| SymbolicDfa::<IntSet> {
+            edges: (0..n)
+                .map(|at| {
+                    vec![Edge {
+                        guard: None,
+                        target: (at + 1) % n,
+                    }]
+                })
+                .collect(),
+            accepting: (0..n).map(|at| at == 0).collect(),
+        };
+        let past = u32::try_from(MAX_STATES).unwrap_or(u32::MAX);
+
+        assert!(
+            cycle(71).intersect(&cycle(73)).is_none(),
+            "71 * 73 > {past}"
+        );
+        // A pair whose product is inside the bound answers, so the refusal
+        // above is the count rather than the shape: both machines are cycles
+        // either way.
+        assert!(
+            cycle(31).intersect(&cycle(37)).is_some(),
+            "31 * 37 is inside it"
+        );
     }
 }

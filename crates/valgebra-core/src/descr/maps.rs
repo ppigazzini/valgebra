@@ -709,7 +709,7 @@ fn tidy<G: Guard>(atoms: Vec<MapAtom<G>>) -> Option<Vec<MapAtom<G>>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Entry, KEY_KINDS, Label, MapLattice, key_slot};
+    use super::{Entry, KEY_KINDS, Label, MAX_ATOMS, MapLattice, key_slot};
     use crate::decision::{Kind, Verdict};
     use crate::descr::budget;
     use crate::descr::integers::IntSet;
@@ -926,5 +926,21 @@ mod tests {
         for kind in [Kind::List, Kind::Set, Kind::Dict] {
             assert_eq!(key_slot(Some(kind)), None, "{kind:?}");
         }
+    }
+
+    /// A union past the atom bound refuses rather than holding a form it cannot.
+    ///
+    /// The count is what a meet multiplies and a difference adds to, so a union
+    /// that has already reached the bound has no sound wider form to return --
+    /// and returning a narrower one would decide a difference by leaving values
+    /// out.
+    #[test]
+    fn a_union_past_the_bound_refuses() {
+        let entry = |n: i64| MapLattice::label(Label::str("x"), IntSet::just(n), false);
+        let mut wide = entry(0);
+        for n in 1..i64::try_from(MAX_ATOMS).unwrap_or(i64::MAX) {
+            wide = wide.union(&entry(n)).expect("inside the bound");
+        }
+        assert!(wide.union(&entry(-1)).is_none());
     }
 }
