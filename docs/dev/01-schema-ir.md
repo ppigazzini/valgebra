@@ -467,8 +467,10 @@ because breadth multiplies too: a union of four records at depth three builds in
 milliseconds** and then *refuses*, because the result exceeded the line bound.
 
 That last number is the shape of the problem. `MAX_LINES`, `MAX_ATOMS` and
-`MAX_STATES` bound the descriptor a build may **produce**; nothing bounds the
-work a build may **do**, so refusing costs as much as succeeding and a caller
+`MAX_STATES` -- rows in the table of every bound in the tree
+([00-architecture.md](00-architecture.md)) -- bound the descriptor a build may
+**produce**; nothing bounds the work a build may **do**, so refusing costs as
+much as succeeding and a caller
 cannot buy safety by being asked to accept less. This is what the nightly fuzzer
 reported as an out-of-memory that four separate bound reductions did not move,
 and what took its throughput from three million runs to two thousand three
@@ -515,7 +517,10 @@ resident memory: every input the fuzzer generates that the rules decline now
 builds two descriptors. That is a testing-capability cost rather than a
 user-facing one, and the route out of it is a target that asks the rules
 directly for the high-volume properties, with the descriptor on a target of its
-own.
+own. Until there is one, the nightly run buys the reach back with time: the
+decision target's budget is 360 seconds rather than 180
+(`.github/workflows/ci.yml`), because the throughput is CPU-bound and nothing
+else moves it.
 
 ## What a bare builtin class denotes
 
@@ -616,7 +621,15 @@ argument is worse than one that says it is going.
 ## The limit
 
 The IR is a tree with back edges, not a graph with sharing. Two structurally
-equal subtrees are two allocations, and nothing interns them. That is why the
-decision procedure carries a work budget instead of a memo table
-([02-decision.md](02-decision.md)), and it is the single largest thing standing
-between the current procedure and a complete one.
+equal subtrees are two allocations, and nothing interns them, so the structural
+rules carry a work budget instead of a memo table ([02-decision.md](02-decision.md)).
+
+What that costs is smaller than it was. Those rules are the fast path now, not
+the whole answer: a shape they run out of budget on is asked again of the sets it
+denotes, and the descriptor interns the guard behind each object line, so sharing
+exists where a set is built even though it does not exist in the tree.
+
+The limit that remains is the one no memo reaches. A cycle has no finite set
+representation here, so a recursive schema is decided by the rules or not at
+all, and that fragment -- not the missing sharing -- is what stands between this
+procedure and a complete one.

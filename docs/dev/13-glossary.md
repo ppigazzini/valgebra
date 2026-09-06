@@ -32,6 +32,11 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **complete** | every true relation is decided. valgebra is complete on a published fragment and conservative elsewhere; `docs/15-decidability.md` states the line |
 | **conservative** | the answer a procedure gives when it cannot decide: the one that claims less |
 | **opaque** | a schema whose region is unknown, so the scalar rules do not apply. Any combination containing one is opaque |
+| **the rules** | `crates/valgebra-core/src/decision.rs`, the structural recursion over the schema tree. The fast path: it answers first, and where it declines the descriptor is asked |
+| **the descriptor** | `crates/valgebra-core/src/descr/`, the set representation a schema is lowered into. One `Lines` per kind, each closed under union, intersection and complement, so a relation comes out of the sets rather than out of a rule about the shape |
+| **kind** | one of the eleven disjoint parts of the value universe the descriptor splits it into, plus a remainder. Coarser than a region, and defined over every value rather than the scalars alone |
+| **line** | one summand of a kind's normal form: a structure met with a lattice of object guards. `Lines` is a set of them with a negation flag, which is what closes a kind under complement |
+| **bounds** (of a build) | `descr::lower::Bounds`, the three ceilings a lowering is held to — schema nodes read, nesting descended, units of multiplying work spent. Distinct from the budget, which is the rules' own step counter. [00-architecture.md](00-architecture.md) lists every bound in the tree |
 | **the oracle** (in the core) | `LeafRelations`, the trait through which the decision procedure asks the bindings about a class or a value |
 | **the budget** (in the core) | `DECISION_BUDGET`, the work ceiling one top-level query may spend before returning the conservative answer |
 | **the ledger** (of completeness) | `tests/test_completeness_ledger.py`, enumerated relations the procedure must *decide*, failing in both directions |
@@ -63,7 +68,7 @@ Say which one you mean.
 |---|---|---|
 | **gate** | a CI step that asserts | the local build-health command set, which is a preview of the merge gate rather than a single check |
 | **oracle** | an independent judge in a test | `LeafRelations`, the trait the decision procedure asks about a class or a value |
-| **budget** | the committed instruction count a workload is held to | `DECISION_BUDGET`, the work ceiling one decision query may spend |
+| **budget** | the committed instruction count a workload is held to | `DECISION_BUDGET`, the work ceiling one decision query may spend. Not `Bounds`, which holds a *build* rather than a query |
 | **ledger** | a list held to the tree in both directions | the completeness ledger, which is that shape but about *relations* rather than about files |
 
 ## Words this set avoids

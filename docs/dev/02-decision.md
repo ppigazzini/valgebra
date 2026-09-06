@@ -1,8 +1,54 @@
 # The decision procedure
 
-`crates/valgebra-core/src/decision.rs` owns emptiness, subtyping, equivalence and
-disjointness. `crates/valgebra-core/src/simplify.rs` owns the
-membership-preserving normalisation that uses them.
+Two representations answer the three relations, and the order between them is a
+cost measurement rather than a preference.
+
+`crates/valgebra-core/src/descr/` is the **definition**. A schema denotes a set;
+each kind carries a representation closed under union, intersection and
+complement; and `a <= b` is `a & ~b` admitting no value. Everything it can hold,
+it decides.
+
+`crates/valgebra-core/src/decision.rs` is the **fast path**. It recurses over the
+schema tree, matching shapes and applying rules. It answers first, and the
+descriptor answers where it declines.
+
+That ordering is not a second opinion. Both are asked the same question, and the
+descriptor can only turn "not proved" into "proved", so the pair gives the
+descriptor's answers wherever the descriptor can build. The rules are an
+optimisation of a relation the descriptor defines --
+[01-schema-ir.md](01-schema-ir.md) records that decision under "Which
+representation decides" -- and the reason they are worth having is measured:
+building a set representation costs about two orders of magnitude more than a
+rule that already answers.
+
+`crates/valgebra-core/src/simplify.rs` owns the membership-preserving
+normalisation that uses them. It is **deprecated**: a schema is built in the
+lattice normal form, so the reduction it promises is the schema a caller already
+holds, and the folds it adds beyond the laws are decisions the three relations
+make better.
+
+## Why every rule stays
+
+A rule earns its place by reaching a shape the descriptor refuses, or by
+answering a common one far more cheaply. The first is the load-bearing half, and
+the refusals are wide: the descriptor holds no cycle, so **every recursive
+schema** is the rules' alone; it holds no predicate and no class whose metaclass
+answers `isinstance`; and it refuses any schema past the three bounds a build is
+held to.
+
+That is not an argument, it is a measurement. Deleting the float arm of the
+region partition takes out two lattice laws and a membership law. Deleting the
+contravariance arm -- `~A <= ~B` is `B <= A` -- takes out *reflexivity*, because
+a complemented recursive schema has no other route. Deleting the sequence arm of
+the emptiness fold takes out the rule that a sequence is empty when a prefix
+element is. And a full mutation sweep of the file leaves **one** survivor and one
+timeout, both accepted in `scripts/mutation_baseline.json` with the argument for
+each: 281 mutants of 311 are caught, and no arm is dead weight.
+
+A rule the descriptor also decides is invisible through the public relation, so a
+test about a rule's *scope* has to ask the rule. `decision.rs`'s own test module
+carries `by_the_rules` and `empty_by_the_rules` for that, and every test about
+what a rule reaches goes through them.
 
 ## Sound, not complete, and the direction matters
 
@@ -64,6 +110,32 @@ trait is how it asks:
 `leaf_subtype(..).unwrap_or(false)` and `no_int_between(..) == Some(true)` — which
 is what the defaults are for, and which is why a mutation replacing either with
 `Some(false)` cannot be killed by any test.
+
+## Four bounds, each measured
+
+The rules bound their own work with a step counter, and a build is held to three
+more: the schema nodes it will read, the nesting it will descend, and the units
+of multiplying work it may spend. They are named together as
+`descr::lower::Bounds`, they are rows in the table of every bound in the tree
+([00-architecture.md](00-architecture.md)), and
+`crates/valgebra-core/benches/core.rs` carries the workload each number was set
+from -- a bound whose figure lives only in a comment
+cannot be re-derived on another machine, and cannot fail when the shape it guards
+against changes.
+
+What the numbers say. The four relations the descriptor decides and the rules do
+not build in 49 to 188 microseconds, which is the room the bounds must leave. A
+record nested behind a list grows 1.7 microseconds, 198 microseconds, 1.5
+milliseconds, 7.2 milliseconds at depths 0, 2, 4 and 6 -- nesting is the
+exponential, and the nesting bound is what catches it. A union of four such
+records minus a union of its siblings costs 9.0 milliseconds unheld and 1.35
+microseconds held, from the nesting bound alone. On the shapes reachable today
+that bound refuses first, so the work allowance is the one that remains for a
+schema that is shallow and wide.
+
+Held this way, the whole widening costs the decision path eleven percent. Asked
+*first* instead, it cost seventeen hundred times the workload's budget, which is
+why the rules answer first.
 
 ## The budget, and what exhausting it means
 
