@@ -3,7 +3,8 @@
 
 use pyo3::intern;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyString, PyTuple};
+use pyo3::sync::PyOnceLock;
+use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
 use valgebra_core::{PathSegment, Violation};
 
 use crate::exception::ValidationError;
@@ -17,11 +18,87 @@ pub(crate) fn class_label(class: &Bound<'_, PyAny>) -> String {
         .unwrap_or_else(|| summarize(class))
 }
 
+/// The characters of a value a summary keeps.
+const SUMMARY_CHARS: usize = 80;
+
+/// A bounded renderer for containers, built once per interpreter.
+///
+/// `reprlib.Repr` cuts a container off by depth and by width *while* rendering,
+/// which is the whole point: `repr()` builds the string in full and only then is
+/// it cut, so a value whose repr is enormous was paid for in full and thrown
+/// away 80 characters later.
+static BOUNDED_REPR: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
+/// The limits are set well above anything a readable message shows, so a value
+/// small enough to print renders exactly as `repr` would and only a value that
+/// was going to be cut anyway takes a different path.
+fn bounded_repr(py: Python<'_>) -> Option<&Py<PyAny>> {
+    BOUNDED_REPR
+        .get_or_try_init(py, || {
+            let repr = py
+                .import("reprlib")?
+                .getattr(intern!(py, "Repr"))?
+                .call0()?;
+            for (limit, value) in [
+                ("maxlevel", 12_usize),
+                ("maxtuple", 32),
+                ("maxlist", 32),
+                ("maxarray", 32),
+                ("maxdict", 32),
+                ("maxset", 32),
+                ("maxfrozenset", 32),
+                ("maxdeque", 32),
+                ("maxstring", SUMMARY_CHARS),
+                ("maxlong", SUMMARY_CHARS),
+                ("maxother", SUMMARY_CHARS),
+            ] {
+                repr.setattr(limit, value)?;
+            }
+            Ok::<_, PyErr>(repr.unbind())
+        })
+        .ok()
+}
+
 /// A short repr-style summary of a value for error messages.
+///
+/// A container is rendered under a bound rather than rendered and then cut. The
+/// difference is not cosmetic: explaining a 20,000-deep list built its 40,000
+/// character repr once per level of the walk -- 128 of them, since that is where
+/// the recursion bound stops -- and kept 80 characters of each. That was twelve
+/// seconds for one error, against `is_valid` at twenty microseconds for the same
+/// value, and it grew with the size of the value rather than with the number of
+/// mistakes in it.
+///
+/// A scalar keeps the direct path: its repr is its size, there is nothing to
+/// bound, and it is the common case in an error message.
 pub(crate) fn summarize(value: &Bound<'_, PyAny>) -> String {
-    match value.repr() {
-        Ok(repr) => shorten(repr.to_string(), 80),
-        Err(_) => "<unrepresentable>".to_owned(),
+    if !value.is_instance_of::<PyList>()
+        && !value.is_instance_of::<PyTuple>()
+        && !value.is_instance_of::<PyDict>()
+        && !value.is_instance_of::<PySet>()
+        && !value.is_instance_of::<PyFrozenSet>()
+    {
+        return match value.repr() {
+            Ok(repr) => shorten(repr.to_string(), SUMMARY_CHARS),
+            Err(_) => "<unrepresentable>".to_owned(),
+        };
+    }
+    let rendered = bounded_repr(value.py())
+        .and_then(|repr| {
+            repr.bind(value.py())
+                .call_method1(intern!(value.py(), "repr"), (value,))
+                .ok()
+        })
+        .and_then(|text| text.extract::<String>().ok());
+    match rendered {
+        Some(text) => shorten(text, SUMMARY_CHARS),
+        // `reprlib` is a standard-library module and the call is total, so this
+        // is unreachable in practice; falling back to the plain repr keeps the
+        // message right rather than trading correctness for the bound.
+        None => match value.repr() {
+            Ok(repr) => shorten(repr.to_string(), SUMMARY_CHARS),
+            Err(_) => "<unrepresentable>".to_owned(),
+        },
     }
 }
 

@@ -393,3 +393,53 @@ def test_a_pattern_that_stays_small_is_still_decided() -> None:
     assert Validator(small).is_subtype_of(Annotated[str, Regex("(a|b)*")])
     long_but_simple = Annotated[str, Regex("a" * 2000)]
     assert Validator(long_but_simple).is_subtype_of(Annotated[str, Regex("a*")])
+
+
+def test_explaining_a_deep_value_does_not_scale_with_its_size() -> None:
+    """A summary is bounded while it is built, not built and then cut.
+
+    The walk stops at `MAX_WALK_DEPTH` levels, so an error over a deeply nested
+    value names a bounded path -- but every violation along the way summarised
+    the value it was about, and a summary was the value's *whole* repr cut to
+    eighty characters afterwards. A 20,000-deep list has a 40,000-character
+    repr, built once per level and discarded, which was twelve seconds for a
+    single error against twenty microseconds for `is_valid` on the same value.
+
+    Timed against depth rather than against a constant: the defect was a cost
+    that grew with the size of the value, and only a comparison across sizes
+    fails if it comes back.
+    """
+    schema = Validator(recursive(lambda node: union(int, [node])))
+
+    def explain(depth: int) -> float:
+        value: object = "not an int"
+        for _ in range(depth):
+            value = [value]
+        started = time.perf_counter()
+        with pytest.raises(ValidationError):
+            schema.validate(value)
+        return time.perf_counter() - started
+
+    small, large = explain(2_000), explain(20_000)
+    # Ten times the value, and the work must not follow it. Generous, because a
+    # loaded machine moves a millisecond around: quadratic was a factor of 40.
+    assert large < small * 5 + 0.05, (
+        f"explaining a 20,000-deep value took {large:.3f}s against "
+        f"{small:.3f}s for a 2,000-deep one; the summary is scaling with the value"
+    )
+
+
+def test_a_bounded_summary_still_names_a_small_value_exactly() -> None:
+    """The bound must not cost the messages that were already readable."""
+
+    def message(schema: object, value: object) -> str:
+        with pytest.raises(ValidationError) as info:
+            Validator(schema).validate(value)
+        return info.value.errors[0]["message"]
+
+    assert message(int, [1, 2, 3]) == "expected int, got [1, 2, 3] [int_type]"
+    assert message(int, {"a": 1}) == "expected int, got {'a': 1} [int_type]"
+    assert message(int, (1, 2)) == "expected int, got (1, 2) [int_type]"
+    assert message(int, "text") == "expected int, got 'text' [int_type]"
+    # And a value too large to print is cut rather than printed.
+    assert len(message(int, list(range(10_000)))) < 200

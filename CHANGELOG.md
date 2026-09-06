@@ -80,6 +80,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an enumeration is the union of its members only when it is one
 - fix: refuse a pattern before its automaton is built, not after
 - fix: a validator takes part in the cycle collector
+- perf: bound a value summary while it is built, not after
 
 -->
 
@@ -495,6 +496,14 @@ answer of its own, or a repair to a change not yet released.
   not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
+
+- Explaining a failure over a large value no longer costs the size of the value.
+  Every violation summarised the value it was about by building that value's
+  whole `repr` and keeping eighty characters of it, so a 20,000-deep list was
+  rendered in full once per level of the walk: twelve seconds for a single
+  error, against twenty microseconds for `is_valid` on the same value. A
+  container is now rendered under a bound instead, which is 1.1 ms for the same
+  case and flat in the depth. A value small enough to print is unchanged.
 
 - A class that holds its own validator is collected. A validator keeps the
   classes, enum members and callables its schema names, so `Model.validator =

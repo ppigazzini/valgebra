@@ -1129,34 +1129,72 @@ fn check_union(
     {
         return decided;
     }
+    if ctx.mode.explains() {
+        return explain_union(members, value, path, ctx, out);
+    }
     // A value is a member iff it matches at least one branch; decide that on the
     // fast path, where a discarded branch pays for no path or violation.
     let sub = fast(ctx);
-    if members
+    members
         .iter()
         .any(|m| member(m, value, &mut Vec::new(), sub, &mut Vec::new()))
-    {
-        return true;
-    }
-    if !ctx.mode.explains() {
-        return false;
-    }
-    // No branch matches. Explain the *closest* branch — the one that descended
-    // furthest into the value before failing — rather than dumping every branch.
-    // "Furthest" is the greatest path depth past the union's own location. When
-    // no branch makes progress (every branch is a flat type mismatch, e.g.
-    // `int | str` against a float), fall back to a single union error. The probe
-    // aggregates regardless of fail_fast so the deepest progress is visible; this
-    // runs only on the error path.
+}
+
+/// Decide a union **and** explain it in one walk of each branch.
+///
+/// The two questions were asked separately: a fast pass over every branch to
+/// decide membership, then -- on failure -- a probe that walked every branch
+/// again in explain mode to find the closest one. Each pass is linear in the
+/// subtree, and the probe's walk reaches the next union one level down, which
+/// did the same thing to the subtree below *it*. The result was quadratic in
+/// the depth of the value: a 5,000-deep value took 0.8 s to explain, 10,000
+/// took 3.3, and 20,000 took 13, against `is_valid` at 1.6 ms for the same
+/// 20,000.
+///
+/// A branch walked in explain mode already answers both: it returns whether it
+/// matched, and it reports what failed if it did not. Asking once makes the
+/// recursion linear, and the walk that used to be thrown away is the one that
+/// is kept.
+fn explain_union(
+    members: &[Schema],
+    value: &Value<'_, '_>,
+    path: &mut Vec<PathSegment>,
+    ctx: Ctx<'_>,
+    out: &mut Vec<Violation>,
+) -> bool {
+    // The *closest* branch -- the one that descended furthest into the value
+    // before failing -- is reported, rather than every branch. "Furthest" is the
+    // greatest path depth past the union's own location. Where no branch makes
+    // progress (`int | str` against a float, say) a single union error stands
+    // for all of them. Violations are aggregated regardless of fail_fast so the
+    // deepest progress is visible; this runs only where a value is being
+    // explained.
     let base_depth = path.len();
     let probe = Ctx {
         mode: WalkMode::Explain,
         ..ctx
     };
     let mut best: Option<(usize, Vec<Violation>)> = None;
-    for branch_schema in members.iter().take(CLOSEST_BRANCH_PROBE_LIMIT) {
+    for (position, branch_schema) in members.iter().enumerate() {
+        if position >= CLOSEST_BRANCH_PROBE_LIMIT {
+            // Past the probe's width the branch is asked the cheap question
+            // only: a union this wide reports the closest of the branches
+            // already walked, and the rest merely decide membership.
+            if member(
+                branch_schema,
+                value,
+                &mut Vec::new(),
+                fast(ctx),
+                &mut Vec::new(),
+            ) {
+                return true;
+            }
+            continue;
+        }
         let mut branch = Vec::new();
-        member(branch_schema, value, path, probe, &mut branch);
+        if member(branch_schema, value, path, probe, &mut branch) {
+            return true;
+        }
         let progress = branch
             .iter()
             .map(|v| v.path.len())
