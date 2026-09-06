@@ -202,3 +202,62 @@ def test_a_parametrized_legacy_alias_is_unaffected() -> None:
     assert Validator(dict[str, int]) == Validator(dict[str, int])
     assert Validator(tuple[int, str]) == Validator(tuple[int, str])
     assert Validator(tuple[int, ...]) == Validator(tuple[int, ...])
+
+
+REFUSED_LITERAL_ARGUMENTS = [
+    ("a list", [1]),
+    ("an empty dict", {}),
+    ("a dict", {1: 2}),
+    ("a set", {1, 2}),
+]
+
+
+@pytest.mark.parametrize(
+    ("name", "argument"),
+    REFUSED_LITERAL_ARGUMENTS,
+    ids=[row[0] for row in REFUSED_LITERAL_ARGUMENTS],
+)
+def test_a_container_is_not_a_literal_argument(name: str, argument: object) -> None:
+    """Python does not reject the subscription, so valgebra has to.
+
+    The typing spec's `Literal` takes `None`, an enum member, or an `int`,
+    `bool`, `str` or `bytes` value. A container is none of those, and
+    `Literal[[1]]` builds at runtime -- so the argument reached the constant
+    fallthrough, where a list is this library's own *native list schema*.
+    `Literal[[1]]` was `list[Literal[1]]` and `Literal[{}]` the empty record:
+    sets a caller writing `Literal` did not ask for, with no message saying so.
+    """
+    with pytest.raises(NotImplementedError) as info:
+        Validator(Literal[argument])  # ty: ignore[invalid-type-form]
+    assert "not a Literal argument" in str(info.value)
+
+
+def test_the_literal_arguments_the_spec_allows_still_build() -> None:
+    """The refusal must not reach past the containers."""
+    assert Validator(Literal[1, "a", b"b"] | None).is_valid("a")
+    assert Validator(Literal[1, "a", b"b"] | None).is_valid(None)
+    assert Validator(Literal[True]).is_valid(True)
+    # A float is not a spelling the spec allows either, and is deliberately kept:
+    # it is a *constant*, which this library pools like any other.
+    assert Validator(Literal[1.5]).is_valid(1.5)  # ty: ignore[invalid-type-form]
+    # A tuple is the spelling for several arguments, not an argument.
+    assert Validator(Literal[(1, 2)]).is_valid(2)
+    # And the containers still mean what they mean outside a `Literal`.
+    assert Validator(list[int]).is_valid([1])
+    assert Validator({}).is_valid({})
+
+
+def test_a_bare_forward_reference_is_refused_like_one_in_an_argument() -> None:
+    """`ForwardRef('int')` names a type; it is not one.
+
+    In a type-argument position this was already refused. At the top level it
+    reached the constant fallthrough and became `Literal[ForwardRef('int')]` --
+    a schema matching only that `ForwardRef` object, which no caller has.
+    """
+    with pytest.raises(NotImplementedError) as info:
+        Validator(ForwardRef("int"))
+    assert "forward reference" in str(info.value)
+    # The same refusal, reached the other way.
+    with pytest.raises(NotImplementedError) as inner:
+        Validator(list[ForwardRef("int")])
+    assert "forward reference" in str(inner.value)

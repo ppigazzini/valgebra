@@ -85,6 +85,8 @@ answer of its own, or a repair to a change not yet released.
 - fix: one schema prints one way
 - fix: a required-ness qualifier survives a string annotation
 - fix: a bare legacy typing alias is the class it aliases
+- fix: refuse a Literal argument the typing spec refuses
+- fix: refuse a Literal argument the typing spec refuses
 
 -->
 
@@ -500,6 +502,16 @@ answer of its own, or a repair to a change not yet released.
   not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
+
+- A container is refused as a `Literal` argument, where it used to be read as a
+  schema. The typing spec's `Literal` takes `None`, an enum member, or an `int`,
+  `bool`, `str` or `bytes` value; Python does not reject the subscription, so
+  `Literal[[1]]` reached the constant fallthrough and came out as
+  `list[Literal[1]]`, and `Literal[{}]` as the empty record — sets the caller did
+  not ask for, with no message saying so. A float is still accepted: it is not a
+  spelling the spec allows either, but it is a *constant*, which this library
+  pools like any other. A bare `ForwardRef` is refused too, with the message a
+  forward reference in a type argument already gave.
 
 - A bare legacy typing alias is the class it aliases. `typing.Tuple` was read as
   `tuple[()]` — the empty tuple, admitting `()` and nothing else — because a bare

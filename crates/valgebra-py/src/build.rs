@@ -333,6 +333,19 @@ pub(crate) fn build_schema(
     // only because it has no typing origin and is not a value. Reject it with a
     // clear message rather than interning it as a literal that would match
     // almost nothing (a free `T` accepts only objects equal to the TypeVar).
+    // A forward reference names a type rather than being one, and the constant
+    // fallthrough would intern it as a literal of the `ForwardRef` object --
+    // matching nothing a caller has. The same refusal a type *argument* already
+    // gives, reached at the top level too.
+    if is_forward_reference(obj)? {
+        return Err(not_implemented(&format!(
+            "{} is a forward reference, and a schema is built from the types \
+             themselves: resolve the annotation first with typing.get_type_hints(\
+             ..., include_extras=True), or write the type rather than its name",
+            summarize(obj)
+        )));
+    }
+
     if is_typing_construct(obj)? {
         return Err(not_implemented(&format!(
             "{} is a typing construct, not a value: a type variable, ParamSpec, \
@@ -348,6 +361,14 @@ pub(crate) fn build_schema(
 /// True if `obj` is a type variable or a typing special form (`Final`,
 /// `ClassVar`, a bare `Optional`/`Union`/`Literal`, ...): a type-system
 /// construct carrying no runtime value, so it cannot denote a set of values.
+/// True if `obj` is a `typing.ForwardRef`, on a runtime that has one.
+fn is_forward_reference(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
+    match obj.py().import("typing")?.getattr("ForwardRef") {
+        Ok(class) => obj.is_instance(&class),
+        Err(_) => Ok(false),
+    }
+}
+
 fn is_typing_construct(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
     let typing = obj.py().import("typing")?;
     for name in ["TypeVar", "ParamSpec", "TypeVarTuple", "_SpecialForm"] {
@@ -807,6 +828,7 @@ fn build_parametrized(
         // there is more than one.
         let mut members = Vec::with_capacity(args.len());
         for arg in args.iter() {
+            refuse_unhashable_literal(&arg)?;
             members.push(build_schema(&arg, lits, defs)?);
         }
         return Ok(Schema::union(members));
@@ -821,6 +843,45 @@ fn build_parametrized(
         "unsupported typing form with origin {}; supported: list, set, dict, \
          tuple, Union, Optional, Literal, Callable",
         summarize(origin)
+    )))
+}
+
+/// Refuse a `Literal` argument the typing spec does not allow, where reading it
+/// on would mean something else entirely.
+///
+/// The spec's `Literal` takes `None`, an enum member, or an `int`, `bool`, `str`
+/// or `bytes` value. A **list, dict or set** is none of those, and Python does
+/// not reject the subscription -- so `Literal[[1]]` arrived here as a list, and
+/// the constant fallthrough read it as this library's own native list *schema*:
+/// `Literal[[1]]` became `list[Literal[1]]`, and `Literal[{}]` the empty record.
+/// Those are sets a caller who wrote `Literal` did not ask for, and no message
+/// said so.
+///
+/// A float is deliberately not refused here. It is not a spelling the spec
+/// allows either, but it is a *constant*, and this library pools it as one --
+/// which is what `docs/05-refinements.md` says and what a caller writing
+/// `Literal[1.5]` means. The line is between a value with no interpretation but
+/// itself and one this library already reads as a schema.
+fn refuse_unhashable_literal(arg: &Bound<'_, PyAny>) -> PyResult<()> {
+    let (kind, instead) = if arg.is_instance_of::<PyList>() {
+        (
+            "a list",
+            "list[T] for a list of values, or a tuple of them in the Literal",
+        )
+    } else if arg.is_instance_of::<PyDict>() {
+        (
+            "a dict",
+            "dict[K, V], or a record written as a dict literal",
+        )
+    } else if arg.is_instance_of::<PySet>() {
+        ("a set", "set[T]")
+    } else {
+        return Ok(());
+    };
+    Err(not_implemented(&format!(
+        "{kind} is not a Literal argument: the typing spec allows None, an enum \
+         member, or an int, bool, str or bytes value, and this one would be read \
+         as a schema of its own rather than as a constant. Write {instead}"
     )))
 }
 
@@ -875,12 +936,7 @@ fn build_type_argument(
     lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
-    let py = arg.py();
-    let forward_ref = match py.import("typing")?.getattr("ForwardRef") {
-        Ok(class) => arg.is_instance(&class)?,
-        Err(_) => false,
-    };
-    if arg.is_instance_of::<PyString>() || forward_ref {
+    if arg.is_instance_of::<PyString>() || is_forward_reference(arg)? {
         return Err(not_implemented(&format!(
             "{} is a forward reference, and a schema is built from the types \
              themselves: resolve the annotation first with typing.get_type_hints(\
