@@ -1,7 +1,7 @@
 [build-system]
 # >= 1.9.4 injects the pyo3 extension-module behavior at build time, so it is
 # not hard-coded as a Cargo feature (see crates/valgebra-py/Cargo.toml).
-requires = ["maturin>=1.14.1,<2"]
+requires = ["maturin>=1.15.0,<2"]
 build-backend = "maturin"
 
 [project]
@@ -33,21 +33,21 @@ classifiers = [
 [dependency-groups]
 dev = [
     "annotated-types>=0.8",
-    "hypothesis>=6.165.9",
+    "hypothesis>=6.167.1",
     "maturin>=1.14.1,<2",
-    "mypy>=1.19",
+    "mypy>=2.3.1",
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
-    "ruff>=0.16.3",
-    "syrupy>=5.5.3",
-    "ty>=0.0.72",
+    "ruff>=0.16.6",
+    "syrupy>=6.0.0",
+    "ty>=0.0.78",
 ]
 # Benchmark-only tools: the wall-clock harness and the external comparison
 # points. They are never runtime dependencies of valgebra.
 bench = [
-    "pytest-benchmark>=5.2.3",
-    "pydantic>=2.13.4",
+    "pytest-benchmark>=5.3.0",
+    "pydantic>=2.13.5",
     "jsonschema>=4.26.0",
     "msgspec>=0.21.1",
 ]

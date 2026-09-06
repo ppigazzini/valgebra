@@ -9,7 +9,7 @@ inputs:
       morning. Dependabot bumps the action SHA below but not this pin: rotate it
       on the monthly maintenance pass, in step with the uv-pre-commit rev.
     required: false
-    default: "0.12.5"
+    default: "0.12.10"
   python-version:
     description: >-
       Interpreter for uv to install and put on the path. Left empty, uv picks

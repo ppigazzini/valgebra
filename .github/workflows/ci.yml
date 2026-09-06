@@ -28,7 +28,7 @@ env:
   # the monthly maintenance pass (Dependabot does not pin toolchains). The
   # scheduled libFuzzer soak stays on floating `nightly` so it still warns about
   # future nightly/fuzzer breakage.
-  FUZZ_NIGHTLY: nightly-2026-08-15
+  FUZZ_NIGHTLY: nightly-2026-09-05
 
 jobs:
   rust-lint:
@@ -145,9 +145,9 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
+      - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
         with:
-          tool: cargo-nextest,cargo-llvm-cov@0.8.7
+          tool: cargo-nextest,cargo-llvm-cov@0.9.0
       # Run the workspace tests under nextest and enforce a core line-coverage
       # floor. The binding crate is measured by its own lane (which ignores the
       # core), so scope this floor to the core and ignore valgebra-py here. The
@@ -170,10 +170,10 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
+      - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
         with:
-          tool: cargo-llvm-cov@0.8.7
-      - uses: ./.github/actions/setup-uv
+          tool: cargo-llvm-cov@0.9.0
+      - uses: $/.github/actions/setup-uv
       # Binding coverage combines two drivers under one instrumentation
       # environment: the Python suite exercising the extension, and the
       # binding-internal Rust unit tests (interner, index remap, fast-path
@@ -239,7 +239,7 @@ jobs:
           # "init function of _valgebra returned uninitialized object". Key the
           # cache on the interpreter (and OS) so each ABI keeps its own build.
           key: ${{ matrix.os }}-${{ matrix.python-version }}
-      - uses: ./.github/actions/setup-uv
+      - uses: $/.github/actions/setup-uv
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dev dependencies
@@ -284,7 +284,7 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: ./.github/actions/setup-uv
+      - uses: $/.github/actions/setup-uv
       - name: Install the differential oracles
         run: uv sync --locked --group bench
       - name: Build the extension into the venv
@@ -315,7 +315,7 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: ./.github/actions/setup-uv
+      - uses: $/.github/actions/setup-uv
       - run: uv sync --locked
       - run: uv run maturin develop --uv
       # Run the corpus through this build and compare it against the recorded
@@ -338,7 +338,7 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: ./.github/actions/setup-uv
+      - uses: $/.github/actions/setup-uv
       - run: uv sync --locked
       - run: uv run maturin develop --uv
       # Execute every runnable example in the README and the docs site; fail on
@@ -357,7 +357,7 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: ./.github/actions/setup-uv
+      - uses: $/.github/actions/setup-uv
       - run: uv sync --locked --group docs
       # mkdocstrings imports the package to read its docstrings.
       - run: uv run --group docs maturin develop --uv
@@ -384,7 +384,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Install valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
-      - uses: ./.github/actions/setup-uv
+      - uses: $/.github/actions/setup-uv
       - run: uv sync --locked --no-install-project --group bench
       # The wall-clock benches must measure the shipped artifact, not a debug
       # build, so build the release wheel with LTO and profile-guided
@@ -519,7 +519,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # Pinned for the reason the nightly sweep gives: the mutant set is compared
       # against a committed baseline.
-      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
+      - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
         with:
           tool: cargo-mutants@27.1.0
       - name: List the Rust files the diff touches
@@ -610,10 +610,10 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # Pinned for the reason the nightly sweep gives: the mutant set is compared
       # against a committed baseline.
-      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
+      - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
         with:
           tool: cargo-mutants@27.1.0
-      - uses: ./.github/actions/setup-uv
+      - uses: $/.github/actions/setup-uv
       - name: List the Rust files the diff touches
         id: diff
         # Both values reach the script through the environment rather than
@@ -686,7 +686,7 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - uses: ./.github/actions/setup-uv
+      - uses: $/.github/actions/setup-uv
         with:
           python-version: "3.13"
       - name: Install dev dependencies
@@ -732,7 +732,7 @@ jobs:
       # A prebuilt cargo-fuzz, pinned: the action has no cargo-fuzz of its own and
       # falls back to cargo-binstall, so the version is what makes the fetch
       # reproducible. See the fuzz-build lane for the whole argument.
-      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
+      - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
         with:
           tool: cargo-fuzz@0.13.2
       # `--target` forces the host (gnu) triple: the prebuilt cargo-fuzz is a
@@ -809,7 +809,7 @@ jobs:
       # `--locked` pins only the deps of, not the tool). Pinned by version: the
       # sweep's survivors are compared against a committed baseline, so a mutant
       # set that moves with the tool moves the baseline under the ratchet.
-      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
+      - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
         with:
           tool: cargo-mutants@27.1.0
       - name: Mutation report over the core
@@ -898,7 +898,7 @@ jobs:
       # path -- without them every mutant reads as unviable, which is a sweep that
       # measured nothing rather than a clean one.
       - name: Set up the Python toolchain for the walk sweep
-        uses: ./.github/actions/setup-uv
+        uses: $/.github/actions/setup-uv
       # The recursion-depth case leaves the SWEEP -- not the test lane, where it
       # runs on every push. It drives a 130-level chain through a two-branch
       # union, so any mutation that removes a short-circuit turns it exponential
@@ -960,7 +960,7 @@ jobs:
       # falls back to cargo-binstall, which fetches a GitHub release and says so.
       # Unpinned, that fallback installs whatever is newest, and the toolchain
       # pinned in FUZZ_NIGHTLY buys nothing while the fuzzer driving it floats.
-      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
+      - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
         with:
           tool: cargo-fuzz@0.13.2
       - name: Build the fuzz targets
@@ -989,7 +989,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
+      - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
         with:
           tool: cargo-deny@0.20.2
       - name: Audit the workspace dependency tree
@@ -1007,7 +1007,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-uv
+      - uses: $/.github/actions/setup-uv
       - name: Audit the locked Python dependencies
         run: |
           uv export --locked --format requirements-txt --no-emit-project --all-groups > requirements-audit.txt
@@ -1023,13 +1023,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-uv
+      - uses: $/.github/actions/setup-uv
       - name: Audit the workflows
         # GH_TOKEN lets zizmor run its online audits (action ref resolution) in
         # addition to the static ones.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uvx zizmor==1.29.0 .github/workflows/ .github/actions/
+        run: uvx zizmor==1.30.0 .github/workflows/ .github/actions/
 
   ci:
     name: ci
