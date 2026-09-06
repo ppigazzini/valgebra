@@ -64,7 +64,19 @@ def _jobs() -> dict[str, str]:
 
 
 def _scheduled_only(job_body: str) -> bool:
-    return "if: github.event_name == 'schedule'" in job_body
+    """Whether the *job* runs only on the schedule, not merely a step of it.
+
+    Read at the job's own indentation. A step inside a job that runs on every
+    push may carry the same condition -- the bench lane reads its recorded
+    budgets nightly and gates on the merge base always -- and matching anywhere
+    in the body took that job for a nightly one, which would have excused it
+    from the merge gate entirely.
+    """
+    return bool(
+        re.search(
+            r"^    if: .*github\.event_name == 'schedule'", job_body, re.MULTILINE
+        )
+    )
 
 
 def _needs() -> set[str]:

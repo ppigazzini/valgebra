@@ -90,9 +90,32 @@ verdict:
   fails on the checksum before its instruction count is read.
 - **An unreadable measurement exits 2.**
 
-The budgets live in `scripts/perf_budget.json`. Do not copy one into prose:
-`scripts/docs_lint.py` fails on it, because a figure that moves when the budget
-is re-recorded is stale the next time it moves.
+### What the merge gate compares against, and why not a number
+
+**The merge gate is relative.** `--against <rev>` builds and measures the same
+workload twice in one job -- once at `HEAD`, once at `rev` in a throwaway
+worktree with its own target directory -- and holds the difference to 2%. The
+toolchain, the flags, the machine and the cachegrind version are one and the
+same across the pair, so what is left is the change.
+
+The recorded numbers in `scripts/perf_budget.json` are a **record of one
+environment**, read on the nightly and never on the merge path. The reason is
+measured: the commit that recorded the current core budget re-measures 5.35%
+away from it on another machine of the same rustc line. An absolute band wide
+enough not to flake on that is ±10%, which cannot see a real 5% regression --
+so the absolute check is either noisy or blind, and choosing between those is
+not a gate. Re-record with `--update` when an intentional change moves the
+number, and say what moved.
+
+One refusal is the relative gate's own: **a workload that changed is not a
+comparison.** Two builds of a workload computing the same thing agree on its
+checksum exactly, so a disagreement says the workload moved between the two
+commits and the counts are of different work. That exits 2 -- neither a pass nor
+a regression.
+
+Do not copy a budget into prose: `scripts/docs_lint.py` fails on it, because a
+figure that moves when the budget is re-recorded is stale the next time it
+moves.
 
 ### The competitive ratio
 

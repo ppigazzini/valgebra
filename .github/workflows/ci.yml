@@ -403,6 +403,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The instruction-count gates below build this change's own merge base
+          # in a worktree and measure it beside HEAD, so the base commit has to
+          # be in the clone.
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
         with:
           toolchain: stable
@@ -422,18 +426,41 @@ jobs:
         run: |
           uv run --no-sync --group bench maturin build --release --pgo --out dist
           uv pip install --no-deps --reinstall dist/*.whl
+      # The merge base this change is measured against. Both counts are taken in
+      # this job, with this toolchain, so what the gates below hold is the
+      # difference the change made rather than the difference between two
+      # machines -- which is 5% on the same rustc line, half the band an
+      # absolute budget has to carry.
+      - name: Name the merge base
+        id: base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          base="$BASE_SHA"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "$DEFAULT_BRANCH"
+            base="$(git rev-parse FETCH_HEAD)"
+          fi
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+          echo "measuring against $base"
       # Deterministic instruction-count regression gate: cachegrind over the
-      # fixed core workload, compared against the committed budget. Independent
-      # of runner noise, so it blocks merges; a wall-clock budget could not.
+      # fixed core workload at HEAD and at the base, compared to each other.
+      # Independent of runner noise, so it blocks merges; a wall-clock budget
+      # could not.
       - name: Instruction-count regression gate
-        run: uv run --no-sync python scripts/perf_gate.py
+        run: uv run --no-sync python scripts/perf_gate.py --against "$BASE"
+        env:
+          BASE: ${{ steps.base.outputs.sha }}
       # The same gate for the decision procedures. A separate workload because
       # the core one runs the transformations and never calls `is_subtype_of`,
       # `is_empty` or `is_equivalent`, so without this the whole decision surface
       # is invisible here in both directions: neither what a new rule costs nor
       # what a cheaper one saves.
       - name: Decision-path instruction-count regression gate
-        run: uv run --no-sync python scripts/perf_gate.py --decision
+        run: uv run --no-sync python scripts/perf_gate.py --decision --against "$BASE"
+        env:
+          BASE: ${{ steps.base.outputs.sha }}
       # The same gate for the binding hot path: the membership walk over a live
       # Python value, which the pure-Rust core workload does not reach. The
       # workload embeds the interpreter, so PYO3_PYTHON selects it at build time
@@ -444,7 +471,19 @@ jobs:
           py="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
           libdir="$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           PYO3_PYTHON="$py" LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}" \
-            uv run --no-sync python scripts/perf_gate.py --binding
+            uv run --no-sync python scripts/perf_gate.py --binding --against "$BASE"
+        env:
+          BASE: ${{ steps.base.outputs.sha }}
+      # And the recorded numbers, on the nightly only. They are a record of one
+      # environment rather than a gate -- the same commit re-measures 5% away on
+      # another machine -- so they are read where a drift over months is worth
+      # seeing and nowhere a merge waits on them.
+      - name: Recorded instruction-count budgets (nightly)
+        if: github.event_name == 'schedule'
+        continue-on-error: true
+        run: |
+          uv run --no-sync python scripts/perf_gate.py
+          uv run --no-sync python scripts/perf_gate.py --decision
       # Smoke-run the wall-clock benches once (timing disabled) so the suites
       # keep working; their numbers are recorded by hand in the performance
       # page. The files are named bench_*, so override the collection pattern.

@@ -107,3 +107,50 @@ def test_the_committed_core_checksum_matches_the_workload() -> None:
         (ROOT / "scripts" / "perf_budget.json").read_text(encoding="utf-8")
     )
     assert budget["core_workload_checksum"] == 134000
+
+
+BASE = gate.Measurement(irefs=100_000_000, checksum=134000)
+
+
+def _relative(head_irefs: int, checksum: int = 134000) -> int:
+    return gate.judge_relative(
+        gate.Measurement(irefs=head_irefs, checksum=checksum), BASE, "core workload"
+    )
+
+
+def test_a_regression_against_the_base_fails() -> None:
+    # The number the report asks this gate to catch and the recorded budget
+    # cannot: three percent, well inside the +/-10% an absolute band must carry
+    # to survive a change of machine, and well outside what one job's two builds
+    # of one toolchain can produce by themselves.
+    assert _relative(103_000_000) == 1
+
+
+def test_a_change_inside_the_band_passes() -> None:
+    assert _relative(101_000_000) == 0
+    assert _relative(BASE.irefs) == 0
+
+
+def test_an_improvement_against_the_base_passes() -> None:
+    # One-sided on purpose. A count that fell because the work vanished is
+    # caught by the checksum below; a count that fell because the code got
+    # faster is what the gate is for.
+    assert _relative(80_000_000) == 0
+
+
+def test_a_workload_that_changed_is_not_a_comparison() -> None:
+    # Neither a pass nor a regression: the two runs measured different work, so
+    # exit 2 -- "could not measure" -- which is the code a lane must not read as
+    # a verdict.
+    assert _relative(100_000_000, checksum=134001) == gate.EXIT_CANNOT_RUN
+
+
+def test_every_mode_names_an_example_the_tree_builds() -> None:
+    # The relative gate builds by mode name, so a mode naming an example that
+    # does not exist fails at build time in the lane rather than here. Held to
+    # the tree instead: every example named is a file under examples/.
+    for mode, (example, subject) in gate.MODES.items():
+        crate = "valgebra-py" if mode == "binding" else "valgebra-core"
+        path = ROOT / "crates" / crate / "examples" / f"{example}.rs"
+        assert path.exists(), f"{mode} names {example}, which is not in the tree"
+        assert subject
