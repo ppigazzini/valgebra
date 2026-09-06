@@ -32,7 +32,11 @@ holds it there.
 
 The roll expires in its own direction too: an entry naming a commit that is not
 in the range is a stale line, and it fails, because a roll nobody prunes is a
-roll nobody reads.
+roll nobody reads. With one exception, and it is the gate's own reflection: the
+commit being made is not in `git log` yet, so its line has nothing to match.
+The roll is oldest first, so a pending line sits after every line that matches;
+one *before* the last match names a commit that went away, and that is the stale
+line this catches.
 
 LEDGER: every feat/fix commit since the last release is on the changelog roll
 """
@@ -134,12 +138,16 @@ def test_every_visible_commit_is_on_the_roll() -> None:
 
 @SHALLOW
 def test_no_roll_entry_is_stale() -> None:
-    extra = sorted(set(_roll()) - _visible_commits())
+    roll, commits = _roll(), _visible_commits()
+    matched = [at for at, entry in enumerate(roll) if entry in commits]
+    settled = roll[: max(matched) + 1] if matched else []
+    extra = sorted(set(settled) - commits)
     assert not extra, (
         "roll entries naming no commit in this release: "
         + "; ".join(extra)
         + ". A released roll is emptied with the section; a rebase renames "
-        "subjects and the roll follows."
+        "subjects and the roll follows. A line for the commit being made is not "
+        "stale -- it belongs at the end, after every line that matches."
     )
 
 

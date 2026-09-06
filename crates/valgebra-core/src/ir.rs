@@ -601,22 +601,45 @@ impl Schema {
         }
     }
 
-    /// The union of `members`: a value belongs when it belongs to at least one.
+    /// The union of `members`, in the lattice normal form.
     ///
     /// A union of no members is the bottom, which is this operation's identity.
     /// The constructor owns that, so a caller folding an empty collection gets an
     /// atom every consumer already reads rather than a node each must special-case
     /// -- the render printed the empty join of no members as an empty string.
     ///
-    /// Members are kept in the order given and are not deduplicated: the order is
-    /// observable through the render and through structural equality, and
-    /// [`simplify`](Self::simplify) is where the lattice laws apply.
+    /// The normal form is what the associativity, commutativity, idempotence and
+    /// identity laws say a join is: a nested union is flattened into this one,
+    /// the bottom drops out, the top absorbs, the members are ordered and
+    /// deduplicated, and a single member is returned unwrapped. So
+    /// `union(int, int)` is `int` and `union(str, int)` is the schema
+    /// `union(int, str)` is, which is what makes `==` equality of the set's one
+    /// spelling rather than of whichever the caller happened to write.
+    ///
+    /// Ordering is by [`Ord`], which is the variant order and then the payload:
+    /// a literal sorts by its pool slot, so a `Literal[...]` keeps the order it
+    /// was written in and the message a failed union reports lists its branches
+    /// that way.
+    ///
+    /// **Absorption is not applied.** `A | (A & B)` is `A` only when `A` contains
+    /// `A & B`, and containment is the decision procedure -- running it wherever
+    /// a schema is built is the cost this design refuses everywhere else. A rule
+    /// downstream may assume the form below and no more.
     #[must_use]
     pub fn union(members: impl IntoIterator<Item = Schema>) -> Schema {
-        let members: Vec<Schema> = members.into_iter().collect();
-        if members.is_empty() {
-            return Schema::Nothing;
+        let mut flat: Vec<Schema> = Vec::new();
+        for member in members {
+            match member {
+                // The top absorbs, and keeps the spelling of the member it
+                // absorbed: `Any | int` renders `Any`.
+                top @ Schema::Anything(_) => return top,
+                Schema::Nothing => {}
+                Schema::Union(inner) => flat.extend(inner),
+                other => flat.push(other),
+            }
         }
+        flat.sort();
+        flat.dedup();
         // A join carrying a schema together with its complement is the top,
         // whatever those are, so no such join survives construction and no rule
         // downstream may assume one does. `has_complementary_pair` is the one
@@ -625,30 +648,49 @@ impl Schema {
         // With no oracle here the law declines for an atom only the bindings can
         // read, which is the safe direction: a join left unfolded still denotes
         // what it denotes.
-        if crate::decision::has_complementary_pair(&members, &crate::decision::NoLeafRelations) {
+        if crate::decision::has_complementary_pair(&flat, &crate::decision::NoLeafRelations) {
             return Schema::ANYTHING;
         }
-        Schema::Union(members)
+        match flat.len() {
+            0 => Schema::Nothing,
+            1 => flat.swap_remove(0),
+            _ => Schema::Union(flat),
+        }
     }
 
-    /// The meet of `members`: a value belongs when it belongs to every one.
+    /// The meet of `members`, in the lattice normal form dual to
+    /// [`union`](Self::union).
     ///
-    /// A meet of no members is the top, dually to [`union`](Self::union).
+    /// A meet of no members is the top. A nested meet is flattened, the top drops
+    /// out, the bottom absorbs, and the members are ordered and deduplicated, so
+    /// `intersection(int, anything)` is `int` and `intersection(int, int)` is
+    /// `int`.
     #[must_use]
     pub fn meet(members: impl IntoIterator<Item = Schema>) -> Schema {
-        let members: Vec<Schema> = members.into_iter().collect();
-        if members.is_empty() {
-            return Schema::ANYTHING;
+        let mut flat: Vec<Schema> = Vec::new();
+        for member in members {
+            match member {
+                Schema::Nothing => return Schema::Nothing,
+                Schema::Anything(_) => {}
+                Schema::Intersection(inner) => flat.extend(inner),
+                other => flat.push(other),
+            }
         }
+        flat.sort();
+        flat.dedup();
         // The dual of the fold in [`union`](Self::union), and the same law read
         // the other way: a meet carrying a schema together with its complement
         // is the bottom. Both constructors state it or neither does -- a law
         // folded on one side and left standing on the other is two answers to
-        // one question, and the simplifier already folds this side.
-        if crate::decision::has_complementary_pair(&members, &crate::decision::NoLeafRelations) {
+        // one question.
+        if crate::decision::has_complementary_pair(&flat, &crate::decision::NoLeafRelations) {
             return Schema::Nothing;
         }
-        Schema::Intersection(members)
+        match flat.len() {
+            0 => Schema::ANYTHING,
+            1 => flat.swap_remove(0),
+            _ => Schema::Intersection(flat),
+        }
     }
 
     /// The complement: every value this schema does not admit.
@@ -659,10 +701,19 @@ impl Schema {
     ///
     /// `~~A` is `A`, so a complement of a complement cancels. Nothing downstream
     /// carries a double negation, and no rule anywhere may assume one exists.
+    ///
+    /// The two bounds cancel with it: `~anything` is `nothing` and `~nothing` is
+    /// `anything`. Without those, dropping the top from a meet -- which the
+    /// identity law does -- would take the complementary pair apart before the
+    /// pair rule saw it, and `Any & ~Any` would come out as `~Any` rather than
+    /// the bottom. The spelling is not carried across, because neither bound is
+    /// the other's spelling of itself.
     #[must_use]
     pub fn complement(self) -> Schema {
         match self {
             Schema::Complement(inner) => *inner,
+            Schema::Anything(_) => Schema::Nothing,
+            Schema::Nothing => Schema::ANYTHING,
             other => Schema::Complement(Box::new(other)),
         }
     }

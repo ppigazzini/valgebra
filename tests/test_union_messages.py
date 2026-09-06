@@ -77,5 +77,8 @@ def test_the_label_bound_is_not_the_branch_bound() -> None:
     hundred = union(*[Validator(f"c{index}") for index in range(100)])
     spec = union(hundred, int)  # two branches
     expected = _expected(spec, 1.5)
-    assert expected.count("the literal") == 64  # sixty-four labels
+    # Sixty-four labels, of which `int` is one: the members of a join are held in
+    # the normal form's order, and a kind sorts before a literal.
+    assert expected.count("the literal") == 63
+    assert expected.startswith("one of: int, ")
     assert expected.endswith("...")

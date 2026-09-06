@@ -97,10 +97,19 @@ def test_double_complement_preserves_membership(spec: object) -> None:
         return
     # `complement` cancels a complement where it is built, so `~~s` *is* `s` and
     # comparing the two asks nothing. The follow-up schema is one the fold does
-    # not reach: a complement of a join whose other member admits nothing, which
-    # denotes the same set through a shape the constructors leave standing.
-    doubled = complement(union(complement(spec), Validator(nothing)))
-    assert doubled != compiled
+    # not reach: absorption, `s | (s & other)`, which denotes `s` and needs a
+    # containment to see -- the one lattice law construction leaves standing,
+    # because deciding it wherever a schema is built is what the design refuses.
+    # The partner is a shape the generator never draws, so it is neither `s` nor
+    # its complement: either would collapse the meet and then the join, and the
+    # comparison below would be vacuous.
+    partner = Validator({"__absorbs__": int})
+    doubled = union(spec, intersection(spec, partner))
+    # The two lattice bounds absorb the partner outright, so for them the fold
+    # does reach it and the comparison below is trivially true rather than
+    # vacuous. Every other schema keeps the respelling.
+    if compiled not in (Validator(anything), Validator(nothing)):
+        assert doubled != compiled
     for value in _UNIVERSE:
         assert doubled.is_valid(value) == compiled.is_valid(value)
 

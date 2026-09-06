@@ -107,9 +107,9 @@ def _compose_in_a_loop(compose: Callable[[object], object]) -> None:
 @pytest.mark.parametrize(
     "compose",
     [
-        lambda s: s | str,
-        lambda s: union(s, str),
-        lambda s: intersection(s, str),
+        lambda s: Validator([s]) | str,
+        lambda s: union(Validator([s]), str),
+        lambda s: intersection(Validator([s]), str),
         lambda s: complement(Validator([s])),
     ],
 )
@@ -121,14 +121,32 @@ def test_composition_depth_guard_rejects_unbounded_nesting(
     # clone, decision, or render walk overflow the native stack. Every combinator
     # family — the `|` operator, union, intersection, and complement — is bounded
     # the same way.
+    #
+    # Each step wraps the subject in a list first, because a *repeated* join or
+    # meet of the same two members does not grow at all: a schema is built in the
+    # lattice normal form, so `s | str` twice is `s | str`. That is the subject of
+    # the test below, and it is why the growing shape here has to be one the
+    # normal form keeps.
     with pytest.raises(ValueError, match="too deep"):
         _compose_in_a_loop(compose)
 
 
-def test_repeated_complement_does_not_nest():
-    # `~~A` is `A`, cancelled where the schema is built, so complementing in a
-    # loop oscillates between two shapes rather than growing. There is no depth
-    # to guard, which is why complement is composed with a constructor above.
+def test_a_repeated_composition_does_not_grow():
+    # Idempotence, the identities and the complement laws are settled where the
+    # schema is built, so a loop that re-applies the same step reaches a fixed
+    # point instead of a bound. There is nothing to guard, which is a better
+    # answer than guarding it: the set stops growing, so the schema does.
+    v = Validator(int)
+    for _ in range(1000):
+        v = v | str
+    assert v == Validator(int) | str
+
+    v = Validator(int)
+    for _ in range(1000):
+        v = union(v, v)
+    assert v == Validator(int)
+
+    # `~~A` is `A`, so complementing in a loop oscillates between two shapes.
     v = Validator(int)
     for _ in range(1000):
         v = complement(v)
@@ -141,7 +159,7 @@ def test_repeated_complement_does_not_nest():
     [
         ("constructor list literal", "v = Validator([v])"),
         ("constructor list[...]", "v = Validator(list[v])"),
-        ("union operator", "v = v | str"),
+        ("union operator", "v = Validator([v]) | str"),
         ("complement of a list", "v = complement(Validator([v]))"),
         ("recursive body", "v = recursive(lambda s, prev=v: [prev, s])"),
     ],
@@ -159,11 +177,15 @@ def test_every_construction_door_rejects_unbounded_depth(door: str, loop: str) -
 
 
 def test_self_combination_rejects_before_exhausting_memory() -> None:
-    # Combining a validator with itself doubles its node count each step while its
-    # depth barely grows, so only the node-count bound catches it. The subprocess
-    # must reject cleanly, never OOM.
+    # Combining a validator with two *different* growing copies of itself doubles
+    # its node count each step while its depth barely grows, so only the
+    # node-count bound catches it. The subprocess must reject cleanly, never OOM.
+    # `union(v, v)` is `v`, so the two copies have to differ for the count to
+    # double at all.
     result = _run_construction_loop(
-        "v = Validator(int)\nfor _ in range(60):\n    v = union(v, v)"
+        "v = Validator(int)\n"
+        "for _ in range(60):\n"
+        "    v = union(Validator([v]), Validator({'k': v}))"
     )
     assert result.returncode == 0, f"crashed with rc={result.returncode}"
     assert "RAISED" in result.stdout, f"{result.stdout} {result.stderr}"
@@ -189,13 +211,13 @@ def test_a_schema_at_the_depth_limit_still_works() -> None:
     # drift away from the tested edge.
     deep = Validator(int)
     for _ in range(MAX_SCHEMA_DEPTH - 1):
-        deep = deep | str
-    assert deep.is_valid("x")
+        deep = Validator([deep])
+    assert deep.is_valid(_nested_value(MAX_SCHEMA_DEPTH - 1))
     assert not deep.is_empty()
     assert isinstance(repr(deep), str)
     # One more step crosses the bound and is rejected.
     with pytest.raises(ValueError, match="too deep"):
-        deep | str
+        Validator([deep])
 
 
 def test_the_published_bounds_are_positive() -> None:

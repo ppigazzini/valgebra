@@ -146,16 +146,24 @@ def test_a_join_with_a_complement_is_the_top():
 
 
 def test_the_fold_reaches_a_schema_built_through_the_constructors_only():
-    # A respelling denotes the same set and is *not folded*, because the fold
-    # reads structural equality. The two claims are separate: what the fold
-    # reaches is a question about the term, and what the relation decides is a
-    # question about the set -- which the descriptor answers, so the equal
-    # spelling is decided even though it was not folded.
+    # A schema is built in the lattice normal form, so a respelling that differs
+    # from the top by the identity and complement laws alone *is* the top: the
+    # empty join drops out and the pair cancels where the schema is built.
     record = Validator({"a": int})
-    respelled = union(record, complement(union(record, Validator(nothing))))
-    assert respelled != Validator(anything)
-    assert Validator(anything).is_subtype_of(respelled)
-    assert respelled.is_equivalent(Validator(anything))
+    assert union(record, complement(union(record, Validator(nothing)))) == Validator(
+        anything
+    )
+
+    # Absorption is the one law construction leaves standing, because it needs a
+    # containment and containment is the decision. So this respelling denotes the
+    # record and is not folded to it -- and the relation decides it anyway, which
+    # is the separation the two claims rest on: what the fold reaches is a
+    # question about the term, what the relation decides is a question about the
+    # set.
+    respelled = union(record, intersection(record, Validator(str)))
+    assert respelled != record
+    assert respelled.is_equivalent(record)
+    assert record.is_subtype_of(respelled)
 
 
 def test_any_folds_like_the_top_it_is():

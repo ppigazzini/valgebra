@@ -62,6 +62,8 @@ answer of its own, or a repair to a change not yet released.
 - feat: publish the construction limits where a caller can read them
 - fix: a negated wanted key leaves the keys it excludes alone
 - fix: render a schema as an expression that rebuilds it
+- feat: a bare container class is its kind
+- feat: a schema is built in the lattice normal form
 
 -->
 
@@ -179,6 +181,29 @@ answer of its own, or a repair to a change not yet released.
   than raising `AttributeError` for an attribute the type declares.
 
 ### Changed
+
+- **A schema is built in the lattice normal form.** The constructors folded two
+  laws and left the rest standing, so `union(int, int)` rendered `int | int` and
+  compared unequal to `int` while `union(int, complement(int))` rendered
+  `anything` — `==` was equality of nothing in particular, and `repr` showed a
+  shape no rule was written for. Members of a join or a meet are flattened,
+  ordered and deduplicated; the identities and the absorbing elements apply;
+  `~anything` is `nothing` and `~nothing` is `anything`; and a join of one member
+  is that member. So `union(str, int) == union(int, str)`,
+  `intersection(int, anything) == Validator(int)`, and `==` is equality of a
+  canonical form.
+
+  Three things a caller may see. `repr` shows the normal form, so a join renders
+  its members in that order — a kind before a literal, for instance, while
+  literals and classes keep the order they were written in, their pool slots
+  being what orders them. A union's `expected` message lists its branches the
+  same way. And `Literal["x"]`, a join of one member, is that literal: it reports
+  `literal_error` where it reported `union_error`.
+
+  Absorption is the one law left standing: `A | (A & B)` is `A` only when `A`
+  contains `A & B`, and containment is the decision procedure — running it
+  wherever a schema is built is the cost this design refuses everywhere else.
+  `is_equivalent` decides it.
 
 - **A bare container class is its kind.** `list` and `list[object]` admit the
   same values — every list, a subclass instance included — and were different

@@ -11,7 +11,15 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import Validator, complement, intersection, recursive, union
+from valgebra import (
+    Validator,
+    anything,
+    complement,
+    intersection,
+    nothing,
+    recursive,
+    union,
+)
 
 # A spread of schema specs and probe values to exercise membership.
 _SPECS = [int, str, bool, float, list[int], dict[str, int], int | None, {"a": int}]
@@ -71,10 +79,17 @@ def test_eq_is_structural_and_reflexive() -> None:
     assert nan == nan  # noqa: PLR0124 -- the self-comparison is the point
 
 
-def test_eq_is_syntactic_not_semantic() -> None:
-    # same set, different shape: equal under is_equivalent, not under ==
-    assert union(int, str) != union(str, int)
-    assert union(int, str).is_equivalent(union(str, int))
+def test_eq_is_the_normal_form_and_not_the_set() -> None:
+    # `==` is equality of the lattice normal form, which construction builds. Two
+    # spellings that differ only by the order of a join, by a repeat, or by an
+    # identity are one schema.
+    assert union(int, str) == union(str, int)
+    assert union(int, int) == Validator(int)
+    assert union(int, Validator(nothing)) == Validator(int)
+    assert intersection(int, Validator(anything)) == Validator(int)
+
+    # It is not equality of the *set*: `bool` is below `int`, so the two denote
+    # one set, and seeing that is a containment rather than a law.
     assert union(bool, int) != Validator(int)
     assert union(bool, int).is_equivalent(int)
 

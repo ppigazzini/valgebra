@@ -202,7 +202,12 @@ def test_a_callback_atom_is_not_reported_empty_against_itself() -> None:
     predicate = Annotated[int, _alternating()]
     meet = Validator(intersection(predicate, complement(predicate)))
 
-    assert meet.is_valid(7), "the alternating answers admit the value"
+    # Two runs, because the witness depends on which parity the alternation is
+    # at when the walk reaches the first member, and the members of a meet are
+    # held in the normal form's order rather than the written one. One of the
+    # two runs admits the value, and that is the witness the law would be
+    # standing against.
+    assert any(meet.is_valid(7) for _ in range(2)), "the answers admit the value"
     assert not meet.is_empty(), "so the meet is not empty"
 
 
@@ -215,7 +220,8 @@ def test_a_hooked_class_is_not_reported_empty_against_itself() -> None:
     restriction is to the atoms it does not hold for, not to the law.
     """
     hooked = Validator(intersection(_Coin, complement(_Coin)))
-    assert hooked.is_valid(7), "the alternating answers admit the value"
+    # Two runs, for the reason the predicate above needs them.
+    assert any(hooked.is_valid(7) for _ in range(2)), "the answers admit the value"
     assert not hooked.is_empty(), "so the meet is not empty"
 
     pure = Validator(intersection(_Pure, complement(_Pure)))

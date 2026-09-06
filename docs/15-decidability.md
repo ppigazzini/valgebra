@@ -254,11 +254,14 @@ assert Validator(bool).is_subtype_of(Literal[True, False])
 assert Validator({"a": int}).is_subtype_of(dict[Literal["a"], int])
 
 # A respelling denotes the same set, and the sets are what the relation reads --
-# even though the fold, which is a construction over the term, does not reach it.
+# even though the laws construction settles do not reach this one. `A | (A & B)`
+# is `A` by absorption, which needs a containment to see, and containment is the
+# decision rather than a law.
 record = Validator({"a": int})
-respelled = union(record, complement(union(record, nothing)))
-assert respelled != Validator(anything)
-assert Validator(anything).is_subtype_of(respelled)
+respelled = union(record, intersection(record, Validator(str)))
+assert respelled != record
+assert record.is_subtype_of(respelled)
+assert respelled.is_subtype_of(record)
 ```
 
 Two instruments hold this list to the tree. `tests/test_completeness_ledger.py`

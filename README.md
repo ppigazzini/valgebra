@@ -73,8 +73,8 @@ assert intersection(int, complement(int)).is_empty()  # provably no value
   `is_equivalent` (mutual inclusion), and `is_empty` (unsatisfiable) form a
   **sound** decision procedure: a `True` is always correct, and the procedure
   decides a wide fragment completely and stays conservative beyond it — never a
-  wrong answer. Keep `is_equivalent` (semantic) distinct from `==` (syntactic
-  shape).
+  wrong answer. Keep `is_equivalent` (semantic) distinct from `==` (the schema's
+  normal form).
 - **A law-justified simplifier.** `simplify` reduces a schema to a lattice normal
   form that admits **exactly the same values** — it never changes a schema's
   meaning.

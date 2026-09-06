@@ -742,16 +742,22 @@ mod tests {
     fn the_nullary_operations_are_their_identities() {
         assert_eq!(Schema::union([]), Schema::Nothing);
         assert_eq!(Schema::meet([]), Schema::ANYTHING);
-        // A non-empty list is kept as given: order and repeats are observable
-        // through the render and structural equality, and the lattice laws are
-        // `simplify`'s job.
+        // A non-empty list arrives in the lattice normal form: idempotence and
+        // the identities are settled where the schema is built, and one member
+        // is returned unwrapped rather than as a join of one.
+        assert_eq!(Schema::union([Schema::Int, Schema::Int]), Schema::Int);
+        assert_eq!(Schema::meet([Schema::Int]), Schema::Int);
+        assert_eq!(Schema::union([Schema::Int, Schema::Nothing]), Schema::Int);
+        assert_eq!(Schema::meet([Schema::Int, Schema::ANYTHING]), Schema::Int);
+        // Commutativity: two spellings of one join are one schema.
         assert_eq!(
-            Schema::union([Schema::Int, Schema::Int]),
-            Schema::Union(vec![Schema::Int, Schema::Int])
+            Schema::union([Schema::Str, Schema::Int]),
+            Schema::union([Schema::Int, Schema::Str])
         );
+        // Associativity: a nested join is flattened into the one above it.
         assert_eq!(
-            Schema::meet([Schema::Int]),
-            Schema::Intersection(vec![Schema::Int])
+            Schema::union([Schema::Int, Schema::union([Schema::Str, Schema::Bytes])]),
+            Schema::union([Schema::Int, Schema::Str, Schema::Bytes])
         );
         assert_eq!(
             Schema::Int.complement(),
@@ -3346,6 +3352,13 @@ mod laws {
                 required: true,
             }],
         };
+        let other_record = Schema::AttrRecord {
+            fields: vec![Field {
+                name: "y".into(),
+                schema: Schema::Str,
+                required: true,
+            }],
+        };
         let class = |index| Schema::Instance(ClassIx::new(index));
         let object = Schema::meet([class(3), record.clone()]);
         assert_eq!(object.object_class(), Some(ClassIx::new(3)));
@@ -3362,9 +3375,15 @@ mod laws {
             Schema::meet([class(3), class(4), record.clone()]).object_class(),
             None
         );
+        // Two *different* records are two records; one written twice is one,
+        // because a meet is idempotent where the schema is built.
+        assert_eq!(
+            Schema::meet([class(3), record.clone(), other_record]).object_class(),
+            None
+        );
         assert_eq!(
             Schema::meet([class(3), record.clone(), record]).object_class(),
-            None
+            Some(ClassIx::new(3))
         );
     }
 

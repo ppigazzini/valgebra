@@ -42,7 +42,7 @@ the dunder behind a type slot and that is what introspection would show.
 | --- | --- | --- |
 | `obj in validator` | `__contains__` | Membership: the operator form of `is_valid`, so a check reads as the set test it is. |
 | `a \| b` | `__or__`, `__ror__` | The union of the two schemas. `\|` is the operator typing already uses for a union; intersection and complement have no typing operator and stay named calls. The reflected form is what makes `None \| validator` work. |
-| `a == b` | `__eq__` | **Syntactic** equality: the schema trees, recursive definitions, and pooled constants all match. Ask `is_equivalent` for the semantic question — whether two schemas denote the same set however they are spelled. |
+| `a == b` | `__eq__` | Equality of the **normal form**: the schema trees, recursive definitions, and pooled constants all match, after the lattice laws construction settles — so a difference of member order, of a repeat, or of an identity is not one. Ask `is_equivalent` for the semantic question — whether two schemas denote the same set, which needs a containment rather than a law. |
 | `hash(validator)` | `__hash__` | Consistent with `==`, so a validator is a dict key or a set member. It digests the schema shape and definitions only, never the pooled constants, so an unhashable constant cannot break it. |
 | `repr(validator)` | `__repr__` | A rendering of the schema as an expression that builds it. |
 

@@ -130,10 +130,11 @@ def test_a_meet_stops_at_the_member_that_rejects_the_value() -> None:
 
     # A member that fails *inside* the value leaves the others meaningful, and
     # each is still collected: both records reject the same key for a reason of
-    # their own.
+    # their own. The order is the meet's own -- a schema is built in the lattice
+    # normal form, so the members are ordered rather than kept as written.
     assert _all(intersection({"a": int}, {"a": bool}), {"a": "x"}) == [
-        ("int_type", ("a",)),
         ("bool_type", ("a",)),
+        ("int_type", ("a",)),
     ]
 
 

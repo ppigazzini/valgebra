@@ -295,7 +295,7 @@ assert (
     == "one of: the literal 'torch', the literal 'jax'"
 )
 assert expected_of(union(Backend, Literal["cpu"]), "arcfase") == (
-    "one of: Backend, the literal 'cpu'"
+    "one of: the literal 'cpu', Backend"
 )
 ```
 
@@ -342,7 +342,9 @@ def report(spec: object) -> tuple[str, str]:
 
 
 assert report("active") == ("literal_error", "the literal 'active'")
-assert report(Literal["active"]) == ("union_error", "one of: the literal 'active'")
+# `Literal[x]` with one member *is* that literal: a join of one member is the
+# member, settled where the schema is built.
+assert report(Literal["active"]) == ("literal_error", "the literal 'active'")
 ```
 
 `Literal[...]` builds a union of its constants — of one branch, when there is one

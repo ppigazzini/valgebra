@@ -302,11 +302,32 @@ assert not Validator(int).is_empty()
 ```
 
 `is_equivalent` is **semantic**: it compares the value sets, however the two
-schemas are spelled. Keep it distinct from `==` on validators, which is
-**syntactic** — `==` compares schema *shape*, so two schemas that denote the same
-set but are written differently are equal under `is_equivalent` yet not under
-`==`. Ask `is_equivalent` "do these mean the same set?" and `==` "are these the
-same shape?".
+schemas are spelled. Keep it distinct from `==` on validators, which compares the
+schema's **normal form** — the shape construction builds. The lattice laws are
+settled there, so a difference of order, of a repeat, or of an identity is not a
+difference:
+
+```python
+from valgebra import Validator, anything, complement, intersection, nothing, union
+
+assert union(int, str) == union(str, int)  # commutativity
+assert union(int, int) == Validator(int)  # idempotence
+assert union(int, Validator(nothing)) == Validator(int)  # the identity
+assert intersection(int, Validator(anything)) == Validator(int)  # dually
+assert intersection(int, complement(int)) == Validator(nothing)  # the complement law
+```
+
+What `==` does not see is a relation that needs a *containment*: `bool` is below
+`int`, so `union(bool, int)` denotes the set `int` does, and no law rewrites one
+into the other. Ask `is_equivalent` "do these mean the same set?" and `==` "are
+these the same schema?".
+
+```python
+from valgebra import Validator, union
+
+assert union(bool, int) != Validator(int)
+assert union(bool, int).is_equivalent(int)
+```
 
 Shape includes the constants a schema pins, read the way `Literal` reads one:
 same type and equal. `Validator(Literal[1]) != Validator(Literal[True])`, because
