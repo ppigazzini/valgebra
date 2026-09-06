@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -45,6 +46,9 @@ import yaml
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+#: A step to run: its job, its name, its command, and the job's own `env`.
+Step = tuple[str, str, str, dict[str, str]]
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -95,6 +99,8 @@ NEEDS_A_RUNNER = {
     "A caller's strict types, on the floor and on the current": (
         "needs both interpreters installed"
     ),
+    "Build the fuzz targets": "needs the pinned nightly toolchain and cargo-fuzz",
+    "Test the fuzz harness": "needs the pinned nightly toolchain",
 }
 
 #: Jobs whose every step is a runner's, so naming each would say nothing more.
@@ -164,25 +170,122 @@ def shallow_clone(into: Path) -> Path:
     return tree
 
 
-def run_step(name: str, command: str, cwd: Path) -> bool:
+#: `${{ env.NAME }}`, the one expression a step's command may carry that this
+#: can resolve: the workflow's own `env:` block is in the file being read.
+ENV_EXPRESSION = re.compile(r"\$\{\{\s*env\.(\w+)\s*\}\}")
+
+
+def resolved(command: str, environment: dict[str, str]) -> str | None:
+    """Fill in `${{ env.X }}`, or answer `None` where one cannot be filled.
+
+    Every other expression -- `github.*`, `steps.*`, `matrix.*` -- is the
+    runner's to answer, and a step carrying one is named in `NEEDS_A_RUNNER`
+    rather than guessed at.
+    """
+    missing = [
+        name for name in ENV_EXPRESSION.findall(command) if name not in environment
+    ]
+    if missing:
+        return None
+    return ENV_EXPRESSION.sub(lambda m: environment[m.group(1)], command)
+
+
+def interpreter_env() -> dict[str, str]:
+    """Where a developer's Python lives, which a runner does not have to say.
+
+    The binding's tests link libpython, and a runner's system interpreter is on
+    the default loader path while a virtual environment's is not. Passing it is
+    not a deviation from the lane: it is what makes the same command mean the
+    same thing here.
+    """
+    try:
+        found = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import sys, sysconfig;"
+                    "print(sys.executable);"
+                    "print(sysconfig.get_config_var('LIBDIR') or '')"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+    except (subprocess.CalledProcessError, OSError):
+        return {}
+    executable, libdir = [*found, "", ""][:2]
+    return {
+        "PYO3_PYTHON": executable,
+        "LD_LIBRARY_PATH": f"{libdir}:{os.environ.get('LD_LIBRARY_PATH', '')}",
+    }
+
+
+def build_plan(spec: dict, jobs: list[str]) -> tuple[list[Step], list[str]]:
+    """Collect the steps to run, and the ones only a runner can fill in."""
+    workflow_env = {key: str(value) for key, value in (spec.get("env") or {}).items()}
+    plan: list[Step] = []
+    unresolved: list[str] = []
+    for job in jobs:
+        job_env = {
+            key: str(value)
+            for key, value in (spec["jobs"][job].get("env") or {}).items()
+            if "${{" not in str(value)
+        }
+        for name, command in steps(spec, job):
+            if not runnable(name):
+                continue
+            filled = resolved(command, workflow_env)
+            if filled is None:
+                unresolved.append(f"{job}: {name}")
+                continue
+            plan.append((job, name, filled, job_env))
+    return plan, unresolved
+
+
+def run_step(name: str, command: str, cwd: Path, environment: dict[str, str]) -> bool:
     print(f"\n=== {name}")
-    result = subprocess.run(
-        ["bash", "-euo", "pipefail", "-c", command],
-        cwd=cwd,
-        check=False,
-        # One build directory across the jobs and across runs. The clone is what
-        # this reproduces; a cold Rust build is not, and paying for one per job
-        # would make the gate something nobody runs.
-        env={
-            **os.environ,
-            "CI": "1",
-            "CARGO_TARGET_DIR": str(ROOT / "target" / "gate"),
-        },
-    )
+    with tempfile.TemporaryDirectory() as outputs:
+        result = subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", command],
+            cwd=cwd,
+            check=False,
+            # One build directory across the jobs and across runs. The clone is
+            # what this reproduces; a cold Rust build is not, and paying for one
+            # per job would make the gate something nobody runs.
+            env={
+                **os.environ,
+                **interpreter_env(),
+                **environment,
+                "CI": "1",
+                "CARGO_TARGET_DIR": str(ROOT / "target" / "gate"),
+                # A step that records an output writes to a file the runner
+                # names. Nothing here reads it back -- the steps that would are
+                # the ones this gate cannot run -- but the write must land
+                # somewhere rather than failing.
+                "GITHUB_OUTPUT": str(Path(outputs) / "github_output"),
+                "GITHUB_STEP_SUMMARY": str(Path(outputs) / "step_summary"),
+            },
+        )
     if result.returncode != 0:
         print(f"FAILED: {name} (exit {result.returncode})")
         return False
     return True
+
+
+def show_plan(
+    spec: dict, jobs: list[str], plan: list[Step], unresolved: list[str]
+) -> None:
+    """Print what would run and what would not, with the reason for each skip."""
+    for job, name, _, _ in plan:
+        print(f"run   {job}: {name}")
+    for step in unresolved:
+        print(f"skip  {step} -- carries an expression only a runner answers")
+    for job in jobs:
+        for name, _ in steps(spec, job):
+            if not runnable(name):
+                print(f"skip  {job}: {name} -- {NEEDS_A_RUNNER[name]}")
 
 
 def main() -> int:
@@ -203,19 +306,9 @@ def main() -> int:
         print(f"gate: no such job: {', '.join(unknown)}")
         return EXIT_CANNOT_RUN
 
-    plan = [
-        (job, name, command)
-        for job in jobs
-        for name, command in steps(spec, job)
-        if runnable(name)
-    ]
+    plan, unresolved = build_plan(spec, jobs)
     if args.list:
-        for job, name, _ in plan:
-            print(f"run   {job}: {name}")
-        for job in jobs:
-            for name, _ in steps(spec, job):
-                if not runnable(name):
-                    print(f"skip  {job}: {name} -- {NEEDS_A_RUNNER[name]}")
+        show_plan(spec, jobs, plan, unresolved)
         return EXIT_OK
 
     if args.here:
@@ -230,8 +323,8 @@ def main() -> int:
     try:
         failures = [
             f"{job}: {name}"
-            for job, name, command in plan
-            if not run_step(f"{job}: {name}", command, tree)
+            for job, name, command, environment in plan
+            if not run_step(f"{job}: {name}", command, tree, environment)
         ]
     finally:
         if holder is not None:
