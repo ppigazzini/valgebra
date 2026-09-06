@@ -548,7 +548,8 @@ and the spec makes a `TypedDict` open — reading it as a narrower set would be 
 deviation the class carries no mark of. The dict-literal form is this library's
 own spelling, and a schema written as a *shape* means that shape. Both sets are
 spellable both ways: write `closed=True` (PEP 728) for a closed `TypedDict`, and
-`{"name": str, ...}` for an open shape.
+`{"name": str, anything: anything}` for an open shape -- or `.open()`, which
+does the same to every record in a schema at once.
 
 ### Pass the class, not its annotations
 

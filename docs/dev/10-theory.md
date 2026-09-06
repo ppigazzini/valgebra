@@ -27,10 +27,10 @@ about Python.
 ## The algebra: a Boolean lattice of value sets
 
 **Birkhoff, _Lattice Theory_.** Union, intersection and complement over value
-sets form a Boolean algebra; the simplifier's rewrites are its laws.
-**[LOAD-BEARING]** — `crates/valgebra-core/src/simplify.rs`, and the property
-suites that check each claimed equivalence against membership rather than
-asserting it.
+sets form a Boolean algebra; the folds the constructors apply are its laws.
+**[LOAD-BEARING]** — `crates/valgebra-core/src/ir.rs`, where a schema is built
+in the lattice normal form, and the property suites that check each claimed
+equivalence against membership rather than asserting it.
 
 **Stone's representation theorem (1936).** Every Boolean algebra is isomorphic to
 an algebra of sets. **[GUIDING]** — the licence for treating the scalar fragment
@@ -51,7 +51,7 @@ The distinction is not pedantry. A rule stated as the reduction and implemented
 structurally has a hole wherever an arm is missing, and the reduction's name over
 the top is what stops anyone looking for one.
 
-On the expectation to hold of a simplifier, the paper offers an observation in
+On the expectation to hold of a rewriter, the paper offers an observation in
 §2.2, not a theorem, and it is about a syntactic rule set:
 
 > Forgetting any of these rules yields a type system that, although sound, does
@@ -59,9 +59,9 @@ On the expectation to hold of a simplifier, the paper offers an observation in
 > types.
 
 A rewriter missing rules is sound and incomplete. Reading that shape onto this
-simplifier is **valgebra's reasoning, not a result of the paper**, and it is why
-[02-decision.md](02-decision.md) states soundness as the contract and treats
-completeness as a measured, growing property rather than a promise.
+tree's normal form is **valgebra's reasoning, not a result of the paper**, and it
+is why [02-decision.md](02-decision.md) states soundness as the contract and
+treats completeness as a measured, growing property rather than a promise.
 
 **Castagna, "Programming with Union, Intersection, and Negation Types"**
 (arXiv:2111.03354, revised 2024). The modern synthesis. **[GUIDING]**

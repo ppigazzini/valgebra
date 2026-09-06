@@ -9,7 +9,6 @@ direction their dependencies run, and the two invariants the compiler holds.
 |---|---|---|
 | `crates/valgebra-core/src/ir.rs` | the schema IR: the node set, and what each node denotes | [01-schema-ir.md](01-schema-ir.md) |
 | `crates/valgebra-core/src/decision.rs` | emptiness, subtyping, equivalence, disjointness | [02-decision.md](02-decision.md) |
-| `crates/valgebra-core/src/simplify.rs` | the membership-preserving lattice normalisation | [02-decision.md](02-decision.md) |
 | `crates/valgebra-py/src/build.rs` | typing annotations and native forms into the IR | [03-frontend.md](03-frontend.md) |
 | `crates/valgebra-py/src/check/` | the membership walk | [04-walk.md](04-walk.md) |
 | `crates/valgebra-py/src/errors.rs`, `render.rs` | the Python exception and the annotation render | [05-errors.md](05-errors.md) |
@@ -60,7 +59,7 @@ for them. [02-decision.md](02-decision.md) owns that boundary.
         |  build.rs                        crates/valgebra-py/src/build.rs
         v
   Schema + a constants pool + definitions  crates/valgebra-core/src/ir.rs
-        |  simplify (optional)             crates/valgebra-core/src/simplify.rs
+        |  checked and pruned              crates/valgebra-py/src/validator.rs
         v
   a compiled Validator                     crates/valgebra-py/src/validator.rs
         |  member()                        crates/valgebra-py/src/check/walk.rs

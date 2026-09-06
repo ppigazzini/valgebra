@@ -14,7 +14,7 @@ it.
 |---|---|
 | [00-architecture.md](00-architecture.md) | the two crates, the module layers, the dependency direction |
 | [01-schema-ir.md](01-schema-ir.md) | `crates/valgebra-core/src/ir.rs` — the node set and what each node denotes |
-| [02-decision.md](02-decision.md) | `crates/valgebra-core/src/decision.rs` and `simplify.rs` — what is decided and what stays conservative |
+| [02-decision.md](02-decision.md) | `crates/valgebra-core/src/decision.rs` and `descr/` — what is decided and what stays conservative |
 | [03-frontend.md](03-frontend.md) | `crates/valgebra-py/src/build.rs` — typing annotations into the IR |
 | [04-walk.md](04-walk.md) | `crates/valgebra-py/src/check/` — the membership walk, both input paths, three modes |
 | [05-errors.md](05-errors.md) | the violation model, the error codes, the annotation render |

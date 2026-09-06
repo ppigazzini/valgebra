@@ -53,9 +53,9 @@ it fails.
 
 - **It terminates on a recursive schema.** A back edge to a reference already
   being rendered shows as `...`, so the form is finite.
-- **It is stable under simplification.** The node matrix asserts
-  `repr(simplify()) == repr(simplify().simplify())`, so a rendered form does not
-  drift under a second normalisation pass.
+- **It is stable under a rebuild.** A rendered form reads back as a schema that
+  renders the same way, so `repr` is a fixed point rather than a form that
+  drifts each time it is built again.
 
 ## The limit
 

@@ -40,8 +40,11 @@ against the membership relation rather than asserting it (see the
 
 The laws hold of the schema a caller **builds**, not of a pass over it
 afterwards: `union`, `intersection` and `complement` produce the lattice normal
-form, so `union(int, int)` *is* `Validator(int)`, an absorbed member is gone
-before anyone asks, and a schema beside its own complement folds to a bound.
+form, so `union(int, int)` *is* `Validator(int)`, a member written twice in
+either order is one member, and a schema beside its own complement folds to a
+bound. Absorption is the law construction does **not** apply: `A | (A & B)` is
+`A` only when `A` contains `A & B`, and containment is the decision procedure
+rather than a shape -- so the two are equivalent sets and two terms.
 `repr` shows that form and `==` compares it. (`simplify` was the pass that used
 to do this and is deprecated; [the algebra guide](04-algebra.md) says what it
 still does.)

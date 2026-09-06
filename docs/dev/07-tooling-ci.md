@@ -61,8 +61,8 @@ Wall-clock benchmarks on shared runners are too noisy to gate, so
 identical across runs of a build. Three workloads, one per surface, because a
 gate only catches what it exercises:
 
-- the **core** transformations — the simplifier, the composition remap, the
-  record transform;
+- the **core** transformations — the constructors' normal form, the composition
+  remap, the record transform;
 - the **decision** procedures (`--decision`) — subtyping, emptiness,
   equivalence. The core workload never calls one, so without this the whole
   decision surface is unmeasured in both directions: neither what a new rule

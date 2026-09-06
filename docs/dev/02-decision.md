@@ -21,11 +21,11 @@ representation decides" -- and the reason they are worth having is measured:
 building a set representation costs about two orders of magnitude more than a
 rule that already answers.
 
-`crates/valgebra-core/src/simplify.rs` owns the membership-preserving
-normalisation that uses them. It is **deprecated**: a schema is built in the
-lattice normal form, so the reduction it promises is the schema a caller already
-holds, and the folds it adds beyond the laws are decisions the three relations
-make better.
+`crates/valgebra-core/src/simplify.rs` is the pass that used to normalise a
+term afterwards. It is **deprecated** and goes in the next minor version: a
+schema is built in the lattice normal form, so the reduction it promises is the
+schema a caller already holds, and the folds it adds beyond the laws are
+decisions the three relations make better.
 
 ## Why every rule stays
 
@@ -71,6 +71,14 @@ is not written down with a reason. An enumerated list can only confirm the rules
 it was built from; a search can report a rule nobody wrote.
 
 ## The scalar fragment is exact, through a region partition
+
+Two partitions of the value universe live in `decision.rs`, and they are not
+rivals: `Kind` is the eleven-part one the descriptor's components are indexed
+by, and `Region` is a seven-bit *summary* derived from it (`Kind::region`) --
+six scalar bits and one for everything else. The rules reason in the summary
+because that is all a bitset needs to decide a scalar; the descriptor reasons in
+the partition because a component per kind is what closes each under complement.
+A change to one is a change to the other, in that direction only.
 
 The value universe is cut into mutually disjoint regions, and a Boolean
 combination of scalar atoms denotes a set the lattice operations compute
@@ -155,19 +163,22 @@ a mutation that removes the bound makes them run without end. They are marked in
 their own source and the ledger holds the marks to the sweep's skip list;
 [07-tooling-ci.md](07-tooling-ci.md) owns that rule.
 
-## The simplifier is not a decision procedure
+## Construction is not a decision procedure
 
-`simplify` applies the lattice laws: flattening, identities, De Morgan,
-deduplication, and the scalar-region collapse. It preserves membership — the set
-does not change — and it is checked against a value oracle rather than against
-itself.
+The constructors apply the lattice laws -- flattening, identities,
+deduplication, the two complement laws -- so no schema reaches a rule in a shape
+those describe. They stop there, and the line is the cost: a law that needs a
+*containment* to see is a decision, and running one wherever a schema is built
+is the price this design refuses everywhere else.
 
-It is not complete and cannot be. It runs the region check and the
-complementary-pair check, so it collapses what those decide; it does not run the
-full procedure, which is why `is_empty` on a structural schema can be true where
-`simplify` leaves the schema standing. That split is deliberate: `simplify` is on
-the compile path and the decision procedure is not, so a rule that costs is
-allowed in one and not the other.
+Absorption is the law on the far side of that line. `A | (A & B)` is `A` exactly
+when `A` contains `A & B`, so the two are one set and two terms: `is_equivalent`
+proves it and `==` does not. `is_empty` on a structural schema is true in places
+construction leaves standing, for the same reason.
+
+(`simplify` was a pass that folded a little more than construction does. It is
+deprecated and goes in the next minor version; what it still folds beyond the
+laws is listed in `docs/04-algebra.md`.)
 
 ## The bounds are decided by emptiness, not by the atom
 

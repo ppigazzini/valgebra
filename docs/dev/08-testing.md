@@ -35,7 +35,7 @@ on one side the day it arrives.
 | Layer | Judges | Blind to |
 |---|---|---|
 | Denotation oracle | the walk, against an independent Python predicate over generated values | what the generator does not draw |
-| Model oracle (Rust) | the IR, `simplify` and the decision procedure, against a value model | the walk — the core cannot see Python |
+| Model oracle (Rust) | the IR, the constructors' normal form and the decision procedure, against a value model | the walk — the core cannot see Python |
 | Differential | the walk, against pydantic-core and jsonschema | the fragment where the semantics deliberately differ |
 | Boundary | the claims about *why* a check-only tool differs from a parser, as verdicts against pydantic | anything the two libraries answer the same way |
 | Metamorphic | the JSON path against the object path; fast mode against explain mode | a defect both sides share |
@@ -157,7 +157,7 @@ the bound. Every job carries one.
 ## What is not tested here, deliberately
 
 **Denotation preservation is not re-checked in the fuzz targets.** They assert
-procedure-agnostic laws — panic-freedom, `simplify` idempotence, reflexivity,
+procedure-agnostic laws — panic-freedom, reflexivity,
 the top and bottom bounds, equivalence as mutual inclusion — over the **full**
 IR, including the opaque fragment a value oracle cannot model. Membership
 preservation is oracle-tested over the decidable fragment in the core law suite.
