@@ -1,13 +1,16 @@
 # cargo-mutants configuration.
 #
-# The sweep covers the soundness-critical core crate and the membership walk.
+# The sweep covers the soundness-critical core crate, the membership walk, and
+# the frontend that builds a schema from an annotation.
 #
-# The walk is where membership is decided, so it and the context it carries are
-# the binding's files whose arms are worth a mutation number rather than a line
-# count. Both are reachable from
-# `cargo test` because the `interpreter-tests` feature links an embedded Python
-# and `check/walk.rs`'s own corpus drives real values through `member`; the sweep
-# is run with that feature (see the workflow) or every mutant reads as unviable.
+# The walk is where membership is decided and the frontend is where an
+# annotation becomes the set it denotes, so those are the binding's files whose
+# arms are worth a mutation number rather than a line count. All three are
+# reachable from `cargo test` because the `interpreter-tests` feature links an
+# embedded Python and each carries its own corpus: `check/walk.rs` drives real
+# values through `member`, and `build.rs` drives real annotations through
+# `build_schema` and compares the render. The sweep is run with that feature
+# (see the workflow) or every mutant reads as unviable.
 #
 # Every other binding file is exercised by pytest, which this harness cannot
 # observe, so its mutants would all "survive" and say nothing about the tests.
@@ -16,7 +19,6 @@
 # `tests/test_mutation_scope.py` holds this list to the tree in both directions.
 exclude_globs = [
     "crates/valgebra-py/examples/**",
-    "crates/valgebra-py/src/build.rs",
     "crates/valgebra-py/src/check.rs",
     "crates/valgebra-py/src/exception.rs",
     "crates/valgebra-py/src/validator.rs",

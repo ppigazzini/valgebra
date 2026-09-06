@@ -40,13 +40,16 @@ CONFIG = ROOT / ".cargo" / "mutants.toml"
 BINDING = ROOT / "crates" / "valgebra-py"
 
 # The binding files inside the sweep: the membership walk, where soundness is
-# decided, and the context it carries. Both are reachable from `cargo test`
-# because the `interpreter-tests` feature links an embedded Python and the walk
-# carries its own value corpus; the context's two predicates are asserted over
-# every mode by its own tests.
+# decided, the context it carries, and the frontend, where an annotation becomes
+# the set it denotes. All three are reachable from `cargo test` because the
+# `interpreter-tests` feature links an embedded Python and each carries its own
+# corpus -- the walk drives real values through `member`, the frontend drives
+# real annotations through `build_schema` -- and the context's two predicates are
+# asserted over every mode by its own tests.
 SWEPT = {
     "crates/valgebra-py/src/check/walk.rs",
     "crates/valgebra-py/src/check/ctx.rs",
+    "crates/valgebra-py/src/build.rs",
 }
 
 

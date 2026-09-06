@@ -110,15 +110,27 @@ derived from the tree rather than restated.
 Each ledger asserts it read something. A check over an empty universe passes
 having checked nothing, which is worse than a bare failure.
 
-## The walk's own corpus
+## The binding's own corpora
 
-`cargo test` cannot reach the membership walk without an interpreter, so the walk
-carries its own value corpus in `crates/valgebra-py/src/check/walk.rs` under the
+`cargo test` cannot reach the binding without an interpreter, so the two files
+where a mistake changes what a schema means carry their own corpus under the
 `interpreter-tests` feature, which links an embedded Python.
 
+The **walk** carries a value corpus in `crates/valgebra-py/src/check/walk.rs`.
 Every case runs in **both** the fast and the explaining mode with the two
 required to agree, and with the violation count asserted where it distinguishes
 the modes. A corpus driven only fast leaves half of every composite unobserved.
+
+The **frontend** carries an annotation corpus in
+`crates/valgebra-py/src/build.rs`: a table of annotations as a caller writes
+them beside the schema each must build, spelled as that schema's render, plus
+the refusals and the message each carries. It exists so the frontend can be
+swept: pytest exercises that file thoroughly and a mutation harness cannot
+observe pytest, so before the corpus every mutant of it read as a survivor and
+the file sat outside the sweep by name. It reads a marker by *attribute* rather
+than importing `annotated_types`, because an embedded interpreter starts on the
+base prefix and sees no virtual environment -- which would make the corpus depend
+on how the harness was launched.
 
 That feature enables an embedded interpreter for the test binary and nothing
 else: all its sites are inside test modules and the shipped wheel is built
@@ -159,7 +171,10 @@ relations true by construction and asserts the procedure decides each.
 
 **Adequacy is measured on the Rust side only.** Both mutation sweeps run
 `cargo test`; the Python suite never executes under either, so a survivor is a
-gap in the Rust corpus and not necessarily in the tests as a whole.
+gap in the Rust corpus and not necessarily in the tests as a whole. That is the
+reason a swept binding file carries a corpus of its own, and the reason the
+files that carry none are excluded by name rather than swept and baselined: a
+sweep whose survivors all say "pytest covers this" measures the harness.
 
 **A coverage floor is read with its scope or it misleads.** The Python package
 floor covers the re-export package, which is a hundred-odd lines; the extension

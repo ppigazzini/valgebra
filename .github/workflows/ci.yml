@@ -600,8 +600,9 @@ jobs:
           fi
 
   mutants-diff-walk:
-    name: mutants walk ${{ matrix.shard }}
-    # Three shards: the walk is two files and a few hundred mutants that run
+    name: mutants binding ${{ matrix.shard }}
+    # Three shards: the binding's swept files are the membership walk, the
+    # context it carries and the frontend -- a few hundred mutants that run
     # against an embedded interpreter, and a shard of it takes minutes rather
     # than tens of them.
     runs-on: ubuntu-latest
@@ -651,12 +652,12 @@ jobs:
           # change touched, because a Rust test and the code it covers are swept
           # together here.
           git diff --name-only --diff-filter=d "$base"...HEAD -- '*.rs' > changed.txt
-          walk=$(grep -E '^crates/valgebra-py/src/check/(walk|ctx)\.rs$' changed.txt || true)
+          walk=$(grep -E '^crates/valgebra-py/src/(check/(walk|ctx)|build)\.rs$' changed.txt || true)
           {
             echo "walk<<EOF"; echo "$walk"; echo "EOF"
           } >> "$GITHUB_OUTPUT"
           echo "walk files: ${walk:-none}"
-      - name: Sweep the walk when the change touches it
+      - name: Sweep the binding's swept files when the change touches one
         if: steps.diff.outputs.walk != ''
         run: |
           uv sync --locked --no-install-project
@@ -667,6 +668,7 @@ jobs:
           cargo mutants --package valgebra-py \
             --file crates/valgebra-py/src/check/walk.rs \
             --file crates/valgebra-py/src/check/ctx.rs \
+            --file crates/valgebra-py/src/build.rs \
             --features interpreter-tests -j 2 --timeout-multiplier 20 \
             --shard "${{ matrix.shard }}/3" \
             --output walk-diff-mutants \
@@ -682,7 +684,7 @@ jobs:
             python3 scripts/mutation_gate.py --baseline walk --new-only \
               --out walk-diff-mutants/mutants.out
           else
-            echo "no walk mutants to judge"
+            echo "no binding mutants to judge"
           fi
   nightly-fuzz:
     name: nightly deep fuzz
