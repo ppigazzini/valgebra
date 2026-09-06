@@ -660,7 +660,8 @@ impl Validator {
     /// stay valid, then `other` interns into it.
     fn union_with(&self, other: &Bound<'_, PyAny>, other_first: bool) -> PyResult<Validator> {
         let py = other.py();
-        let mut literals = Pool::seeded(self.literals.iter().map(|o| o.clone_ref(py)).collect());
+        let mut literals =
+            Pool::seeded(py, self.literals.iter().map(|o| o.clone_ref(py)).collect());
         let mut definitions = self.definitions.clone();
         let other_schema = build_schema(other, &mut literals, &mut definitions)?;
         let members = if other_first {
@@ -937,7 +938,8 @@ impl Validator {
     /// Returns:
     ///     `True` if this schema is a subtype of `other`, else `False`.
     fn is_subtype_of(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let mut literals = Pool::seeded(self.literals.iter().map(|o| o.clone_ref(py)).collect());
+        let mut literals =
+            Pool::seeded(py, self.literals.iter().map(|o| o.clone_ref(py)).collect());
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations {
@@ -968,7 +970,8 @@ impl Validator {
     /// Returns:
     ///     `True` if the two schemas are equivalent, else `False`.
     fn is_equivalent(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let mut literals = Pool::seeded(self.literals.iter().map(|o| o.clone_ref(py)).collect());
+        let mut literals =
+            Pool::seeded(py, self.literals.iter().map(|o| o.clone_ref(py)).collect());
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations {

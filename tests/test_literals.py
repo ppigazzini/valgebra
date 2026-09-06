@@ -1,6 +1,6 @@
 import pytest
 
-from valgebra import ValidationError, Validator
+from valgebra import ValidationError, Validator, union
 
 
 def test_literal_accepts_the_exact_value() -> None:
@@ -30,3 +30,28 @@ def test_literal_failure_reports_its_code() -> None:
     with pytest.raises(ValidationError) as info:
         Validator(5).validate(6)
     assert info.value.code == "literal_error"
+
+
+def test_two_spellings_of_one_constant_are_one_node() -> None:
+    # A constant is a value, not an object: two equal strings built at run time
+    # are one pooled constant, so the schema built from them is one node and the
+    # containment rules see it as one.
+    # Built rather than written, so the compiler cannot fold the two into one
+    # object; ruff would rewrite a literal join back into a constant.
+    left = "".join(chr(byte) for byte in b"code")
+    right = "".join(chr(byte) for byte in b"code")
+    assert left is not right
+    assert Validator(union(left, right)).is_equivalent(Validator(left))
+    assert Validator(left) == Validator(right)
+
+
+def test_the_literal_rule_decides_which_constants_are_one() -> None:
+    # The same rule a literal is checked by: same exact type, and equal. `1` and
+    # `True` compare equal and are not one constant; `0.0` and `-0.0` are.
+    assert not Validator(union(1, True)).is_equivalent(Validator(1))
+    assert Validator(union(0.0, -0.0)).is_equivalent(Validator(0.0))
+    # A `nan` equals nothing, itself included, so it is never merged with
+    # another constant -- and a literal naming one admits no value at all, which
+    # is what `==` on it says.
+    nan = float("nan")
+    assert not Validator(nan).is_valid(nan)
