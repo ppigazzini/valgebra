@@ -43,6 +43,7 @@ impl Violation {
                     out.write_str(key)?;
                 }
                 PathSegment::IntKey(key) => write!(out, "[{key}]")?,
+                PathSegment::BigIntKey(key) => write!(out, "[{key}]")?,
                 PathSegment::Index(index) => write!(out, "[{index}]")?,
             }
             first = false;

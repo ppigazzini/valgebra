@@ -83,3 +83,34 @@ def test_an_integer_key_stays_an_integer_in_the_path() -> None:
     with pytest.raises(ValidationError) as failure:
         text.validate({1.5: 1})
     assert failure.value.errors[0]["path"] == ("1.5",)
+
+
+def test_every_integer_key_reaches_its_value_from_the_path() -> None:
+    """`docs/08` promises a path a caller can walk back down.
+
+    A key that is an `int` must arrive as an `int`, whatever its size: it used
+    to be `repr`-ed into the path once it left the range of a machine word, and
+    a `bool` was excluded outright -- so `path` held `'1180591620717411303424'`
+    and `'True'`, strings that index nothing. Each row below indexes the very
+    dict the error came from, which is the property the page states.
+    """
+    for key in (2, -1, 0, 2**70, -(2**70), True, False):
+        holder = {key: "not an int"}
+        with pytest.raises(ValidationError) as info:
+            Validator(dict[int, int]).validate(holder)
+        (segment,) = info.value.errors[0]["path"]
+        assert isinstance(segment, int), f"{key!r} left the path as {segment!r}"
+        assert holder[segment] == "not an int", f"{key!r} does not index back"
+
+
+def test_a_key_that_is_neither_a_string_nor_an_integer_is_named_not_spelled() -> None:
+    """The other half: a path is strings and integers, so the rest is a name."""
+    with pytest.raises(ValidationError) as info:
+        Validator(dict[float, int]).validate({1.5: "x"})
+    (segment,) = info.value.errors[0]["path"]
+    assert segment == "1.5"
+    # A string key that looks like a number stays a string, which is the
+    # distinction the integer path exists to preserve.
+    with pytest.raises(ValidationError) as info:
+        Validator(dict[str, int]).validate({"2": "x"})
+    assert info.value.errors[0]["path"] == ("2",)

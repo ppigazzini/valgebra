@@ -361,6 +361,15 @@ pub enum PathSegment {
     /// two indistinguishable and the path unusable on a dict keyed by numbers.
     /// Separate from [`PathSegment::Index`] because it is not a position.
     IntKey(i64),
+    /// A mapping key that is an integer too large for [`PathSegment::IntKey`].
+    ///
+    /// Python's integers are unbounded and a dict may be keyed by any of them,
+    /// so a key of `2**70` has to reach a caller as an integer or the path stops
+    /// walking back down. Carried as its decimal digits because the core holds
+    /// no Python object and has no big integer of its own; the binding turns it
+    /// back into the `int` it came from, which is the only form a caller can
+    /// index with.
+    BigIntKey(String),
     /// A sequence, tuple, or set position.
     Index(usize),
 }

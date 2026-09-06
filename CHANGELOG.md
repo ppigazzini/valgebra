@@ -81,6 +81,8 @@ answer of its own, or a repair to a change not yet released.
 - fix: refuse a pattern before its automaton is built, not after
 - fix: a validator takes part in the cycle collector
 - perf: bound a value summary while it is built, not after
+- fix: an integer key of any size stays an integer in an error path
+- fix: an integer key of any size stays an integer in an error path
 
 -->
 
@@ -496,6 +498,13 @@ answer of its own, or a repair to a change not yet released.
   not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
+
+- An integer key of any size reaches an error path as an integer, and so does a
+  `bool`. `docs/08-error-model.md` promises a path a caller can walk back down to
+  the value, and a key outside a machine word's range was rendered as its `repr`
+  — `'1180591620717411303424'` — while `True` was excluded outright and arrived
+  as `'True'`. Both index nothing. `d[True]` and `d[1]` are one entry in Python,
+  so a `bool` arrives as the integer it is.
 
 - Explaining a failure over a large value no longer costs the size of the value.
   Every violation summarised the value it was about by building that value's

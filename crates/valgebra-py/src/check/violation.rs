@@ -1,7 +1,7 @@
 //! Building the structured [`Violation`] values the explain walk reports.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyString};
+use pyo3::types::{PyInt, PyString};
 use valgebra_core::{PathSegment, Schema, Violation};
 
 use crate::check::ctx::Ctx;
@@ -89,10 +89,16 @@ pub(crate) fn key_segment(key: &Bound<'_, PyAny>) -> PathSegment {
     if let Ok(text) = key.cast::<PyString>() {
         return PathSegment::Key(text.to_string());
     }
-    if !key.is_instance_of::<PyBool>()
-        && let Ok(number) = key.extract::<i64>()
-    {
-        return PathSegment::IntKey(number);
+    if let Ok(number) = key.cast::<PyInt>() {
+        // Every `int`, whatever its size, and `bool` with them: `d[True]` and
+        // `d[1]` are one entry in Python, so the integer indexes back down to
+        // the value while `'True'` indexed nothing at all.
+        if let Ok(small) = number.extract::<i64>() {
+            return PathSegment::IntKey(small);
+        }
+        if let Ok(digits) = number.str() {
+            return PathSegment::BigIntKey(digits.to_string());
+        }
     }
     PathSegment::Key(summarize(key))
 }
