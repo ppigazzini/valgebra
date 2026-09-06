@@ -551,14 +551,21 @@ _DECIDED = [
 #
 # Each is marked strict, so the day one is decided the mark fails and the entry
 # leaves both this list and the conservative half of the decidability page --
-# which is how the entries above it left. What is left is what the descriptor
-# cannot hold: a length bound over a shape that is not words, an attribute
-# record beside a builtin kind, and recursion, which no finite descriptor has
-# room for.
+# which is how the entries above it left.
+#
+# **Each carries its own reason**, and that is the point of the list rather than
+# a courtesy. One shared reason said "neither decides it" five times, which is
+# the observation that made the list, not an account of anything: five entries
+# with one sentence between them read as one limit seen five ways, and they are
+# four different limits. A reader deciding what to work on needs to know that
+# three of these fall to one change and two do not, and a reader who closes one
+# needs to know which of the others it did not touch.
 
-_MISSED = pytest.mark.xfail(
-    strict=True, reason="neither the rules nor the descriptor decides this relation"
-)
+
+def _missed(why: str) -> pytest.MarkDecorator:
+    """Mark a relation that holds and is not decided, with the limit that leaves it."""
+    return pytest.mark.xfail(strict=True, reason=why)
+
 
 _LEDGERED = [
     # A length bound is opaque to the shape it bounds.
@@ -567,21 +574,31 @@ _LEDGERED = [
         Annotated[tuple[int, int], at.MinLen(3)],
         None,
         id="empty:2-tuple&MinLen(3)",
-        marks=_MISSED,
+        marks=_missed(
+            "a length bound lowers only for words, so it is opaque to the tuple "
+            "it bounds"
+        ),
     ),
     pytest.param(
         "empty",
         Annotated[list[nothing], at.MinLen(1)],  # ty: ignore[invalid-type-form]
         None,
         id="empty:list[nothing]&MinLen(1)",
-        marks=_MISSED,
+        marks=_missed(
+            "the element type and the length bound are read apart: nothing joins "
+            '"no element is possible" to "at least one is required"'
+        ),
     ),
     pytest.param(
         "empty",
         recursive(lambda t: Annotated[list[t], at.MinLen(1)]),  # ty: ignore[invalid-type-form]
         None,
         id="empty:mu-t.list[t]&MinLen(1)",
-        marks=_MISSED,
+        marks=_missed(
+            "a fixpoint every unfolding of which needs one more element has no "
+            "finite value, and the coinductive rule assumes its goal rather than "
+            "deriving that"
+        ),
     ),
     # An attribute schema and the shape its instances have are unrelated.
     pytest.param(
@@ -589,7 +606,10 @@ _LEDGERED = [
         _Pair,
         tuple[int, int],
         id="NamedTuple<=tuple[int,int]",
-        marks=_MISSED,
+        marks=_missed(
+            "an attribute record and a sequence kind sit in different components, "
+            "and nothing relates a class's layout to the shape its instances have"
+        ),
     ),
     # The complement laws are settled by the constructors, so a shape they do not
     # reach is not decided: a respelling, and a recursive definition whose two
@@ -599,7 +619,11 @@ _LEDGERED = [
         intersection(_RECURSIVE, complement(_RECURSIVE)),
         None,
         id="empty:mu-t&~mu-t",
-        marks=_MISSED,
+        marks=_missed(
+            "the complement pair is folded at construction by structural equality, "
+            "and two occurrences of a recursive schema are two definitions; the "
+            "descriptor holds no cycle to decide it instead"
+        ),
     ),
 ]
 
