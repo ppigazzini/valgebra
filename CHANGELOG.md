@@ -76,6 +76,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the changelog ledger survives the window a release passes through -- internal
 - fix: an unanchored ignore rule hid the frontend's test module -- internal
 - fix: report a list that resizes under the walk, as a dict already is
+- fix: the local gate refuses an expression it cannot fill -- internal
 
 -->
 

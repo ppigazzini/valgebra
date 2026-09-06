@@ -174,20 +174,28 @@ def shallow_clone(into: Path) -> Path:
 #: can resolve: the workflow's own `env:` block is in the file being read.
 ENV_EXPRESSION = re.compile(r"\$\{\{\s*env\.(\w+)\s*\}\}")
 
+#: Any expression at all. What is left after the `env.` ones are filled in is
+#: the runner's to answer, and the gate must see that it is left rather than
+#: hand the braces to bash.
+ANY_EXPRESSION = re.compile(r"\$\{\{")
+
 
 def resolved(command: str, environment: dict[str, str]) -> str | None:
-    """Fill in `${{ env.X }}`, or answer `None` where one cannot be filled.
+    """Fill in `${{ env.X }}`, or answer `None` where anything is left.
 
     Every other expression -- `github.*`, `steps.*`, `matrix.*` -- is the
-    runner's to answer, and a step carrying one is named in `NEEDS_A_RUNNER`
-    rather than guessed at.
+    runner's to answer, so a step carrying one is reported unresolved rather
+    than guessed at. Checking only the `env.` ones would let `${{ github.sha }}`
+    through untouched and hand the braces to bash, which is neither running the
+    step nor refusing it.
     """
     missing = [
         name for name in ENV_EXPRESSION.findall(command) if name not in environment
     ]
     if missing:
         return None
-    return ENV_EXPRESSION.sub(lambda m: environment[m.group(1)], command)
+    filled = ENV_EXPRESSION.sub(lambda m: environment[m.group(1)], command)
+    return None if ANY_EXPRESSION.search(filled) else filled
 
 
 def interpreter_env() -> dict[str, str]:

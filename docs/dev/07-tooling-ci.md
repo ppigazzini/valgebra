@@ -34,6 +34,14 @@ A step that needs a runner (a PGO wheel, valgrind, a mutation sweep, a second
 interpreter) is named with the reason instead, and `tests/test_local_gate.py`
 holds that list to the workflow in both directions.
 
+A step is **accounted for** when it is in the plan the gate builds or named in
+`NEEDS_A_RUNNER`, and the ledger asks it of the plan. Asking it of "is this name
+excused" instead was a contradiction that no workflow could fail, and underneath
+it `resolved` searched for `${{ env.X }}` alone -- so a step carrying
+`${{ github.sha }}` came back resolved with its braces intact and would have
+reached bash that way. Every expression the gate cannot fill in now makes the
+step unresolved, which is a skip with a reason rather than a command.
+
 The reason it exists is a measurement rather than a principle: a ledger reading
 `git describe` passed locally for a week and turned eight jobs red on one push,
 because the clone shape differed. Everything else on this page is about what the

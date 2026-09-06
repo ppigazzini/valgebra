@@ -9,10 +9,15 @@ at once, because a local clone has tags and a checkout does not.
 `scripts/gate.py` closes that by running the workflow's own `run:` steps in a
 clone shaped like the runner's. This holds the two halves of that claim:
 
-* every `run:` step of every merge-gate job is either executed by the gate or
-  named in its `NEEDS_A_RUNNER` list with the reason, so a step added to CI is
-  one the local gate runs or refuses **by name**;
+* every `run:` step of every merge-gate job is either **in the plan the gate
+  builds** or named in its `NEEDS_A_RUNNER` list with the reason, so a step
+  added to CI is one the local gate runs or refuses by name;
 * nothing in that list has outlived its step, so the excuses cannot accumulate.
+
+The first of those is asked of the *plan*, not of `runnable`. Asked of
+`runnable` it was `name in NEEDS_A_RUNNER and name not in NEEDS_A_RUNNER` -- a
+contradiction, so the list it built was empty for every workflow and the
+assertion could not fail. The defect it now catches is planted below.
 
 And the property the whole thing exists for: the tree it runs in is a shallow
 clone with no tags.
@@ -62,24 +67,73 @@ def _merge_gate_steps() -> list[tuple[str, str]]:
     ]
 
 
-def test_every_merge_gate_step_is_run_or_excused_by_name() -> None:
+def _planned(spec: dict) -> set[str]:
+    """Collect the steps `gate.py` would actually run, as `job: name`."""
+    plan, _ = gate.build_plan(spec, gate.required_jobs(spec))
+    return {f"{job}: {name}" for job, name, _, _ in plan}
+
+
+def test_every_merge_gate_step_is_planned_or_excused_by_name() -> None:
+    spec = gate.workflow()
     steps = _merge_gate_steps()
     # The scan is the detector: no steps at all would pass having read nothing.
     assert len(steps) >= 20, f"the workflow scan found only {steps}"
 
+    planned = _planned(spec)
     unaccounted = sorted(
         f"{job}: {name}"
         for job, name in steps
-        if not gate.runnable(name) and name not in gate.NEEDS_A_RUNNER
+        if f"{job}: {name}" not in planned and name not in gate.NEEDS_A_RUNNER
     )
-    assert not unaccounted, unaccounted
-    # Every step is one or the other, by construction of `runnable`; what this
-    # asserts is that both columns are non-empty, since a gate that ran nothing
-    # and a list that excused nothing would each pass the line above.
-    assert any(gate.runnable(name) for _, name in steps), "the gate runs nothing"
-    assert any(not gate.runnable(name) for _, name in steps), (
+    assert not unaccounted, (
+        f"merge-gate steps the local gate neither runs nor excuses: {unaccounted}. "
+        "A step carrying an expression only a runner answers is skipped silently "
+        "unless it is named in NEEDS_A_RUNNER with the reason."
+    )
+    # Both columns must be non-empty: a gate that planned nothing and a list
+    # that excused nothing would each pass the assertion above.
+    assert planned, "the gate runs nothing"
+    assert any(name in gate.NEEDS_A_RUNNER for _, name in steps), (
         "no step needs a runner, which means the list stopped being read"
     )
+
+
+def test_a_step_only_a_runner_can_fill_in_is_unaccounted() -> None:
+    """The defect the assertion above exists to catch, planted on a spec.
+
+    `${{ github.sha }}` is the runner's to answer and `gate.py` cannot. Before
+    this, `resolved` searched for `env.` expressions alone, so such a step came
+    back "resolved" with its braces intact, was planned, and would have been
+    handed to bash verbatim -- while the ledger passed, because its filter was a
+    contradiction. Planting it on a synthetic workflow keeps the case in the
+    suite without a step in `ci.yml` that exists only to be caught.
+    """
+    planted = "A step only a runner can fill in"
+    spec = {
+        "env": {},
+        "jobs": {
+            "ci": {"needs": ["planted"]},
+            "planted": {
+                "steps": [{"name": planted, "run": 'echo "${{ github.sha }}"'}]
+            },
+        },
+    }
+    plan, unresolved = gate.build_plan(spec, gate.required_jobs(spec))
+    assert plan == [], "a step the gate cannot fill in must not be planned"
+    assert unresolved == [f"planted: {planted}"]
+    assert planted not in gate.NEEDS_A_RUNNER
+    assert f"planted: {planted}" not in _planned(spec), (
+        "the filter must flag a step that is neither planned nor excused"
+    )
+
+
+def test_an_env_expression_the_workflow_defines_is_filled_in() -> None:
+    """And the other direction, so the refusal is not a blanket one."""
+    assert gate.resolved("echo ${{ env.X }}", {"X": "1"}) == "echo 1"
+    assert gate.resolved("echo ${{ env.X }}", {}) is None
+    assert gate.resolved("echo ${{ github.sha }}", {"X": "1"}) is None
+    assert gate.resolved("echo ${{ env.X }} ${{ matrix.os }}", {"X": "1"}) is None
+    assert gate.resolved("echo plain", {}) == "echo plain"
 
 
 def test_no_excuse_has_outlived_its_step() -> None:
