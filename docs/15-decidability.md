@@ -65,11 +65,21 @@ conservative](#sound-but-conservative)).
   so two of its members are two values and a meet of them is empty. An `IntEnum`
   says otherwise: its members equal the integers they carry, and a meet of two of
   them stays conservative.
-- **An enumeration against the union of its members.** They are fixed when the
-  class is created, a class with any member cannot be subclassed, and every
-  instance is one of them -- so `Colour` and `Literal[Colour.RED,
-  Colour.GREEN]` are one set, decided in both directions. The class is still
-  what `repr` prints and what a failure names.
+- **An enumeration against the union of its members**, when every instance of
+  the class really is one of them: an `Enum` that is not a `Flag`, carrying at
+  least one member, whose members compare by identity. Then `Colour` and
+  `Literal[Colour.RED, Colour.GREEN]` are one set, decided in both directions;
+  the class is still what `repr` prints and what a failure names. The three
+  exclusions are each a value that would stand against the union:
+
+  | kind | the value it admits that `list(cls)` never yields |
+  |---|---|
+  | `Flag`, `IntFlag` | `P.A \| P.B` -- `\|` builds instances the class never listed |
+  | an `Enum` with no members | a member of a subclass, since a memberless enum can still be subclassed |
+  | `IntEnum`, `StrEnum` | nothing new, but its members equal the values behind them, so two of them are not two values |
+
+  Each stays the `isinstance` atom it was, which is sound for every enumeration
+  and merely less complete.
 - **Refinements.** A refinement is a subtype of its base and of a refinement with
   looser bounds — a tighter numeric or length bound entails a looser one, not only
   a verbatim-contained constraint set; a bound conjunction that cannot be satisfied

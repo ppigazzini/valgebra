@@ -76,8 +76,8 @@ answer of its own, or a repair to a change not yet released.
 - fix: the changelog ledger survives the window a release passes through -- internal
 - fix: an unanchored ignore rule hid the frontend's test module -- internal
 - fix: report a list that resizes under the walk, as a dict already is
-- fix: the local gate refuses an expression it cannot fill -- internal
-- test: every ledger fails on the defect it exists to catch -- internal
+- fix: a test that names a script as a subject is not a lane that runs it -- internal
+- fix: an enumeration is the union of its members only when it is one
 
 -->
 
@@ -493,6 +493,16 @@ answer of its own, or a repair to a change not yet released.
   not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
+
+- A `Flag`, an `IntFlag` and an `Enum` with no members are no longer read as the
+  union of the members they list. A flag's `|` builds instances the class never
+  listed, so `Validator(Permission)` was decided a subtype of
+  `Literal[Permission.READ, Permission.WRITE]` although
+  `Permission.READ | Permission.WRITE` is in the class and not in the literal; an
+  enumeration with no members can still be subclassed, so `Validator(Base)` was
+  decided a subtype of `nothing` although a subclass's member is an instance of
+  it. Each is now the `isinstance` atom it was before the union reading existed,
+  which leaves membership unchanged and the relations undecided.
 
 - A **list** that changes size while it is being checked is reported as
   `mutated_during_validation`, as a dict, a set and a record already were. A

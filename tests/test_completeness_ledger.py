@@ -240,9 +240,11 @@ _DECIDED = [
         "empty", intersection(set[int], _JSON), None, id="empty:set[int]&json"
     ),
     pytest.param("subtype", _JSON, anything, id="json<=anything"),
-    # An enumeration whose members compare by identity is the union of them:
-    # the members are fixed at class creation, a class with any cannot be
-    # subclassed, and every instance is one of them.
+    # An enumeration is the union of its members when every instance of the
+    # class is one of them: it is an `Enum` that is not a `Flag`, it has at
+    # least one member, and its members compare by identity. The kinds that
+    # fail one of those stay atoms, and `test_enums.py` holds each to a value
+    # that would refute the union reading.
     pytest.param(
         "equivalent", _Colour, Literal[_Colour.RED, _Colour.GREEN], id="Colour==members"
     ),

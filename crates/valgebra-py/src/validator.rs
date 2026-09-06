@@ -191,14 +191,21 @@ struct PoolRelations<'py, 'pool> {
 /// The subtype rule asks whether a class is an enumeration for *every* class it
 /// cannot place in a union, so importing a module there would put an import on
 /// a decision path.
-static ENUM_META: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+static ENUM_TYPES: PyOnceLock<(Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
 
-fn enum_meta(py: Python<'_>) -> Option<&Py<PyAny>> {
-    ENUM_META
+/// `(enum.EnumMeta, enum.Flag)`, imported once per interpreter.
+///
+/// Both are needed at the same place and neither on any other path, so they
+/// share one lock. `Flag` is here because it is the one enumeration whose
+/// instances are *not* the members it lists: `P.A | P.B` is an instance of `P`
+/// that `list(P)` never yields.
+fn enum_types(py: Python<'_>) -> Option<&(Py<PyAny>, Py<PyAny>)> {
+    ENUM_TYPES
         .get_or_try_init(py, || {
-            py.import("enum")
-                .and_then(|module| module.getattr(intern!(py, "EnumMeta")))
-                .map(pyo3::Bound::unbind)
+            let module = py.import("enum")?;
+            let meta = module.getattr(intern!(py, "EnumMeta"))?.unbind();
+            let flag = module.getattr(intern!(py, "Flag"))?.unbind();
+            Ok::<_, PyErr>((meta, flag))
         })
         .ok()
 }
@@ -230,18 +237,37 @@ fn compares_by_identity(ty: &Bound<'_, PyType>) -> bool {
 }
 
 impl PoolRelations<'_, '_> {
-    /// The members of an enumeration whose values compare by identity, if this
-    /// class is one.
+    /// The members of an enumeration that *is* the union of them, if this class
+    /// is one.
     ///
-    /// Three things make an enumeration readable as the union of its members:
-    /// the members are fixed when the class is created, a class that has any
-    /// cannot be subclassed, and every instance is one of them. The fourth --
-    /// that two members are two values -- is the identity check, which an
-    /// `IntEnum` fails because its members equal the integers behind them.
+    /// Reading a class as the union of `list(cls)` is sound only when every
+    /// instance of the class is one of the values listed, and that takes four
+    /// things rather than the three this used to check:
+    ///
+    /// * it is an enumeration, so the members are fixed when the class is
+    ///   created;
+    /// * it is **not a `Flag`**. A flag's `|` builds instances the class never
+    ///   listed: `P.A | P.B` is an instance of `P`, and `list(P)` is
+    ///   `[P.A, P.B]`. Reading `P` as that union made `P <= Literal[P.A, P.B]`
+    ///   true with `P.A | P.B` standing against it, and `P & ~Literal[P.A,
+    ///   P.B]` was not decided empty although it admits that value.
+    /// * it **has at least one member**. An enumeration with none can still be
+    ///   subclassed -- that is how an enum base class is written -- so its
+    ///   instances are its subclasses' members, and reading it as the empty
+    ///   union made it a subtype of `nothing`.
+    /// * two members are two values, which is the identity check. An `IntEnum`
+    ///   fails it because its members equal the integers behind them.
+    ///
+    /// A class failing any of them stays the `isinstance` atom it was, which is
+    /// sound for every enumeration and merely less complete.
     fn enum_members<'py>(class: &Bound<'py, PyAny>) -> Option<Vec<Bound<'py, PyAny>>> {
         let py = class.py();
         let class = class.cast::<PyType>().ok()?;
-        if !class.is_instance(enum_meta(py)?.bind(py)).ok()? {
+        let (meta, flag) = enum_types(py)?;
+        if !class.is_instance(meta.bind(py)).ok()? {
+            return None;
+        }
+        if class.is_subclass(flag.bind(py)).ok()? {
             return None;
         }
         if !compares_by_identity(class) {
@@ -253,7 +279,7 @@ impl PoolRelations<'_, '_> {
             .take(MAX_ENUM_MEMBERS + 1)
             .collect::<Result<_, _>>()
             .ok()?;
-        (members.len() <= MAX_ENUM_MEMBERS).then_some(members)
+        (!members.is_empty() && members.len() <= MAX_ENUM_MEMBERS).then_some(members)
     }
 
     fn is_member(&self, schema: &Schema, value: &Bound<'_, PyAny>) -> bool {

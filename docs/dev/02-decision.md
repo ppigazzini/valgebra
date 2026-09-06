@@ -119,6 +119,34 @@ trait is how it asks:
 is what the defaults are for, and which is why a mutation replacing either with
 `Some(false)` cannot be killed by any test.
 
+## When a class is the union of the values it lists
+
+`leaf_subtype` answers one question the class hierarchy alone cannot: whether an
+enumeration is the union of its members. It is, when **every instance of the
+class is one of the values `list(cls)` yields** — and that is four conditions,
+not the three first written down:
+
+| condition | the value that stands against dropping it |
+|---|---|
+| it is an `Enum` | — |
+| it is **not** a `Flag` | `P.A \| P.B`, an instance of `P` that `list(P)` never yields |
+| it has **at least one member** | a subclass's member: a memberless enum is still subclassable |
+| its members compare by identity | an `IntEnum` member *is* the integer, so two of them are not two values |
+
+The first three were read as "the members are fixed at class creation, a class
+with any cannot be subclassed, and every instance is one of them". The middle
+clause is true and the outer two are not: a flag's `|` operator makes instances
+after the fact, and a class with *no* members is exactly the case the
+no-subclassing rule does not cover. Both were decided as unions, so
+`Validator(Flag) <= Literal[*Flag]` and `Validator(EmptyEnum) <= nothing` were
+`True` with a value refuting each.
+
+A class failing any condition stays the `isinstance` atom it already was. That
+costs completeness and nothing else: membership is unaffected, and the relations
+simply stay undecided. `tests/test_enums.py` holds each refused kind to the value
+that would refute the union reading, so a kind read as its members again fails
+there.
+
 ## Four bounds, each measured
 
 The rules bound their own work with a step counter, and a build is held to three
