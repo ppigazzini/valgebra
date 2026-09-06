@@ -1,9 +1,12 @@
+import itertools
 import sys
-from typing import Literal, NoReturn
+from typing import Annotated, Literal, NoReturn
 
+import annotated_types as at
 import pytest
 
 from valgebra import (
+    Regex,
     ValidationError,
     Validator,
     anything,
@@ -86,3 +89,48 @@ def test_intersect_with_an_annotation() -> None:
     schema = intersection(int, complement(Literal[0]))
     assert schema.is_valid(1)
     assert not schema.is_valid(0)
+
+
+def test_a_predicate_does_not_fold_against_its_own_complement() -> None:
+    """The complement laws are laws about sets, and a predicate is not one.
+
+    `A & ~A = nothing` holds because a value is in `A` or it is not, once. A
+    predicate is user code and the two occurrences of `A` are two calls, so one
+    that does not answer from the value alone answers them differently. The
+    witness below is admitted by the meet, and the dual rejects a value the top
+    would have to admit -- so folding either would claim emptiness of a schema
+    that admits values.
+
+    Pinned rather than left to the reader of the law, because "`A & ~A` is
+    empty" is exactly what somebody reading `docs/04-algebra.md` would add.
+    `docs/dev/01-schema-ir.md` carries the refusal.
+    """
+    flip = itertools.count()
+
+    def alternating(_: object) -> bool:
+        return next(flip) % 2 == 0
+
+    predicate = Validator(Annotated[int, at.Predicate(alternating)])
+    assert predicate == predicate  # noqa: PLR0124 - the identity is the subject
+
+    meet = intersection(predicate, complement(predicate))
+    assert not meet.is_empty(), "a predicate is not a set, so the law does not apply"
+    # The witness: some call lands inside a meet the fold would call empty.
+    assert any(meet.is_valid(1) for _ in range(8))
+
+    join = union(predicate, complement(predicate))
+    assert not join.is_equivalent(anything)
+    # And the dual witness: some call falls outside a join the fold would call
+    # the top.
+    assert not all(join.is_valid(1) for _ in range(8))
+
+
+def test_a_pattern_does_fold_against_its_own_complement() -> None:
+    """The contrast that makes the refusal about predicates, not about markers.
+
+    A pattern is a function of the string, so the two occurrences agree and the
+    law holds.
+    """
+    pattern = Validator(Annotated[str, Regex("a+")])
+    assert intersection(pattern, complement(pattern)).is_empty()
+    assert union(pattern, complement(pattern)).is_equivalent(anything)

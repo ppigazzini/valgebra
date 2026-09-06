@@ -145,6 +145,30 @@ rather than here.
 strings, and arbitrary keys are a different labelling than the record model
 assumes.
 
+**Folding `A & ~A` to `nothing`, and `A | ~A` to the top, when `A` carries a
+`Predicate`.** Refused, and the test it fails is three lines:
+
+```python
+flip = itertools.count()
+predicate = Validator(Annotated[int, at.Predicate(lambda _: next(flip) % 2 == 0)])
+intersection(predicate, complement(predicate)).is_valid(1)  # True, on every other call
+```
+
+The complement laws are laws about *sets*: `A ∩ ¬A = ∅` holds because a value is
+in `A` or it is not, once. A predicate is user code, so the two occurrences of
+`A` in that expression are two calls, and a predicate that does not answer from
+the value alone gives different answers to them. The value above is admitted by
+the meet, and the dual `A | ~A` rejects a value it would have to admit — so
+folding either would claim emptiness of a schema that admits values, which is
+the one direction this project's soundness argument does not survive.
+
+`denotes_a_set_within` is where the refusal lives, and it refuses the same way
+for a `SelfRef`, for an `Instance` the bindings will not vouch for, and for a
+reference no definition resolves. `Regex` folds, because a pattern is a function
+of the string. The cost is completeness on a schema nobody can decide anyway, and
+`tests/test_combinators.py` pins the witness so the fold cannot be added back by
+someone reading only the law.
+
 ### Arguments for the carrier change, and why each fails
 
 | argument | why it fails |

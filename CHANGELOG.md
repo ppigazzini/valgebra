@@ -83,6 +83,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an integer key of any size stays an integer in an error path
 - fix: a literal's hash is the constant's, not its slot's
 - fix: one schema prints one way
+- test: pin why a predicate does not fold against its complement -- internal
 
 -->
 

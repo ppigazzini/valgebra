@@ -87,6 +87,14 @@ The same holds of a class whose metaclass answers `isinstance` by running code:
 what it admits is not a set that stands still, so the complement laws are not
 applied to it.
 
+That is why `A & ~A` is not folded to `nothing` when `A` carries a predicate,
+and `A | ~A` not to the top. The laws are about sets — a value is in `A` or it
+is not, once — and the two occurrences of `A` there are two calls. A predicate
+that does not answer from the value alone answers them differently, and a value
+then really is admitted by the meet. The fold would be a claim the schema
+contradicts, so it is refused rather than approximated; a `Regex` folds,
+because a pattern is a function of the string.
+
 ## Your code runs inside the check, and may call back in
 
 A predicate, an `__eq__` behind a `Literal`, an `isinstance` hook, a `keys()`
