@@ -29,6 +29,7 @@
 //! be pushed onto finitely many labels; an attribute namespace has no such
 //! regions.
 
+use super::budget;
 use super::classes::Class;
 use super::symbolic::Guard;
 use super::values::{Field, Values};
@@ -375,11 +376,15 @@ fn complement_atoms<G: Guard>(atoms: &[Atom<G>]) -> Option<Vec<Atom<G>>> {
 }
 
 /// The atoms of a meet, which is a meet of every pair.
+///
+/// Every pair charges the build's allowance: the count is the product of the
+/// two, and a meet of a guard against a guard descends a level of nesting for
+/// each pair. See [`budget`](super::budget).
 fn product<G: Guard>(left: &[Atom<G>], right: &[Atom<G>]) -> Option<Vec<Atom<G>>> {
     let mut atoms = Vec::new();
     for mine in left {
         for theirs in right {
-            if atoms.len() >= MAX_ATOMS {
+            if atoms.len() >= MAX_ATOMS || !budget::spend() {
                 return None;
             }
             atoms.push(mine.meet(theirs)?);
@@ -409,9 +414,26 @@ fn tidy<G: Guard>(atoms: Vec<Atom<G>>) -> Option<Vec<Atom<G>>> {
 mod tests {
     use super::{MAX_ATOMS, RecordLattice};
     use crate::decision::Verdict;
+    use crate::descr::budget;
     use crate::descr::classes::Class;
     use crate::descr::integers::IntSet;
     use proptest::prelude::*;
+
+    /// A meet past the build's allowance refuses, and the same meet succeeds
+    /// under one that covers it.
+    ///
+    /// The atom product is a loop over every pair, so it is one of the places a
+    /// build multiplies and one of the places the allowance is charged. Both
+    /// directions, because an allowance that only ever refuses would pass half
+    /// of this and so would one that never does.
+    #[test]
+    fn a_meet_past_the_allowance_refuses() {
+        let x = RecordLattice::attribute("x", IntSet::just(1), false);
+        let y = RecordLattice::attribute("y", IntSet::just(2), false);
+
+        assert!(budget::under(0, || x.intersect(&y)).is_none());
+        assert!(budget::under(64, || x.intersect(&y)).is_some());
+    }
 
     /// An atom that holds nothing is dropped from a union, and one already there
     /// is not added twice.

@@ -24,6 +24,7 @@
 
 use std::sync::Arc;
 
+use super::budget;
 use super::records::RecordLattice;
 use super::{Component, Descr, Op};
 use crate::decision::Verdict;
@@ -250,11 +251,17 @@ fn complement_lines(lines: &[Line], whole: &Component) -> Option<Vec<Line>> {
 }
 
 /// The lines of a meet, which is a meet of every pair.
+///
+/// Every pair charges the build's allowance, because this is the loop that
+/// multiplies: the pairs are the product of the two counts, and a fold over
+/// several unions raises that to a power. The line bound stops the result from
+/// being too wide, and the allowance stops the *work* from being too much
+/// before the width is known.
 fn product(left: &[Line], right: &[Line]) -> Option<Vec<Line>> {
     let mut lines = Vec::new();
     for mine in left {
         for theirs in right {
-            if lines.len() >= MAX_LINES {
+            if lines.len() >= MAX_LINES || !budget::spend() {
                 return None;
             }
             lines.push(mine.combine(theirs, Op::Intersect)?);

@@ -24,6 +24,7 @@
 //! `tuple[A, *tuple[B, ...], C]` is a chain with a loop in the middle, which is
 //! why the three spellings need one constructor rather than three nodes.
 
+use super::budget;
 use crate::decision::Verdict;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
@@ -364,7 +365,7 @@ impl<G: Guard> SymbolicDfa<G> {
                     let target = if let Some(id) = ids.get(&pair) {
                         *id
                     } else {
-                        if ids.len() >= MAX_STATES {
+                        if ids.len() >= MAX_STATES || !budget::spend() {
                             return None;
                         }
                         let id = u32::try_from(ids.len()).ok()?;
@@ -877,6 +878,23 @@ mod tests {
             (None, None) => true,
             _ => false,
         }
+    }
+
+    /// A product past the build's allowance refuses, and the same product
+    /// succeeds under one that covers it.
+    ///
+    /// Each state of the product is a pair of states, so the machine is where a
+    /// build multiplies hardest -- and the allowance is charged per new pair,
+    /// which is what makes a determinisation stop while it is still cheap. Both
+    /// directions, because an allowance that only ever refuses would pass half
+    /// of this.
+    #[test]
+    fn a_product_past_the_allowance_refuses() {
+        let ints = SymbolicDfa::shape(&[IntSet::just(1), IntSet::just(2)], None);
+        let others = SymbolicDfa::shape(&[IntSet::just(1)], Some(&IntSet::all()));
+
+        assert!(crate::descr::budget::under(1, || ints.intersect(&others)).is_none());
+        assert!(crate::descr::budget::under(4096, || ints.intersect(&others)).is_some());
     }
 
     /// The three spellings one constructor covers, and the recursion living in
