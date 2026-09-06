@@ -79,7 +79,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a test that names a script as a subject is not a lane that runs it -- internal
 - fix: an enumeration is the union of its members only when it is one
 - fix: refuse a pattern before its automaton is built, not after
-- fix: refuse a pattern before its automaton is built, not after
+- fix: a validator takes part in the cycle collector
 
 -->
 
@@ -495,6 +495,14 @@ answer of its own, or a repair to a change not yet released.
   not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
+
+- A class that holds its own validator is collected. A validator keeps the
+  classes, enum members and callables its schema names, so `Model.validator =
+  Validator(Model)` is a reference cycle -- and the type was not tracked by the
+  cycle collector, so the collector never saw the edge from the validator back
+  to the class and every such class leaked. A validator now traverses the
+  objects it owns, and can be weakly referenced, so a registry keyed by schema
+  can be a `WeakValueDictionary` and let its entries go.
 
 - A relation over a pattern whose determinisation is exponential refuses instead
   of exhausting memory. `Annotated[str, Regex("(a|b)*a(a|b){20}")]` against

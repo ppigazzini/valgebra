@@ -18,6 +18,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{
     PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
 };
+use pyo3::{PyTraverseError, PyVisit};
 use rustc_hash::FxHashMap;
 use valgebra_core::descr::classes::Class;
 use valgebra_core::descr::lower::{Constants, Operand};
@@ -627,7 +628,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
 /// keeps true. It cannot be subclassed: every method reads a schema this type
 /// built, and a subclass overriding one would be a validator whose answers are
 /// not the algebra's.
-#[pyclass(frozen, module = "valgebra")]
+#[pyclass(frozen, weakref, module = "valgebra")]
 pub struct Validator {
     pub(crate) schema: Schema,
     pub(crate) literals: Vec<Py<PyAny>>,
@@ -829,6 +830,45 @@ impl Validator {
 #[allow(clippy::doc_markdown)]
 #[pymethods]
 impl Validator {
+    /// Show the cycle collector every Python object this validator owns.
+    ///
+    /// A validator holds the classes, enum members and predicates its schema
+    /// names, so the natural spelling -- a class that keeps its own validator --
+    /// is a reference cycle:
+    ///
+    /// ```python
+    /// class Model:
+    ///     a: int
+    /// Model.validator = Validator(Model)
+    /// ```
+    ///
+    /// Without a traversal the type is untracked, the collector never sees the
+    /// edge from the validator back to the class, and the cycle is never
+    /// collected: two thousand such classes stayed alive across a `gc.collect()`
+    /// that freed all two thousand of the same classes when the validator was
+    /// held anywhere else.
+    ///
+    /// Traversal alone breaks these. The collector needs to *see* the edge to
+    /// find the cycle, and clearing any one participant is enough to break it --
+    /// the class in every such cycle carries `tp_clear`. A frozen pyclass has no
+    /// `&mut self` to offer a `__clear__` of its own, which is the point of
+    /// being frozen: a validator that could be emptied would answer differently
+    /// after the collector touched it.
+    // `PyVisit` is taken by value because that is the signature CPython's
+    // `tp_traverse` maps to; it is a handle, not a payload.
+    #[allow(clippy::needless_pass_by_value)]
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        for constant in &self.literals {
+            visit.call(constant)?;
+        }
+        if let Some(index) = self.index.get() {
+            for name in index.interned_names() {
+                visit.call(name)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Compile a schema into a reusable, immutable validator.
     ///
     /// The schema is any supported form: a type or typing annotation (`int`,

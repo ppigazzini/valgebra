@@ -189,6 +189,35 @@ except TypeError as error:
 A `ValidationError` **does** pickle, because a failure has to be able to cross a
 process boundary back to whatever started the work.
 
+## It holds what its schema names, and lets go of it
+
+A schema names classes, enum members and callables, and a validator keeps a
+reference to each: the walk reads them, so they must not be collected underneath
+it. That makes the natural spelling a reference cycle — a class that keeps its
+own validator holds the validator, and the validator holds the class — and the
+validator takes part in the cycle collector so the pair is freed like any other.
+
+```python
+import gc
+import weakref
+
+from valgebra import Validator
+
+
+class Model:
+    a: int
+
+
+Model.validator = Validator(Model)
+watch = weakref.ref(Model)
+del Model
+gc.collect()
+assert watch() is None
+```
+
+A validator can also be weakly referenced, so a registry keyed by schema can be
+a `WeakValueDictionary` and let its entries go.
+
 ## It does not enforce ordering between separate checks
 
 Two validators are two questions. A constraint that relates *two* values — this

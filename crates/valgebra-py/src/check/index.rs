@@ -103,6 +103,19 @@ pub(crate) struct ValidatorIndex {
     pub(crate) regexes: RegexIndex,
 }
 
+impl ValidatorIndex {
+    /// Every Python object this index owns, for the validator's `__traverse__`.
+    ///
+    /// Only the interned attribute names: the other plans hold Rust values --
+    /// integer and string sets, compiled patterns -- copied out of the pool
+    /// rather than referenced. A `str` joins no cycle, so nothing here can be
+    /// the edge a collector needs; a traversal that skipped an owned reference
+    /// would still be wrong on its own terms.
+    pub(crate) fn interned_names(&self) -> impl Iterator<Item = &Py<PyString>> {
+        self.attrs.values().flat_map(|plan| plan.names.iter())
+    }
+}
+
 /// Build the index for a finished schema plus its recursion definitions. `pool`
 /// is the validator's constants pool, needed to read each literal's value while
 /// building union plans. A record with no declared fields, and a union with a
