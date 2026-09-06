@@ -17,7 +17,7 @@
 use super::budget;
 use super::classes::Class;
 use super::maps::{KEY_KINDS, Label};
-use super::{Descr, integers::IntSet};
+use super::{BoolSet, Descr, integers::IntSet};
 use crate::decision::Kind;
 use crate::ir::{
     ClassIx, ConstIx, Constraint, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
@@ -49,10 +49,20 @@ pub enum Operand {
 /// refuses the lowering rather than guessing.
 pub trait Constants {
     /// What a comparison or `MultipleOf` operand carries.
-    fn operand(&self, index: OperandIx) -> Option<Operand>;
+    ///
+    /// Every question here defaults to `None`, the answer of a pool that cannot
+    /// see this one. That is the conservative direction -- it refuses the
+    /// lowering rather than describing a set the schema does not denote -- and it
+    /// is what lets an oracle that holds no objects be written as an empty impl
+    /// instead of three declines.
+    fn operand(&self, _index: OperandIx) -> Option<Operand> {
+        None
+    }
 
     /// What a `Literal` names.
-    fn constant(&self, index: ConstIx) -> Option<Operand>;
+    fn constant(&self, _index: ConstIx) -> Option<Operand> {
+        None
+    }
 
     /// The class an `Instance` atom names, as the order snapshot the core reads.
     ///
@@ -60,7 +70,9 @@ pub trait Constants {
     /// class from one whose metaclass answers `isinstance` by running code. A
     /// hooked class is not a set this algebra holds, so answering `None` for one
     /// refuses the lowering rather than describing a set the class does not have.
-    fn class(&self, index: ClassIx) -> Option<Class>;
+    fn class(&self, _index: ClassIx) -> Option<Class> {
+        None
+    }
 }
 
 /// A pool that knows nothing, for a caller that has none.
@@ -72,19 +84,7 @@ pub trait Constants {
 /// pattern constraints, which carry their operand inline.
 pub struct NoConstants;
 
-impl Constants for NoConstants {
-    fn operand(&self, _index: OperandIx) -> Option<Operand> {
-        None
-    }
-
-    fn constant(&self, _index: ConstIx) -> Option<Operand> {
-        None
-    }
-
-    fn class(&self, _index: ClassIx) -> Option<Class> {
-        None
-    }
-}
+impl Constants for NoConstants {}
 
 /// The nodes this will lower before refusing.
 ///
@@ -136,6 +136,30 @@ pub fn lower(schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
 /// the third of a second the last costs unheld.
 pub const WORK: u64 = 1024;
 
+/// The schema nesting this will descend before refusing.
+///
+/// [`WORK`] bounds what a build spends once it has started, and it cannot bound
+/// what starting costs: a lowering builds an automaton at every sequence node
+/// and a powerset at every set node, and none of that is a product to charge
+/// for. On the shapes a relation is asked about, that floor is around a hundred
+/// times what the structural rules spend answering the whole question -- so a
+/// build that will not pay for itself has to be refused *before* it is walked,
+/// and depth is what says which.
+///
+/// Nesting is the exponential: a record behind a list, at depths 0, 2, 4, 6 and
+/// 8, builds in 7 microseconds, 280 microseconds, 1.8 milliseconds, 8
+/// milliseconds and 37 milliseconds. Breadth is not -- a record of sixteen
+/// fields builds in 13 microseconds -- and what breadth costs is bounded by
+/// [`BUDGET`] instead.
+///
+/// Set from both sides. Every relation the descriptor decides and the rules do
+/// not nests five deep or less; the shapes that blow up nest ten and deeper.
+/// Held here, a schema past it is refused having walked five nodes, and the
+/// whole widening costs the decision path eleven percent. Unheld, one relation
+/// over an eight-deep record costs more than the rules spend on the entire
+/// workload -- seventeen hundred times its budget.
+pub const DEPTH: u32 = 5;
+
 /// [`lower`] under an explicit allowance, for a caller measuring the bound
 /// itself.
 ///
@@ -146,12 +170,13 @@ pub const WORK: u64 = 1024;
 /// schema lowers under a larger allowance. It is what makes the cost of asking
 /// bounded, which is the only thing that makes asking safe.
 pub fn lower_within(work: u64, schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
-    budget::under(work, || descend(schema, pool, &Cell::new(BUDGET)))
+    budget::under(work, || descend(schema, pool, &Cell::new(BUDGET), DEPTH))
 }
 
 /// [`lower`] with the nodes left to spend, which every node spends one of.
-fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>) -> Option<Descr> {
+fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>, depth: u32) -> Option<Descr> {
     budget.set(budget.get().checked_sub(1)?);
+    let depth = depth.checked_sub(1)?;
     match schema {
         Schema::Anything(_) => Some(Descr::anything()),
         Schema::Nothing => Some(Descr::nothing()),
@@ -165,32 +190,32 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>) -> Option<
         Schema::Str => Some(Descr::of_kind(Kind::Str)),
         Schema::Bytes => Some(Descr::of_kind(Kind::Bytes)),
         Schema::Literal(index) => singleton(&pool.constant(*index)?),
-        Schema::Seq { container, shape } => sequence(*container, shape, pool, budget),
-        Schema::Set(elements) => Descr::set(&descend(elements, pool, budget)?, Kind::Set),
+        Schema::Seq { container, shape } => sequence(*container, shape, pool, budget, depth),
+        Schema::Set(elements) => Descr::set(&descend(elements, pool, budget, depth)?, Kind::Set),
         Schema::FrozenSet(elements) => {
-            Descr::set(&descend(elements, pool, budget)?, Kind::FrozenSet)
+            Descr::set(&descend(elements, pool, budget, depth)?, Kind::FrozenSet)
         }
         Schema::Union(members) => members.iter().try_fold(Descr::nothing(), |whole, member| {
-            whole.union(&descend(member, pool, budget)?)
+            whole.union(&descend(member, pool, budget, depth)?)
         }),
         Schema::Intersection(members) => {
             members.iter().try_fold(Descr::anything(), |whole, member| {
-                whole.intersect(&descend(member, pool, budget)?)
+                whole.intersect(&descend(member, pool, budget, depth)?)
             })
         }
-        Schema::Complement(inner) => Some(descend(inner, pool, budget)?.complement()),
-        Schema::Refine { base, constraints } => refine(base, constraints, pool, budget),
+        Schema::Complement(inner) => Some(descend(inner, pool, budget, depth)?.complement()),
+        Schema::Refine { base, constraints } => refine(base, constraints, pool, budget, depth),
         // Every field narrows the same value, so the record is their meet. Each
         // field's type is a descriptor in its own right, which is what makes the
         // attribute half recursive; a field the schema does not require admits
         // the values that do not carry it at all.
         Schema::AttrRecord { fields } => {
             fields.iter().try_fold(Descr::anything(), |whole, field| {
-                let ty = descend(&field.schema, pool, budget)?;
+                let ty = descend(&field.schema, pool, budget, depth)?;
                 whole.intersect(&Descr::attribute(&field.name, &ty, !field.required))
             })
         }
-        Schema::KeyedMap { fields, defaults } => map(fields, defaults, pool, budget),
+        Schema::KeyedMap { fields, defaults } => map(fields, defaults, pool, budget, depth),
         Schema::Instance(index) => Some(Descr::instance_of(pool.class(*index)?)),
         // A reference is a cycle a finite descriptor has no room for.
         Schema::Ref(_) | Schema::SelfRef(_) => None,
@@ -208,15 +233,16 @@ fn map(
     defaults: &[MapClause],
     pool: &dyn Constants,
     budget: &Cell<u32>,
+    depth: u32,
 ) -> Option<Descr> {
     let mut labels: Vec<(Label, Descr, bool)> = Vec::with_capacity(fields.len());
     for field in fields {
-        let ty = descend(&field.schema, pool, budget)?;
+        let ty = descend(&field.schema, pool, budget, depth)?;
         labels.push((Label::str(&field.name), ty, !field.required));
     }
     let mut opened: Vec<(Option<Kind>, Descr)> = Vec::new();
     for clause in defaults {
-        let value = descend(&clause.value, pool, budget)?;
+        let value = descend(&clause.value, pool, budget, depth)?;
         let (named, parts) = key_cover(&clause.key, pool)?;
         for label in named {
             // A clause names a key without requiring it: `dict[Literal["a"], V]`
@@ -303,6 +329,7 @@ fn sequence(
     shape: &SeqShape,
     pool: &dyn Constants,
     budget: &Cell<u32>,
+    depth: u32,
 ) -> Option<Descr> {
     let kind = match container {
         SeqKind::List => Kind::List,
@@ -311,10 +338,10 @@ fn sequence(
     let prefix: Option<Vec<Descr>> = shape
         .prefix
         .iter()
-        .map(|element| descend(element, pool, budget))
+        .map(|element| descend(element, pool, budget, depth))
         .collect();
     let tail = match &shape.tail {
-        Some(element) => Some(descend(element, pool, budget)?),
+        Some(element) => Some(descend(element, pool, budget, depth)?),
         None => None,
     };
     Descr::sequence(&prefix?, tail.as_ref(), kind)
@@ -330,8 +357,9 @@ fn refine(
     constraints: &[Constraint],
     pool: &dyn Constants,
     budget: &Cell<u32>,
+    depth: u32,
 ) -> Option<Descr> {
-    let mut narrowed = descend(base, pool, budget)?;
+    let mut narrowed = descend(base, pool, budget, depth)?;
     for constraint in constraints {
         narrowed = narrowed.intersect(&constrained(constraint, &narrowed, pool)?)?;
     }
@@ -345,9 +373,32 @@ fn refine(
 /// the descriptor cannot read -- a predicate, a bound on a float, a length bound
 /// on a sequence -- refuses.
 fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> Option<Descr> {
+    // A bound is a set of whole numbers, and `bool` is a kind of its own here,
+    // so the set has to be spelled in both slots: `True` is `1` to every
+    // comparison Python makes, and a bound that admits `1` admits it.
+    //
+    // **Refuses unless the base is whole numbers and nothing else**, for the
+    // reason [`words`] refuses a length bound over more than words. A bound
+    // orders whatever a value's type orders -- a float, a string, a date -- and
+    // these two components speak for two of those. Narrowing a float base to a
+    // set of integers gives a *smaller* set than the schema denotes, and a
+    // smaller set has a larger complement, which is a subtype proof no value
+    // supports.
     let integers = |set: IntSet| {
+        let numbers = Descr::of_kind(Kind::Int).union(&Descr::of_kind(Kind::Bool))?;
+        if !base.intersect(&numbers.complement())?.is_empty() {
+            return None;
+        }
         let mut descr = Descr::nothing();
-        descr.integers(set);
+        descr.integers(set.clone());
+        descr.booleans(
+            [false, true]
+                .into_iter()
+                .filter(|boolean| set.holds(i64::from(*boolean)))
+                .fold(BoolSet::EMPTY, |held, boolean| {
+                    held.union(BoolSet::just(boolean))
+                }),
+        );
         Some(descr)
     };
     match constraint {
@@ -420,7 +471,7 @@ fn words(pattern: &str, base: &Descr) -> Option<Descr> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BUDGET, Constants, Operand, WORK, lower, lower_within};
+    use super::{BUDGET, Constants, DEPTH, Operand, WORK, lower, lower_within};
     use crate::decision::{Kind, Verdict};
     use crate::descr::classes::Class;
     use crate::descr::{Descr, Value};
@@ -950,27 +1001,32 @@ mod tests {
         );
     }
 
-    /// A schema past the budget refuses rather than spending without end.
+    /// A schema past a bound refuses rather than spending without end.
     ///
-    /// Lowering builds at every node, so a deep schema is both a deep recursion
-    /// and a lot of work. The bound is what keeps a caller that asks about an
-    /// adversarial schema from paying for it -- and refusing is safe, because
-    /// the caller decides the old way.
+    /// Lowering builds at every node, so a wide schema is a lot of work and a
+    /// deep one is that work raised to a power. There are two bounds because
+    /// there are two quantities: [`BUDGET`] counts the nodes and [`DEPTH`] the
+    /// nesting, and each is asserted in both directions -- a bound that only
+    /// ever refuses would pass half of this.
+    ///
+    /// Refusing is safe, because the caller decides the old way.
     #[test]
-    fn a_schema_past_the_budget_refuses() {
+    fn a_schema_past_a_bound_refuses() {
         let pool = empty_pool();
-        let mut deep = Schema::Int;
-        for _ in 0..BUDGET {
-            deep = Schema::Complement(Box::new(deep));
-        }
-        assert!(lower(&deep, &pool).is_none());
+        let wide = |members: usize| {
+            Schema::Union(core::iter::repeat_n(Schema::Str, members).collect::<Vec<_>>())
+        };
+        assert!(
+            lower(&wide(BUDGET as usize), &pool).is_none(),
+            "too many nodes"
+        );
+        assert!(lower(&wide(BUDGET as usize / 2), &pool).is_some());
 
-        // Just inside it still lowers, so the bound is a bound and not a wall.
-        let mut shallow = Schema::Int;
-        for _ in 0..(BUDGET / 2) {
-            shallow = Schema::Complement(Box::new(shallow));
-        }
-        assert!(lower(&shallow, &pool).is_some());
+        let nested = |levels: u32| {
+            (0..levels).fold(Schema::Str, |inner, _| Schema::Complement(Box::new(inner)))
+        };
+        assert!(lower(&nested(DEPTH + 1), &pool).is_none(), "too deep");
+        assert!(lower(&nested(DEPTH - 1), &pool).is_some());
     }
 
     /// A build that would cost too much refuses, and the same schema lowers

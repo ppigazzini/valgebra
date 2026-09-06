@@ -1,6 +1,7 @@
 //! The decision procedures over the IR: emptiness, subtyping, equivalence, and
 //! disjointness, with the leaf-relation oracle and the scalar region partition.
 
+use crate::descr::lower::{Constants, lower};
 use crate::ir::{
     ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
 };
@@ -369,10 +370,15 @@ impl Schema {
     /// sequence, a keyed map with an impossible required field, and a union of
     /// empties — and sound everywhere else: it never reports a non-empty schema
     /// as empty. A set or frozenset is never empty (the empty collection is
-    /// always a member). The gradual `Any`, instances, literals, refinements,
-    /// and unresolved recursive references are not decided, so a combination
-    /// containing one is never reported empty. To resolve recursive references,
-    /// use [`is_empty_under`](Self::is_empty_under).
+    /// always a member). To resolve recursive references, use
+    /// [`is_empty_under`](Self::is_empty_under).
+    ///
+    /// Where the rules decline, the question is asked again of the *set* the
+    /// schema denotes, under a bound on what building it may cost, which
+    /// decides a container meet, a double complement and a kind against its own
+    /// literals. What is left undecided is what no bounded descriptor holds: an
+    /// unresolved recursive reference, a predicate, and a schema past one of the
+    /// build's bounds.
     ///
     /// The decision is bounded: a deeply nested adversarial schema that would take
     /// more than a fixed number of steps stops and returns `false`, so a `false`
@@ -382,12 +388,7 @@ impl Schema {
     /// in time linear in its size rather than by re-walking each subtree per level.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.is_empty_rec(
-            &NoLeafRelations,
-            &[],
-            &mut Vec::new(),
-            &Cell::new(DECISION_BUDGET),
-        )
+        self.is_empty_with(&NoLeafRelations, &[])
     }
 
     /// Like [`is_empty`](Self::is_empty), but resolving recursive references
@@ -396,12 +397,7 @@ impl Schema {
     /// not resolve stays conservative (never reported empty).
     #[must_use]
     pub fn is_empty_under(&self, defs: &[Schema]) -> bool {
-        self.is_empty_rec(
-            &NoLeafRelations,
-            defs,
-            &mut Vec::new(),
-            &Cell::new(DECISION_BUDGET),
-        )
+        self.is_empty_with(&NoLeafRelations, defs)
     }
 
     /// Like [`is_empty_under`](Self::is_empty_under), but with an `oracle` that
@@ -410,6 +406,48 @@ impl Schema {
     #[must_use]
     pub fn is_empty_with(&self, oracle: &dyn LeafRelations, defs: &[Schema]) -> bool {
         self.is_empty_rec(oracle, defs, &mut Vec::new(), &Cell::new(DECISION_BUDGET))
+            || self.denotes_no_value(oracle)
+    }
+
+    /// Whether the descriptor proves this schema admits no value.
+    ///
+    /// Asked **after** the structural rules and only where they decline, which
+    /// is the ordering the cost forces: building a descriptor determinises
+    /// automata and takes products, and beside a verdict the rules already
+    /// reached that work is discarded. Since it can only turn a `false` into a
+    /// `true`, both orders give the same answers and only one is affordable.
+    ///
+    /// Asking costs a bounded amount whether or not it answers: the build is
+    /// held to the nodes it may read, the nesting it may descend and the work it
+    /// may spend, and past any of those it refuses. A schema the descriptor
+    /// cannot hold -- a recursive one -- refuses the same way. Either way the
+    /// caller keeps the verdict the rules reached.
+    fn denotes_no_value(&self, pool: &dyn Constants) -> bool {
+        lower(self, pool).is_some_and(|set| set.emptiness() == Verdict::Empty)
+    }
+
+    /// Whether the descriptor proves every value of this schema is one of
+    /// `other`, by proving the difference empty.
+    ///
+    /// `a ≤ b` is `a ∧ ¬b = ∅`, which is the whole of the test. A **widening and
+    /// nothing else**, asked where [`denotes_no_value`](Self::denotes_no_value)
+    /// is asked and for the same reasons.
+    ///
+    /// An empty left side is below every set, and it says so without lowering
+    /// the right one at all -- otherwise a schema the descriptor proves empty
+    /// would be below nothing whose descriptor it could not build, which is a
+    /// pair of answers that contradict each other.
+    fn descriptor_contained_in(&self, other: &Schema, pool: &dyn Constants) -> bool {
+        let Some(mine) = lower(self, pool) else {
+            return false;
+        };
+        if mine.emptiness() == Verdict::Empty {
+            return true;
+        }
+        lower(other, pool).is_some_and(|theirs| {
+            mine.intersect(&theirs.complement())
+                .is_some_and(|difference| difference.emptiness() == Verdict::Empty)
+        })
     }
 
     /// The decision steps [`is_empty`](Self::is_empty) spends on this schema.
@@ -662,13 +700,17 @@ impl Schema {
     /// matching constructors (the lattice rules, set/frozenset element
     /// inclusion, and sequence inclusion on the prefix-and-tail form). Every
     /// rule is **sound** — it never reports a subtype it cannot justify — and
-    /// conservative where it cannot decide (`Or` regexes, recursive references,
-    /// instances, literals): there it returns `false` rather than guess.
+    /// conservative where it cannot decide: there it returns `false` rather than
+    /// guess. A `false` is then asked again of the two *sets*, under a bound on
+    /// what building them may cost, which decides
+    /// what no rule about shapes reaches: a container meet, a double complement,
+    /// one regular language inside another, a kind against its own literals, one
+    /// step dividing another.
     ///
-    /// The decision is bounded: an adversarial schema that would take more than a
-    /// fixed number of steps stops and returns `false`, so a `false` can mean
-    /// "not proven a subtype within the work bound". A real schema decides far
-    /// inside the bound.
+    /// The decision is bounded twice over: an adversarial schema that would take
+    /// more than a fixed number of steps stops, and a descriptor too costly to
+    /// build refuses. A `false` can therefore mean "not proven a subtype within
+    /// the work bound". A real schema decides far inside both.
     #[must_use]
     pub fn is_subtype_of(&self, other: &Schema) -> bool {
         self.is_subtype_of_under(other, &NoLeafRelations, &[])
@@ -695,7 +737,7 @@ impl Schema {
                 budget: &budget,
             },
             &mut Vec::new(),
-        )
+        ) || self.descriptor_contained_in(other, oracle)
     }
 
     fn is_subtype_rec(
@@ -980,8 +1022,10 @@ impl Schema {
             defs,
             budget: &budget,
         };
-        self.is_subtype_rec(other, cx, &mut Vec::new())
-            && other.is_subtype_rec(self, cx, &mut Vec::new())
+        let within = |sub: &Schema, sup: &Schema| {
+            sub.is_subtype_rec(sup, cx, &mut Vec::new()) || sub.descriptor_contained_in(sup, oracle)
+        };
+        within(self, other) && within(other, self)
     }
 }
 
@@ -1001,7 +1045,14 @@ struct SubtypeCx<'a> {
 /// that depend on the Python class hierarchy (an `Instance`) or on a concrete
 /// value (a `Literal`). The bindings implement it with `issubclass` and
 /// membership; the core defaults to [`NoLeafRelations`].
-pub trait LeafRelations {
+///
+/// It carries [`Constants`] because both are the same question asked twice: the
+/// object table lives in the bindings, and an implementor that can answer what a
+/// `Literal` is a subtype of can also say what it *names*. Requiring it here is
+/// what lets a relation lower its two schemas -- a descriptor holding a constant
+/// as a value decides `MultipleOf(4) ≤ MultipleOf(2)`, which no rule about
+/// constraints reaches -- rather than declining every schema that names one.
+pub trait LeafRelations: Constants {
     /// Whether leaf schema `sub` is a subtype of `sup`, or `None` to leave the
     /// relation conservatively undecided.
     fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool>;
@@ -1077,6 +1128,10 @@ impl LeafRelations for NoLeafRelations {
         None
     }
 }
+
+/// An oracle that decides nothing reads no pool either, so a schema naming a
+/// constant refuses to lower here and is decided by the rules alone.
+impl Constants for NoLeafRelations {}
 
 /// Whether the values a meet admits are bounded to the integers, so a bound
 /// conjunction over it may count them.
@@ -2352,6 +2407,8 @@ mod tests {
     /// for the bindings' answer about a pure class.
     struct Pure;
 
+    impl Constants for Pure {}
+
     impl LeafRelations for Pure {
         fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
             None
@@ -2768,6 +2825,223 @@ mod tests {
         ]));
     }
 
+    /// The structural rules alone, without the descriptor that widens them.
+    ///
+    /// A test about a *rule's* scope has to ask the rule: through
+    /// [`Schema::is_subtype_of`] a decline is invisible, because the descriptor
+    /// answers behind it and a relation the rule was never meant to reach is
+    /// decided anyway. Which is a better answer and a worse test.
+    fn by_the_rules(sub: &Schema, sup: &Schema) -> bool {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.is_subtype_rec(
+            sup,
+            SubtypeCx {
+                oracle: &NoLeafRelations,
+                defs: &[],
+                budget: &budget,
+            },
+            &mut Vec::new(),
+        )
+    }
+
+    /// Emptiness by the structural rules alone, for the reason
+    /// [`by_the_rules`] exists.
+    fn empty_by_the_rules(schema: &Schema) -> bool {
+        empty_by_the_rules_under(schema, &NoLeafRelations)
+    }
+
+    /// [`empty_by_the_rules`] with an oracle, for the arms that need one to
+    /// order two pooled bounds.
+    fn empty_by_the_rules_under(schema: &Schema, oracle: &dyn LeafRelations) -> bool {
+        schema.is_empty_rec(oracle, &[], &mut Vec::new(), &Cell::new(DECISION_BUDGET))
+    }
+
+    /// A refinement carrying no constraint denotes exactly its base, and both
+    /// halves of the procedure read it that way.
+    ///
+    /// Without it the universe had two spellings that decided differently:
+    /// `anything` is below `Refine { base: anything }` through the refinement
+    /// arm, and the gradual `Any` is below `anything`, but was not below the
+    /// refinement -- because only a region set says so. A fuzzer found it.
+    #[test]
+    fn the_rules_read_a_refinement_with_no_constraint_as_its_base() {
+        let bare = |base| Schema::Refine {
+            base: Box::new(base),
+            constraints: Vec::new(),
+        };
+        assert!(by_the_rules(&Schema::ANY, &bare(Schema::ANYTHING)));
+        assert!(by_the_rules(
+            &Schema::Union(vec![Schema::ANY, Schema::ANYTHING]),
+            &bare(Schema::ANYTHING),
+        ));
+        // And the same reading on the emptiness side, where it is the *regions*
+        // that the base lends: a bare refinement over the universe covers every
+        // region, so its complement covers none and the meet below is empty.
+        // Without that the complement has no region set and nothing decides it.
+        assert!(empty_by_the_rules(&Schema::Intersection(vec![
+            Schema::ANYTHING,
+            Schema::Complement(Box::new(bare(Schema::ANYTHING))),
+        ])));
+        assert!(empty_by_the_rules(&bare(Schema::Nothing)));
+        assert!(!empty_by_the_rules(&bare(Schema::Str)));
+    }
+
+    /// A meet of a schema and its own complement is empty, where the regions
+    /// cannot say so.
+    ///
+    /// The emptiness fold has several ways to reach `Empty` and they are read in
+    /// order, so a member whose regions are opaque is what leaves the
+    /// complementary-pair rule as the only one that can answer. A constrained
+    /// refinement is such a member: its regions are unknown, because a narrowed
+    /// region set read back through a complement would report an inhabited
+    /// schema empty.
+    #[test]
+    fn the_complementary_pair_rule_answers_where_the_regions_cannot() {
+        let bounded = Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints: vec![Constraint::Ge(OperandIx::new(0))],
+        };
+        assert_eq!(bounded.region_set(), Regions::Unknown, "no regions to read");
+        assert!(empty_by_the_rules(&Schema::Intersection(vec![
+            bounded.clone(),
+            Schema::Complement(Box::new(bounded)),
+        ])));
+    }
+
+    /// The two complement arms of the subtyping rules, asked of the rules.
+    ///
+    /// Both relations are also decided by the descriptor, which holds a
+    /// complement as a set again -- so through [`Schema::is_subtype_of`] either
+    /// arm could be deleted and every test would still pass. What the arms are
+    /// for is deciding them *without* building a descriptor, and that is what is
+    /// asserted here.
+    #[test]
+    fn the_rules_relate_a_complement_on_either_side() {
+        // Contravariance: `¬A ≤ ¬B` is `B ≤ A`, read backwards. Over containers,
+        // because that is where the arm earns its place -- `list[bool] ≤
+        // list[int]` is decided by recursing on the element, while the meet
+        // `¬list[int] ∧ list[bool]` is not decided empty, so the arm below
+        // cannot answer this.
+        let not = |schema| Schema::Complement(Box::new(schema));
+        let list = |element| Schema::list(SeqShape::homogeneous(element));
+        assert!(by_the_rules(
+            &not(list(Schema::Int)),
+            &not(list(Schema::Bool))
+        ));
+        assert!(!by_the_rules(
+            &not(list(Schema::Bool)),
+            &not(list(Schema::Int))
+        ));
+
+        // A complement on the right alone: the question is whether the two share
+        // a value, which is emptiness of the meet.
+        assert!(by_the_rules(
+            &Schema::list(SeqShape::homogeneous(Schema::Int)),
+            &not(Schema::Int),
+        ));
+        assert!(!by_the_rules(&Schema::Bool, &not(Schema::Bool)));
+    }
+
+    /// Two schemas sharing no value, asked of the rules.
+    ///
+    /// The cheap half reads two kind discriminants; the general half builds the
+    /// meet and asks whether it is empty. Both are needed, and neither is
+    /// visible through a relation the descriptor also answers.
+    #[test]
+    fn the_rules_decide_that_two_schemas_share_no_value() {
+        // Different kinds, settled by the discriminants.
+        assert!(Schema::list(SeqShape::homogeneous(Schema::Int)).disjoint(&Schema::Int));
+        // One kind, settled by the meet: a complement on the right sends the
+        // subtyping question here.
+        assert!(by_the_rules(
+            &Schema::Str,
+            &Schema::Complement(Box::new(Schema::Int)),
+        ));
+        assert!(!by_the_rules(
+            &Schema::Union(vec![Schema::Str, Schema::Int]),
+            &Schema::Complement(Box::new(Schema::Int)),
+        ));
+    }
+
+    /// Each way the emptiness fold reaches a verdict, asked of the rules.
+    ///
+    /// The descriptor decides most of these too, so through
+    /// [`Schema::is_empty`] a deleted rule is invisible: the answer is still
+    /// right, and the test that was meant to hold the rule up holds nothing.
+    /// Asking the rules is what keeps each of them covered.
+    #[test]
+    fn the_rules_reach_each_way_a_meet_is_empty() {
+        // A member that is itself empty empties the meet.
+        assert!(empty_by_the_rules(&Schema::Intersection(vec![
+            Schema::Nothing,
+            Schema::Str,
+        ])));
+        // Two kinds that share no region.
+        assert!(empty_by_the_rules(&Schema::Intersection(vec![
+            Schema::Str,
+            Schema::Float,
+        ])));
+        // A schema beside its own complement.
+        assert!(empty_by_the_rules(&Schema::Intersection(vec![
+            Schema::Str,
+            Schema::Complement(Box::new(Schema::Str)),
+        ])));
+        // Two bounds that no value satisfies, which needs an oracle to order
+        // the two pooled operands.
+        let bounded = |constraint| Schema::Refine {
+            base: Box::new(Schema::Int),
+            constraints: vec![constraint],
+        };
+        assert!(empty_by_the_rules_under(
+            &Schema::Intersection(vec![
+                bounded(Constraint::Ge(OperandIx::new(1))),
+                bounded(Constraint::Le(OperandIx::new(0))),
+            ]),
+            &ByIndex,
+        ));
+        // And a meet that is inhabited is not reported empty by any of them.
+        assert!(!empty_by_the_rules(&Schema::Intersection(vec![
+            Schema::Str,
+            Schema::Union(vec![Schema::Str, Schema::Int]),
+        ])));
+    }
+
+    /// A sequence is empty exactly when a prefix element is, and the rule says
+    /// so on its own.
+    ///
+    /// A tail repeats zero times, so an empty *tail* empties nothing: the
+    /// sequence that stops at the prefix is still a member. Both halves are
+    /// asserted, because a rule that only ever answers one way is a rule a
+    /// deletion cannot be seen through.
+    #[test]
+    fn the_rules_read_a_sequence_s_emptiness_off_its_prefix() {
+        assert!(empty_by_the_rules(&Schema::list(SeqShape::fixed([
+            Schema::Nothing
+        ]))));
+        assert!(!empty_by_the_rules(&Schema::list(SeqShape::homogeneous(
+            Schema::Nothing
+        ))));
+        assert!(!empty_by_the_rules(&Schema::list(SeqShape::fixed([
+            Schema::Str
+        ]))));
+    }
+
+    /// The descriptor proves an emptiness no rule reaches: a container meet is
+    /// the meet of the element sets, and the rules never take one.
+    #[test]
+    fn the_descriptor_proves_an_emptiness_the_rules_decline() {
+        let bools = Schema::list(SeqShape::homogeneous(Schema::Bool));
+        let not_ints =
+            Schema::Complement(Box::new(Schema::list(SeqShape::homogeneous(Schema::Int))));
+        let meet = Schema::Intersection(vec![bools, not_ints]);
+
+        assert!(
+            !empty_by_the_rules(&meet),
+            "no rule about shapes reaches it"
+        );
+        assert!(meet.is_empty(), "and the sets decide it");
+    }
+
     /// A fixed-arity sequence is a product, and a product is decided against a
     /// union of products by the backtrack-free `Phi` -- so a value that lands in
     /// no single branch is still decided, which is the whole reason the rule
@@ -2814,10 +3088,17 @@ mod tests {
             Schema::tuple(SeqShape::homogeneous(Schema::Str)),
         ])));
         // Nor is a branch with a tail a product, so it drops out of the branches.
-        assert!(!subject.is_subtype_of(&Schema::union([
+        // The relation *holds* -- a two-tuple of ints is one int followed by
+        // ints -- so this asks the rule, which is what has a scope to pin.
+        let with_a_tail = Schema::union([
             Schema::tuple(SeqShape::prefix_tail([Schema::Int], Schema::Int)),
             tuple([Schema::Str, Schema::Int]),
-        ])));
+        ]);
+        assert!(!by_the_rules(&subject, &with_a_tail));
+        assert!(
+            subject.is_subtype_of(&with_a_tail),
+            "and the descriptor decides it, holding the branch as a language"
+        );
 
         // The empty prefix is the nullary product, and it is covered by itself.
         let nullary = Schema::tuple(SeqShape::fixed([]));
@@ -2831,6 +3112,8 @@ mod tests {
     /// disjoint when their kinds differ or their indices do -- the same rule the
     /// bindings apply to a builtin scalar, whose equality is Python's own.
     struct Kinded;
+    impl Constants for Kinded {}
+
     impl LeafRelations for Kinded {
         fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
             None
@@ -2890,6 +3173,8 @@ mod tests {
     /// An oracle treating each pool index as its own value, so comparing indices
     /// orders the bound values they stand for.
     struct ByIndex;
+    impl Constants for ByIndex {}
+
     impl LeafRelations for ByIndex {
         fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
             None
@@ -2999,6 +3284,8 @@ mod tests {
     /// integer adjacency by the same arithmetic the binding uses, so the
     /// discreteness rule can be driven without an interpreter.
     struct Adjacent;
+    impl Constants for Adjacent {}
+
     impl LeafRelations for Adjacent {
         fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
             None

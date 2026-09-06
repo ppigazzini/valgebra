@@ -146,13 +146,16 @@ def test_a_join_with_a_complement_is_the_top():
 
 
 def test_the_fold_reaches_a_schema_built_through_the_constructors_only():
-    # A respelling denotes the same set and is not folded, because the fold reads
-    # structural equality; the procedure has no rule for the shape either, which
-    # is the ledger entry.
+    # A respelling denotes the same set and is *not folded*, because the fold
+    # reads structural equality. The two claims are separate: what the fold
+    # reaches is a question about the term, and what the relation decides is a
+    # question about the set -- which the descriptor answers, so the equal
+    # spelling is decided even though it was not folded.
     record = Validator({"a": int})
     respelled = union(record, complement(union(record, Validator(nothing))))
     assert respelled != Validator(anything)
-    assert not Validator(anything).is_subtype_of(respelled)
+    assert Validator(anything).is_subtype_of(respelled)
+    assert respelled.is_equivalent(Validator(anything))
 
 
 def test_any_folds_like_the_top_it_is():

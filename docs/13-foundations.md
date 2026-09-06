@@ -113,13 +113,19 @@ the **soundly decidable fragment** and is honest about the rest:
   subtype is never claimed unless it provably holds.
 
 The relation is *defined* by the set-theoretic emptiness test (`s <: t` iff
-`[[s ∧ ¬t]]` is empty). It is *decided* by structural rules that are exact on the
-published fragment and conservative beyond it — not by the full type-automaton
-construction the general EXPTIME procedure would use. That construction would
-decide strictly more (the cases the boundary records as conservative, such as a
-value split across union branches), but it never changes a membership decision:
-the walk answers membership directly, and every structural rule the decision does
-apply is sound.
+`[[s ∧ ¬t]]` is empty), and it is decided two ways. **Structural rules** recurse
+over the schema tree, exact on the published fragment and conservative beyond it.
+Where they decline, a **descriptor** is built: each kind held as a set closed
+under union, intersection and complement, so the emptiness test is asked
+literally rather than approximated by a rule about the shape. It decides what a
+rule about shapes cannot — a container meet, a double complement, one regular
+language inside another, the ordering of two steps — and it is bounded, because
+building one costs about two orders of magnitude more than a rule that already
+answered. What is past those bounds, and what no finite descriptor holds, is what
+the boundary records as conservative.
+
+Neither ever changes a membership decision: the walk answers membership directly,
+and both representations are sound.
 
 ## References
 

@@ -381,7 +381,12 @@ length constraints, prefix-and-tail sequences, sets and frozensets, records and
 mappings (including multi-clause mixed maps, a closed record against a catch-all
 mapping, and mixed maps where the supertype's extra field is optional and the
 subtype's catch-all covers it), inclusion in a complement where the two schemas
-share no value, and recursion — and stay conservative on the rest. The
+share no value, and recursion. Where a rule declines, the relation is asked again
+of the *sets* the two schemas denote, which decides what no rule about shapes
+reaches — a container meet, a double complement, one regular language inside
+another, a kind against its own literals, one step dividing another — under a
+bound on what building those sets may cost. What is past that bound, and what no
+finite set representation holds, is where they stay conservative. The
 [decidability boundary](15-decidability.md) lists exactly what is decided, what is
 conservative, and what is undecidable at runtime; see the
 [foundations](13-foundations.md) for the theory.

@@ -1635,6 +1635,8 @@ mod laws {
     fn refinement_subtyping_decides_bound_entailment() {
         use core::cmp::Ordering;
         struct ByIndex;
+        impl crate::descr::lower::Constants for ByIndex {}
+
         impl LeafRelations for ByIndex {
             fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
                 None
@@ -1698,6 +1700,8 @@ mod laws {
         use core::cmp::Ordering;
         // The pool index doubles as the integer bound value.
         struct ByValue;
+        impl crate::descr::lower::Constants for ByValue {}
+
         impl LeafRelations for ByValue {
             fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
                 None
@@ -1851,6 +1855,8 @@ mod laws {
         // core's own unit tests catch a defect without relying on the Python layer.
         use core::cmp::Ordering;
         struct ByIndex;
+        impl crate::descr::lower::Constants for ByIndex {}
+
         impl LeafRelations for ByIndex {
             fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
                 None
@@ -2415,6 +2421,8 @@ mod laws {
         // A mock oracle that treats each pool index as its own value, so
         // comparing indices orders the bounds those indices stand for.
         struct ByIndex;
+        impl crate::descr::lower::Constants for ByIndex {}
+
         impl LeafRelations for ByIndex {
             fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
                 None
