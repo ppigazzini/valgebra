@@ -106,6 +106,7 @@ cover.
 | [13-foundations.md](13-foundations.md) | the denotational frame and the theory it is sourced from |
 | [14-soundness.md](14-soundness.md) | why an accept is never wrong, node by node |
 | [15-decidability.md](15-decidability.md) | what is decided exactly, and what stays conservative |
+| [17-boundaries.md](17-boundaries.md) | what a validator cannot do, and why each boundary is where it is |
 | [16-api.md](16-api.md) | everything callable |
 
 ## Where to start
@@ -121,3 +122,6 @@ cover.
   enforces.
 - Wondering what it decides? The [decidability boundary](15-decidability.md),
   and the [foundations](13-foundations.md) behind it.
+- Wondering whether it does something at all? [What it cannot
+  do](17-boundaries.md) lists the deliberate boundaries and says which are the
+  product's and which are a runtime check's.
