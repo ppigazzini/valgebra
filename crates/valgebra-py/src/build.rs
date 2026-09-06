@@ -885,6 +885,28 @@ fn refuse_unhashable_literal(arg: &Bound<'_, PyAny>) -> PyResult<()> {
     )))
 }
 
+/// Refuse an order bound against `nan`, which orders nothing.
+///
+/// Every comparison with `nan` is false, so `Annotated[float, Ge(nan)]` admits
+/// **no value at all** -- and it is the empty set written as a bound, which no
+/// caller means and neither decider proves empty. Dropping the bound would
+/// admit every float instead; refusing says which mistake was made.
+///
+/// Only `nan` is refused, not every empty bound: `Gt(inf)` is also empty, but it
+/// is empty because the order says so, which is an answer. `nan` is the absence
+/// of an order.
+fn refuse_unordered_bound(attr: &str, bound: &Bound<'_, PyAny>) -> PyResult<()> {
+    let unordered = bound.extract::<f64>().is_ok_and(f64::is_nan);
+    if unordered {
+        return Err(PyValueError::new_err(format!(
+            "{attr} cannot be nan: every comparison with nan is false, so the \
+             bound admits no value at all. Write the bound you mean, or `nothing` \
+             for the empty set"
+        )));
+    }
+    Ok(())
+}
+
 /// True if `origin` is `typing.Union` (from Union/Optional) or
 /// `types.UnionType` (from `X | Y`).
 fn is_union_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
@@ -1483,6 +1505,7 @@ fn parse_constraint(
         if let Ok(bound) = marker.getattr(attr)
             && !bound.is_none()
         {
+            refuse_unordered_bound(attr, &bound)?;
             out.push(make(lits.intern_operand(&bound)));
         }
     }
@@ -1497,6 +1520,13 @@ fn parse_constraint(
         if let Ok(bound) = marker.getattr(attr)
             && !bound.is_none()
         {
+            // A `bool` is read as the length it equals: `MinLen(True)` is
+            // `MinLen(1)`. Refusing it was tried and withdrawn -- `MinLen(0)` and
+            // `MinLen(False)` are equal and hash alike, so `typing` returns one
+            // `Annotated` object for both and whichever spelling a process built
+            // first is the one every later spelling gets. A refusal would fail
+            // correct `MinLen(0)` code because of a `MinLen(False)` somewhere
+            // else, which is worse than reading the value the marker holds.
             let n = bound.extract::<usize>().map_err(|_| {
                 PyValueError::new_err(format!(
                     "{attr} must be a length a value can have, and {} is not",
@@ -1512,6 +1542,13 @@ fn parse_constraint(
     if let Ok(multiple) = marker.getattr("multiple_of")
         && !multiple.is_none()
     {
+        if multiple.extract::<f64>().is_ok_and(f64::is_nan) {
+            return Err(PyValueError::new_err(
+                "MultipleOf(nan) is not a valid constraint: no value is a multiple \
+                 of nan, because every comparison with nan is false. Write the \
+                 step you mean",
+            ));
+        }
         if multiple.eq(0).unwrap_or(false) {
             return Err(PyValueError::new_err(
                 "MultipleOf(0) is not a valid constraint: no value is a multiple of \

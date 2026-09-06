@@ -242,6 +242,13 @@ version pattern written with `\d` admits strings the parser downstream rejects,
 and every engine involved agreed the pattern was fine.
 
 
+A bound against `nan` is rejected with a `ValueError`, and so is
+`MultipleOf(nan)`: every comparison with `nan` is false, so such a bound admits
+no value at all. That is the empty set written as a bound, which no caller
+means, and dropping the marker instead would admit every value of the base. A
+bound that is empty because the *order* says so — `Gt(inf)` on a float — is kept,
+because emptiness is then an answer rather than the absence of one.
+
 `MultipleOf(n)` requires a nonzero divisor: no value is a multiple of zero, so
 `MultipleOf(0)` is an unsatisfiable constraint and is rejected with a `ValueError`
 when the validator is built, rather than rejecting every value at check time.

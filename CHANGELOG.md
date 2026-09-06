@@ -86,7 +86,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a required-ness qualifier survives a string annotation
 - fix: a bare legacy typing alias is the class it aliases
 - fix: refuse a Literal argument the typing spec refuses
-- fix: refuse a Literal argument the typing spec refuses
+- fix: refuse a bound against nan, which orders nothing
 
 -->
 
@@ -502,6 +502,12 @@ answer of its own, or a repair to a change not yet released.
   not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
+
+- A bound against `nan` is refused. Every comparison with `nan` is false, so
+  `Annotated[float, Ge(nan)]` admitted no value at all — the empty set written as
+  a bound, which no caller means and which neither decider proves empty.
+  `MultipleOf(nan)` goes the same way. A bound that is empty because the *order*
+  says so, such as `Gt(inf)`, is kept: emptiness is then an answer.
 
 - A container is refused as a `Literal` argument, where it used to be read as a
   schema. The typing spec's `Literal` takes `None`, an enum member, or an `int`,

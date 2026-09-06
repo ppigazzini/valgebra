@@ -269,3 +269,65 @@ def test_every_other_kind_still_answers_with_its_dunder() -> None:
     assert Validator(Annotated[bytes, at.MaxLen(2)]).is_valid(b"ab")
     assert Validator(Annotated[set[int], at.MinLen(2)]).is_valid({1, 2})
     assert Validator(Annotated[dict[str, int], at.MinLen(2)]).is_valid({"a": 1, "b": 2})
+
+
+NAN_BOUNDS = ["ge", "gt", "le", "lt"]
+
+
+@pytest.mark.parametrize("bound", NAN_BOUNDS)
+def test_an_order_bound_against_nan_is_refused(bound: str) -> None:
+    """`nan` is not a bound; it is the absence of an order.
+
+    Every comparison with `nan` is false, so `Annotated[float, Ge(nan)]` admits
+    no value at all -- the empty set written as a bound, which no caller means
+    and which neither decider proves empty. Dropping the marker instead would
+    admit every float, so the refusal is what says which mistake was made.
+    """
+    marker = getattr(at, {"ge": "Ge", "gt": "Gt", "le": "Le", "lt": "Lt"}[bound])
+    with pytest.raises(ValueError, match="cannot be nan"):
+        Validator(Annotated[float, marker(float("nan"))])
+
+
+def test_a_multiple_of_nan_is_refused() -> None:
+    with pytest.raises(ValueError, match="MultipleOf\\(nan\\)"):
+        Validator(Annotated[float, at.MultipleOf(float("nan"))])
+
+
+def test_a_bound_that_is_empty_because_the_order_says_so_is_kept() -> None:
+    """The refusal is about `nan`, not about emptiness.
+
+    `Gt(inf)` admits nothing either, and it is empty *because the order says
+    so*, which is an answer a caller may well have meant.
+    """
+    beyond = Validator(Annotated[float, at.Gt(float("inf"))])
+    assert not beyond.is_valid(1e308)
+    assert not beyond.is_valid(float("inf"))
+
+
+def test_a_truth_value_is_read_as_the_length_it_equals() -> None:
+    """`MinLen(True)` is `MinLen(1)`, and refusing it is not available.
+
+    A `bool` is an `int` in Python, so a truth value in a length marker is a
+    mistake worth catching -- but `at.MinLen(0)` and `at.MinLen(False)` compare
+    equal and hash alike, so `typing` caches **one** `Annotated` object for both
+    spellings and hands it to whichever comes second. Refusing the `bool` would
+    therefore fail correct `MinLen(0)` code in any process where a
+    `MinLen(False)` was built first, which is a worse failure than reading the
+    value the marker holds.
+
+    Pinned so the refusal is not added by the next reader who notices the same
+    thing: the collision below is what makes it unavailable.
+    """
+    assert at.MinLen(0) == at.MinLen(False)
+    assert hash(at.MinLen(0)) == hash(at.MinLen(False))
+    assert Annotated[str, at.MinLen(0)] is Annotated[str, at.MinLen(False)]
+
+    assert repr(Validator(Annotated[str, at.MinLen(True)])) == (
+        "Annotated[str, MinLen(1)]"
+    )
+
+
+def test_the_lengths_a_value_can_have_still_build() -> None:
+    assert Validator(Annotated[str, at.MinLen(0)]).is_valid("")
+    assert Validator(Annotated[str, at.MinLen(3)]).is_valid("abc")
+    assert Validator(Annotated[str, at.MaxLen(0)]).is_valid("")
