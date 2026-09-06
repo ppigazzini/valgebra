@@ -1,7 +1,7 @@
 use super::*;
 use crate::check::index::ValidatorIndex;
 use crate::check::{WalkMode, WalkState, build_index};
-use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyModule};
+use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyModule};
 use valgebra_core::{Field, MapClause, Openness};
 
 /// Decide membership of a Python value against a schema, through the real
@@ -160,6 +160,75 @@ fn a_dict_scan_visits_each_entry_once_and_stops_where_it_is_told() {
             ControlFlow::Continue(())
         });
         assert!(matches!(scan, Scan::Unreadable));
+    });
+}
+
+/// A list scan visits each position once and refuses a list that resizes.
+///
+/// The sequence walk reads a length once and matches positions against it, so a
+/// list that grows hides its new items from the walk and one that shrinks leaves
+/// it answering about items that are gone -- and `is_valid` said `True` for a
+/// value that is not a member. Driven against the scan for the reason the dict
+/// case is: the question is what the scan does with the count.
+#[test]
+fn a_list_scan_visits_each_position_once_and_refuses_one_that_resizes() {
+    Python::attach(|py| {
+        let list = PyList::new(py, 0..5).expect("a list of five");
+
+        // Every position, exactly once, and in order: the index the visitor is
+        // handed is what picks a prefix schema, so a drifting one would match
+        // the wrong element rather than fail.
+        let mut seen = Vec::new();
+        let scan = scan_list(&list, |at, _| {
+            seen.push(at);
+            ControlFlow::Continue(())
+        });
+        assert!(matches!(scan, Scan::Complete));
+        assert_eq!(seen, vec![0, 1, 2, 3, 4]);
+
+        // A visitor that breaks stops the scan, and the answer says so.
+        let mut before_break = 0;
+        let scan = scan_list(&list, |_, _| {
+            before_break += 1;
+            if before_break == 2 {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+        assert!(matches!(scan, Scan::Stopped));
+        assert_eq!(before_break, 2);
+
+        // Grown under the scan: the items past the length read at entry would
+        // never be visited, so there is no reading to answer from.
+        let growing = PyList::new(py, 0..4).expect("a list of four");
+        let scan = scan_list(&growing, |at, _| {
+            if at == 0 {
+                growing.append(9).expect("append");
+            }
+            ControlFlow::Continue(())
+        });
+        assert!(
+            matches!(scan, Scan::Unreadable),
+            "a list whose size moved is not readable"
+        );
+
+        // And shrunk, which is the same fact at the other end.
+        let shrinking = PyList::new(py, 0..4).expect("a list of four");
+        let scan = scan_list(&shrinking, |at, _| {
+            if at == 0 {
+                shrinking.del_item(3).expect("del_item");
+            }
+            ControlFlow::Continue(())
+        });
+        assert!(matches!(scan, Scan::Unreadable));
+
+        // A list nobody touched reads to the end, so the guard costs no answer.
+        let still = PyList::new(py, 0..4).expect("a list of four");
+        assert!(matches!(
+            scan_list(&still, |_, _| ControlFlow::Continue(())),
+            Scan::Complete
+        ));
     });
 }
 

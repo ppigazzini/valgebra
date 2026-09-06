@@ -225,8 +225,11 @@ except ValidationError as error:
     assert error.code == "mutated_during_validation"
 ```
 
-Only a change in the container's **size** costs the reading; a value rewritten in
-place leaves the entries where they are and the check answers normally. The
+A **dict, a set and a list** are all read this way — each against a count taken
+once — so each reports rather than guesses; a tuple cannot be resized and needs
+no guard. Only a change in the container's **size** costs the reading; a value
+rewritten in place leaves the entries where they are and the check answers
+normally. The
 same code also reports the rarer case of a value that answers two readings
 differently — a predicate or an `__eq__` that is not a function of the value —
 because it is the same failure: the check has no stable value to decide about.

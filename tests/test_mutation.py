@@ -2,7 +2,9 @@
 
 Membership runs Python at almost every entry of a container -- a predicate, an
 ``__eq__``, an ``isinstance`` hook -- and a free-threaded interpreter lets another
-thread write to that container meanwhile. The walk therefore reads containers in
+thread write to that container meanwhile. A dict, a set and a **list** are all
+read against a count taken once, so all three are held here; a tuple cannot be
+resized and needs no guard. The walk therefore reads containers in
 a way that survives the change: it reports ``mutated_during_validation`` and a
 non-member, because nothing about the contents was decided, and never a
 ``BaseException`` the caller cannot catch as a validation failure.
@@ -44,6 +46,27 @@ def _record_growing(target: dict[str, int]) -> Validator:
     return Validator({"a": Annotated[int, at.Predicate(grow)], "b": int, "c?": int})
 
 
+def _list_growing(target: list[int]) -> Validator:
+    """Build a list schema whose element predicate grows `target` while it runs."""
+
+    def grow(_: object) -> bool:
+        target.append(99)
+        return True
+
+    return Validator(list[Annotated[int, at.Predicate(grow)]])
+
+
+def _list_shrinking(target: list[int]) -> Validator:
+    """Build a list schema whose element predicate shrinks `target` while it runs."""
+
+    def shrink(_: object) -> bool:
+        if len(target) > 1:
+            target.pop()
+        return True
+
+    return Validator(list[Annotated[int, at.Predicate(shrink)]])
+
+
 def _set_growing(target: set[int]) -> Validator:
     """Build a set schema whose element predicate grows `target` while it runs."""
 
@@ -62,6 +85,68 @@ def test_a_dict_grown_by_a_predicate_is_reported_not_a_panic() -> None:
     with pytest.raises(ValidationError) as info:
         _record_growing(explained).validate(explained)
     assert info.value.code == MUTATED
+
+
+def test_a_list_grown_by_a_predicate_is_reported_not_answered() -> None:
+    """The positions past the length read at entry are never visited.
+
+    A sequence is walked by position against a length read once, so a list that
+    grows hides its new items -- and the walk that never saw them answered
+    `True` for a value that is not a member. The pair below is the whole of it:
+    the value ends as `[1, 99]`, `list[int]` admits that, and the schema whose
+    element must also pass the predicate does not admit a reading at all.
+    """
+    checked = [1]
+    assert _list_growing(checked).is_valid(checked) is False
+    assert checked == [1, 99], "the predicate really did move it"
+
+    explained = [1]
+    with pytest.raises(ValidationError) as info:
+        _list_growing(explained).validate(explained)
+    assert info.value.code == MUTATED
+
+
+def test_a_list_shrunk_by_a_predicate_is_reported_not_answered() -> None:
+    """The same fact at the other end: the walk expected items that are gone."""
+    checked = [1, 2, 3]
+    assert _list_shrinking(checked).is_valid(checked) is False
+
+    explained = [1, 2, 3]
+    with pytest.raises(ValidationError) as info:
+        _list_shrinking(explained).validate(explained)
+    assert info.value.code == MUTATED
+
+
+def test_a_list_that_was_never_a_member_is_not_made_one_by_shrinking() -> None:
+    """The direction that would be an accept the value never supported.
+
+    `[1, "x"]` is not a `list[int]` at entry. A predicate that drops the bad
+    element while the walk is on the first one leaves a list that *is* one, and
+    a walk that answered from the positions it managed to read would say `True`
+    about neither state.
+    """
+    target: list[object] = [1, "x"]
+
+    def drop(_: object) -> bool:
+        if len(target) > 1:
+            target.pop()
+        return True
+
+    schema = Validator(list[Annotated[int, at.Predicate(drop)]])
+    assert schema.is_valid(target) is False
+
+
+def test_a_tuple_needs_no_guard() -> None:
+    """A tuple cannot be resized, so its walk keeps the plain iterator."""
+    seen: list[object] = []
+
+    def note(value: object) -> bool:
+        seen.append(value)
+        return True
+
+    schema = Validator(tuple[Annotated[int, at.Predicate(note)], ...])
+    assert schema.is_valid((1, 2, 3)) is True
+    assert seen == [1, 2, 3], "every position, in order, exactly once"
 
 
 def test_a_set_grown_by_a_predicate_is_reported_not_a_panic() -> None:
@@ -89,6 +174,9 @@ def test_replacing_a_value_leaves_the_reading_intact() -> None:
 
 
 def test_an_unmutated_container_is_unaffected() -> None:
+    assert Validator(list[int]).is_valid([1, 2])
+    assert not Validator(list[int]).is_valid([1, "x"])
+    assert Validator([int, str]).is_valid([1, "x"])
     assert Validator({"a": int}).is_valid({"a": 1})
     assert not Validator({"a": int}).is_valid({"a": "x"})
     assert Validator(set[int]).is_valid({1, 2})
@@ -128,6 +216,11 @@ def _hammer(
     return escaped
 
 
+def _resize_list(container: list[int]) -> None:
+    container.append(1)
+    container.pop()
+
+
 def _resize_dict(container: dict[str, int]) -> None:
     container["spare"] = 1
     container.pop("spare", None)
@@ -153,6 +246,7 @@ def _resize_set(container: set[int]) -> None:
             id="dict",
         ),
         pytest.param(set[int], set(range(200)), _resize_set, id="set"),
+        pytest.param(list[int], list(range(200)), _resize_list, id="list"),
     ],
 )
 def test_a_container_written_by_another_thread_never_escapes_as_an_exception(

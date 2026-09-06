@@ -91,6 +91,29 @@ for an exact int or str — an explain walk, a non-literal union, another value
 type and a JSON value all fall through to the linear scan, which stays the one
 source of truth for behaviour.
 
+## A container is read against a count taken once
+
+Membership runs arbitrary Python at almost every entry — a predicate, an
+`__eq__`, an `isinstance` hook — and a free-threaded interpreter lets another
+thread write to the container meanwhile. Every container the walk does not own
+is therefore read against a count taken at entry and re-read before each step
+and after the last: `scan_dict` over entries, `scan_set` over the iterator, and
+`scan_list` over positions. A count that moved makes the reading cover no state
+the value was ever in, so the scan answers `Scan::Unreadable` and the caller
+reports `mutated_during_validation` rather than answering from the part it saw.
+
+The three differ only in what they count, and the sequence one is the case that
+argues for all of them. A list is walked *by position* against a length read
+once, so a list that grows hides its new items from the walk and one that
+shrinks leaves the walk answering about items that are gone — and in both
+directions `is_valid` returned `True` for a value that is not a member. A
+**tuple** cannot be resized, so its arm keeps the plain iterator and pays
+nothing; a JSON array is owned by the parser and cannot move at all.
+
+The cost is one length read per element, which is a pointer dereference: the
+`large_array` shape of the comparative gate moved 0.881 to 0.886 against
+pydantic-core when the sequence guard landed.
+
 ## Recursion is guarded by value identity
 
 `check_ref` records `(object id, definition index)` on the path. A value that

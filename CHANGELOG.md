@@ -75,6 +75,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an integer key stays an integer in an error path
 - fix: the changelog ledger survives the window a release passes through -- internal
 - fix: an unanchored ignore rule hid the frontend's test module -- internal
+- fix: report a list that resizes under the walk, as a dict already is
 
 -->
 
@@ -490,6 +491,15 @@ answer of its own, or a repair to a change not yet released.
   not spellable one set at a time, which is what a whole-schema operation is.
 
 ### Fixed
+
+- A **list** that changes size while it is being checked is reported as
+  `mutated_during_validation`, as a dict, a set and a record already were. A
+  sequence is walked by position against a length read once, so a list grown by
+  a predicate — or, on a free-threaded interpreter, by another thread — hid its
+  new items from the walk, and one that shrank left the walk answering about
+  items that were gone. In both directions `is_valid` returned `True` for a
+  value that is not a member, and `ensure` handed that value back as checked. A
+  tuple cannot be resized and keeps the plain iterator.
 
 - A dict schema is not decided below the complement of a record it shares values
   with. Negating "no key of this part, other than the ones this atom names, maps

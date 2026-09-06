@@ -311,13 +311,19 @@ fn check_seq(
                 return seq_length_fail(len_code, kind_word, prefix, tail, value, path, ctx, out);
             }
             let mut ok = true;
-            for (i, item) in list.iter().enumerate() {
-                ok &= seq_element(prefix, tail, i, &Value::Py(&item), path, ctx, out);
+            let scan = scan_list(list, |i, item| {
+                ok &= seq_element(prefix, tail, i, &Value::Py(item), path, ctx, out);
                 if !ok && stop(ctx) {
-                    return false;
+                    ControlFlow::Break(())
+                } else {
+                    ControlFlow::Continue(())
                 }
+            });
+            match scan {
+                Scan::Complete => ok,
+                Scan::Stopped => false,
+                Scan::Unreadable => mutated(value, path, ctx, out),
             }
-            ok
         }
         (SeqKind::List, Value::Json(py, JsonValue::Array(items))) => {
             if !SeqArity::of(prefix.len(), tail).admits(items.len()) {
@@ -486,6 +492,47 @@ fn mutated(
         });
     }
     false
+}
+
+/// Visit a list's items by position, refusing when the list resizes underneath.
+///
+/// A sequence is walked by position against a length read once, so a list that
+/// grows past that length hides its new items from the walk and one that shrinks
+/// leaves the walk answering about items that are gone. Either way the reading
+/// covers no state the list was ever in, and `is_valid` returned `True` for a
+/// value that is not a member -- which the dict and set scans already refuse to
+/// do, on the same argument, for the same reason.
+///
+/// The count is read once and re-read before each item and after the last, which
+/// is [`scan_dict`]'s rule applied to positions instead of entries. A tuple needs
+/// none of this: it cannot be resized, so its arm walks the iterator directly.
+fn scan_list<'py>(
+    list: &Bound<'py, PyList>,
+    mut visit: impl FnMut(usize, &Bound<'py, PyAny>) -> ControlFlow<()>,
+) -> Scan {
+    with_critical_section(list.as_any(), || {
+        let items = list.len();
+        let mut iter = list.iter();
+        let mut seen = 0;
+        while seen < items {
+            if list.len() != items {
+                return Scan::Unreadable;
+            }
+            let Some(item) = iter.next() else {
+                break;
+            };
+            let at = seen;
+            seen += 1;
+            if visit(at, &item).is_break() {
+                return Scan::Stopped;
+            }
+        }
+        if list.len() == items {
+            Scan::Complete
+        } else {
+            Scan::Unreadable
+        }
+    })
 }
 
 /// Visit a dict's entries, refusing rather than panicking when the dict changes
