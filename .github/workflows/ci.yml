@@ -224,6 +224,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The floor leg carries the project's own audit, and one of those
+          # checks holds the changelog roll to `git log` since the last release
+          # tag. A shallow clone cannot see back that far, so that ledger skips
+          # where it cannot read -- and it would then skip everywhere. This leg
+          # takes the whole history so it runs somewhere, and
+          # `tests/test_changelog_ledger.py` holds the depth here. Quoted,
+          # because `0` is falsy in a workflow expression and an unquoted
+          # `&& 0 || 1` is always 1.
+          fetch-depth: ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10') && '0' || '1' }}
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
         with:
           toolchain: stable

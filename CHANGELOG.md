@@ -6,19 +6,188 @@ All notable changes to valgebra are recorded here. The format follows
 
 ## [Unreleased]
 
-### Fixed
+<!-- changelog-roll
 
-- **`open` and `close` are functions on sets.** `{"a?": nothing}` and `{}` admit
-  exactly the empty dict — the field allows the key to be absent and admits no
-  value for it, which is what a closed record already says of every key it does
-  not name — yet `.open()` gave them different sets. The redundant field is now
-  read away first, so equal records open to equal records. Two consequences a
-  caller may see: `Validator({}).open()` now admits every dict, where it used to
-  be left alone (having no field never made `{}` a mapping — a clause and no
-  field does), and a record carrying a field its own clauses already cover loses
-  that field when opened or closed.
+Every feat/fix commit this section accounts for, oldest first; held to
+`git log` by tests/test_changelog_ledger.py. `-- internal` marks a commit
+a caller cannot see: a step of the set representation that changed no
+answer of its own, or a repair to a change not yet released.
+
+- fix: let a validation failure cross a process boundary
+- fix: name a union's branches by what they accept
+- feat: decide a literal against another kind
+- feat: decide a fixed-length sequence that splits across union branches
+- feat: decide an empty meet of two record schemas
+- feat: cancel a double complement where the schema is built
+- fix: bound the levels the membership walk holds open
+- fix: report a container that changes under the walk
+- fix: resolve a recursive marker wherever the build puts it
+- fix: divide by the modulo operator, not the value's dunder
+- fix: narrow a product component without writing at an index
+- feat: read an unpacked variadic tuple as the shape it names
+- fix: refuse a forward reference where a type argument belongs
+- fix: check a class for the attributes it declares
+- fix: compare a pooled constant by its type as well as its value
+- fix: refuse a refinement marker that would otherwise be dropped
+- fix: report a set's failures in an order the value fixes
+- feat: ask both rules where both of them apply
+- feat: the descriptor, and the three operations it is closed under -- internal
+- feat: integer intervals, as the layer an integer set is built from -- internal
+- feat: integers as an interval set per residue class -- internal
+- feat: floats as intervals over the ordered line, and a bit for nan -- internal
+- feat: strings and bytes as regular languages -- internal
+- feat: sequences as an automaton guarded by value sets -- internal
+- feat: lists and tuples as automata over descriptors -- internal
+- feat: sets as a powerset over a descriptor -- internal
+- feat: objects as open records over their attributes -- internal
+- feat: classes as an order the core carries rather than asks for -- internal
+- feat: one emptiness verdict, with a third answer for the open world -- internal
+- feat: lower the schema fragment the descriptor can hold -- internal
+- feat: decide by emptiness of the difference where the descriptor can -- internal
+- feat: refuse the complement law over an atom that is not a set
+- fix: withdraw the descriptor from the public relations -- internal
+- feat: a sequence's length is what it holds
+- feat: a meet cancelling to nothing is nothing
+- feat: Any is the top, spelled
+- feat: a class and an attribute record are a line of the kind -- internal
+- feat: dicts as map atoms with a default per key kind -- internal
+- feat: a field and a literal key are one label -- internal
+- feat: refuse a map key schema narrowed by a constraint
+- feat: read a TypedDict as the typing spec defines it
+- fix: open and close read the labels on the semantic dom
+- feat: the descriptor reads a class through the object pool -- internal
+- feat: a constant is a value, not an object
+- feat: a descriptor build spends a work budget -- internal
+- feat: say what the compiled surface is
+- feat: publish the construction limits where a caller can read them
+- fix: a negated wanted key leaves the keys it excludes alone
+- fix: render a schema as an expression that rebuilds it
+
+-->
+
+### Added
+
+- **Schemas compare as sets.** Each kind of value carries a representation
+  closed under union, intersection and complement — integers as interval sets per
+  residue class, floats as intervals over the ordered line with a bit for `nan`,
+  strings and bytes as regular languages, sequences as automata over value sets,
+  sets as powerset lines, dicts as map atoms with a default per key kind, classes
+  as an order, objects as records over their attributes — so `a <= b` is asked
+  as `a & ~b` admitting no value, which is what the relation means. Where the
+  structural rules decline, that question is asked and answered:
+
+  ```python
+  from typing import Annotated, Literal
+
+  import annotated_types as at
+
+  from valgebra import Regex, Validator, complement, intersection
+
+  assert Validator(Annotated[str, Regex("a")]).is_subtype_of(Annotated[str, Regex("ab?")])
+  assert Validator(Annotated[int, at.MultipleOf(4)]).is_subtype_of(
+      Annotated[int, at.MultipleOf(2)]
+  )
+  assert Validator(bool).is_subtype_of(Literal[True, False])
+  assert Validator(bool).is_subtype_of(Annotated[int, at.Ge(0)])
+  assert Validator({"a": int}).is_subtype_of(dict[Literal["a"], int])
+  assert intersection(list[int], list[str]).is_subtype_of([])
+  assert Validator(tuple[int]).is_subtype_of(complement(tuple[str]))
+  ```
+
+  Container meets, double complements, one regular language inside another, a
+  kind against its own literals, one step dividing another, and the emptiness of
+  a dict schema are decided this way. Twenty-five relations that answered `False`
+  answer `True`, and the same shape written any other way is decided alike: a
+  respelling such as `union(A, complement(union(A, nothing)))` is the universe.
+
+  Building a set representation costs about two orders of magnitude more than a
+  rule that already answers, so it is asked only where the rules decline, and
+  only for a schema it can build within a bound on the nodes it reads, the
+  nesting it descends and the work it spends. Past any of those the answer is the
+  conservative one, as before. What stays conservative is recursion, a length
+  bound over a shape that is not text, an attribute record beside a builtin kind,
+  and a predicate.
+
+- The three construction bounds are importable: `MAX_SCHEMA_DEPTH`,
+  `MAX_DEFINITIONS` and `MAX_SCHEMA_NODES` are exported from `valgebra` and
+  listed in `__all__`, so code sizing a schema against a bound reads the number
+  rather than repeating it.
+
+- A class with declared attributes is the meet of its `isinstance` atom and a
+  record of its attributes, and each half is a set the algebra relates on its
+  own: an object schema is below its own class, an attribute record relates to
+  another by width and depth whatever class it came from, and a record whose
+  required attribute admits nothing is decided empty *and* one whose attributes
+  are inhabited is decided inhabited — which the class half, being opaque, used
+  to take away. The surface is unchanged: `repr(Validator(Point))` is `Point`, a
+  union names the class in its branch list, and a value of the wrong class
+  reports one `instance_type` violation.
+
+- An `intersection` stops collecting violations once a member rejects the value
+  itself rather than something inside it, the rule `Annotated[...]` already
+  applied between a base and its constraints. A member that fails inside the
+  value leaves the others meaningful and they are still collected.
+
+- Widening a literal union is decided by containment rather than by the product
+  of the two member counts, so a table whose members are the same constants as
+  the wider one's relates at any size. Constants pool by value, so two tables
+  written independently share theirs and relate the same way.
+
+- `~~A` is `A`, a union carrying a schema together with its complement is the
+  top, and a meet of that pair is the bottom, all settled where the schema is
+  built. The decision procedure has no rule for these shapes and does not meet
+  one built through the constructors; a shape built another way — a recursive
+  definition, a respelling, constants equal but not identical — reaches the
+  procedure and is not decided. `repr`, `==`, and the code a violation reports
+  follow the cancelled form: `complement(complement(int))` reports `int_type`
+  where it reported `unexpected_match`, and `intersection(int, complement(int))`
+  reports `no_match` naming `nothing`. A predicate and a class with an
+  `isinstance` hook are exempt from the two cancelling folds: the law is about
+  sets, and an atom that answers by running code is not one.
+
+- A meet of two record schemas is decided empty when a key one side requires
+  cannot hold — because the types the two give it share no value, or because the
+  other side is closed and does not declare it. `{"a": int} & {"a": str}` is
+  empty, and so `{"a": int}` is below `~{"a": str}`. Only a required key empties
+  a meet: two mappings, or two optional fields, always admit the empty dict.
+
+- A fixed-length sequence is decided against a union of fixed-length sequences
+  it splits across, where no single branch contains it: `tuple[int | str, int]`
+  is below `tuple[int, int] | tuple[str, int]`. The rule needs a fixed component
+  count, so a homogeneous or variadic sequence is not decomposed, and branches of
+  another container or arity drop out rather than blocking it.
+
+- A literal carries the kind of its constant, so it is decided against another
+  kind: `Literal["a"]` is below `~int`, and `Literal["a"] & Literal["b"]` is
+  empty. `Literal[1]` and `Literal[True]` are disjoint although `1 == True`,
+  because a literal pins `type(x)` exactly. The rule applies to the builtin
+  scalars, whose equality is Python's own; a meet of two `Enum` members stays
+  conservative, since user-defined equality can admit one value for two
+  constants.
+
+- A recursive schema is decided below its own body written out, and a refinement
+  of a union below that union: `recursive(lambda t: union(None, {"next": t}))` is
+  a subtype of `union(None, {"next": <that schema>})`, and
+  `Annotated[int | str, Ge(0)]` of `int | str`. Trying a union's branches one by
+  one commits to a branch, and a subject that lands in the union only once a
+  reference is unfolded or a refinement drops to its base got no answer from it.
+  Both rules are sound alone, so where both apply both are asked.
+
+- Every `ValidationError` carries the six attributes the error model documents,
+  however it was made. The model describes failures and an error built by hand
+  reports none, so it reads as empty — empty strings and empty tuples — rather
+  than raising `AttributeError` for an attribute the type declares.
 
 ### Changed
+
+- **Every argument the compiled surface takes is positional.** `Validator`, the
+  combinators, and every method on a validator declare their parameters
+  positional-only, matching the stub that already wrote them that way: a call
+  naming one — `v.is_valid(obj=x)`, `Validator(schema=int)`,
+  `complement(schema=int)` — raises `TypeError`. `fail_fast` is the one keyword
+  the surface takes and it is keyword-only, as before. A stub that permits a
+  keyword the extension refuses type-checks code that cannot run, and the two
+  disagreed in nine places.
 
 - **A `TypedDict` is open**, which is the set the typing spec assigns it: a dict
   carrying keys the class does not name is admitted, and the keys it does name
@@ -56,72 +225,32 @@ All notable changes to valgebra are recorded here. The format follows
   Membership is unchanged: `Any` admitted every value before and admits every
   value now.
 
-### Added
+- A constant is a value rather than an object. Two equal builtin scalars built
+  separately — two `"code_00042"` strings read from different files — pool into
+  one constant, where pooling by object identity made them two and left a schema
+  mentioning both with two nodes no rule could see as one. The rule is a
+  literal's own: same exact type, and equal. `Literal[1]` and `Literal[True]`
+  stay two constants because the types differ; `Literal[0.0]` and
+  `Literal[-0.0]` are one, because the values are equal and the sign of zero is
+  not part of either; a `nan` and an integer too wide for the key pool by
+  identity, since `nan` equals nothing at all and a wide integer has no key. Two
+  independently written thousand-member tables relate at any size as a result.
 
-- A class with declared attributes is the meet of its `isinstance` atom and a
-  record of its attributes, and each half is a set the algebra relates on its
-  own: an object schema is below its own class, an attribute record relates to
-  another by width and depth whatever class it came from, and a record whose
-  required attribute admits nothing is decided empty *and* one whose attributes
-  are inhabited is decided inhabited — which the class half, being opaque, used
-  to take away. The surface is unchanged: `repr(Validator(Point))` is `Point`, a
-  union names the class in its branch list, and a value of the wrong class
-  reports one `instance_type` violation.
+- `repr` renders an expression that rebuilds the schema. Three forms rendered
+  something that either was not Python or was Python that builds a *different*
+  schema: a recursive schema showed its back edge as `...`, an open record showed
+  its catch-all as `...`, and both read back as `Literal[Ellipsis]`, an ordinary
+  dict key; the nullary product printed `tuple[]`, which is not an expression.
+  They render as `recursive(lambda X: {'v': int, 'n?': X})`,
+  `{'name': str, anything: anything}` and `tuple[()]`. Two forms remain a
+  rendering rather than a round trip, because neither is syntax: a class prints
+  its name and a predicate prints `Predicate(...)`.
 
-- An `intersection` stops collecting violations once a member rejects the value
-  itself rather than something inside it, the rule `Annotated[...]` already
-  applied between a base and its constraints. A member that fails inside the
-  value leaves the others meaningful and they are still collected.
-
-- Widening a literal union is decided by containment rather than by the product
-  of the two member counts, so a table whose members are *the same constants* as
-  the wider one's relates at any size. Two tables written independently pool
-  their constants separately, and those still meet the decision budget above
-  roughly a thousand members, which the completeness ledger records.
-
-- `~~A` is `A`, a union carrying a schema together with its complement is the
-  top, and a meet of that pair is the bottom, all settled where the schema is
-  built. The decision procedure has no rule for these shapes and does not meet
-  one built through the constructors; a shape built another way — a recursive
-  definition, a respelling, constants equal but not identical — reaches the
-  procedure and is not decided. `repr`, `==`, and the code a violation reports
-  follow the cancelled form: `complement(complement(int))` reports `int_type`
-  where it reported `unexpected_match`, and `intersection(int, complement(int))`
-  reports `no_match` naming `nothing`. A predicate and a class with an
-  `isinstance` hook are exempt from the two cancelling folds: the law is about
-  sets, and an atom that answers by running code is not one.
-
-- A meet of two record schemas is decided empty when a key one side requires
-  cannot hold — because the types the two give it share no value, or because the
-  other side is closed and does not declare it. `{"a": int} & {"a": str}` is
-  empty, and so `{"a": int}` is below `~{"a": str}`. Only a required key empties
-  a meet: two mappings, or two optional fields, always admit the empty dict.
-
-- A fixed-length sequence is decided against a union of fixed-length sequences
-  it splits across, where no single branch contains it: `tuple[int | str, int]`
-  is below `tuple[int, int] | tuple[str, int]`. The rule needs a fixed component
-  count, so a homogeneous or variadic sequence is not decomposed, and branches of
-  another container or arity drop out rather than blocking it.
-
-- A literal carries the kind of its constant, so it is decided against another
-  kind: `Literal["a"]` is below `~int`, and `Literal["a"] & Literal["b"]` is
-  empty. `Literal[1]` and `Literal[True]` are disjoint although `1 == True`,
-  because a literal pins `type(x)` exactly. The rule applies to the builtin
-  scalars, whose equality is Python's own; a meet of two `Enum` members stays
-  conservative, since user-defined equality can admit one value for two
-  constants.
-
-### Added
-
-- A recursive schema is decided below its own body written out, and a refinement
-  of a union below that union: `recursive(lambda t: union(None, {"next": t}))` is
-  a subtype of `union(None, {"next": <that schema>})`, and
-  `Annotated[int | str, Ge(0)]` of `int | str`. Trying a union's branches one by
-  one commits to a branch, and a subject that lands in the union only once a
-  reference is unfolded or a refinement drops to its base got no answer from it.
-  Both rules are sound alone, so where both apply both are asked.
-
-### Changed
+- A validator names the package it is imported from. `Validator.__module__` is
+  `valgebra` rather than the private extension underneath, which the API
+  reference reserves the right to rename and tells callers not to import; the
+  class is `final`, which it was already at runtime, and the annotation says so
+  to a type checker.
 
 - A list or tuple counts one level of the construction depth bound, not two, so a
   schema can nest twice as deep before the bound refuses it: a chain of 128
@@ -158,6 +287,36 @@ All notable changes to valgebra are recorded here. The format follows
   route to deciding each. No answer changed; nothing was found unsound.
 
 ### Fixed
+
+- A dict schema is not decided below the complement of a record it shares values
+  with. Negating "no key of this part, other than the ones this atom names, maps
+  anywhere" tightened that part's default, and a default governs every key the
+  atom does not name — the excluded ones included — so a record complemented
+  twice came back forbidding the key it is about, and `dict[str, int]` was
+  decided a subtype of `~{"a": int}` although `{"a": 1}` is in both.
+
+- A numeric bound orders the booleans as well as the integers. `bool` is a kind
+  of its own to the set representation and `int` denotes both, so a bound lowered
+  as a set of integers alone denoted less than the schema does — and a smaller
+  set has a larger complement, which is a subtype proof no value supports. A
+  bound over a base that is not whole numbers, `Annotated[float, Gt(0), Lt(1)]`
+  among them, is left to the structural rules rather than narrowed to integers.
+
+- Two plain classes are not decided disjoint. A class built on no builtin lays
+  down no instance layout of its own, and reading two such classes as laying down
+  *different* layouts made them share no value — though `class Both(A, B)` builds
+  and its instances are in both. A layout conflict, which Python refuses to build
+  a class across, still decides the pair.
+
+- **`open` and `close` are functions on sets.** `{"a?": nothing}` and `{}` admit
+  exactly the empty dict — the field allows the key to be absent and admits no
+  value for it, which is what a closed record already says of every key it does
+  not name — yet `.open()` gave them different sets. The redundant field is now
+  read away first, so equal records open to equal records. Two consequences a
+  caller may see: `Validator({}).open()` now admits every dict, where it used to
+  be left alone (having no field never made `{}` a mapping — a clause and no
+  field does), and a record carrying a field its own clauses already cover loses
+  that field when opened or closed.
 
 - A set reports its failing elements in an order the value fixes rather than the
   one the interpreter hands them over in, which moves with the hash seed. A set
