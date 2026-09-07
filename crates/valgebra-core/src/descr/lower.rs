@@ -16,6 +16,7 @@
 
 use super::budget;
 use super::classes::Class;
+use super::floats::FloatSet;
 use super::maps::{KEY_KINDS, Label};
 use super::{BoolSet, Descr, integers::IntSet};
 use crate::decision::Kind;
@@ -449,7 +450,61 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
         );
         Some(descr)
     };
+    // The same shape for a float base. A bound on a float was refused outright,
+    // so every relation needing the descriptor and mentioning `Annotated[float,
+    // Gt(0)]` stayed undecided -- which was every one of the eighteen the random
+    // sweep reported as an undecided corpus-true subtype.
+    //
+    // **Refuses unless the base is floats and nothing else**, for the reason the
+    // integer side refuses: narrowing a wider base to a set of floats gives a
+    // smaller set than the schema denotes, and a smaller set has a larger
+    // complement. `nan` is outside every interval, which is what `FloatSet`'s
+    // constructors already say and what Python's own comparisons do.
+    let floats = |set: FloatSet| {
+        if !base
+            .intersect(&Descr::of_kind(Kind::Float).complement())?
+            .is_empty()
+        {
+            return None;
+        }
+        let mut descr = Descr::nothing();
+        descr.floats(set);
+        Some(descr)
+    };
+    // A bound's operand is whatever the caller wrote: `Annotated[float, Gt(0)]`
+    // carries the *integer* zero, and it orders the floats all the same. So the
+    // side a bound lands on is chosen by the **base**, not by the operand's own
+    // type, and the operand is read as a number either way.
+    let as_float = |index: &OperandIx| match pool.operand(*index) {
+        Some(Operand::Float(value)) => Some(value),
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "a bound past 2^53 rounds to the nearest float, which is the \
+                      comparison Python makes for the same pair"
+        )]
+        Some(Operand::Integer(value)) => Some(value as f64),
+        _ => None,
+    };
+    let base_is_floats = base
+        .intersect(&Descr::of_kind(Kind::Float).complement())
+        .is_some_and(|rest| rest.is_empty());
     match constraint {
+        Constraint::Ge(index) | Constraint::Gt(index) if base_is_floats => {
+            let bound = as_float(index)?;
+            floats(if matches!(constraint, Constraint::Gt(_)) {
+                FloatSet::above(bound)
+            } else {
+                FloatSet::at_least(bound)
+            })
+        }
+        Constraint::Le(index) | Constraint::Lt(index) if base_is_floats => {
+            let bound = as_float(index)?;
+            floats(if matches!(constraint, Constraint::Lt(_)) {
+                FloatSet::below(bound)
+            } else {
+                FloatSet::at_most(bound)
+            })
+        }
         Constraint::Ge(index) | Constraint::Gt(index) => {
             let Operand::Integer(bound) = pool.operand(*index)? else {
                 return None;
@@ -775,18 +830,81 @@ mod tests {
         assert!(below_one.admits(Value::boolean(false)));
         assert!(!below_one.admits(Value::boolean(true)));
 
-        // And a bound over a base that is *not* whole numbers refuses rather
-        // than narrowing it to a set of them.
+        // A bound over a **float** base lands in the float component instead,
+        // with the operand read as a number: `Annotated[float, Ge(0)]` carries
+        // the integer zero and orders the floats all the same. Narrowing a float
+        // base to a set of *integers* is what would be unsound, and that is not
+        // what happens.
+        // The pool's only operand is the integer 1, so this is "float >= 1".
+        let floats_at_least_one = lower(
+            &Schema::Refine {
+                base: Box::new(Schema::Float),
+                constraints: vec![Constraint::Ge(OperandIx::new(0))],
+            },
+            &pool,
+        )
+        .expect("a bound over floats lowers");
+        assert!(floats_at_least_one.admits(Value::float(1.0)));
+        assert!(floats_at_least_one.admits(Value::float(1.5)));
+        assert!(!floats_at_least_one.admits(Value::float(0.5)));
+        assert!(!floats_at_least_one.admits(Value::float(-1.0)));
+        // `nan` is outside every interval, which is the comparison Python makes.
+        assert!(!floats_at_least_one.admits(Value::float(f64::NAN)));
+        // And it is floats and nothing else: the integer 1 is not in it.
+        assert!(!floats_at_least_one.admits(Value::integer(1)));
+
+        // A base that is neither whole numbers nor floats alone still refuses,
+        // for the reason both sides refuse: narrowing it to one component gives
+        // a smaller set than the schema denotes, and a smaller set has a larger
+        // complement.
         assert!(
             lower(
                 &Schema::Refine {
-                    base: Box::new(Schema::Float),
+                    base: Box::new(Schema::ANYTHING),
                     constraints: vec![Constraint::Ge(OperandIx::new(0))],
                 },
                 &pool,
             )
             .is_none()
         );
+    }
+
+    /// A bound over floats reads a float operand, and reads both directions.
+    ///
+    /// The test above writes the bound as `Annotated[float, Ge(1)]`, whose
+    /// operand is the *integer* one; this writes the one a caller reaches for
+    /// more often, `Ge(1.5)`, whose fractional part is the whole difference --
+    /// read as an integer it would round, and `1.25` would land inside a set
+    /// that excludes it. The upper direction is a separate arm from the lower,
+    /// and a reading that carried only one of them refuses the other, leaving
+    /// the relation undecided where the schema is perfectly ordinary.
+    #[test]
+    fn a_float_bound_is_read_as_a_float_in_both_directions() {
+        let pool = Pool(vec![Operand::Float(1.5)]);
+        let bounded = |constraint| {
+            lower(
+                &Schema::Refine {
+                    base: Box::new(Schema::Float),
+                    constraints: vec![constraint],
+                },
+                &pool,
+            )
+            .expect("a bound over floats lowers")
+        };
+
+        let at_least = bounded(Constraint::Ge(OperandIx::new(0)));
+        assert!(at_least.admits(Value::float(1.5)));
+        assert!(!at_least.admits(Value::float(1.25)), "1.5 is not 1");
+        let above = bounded(Constraint::Gt(OperandIx::new(0)));
+        assert!(above.admits(Value::float(1.75)) && !above.admits(Value::float(1.5)));
+
+        let at_most = bounded(Constraint::Le(OperandIx::new(0)));
+        assert!(at_most.admits(Value::float(1.5)) && at_most.admits(Value::float(0.0)));
+        assert!(!at_most.admits(Value::float(1.75)));
+        // `nan` is outside every interval, on this side as on the other.
+        assert!(!at_most.admits(Value::float(f64::NAN)));
+        let below = bounded(Constraint::Lt(OperandIx::new(0)));
+        assert!(below.admits(Value::float(1.25)) && !below.admits(Value::float(1.5)));
     }
 
     /// A step is the constraint no union of intervals can spell, and it meets

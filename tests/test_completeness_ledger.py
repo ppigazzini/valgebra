@@ -286,6 +286,40 @@ _DECIDED = [
         [],
         id="MaxLen(0)list[int]==[]",
     ),
+    # A bound over floats is a set of floats, so the descriptor holds it and the
+    # relations that turn on one are decided. Which side a bound lands on is
+    # chosen by the *base*: `Annotated[float, Gt(0)]` carries the integer zero
+    # and orders the floats all the same.
+    pytest.param(
+        "empty",
+        intersection(Annotated[float, at.Gt(0)], int),
+        None,
+        id="empty:float>0&int",
+    ),
+    pytest.param(
+        "empty",
+        intersection(Annotated[float, at.Gt(0)], Annotated[float, at.Lt(0)]),
+        None,
+        id="empty:float>0&float<0",
+    ),
+    pytest.param(
+        "empty",
+        intersection(str, Annotated[float, at.Gt(0)]),
+        None,
+        id="empty:str&float>0",
+    ),
+    pytest.param(
+        "subtype",
+        Annotated[float, at.Gt(0)],
+        Annotated[float, at.Gt(-1)],
+        id="float>0<=float>-1",
+    ),
+    pytest.param(
+        "empty",
+        Annotated[float, at.Gt(float("inf"))],
+        None,
+        id="empty:float>inf",
+    ),
     pytest.param("subtype", bytes, complement(_JSON), id="bytes<=~json"),
     # A fixpoint beside its own complement. Two occurrences of one recursive
     # schema used to compile to two definitions, so the fold that cancels a

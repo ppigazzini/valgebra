@@ -90,6 +90,13 @@ conservative](#sound-but-conservative)).
   on one refinement, or across an intersection whose members bound it, since an
   intersection is a subset of every member. A `bool` base counts too, because it
   subclasses `int`; a `float` base stays dense, so the same bounds are not empty.
+  A bound over a **float** base is a set of floats and is decided as one: which
+  side a bound lands on is chosen by the base rather than by the operand's type,
+  so `Annotated[float, Gt(0)]` carries the integer zero and still orders the
+  floats. `nan` is outside every interval, which is the comparison Python makes.
+  A base that is neither the whole numbers nor the floats alone stays undecided,
+  because narrowing it to one component would give a smaller set than the schema
+  denotes.
 - **Sequences.** Homogeneous, fixed-length, and prefix-plus-tail lists and tuples,
   with the container as part of the type (a list is never a tuple). Every sequence
   schema valgebra builds takes this linear shape, so inclusion *between two

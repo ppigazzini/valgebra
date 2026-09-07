@@ -749,6 +749,15 @@ impl Descr {
         self.put(Kind::Int, Component::Integers(set));
     }
 
+    /// Put a float set in the `float` slot, leaving every other kind empty.
+    ///
+    /// Beside [`integers`](Self::integers), for a bound that orders floats. The
+    /// two cannot be folded together: a float bound orders `nan` out of every
+    /// side of itself, and an integer bound says nothing about a float at all.
+    pub fn floats(&mut self, set: FloatSet) {
+        self.put(Kind::Float, Component::Floats(set));
+    }
+
     /// Put a boolean set in the `bool` slot, leaving every other kind empty.
     ///
     /// Beside [`integers`](Self::integers) and for the same caller: `bool` is a

@@ -91,10 +91,23 @@ answer of its own, or a repair to a change not yet released.
 - fix: take the version from the crate, not from the metadata reader
 - fix: decide two sets of literals as sets, not pair by pair
 - fix: a ledger plant that judges nothing is not a miss -- internal
+- feat: a bound over floats is a set the descriptor can hold
 
 -->
 
 ### Added
+
+- Relations over a bound on a **float** are decided. A bound was lowered into
+  the descriptor only over whole numbers, so anything needing the descriptor and
+  mentioning `Annotated[float, Gt(0)]` stayed undecided: `float > 0` was not
+  known to be below `float`, nor disjoint from `int`, nor from `float < 0`. A
+  float bound is now a set of floats, with the side chosen by the *base* rather
+  than by the operand's type — `Gt(0)` carries the integer zero and orders the
+  floats all the same — and `nan` sits outside every interval, as Python's own
+  comparisons put it. Over the 6,000-pair random sweep the undecided
+  corpus-true subtypes fall from 18 to 7 and the undecided emptinesses from 5
+  to 1, with no relation refuted by a value.
+
 
 - **Schemas compare as sets.** Each kind of value carries a representation
   closed under union, intersection and complement — integers as interval sets per
