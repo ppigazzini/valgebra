@@ -90,6 +90,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the merge base is never the commit being measured -- internal
 - fix: take the version from the crate, not from the metadata reader
 - fix: decide two sets of literals as sets, not pair by pair
+- fix: a ledger plant that judges nothing is not a miss -- internal
 
 -->
 
