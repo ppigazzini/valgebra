@@ -34,6 +34,15 @@ A step that needs a runner (a PGO wheel, valgrind, a mutation sweep, a second
 interpreter) is named with the reason instead, and `tests/test_local_gate.py`
 holds that list to the workflow in both directions.
 
+Three of the excused steps need only what a developer's machine already has --
+the dependency sync, the extension build, and the stub check that needs both --
+and lending the caller's virtual environment to the clone was tried so they
+could run. It is **reverted and recorded**: `uv run` inside the clone *writes*
+the environment it is pointed at, and doing so uninstalled the built extension
+and the bench group from the tree being worked in. A gate that damages the
+environment it checks is worse than one that names three steps, so each now
+carries that cost as its reason rather than "the caller has already run it".
+
 A step is **accounted for** when it is in the plan the gate builds or named in
 `NEEDS_A_RUNNER`, and the ledger asks it of the plan. Asking it of "is this name
 excused" instead was a contradiction that no workflow could fail, and underneath

@@ -91,11 +91,25 @@ NEEDS_A_RUNNER = {
     "Cross-check membership against pydantic-core and jsonschema": (
         "needs the bench group installed above"
     ),
+    # These three were the candidates for running here rather than being named,
+    # since a developer's machine has what they need. Lending the caller's
+    # environment to the clone -- `UV_PROJECT_ENVIRONMENT` at the caller's
+    # `.venv` -- was tried and reverted: `uv run` in the clone *wrote* that
+    # environment, uninstalling the built extension and the bench group from the
+    # tree the developer was working in. A gate that damages the environment it
+    # is checking is worse than one that skips three steps, so the excuse is now
+    # the cost rather than the assumption.
     "Build the extension into the venv": (
-        "maturin develop, which the caller has already run"
+        "maturin develop into the clone is a full rebuild; into the caller's "
+        "environment it overwrites what the caller built"
     ),
-    "Install dev dependencies": "uv sync, which the caller has already run",
-    "Stub matches the extension": "needs the built extension in the venv",
+    "Install dev dependencies": (
+        "uv sync into the clone resolves the whole tree; into the caller's "
+        "environment it rewrites what the caller installed"
+    ),
+    "Stub matches the extension": (
+        "needs the built extension, so it needs one of the two above"
+    ),
     "A caller's strict types, on the floor and on the current": (
         "needs both interpreters installed"
     ),
