@@ -22,18 +22,22 @@ fn violation(code: &'static str, path: Vec<PathSegment>) -> Violation {
 #[should_panic(expected = "into_pyerr needs a failure")]
 fn an_empty_violation_list_trips_the_debug_assert() {
     Python::attach(|py| {
-        let _ = into_pyerr(py, &[]);
+        let _ = into_pyerr(py, Vec::new());
     });
 }
 
 #[test]
 fn into_pyerr_maps_violations_to_the_structured_attributes() {
     Python::attach(|py| {
+        // The six are built by the hooks, which the module installs on import.
+        // Nothing imports the module here, so this test installs them itself --
+        // through the same function, so what it reads is what a caller reads.
+        install_lazy_attributes(py).expect("the hooks the module installs");
         let violations = vec![
             violation("int_type", vec![PathSegment::Key("a".to_owned())]),
             violation("missing", vec![PathSegment::Index(2)]),
         ];
-        let err = into_pyerr(py, &violations);
+        let err = into_pyerr(py, violations);
         let value = err.value(py);
 
         // The scalar attributes mirror the first violation; the path is the

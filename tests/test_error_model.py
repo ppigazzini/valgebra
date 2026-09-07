@@ -1,4 +1,6 @@
+import copy
 import json
+import pickle
 
 import pytest
 
@@ -118,3 +120,94 @@ def test_a_key_that_is_neither_a_string_nor_an_integer_is_named_not_spelled() ->
     with pytest.raises(ValidationError) as info:
         Validator(dict[str, int]).validate({"2": "x"})
     assert info.value.errors[0]["path"] == ("2",)
+
+
+def test_the_error_model_is_built_when_it_is_asked_for() -> None:
+    """A caller that logs `str(error)` should not pay for the whole model.
+
+    Populating the six documented attributes at raise time cost a dict per
+    violation, a path per violation and six attribute writes -- and a report
+    over 10,000 failing rows spent 26 ms of it whether or not anybody read a
+    row. The failures are carried in Rust and the attributes are built by the
+    first access that asks, so what a caller does not read is not built.
+
+    Observable rather than timed: the value is on the instance once it has been
+    read, and absent before.
+    """
+    with pytest.raises(ValidationError) as info:
+        Validator({"a": int}).validate({"a": "x"})
+    error = info.value
+
+    # Nothing built yet, and the carried failures are the reason.
+    assert "code" not in vars(error)
+    assert "errors" not in vars(error)
+
+    assert error.code == "int_type"
+    assert "code" in vars(error), "the built value is cached on the instance"
+    assert "errors" not in vars(error), "and only what was asked for is built"
+
+    assert len(error.errors) == 1
+    assert "errors" in vars(error)
+    # A second read is the same object, not a second build.
+    assert error.errors is error.errors
+
+
+def test_every_documented_attribute_answers_after_the_change() -> None:
+    with pytest.raises(ValidationError) as info:
+        Validator({"a": int, "b": str}).validate({"a": "x", "b": 1})
+    error = info.value
+    assert error.code == "int_type"
+    assert error.path == ("a",)
+    assert error.message == "at a: expected int, got 'x' [int_type]"
+    assert error.expected == "int"
+    assert error.value == "'x'"
+    assert len(error.errors) == 2
+    assert str(error).startswith("2 validation errors:")
+
+
+def test_an_error_built_by_hand_reports_an_empty_model() -> None:
+    """The model describes *failures*, and one built by hand has none.
+
+    Class defaults used to say this. They cannot now -- a default makes ordinary
+    lookup succeed, so the hook that builds the attributes would never run -- so
+    the empty answers come from the hook instead, and the type keeps one shape.
+    """
+    hand = ValidationError("built by hand")
+    assert hand.code == ""
+    assert hand.path == ()
+    assert hand.message == ""
+    assert hand.expected == ""
+    assert hand.value == ""
+    assert hand.errors == ()
+    assert str(hand) == "built by hand"
+
+
+def test_an_attribute_the_model_does_not_have_is_still_an_attribute_error() -> None:
+    """The hook answers six names; everything else must fall through."""
+    with pytest.raises(ValidationError) as info:
+        Validator(int).validate("x")
+    with pytest.raises(AttributeError, match="nonesuch"):
+        _ = info.value.nonesuch  # ty: ignore[unresolved-attribute]
+
+
+def test_the_model_survives_a_process_boundary() -> None:
+    """Pickling carries the built data, not the Rust object behind it."""
+    with pytest.raises(ValidationError) as info:
+        Validator({"a": int, "b": str}).validate({"a": "x", "b": 1})
+    error = info.value
+
+    restored = pickle.loads(pickle.dumps(error))  # noqa: S301
+    assert restored.errors == error.errors
+    assert restored.code == error.code
+    assert restored.path == error.path
+    assert str(restored) == str(error)
+    # And the carrier does not travel: what crossed is the plain model.
+    assert "_failures" not in vars(restored)
+
+
+def test_copying_an_error_keeps_the_model() -> None:
+    with pytest.raises(ValidationError) as info:
+        Validator({"a": int}).validate({"a": "x"})
+    error = info.value
+    assert copy.copy(error).errors == error.errors
+    assert copy.deepcopy(error).code == error.code

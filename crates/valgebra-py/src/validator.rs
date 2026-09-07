@@ -959,7 +959,7 @@ impl Validator {
         if ok {
             Ok(())
         } else {
-            Err(into_pyerr(obj.py(), &violations))
+            Err(into_pyerr(obj.py(), violations))
         }
     }
 

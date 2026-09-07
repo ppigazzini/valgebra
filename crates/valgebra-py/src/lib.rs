@@ -27,6 +27,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyList, PyTuple};
 use valgebra_core::{DefIx, Guarded, Schema, SeqKind, SeqShape, fresh_self_token};
 
+use crate::errors::install_lazy_attributes;
 pub use crate::exception::ValidationError;
 pub use crate::validator::Validator;
 
@@ -196,17 +197,16 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     // each other rather than trusting that.
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     let failure = py.get_type::<ValidationError>();
-    // The structured model describes *failures*, and an error built by hand has
-    // none. Class defaults are what make that the honest answer rather than an
-    // `AttributeError`: every instance carries the six attributes the model
-    // documents, a raised one shadowing them per instance with the failure it
-    // reports. Without these the type has two shapes and the stub describes one.
-    failure.setattr("code", "")?;
-    failure.setattr("path", PyTuple::empty(py))?;
-    failure.setattr("message", "")?;
-    failure.setattr("expected", "")?;
-    failure.setattr("value", "")?;
-    failure.setattr("errors", PyTuple::empty(py))?;
+    // The six documented attributes are built on the access that asks for one,
+    // from the failures a raised error carries. `__getattr__` runs only when
+    // ordinary lookup fails, and it caches what it built on the instance, so the
+    // second access is a plain attribute read.
+    //
+    // There are no class defaults any more, and there must not be: a default
+    // makes ordinary lookup *succeed*, so the hook would never run. The empty
+    // answers a hand-built error used to get from those defaults come from the
+    // hook instead, which keeps the type one shape rather than two.
+    install_lazy_attributes(py)?;
     module.add("ValidationError", failure)?;
     module.add_class::<Validator>()?;
     module.add_function(wrap_pyfunction!(union, module)?)?;

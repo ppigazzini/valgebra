@@ -430,7 +430,7 @@ impl RegularSet {
     /// the walk matches a pattern against the whole text, not a substring of it.
     ///
     /// The size limits are the load-bearing part. `MAX_STATES` is checked in
-    /// [`Dfa::from_automaton`], which runs *after* `regex-automata` has built
+    /// `Dfa::from_automaton`, which runs *after* `regex-automata` has built
     /// the complete dense table -- so a pattern whose determinisation is
     /// exponential allocated gigabytes and then refused, or aborted the process
     /// trying. `(a|b)*a(a|b){k}` is the family: every `k` doubles the states,

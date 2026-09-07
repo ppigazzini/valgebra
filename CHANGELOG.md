@@ -92,6 +92,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: decide two sets of literals as sets, not pair by pair
 - fix: a ledger plant that judges nothing is not a miss -- internal
 - feat: a bound over floats is a set the descriptor can hold
+- fix: build the error model when it is asked for
 
 -->
 
@@ -526,6 +527,14 @@ answer of its own, or a repair to a change not yet released.
   bindings and **six seconds**; it is now 10 ms. The bindings answer the whole
   disjointness question in one pass where they can hash the constants, and
   decline — leaving the member walk — where they cannot.
+
+- A raised `ValidationError` builds its structured model when something asks for
+  it. Every failure became a dict, a path tuple and six attribute writes at raise
+  time, so a report over 10,000 failing rows cost **26 ms** whether or not the
+  caller read a row; it is now **9 ms** for a caller that logs `str(error)`, and
+  still faster than before for one that reads `errors`. The attributes, their
+  values and `str()` are unchanged, and pickling builds the model first so what
+  crosses a process boundary is the same plain data.
 
 - `import valgebra` costs **0.9 ms**, down from 32. `__version__` was read with
   `importlib.metadata.version()`, which pulls `email`, `zipfile`, `inspect` and
