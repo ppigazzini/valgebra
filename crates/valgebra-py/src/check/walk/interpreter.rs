@@ -1285,6 +1285,18 @@ fn a_json_keyed_map_decides_like_its_object_form() {
             Openness::Closed,
         );
         let open = Schema::record(vec![field("x", Schema::Int, true)], Openness::Open);
+        // A record with fields *and* a catch-all: the shape the closed record's
+        // key-by-key path does not answer, so the document search still does.
+        let mixed = Schema::keyed_map(
+            vec![
+                field("x", Schema::Int, true),
+                field("y", Schema::Str, false),
+            ],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        );
         let mapping = Schema::mapping(MapClause {
             key: Schema::Str,
             value: Schema::Int,
@@ -1316,6 +1328,26 @@ fn a_json_keyed_map_decides_like_its_object_form() {
                 &open,
                 vec![("x", JsonValue::Int(1)), ("z", JsonValue::Int(2))],
                 true,
+            ),
+            // The mixed record, whose required-ness the document search reads:
+            // a required key must be there, an optional one need not be, and a
+            // key neither names is the catch-all's to judge.
+            (&mixed, vec![("x", JsonValue::Int(1))], true),
+            (
+                &mixed,
+                vec![("x", JsonValue::Int(1)), ("y", JsonValue::Str("a".into()))],
+                true,
+            ),
+            (&mixed, vec![("y", JsonValue::Str("a".into()))], false),
+            (
+                &mixed,
+                vec![("x", JsonValue::Int(1)), ("k", JsonValue::Int(2))],
+                true,
+            ),
+            (
+                &mixed,
+                vec![("x", JsonValue::Int(1)), ("k", JsonValue::Str("a".into()))],
+                false,
             ),
             // A pure mapping judges every key and value by the clause.
             (&mapping, vec![("k", JsonValue::Int(1))], true),

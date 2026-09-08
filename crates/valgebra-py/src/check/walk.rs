@@ -1088,6 +1088,51 @@ fn keyed_map_matches_json(
 ) -> bool {
     let sub = fast(ctx);
     let (mut path, mut out) = (Vec::new(), Vec::new());
+    // A closed record resolves the document's keys through the plan instead of
+    // searching the document once per field. The search is quadratic in the
+    // width -- a fifty-field record read a fifty-entry object fifty times -- and
+    // the plan already holds the name-to-position map the resolution wants.
+    if let Some(plan) = ctx
+        .records
+        .get(&(fields.as_ptr() as usize))
+        .filter(|plan| defaults.is_empty() && plan.by_name.len() == fields.len())
+    {
+        // The document's value for each declared field, last occurrence winning
+        // as `json.loads` does, gathered before any of them is checked: an
+        // earlier duplicate that fails is not the entry the document means.
+        let mut found: Vec<Option<&JsonValue<'_>>> = vec![None; fields.len()];
+        for (key, value) in entries {
+            match plan.by_name.get(key.as_ref()) {
+                Some(&at) => match found.get_mut(at) {
+                    Some(slot) => *slot = Some(value),
+                    // The plan and the field list disagree about a position,
+                    // which the filter above rules out; answer conservatively
+                    // rather than indexing.
+                    None => return false,
+                },
+                // A closed record has no clause to cover an undeclared key.
+                None => return false,
+            }
+        }
+        for (field, value) in fields.iter().zip(found) {
+            match value {
+                Some(value) => {
+                    if !member(
+                        &field.schema,
+                        &Value::Json(py, value),
+                        &mut path,
+                        sub,
+                        &mut out,
+                    ) {
+                        return false;
+                    }
+                }
+                None if field.required => return false,
+                None => {}
+            }
+        }
+        return true;
+    }
     for field in fields {
         match entries
             .iter()

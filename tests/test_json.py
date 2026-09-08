@@ -101,6 +101,22 @@ def test_duplicate_json_keys_keep_the_last_value() -> None:
     assert v.is_valid_json('{"a": "x", "a": 3}')
 
 
+def test_a_declared_key_repeated_keeps_its_last_value() -> None:
+    # The same rule for a *declared* field, which a closed record resolves
+    # through its own plan: the document's later entry is the one it means, so an
+    # earlier one that would fail is not the value checked. Read the other way
+    # too -- a later entry that fails is a failure however good the earlier one
+    # was.
+    v = Validator({"a": int, "b?": str})
+    assert v.is_valid_json('{"a": "x", "a": 1}')
+    assert not v.is_valid_json('{"a": 1, "a": "x"}')
+    # And the rest of a closed record's rules over the same path.
+    assert not v.is_valid_json('{"a": 1, "z": 2}')
+    assert v.is_valid_json('{"a": 1}')
+    assert v.is_valid_json('{"a": 1, "b": "s"}')
+    assert not v.is_valid_json('{"b": "s"}')
+
+
 def test_many_duplicate_json_keys_validate_in_one_pass() -> None:
     # A document with thousands of repeated keys against an open mapping is covered
     # without a per-key tail rescan; this finishes promptly rather than quadratically.
