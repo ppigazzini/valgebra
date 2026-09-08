@@ -18,7 +18,7 @@ fn violation(code: &'static str, path: Vec<PathSegment>, expected: &str, value: 
 
 #[test]
 fn violation_message_format() {
-    let key = |name: &str| PathSegment::Key(name.to_owned());
+    let key = |name: &str| PathSegment::Key(name.into());
     let corpus = [
         violation("int_type", vec![], "int", "'x'"),
         violation(

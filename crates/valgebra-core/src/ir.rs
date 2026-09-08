@@ -355,7 +355,13 @@ impl Guarded {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PathSegment {
     /// A mapping or record key that is a string.
-    Key(String),
+    ///
+    /// Shared rather than owned outright, for the reason a field's name is
+    /// ([`Field::name`]): a record's failure path carries the very name the
+    /// schema declares, and copying it per violation is a heap allocation per
+    /// failing field of every failing record. A key read from a value rather
+    /// than from the schema is copied once, into the same shared form.
+    Key(Arc<str>),
     /// A mapping key that is an integer.
     ///
     /// Separate from [`PathSegment::Key`] because the path is what a caller

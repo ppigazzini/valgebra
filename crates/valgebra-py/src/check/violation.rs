@@ -1,5 +1,7 @@
 //! Building the structured [`Violation`] values the explain walk reports.
 
+use std::sync::Arc;
+
 use pyo3::prelude::*;
 use pyo3::types::{PyInt, PyString};
 use valgebra_core::{PathSegment, Schema, Violation};
@@ -50,7 +52,7 @@ pub(crate) fn type_mismatch(
 /// Build a violation whose path is `path` extended by one key segment.
 pub(crate) fn located(
     path: &[PathSegment],
-    key: String,
+    key: Arc<str>,
     code: &'static str,
     expected: String,
     value_summary: String,
@@ -87,7 +89,7 @@ pub(crate) fn summarize_value(value: &Value<'_, '_>) -> String {
 /// takes the repr path with the rest.
 pub(crate) fn key_segment(key: &Bound<'_, PyAny>) -> PathSegment {
     if let Ok(text) = key.cast::<PyString>() {
-        return PathSegment::Key(text.to_string());
+        return PathSegment::Key(Arc::from(text.to_cow().unwrap_or_default().as_ref()));
     }
     if let Ok(number) = key.cast::<PyInt>() {
         // Every `int`, whatever its size, and `bool` with them: `d[True]` and
@@ -100,5 +102,5 @@ pub(crate) fn key_segment(key: &Bound<'_, PyAny>) -> PathSegment {
             return PathSegment::BigIntKey(digits.to_string());
         }
     }
-    PathSegment::Key(summarize(key))
+    PathSegment::Key(Arc::from(summarize(key).as_str()))
 }

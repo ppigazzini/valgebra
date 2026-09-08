@@ -359,7 +359,7 @@ fn violation_renders_root_message() {
 fn violation_renders_nested_location() {
     let v = Violation {
         code: "string_type",
-        path: vec![PathSegment::Key("name".to_owned()), PathSegment::Index(2)],
+        path: vec![PathSegment::Key("name".into()), PathSegment::Index(2)],
         expected: "str".to_owned(),
         value_summary: "5".to_owned(),
     };
@@ -421,10 +421,7 @@ fn labels_and_codes_for_every_variant() {
 fn location_renders_keys_indices_and_their_mix() {
     let key_only = Violation {
         code: "x",
-        path: vec![
-            PathSegment::Key("a".to_owned()),
-            PathSegment::Key("b".to_owned()),
-        ],
+        path: vec![PathSegment::Key("a".into()), PathSegment::Key("b".into())],
         expected: String::new(),
         value_summary: String::new(),
     };
@@ -441,9 +438,9 @@ fn location_renders_keys_indices_and_their_mix() {
     let mixed = Violation {
         code: "x",
         path: vec![
-            PathSegment::Key("items".to_owned()),
+            PathSegment::Key("items".into()),
             PathSegment::Index(2),
-            PathSegment::Key("id".to_owned()),
+            PathSegment::Key("id".into()),
         ],
         expected: "int".to_owned(),
         value_summary: "'x'".to_owned(),

@@ -29,6 +29,8 @@
 //! [`member`] call returns at once) and the entry point re-raises it, so an
 //! interrupted check stops instead of being silently reported as a non-member.
 
+use std::sync::Arc;
+
 use std::borrow::Cow;
 use std::ops::ControlFlow;
 
@@ -788,9 +790,15 @@ fn keyed_map_matches(
 /// denote a union of key×value rectangles.
 fn covered(defaults: &[MapClause], key: &Value<'_, '_>, val: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
     let sub = fast(ctx);
+    // One pair of scratch buffers for every clause rather than a pair per call
+    // into the walk. Neither is written on this path -- a fast walk reports
+    // nothing and records no location -- but each is a value with a destructor,
+    // and building and dropping four of them per key is work the answer does
+    // not depend on.
+    let (mut path, mut out) = (Vec::new(), Vec::new());
     defaults.iter().any(|clause| {
-        member(&clause.key, key, &mut Vec::new(), sub, &mut Vec::new())
-            && member(&clause.value, val, &mut Vec::new(), sub, &mut Vec::new())
+        member(&clause.key, key, &mut path, sub, &mut out)
+            && member(&clause.value, val, &mut path, sub, &mut out)
     })
 }
 
@@ -843,6 +851,10 @@ fn keyed_map_scan(
     lookup: impl Fn(&str) -> Option<usize>,
 ) -> bool {
     let sub = fast(ctx);
+    // Scratch buffers for the whole record, not one pair per field: a fast walk
+    // writes to neither, and a fifty-field record was building and dropping a
+    // hundred of them to answer one membership question.
+    let (mut path, mut out) = (Vec::new(), Vec::new());
     let scan = scan_dict(dict, |key, val| {
         // A non-string key, or a string carrying a lone surrogate (which cannot
         // equal a field name, since names are valid UTF-8 by build-time check),
@@ -854,13 +866,7 @@ fn keyed_map_scan(
             .and_then(&lookup);
         match index.and_then(|i| fields.get(i)) {
             Some(field) => {
-                if !member(
-                    &field.schema,
-                    &Value::Py(val),
-                    &mut Vec::new(),
-                    sub,
-                    &mut Vec::new(),
-                ) {
+                if !member(&field.schema, &Value::Py(val), &mut path, sub, &mut out) {
                     return ControlFlow::Break(());
                 }
                 if field.required {
@@ -892,6 +898,7 @@ fn keyed_map_matches_json(
     ctx: Ctx<'_>,
 ) -> bool {
     let sub = fast(ctx);
+    let (mut path, mut out) = (Vec::new(), Vec::new());
     for field in fields {
         match entries
             .iter()
@@ -902,9 +909,9 @@ fn keyed_map_matches_json(
                 if !member(
                     &field.schema,
                     &Value::Json(py, val),
-                    &mut Vec::new(),
+                    &mut path,
                     sub,
-                    &mut Vec::new(),
+                    &mut out,
                 ) {
                     return false;
                 }
@@ -993,13 +1000,13 @@ fn keyed_map_explain(
         };
         match found {
             Ok(Some(item)) => {
-                path.push(PathSegment::Key(field.name.to_string()));
+                path.push(PathSegment::Key(Arc::clone(&field.name)));
                 member(&field.schema, &Value::Py(&item), path, ctx, out);
                 path.pop();
             }
             Ok(None) if field.required => out.push(located(
                 path,
-                field.name.to_string(),
+                Arc::clone(&field.name),
                 "missing_key",
                 format!("required key {:?}", field.name),
                 "missing".to_owned(),
@@ -1034,7 +1041,7 @@ fn keyed_map_explain(
                 .map_or_else(|_| String::new(), |text| text.to_string());
             out.push(located(
                 path,
-                key_text.clone(),
+                Arc::from(key_text.as_str()),
                 "extra_forbidden",
                 "no unexpected key".to_owned(),
                 format!("{key_text:?}"),
@@ -1383,7 +1390,7 @@ fn check_attr_record(
         match attribute {
             Ok(attr) => {
                 if ctx.mode.explains() {
-                    path.push(PathSegment::Key(field.name.to_string()));
+                    path.push(PathSegment::Key(Arc::clone(&field.name)));
                 }
                 ok &= member(&field.schema, &Value::Py(&attr), path, ctx, out);
                 if ctx.mode.explains() {
@@ -1402,7 +1409,7 @@ fn check_attr_record(
                 if ctx.mode.explains() {
                     out.push(located(
                         path,
-                        field.name.to_string(),
+                        Arc::clone(&field.name),
                         "missing_attribute",
                         format!("attribute {:?}", field.name),
                         "missing".to_owned(),

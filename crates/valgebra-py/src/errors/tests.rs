@@ -34,7 +34,7 @@ fn into_pyerr_maps_violations_to_the_structured_attributes() {
         // through the same function, so what it reads is what a caller reads.
         install_lazy_attributes(py).expect("the hooks the module installs");
         let violations = vec![
-            violation("int_type", vec![PathSegment::Key("a".to_owned())]),
+            violation("int_type", vec![PathSegment::Key("a".into())]),
             violation("missing", vec![PathSegment::Index(2)]),
         ];
         let err = into_pyerr(py, violations);

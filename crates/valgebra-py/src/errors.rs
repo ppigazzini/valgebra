@@ -408,7 +408,7 @@ fn build_path<'py>(py: Python<'py>, path: &[PathSegment]) -> PyResult<Bound<'py,
     let mut items: Vec<Bound<'py, PyAny>> = Vec::with_capacity(path.len());
     for segment in path {
         let item = match segment {
-            PathSegment::Key(key) => key.as_str().into_pyobject(py)?.into_any(),
+            PathSegment::Key(key) => (&**key).into_pyobject(py)?.into_any(),
             PathSegment::IntKey(key) => (*key).into_pyobject(py)?.into_any(),
             // Back to the `int` it came from: a caller indexes with the key, not
             // with its digits.
