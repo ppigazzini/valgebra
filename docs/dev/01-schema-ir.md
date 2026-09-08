@@ -682,6 +682,12 @@ separately are two allocations, nothing interns them, and equality is therefore
 structural, so the rules carry a work budget instead of a memo table
 ([02-decision.md](02-decision.md)).
 
+A transform over the tree answers with the handle it was given when it changed
+nothing: opening a schema with no record in it, closing one already closed, or
+rebuilding one side of a composition whose indices do not move all return the
+input rather than a copy of it. Measured on a probe over a thirty-two-level
+tree, the two together cost half what they did.
+
 The trade the shared representation makes is visible in the gates. Carrying a
 subtree got cheaper and the node got smaller, which the membership walk and the
 decision procedures both read; *building* one got dearer, because a list is

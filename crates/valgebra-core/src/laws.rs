@@ -1000,10 +1000,12 @@ fn a_transform_over_a_sequence_keeps_its_shape() {
     // length and its unbounded part off the tail, and a transform that
     // shuffled them would change which lengths the schema admits.
     let shape = SeqShape::prefix_tail([Schema::Str], Schema::Int);
-    let mapped = shape.map_elems(&|s| s.clone());
-    assert_eq!(mapped, shape);
+    // Nothing changed, so nothing is rebuilt and the shape answers for itself.
+    assert_eq!(shape.mapped_elems(&|_| None), None);
 
-    let complemented = shape.map_elems(&|s| Schema::Complement(Arc::new(s.clone())));
+    let complemented = shape
+        .mapped_elems(&|s| Some(Schema::Complement(Arc::new(s.clone()))))
+        .expect("every element changed");
     assert_eq!(
         complemented.prefix.to_vec(),
         vec![Schema::Complement(Arc::new(Schema::Str))]

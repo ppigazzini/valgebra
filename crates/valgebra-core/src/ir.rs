@@ -415,6 +415,112 @@ fn clauses_for(open: Openness) -> Clauses {
     }
 }
 
+/// Move a constraint list's indices, rebuilding it only where one moves.
+fn remapped_constraints(constraints: &Constraints, remap: Remap<'_>) -> Option<Constraints> {
+    let mut rebuilt: Option<Vec<Constraint>> = None;
+    for (at, constraint) in constraints.iter().enumerate() {
+        match constraint.remapped_where_moved(remap) {
+            None => {
+                if let Some(buffer) = rebuilt.as_mut() {
+                    buffer.push(constraint.clone());
+                }
+            }
+            Some(moved) => {
+                let buffer = rebuilt.get_or_insert_with(|| {
+                    constraints.iter().take(at).cloned().collect::<Vec<_>>()
+                });
+                buffer.push(moved);
+            }
+        }
+    }
+    rebuilt.map(|buffer| Constraints::from(&buffer[..]))
+}
+
+/// Map a member list, rebuilding it only where `f` changed a member.
+///
+/// Nothing is allocated until a member actually changes: a list `f` has nothing
+/// to say about costs one call per member and no memory at all, which is the
+/// whole point of asking whether it changed.
+fn mapped_members(members: &Members, f: &impl Fn(&Schema) -> Option<Schema>) -> Option<Members> {
+    with_member_buffer(|buffer| {
+        let mut changed = false;
+        for (at, member) in members.iter().enumerate() {
+            match f(member) {
+                None => {
+                    if changed {
+                        buffer.push(member.clone());
+                    }
+                }
+                Some(mapped) => {
+                    if !changed {
+                        buffer.extend(members.iter().take(at).cloned());
+                        changed = true;
+                    }
+                    buffer.push(mapped);
+                }
+            }
+        }
+        // Drained rather than copied: the finished list is moved into the
+        // node's slice, so a member does not pay a clone -- which is a
+        // reference count on every handle it carries -- to be put where it
+        // was going anyway.
+        changed.then(|| buffer.drain(..).collect())
+    })
+}
+
+/// Map a field list, rebuilding it only where `f` changed a field's schema.
+///
+/// `f` is asked once per field, and the list is allocated only once a field has
+/// answered: asking twice -- once to find out and once to build -- would run a
+/// recursive transform twice per level, which is exponential in the depth.
+fn mapped_fields(fields: &Fields, f: &impl Fn(&Schema) -> Option<Schema>) -> Option<Fields> {
+    with_field_buffer(|buffer| {
+        let mut changed = false;
+        for (at, field) in fields.iter().enumerate() {
+            match f(&field.schema) {
+                None => {
+                    if changed {
+                        buffer.push(field.clone());
+                    }
+                }
+                Some(schema) => {
+                    if !changed {
+                        buffer.extend(fields.iter().take(at).cloned());
+                        changed = true;
+                    }
+                    buffer.push(field.with_schema(schema));
+                }
+            }
+        }
+        changed.then(|| buffer.drain(..).collect())
+    })
+}
+
+/// Map a clause list, rebuilding it only where `f` changed a key or a value.
+///
+/// Asked once per key and once per value, for the same reason as
+/// [`mapped_fields`].
+fn mapped_clauses(clauses: &Clauses, f: &impl Fn(&Schema) -> Option<Schema>) -> Option<Clauses> {
+    let mut rebuilt: Option<Vec<MapClause>> = None;
+    for (at, clause) in clauses.iter().enumerate() {
+        let key = f(&clause.key);
+        let value = f(&clause.value);
+        if key.is_none() && value.is_none() {
+            if let Some(buffer) = rebuilt.as_mut() {
+                buffer.push(clause.clone());
+            }
+            continue;
+        }
+        let buffer =
+            rebuilt.get_or_insert_with(|| clauses.iter().take(at).cloned().collect::<Vec<_>>());
+        buffer.push(MapClause::of(
+            key.unwrap_or_else(|| clause.key.clone()),
+            value.unwrap_or_else(|| clause.value.clone()),
+        ));
+    }
+    rebuilt.map(|buffer| Clauses::from(&buffer[..]))
+}
+
 /// A field list, shared when it is empty and owned when it is not.
 fn share_fields(fields: Vec<Field>) -> Fields {
     if fields.is_empty() {
@@ -719,11 +825,20 @@ pub struct SeqShape {
 }
 
 impl SeqShape {
-    /// Map every element schema through `f`, preserving the shape.
-    pub(crate) fn map_elems(&self, f: &impl Fn(&Schema) -> Schema) -> SeqShape {
-        SeqShape {
-            prefix: self.prefix.iter().map(f).collect(),
-            tail: self.tail.as_deref().map(|t| Arc::new(f(t))),
+    /// The same, rebuilding only what `f` changed, and `None` when it changed
+    /// nothing: the sequence half of [`Schema::mapped_children`].
+    pub(crate) fn mapped_elems(&self, f: &impl Fn(&Schema) -> Option<Schema>) -> Option<SeqShape> {
+        let prefix = mapped_members(&self.prefix, f);
+        let tail = self.tail.as_deref().map(f);
+        match (&prefix, &tail) {
+            (None, None | Some(None)) => None,
+            _ => Some(SeqShape {
+                prefix: prefix.unwrap_or_else(|| self.prefix.clone()),
+                tail: match (tail, &self.tail) {
+                    (Some(Some(mapped)), _) => Some(Arc::new(mapped)),
+                    (_, held) => held.clone(),
+                },
+            }),
         }
     }
 
@@ -1198,12 +1313,14 @@ impl MapClause {
         }
     }
 
-    /// This clause with both schemas mapped through `f`.
-    pub(crate) fn map_schemas(&self, f: &impl Fn(&Schema) -> Schema) -> MapClause {
-        MapClause {
-            key: f(&self.key),
-            value: f(&self.value),
-        }
+    /// A clause from a key and a value schema.
+    ///
+    /// Spelled here rather than at each pass over a clause list, for the reason
+    /// [`Field::with_schema`] is: the two schemas a clause holds are in a fixed
+    /// order and a pass that rebuilds one from the wrong parts swaps what a key
+    /// must be with what its value must be.
+    pub(crate) fn of(key: Schema, value: Schema) -> MapClause {
+        MapClause { key, value }
     }
 }
 
@@ -1260,10 +1377,10 @@ impl Field {
     /// The three-line struct literal that spells this out was written at every
     /// pass over a field list, and it is the one place a pass could drop a
     /// field's required-ness by rebuilding it from the wrong parts.
-    pub(crate) fn map_schema(&self, f: &impl Fn(&Schema) -> Schema) -> Field {
+    pub(crate) fn with_schema(&self, schema: Schema) -> Field {
         Field {
             name: Arc::clone(&self.name),
-            schema: f(&self.schema),
+            schema,
             required: self.required,
         }
     }
@@ -1512,7 +1629,24 @@ impl Schema {
     /// be handled in [`remapped_by`](Self::remapped_by), which is why that match
     /// takes no wildcard.
     pub(crate) fn map_children(&self, f: &impl Fn(&Schema) -> Schema) -> Schema {
-        let field = |field: &Field| field.map_schema(f);
+        self.mapped_children(&|child| Some(f(child)))
+            .unwrap_or_else(|| self.clone())
+    }
+
+    /// The same descent, rebuilding only what `f` actually changed.
+    ///
+    /// `f` answers `None` for a child it leaves alone, and this answers `None`
+    /// for a node every child of which came back that way -- so a pass over a
+    /// subtree it has nothing to say about allocates nothing and the caller
+    /// keeps the handle it already had. The pass that has something to say
+    /// about every node pays one comparison per child for the privilege, which
+    /// is the trade the shared representation makes worth taking: what it
+    /// saves is a rebuild of everything beneath the node, and what it costs is
+    /// an `Option` the optimiser sees through.
+    ///
+    /// [`map_children`](Self::map_children) is this with `f` that always
+    /// answers `Some`, so the child set is still written down once.
+    pub(crate) fn mapped_children(&self, f: &impl Fn(&Schema) -> Option<Schema>) -> Option<Schema> {
         match self {
             Schema::Anything(_)
             | Schema::Nothing
@@ -1525,29 +1659,36 @@ impl Schema {
             | Schema::Literal(_)
             | Schema::Instance(_)
             | Schema::Ref(_)
-            | Schema::SelfRef(_) => self.clone(),
-            Schema::Seq { container, shape } => Schema::Seq {
+            | Schema::SelfRef(_) => None,
+            Schema::Seq { container, shape } => shape.mapped_elems(f).map(|shape| Schema::Seq {
                 container: *container,
-                shape: shape.map_elems(f),
-            },
-            Schema::Coll { container, element } => Schema::Coll {
+                shape,
+            }),
+            Schema::Coll { container, element } => f(element).map(|element| Schema::Coll {
                 container: *container,
-                element: Arc::new(f(element)),
-            },
-            Schema::Complement(inner) => Schema::Complement(Arc::new(f(inner))),
-            Schema::Union(members) => Schema::Union(members.iter().map(f).collect()),
-            Schema::Intersection(members) => Schema::Intersection(members.iter().map(f).collect()),
-            Schema::KeyedMap { fields, defaults } => Schema::KeyedMap {
-                fields: fields.iter().map(field).collect(),
-                defaults: defaults.iter().map(|c| c.map_schemas(f)).collect(),
-            },
-            Schema::AttrRecord { fields } => Schema::AttrRecord {
-                fields: fields.iter().map(field).collect(),
-            },
-            Schema::Refine { base, constraints } => Schema::Refine {
-                base: Arc::new(f(base)),
+                element: Arc::new(element),
+            }),
+            Schema::Complement(inner) => f(inner).map(|inner| Schema::Complement(Arc::new(inner))),
+            Schema::Union(members) => mapped_members(members, f).map(Schema::Union),
+            Schema::Intersection(members) => mapped_members(members, f).map(Schema::Intersection),
+            Schema::KeyedMap { fields, defaults } => {
+                let mapped_fields = mapped_fields(fields, f);
+                let mapped_clauses = mapped_clauses(defaults, f);
+                if mapped_fields.is_none() && mapped_clauses.is_none() {
+                    return None;
+                }
+                Some(Schema::KeyedMap {
+                    fields: mapped_fields.unwrap_or_else(|| fields.clone()),
+                    defaults: mapped_clauses.unwrap_or_else(|| defaults.clone()),
+                })
+            }
+            Schema::AttrRecord { fields } => {
+                mapped_fields(fields, f).map(|fields| Schema::AttrRecord { fields })
+            }
+            Schema::Refine { base, constraints } => f(base).map(|base| Schema::Refine {
+                base: Arc::new(base),
                 constraints: constraints.clone(),
-            },
+            }),
         }
     }
 
@@ -1562,17 +1703,42 @@ impl Schema {
     /// the structural variants costs a line each and makes a new variant a
     /// compile error here, where the decision belongs.
     fn remapped_by(&self, remap: Remap<'_>) -> Schema {
+        self.remapped_where_moved(remap)
+            .unwrap_or_else(|| self.clone())
+    }
+
+    /// The same rebuild, answering `None` where no index below this node moves.
+    ///
+    /// Combining two validators shifts one side's indices and leaves the
+    /// other's where they are, so half of every composition was rebuilding a
+    /// whole tree to arrive at the tree it started from. An index that does not
+    /// move says so, and a node all of whose children said so is returned as
+    /// the handle the caller already held.
+    fn remapped_where_moved(&self, remap: Remap<'_>) -> Option<Schema> {
         match self {
-            Schema::Literal(index) => Schema::Literal(index.remapped_by(remap)),
-            Schema::Instance(index) => Schema::Instance(index.remapped_by(remap)),
-            Schema::Ref(index) => Schema::Ref(index.remapped_by(remap)),
-            Schema::Refine { base, constraints } => Schema::Refine {
-                base: Arc::new(base.remapped_by(remap)),
-                constraints: constraints
-                    .iter()
-                    .map(|constraint| constraint.remapped_by(remap))
-                    .collect(),
-            },
+            Schema::Literal(index) => {
+                let moved = index.remapped_by(remap);
+                (moved != *index).then_some(Schema::Literal(moved))
+            }
+            Schema::Instance(index) => {
+                let moved = index.remapped_by(remap);
+                (moved != *index).then_some(Schema::Instance(moved))
+            }
+            Schema::Ref(index) => {
+                let moved = index.remapped_by(remap);
+                (moved != *index).then_some(Schema::Ref(moved))
+            }
+            Schema::Refine { base, constraints } => {
+                let moved_base = base.remapped_where_moved(remap);
+                let moved_constraints = remapped_constraints(constraints, remap);
+                if moved_base.is_none() && moved_constraints.is_none() {
+                    return None;
+                }
+                Some(Schema::Refine {
+                    base: moved_base.map_or_else(|| Arc::clone(base), Arc::new),
+                    constraints: moved_constraints.unwrap_or_else(|| Arc::clone(constraints)),
+                })
+            }
             // No payload of its own: descend, and let the child set live in one
             // place. Spelled out rather than caught by `_` so a new variant with
             // an index cannot arrive here silently.
@@ -1591,7 +1757,7 @@ impl Schema {
             | Schema::Union(_)
             | Schema::Intersection(_)
             | Schema::KeyedMap { .. }
-            | Schema::AttrRecord { .. } => self.map_children(&|s| s.remapped_by(remap)),
+            | Schema::AttrRecord { .. } => self.mapped_children(&|s| s.remapped_where_moved(remap)),
         }
     }
 
@@ -1854,6 +2020,16 @@ impl Schema {
     /// sets to unequal sets and put it outside the algebra.
     #[must_use]
     pub fn with_records_open(&self, open: Openness) -> Schema {
+        self.records_opened(open).unwrap_or_else(|| self.clone())
+    }
+
+    /// The same transform, answering `None` for a subtree it leaves alone.
+    ///
+    /// A schema with no record under it is returned to the caller as the handle
+    /// it already had: opening a list of integers rebuilt every node of it to
+    /// arrive back where it started, and a record whose catch-all already says
+    /// what the openness asks for is in the same position.
+    fn records_opened(&self, open: Openness) -> Option<Schema> {
         match self {
             // The one node this transform is about: a record replaces its
             // catch-all. Having no field does not make one a mapping -- the empty
@@ -1870,15 +2046,33 @@ impl Schema {
                 // already says -- so the field list's own length is the right
                 // guess, and over-reserving by the one or two it drops costs a
                 // few unused slots and no allocation.
-                with_field_buffer(|kept| {
+                let wanted = clauses_for(open);
+                let dropping = fields.iter().any(|field| already_said(field, defaults));
+                let opened = mapped_fields(fields, &|schema| schema.records_opened(open));
+                if !dropping && opened.is_none() && *defaults == wanted {
+                    return None;
+                }
+                let updated = opened.unwrap_or_else(|| fields.clone());
+                if !dropping {
+                    // The names and their order are the ones this node already
+                    // had, so the list is canonical without being sorted again.
+                    return Some(Schema::KeyedMap {
+                        fields: updated,
+                        defaults: wanted,
+                    });
+                }
+                // A field a name says twice -- once as its own and once through
+                // the catch-all the openness adds -- is dropped, and the list
+                // has to be assembled again around the hole.
+                Some(with_field_buffer(|kept| {
                     kept.extend(
-                        fields
+                        updated
                             .iter()
                             .filter(|field| !already_said(field, defaults))
-                            .map(|field| field.map_schema(&|s| s.with_records_open(open))),
+                            .cloned(),
                     );
-                    Schema::keyed_map_from(kept, clauses_for(open))
-                })
+                    Schema::keyed_map_from(kept, wanted)
+                }))
             }
             // Every other node carries the transform to its children and keeps
             // its own payloads. Spelling the descent out here again is what let
@@ -1891,7 +2085,9 @@ impl Schema {
             // shape exists. [`map_children`] itself stays raw -- reindexing uses
             // it to relabel pool slots, and a relabelling that changed the shape
             // would not be one.
-            _ => self.map_children(&|s| s.with_records_open(open)).refolded(),
+            _ => self
+                .mapped_children(&|s| s.records_opened(open))
+                .map(Schema::refolded),
         }
     }
 
@@ -1917,17 +2113,23 @@ impl Constraint {
     /// A length bound and a regex pattern are not pool indices and are carried
     /// through untouched. The type says so for the length: a `usize` has no
     /// `remapped_by`, so an arm that must not move an index cannot.
-    fn remapped_by(&self, remap: Remap<'_>) -> Constraint {
+    fn remapped_where_moved(&self, remap: Remap<'_>) -> Option<Constraint> {
+        let moved = |index: OperandIx| {
+            let moved = index.remapped_by(remap);
+            (moved != index).then_some(moved)
+        };
         match self {
-            Constraint::Ge(index) => Constraint::Ge(index.remapped_by(remap)),
-            Constraint::Gt(index) => Constraint::Gt(index.remapped_by(remap)),
-            Constraint::Le(index) => Constraint::Le(index.remapped_by(remap)),
-            Constraint::Lt(index) => Constraint::Lt(index.remapped_by(remap)),
-            Constraint::MinLen(n) => Constraint::MinLen(*n),
-            Constraint::MaxLen(n) => Constraint::MaxLen(*n),
-            Constraint::MultipleOf(index) => Constraint::MultipleOf(index.remapped_by(remap)),
-            Constraint::Predicate(index) => Constraint::Predicate(index.remapped_by(remap)),
-            Constraint::Regex(pattern) => Constraint::Regex(pattern.clone()),
+            Constraint::Ge(index) => moved(*index).map(Constraint::Ge),
+            Constraint::Gt(index) => moved(*index).map(Constraint::Gt),
+            Constraint::Le(index) => moved(*index).map(Constraint::Le),
+            Constraint::Lt(index) => moved(*index).map(Constraint::Lt),
+            // Neither carries an index, so neither can move.
+            Constraint::MinLen(_) | Constraint::MaxLen(_) | Constraint::Regex(_) => None,
+            Constraint::MultipleOf(index) => moved(*index).map(Constraint::MultipleOf),
+            Constraint::Predicate(index) => {
+                let moved = index.remapped_by(remap);
+                (moved != *index).then_some(Constraint::Predicate(moved))
+            }
         }
     }
 }
