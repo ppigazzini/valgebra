@@ -552,7 +552,9 @@ row = Row(1)
 assert not Validator(Row).is_valid(row)  # `seen` is not there yet
 row.touch()
 assert Validator(Row).is_valid(row)
-``` On a `TypedDict`, `Required`,
+```
+
+On a `TypedDict`, `Required`,
 `NotRequired` and `ReadOnly` qualify the key rather than narrowing its type:
 required-ness is read from the qualifier where the field carries one and from
 the class otherwise, and read-only-ness is about writing the key back rather

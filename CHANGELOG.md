@@ -97,6 +97,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an instruction count says how much history it is comparing -- internal
 - feat: subtyping answers in three values, and the boundary keeps two -- internal
 - fix: a subject disjoint from a meet is below that meet's complement
+- fix: a code fence closed with a sentence took a section into the block -- internal
 
 -->
 

@@ -193,6 +193,35 @@ def gate_numbers() -> list[str]:
     return numbers
 
 
+def check_fences(text: str) -> list[str]:
+    """Refuse a code fence that carries prose where its language belongs.
+
+    ``` followed by a sentence is an *opening* fence with a long info string,
+    not a closing one, so everything after it renders as code -- including the
+    headings, which then have no anchors for a link to reach. One page carried
+    that for a release: a fence closed with "``` On a `TypedDict`, ..." and took
+    a section and its anchor into a code block, which nothing noticed because
+    the page still built and the prose still read as prose in the source.
+
+    A real info string is one word: `python`, `bash`, `text`, `json`,
+    `mermaid`, or one of those with a brace-delimited attribute list. Anything
+    with a space in it is this mistake.
+    """
+    problems = []
+    for number, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped.startswith("```"):
+            continue
+        info = stripped[3:].strip()
+        if not info or " " not in info or info.startswith("{"):
+            continue
+        problems.append(
+            f"line {number}: a fence whose language is a sentence "
+            f'("{info[:40]}...") opens a code block rather than closing one'
+        )
+    return problems
+
+
 def check_pinned_numbers(text: str, numbers: list[str]) -> list[str]:
     return [
         f"quotes a number the perf budget owns ({n}); name the file instead"
@@ -488,6 +517,7 @@ def main() -> int:
             + check_named_paths(text, ignored)
             + check_internal_reference(text)
             + check_pinned_numbers(text, numbers)
+            + check_fences(text)
         ]
     for path in referencing:
         if path.suffix == ".md":
