@@ -450,6 +450,12 @@ fn check_seq(
             if !SeqArity::of(prefix.len(), tail).admits(items.len()) {
                 return seq_length_fail(len_code, kind_word, prefix, tail, value, path, ctx, out);
             }
+            // The same shape over a parsed JSON array.
+            if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
+                return items
+                    .iter()
+                    .all(|item| scalar_admits(kind, &Value::Json(*py, item)));
+            }
             let mut ok = true;
             for (i, item) in items.iter().enumerate() {
                 ok &= seq_element(prefix, tail, i, &Value::Json(*py, item), path, ctx, out);
@@ -809,9 +815,17 @@ fn check_elements(
     if ctx.mode.explains() {
         return explain_elements(element, container, value, path, ctx, out);
     }
+    // A set of one scalar kind, as a sequence of one is: the element schema is
+    // read once and each element tested against the kind, without the walk's
+    // per-element depth guard, signal check and dispatch.
+    let scalar = scalar_of(element);
     let mut ok = true;
     let scan = scan_set(container, ctx, |item| {
-        ok &= member(element, &Value::Py(item), path, ctx, out);
+        let value = Value::Py(item);
+        ok &= match scalar {
+            Some(kind) => scalar_admits(kind, &value),
+            None => member(element, &value, path, ctx, out),
+        };
         if !ok && stop(ctx) {
             ControlFlow::Break(())
         } else {

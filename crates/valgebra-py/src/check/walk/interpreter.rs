@@ -685,6 +685,72 @@ fn a_set_and_a_frozenset_are_distinct_containers() {
     });
 }
 
+/// A sequence whose elements are not one scalar kind is walked element by
+/// element, and that walk answers the same way.
+///
+/// The scalar loop covers the shapes it can, and everything else -- an element
+/// schema that is itself a container, a JSON array of them, a tuple of them --
+/// takes the general walk. The rules are the same rules: one element outside
+/// the schema makes the value a non-member, and a walk that stops at the first
+/// failure must not stop before it.
+#[test]
+fn a_sequence_of_a_container_element_is_walked_element_by_element() {
+    Python::attach(|py| {
+        let rows = |element| Schema::list(SeqShape::homogeneous(element));
+        let list_of_lists = rows(Schema::list(SeqShape::homogeneous(Schema::Int)));
+
+        // Over a parsed JSON array, where the element is not a scalar.
+        let array = |items: Vec<JsonValue<'static>>| JsonValue::Array(std::sync::Arc::new(items));
+        let good = array(vec![
+            array(vec![JsonValue::Int(1)]),
+            array(vec![JsonValue::Int(2)]),
+        ]);
+        assert!(holds_json(py, &list_of_lists, &good));
+        let bad = array(vec![
+            array(vec![JsonValue::Int(1)]),
+            array(vec![JsonValue::Str("x".into())]),
+        ]);
+        assert!(!holds_json(py, &list_of_lists, &bad));
+
+        // And over a tuple of them, which is the third of the three loops.
+        let tuple_of_lists = Schema::tuple(SeqShape::homogeneous(Schema::list(
+            SeqShape::homogeneous(Schema::Int),
+        )));
+        let int = |n: i64| n.into_pyobject(py).expect("an int").into_any();
+        let one = PyList::new(py, [int(1)]).expect("a list builds").into_any();
+        let two = PyList::new(py, [int(2)]).expect("a list builds").into_any();
+        let text = PyList::new(py, [PyString::new(py, "x").into_any()])
+            .expect("a list builds")
+            .into_any();
+        let good = PyTuple::new(py, [one.clone(), two])
+            .expect("a tuple builds")
+            .into_any();
+        case(py, &tuple_of_lists, &good, true);
+        let bad = PyTuple::new(py, [one, text])
+            .expect("a tuple builds")
+            .into_any();
+        case(py, &tuple_of_lists, &bad, false);
+    });
+}
+
+/// A JSON array of one scalar kind takes the same loop as a Python list.
+#[test]
+fn a_json_array_of_one_scalar_kind_rejects_an_element_that_is_not_one() {
+    Python::attach(|py| {
+        let list_of_int = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let good = JsonValue::Array(std::sync::Arc::new(vec![
+            JsonValue::Int(1),
+            JsonValue::Int(2),
+        ]));
+        assert!(holds_json(py, &list_of_int, &good));
+        let bad = JsonValue::Array(std::sync::Arc::new(vec![
+            JsonValue::Int(1),
+            JsonValue::Str("x".into()),
+        ]));
+        assert!(!holds_json(py, &list_of_int, &bad));
+    });
+}
+
 #[test]
 fn a_keyed_map_separates_fields_from_the_catch_all() {
     Python::attach(|py| {

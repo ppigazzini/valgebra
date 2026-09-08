@@ -8,11 +8,11 @@
   "decision_workload_irefs": 17973844,
   "decision_workload_checksum": 14000,
   "_binding_comment": "Binding hot-path budget: the per-iteration instruction cost of the membership walk over a live Python value, isolated as the difference between two iteration counts so the embedded interpreter's startup cancels out (scripts/perf_gate.py --binding). Recorded on a local CPython 3.12 rather than in the bench job, which is a change from how it used to be read: valgrind cannot run the workload against a 3.14 interpreter (it aborts on an instruction it does not model), and 3.12 is the interpreter the mutation lanes already use, so the leg is now reproducible off CI. The absolute count is the machine's, not the runner's -- this environment measured 968,944,450 against the 893,274,256 the bench job had recorded for the same code, an offset of +8.5% -- so the band is what makes the number portable rather than the number itself. Re-record with --binding --update on a 3.12 and say what moved. The wider tolerance absorbs that offset plus FFI and codegen drift while still catching a per-node regression, which is far larger.",
-  "binding_workload_irefs": 188618107,
+  "binding_workload_irefs": 188752487,
   "binding_tolerance": 0.3,
-  "binding_boundary_workload_irefs": 12416090,
-  "binding_record_workload_irefs": 185433501,
-  "binding_build_workload_irefs": 431781704,
-  "binding_explain_workload_irefs": 250483555,
+  "binding_boundary_workload_irefs": 12372855,
+  "binding_record_workload_irefs": 184438776,
+  "binding_build_workload_irefs": 431484231,
+  "binding_explain_workload_irefs": 250728664,
   "_binding_shapes_comment": "Four more binding shapes, each the deterministic twin of a shape the comparison gate measures on a wall clock. The gate compared seven shapes and budgeted one, which is how schema construction grew twelve percent over a release cycle with nothing watching: no instruction count built a schema. Each is the difference of two iteration counts, so the embedded interpreter's startup cancels; the counts differ per shape so every measurement is seconds rather than minutes under cachegrind, and each run is held to its checksum before its count is read. Re-record one with `scripts/perf_gate.py --binding-<shape> --update` on a 3.12, which is the interpreter valgrind can execute. The band these five carry is thirty percent rather than the ten an all-Rust workload takes, and the reason is the interpreter rather than the compiler: the budgets are recorded against a CPython 3.12 -- the one valgrind can execute -- and read on a 3.14 in the bench lane. Four of the five cross that gap within nine percent; the record walk reads **twenty-one percent higher** there, because it is a run of dict probes and the two interpreters do not probe a dict the same way. A band that did not cover the gap would fail every nightly while measuring nothing about the code, and a per-node regression is several times larger than the gap, so the band still catches what it is for. The sharp gate for these shapes is `--against`, which measures both sides in one job on one interpreter and holds the difference to two percent."
 }
