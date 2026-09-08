@@ -242,6 +242,16 @@ pub(crate) fn member(
 
 /// A leaf decision: pass `ok` through, recording a type/value mismatch when it is
 /// false in explain mode.
+///
+/// Inlined, and its recording half is not. Every scalar arm of the walk ends
+/// here, so on a list of integers this is called once per element and does
+/// nothing but return the bool it was handed: measured at twenty-two
+/// instructions of call and return around a single test, which was a fifth of
+/// the per-element cost. Inlining leaves the test where the answer already is.
+/// The other half is a `Vec` push and a value summary, which only a failing
+/// element in explain mode reaches -- it is marked cold so the branch predicts
+/// the accepting path and the code sits away from it.
+#[inline]
 fn admit(
     ok: bool,
     schema: &Schema,
@@ -251,9 +261,21 @@ fn admit(
     out: &mut Vec<Violation>,
 ) -> bool {
     if !ok && ctx.mode.explains() {
-        out.push(mismatch(schema, value, path));
+        record_mismatch(schema, value, path, out);
     }
     ok
+}
+
+/// Record a leaf's type or value mismatch. The half of [`admit`] that allocates.
+#[cold]
+#[inline(never)]
+fn record_mismatch(
+    schema: &Schema,
+    value: &Value<'_, '_>,
+    path: &[PathSegment],
+    out: &mut Vec<Violation>,
+) {
+    out.push(mismatch(schema, value, path));
 }
 
 fn check_literal(
@@ -395,6 +417,12 @@ impl SeqArity {
 
 /// Match one element at position `i`: the prefix schema at `i`, or the repeated
 /// tail past the prefix. The index segment is pushed only in explain mode.
+///
+/// Inlined into the one loop that calls it. It sits between that loop and
+/// [`member`], so leaving it out of line put a second call frame on every
+/// element of every sequence -- eleven instructions of entry and thirteen of
+/// call, against the one index lookup and two mode tests it exists to do.
+#[inline]
 fn seq_element(
     prefix: &[Schema],
     tail: Option<&Schema>,

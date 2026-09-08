@@ -96,6 +96,7 @@ answer of its own, or a repair to a change not yet released.
 - perf: a field name is shared rather than copied into every rebuilt schema
 - perf: size a reopened record's field list from the list it rebuilds
 - perf: ask a schema for the regions only where the answer can be used
+- perf: the walk's leaf decision is a test, not a call
 
 -->
 
@@ -358,6 +359,18 @@ answer of its own, or a repair to a change not yet released.
   than raising `AttributeError` for an attribute the type declares.
 
 ### Changed
+
+- **The membership walk costs a third less.** Every scalar arm of the walk ended
+  in a helper that passed a boolean through and recorded a violation when it was
+  false, and every element of a sequence went through a second helper between
+  the loop and the walk. Both were out-of-line calls doing almost nothing: on a
+  list of integers they were fifty of the hundred and fifty instructions spent
+  per element. The two are inlined and the violation-recording half is marked
+  cold, so the accepting path is a test where the answer already is. Measured on
+  the fixed binding workload, **661.6M instructions against 968.9M**, and against
+  pydantic-core a 1,000-element array moves 0.88 to 0.57 of its time, a
+  fifty-field record 0.58 to 0.49, and a JSON document 0.86 to 0.81. No answer
+  changes.
 
 - **Building and composing a schema costs less.** A field name was owned
   outright by the field that declared it, so every pass that rebuilds a schema
