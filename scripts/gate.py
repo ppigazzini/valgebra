@@ -15,6 +15,12 @@ and every step of every merge-gate job is either executed here or named in
 that list to the workflow in both directions, so a step added to CI is a step
 this either runs or refuses by name.
 
+An excused step may still carry a `STANDINS` row: the part of it a developer's
+machine can run, with what the substitute gives up written beside it. The
+binding's interpreter-backed Rust tests are the case it exists for -- the merge
+gate reaches them only inside an instrumented coverage rebuild, so excusing the
+rebuild left seventy-odd tests in no local step at all.
+
 What it is not is a CI replacement: the steps that need a PGO wheel, valgrind, a
 mutation sweep or a second operating system are named and skipped. Those are the
 lanes a push is for.
@@ -115,6 +121,28 @@ NEEDS_A_RUNNER = {
     ),
     "Build the fuzz targets": "needs the pinned nightly toolchain and cargo-fuzz",
     "Test the fuzz harness": "needs the pinned nightly toolchain",
+}
+
+#: A step only a runner can run, and the part of it a developer can.
+#:
+#: An excuse is honest and is still a hole: the merge gate runs the binding's
+#: interpreter-backed Rust tests only inside an instrumented coverage rebuild,
+#: so naming that rebuild as a runner's step leaves seventy-odd tests in no
+#: local step at all. The rebuild is the runner's; the tests are not. Each row
+#: is a `NEEDS_A_RUNNER` step, the command that reaches the same failures here,
+#: and what the substitute gives up -- because a stand-in nobody can tell from
+#: the step is the next excuse.
+#:
+#: Held to `NEEDS_A_RUNNER` in both directions by `tests/test_local_gate.py`: a
+#: stand-in for a step that is not excused is a step the gate should just run.
+STANDINS = {
+    "Measure binding coverage via the Python suite and Rust unit tests": (
+        "cargo test -p valgebra-py --features interpreter-tests",
+        (
+            "the instrumented rebuild and the coverage floor are the runner's; "
+            "the interpreter-backed tests inside it run here"
+        ),
+    ),
 }
 
 #: Jobs whose every step is a runner's, so naming each would say nothing more.
@@ -263,6 +291,13 @@ def build_plan(spec: dict, jobs: list[str]) -> tuple[list[Step], list[str]]:
                 unresolved.append(f"{job}: {name}")
                 continue
             plan.append((job, name, filled, job_env))
+    plan += [
+        (job, f"{name} (the part that runs here)", command, {})
+        for job in jobs
+        for name, _ in steps(spec, job)
+        if name in STANDINS
+        for command, _ in [STANDINS[name]]
+    ]
     return plan, unresolved
 
 
@@ -308,6 +343,8 @@ def show_plan(
         for name, _ in steps(spec, job):
             if not runnable(name):
                 print(f"skip  {job}: {name} -- {NEEDS_A_RUNNER[name]}")
+                if name in STANDINS:
+                    print(f"      stands in: {STANDINS[name][0]} ({STANDINS[name][1]})")
 
 
 def main() -> int:

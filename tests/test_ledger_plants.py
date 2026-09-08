@@ -260,6 +260,19 @@ PLANTS = (
         ),
     ),
     Plant(
+        "tests/test_floor_names.py",
+        ("tests/test_enums.py",),
+        # The form itself, from the lane it reddened: a name that reaches
+        # `typing` one release above the floor, imported where importing the
+        # module runs it.
+        lambda tree: _edit(
+            tree,
+            "tests/test_enums.py",
+            "import sys",
+            "import sys\nfrom typing import NotRequired",
+        ),
+    ),
+    Plant(
         "tests/test_metamorphic_gate.py",
         ("scripts/metamorphic_gate.py",),
         lambda tree: _edit(

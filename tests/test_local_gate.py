@@ -145,6 +145,35 @@ def test_no_excuse_has_outlived_its_step() -> None:
     )
 
 
+def test_every_stand_in_is_for_a_step_the_gate_excuses() -> None:
+    """A stand-in for a step the gate already runs is a step run twice."""
+    loose = sorted(set(gate.STANDINS) - set(gate.NEEDS_A_RUNNER))
+    assert not loose, (
+        f"stand-ins for steps the gate is not excused from: {loose}. A step the "
+        "gate can run is run, not stood in for."
+    )
+    named = {name for _, name in _merge_gate_steps()}
+    stale = sorted(set(gate.STANDINS) - named)
+    assert not stale, f"stand-ins for steps the workflow no longer has: {stale}"
+
+
+def test_the_interpreter_backed_binding_tests_are_in_the_plan() -> None:
+    """The hole the stand-ins exist for, asked of the plan the gate builds.
+
+    Seventy-odd Rust tests link an embedded interpreter, and the merge gate
+    reaches them only inside a coverage rebuild the local gate cannot run. Both
+    halves are needed: the command has to carry the feature, and it has to be in
+    the plan rather than in a table nothing reads.
+    """
+    spec = gate.workflow()
+    plan, _ = gate.build_plan(spec, gate.required_jobs(spec))
+    running = [command for _, _, command, _ in plan if "interpreter-tests" in command]
+    assert running, (
+        "no step in the plan runs the binding's interpreter-backed tests; "
+        "without one they are in no local step at all"
+    )
+
+
 def test_every_excuse_carries_a_reason() -> None:
     empty = sorted(name for name, why in gate.NEEDS_A_RUNNER.items() if not why.strip())
     assert not empty, f"steps excused with no reason: {empty}"
