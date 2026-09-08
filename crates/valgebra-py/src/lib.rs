@@ -24,8 +24,8 @@ mod validator;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyTuple};
-use valgebra_core::{DefIx, Guarded, Schema, SeqKind, SeqShape, fresh_self_token};
+use pyo3::types::{PyDict, PyList, PyTuple};
+use valgebra_core::{DefIx, Field, Guarded, Schema, SeqKind, SeqShape, fresh_self_token};
 
 use crate::errors::install_lazy_attributes;
 pub use crate::exception::ValidationError;
@@ -36,6 +36,94 @@ use crate::validator::{MAX_DEFINITIONS, MAX_SCHEMA_DEPTH, MAX_SCHEMA_NODES, Open
 use crate::build::{Pool, build_schema, combine};
 use crate::check::{WalkMode, WalkState, member};
 use crate::input::Value;
+
+/// Which deterministic workload to run.
+///
+/// The comparison gate -- `scripts/compare_gate.py` -- measures seven shapes
+/// against pydantic-core on a wall clock; the instruction gate measured one of
+/// them. The gap is how a shape regresses without a gate saying so: schema
+/// construction grew twelve percent over one release cycle and nothing caught
+/// it, because no deterministic workload built a schema.
+///
+/// Each variant below is the deterministic twin of a comparison shape, so a
+/// wall-clock movement can be confirmed or refuted by an instruction count on
+/// the same work. They are *not* the same code as the comparison shapes and are
+/// not meant to be: the gate compares against another library and has to run
+/// what that library can also run, while these run the thing being budgeted.
+// A gate's own hook, like the workload it selects: not part of the extension's
+// surface, and not in the crate's documentation.
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BindingShape {
+    /// The membership walk over a homogeneous list of sixty-four integers: the
+    /// original workload, and the twin of `large_array`.
+    Walk,
+    /// The walk over a single integer: the floor every other shape stands on,
+    /// and the nearest deterministic twin of `scalar`.
+    ///
+    /// Not the FFI crossing itself. This runs inside one interpreter attachment
+    /// and calls the walk directly, so what it counts is the dispatch and the
+    /// type check with no container around them -- the part of `scalar` this
+    /// crate owns. The crossing is `PyO3`'s and is measured by the comparison
+    /// gate's wall clock, where it belongs.
+    Boundary,
+    /// The accepting walk over a fifty-field record: the twin of `wide_record`,
+    /// and the path that resolves each key through the plan built with the
+    /// validator rather than through the walk.
+    Record,
+    /// Building a fifty-field record schema and its validator: the twin of
+    /// `build`.
+    ///
+    /// The core's construction, not the frontend's: it assembles the fields
+    /// directly rather than reading a Python annotation, so it counts the
+    /// canonical form being imposed -- fields ordered, clauses deduplicated --
+    /// and the validator's own index, without the annotation walk in front of
+    /// them. That is the half of `build` this crate can change.
+    Build,
+    /// The explaining walk over a fifty-field record with one bad field, read
+    /// to the end: the twin of `error_report`, and the only shape here that
+    /// builds violations rather than answering a bool.
+    Explain,
+}
+
+impl BindingShape {
+    /// The name the gate passes on the command line.
+    #[must_use]
+    pub fn named(name: &str) -> Option<BindingShape> {
+        Some(match name {
+            "walk" => BindingShape::Walk,
+            "boundary" => BindingShape::Boundary,
+            "record" => BindingShape::Record,
+            "build" => BindingShape::Build,
+            "explain" => BindingShape::Explain,
+            _ => return None,
+        })
+    }
+}
+
+/// The fifty-field record both record shapes use, as a schema and as a value.
+///
+/// Fifty fields is the comparison gate's width, kept identical so the two
+/// measurements are of the same size of problem.
+fn wide_record(py: Python<'_>) -> (Schema, Py<PyAny>) {
+    let fields: Vec<Field> = (0..50)
+        .map(|i| Field {
+            name: format!("f{i}").into(),
+            schema: Schema::Int,
+            required: true,
+        })
+        .collect();
+    let value = PyDict::new(py);
+    for i in 0..50 {
+        value
+            .set_item(format!("f{i}"), i)
+            .expect("a fresh dict of small ints always builds");
+    }
+    (
+        Schema::keyed_map(fields, Vec::new()),
+        value.into_any().unbind(),
+    )
+}
 
 /// A deterministic, binding-level instruction workload for the perf gate.
 ///
@@ -50,6 +138,87 @@ use crate::input::Value;
 /// *difference* between two iteration counts: startup is identical in both runs
 /// and cancels, leaving the deterministic per-iteration walk cost. This is the
 /// budgeted signal, and it also covers the per-node `ctx.fatal.borrow()` tax.
+#[doc(hidden)]
+#[must_use]
+pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: usize) -> u64 {
+    match shape {
+        BindingShape::Walk => binding_perf_workload(py, iters),
+        BindingShape::Boundary => {
+            let validator = Validator::new(Schema::Int, Vec::new(), Vec::new());
+            let obj = 42_i64
+                .into_pyobject(py)
+                .expect("an i64 always converts")
+                .into_any();
+            let mut checksum: u64 = 0;
+            for _ in 0..iters {
+                let state = WalkState::new();
+                let ok = member(
+                    std::hint::black_box(&validator.schema),
+                    &Value::Py(std::hint::black_box(&obj)),
+                    &mut Vec::new(),
+                    validator.context(py, &state, WalkMode::Fast),
+                    &mut Vec::new(),
+                );
+                checksum = checksum.wrapping_add(u64::from(ok));
+            }
+            checksum
+        }
+        BindingShape::Record => {
+            let (schema, value) = wide_record(py);
+            let validator = Validator::new(schema, Vec::new(), Vec::new());
+            let obj = value.bind(py).clone();
+            let mut checksum: u64 = 0;
+            for _ in 0..iters {
+                let state = WalkState::new();
+                let ok = member(
+                    std::hint::black_box(&validator.schema),
+                    &Value::Py(std::hint::black_box(&obj)),
+                    &mut Vec::new(),
+                    validator.context(py, &state, WalkMode::Fast),
+                    &mut Vec::new(),
+                );
+                checksum = checksum.wrapping_add(u64::from(ok));
+            }
+            checksum
+        }
+        BindingShape::Build => {
+            let mut checksum: u64 = 0;
+            for _ in 0..iters {
+                let (schema, _) = wide_record(py);
+                let validator =
+                    Validator::new(std::hint::black_box(schema), Vec::new(), Vec::new());
+                checksum = checksum.wrapping_add(validator.schema.node_count() as u64);
+            }
+            checksum
+        }
+        BindingShape::Explain => {
+            let (schema, value) = wide_record(py);
+            let validator = Validator::new(schema, Vec::new(), Vec::new());
+            let obj = value.bind(py).clone();
+            obj.cast::<PyDict>()
+                .expect("the record value is a dict")
+                .set_item("f37", "not an int")
+                .expect("replacing one key always succeeds");
+            let mut checksum: u64 = 0;
+            for _ in 0..iters {
+                let state = WalkState::new();
+                let mut out = Vec::new();
+                let ok = member(
+                    std::hint::black_box(&validator.schema),
+                    &Value::Py(std::hint::black_box(&obj)),
+                    &mut Vec::new(),
+                    validator.context(py, &state, WalkMode::Explain),
+                    &mut out,
+                );
+                checksum = checksum
+                    .wrapping_add(u64::from(ok))
+                    .wrapping_add(out.len() as u64);
+            }
+            checksum
+        }
+    }
+}
+
 #[doc(hidden)]
 #[must_use]
 pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {

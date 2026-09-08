@@ -236,11 +236,46 @@ def check_against_budget(measured: int, recorded: int, tolerance: float) -> int:
     return 0
 
 
-#: The three modes, each naming the example it builds and where it lands.
+#: Every mode, each naming the example it builds and what it measures.
+#:
+#: The four shapes below `binding` are the deterministic twins of the comparison
+#: gate's wall-clock shapes. The gate compared seven shapes against another
+#: library and budgeted one of them, and the gap is how a shape moves without
+#: anything saying so: schema construction grew twelve percent over one release
+#: cycle, and no instruction count was watching the thing that grew.
+#:
+#: All five binding modes are the *difference* of two iteration counts, so the
+#: embedded interpreter's startup cancels; they share the pair of counts and the
+#: checksum rig, and differ only in which workload the example runs.
 MODES = {
     "core": ("perf_workload", "core workload"),
     "decision": ("decision_workload", "decision workload"),
     "binding": ("binding_workload", "binding walk"),
+    "binding-boundary": ("binding_workload", "binding call boundary"),
+    "binding-record": ("binding_workload", "binding record walk"),
+    "binding-build": ("binding_workload", "binding record build"),
+    "binding-explain": ("binding_workload", "binding record explain"),
+}
+
+#: The workload argument each binding mode passes, and the budget key it reads.
+#: Iterations per shape, high and low, chosen so each measurement is a minute or
+#: so under cachegrind rather than ten. The walk keeps the pair its budget was
+#: recorded with; the shapes that do more work per iteration run fewer of them,
+#: and the difference still cancels startup because both runs share it.
+BINDING_ITERATIONS = {
+    "binding": (150_000, 50_000),
+    "binding-boundary": (150_000, 50_000),
+    "binding-record": (20_000, 5_000),
+    "binding-build": (4_000, 1_000),
+    "binding-explain": (8_000, 2_000),
+}
+
+BINDING_SHAPES = {
+    "binding": "walk",
+    "binding-boundary": "boundary",
+    "binding-record": "record",
+    "binding-build": "build",
+    "binding-explain": "explain",
 }
 
 
@@ -256,19 +291,26 @@ def measure_mode(
     wherever it is measured.
     """
     example, subject = MODES[mode]
-    if mode != "binding":
+    if mode not in BINDING_SHAPES:
         build_workload(example, root, target)
         binary = (target or root / "target") / "release" / "examples" / example
         return measure(binary)
 
+    shape = BINDING_SHAPES[mode]
+    hi, lo = BINDING_ITERATIONS[mode]
     build_binding_workload(root, target)
     binary = (target or root / "target") / "release" / "examples" / example
-    high = measure(binary, str(BINDING_ITERS_HIGH))
-    low = measure(binary, str(BINDING_ITERS_LOW))
-    for result, iters in ((high, BINDING_ITERS_HIGH), (low, BINDING_ITERS_LOW)):
-        if check_checksum(result.checksum, iters, f"{subject} x{iters:,}"):
+    high = measure(binary, str(hi), shape)
+    low = measure(binary, str(lo), shape)
+    # The build shape folds a node count per iteration rather than one, so its
+    # checksum is a multiple of the count rather than the count. The rig check is
+    # that both runs agree on that multiple, which a run ignoring its argument
+    # cannot do: it would report the same checksum twice.
+    scale = high.checksum // hi if hi else 0
+    for result, iters in ((high, hi), (low, lo)):
+        if check_checksum(result.checksum, iters * scale, f"{subject} x{iters:,}"):
             raise SystemExit(EXIT_FAIL)
-    return Measurement(high.irefs - low.irefs, BINDING_ITERS_HIGH)
+    return Measurement(high.irefs - low.irefs, hi - lo)
 
 
 def resolve_rev(rev: str) -> str:
@@ -409,38 +451,42 @@ def run_decision(budget: dict, *, update: bool) -> int:
     )
 
 
-def run_binding(budget: dict, *, update: bool) -> int:
-    # The walk's per-iteration cost, isolated by subtracting two runs so the
-    # embedded interpreter's (identical) startup cancels out. The workload folds
-    # one unit per successful walk, so its checksum IS its iteration count, and
-    # `measure_mode` holds it to that identity: a run that ignored its argument
-    # reports a difference near zero, which a ceiling-only budget accepts.
-    measured = measure_mode("binding").irefs
+def run_binding(budget: dict, mode: str, *, update: bool) -> int:
+    """Measure one binding shape against its own budget.
+
+    Every shape here is the difference of two iteration counts, so the embedded
+    interpreter's (identical) startup cancels out. `measure_mode` holds each run
+    to its checksum first: a run that ignored its argument reports a difference
+    near zero, which a ceiling-only budget would accept.
+    """
+    subject = MODES[mode][1]
+    key = f"{mode.replace('-', '_')}_workload_irefs"
+    hi, lo = BINDING_ITERATIONS[mode]
+    measured = measure_mode(mode).irefs
     print(
-        f"binding walk over {BINDING_ITERS_HIGH - BINDING_ITERS_LOW:,} iterations "
-        f"(difference of {BINDING_ITERS_HIGH:,} and {BINDING_ITERS_LOW:,} runs)"
+        f"{subject} over {hi - lo:,} iterations (difference of {hi:,} and {lo:,} runs)"
     )
     if update:
-        budget["binding_workload_irefs"] = measured
+        budget[key] = measured
         BUDGET_FILE.write_text(json.dumps(budget, indent=2) + "\n", encoding="utf-8")
-        print(f"recorded binding budget: {measured:,} instructions")
+        print(f"recorded {subject} budget: {measured:,} instructions")
         return 0
+    if key not in budget:
+        print(f"perf_gate: no budget recorded for {subject}; run with --update")
+        return EXIT_CANNOT_RUN
     return check_against_budget(
         measured,
-        int(budget["binding_workload_irefs"]),
+        int(budget[key]),
         float(budget["binding_tolerance"]),
     )
 
 
 def main() -> int:
     args = sys.argv[1:]
-    mode = (
-        "binding"
-        if "--binding" in args
-        else "decision"
-        if "--decision" in args
-        else "core"
-    )
+    # `--binding` keeps its meaning -- the walk -- so an existing invocation and
+    # the budget recorded under it still name the same measurement.
+    flagged = [name for name in MODES if f"--{name}" in args]
+    mode = flagged[0] if flagged else "core"
     if "--against" in args:
         at = args.index("--against")
         if at + 1 >= len(args):
@@ -449,8 +495,8 @@ def main() -> int:
         return run_relative(mode, args[at + 1])
     update = "--update" in args
     budget = json.loads(BUDGET_FILE.read_text(encoding="utf-8"))
-    if mode == "binding":
-        return run_binding(budget, update=update)
+    if mode in BINDING_SHAPES:
+        return run_binding(budget, mode, update=update)
     if mode == "decision":
         return run_decision(budget, update=update)
     return run_core(budget, update=update)

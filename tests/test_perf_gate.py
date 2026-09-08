@@ -13,6 +13,7 @@ measures low and reads as an improvement it never earned.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -155,10 +156,33 @@ def test_every_mode_names_an_example_the_tree_builds() -> None:
     # does not exist fails at build time in the lane rather than here. Held to
     # the tree instead: every example named is a file under examples/.
     for mode, (example, subject) in gate.MODES.items():
-        crate = "valgebra-py" if mode == "binding" else "valgebra-core"
+        # Which crate holds the example is the same question the gate asks when
+        # it builds one: a binding shape needs the embedded interpreter and the
+        # binding crate, everything else builds in the core.
+        crate = "valgebra-py" if mode in gate.BINDING_SHAPES else "valgebra-core"
         path = ROOT / "crates" / crate / "examples" / f"{example}.rs"
         assert path.exists(), f"{mode} names {example}, which is not in the tree"
         assert subject
+
+
+def test_every_binding_shape_has_iterations_and_a_budget() -> None:
+    """A shape the gate can name is one it can measure and judge.
+
+    Three tables have to agree: the mode, the iteration pair it runs at, and the
+    budget key it reads. A shape in one and not the others is a mode that either
+    cannot run or cannot fail, and both look like a pass.
+    """
+    budget = json.loads(
+        (ROOT / "scripts" / "perf_budget.json").read_text(encoding="utf-8")
+    )
+    for mode in gate.BINDING_SHAPES:
+        assert mode in gate.MODES, f"{mode} has no example"
+        assert mode in gate.BINDING_ITERATIONS, f"{mode} has no iteration pair"
+        high, low = gate.BINDING_ITERATIONS[mode]
+        assert high > low > 0, f"{mode} iterations do not difference"
+        key = f"{mode.replace('-', '_')}_workload_irefs"
+        assert key in budget, f"{mode} has no recorded budget under {key}"
+        assert budget[key] > 0
 
 
 def _merge_base_step() -> str:
