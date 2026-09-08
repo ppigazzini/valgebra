@@ -93,6 +93,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a ledger plant that judges nothing is not a miss -- internal
 - feat: a bound over floats is a set the descriptor can hold
 - fix: build the error model when it is asked for
+- perf: a field name is shared rather than copied into every rebuilt schema
 
 -->
 
@@ -355,6 +356,15 @@ answer of its own, or a repair to a change not yet released.
   than raising `AttributeError` for an attribute the type declares.
 
 ### Changed
+
+- **Building and composing a schema costs less.** A field name was owned
+  outright by the field that declared it, so every pass that rebuilds a schema
+  — opening or closing its records, reindexing it onto another validator's
+  pools, simplifying it — copied the name of every field it carried across. On
+  the core's fixed workload those copies were 38% of every heap allocation the
+  crate made. A name is now shared: carrying it is a refcount bump and no
+  allocation. The workload runs in 161.0M instructions against 233.5M, and
+  compiling a fifty-field record costs 13.7 µs against 14.2. No answer changes.
 
 - **A schema is built in the lattice normal form.** The constructors folded two
   laws and left the rest standing, so `union(int, int)` rendered `int | int` and

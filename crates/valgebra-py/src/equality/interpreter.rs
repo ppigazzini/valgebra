@@ -170,7 +170,7 @@ fn a_constant_inside_any_container_is_read_through_its_slot() {
             ("record field", |s| {
                 Schema::keyed_map(
                     vec![Field {
-                        name: "x".to_owned(),
+                        name: "x".into(),
                         schema: s,
                         required: true,
                     }],
@@ -272,7 +272,7 @@ fn a_record_and_a_definition_are_read_through_the_pool_too() {
         };
         let field = |schema: Schema| {
             Schema::attr_record(vec![Field {
-                name: "x".to_owned(),
+                name: "x".into(),
                 schema,
                 required: true,
             }])
@@ -378,7 +378,7 @@ fn the_hash_is_blind_to_the_slot_and_to_the_order() {
         // without a class, so it is built here.
         let attributes = |name: &str, schema: Schema| {
             Schema::attr_record(vec![Field {
-                name: name.to_owned(),
+                name: name.into(),
                 schema,
                 required: true,
             }])

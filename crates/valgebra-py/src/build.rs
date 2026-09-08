@@ -559,8 +559,13 @@ fn resolve_type_hints<'py>(ty: &Bound<'py, PyType>) -> PyResult<Bound<'py, PyAny
 /// matched against dict keys as UTF-8, so a surrogate key cannot round-trip;
 /// refusing it at build time turns silent corruption — a lossy replacement that
 /// makes the field unmatchable — into an explicit error.
-fn field_name(name: &Bound<'_, PyString>) -> PyResult<String> {
-    name.to_str().map(str::to_owned).map_err(|_| {
+///
+/// The name is handed back borrowed from the Python string rather than copied
+/// into one of its own. Every caller turns it into the shared name a field
+/// holds, and that conversion copies the text anyway, so owning it here would
+/// buy an allocation per field and free it one line later.
+fn field_name<'a>(name: &'a Bound<'_, PyString>) -> PyResult<&'a str> {
+    name.to_str().map_err(|_| {
         PyValueError::new_err(
             "a record key must be valid Unicode; a field name cannot contain a lone surrogate",
         )
@@ -591,7 +596,7 @@ fn build_typed_dict(
     let mut fields = Vec::with_capacity(hints.len());
     for (name, hint) in hints.iter() {
         fields.push(Field {
-            name: field_name(&name.str()?)?,
+            name: field_name(&name.str()?)?.into(),
             schema: build_schema(&hint, lits, defs)?,
             // The qualifier on the *resolved* hint wins over the class's key
             // sets. CPython fills `__required_keys__` when the class is created,
@@ -750,7 +755,7 @@ fn build_object(
             continue;
         };
         fields.push(Field {
-            name: field_name(&name.str()?)?,
+            name: field_name(&name.str()?)?.into(),
             schema: build_schema(&hint, lits, defs)?,
             required: true,
         });
@@ -1154,8 +1159,8 @@ fn build_dict(
         if let Ok(name) = key.cast::<PyString>() {
             let raw = field_name(name)?;
             let (name, required) = match raw.strip_suffix('?') {
-                Some(stripped) => (stripped.to_owned(), false),
-                None => (raw, true),
+                Some(stripped) => (stripped.into(), false),
+                None => (raw.into(), true),
             };
             fields.push(Field {
                 name,

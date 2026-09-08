@@ -178,7 +178,7 @@ fn a_callback_is_found_through_every_container() {
         constraints: vec![Constraint::Predicate(PredIx::new(0))],
     };
     let field = |schema: Schema| Field {
-        name: "x".to_owned(),
+        name: "x".into(),
         schema,
         required: true,
     };
@@ -422,7 +422,7 @@ fn unordered_pairs_yields_each_distinct_pair_once() {
 fn a_union_fold_stops_only_once_a_member_is_inhabited() {
     let uninhabited = Schema::record(
         vec![Field {
-            name: "a".to_owned(),
+            name: "a".into(),
             schema: Schema::Nothing,
             required: true,
         }],
@@ -531,7 +531,7 @@ fn a_reference_and_a_refinement_are_read_beside_the_union_rule() {
 /// A field, spelled once rather than at each of the many sites below.
 fn field(name: &str, schema: Schema, required: bool) -> Field {
     Field {
-        name: name.to_owned(),
+        name: name.into(),
         schema,
         required,
     }
@@ -1242,7 +1242,7 @@ fn both_meets_ask_the_same_question_of_their_base() {
 fn each_half_of_an_attribute_schema_is_reachable_through_the_meet() {
     let record = |schema| Schema::AttrRecord {
         fields: vec![Field {
-            name: "a".to_owned(),
+            name: "a".into(),
             schema,
             required: true,
         }],
@@ -1266,7 +1266,7 @@ fn each_half_of_an_attribute_schema_is_reachable_through_the_meet() {
 fn an_attribute_record_is_inhabited_by_its_fields() {
     let record = |schema| Schema::AttrRecord {
         fields: vec![Field {
-            name: "a".to_owned(),
+            name: "a".into(),
             schema,
             required: true,
         }],
@@ -1277,7 +1277,7 @@ fn an_attribute_record_is_inhabited_by_its_fields() {
     // does not carry the attribute is still a value of the record.
     let optional = Schema::AttrRecord {
         fields: vec![Field {
-            name: "a".to_owned(),
+            name: "a".into(),
             schema: Schema::Nothing,
             required: false,
         }],

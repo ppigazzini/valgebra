@@ -22,6 +22,8 @@
 //! of combining two pools ([`Remap`]) and why the child set of each variant is
 //! declared in one place ([`Schema::map_children`]).
 
+use std::sync::Arc;
+
 /// Remap a pool index through the reindexing map built when two validators merge.
 /// Every index is in range by construction, so a miss is an internal invariant
 /// break; the map keeps the original index rather than panicking, so a malformed
@@ -1070,8 +1072,21 @@ fn already_said(field: &Field, defaults: &[MapClause]) -> bool {
 /// A named field of a [`Schema::KeyedMap`] or [`Schema::AttrRecord`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Field {
-    /// The key name.
-    pub name: String,
+    /// The key name, shared rather than owned outright.
+    ///
+    /// A field name is written once, when the frontend reads the annotation,
+    /// and never edited; every pass over a schema afterwards rebuilds the tree
+    /// and carries the name across unchanged. Owning it outright made each of
+    /// those rebuilds allocate and copy the name again, and a pass over a wide
+    /// record does that once per field: the name copies were the single largest
+    /// source of allocations in the core, ahead of the nodes themselves. A
+    /// shared pointer makes the carry a refcount bump, and it is atomic because
+    /// a validator is shared across threads on a free-threaded interpreter.
+    ///
+    /// Comparison, ordering and hashing read *through* to the string, so a name
+    /// is still a name: two fields with the same spelling are equal whether or
+    /// not they came from the same read.
+    pub name: Arc<str>,
     /// Schema the field's value must satisfy.
     pub schema: Schema,
     /// Whether the key must be present.
@@ -1087,7 +1102,7 @@ impl Field {
     /// field's required-ness by rebuilding it from the wrong parts.
     pub(crate) fn map_schema(&self, f: &impl Fn(&Schema) -> Schema) -> Field {
         Field {
-            name: self.name.clone(),
+            name: Arc::clone(&self.name),
             schema: f(&self.schema),
             required: self.required,
         }

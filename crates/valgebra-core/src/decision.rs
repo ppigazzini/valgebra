@@ -1595,7 +1595,7 @@ fn keyed_map_meet_empty(
     let mut keys: FxHashMap<&str, (Vec<&Schema>, bool)> = FxHashMap::default();
     for (fields, _) in &maps {
         for field in *fields {
-            let entry = keys.entry(field.name.as_str()).or_default();
+            let entry = keys.entry(&*field.name).or_default();
             entry.0.push(&field.schema);
             entry.1 |= field.required;
         }
@@ -1609,7 +1609,7 @@ fn keyed_map_meet_empty(
             };
             types_cannot_hold
                 || maps.iter().any(|(fields, closed)| {
-                    *closed && !fields.iter().any(|field| field.name == **name)
+                    *closed && !fields.iter().any(|field| *field.name == **name)
                 })
         })
 }
@@ -1851,7 +1851,7 @@ fn keyed_map_subtype(
         // Every supertype field is checked against `a`: a field `a` declares is
         // matched field-wise; a field `a` lacks is governed by `a`'s catch-all.
         let fields_ok = fb.iter().all(|b_field| {
-            match a_by_name.get(b_field.name.as_str()) {
+            match a_by_name.get(&*b_field.name) {
                 // Shared field: it must narrow in depth, and a field `b` requires
                 // must be required in `a` too.
                 Some(a_field) => {
@@ -1878,7 +1878,7 @@ fn keyed_map_subtype(
         // catch-all, so a `str`/`anything`-keyed clause of `b` must cover it.
         let extra_covered = fa
             .iter()
-            .filter(|a_field| !b_by_name.contains_key(a_field.name.as_str()))
+            .filter(|a_field| !b_by_name.contains_key(&*a_field.name))
             .all(|a_field| {
                 db.iter().any(|clause| {
                     matches!(clause.key, Schema::Str | Schema::Anything(_))
@@ -1918,7 +1918,7 @@ fn attr_record_subtype(
 ) -> bool {
     let a_by_name = field_index(fa);
     fb.iter().all(|b| {
-        a_by_name.get(b.name.as_str()).is_some_and(|a| {
+        a_by_name.get(&*b.name).is_some_and(|a| {
             // A supertype field the subtype only *may* carry is not a supertype
             // field: the subtype holds values with the attribute missing, and
             // those are outside the supertype.
@@ -1935,7 +1935,7 @@ fn attr_record_subtype(
 /// frontend rejects duplicates; the `debug_assert` makes that dependency explicit
 /// and catches a malformed IR in debug rather than deciding on a shadowed field.
 fn field_index(fields: &[Field]) -> FxHashMap<&str, &Field> {
-    let index: FxHashMap<&str, &Field> = fields.iter().map(|f| (f.name.as_str(), f)).collect();
+    let index: FxHashMap<&str, &Field> = fields.iter().map(|f| (&*f.name, f)).collect();
     debug_assert_eq!(
         index.len(),
         fields.len(),

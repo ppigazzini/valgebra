@@ -1353,7 +1353,7 @@ mod tests {
         let deep = (0..6).fold(
             Schema::record(
                 vec![Field {
-                    name: "leaf".to_owned(),
+                    name: "leaf".into(),
                     schema: Schema::Int,
                     required: true,
                 }],
@@ -1362,7 +1362,7 @@ mod tests {
             |inner, _| {
                 Schema::record(
                     vec![Field {
-                        name: "child".to_owned(),
+                        name: "child".into(),
                         schema: Schema::list(SeqShape::homogeneous(inner)),
                         required: true,
                     }],
@@ -1435,7 +1435,7 @@ mod tests {
         const CARRIED: &[(&str, Value)] = &[("a", Value::integer(1))];
         let pool = empty_pool();
         let field = |name: &str, schema, required| crate::ir::Field {
-            name: name.to_owned(),
+            name: name.into(),
             schema,
             required,
         };
@@ -1467,7 +1467,7 @@ mod tests {
         let closed =
             |fields: Vec<crate::ir::Field>, defaults| Schema::KeyedMap { fields, defaults };
         let field = |name: &str, schema, required| crate::ir::Field {
-            name: name.to_owned(),
+            name: name.into(),
             schema,
             required,
         };
@@ -1515,7 +1515,7 @@ mod tests {
         ];
         let pool = empty_pool();
         let field = crate::ir::Field {
-            name: "a".to_owned(),
+            name: "a".into(),
             schema: Schema::Int,
             required: true,
         };

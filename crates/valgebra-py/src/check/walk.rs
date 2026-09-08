@@ -792,7 +792,7 @@ fn keyed_map_matches_py(
         let declared: FxHashMap<&str, usize> = fields
             .iter()
             .enumerate()
-            .map(|(i, f)| (f.name.as_str(), i))
+            .map(|(i, f)| (&*f.name, i))
             .collect();
         let required = fields.iter().filter(|f| f.required).count();
         keyed_map_scan(fields, defaults, dict, ctx, required, |name| {
@@ -868,7 +868,7 @@ fn keyed_map_matches_json(
         match entries
             .iter()
             .rev()
-            .find(|(key, _)| field.name == key.as_ref())
+            .find(|(key, _)| &*field.name == key.as_ref())
         {
             Some((_, val)) => {
                 if !member(
@@ -896,7 +896,7 @@ fn keyed_map_matches_json(
     let plan = ctx.records.get(&(fields.as_ptr() as usize));
     let declares = |name: &str| match plan {
         Some(plan) => plan.by_name.contains_key(name),
-        None => fields.iter().any(|f| f.name == name),
+        None => fields.iter().any(|f| &*f.name == name),
     };
     // A closed record has no clause to cover an undeclared key with, so the first
     // one decides and there is nothing to collapse.
@@ -950,17 +950,17 @@ fn keyed_map_explain(
         out.push(type_mismatch("dict_type", "dict", value, path));
         return;
     };
-    let declared: FxHashSet<&str> = fields.iter().map(|field| field.name.as_str()).collect();
+    let declared: FxHashSet<&str> = fields.iter().map(|field| &*field.name).collect();
     for field in fields {
-        match dict.get_item(field.name.as_str()) {
+        match dict.get_item(&*field.name) {
             Ok(Some(item)) => {
-                path.push(PathSegment::Key(field.name.clone()));
+                path.push(PathSegment::Key(field.name.to_string()));
                 member(&field.schema, &Value::Py(&item), path, ctx, out);
                 path.pop();
             }
             Ok(None) if field.required => out.push(located(
                 path,
-                field.name.clone(),
+                field.name.to_string(),
                 "missing_key",
                 format!("required key {:?}", field.name),
                 "missing".to_owned(),
@@ -1339,12 +1339,12 @@ fn check_attr_record(
         let name = interned.and_then(|plan| plan.names.get(position));
         let attribute = match name {
             Some(interned) => obj.getattr(interned.bind(value.py())),
-            None => obj.getattr(field.name.as_str()),
+            None => obj.getattr(&*field.name),
         };
         match attribute {
             Ok(attr) => {
                 if ctx.mode.explains() {
-                    path.push(PathSegment::Key(field.name.clone()));
+                    path.push(PathSegment::Key(field.name.to_string()));
                 }
                 ok &= member(&field.schema, &Value::Py(&attr), path, ctx, out);
                 if ctx.mode.explains() {
@@ -1363,7 +1363,7 @@ fn check_attr_record(
                 if ctx.mode.explains() {
                     out.push(located(
                         path,
-                        field.name.clone(),
+                        field.name.to_string(),
                         "missing_attribute",
                         format!("attribute {:?}", field.name),
                         "missing".to_owned(),

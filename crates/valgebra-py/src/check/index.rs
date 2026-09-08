@@ -5,12 +5,13 @@ use pyo3::prelude::*;
 use pyo3::types::{PyInt, PyString};
 use regex::Regex;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::sync::Arc;
 use valgebra_core::{Constraint, Schema};
 
 use crate::input::Value;
 
 pub(crate) struct RecordPlan {
-    pub(crate) by_name: FxHashMap<Box<str>, usize>,
+    pub(crate) by_name: FxHashMap<Arc<str>, usize>,
     pub(crate) required: usize,
 }
 
@@ -146,7 +147,7 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
                         by_name: fields
                             .iter()
                             .enumerate()
-                            .map(|(i, f)| (f.name.as_str().into(), i))
+                            .map(|(i, f)| (Arc::clone(&f.name), i))
                             .collect(),
                         required: fields.iter().filter(|f| f.required).count(),
                     });

@@ -10,7 +10,7 @@ use std::cell::Cell;
 /// when one carries no row, which is what stops this list going stale.
 fn every_variant() -> Vec<Schema> {
     let field = |name: &str| Field {
-        name: name.to_owned(),
+        name: name.into(),
         schema: Schema::Int,
         required: true,
     };
@@ -393,7 +393,7 @@ fn labels_and_codes_for_every_variant() {
         (
             Schema::record(
                 vec![Field {
-                    name: "k".to_owned(),
+                    name: "k".into(),
                     schema: Schema::Int,
                     required: true,
                 }],
@@ -470,7 +470,7 @@ fn record_is_open(schema: &Schema) -> bool {
 fn with_records_open_flips_every_record_in_the_tree() {
     let record = Schema::record(
         vec![Field {
-            name: "k".to_owned(),
+            name: "k".into(),
             schema: Schema::Int,
             required: true,
         }],
@@ -498,7 +498,7 @@ fn with_records_open_flips_every_record_in_the_tree() {
 fn opening_drops_a_field_the_record_already_said() {
     let optional = |schema| {
         vec![Field {
-            name: "a".to_owned(),
+            name: "a".into(),
             schema,
             required: false,
         }]
@@ -539,7 +539,7 @@ fn opening_drops_a_field_the_record_already_said() {
     );
     let demanded = Schema::record(
         vec![Field {
-            name: "a".to_owned(),
+            name: "a".into(),
             schema: Schema::Nothing,
             required: true,
         }],
@@ -571,7 +571,7 @@ fn opening_drops_a_field_the_record_already_said() {
 fn closing_cannot_tell_an_open_record_from_a_mapping() {
     let free = Schema::record(
         vec![Field {
-            name: "a".to_owned(),
+            name: "a".into(),
             schema: Schema::ANYTHING,
             required: false,
         }],
@@ -617,7 +617,7 @@ fn opening_leaves_a_mapping_alone_and_opens_the_empty_record() {
 fn with_records_open_refolds_a_pair_it_creates() {
     let closed = Schema::record(
         vec![Field {
-            name: "a".to_owned(),
+            name: "a".into(),
             schema: Schema::Int,
             required: true,
         }],
@@ -915,12 +915,12 @@ fn the_escaped_marker_walk_finds_a_marker_wherever_it_sits() {
 #[test]
 fn field_is_cloneable_and_carries_its_flag() {
     let field = Field {
-        name: "n".to_owned(),
+        name: "n".into(),
         schema: Schema::Int,
         required: false,
     };
     let copy = field.clone();
-    assert_eq!(copy.name, "n");
+    assert_eq!(&*copy.name, "n");
     assert!(!copy.required);
     assert_eq!(copy.schema, Schema::Int);
 }
@@ -984,7 +984,7 @@ fn sequence_transforms_reach_the_prefix_and_the_tail() {
 fn keyed_map_transforms_recurse_through_fields_and_defaults() {
     let schema = Schema::KeyedMap {
         fields: vec![Field {
-            name: "f".to_owned(),
+            name: "f".into(),
             schema: Schema::Ref(DefIx::new(0)),
             required: true,
         }],
@@ -1225,7 +1225,7 @@ fn unfolding_reads_the_body_then_stands_in_the_bound_the_position_makes_sound() 
 fn a_reference_is_found_under_every_child_holding_variant() {
     let reference = Schema::Ref(DefIx::new(0));
     let field = |schema: Schema| Field {
-        name: "a".to_owned(),
+        name: "a".into(),
         schema,
         required: true,
     };
@@ -1302,7 +1302,7 @@ fn pruning_keeps_what_is_reached_and_renumbers_the_rest_in_order() {
 #[test]
 fn a_record_and_a_map_are_one_term_however_their_parts_are_written() {
     let field = |name: &str, schema: Schema| Field {
-        name: name.to_owned(),
+        name: name.into(),
         schema,
         required: true,
     };

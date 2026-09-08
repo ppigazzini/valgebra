@@ -37,7 +37,7 @@ fn boolean_corpus(depth: usize) -> Schema {
 fn wide_record(width: usize) -> Schema {
     let fields = (0..width)
         .map(|i| Field {
-            name: format!("f{i}"),
+            name: format!("f{i}").into(),
             schema: Schema::Literal(ConstIx::new(i)),
             required: i % 2 == 0,
         })
@@ -49,7 +49,7 @@ fn wide_record(width: usize) -> Schema {
 fn nested_records(depth: usize) -> Schema {
     let mut inner = Schema::record(
         vec![Field {
-            name: "leaf".to_owned(),
+            name: "leaf".into(),
             schema: Schema::Int,
             required: true,
         }],
@@ -58,7 +58,7 @@ fn nested_records(depth: usize) -> Schema {
     for _ in 0..depth {
         inner = Schema::record(
             vec![Field {
-                name: "child".to_owned(),
+                name: "child".into(),
                 schema: Schema::list(SeqShape::homogeneous(inner)),
                 required: true,
             }],

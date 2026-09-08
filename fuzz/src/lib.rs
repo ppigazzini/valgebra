@@ -152,7 +152,7 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
                 let name = NAMES[usize::from(u.arbitrary::<u8>()?) % NAMES.len()];
                 let schema = build_schema(u, depth - 1)?;
                 let required = u.arbitrary()?;
-                if fields.iter().any(|f| f.name == name) {
+                if fields.iter().any(|f| &*f.name == name) {
                     continue;
                 }
                 fields.push(Field {
@@ -257,7 +257,7 @@ mod tests {
                 let mut seen = std::collections::HashSet::new();
                 for field in fields {
                     assert!(
-                        seen.insert(field.name.as_str()),
+                        seen.insert(&*field.name),
                         "duplicate field name {:?} in {schema:?}",
                         field.name
                     );

@@ -154,7 +154,7 @@ fn decides_structural_container_emptiness() {
     assert!(!Schema::frozen_set(Schema::Nothing).is_empty());
     // A keyed map is empty exactly when a required field is impossible.
     let field = |required| Field {
-        name: "x".to_owned(),
+        name: "x".into(),
         schema: Schema::Nothing,
         required,
     };
@@ -219,7 +219,7 @@ fn decides_structural_subtyping_between_containers() {
 #[test]
 fn decides_record_and_mapping_subtyping() {
     let field = |name: &str, schema, required| Field {
-        name: name.to_owned(),
+        name: name.into(),
         schema,
         required,
     };
@@ -682,7 +682,7 @@ fn keyed_map_arms_are_pinned_independently_of_the_python_suite() {
     // rescued by the required-coverage holding.
     let map = |key, value| Schema::mapping(MapClause { key, value });
     let field = |name: &str, schema, required| Field {
-        name: name.to_owned(),
+        name: name.into(),
         schema,
         required,
     };
@@ -759,7 +759,7 @@ fn keyed_map_arms_are_pinned_independently_of_the_python_suite() {
 #[test]
 fn keyed_map_subtyping_decides_supertype_extra_field() {
     let field = |name: &str, schema, required| Field {
-        name: name.to_owned(),
+        name: name.into(),
         schema,
         required,
     };
@@ -1055,7 +1055,7 @@ fn decides_a_record_beside_its_catch_all() {
     // A closed record is a subtype of an open one that declares its fields.
     let closed = |fields| Schema::record(fields, Openness::Closed);
     let field = |name: &str, schema, required| Field {
-        name: name.to_owned(),
+        name: name.into(),
         schema,
         required,
     };
@@ -1221,7 +1221,7 @@ fn decides_refinement_bound_emptiness_with_an_ordering_oracle() {
 #[test]
 fn detects_uninhabited_recursive_schemas() {
     let field = |name: &str, schema, required| Field {
-        name: name.to_owned(),
+        name: name.into(),
         schema,
         required,
     };
@@ -1278,7 +1278,7 @@ fn decides_complement_subtyping_contravariantly() {
 #[test]
 fn decides_recursive_subtyping_coinductively() {
     let field = |name: &str, schema, required| Field {
-        name: name.to_owned(),
+        name: name.into(),
         schema,
         required,
     };
@@ -1471,7 +1471,7 @@ fn schema_holding_a_ref() -> impl Strategy<Value = Schema> {
                 .prop_map(|s| Schema::list(SeqShape::homogeneous(s))),
             inner.prop_map(|s| Schema::record(
                 vec![Field {
-                    name: "f".to_owned(),
+                    name: "f".into(),
                     schema: s,
                     required: true,
                 }],
@@ -2345,13 +2345,13 @@ fn member_full(schema: &Schema, value: &Obj, pool: &[Obj]) -> bool {
         Schema::KeyedMap { fields, defaults } => match value {
             Obj::Map(entries) => {
                 let fields_ok = fields.iter().all(|field| {
-                    match entries.iter().find(|(key, _)| field.name == *key) {
+                    match entries.iter().find(|(key, _)| &*field.name == *key) {
                         Some((_, val)) => member_full(&field.schema, val, pool),
                         None => !field.required,
                     }
                 });
                 let rest_ok = entries.iter().all(|(key, val)| {
-                    if fields.iter().any(|field| field.name == *key) {
+                    if fields.iter().any(|field| &*field.name == *key) {
                         return true;
                     }
                     defaults.iter().any(|clause| {
@@ -2439,13 +2439,13 @@ fn constraint_strategy() -> impl Strategy<Value = Constraint> {
 /// that invariant, so generating one measures the assertion rather than the
 /// rule.
 fn unique_by_name(fields: Vec<Field>) -> Vec<Field> {
-    let mut seen: Vec<String> = Vec::new();
+    let mut seen: Vec<std::sync::Arc<str>> = Vec::new();
     fields
         .into_iter()
         .filter(|field| {
             let fresh = !seen.contains(&field.name);
             if fresh {
-                seen.push(field.name.clone());
+                seen.push(std::sync::Arc::clone(&field.name));
             }
             fresh
         })
@@ -2468,7 +2468,7 @@ fn decidable_schema() -> impl Strategy<Value = Schema> {
     leaf.prop_recursive(3, 48, 4, |inner| {
         let field =
             (0usize..2, inner.clone(), proptest::bool::ANY).prop_map(|(n, schema, req)| Field {
-                name: ["a", "b"][n].to_owned(),
+                name: ["a", "b"][n].into(),
                 schema,
                 required: req,
             });

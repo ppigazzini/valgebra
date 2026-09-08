@@ -395,7 +395,7 @@ fn a_union_names_a_class_branch_by_its_class() {
             Schema::Instance(ClassIx::new(0)),
             Schema::AttrRecord {
                 fields: vec![Field {
-                    name: "x".to_owned(),
+                    name: "x".into(),
                     schema: Schema::Int,
                     required: true,
                 }],
@@ -594,7 +594,7 @@ fn a_set_and_a_frozenset_are_distinct_containers() {
 fn a_keyed_map_separates_fields_from_the_catch_all() {
     Python::attach(|py| {
         let field = |name: &str, schema, required| Field {
-            name: name.to_owned(),
+            name: name.into(),
             schema,
             required,
         };
@@ -801,7 +801,7 @@ fn a_reference_unfolds_its_definition_and_a_cycle_is_refused() {
             Schema::NoneType,
             Schema::record(
                 vec![Field {
-                    name: "next".to_owned(),
+                    name: "next".into(),
                     schema: Schema::Ref(DefIx::new(0)),
                     required: true,
                 }],
@@ -909,7 +909,7 @@ fn an_attribute_record_checks_the_class_then_every_attribute() {
         let bare_class = module.getattr("NoAttrs").expect("NoAttrs");
         let pool = vec![point_class.clone().unbind(), bare_class.clone().unbind()];
         let field = |name: &str, schema| Field {
-            name: name.to_owned(),
+            name: name.into(),
             schema,
             required: true,
         };
@@ -952,7 +952,7 @@ fn an_attribute_record_checks_the_class_then_every_attribute() {
         // denotation is what holds the walk to it.
         let optional = Schema::AttrRecord {
             fields: vec![Field {
-                name: "absent".to_owned(),
+                name: "absent".into(),
                 schema: Schema::Int,
                 required: false,
             }],
@@ -1036,7 +1036,7 @@ fn json_object<'a>(pairs: Vec<(&'a str, JsonValue<'a>)>) -> JsonValue<'a> {
 
 fn field(name: &str, schema: Schema, required: bool) -> Field {
     Field {
-        name: name.to_owned(),
+        name: name.into(),
         schema,
         required,
     }
@@ -1751,7 +1751,7 @@ fn the_json_record_path_agrees_with_and_without_its_plan() {
     Python::attach(|py| {
         let schema = Schema::keyed_map(
             vec![Field {
-                name: "a".to_owned(),
+                name: "a".into(),
                 schema: Schema::Int,
                 required: true,
             }],

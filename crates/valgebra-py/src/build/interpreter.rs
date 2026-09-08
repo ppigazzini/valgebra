@@ -566,7 +566,7 @@ fn a_declared_field_becomes_an_attribute_beside_the_class() {
                     Schema::AttrRecord { fields } => Some(
                         fields
                             .iter()
-                            .map(|field| field.name.clone())
+                            .map(|field| field.name.to_string())
                             .collect::<Vec<_>>(),
                     ),
                     _ => None,

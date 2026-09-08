@@ -10,7 +10,7 @@ fn recursive_record() -> Validator {
         Vec::new(),
         vec![Schema::record(
             vec![Field {
-                name: "a".to_owned(),
+                name: "a".into(),
                 schema: Schema::Int,
                 required: true,
             }],

@@ -13,7 +13,7 @@ const MAX_SHIFT: usize = 8;
 
 fn field(schema: Schema) -> Field {
     Field {
-        name: "f".to_owned(),
+        name: "f".into(),
         schema,
         required: true,
     }
