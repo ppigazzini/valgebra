@@ -126,6 +126,35 @@ def test_naming_the_untracked_surface_fails() -> None:
     assert not lint.check_internal_reference("see the untracked working area")
 
 
+def test_naming_an_internal_note_or_a_milestone_code_fails() -> None:
+    """The half of the internal surface written as prose rather than as a path.
+
+    A page or a message saying "REPORT-31 asked for this" or "what M19 left
+    open" points at something no reader outside the working area can open. The
+    path check cannot see it -- there is no path -- so the names are held
+    directly, and the sentence has to carry its own reason instead.
+    """
+    for names_one in (
+        "REPORT-31 asked for the closed core",
+        "the plan in REPORT-35 section 5",
+        "what M19 left open",
+        "M33.2's exit criterion",
+        "recorded in 2-MILESTONES",
+        "the workflow in PROMPT.md",
+        "see 5-THEORY for the citation",
+        "ITERATION-74 records the slice",
+    ):
+        assert lint.check_internal_reference(names_one), names_one
+
+    for stands_alone in (
+        "the decision procedure asked for a closed core",
+        "the lowering left the class representation open",
+        "the exit criterion was not met",
+        "the release checklist records it",
+    ):
+        assert not lint.check_internal_reference(stands_alone), stands_alone
+
+
 def test_a_budget_number_in_prose_fails() -> None:
     budget = json.loads(
         (ROOT / "scripts" / "perf_budget.json").read_text(encoding="utf-8")

@@ -63,6 +63,16 @@ EXIT_CANNOT_RUN = 2
 ROOT = Path(__file__).resolve().parent.parent
 INTERNAL = "__DEV"
 
+# The other half of the internal surface: the notes and plans that live under it.
+# A page or a commit naming one of these dangles exactly as a `__DEV/` path does,
+# and the path check cannot see it, because the name is written as prose rather
+# than as a path -- "REPORT-31 asked for", "what M19 left open". Held by name
+# because there is no path to match.
+INTERNAL_NAMES = re.compile(
+    r"REPORT-[0-9]+|ITERATION-[0-9]+|\b[0-9]-(?:MILESTONES|THEORY|REFERENCES|PROJECT)\b"
+    r"|\b00-CONTRACT\b|\bPROMPT\.md\b|\bM[0-9]+(?:\.[0-9]+)?\b"
+)
+
 # `[text](target)`, excluding image embeds, which carry the same rule but are
 # matched by the same expression.
 LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
@@ -156,14 +166,19 @@ def check_named_paths(text: str, ignored: set[str] | None = None) -> list[str]:
 
 
 def check_internal_reference(text: str) -> list[str]:
+    problems = []
     if INTERNAL in text:
-        return [
-            (
-                f"names the internal surface ({INTERNAL}/), which is gitignored: "
-                "the reference dangles for every reader but its author"
-            )
-        ]
-    return []
+        problems.append(
+            f"names the internal surface ({INTERNAL}/), which is gitignored: "
+            "the reference dangles for every reader but its author"
+        )
+    problems.extend(
+        f"names {name}, which is an internal note or a milestone code: it "
+        "dangles for every reader but its author, and the sentence has to "
+        "stand on its own instead"
+        for name in sorted(set(INTERNAL_NAMES.findall(text)))
+    )
+    return problems
 
 
 def gate_numbers() -> list[str]:
@@ -437,9 +452,13 @@ def main() -> int:
     # reads every tracked file.
     # This file names the surface to forbid it, a test of the rule has to write
     # one to check it, and `.gitignore` is where the surface is declared ignored.
+    # The commit-message ledger is the same case a second time: it carries the
+    # names in order to refuse them, and holds its pattern to examples that have
+    # to be spelled to mean anything.
     exempt = {
         ROOT / "scripts" / "docs_lint.py",
         ROOT / "tests" / "test_docs_lint.py",
+        ROOT / "tests" / "test_commit_messages.py",
         ROOT / ".gitignore",
     }
     referencing = [path for path in tracked_files() if path not in exempt]

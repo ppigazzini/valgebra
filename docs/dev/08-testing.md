@@ -99,6 +99,7 @@ for and misses the other. Fifteen of them:
 | `tests/test_changelog_ledger.py` | every `feat`/`fix` commit since the last release is on the changelog roll |
 | `tests/test_closure_ledger.py` | every schema variant is a generator, a representative, or a marker |
 | `tests/test_local_gate.py` | every merge-gate step is planned by the local gate or excused by name |
+| `tests/test_commit_messages.py` | no commit message names the internal working area |
 | `tests/test_fuzz_lane.py` | the fuzz soak names its allocation ceiling and forks its batches |
 | `tests/test_ledger_plants.py` | every ledger fails on the defect it exists to catch |
 

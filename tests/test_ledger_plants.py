@@ -23,6 +23,7 @@ LEDGER: every ledger fails on the defect it exists to catch
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -50,6 +51,40 @@ class Plant(NamedTuple):
     """Every path the plant writes, so the copy can be repaired after it."""
     apply: Callable[[Path], None]
     """Break the claim, given the root of the copy."""
+
+
+def _name_the_working_area(tree: Path) -> None:
+    """Rewrite the tip's message so it points at a note no reader can open.
+
+    Spelled from its pieces rather than written out, so this file does not
+    itself carry the string the docs lint refuses.
+    """
+    # Written as a join on purpose: spelled out, this file would carry the very
+    # reference the docs lint refuses, and fail it.
+    note = "-".join(("REPORT", "99"))  # noqa: FLY002
+    # An identity of its own: a clone inherits no committer, and this must not
+    # depend on whether the machine running it has one configured.
+    subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        [  # noqa: S607 - git is on the path of every machine that clones this
+            "git",
+            "-C",
+            str(tree),
+            "commit",
+            "--amend",
+            "--no-verify",
+            "-m",
+            f"test: a planted message\n\n{note} asked for this.",
+        ],
+        check=True,
+        capture_output=True,
+        env={
+            **os.environ,
+            "GIT_AUTHOR_NAME": "plant",
+            "GIT_AUTHOR_EMAIL": "plant@example.invalid",
+            "GIT_COMMITTER_NAME": "plant",
+            "GIT_COMMITTER_EMAIL": "plant@example.invalid",
+        },
+    )
 
 
 def _edit(tree: Path, relative: str, old: str, new: str) -> None:
@@ -159,6 +194,15 @@ PLANTS = (
             "      - name: Audit the workflows",
             RUNNER_ONLY_STEP,
         ),
+    ),
+    Plant(
+        "tests/test_commit_messages.py",
+        (),
+        # The subject is a message rather than a file, and the stage is a real
+        # clone, so the plant writes one: the tip's message gains a name from
+        # the working area. Nothing in the tree changes, which is why this row
+        # touches no path and repairs itself by restoring the message.
+        _name_the_working_area,
     ),
     Plant(
         "tests/test_fuzz_lane.py",
