@@ -19,6 +19,10 @@ _T = TypeVar("_T")
 #: The distribution version, taken from the crate manifest the wheel is built
 #: from rather than read back out of the installed metadata.
 __version__: str
+#: Whether this extension carries debug assertions, which is what separates a
+#: `maturin develop` build from a release or PGO one. Read by the timing
+#: harnesses, which refuse to quote a figure from a debug build.
+_debug_build: bool
 
 class ValidationError(Exception):
     # The structured, machine-readable error model. `errors` is a tuple of
@@ -94,6 +98,7 @@ __all__ = [
     "ValidationError",
     "Validator",
     "__version__",
+    "_debug_build",
     "anything",
     "complement",
     "intersection",

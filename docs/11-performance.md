@@ -71,8 +71,10 @@ the manifest), CPython 3.14.7 built from source with
 `CFLAGS=-march=native -mtune=native`, and **the GIL enabled**
 (`sysconfig.get_config_var("Py_GIL_DISABLED")` is `0`; the free-threaded build
 of the same version runs this work about twice as slow, so a figure measured on
-one is not comparable with the other), pydantic 2.13.4, jsonschema 4.26.0,
-criterion 0.8.2, pytest-benchmark 5.2.3.
+one is not comparable with the other), criterion 0.8.2 and pytest-benchmark
+5.2.3. The comparison packages are whichever versions the bench group resolves:
+`uv.lock` records them and `scripts/compare_gate.py` prints them beside the
+figures, so a version written here could only go stale.
 
 `sysconfig.get_config_var("CONFIG_ARGS")` reports that build on the machine
 these figures come from. The native tuning is the flag that matters when
@@ -87,10 +89,17 @@ uv run maturin build --release --pgo -i .venv/bin/python
 ```
 
 pydantic's PyPI wheels are likewise PGO-built, so this is a release-to-release
-comparison. The build matters more than it reads: on these shapes a plain
-`--release` build is **1.3x to 1.9x slower** than the PGO one — 1.9x on the large
-array, 1.8x on deep nesting, 1.3x on the record and the scalar — and a debug
-build is not representative of either.
+comparison.
+
+**Build with PGO if you build your own wheel**, and read no figure taken from a
+debug build as either. How much PGO adds over a plain `--release` build is not a
+constant this page can state. It is whatever the profile can still arrange that
+fat LTO did not, so it shrinks as the hot paths themselves get shorter: measured
+on one machine across this project's history it has ranged from 1.75x down to
+1.01x, and the shapes where it once bought the most are the ones where it now
+buys the least — because the release build caught up, not because the profile
+stopped working. If the number matters to you, measure it on your own build:
+`scripts/compare_gate.py` against each wheel is the way.
 
 The figures are measured on the wheel carrying valgebra's full feature set — the
 per-validator precompute (record-field lookups, literal-union dispatch) and

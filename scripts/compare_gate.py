@@ -66,6 +66,56 @@ class Shape(TypedDict):
     number: int
 
 
+def provenance() -> str | None:
+    """Say which extension is being timed, and refuse one that is not optimised.
+
+    Two readings during this gate's own history were of a binary nobody meant to
+    measure: an editable install that silently fell back to a debug build, and a
+    profiling build swapped in for symbols. Both produced figures off by a factor
+    of ten or more, and both looked exactly like a regression. A timing run has
+    to say what it timed.
+
+    The module that is *loaded* is the one asked, not a file matching a glob: a
+    package directory can hold an extension per interpreter, and naming the
+    wrong one is the same failure a step later.
+
+    The size is the tell for the build. A release extension is a couple of
+    megabytes; a debug or profiling one carries its symbols and runs an order of
+    magnitude larger, so a threshold between them separates the two without
+    asking the compiler what it did.
+    """
+    from valgebra import _valgebra  # noqa: PLC0415
+
+    loaded = getattr(_valgebra, "__file__", None)
+    if loaded is None:
+        return "the extension reports no file: nothing to name"
+    extension = Path(loaded)
+    size = extension.stat().st_size
+    print(f"extension: {extension} ({size / 1_048_576:.1f} MiB)")
+    if getattr(_valgebra, "_debug_build", False):
+        return (
+            f"{extension.name} was built with debug assertions, so it is a "
+            "`maturin develop` build rather than a release one; a figure from "
+            "it is an order of magnitude off and is not comparable with "
+            "anything here. Rebuild with `--release`, or install the wheel."
+        )
+    return None
+
+
+def comparison_versions() -> str:
+    """Read the versions the figures are measured against, rather than write them."""
+    from importlib import metadata  # noqa: PLC0415
+
+    named = []
+    for package in ("valgebra", "pydantic", "pydantic-core", "jsonschema"):
+        try:
+            found = metadata.version(package)
+        except metadata.PackageNotFoundError:
+            found = "absent"
+        named.append(f"{package} {found}")
+    return ", ".join(named)
+
+
 def _building(build: Callable[[], object]) -> Callable[[object], object]:
     """Time a compile, and answer the rig check the accept shapes answer.
 
@@ -265,6 +315,11 @@ def main() -> int:
     if prepared is None:
         return EXIT_CANNOT_RUN
     ceilings, shapes = prepared
+    wrong_build = provenance()
+    if wrong_build is not None:
+        print(f"compare_gate: {wrong_build}")
+        return EXIT_CANNOT_RUN
+    print(f"measured against: {comparison_versions()}")
     if not warm_up(shapes):
         return EXIT_FAIL
 

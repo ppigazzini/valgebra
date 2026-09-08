@@ -196,6 +196,16 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     // so the two cannot disagree -- and `tests/test_version.py` holds them to
     // each other rather than trusting that.
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    // Whether this extension was built with debug assertions on, which is what
+    // separates a `maturin develop` build from a `--release` or PGO one.
+    //
+    // A timing harness has to know: a figure taken from a debug build is an
+    // order of magnitude off and looks exactly like a regression, and guessing
+    // the build from the file's size does not separate them -- the debug
+    // extension is eight megabytes against the release three, close enough that
+    // a threshold between the two is a coin toss on the next toolchain. The
+    // build knows what it is, so it says so rather than being inferred.
+    module.add("_debug_build", cfg!(debug_assertions))?;
     let failure = py.get_type::<ValidationError>();
     // The six documented attributes are built on the access that asks for one,
     // from the failures a raised error carries. `__getattr__` runs only when

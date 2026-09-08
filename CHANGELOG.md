@@ -93,11 +93,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a ledger plant that judges nothing is not a miss -- internal
 - feat: a bound over floats is a set the descriptor can hold
 - fix: build the error model when it is asked for
-- perf: a field name is shared rather than copied into every rebuilt schema
-- perf: size a reopened record's field list from the list it rebuilds
-- perf: ask a schema for the regions only where the answer can be used
-- perf: the walk's leaf decision is a test, not a call
-- perf: a record's declared keys are interned for the explain walk too
+- fix: a timing harness names the build it measured, and refuses a debug one -- internal
 
 -->
 
