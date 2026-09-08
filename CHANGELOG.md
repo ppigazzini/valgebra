@@ -97,6 +97,7 @@ answer of its own, or a repair to a change not yet released.
 - perf: size a reopened record's field list from the list it rebuilds
 - perf: ask a schema for the regions only where the answer can be used
 - perf: the walk's leaf decision is a test, not a call
+- perf: a record's declared keys are interned for the explain walk too
 
 -->
 
@@ -359,6 +360,16 @@ answer of its own, or a repair to a change not yet released.
   than raising `AttributeError` for an attribute the type declares.
 
 ### Changed
+
+- **Explaining a failure over a record costs a third less.** The accepting walk
+  scans a dict once and resolves each key it finds through a map built with the
+  validator; the explaining walk asked the dict for each declared key by name,
+  and a Rust string handed to a dict lookup is decoded into a fresh Python
+  string and hashed before the probe can start -- once per field, per call. The
+  declared keys are interned with the validator, as the attribute names already
+  were, so the lookup is the probe alone. A fifty-field record reporting one bad
+  field moves from **2.38 to 1.53 of pydantic-core's time**, and the shape's
+  ceiling comes down from 3.5 to 2.5. No answer changes.
 
 - **The membership walk costs a third less.** Every scalar arm of the walk ended
   in a helper that passed a boolean through and recorded a violation when it was

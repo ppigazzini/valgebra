@@ -13,6 +13,16 @@ use crate::input::Value;
 pub(crate) struct RecordPlan {
     pub(crate) by_name: FxHashMap<Arc<str>, usize>,
     pub(crate) required: usize,
+    /// The interned key of each declared field, in field order.
+    ///
+    /// The same thing [`AttrsPlan`] holds for `getattr`, for the other lookup a
+    /// record does. The explain walk asks the dict for each declared key by
+    /// name, and a Rust `&str` handed to `get_item` is decoded into a fresh
+    /// `PyString` and hashed before the lookup can start -- per field, per
+    /// call. An interned key carries its hash with it, so the lookup is the
+    /// probe alone. The accepting walk does not need these: it scans the dict
+    /// once and resolves each key it finds through `by_name`.
+    pub(crate) keys: Vec<Py<PyString>>,
 }
 
 /// The interned attribute names of one [`Schema::AttrRecord`] node, in field
@@ -107,13 +117,18 @@ pub(crate) struct ValidatorIndex {
 impl ValidatorIndex {
     /// Every Python object this index owns, for the validator's `__traverse__`.
     ///
-    /// Only the interned attribute names: the other plans hold Rust values --
-    /// integer and string sets, compiled patterns -- copied out of the pool
-    /// rather than referenced. A `str` joins no cycle, so nothing here can be
-    /// the edge a collector needs; a traversal that skipped an owned reference
-    /// would still be wrong on its own terms.
+    /// The interned attribute names and the interned record keys: the other
+    /// plans hold Rust values -- integer and string sets, compiled patterns --
+    /// copied out of the pool rather than referenced. A `str` joins no cycle,
+    /// so nothing here can be the edge a collector needs; a traversal that
+    /// skipped an owned reference would still be wrong on its own terms, which
+    /// is why the keys join this the moment the record plan starts holding
+    /// them.
     pub(crate) fn interned_names(&self) -> impl Iterator<Item = &Py<PyString>> {
-        self.attrs.values().flat_map(|plan| plan.names.iter())
+        self.attrs
+            .values()
+            .flat_map(|plan| plan.names.iter())
+            .chain(self.records.values().flat_map(|plan| plan.keys.iter()))
     }
 }
 
@@ -150,6 +165,10 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
                             .map(|(i, f)| (Arc::clone(&f.name), i))
                             .collect(),
                         required: fields.iter().filter(|f| f.required).count(),
+                        keys: fields
+                            .iter()
+                            .map(|f| PyString::new(py, &f.name).unbind())
+                            .collect(),
                     });
             }
             for f in fields {

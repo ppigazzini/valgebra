@@ -979,8 +979,19 @@ fn keyed_map_explain(
         return;
     };
     let declared: FxHashSet<&str> = fields.iter().map(|field| &*field.name).collect();
-    for field in fields {
-        match dict.get_item(&*field.name) {
+    // The interned keys, in field order. Asking the dict by Rust text decodes a
+    // fresh `PyString` and hashes it before the probe can start, once per field
+    // per call; an interned key carries its hash. A schema absent from the index
+    // falls back to its own text, so correctness never depends on the plan being
+    // complete -- the two spellings name the same key.
+    let interned = ctx.records.get(&(fields.as_ptr() as usize));
+    for (position, field) in fields.iter().enumerate() {
+        let key = interned.and_then(|plan| plan.keys.get(position));
+        let found = match key {
+            Some(interned) => dict.get_item(interned.bind(dict.py())),
+            None => dict.get_item(&*field.name),
+        };
+        match found {
             Ok(Some(item)) => {
                 path.push(PathSegment::Key(field.name.to_string()));
                 member(&field.schema, &Value::Py(&item), path, ctx, out);
