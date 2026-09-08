@@ -1595,6 +1595,21 @@ fn the_rules_refute_prove_and_decline_these() {
         Relation::Fails
     );
 
+    // A length that cannot match refutes on its own, whatever the elements
+    // are: the pair below has an element pair no oracle here can relate, so a
+    // rule that fell through to comparing them would answer `Unknown` where the
+    // shapes alone say `Fails`.
+    assert_eq!(
+        relation(
+            &Schema::tuple(SeqShape::fixed([
+                Schema::Instance(ClassIx::new(0)),
+                Schema::Int,
+            ])),
+            &Schema::tuple(SeqShape::fixed([Schema::Instance(ClassIx::new(1))])),
+        ),
+        Relation::Fails
+    );
+
     // Declined: a leaf pair only an oracle can relate, and a class beside a
     // literal. `NoLeafRelations` answers neither, and the rules say so rather
     // than reporting a refutation they have not earned.

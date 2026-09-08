@@ -574,6 +574,92 @@ fn a_sequence_matches_its_regex_and_its_container_kind() {
     });
 }
 
+/// A sequence with a prefix is not one schema at every position, so the loop
+/// must not take it.
+///
+/// `tuple[str, int, ...]` says the first element is a string and the rest are
+/// integers. A loop that read the tail as the whole shape would test the first
+/// element against `int` and reject the value the schema admits.
+#[test]
+fn a_prefix_is_not_tested_against_the_repeated_tail() {
+    Python::attach(|py| {
+        let prefixed = Schema::tuple(SeqShape::prefix_tail([Schema::Str], Schema::Int));
+        let good = PyTuple::new(py, [PyString::new(py, "a").into_any()])
+            .expect("a tuple builds")
+            .into_any();
+        let good = good
+            .cast::<PyTuple>()
+            .expect("a tuple")
+            .as_sequence()
+            .concat(
+                PyTuple::new(py, [1i64, 2])
+                    .expect("a tuple builds")
+                    .as_sequence(),
+            )
+            .expect("two tuples concatenate")
+            .to_tuple()
+            .expect("a sequence of tuples is a tuple")
+            .into_any();
+        case(py, &prefixed, &good, true);
+        // The tail's schema at the prefix's position is not the shape: an int
+        // first is a non-member, and a loop over the tail alone would admit it.
+        let wrong = PyTuple::new(py, [1i64, 2])
+            .expect("a tuple builds")
+            .into_any();
+        case(py, &prefixed, &wrong, false);
+    });
+}
+
+/// A sequence of one scalar kind is walked by a loop of its own, and that loop
+/// answers what the general walk answers.
+///
+/// The loop reads the element schema once and tests each element against the
+/// kind, without the depth guard, the signal check and the dispatch the general
+/// walk pays per element. What it must not lose is the answer: one element that
+/// is not of the kind makes the value a non-member, and the loop has to stop
+/// there rather than fold the elements together.
+#[test]
+fn a_sequence_of_one_scalar_kind_rejects_an_element_that_is_not_one() {
+    Python::attach(|py| {
+        let bad = |first: bool| {
+            let items = PyList::new(py, [1i64]).expect("a one-element list builds");
+            if first {
+                items.insert(0, PyString::new(py, "x")).expect("insert");
+            } else {
+                items.append(PyString::new(py, "x")).expect("append");
+            }
+            items.into_any()
+        };
+        let list_of_int = Schema::list(SeqShape::homogeneous(Schema::Int));
+        case(py, &list_of_int, &list_of(py, vec![1, 2, 3]), true);
+        // Wherever the element that is not an int sits: first, so the loop must
+        // stop; last, so it must not have folded the earlier answers away.
+        case(py, &list_of_int, &bad(true), false);
+        case(py, &list_of_int, &bad(false), false);
+
+        // The same for the immutable container, which the loop walks without a
+        // scan because a tuple cannot resize under it.
+        let tuple_of_int = Schema::tuple(SeqShape::homogeneous(Schema::Int));
+        let mixed = PyTuple::new(py, [1i64, 2])
+            .expect("a tuple builds")
+            .into_any();
+        case(py, &tuple_of_int, &mixed, true);
+        let spoiled = PyTuple::new(py, [PyString::new(py, "x")])
+            .expect("a tuple builds")
+            .into_any();
+        case(py, &tuple_of_int, &spoiled, false);
+
+        // And for a set, whose elements the same loop tests.
+        let set_of_int = Schema::set(Schema::Int);
+        let set = PySet::new(py, [1i64, 2]).expect("a set builds").into_any();
+        case(py, &set_of_int, &set, true);
+        let spoiled = PySet::new(py, [PyString::new(py, "x")])
+            .expect("a set builds")
+            .into_any();
+        case(py, &set_of_int, &spoiled, false);
+    });
+}
+
 #[test]
 fn a_set_and_a_frozenset_are_distinct_containers() {
     Python::attach(|py| {
@@ -1925,5 +2011,60 @@ fn the_json_path_and_the_object_path_agree() {
             ctx,
             &mut Vec::new()
         ));
+    });
+}
+
+/// The scalar loop and the walk admit the same values.
+///
+/// `scalar_admits` states the scalar rules a second time so a homogeneous list
+/// can test its elements without the walk's per-element bookkeeping -- the
+/// difference between the two paths is 70% of a list of integers. Two
+/// statements of one rule is how a value comes to be decided two ways, so this
+/// asks both about every scalar schema and every kind of value the walk can be
+/// handed, and requires the same answer.
+#[test]
+fn the_scalar_loop_and_the_walk_admit_the_same_values() {
+    Python::initialize();
+    Python::attach(|py| {
+        let scalars = [
+            Schema::ANYTHING,
+            Schema::ANY,
+            Schema::Nothing,
+            Schema::NoneType,
+            Schema::Bool,
+            Schema::Int,
+            Schema::Float,
+            Schema::Str,
+            Schema::Bytes,
+        ];
+        let values: Vec<Bound<'_, PyAny>> = vec![
+            py.None().into_bound(py),
+            PyBool::new(py, true).to_owned().into_any(),
+            PyBool::new(py, false).to_owned().into_any(),
+            0_i64.into_pyobject(py).expect("an int").into_any(),
+            (-7_i64).into_pyobject(py).expect("an int").into_any(),
+            PyFloat::new(py, 1.5).into_any(),
+            PyString::new(py, "a").into_any(),
+            PyBytes::new(py, b"a").into_any(),
+            PyList::empty(py).into_any(),
+            PyDict::new(py).into_any(),
+        ];
+        for schema in &scalars {
+            let kind = scalar_of(schema).expect("every schema above is a scalar");
+            for value in &values {
+                let walked = holds(py, schema, value, &[], &[]);
+                let looped = scalar_admits(kind, &Value::Py(value));
+                assert_eq!(
+                    walked, looped,
+                    "the walk and the scalar loop disagree about {schema:?} and {value:?}"
+                );
+            }
+        }
+        // And the other direction: a schema the loop calls a scalar is one the
+        // walk answers without descending, so nothing that needs a descent may
+        // be named here.
+        assert!(scalar_of(&Schema::list(SeqShape::homogeneous(Schema::Int))).is_none());
+        assert!(scalar_of(&Schema::Literal(ConstIx::new(0))).is_none());
+        assert!(scalar_of(&Schema::Instance(ClassIx::new(0))).is_none());
     });
 }

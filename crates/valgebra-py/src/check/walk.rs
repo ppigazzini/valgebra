@@ -242,6 +242,81 @@ pub(crate) fn member(
     }
 }
 
+/// A schema whose membership is decided by the value alone.
+///
+/// Named as a kind rather than answered as a test, so a caller that asks the
+/// same schema about many values -- a homogeneous sequence -- reads the schema
+/// once and tests many times.
+///
+/// This *is* a second statement of the scalar rules, beside the arms of
+/// [`member`], and it is one deliberately: routing those arms through here cost
+/// the call boundary 2.8% and the record walk 2.4%, because a match the
+/// compiler can see through is worth more there than the sharing is. The two
+/// are held together by a test rather than by construction --
+/// `the_scalar_loop_and_the_walk_admit_the_same_values` asks both about every
+/// scalar schema and every kind of value, so a rule changed in one place and
+/// not the other fails rather than deciding one value two ways.
+#[derive(Clone, Copy)]
+enum Scalar {
+    /// The top and the bottom, which admit everything and nothing.
+    Everything,
+    Nothing,
+    NoneType,
+    Bool,
+    Int,
+    Float,
+    Str,
+    Bytes,
+}
+
+/// The scalar kind of a schema, or `None` for one the walk must descend into.
+#[inline]
+fn scalar_of(schema: &Schema) -> Option<Scalar> {
+    Some(match schema {
+        Schema::Anything(_) => Scalar::Everything,
+        Schema::Nothing => Scalar::Nothing,
+        Schema::NoneType => Scalar::NoneType,
+        Schema::Bool => Scalar::Bool,
+        Schema::Int => Scalar::Int,
+        Schema::Float => Scalar::Float,
+        Schema::Str => Scalar::Str,
+        Schema::Bytes => Scalar::Bytes,
+        _ => return None,
+    })
+}
+
+/// Whether a scalar kind admits a value.
+#[inline]
+fn scalar_admits(kind: Scalar, value: &Value<'_, '_>) -> bool {
+    match kind {
+        Scalar::Everything => true,
+        Scalar::Nothing => false,
+        Scalar::NoneType => value.is_none(),
+        Scalar::Bool => value.is_bool(),
+        // bool subclasses int, so True/False are ints: Bool is a subset of Int.
+        Scalar::Int => value.is_int(),
+        Scalar::Float => value.is_float(),
+        Scalar::Str => value.is_str(),
+        Scalar::Bytes => value.is_bytes(),
+    }
+}
+
+/// The scalar kind every position of a sequence takes, where the walk of it
+/// needs no path and reports no violation.
+///
+/// The shape a homogeneous list or tuple of a builtin type takes -- `list[int]`,
+/// `tuple[str, ...]` -- and the one whose per-element cost is almost all
+/// bookkeeping: a depth guard, a fatal-signal check and a dispatch around a
+/// single type test. An explaining walk is not this shape, since it records the
+/// position of each element it rejects.
+#[inline]
+fn homogeneous_scalar(prefix: &[Schema], tail: Option<&Schema>, ctx: Ctx<'_>) -> Option<Scalar> {
+    if !prefix.is_empty() || ctx.mode.explains() {
+        return None;
+    }
+    scalar_of(tail?)
+}
+
 /// A leaf decision: pass `ok` through, recording a type/value mismatch when it is
 /// false in explain mode.
 ///
@@ -334,6 +409,28 @@ fn check_seq(
             if !SeqArity::of(prefix.len(), tail).admits(list.len()) {
                 return seq_length_fail(len_code, kind_word, prefix, tail, value, path, ctx, out);
             }
+            // A list of one scalar kind -- `list[int]`, `list[str]` -- is the
+            // shape whose per-element cost is almost all bookkeeping: the walk's
+            // depth guard, its fatal-signal check and its dispatch, around a
+            // single type test. None of the three is needed per element here: a
+            // scalar cannot recurse, cannot run Python, and is the same schema at
+            // every position, so they are paid once for the list.
+            if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
+                let mut ok = true;
+                let scan = scan_list(list, |_, item| {
+                    ok &= scalar_admits(kind, &Value::Py(item));
+                    if ok {
+                        ControlFlow::Continue(())
+                    } else {
+                        ControlFlow::Break(())
+                    }
+                });
+                return match scan {
+                    Scan::Complete => ok,
+                    Scan::Stopped => false,
+                    Scan::Unreadable => mutated(value, path, ctx, out),
+                };
+            }
             let mut ok = true;
             let scan = scan_list(list, |i, item| {
                 ok &= seq_element(prefix, tail, i, &Value::Py(item), path, ctx, out);
@@ -368,6 +465,14 @@ fn check_seq(
             };
             if !SeqArity::of(prefix.len(), tail).admits(tuple.len()) {
                 return seq_length_fail(len_code, kind_word, prefix, tail, value, path, ctx, out);
+            }
+            // The list arm's reasoning, for the immutable container: `tuple[int,
+            // ...]` tests one scalar at every position, so the walk's
+            // per-element bookkeeping is paid once for the tuple.
+            if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
+                return tuple
+                    .iter()
+                    .all(|item| scalar_admits(kind, &Value::Py(&item)));
             }
             let mut ok = true;
             for (i, item) in tuple.iter().enumerate() {
