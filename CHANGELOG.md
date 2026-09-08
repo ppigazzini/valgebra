@@ -95,6 +95,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: build the error model when it is asked for
 - perf: a field name is shared rather than copied into every rebuilt schema
 - perf: size a reopened record's field list from the list it rebuilds
+- perf: ask a schema for the regions only where the answer can be used
 
 -->
 

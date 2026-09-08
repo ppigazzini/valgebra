@@ -787,8 +787,17 @@ impl Schema {
         // set inclusion between the two region sets, and nothing else. A
         // non-scalar node yields `Unknown` from its own discriminant, so this
         // costs one match off the fragment.
+        //
+        // The subtype's own regions are read only once the supertype's are
+        // known. Reading a region set is one match on an atom and a fold over
+        // every member of a union, so on a Boolean schema it walks the subtree;
+        // asking for a set that a mismatched partner has already made unusable
+        // walks it for nothing. Both are pure, so which is asked first is free
+        // to choose, and the answer is the same either way.
         let supertype_regions = other.region_set();
-        if let (Regions::Known(a), Regions::Known(b)) = (self.region_set(), supertype_regions) {
+        if let Regions::Known(b) = supertype_regions
+            && let Regions::Known(a) = self.region_set()
+        {
             return a.subset_of(b);
         }
         // Reflexivity for two equal spellings that are not the same node.
@@ -1500,9 +1509,17 @@ pub(crate) fn denotes_a_set_within(
     oracle: &dyn LeafRelations,
     definitions: &[Schema],
 ) -> bool {
-    let mut pending = vec![schema];
+    // The root is held beside the worklist rather than inside it. A one-element
+    // `vec![...]` is a heap allocation, and most schemas asked this question
+    // answer from the root alone -- an atom has no children to defer, and the
+    // two refusals below return before reaching any. Seeding the loop this way
+    // leaves the worklist empty until a node actually has children, so the
+    // common call allocates nothing; the order is the stack's either way, since
+    // the root is the only thing the vector held.
+    let mut pending: Vec<&Schema> = Vec::new();
+    let mut root = Some(schema);
     let mut open: Vec<DefIx> = Vec::new();
-    while let Some(node) = pending.pop() {
+    while let Some(node) = root.take().or_else(|| pending.pop()) {
         match node {
             Schema::Ref(index) => {
                 if open.contains(index) {
