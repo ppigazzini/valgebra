@@ -654,6 +654,68 @@ fn a_keyed_map_separates_fields_from_the_catch_all() {
     });
 }
 
+/// A closed record asks the value for the keys it declares, and the answer is
+/// the one the general scan gives.
+///
+/// Four rules meet on that path: a declared key's value must match, a required
+/// key must be there, an optional one need not be, and a key the record does
+/// not declare makes the value a non-member however good the rest of it is.
+#[test]
+fn a_closed_record_answers_for_each_of_its_keys() {
+    Python::attach(|py| {
+        let record = Schema::record(
+            vec![
+                Field {
+                    name: "a".into(),
+                    schema: Schema::Int,
+                    required: true,
+                },
+                Field {
+                    name: "b".into(),
+                    schema: Schema::Str,
+                    required: false,
+                },
+            ],
+            Openness::Closed,
+        );
+        let dict = |pairs: Vec<(&str, Bound<'_, PyAny>)>| {
+            let value = PyDict::new(py);
+            for (key, item) in pairs {
+                value.set_item(key, item).expect("a fresh dict takes a key");
+            }
+            value.into_any()
+        };
+        let int = |n: i64| n.into_pyobject(py).expect("an int").into_any();
+        let text = |s: &str| PyString::new(py, s).into_any();
+
+        case(py, &record, &dict(vec![("a", int(1))]), true);
+        case(
+            py,
+            &record,
+            &dict(vec![("a", int(1)), ("b", text("x"))]),
+            true,
+        );
+        // A declared key whose value is not the field's schema.
+        case(py, &record, &dict(vec![("a", text("x"))]), false);
+        case(
+            py,
+            &record,
+            &dict(vec![("a", int(1)), ("b", int(2))]),
+            false,
+        );
+        // A required key the value does not carry.
+        case(py, &record, &dict(vec![("b", text("x"))]), false);
+        case(py, &record, &dict(vec![]), false);
+        // A key the record does not declare: closed means closed.
+        case(
+            py,
+            &record,
+            &dict(vec![("a", int(1)), ("z", int(2))]),
+            false,
+        );
+    });
+}
+
 /// A violation says what the value was measured against, for every kind of
 /// constraint. The message is built only on the failing path, so nothing
 /// else pins its text: a `render` returning a constant would satisfy every

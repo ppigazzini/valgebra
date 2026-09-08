@@ -46,7 +46,7 @@ use valgebra_core::{
 };
 
 use crate::check::ctx::{Ctx, MAX_WALK_DEPTH, WalkMode};
-use crate::check::index::compile_pattern;
+use crate::check::index::{RecordPlan, compile_pattern};
 use crate::check::violation::{
     key_segment, located, mismatch, summarize_value, type_fail, type_mismatch,
 };
@@ -802,6 +802,73 @@ fn covered(defaults: &[MapClause], key: &Value<'_, '_>, val: &Value<'_, '_>, ctx
     })
 }
 
+/// A closed record's membership, asked key by key rather than read entry by
+/// entry, or `None` where that reading does not settle it.
+///
+/// A closed record declares every key the value may carry, so the value belongs
+/// exactly when each declared key it holds matches and it holds nothing else --
+/// and "nothing else" is a count, since a dict cannot repeat a key. Asking for
+/// the declared keys costs one probe each with the key's own hash, where
+/// scanning the value costs an iteration step, a decode of the key's bytes, a
+/// second hash of those bytes and a comparison against the name they matched.
+///
+/// A key is resolved the way Python resolves one -- by the dict's own lookup --
+/// rather than by decoding its bytes and matching those, so a key of a `str`
+/// subclass with an `__eq__` of its own is found exactly where indexing the
+/// dict would find it.
+///
+/// `None` means "ask the scan instead": the record is open, so an undeclared
+/// key may still be covered by a clause; the plan has no interned key for a
+/// field; or a probe raised, which is not an answer. A value that changes size
+/// under the probes is not one of those: it is answered here, as the scan
+/// answers it, because there is no reading of it left to fall back to.
+fn keyed_map_asks_for_its_keys(
+    fields: &[Field],
+    defaults: &[MapClause],
+    dict: &Bound<'_, PyDict>,
+    ctx: Ctx<'_>,
+    plan: &RecordPlan,
+) -> Option<bool> {
+    if !defaults.is_empty() || plan.keys.len() != fields.len() {
+        return None;
+    }
+    let sub = fast(ctx);
+    // One pair of scratch buffers for the record, as the scan takes: a fast
+    // walk writes to neither.
+    let (mut path, mut out) = (Vec::new(), Vec::new());
+    with_critical_section(dict.as_any(), || {
+        let entries = dict.len();
+        let mut present = 0usize;
+        for (position, field) in fields.iter().enumerate() {
+            let key = plan.keys.get(position)?.bind(dict.py());
+            match dict.get_item(key) {
+                Ok(Some(value)) => {
+                    present += 1;
+                    if !member(&field.schema, &Value::Py(&value), &mut path, sub, &mut out) {
+                        return Some(false);
+                    }
+                }
+                // A key the value does not carry: the record still matches when
+                // the field is optional.
+                Ok(None) if !field.required => {}
+                Ok(None) => return Some(false),
+                // A failed probe is not an answer -- an unhashable key cannot be
+                // in a dict, but a `__eq__` that raises can stop the lookup.
+                Err(_) => return None,
+            }
+        }
+        if dict.len() != entries {
+            // The value changed while it was being read, so there is no reading
+            // to answer from: not a member, exactly as the scan answers it, and
+            // the explain pass names the mutation.
+            return Some(false);
+        }
+        // Every key the value carries is one of the declared ones exactly when
+        // the count of declared keys found equals the count it holds.
+        Some(present == entries)
+    })
+}
+
 /// The keyed-map fast path over a Python dict. A string key naming a declared
 /// field is checked against it; any other key (non-string, or undeclared) must
 /// be covered by a default clause. Closed records have no clauses, so an
@@ -821,6 +888,9 @@ fn keyed_map_matches_py(
         return false;
     };
     if let Some(plan) = ctx.records.get(&(fields.as_ptr() as usize)) {
+        if let Some(answered) = keyed_map_asks_for_its_keys(fields, defaults, dict, ctx, plan) {
+            return answered;
+        }
         keyed_map_scan(fields, defaults, dict, ctx, plan.required, |name| {
             plan.by_name.get(name).copied()
         })
