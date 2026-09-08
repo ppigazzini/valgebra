@@ -167,12 +167,17 @@ ships), per-call median on a passing document:
 
 | Shape | `is_valid_json` | `json.loads` + `is_valid` | speedup |
 | --- | --- | --- | --- |
-| Record, 50 int fields | 3.7 us | 6.5 us | ~1.8x |
-| List of 200 small records | 27.3 us | 40.6 us | ~1.5x |
-| `list[int]`, 10,000 elements | 105 us | 501 us | ~4.8x |
+| Record, 50 int fields | 2.5 us | 6.2 us | ~2.5x |
+| List of 200 small records | 40.5 us | 39.9 us | ~1.0x |
+| `list[int]`, 10,000 elements | 71 us | 462 us | ~6.5x |
 
-Avoiding materialization helps most where the document is large or scalar-heavy:
-the 10,000-element array is nearly five times faster than parse-then-validate.
+Avoiding materialization helps where the document is large or scalar-heavy: the
+10,000-element array is six times faster than parse-then-validate, and the wide
+record two and a half. The middle row is the shape where it stops paying -- two
+hundred small mappings are two hundred dict walks either way, and the object
+path reaches each of them through a walk that has been made cheaper than the
+parse it avoids. Measure your own documents rather than reading a rule off
+these three.
 `benches/bench_json.py` measures a strict `TypeAdapter.validate_json` over the
 same three shapes; that column is not recorded above, so read the comparison
 from the benchmark rather than from this page.

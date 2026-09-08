@@ -152,14 +152,14 @@ End-to-end validation of a value that passes (lower is better):
 
 | Shape | valgebra | pydantic (strict) | jsonschema |
 | --- | --- | --- | --- |
-| `list[int]`, 10,000 elements | 48.4 +/- 1.3 us | 85.4 +/- 1.3 us | 25,035 +/- 604 us |
-| Closed record, 50 int fields | 0.927 +/- 0.006 us | 1.90 +/- 0.072 us | 129 +/- 2.2 us |
-| Nested `list[...]`, depth 25 | 0.254 +/- 0.005 us | 1.93 +/- 0.042 us | 73.8 +/- 1.4 us |
+| `list[int]`, 10,000 elements | 9.76 +/- 0.15 us | 78.4 +/- 0.75 us | 25,361 +/- 555 us |
+| Closed record, 50 int fields | 0.704 +/- 0.010 us | 1.90 +/- 0.087 us | 130 +/- 4.3 us |
+| Nested `list[...]`, depth 25 | 0.201 +/- 0.021 us | 1.97 +/- 0.031 us | 75.1 +/- 2.0 us |
 
-valgebra relative to pydantic on this machine: **7.6x** faster on deep nesting,
-**2.0x** on the wide record, **1.8x** on the large flat array. It is consistently
-far ahead of pure-Python jsonschema — 517x on the array, 291x on the nesting and
-139x on the record. pydantic does strictly more work on the record (it
+valgebra relative to pydantic on this machine: **9.8x** faster on deep nesting,
+**8.0x** on the large flat array, **2.7x** on the wide record. It is consistently
+far ahead of pure-Python jsonschema — 2,600x on the array, 374x on the nesting
+and 185x on the record. pydantic does strictly more work on the record (it
 constructs output), so read that shape as a margin over a heavier operation, not
 a like-for-like loss for pydantic.
 

@@ -302,8 +302,8 @@ nor a msgspec `Struct`: each reaches the frontend as a bare class, denoting the
 set of its instances. Check either one's fields through a mapping view of them.
 
 On a synthetic benchmark (the PGO release wheel) a passing check is faster than a
-strict pydantic `TypeAdapter` — roughly 2× on a 50-field record and a large
-`list[int]`, ~7× on deep nesting — and far faster than pure-Python jsonschema. The
+strict pydantic `TypeAdapter` — roughly 3× on a 50-field record, 5× on a large
+`list[int]` and 7× on deep nesting — and far faster than pure-Python jsonschema. The
 comparison is not apples-to-apples and is gated against regression in CI; see the
 [performance page](docs/11-performance.md) for the method, the matrix, and the limits.
 
