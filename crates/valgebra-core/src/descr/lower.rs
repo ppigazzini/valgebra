@@ -106,6 +106,12 @@ impl Constants for NoConstants {}
 /// deepens the descriptor as well as the schema, and the operations recurse
 /// through that nesting: past roughly a hundred the stack goes rather than the
 /// clock. An annotation anyone writes is orders of magnitude inside this.
+///
+/// **This bound is debt.** It counts work rather than limiting what the
+/// representation can hold, and it is here for the reason the decision's own
+/// budget is: a lowering repeats itself over structurally equal subtrees
+/// because they are separate nodes. Sharing them makes the repetition
+/// unnecessary and this constant removable.
 pub const BUDGET: u32 = 64;
 
 /// The set a schema denotes, or `None` where the descriptor cannot yet hold it.
@@ -179,6 +185,12 @@ impl Bounds {
 /// `benches/core.rs` is refused for nesting, not for work. It is the bound that
 /// remains when a shape is shallow and wide, which is the one nesting cannot
 /// catch, and it is kept for that.
+///
+/// **This bound is debt.** It counts work rather than limiting what the
+/// representation can hold, and it is here for the reason the decision's own
+/// budget is: a lowering repeats itself over structurally equal subtrees
+/// because they are separate nodes. Sharing them makes the repetition
+/// unnecessary and this constant removable.
 pub const WORK: u64 = 1024;
 
 /// The schema nesting this will descend before refusing.
@@ -203,6 +215,12 @@ pub const WORK: u64 = 1024;
 /// blow up nest ten and deeper. `lower_sibling_union_difference_{unheld,held}`
 /// is the pair that shows what the bound buys: 9.0 milliseconds against 1.35
 /// microseconds, on one shape, from this number alone.
+///
+/// **This bound is debt.** It counts work rather than limiting what the
+/// representation can hold, and it is here for the reason the decision's own
+/// budget is: a lowering repeats itself over structurally equal subtrees
+/// because they are separate nodes. Sharing them makes the repetition
+/// unnecessary and this constant removable.
 pub const DEPTH: u32 = 5;
 
 /// [`lower`] under explicit bounds, for a caller measuring one of them.

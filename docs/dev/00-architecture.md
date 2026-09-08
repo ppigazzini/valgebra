@@ -95,34 +95,52 @@ both directions by `scripts/docs_lint.py`, values included, so a number that
 moves in the source and not here fails, and a row naming a constant that is gone
 fails too.
 
-| where | bound | value | what it stops | what measures it |
-|---|---|---|---|---|
-| `crates/valgebra-py/src/validator.rs` | `MAX_SCHEMA_DEPTH` | `128` | nesting in a constructed schema | `tests/test_adversarial_bounds.py` |
-| `crates/valgebra-py/src/validator.rs` | `MAX_DEFINITIONS` | `128` | recursive definitions chained in one schema | `tests/test_adversarial_bounds.py` |
-| `crates/valgebra-py/src/validator.rs` | `MAX_SCHEMA_NODES` | `100_000` | a schema that is shallow and exponentially wide | `tests/test_adversarial_bounds.py` |
-| `crates/valgebra-py/src/build.rs` | `MAX_BUILD_DEPTH` | `crate::validator::MAX_SCHEMA_DEPTH + 1` | the frontend descending past what `checked` will accept, so the schema past the bound is built and refused by name | `tests/test_adversarial_bounds.py` |
-| `crates/valgebra-py/src/render.rs` | `MAX_RENDER_DEPTH` | `200` | `repr` overflowing the stack on a chain of definitions | `tests/test_adversarial_bounds.py` |
-| `crates/valgebra-py/src/check/ctx.rs` | `MAX_WALK_DEPTH` | `512` | a walk overflowing the smallest thread stack a platform gives | its own tests, and `tests/test_adversarial_bounds.py` |
-| `crates/valgebra-py/src/check/walk.rs` | `MAX_RECURSION_DEPTH` | `128` | a pathologically deep *value* overflowing the stack | its own tests, and `tests/test_adversarial_bounds.py` |
-| `crates/valgebra-py/src/validator.rs` | `MAX_ENUM_MEMBERS` | `512` | one relation turning into a membership question per member of an enumeration | its own tests, and `tests/test_algebra_closure.py` |
-| `crates/valgebra-py/src/check/walk.rs` | `CLOSEST_BRANCH_PROBE_LIMIT` | `64` | the error path's second walk costing the branch count | `tests/test_union_messages.py` |
-| `crates/valgebra-py/src/check/walk.rs` | `UNION_LABEL_LIMIT` | `64` | a union naming a thousand labels in one `expected` | its own tests |
-| `crates/valgebra-core/src/decision.rs` | `DECISION_BUDGET` | `1_000_000` | one query spending unbounded work before answering conservatively | its own tests, and `tests/test_decision_adversarial.py` |
-| `crates/valgebra-core/src/descr/lower.rs` | `BUDGET` | `64` | the schema nodes one lowering reads | its own tests, and `crates/valgebra-core/benches/core.rs` |
-| `crates/valgebra-core/src/descr/lower.rs` | `DEPTH` | `5` | the nesting one lowering descends, which is the exponential | its own tests, and `crates/valgebra-core/benches/core.rs` |
-| `crates/valgebra-core/src/descr/lower.rs` | `WORK` | `1024` | the multiplying work one build spends before refusing | its own tests, and `crates/valgebra-core/benches/core.rs` |
-| `crates/valgebra-core/src/descr/lines.rs` | `MAX_LINES` | `256` | the lines one kind carries, which a meet multiplies and a complement doubles | `crates/valgebra-core/src/descr/mod.rs` tests |
-| `crates/valgebra-core/src/descr/sets.rs` | `MAX_LINES` | `256` | the lines a set lattice holds | its own tests |
-| `crates/valgebra-core/src/descr/maps.rs` | `MAX_ATOMS` | `256` | the atoms a map union holds | its own tests |
-| `crates/valgebra-core/src/descr/maps.rs` | `PARTS` | `KEY_KINDS.len() + 1` | nothing -- it is the key-kind partition's width, listed because it is a file-scope integer constant and the check that reads this table cannot tell the two apart | its own tests |
-| `crates/valgebra-core/src/descr/records.rs` | `MAX_ATOMS` | `256` | the atoms a record union holds, which a complement multiplies | its own tests |
-| `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_STATES` | `4096` | a product of two automata multiplying past memory | its own tests |
-| `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_ROW` | `MAX_STATES` | one row of a product growing past the alternatives a shape has | its own tests |
-| `crates/valgebra-py/src/errors.rs` | `SUMMARY_CHARS` | `80` | a value summary built in full and then cut, so a huge repr is paid for and thrown away | its own tests |
-| `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_EDGES` | `1 << 16` | a table inside both dimensions and still too large: 4,096 states each with a 4,096-wide row is sixteen million edges | its own tests |
-| `crates/valgebra-core/src/descr/regular.rs` | `MAX_STATES` | `4096` | a pattern product doubling the exponent twice | its own tests |
-| `crates/valgebra-core/src/descr/regular.rs` | `BUILD_SIZE_LIMIT` | `8 * 1024 * 1024` | a pattern whose determinisation is exponential, which reaches `MAX_STATES` only after the table it refuses has been built | its own tests |
-| `crates/valgebra-core/src/descr/integers.rs` | `MAX_PERIOD` | `4096` | a step set holding one interval set per residue, and the period two steps share | its own tests |
+Each row says which of three kinds its bound is, because they are not the same
+sort of thing and only one of them is a defect.
+
+* **limit** -- past it this representation holds no sound answer, so the
+  operation refuses rather than approximating. A set too wide is complemented
+  into one too narrow, which is why rounding is never the alternative. These are
+  the bounds the algebra asks for.
+* **shape** -- a bound on a value or a schema a caller wrote: how deep it nests,
+  how many members it has, how much of it an error message prints. A caller can
+  see these and work within them.
+* **debt** -- a budget on *work*, standing in for a termination argument that is
+  already available. Regularity bounds the number of distinct subtyping goals, so
+  a memo over shared nodes terminates by a theorem; these budgets exist because
+  the nodes are not shared, and each names the work that removes it.
+
+A bound that is `debt` carries the change that retires it in its own doc
+comment. A `limit` or a `shape` carries the reason it is where it is.
+
+| where | bound | value | kind | what it stops | what measures it |
+|---|---|---|---|---|---|
+| `crates/valgebra-py/src/validator.rs` | `MAX_SCHEMA_DEPTH` | `128` | shape | nesting in a constructed schema | `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/validator.rs` | `MAX_DEFINITIONS` | `128` | shape | recursive definitions chained in one schema | `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/validator.rs` | `MAX_SCHEMA_NODES` | `100_000` | shape | a schema that is shallow and exponentially wide | `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/build.rs` | `MAX_BUILD_DEPTH` | `crate::validator::MAX_SCHEMA_DEPTH + 1` | shape | the frontend descending past what `checked` will accept, so the schema past the bound is built and refused by name | `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/render.rs` | `MAX_RENDER_DEPTH` | `200` | shape | `repr` overflowing the stack on a chain of definitions | `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/check/ctx.rs` | `MAX_WALK_DEPTH` | `512` | shape | a walk overflowing the smallest thread stack a platform gives | its own tests, and `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/check/walk.rs` | `MAX_RECURSION_DEPTH` | `128` | shape | a pathologically deep *value* overflowing the stack | its own tests, and `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/validator.rs` | `MAX_ENUM_MEMBERS` | `512` | shape | one relation turning into a membership question per member of an enumeration | its own tests, and `tests/test_algebra_closure.py` |
+| `crates/valgebra-py/src/check/walk.rs` | `CLOSEST_BRANCH_PROBE_LIMIT` | `64` | shape | the error path's second walk costing the branch count | `tests/test_union_messages.py` |
+| `crates/valgebra-py/src/check/walk.rs` | `UNION_LABEL_LIMIT` | `64` | shape | a union naming a thousand labels in one `expected` | its own tests |
+| `crates/valgebra-core/src/decision.rs` | `DECISION_BUDGET` | `1_000_000` | debt | one query spending unbounded work before answering conservatively | its own tests, and `tests/test_decision_adversarial.py` |
+| `crates/valgebra-core/src/descr/lower.rs` | `BUDGET` | `64` | debt | the schema nodes one lowering reads | its own tests, and `crates/valgebra-core/benches/core.rs` |
+| `crates/valgebra-core/src/descr/lower.rs` | `DEPTH` | `5` | debt | the nesting one lowering descends, which is the exponential | its own tests, and `crates/valgebra-core/benches/core.rs` |
+| `crates/valgebra-core/src/descr/lower.rs` | `WORK` | `1024` | debt | the multiplying work one build spends before refusing | its own tests, and `crates/valgebra-core/benches/core.rs` |
+| `crates/valgebra-core/src/descr/lines.rs` | `MAX_LINES` | `256` | limit | the lines one kind carries, which a meet multiplies and a complement doubles | `crates/valgebra-core/src/descr/mod.rs` tests |
+| `crates/valgebra-core/src/descr/sets.rs` | `MAX_LINES` | `256` | limit | the lines a set lattice holds | its own tests |
+| `crates/valgebra-core/src/descr/maps.rs` | `MAX_ATOMS` | `256` | limit | the atoms a map union holds | its own tests |
+| `crates/valgebra-core/src/descr/maps.rs` | `PARTS` | `KEY_KINDS.len() + 1` | limit | nothing -- it is the key-kind partition's width, listed because it is a file-scope integer constant and the check that reads this table cannot tell the two apart | its own tests |
+| `crates/valgebra-core/src/descr/records.rs` | `MAX_ATOMS` | `256` | limit | the atoms a record union holds, which a complement multiplies | its own tests |
+| `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_STATES` | `4096` | limit | a product of two automata multiplying past memory | its own tests |
+| `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_ROW` | `MAX_STATES` | limit | one row of a product growing past the alternatives a shape has | its own tests |
+| `crates/valgebra-py/src/errors.rs` | `SUMMARY_CHARS` | `80` | shape | a value summary built in full and then cut, so a huge repr is paid for and thrown away | its own tests |
+| `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_EDGES` | `1 << 16` | limit | a table inside both dimensions and still too large: 4,096 states each with a 4,096-wide row is sixteen million edges | its own tests |
+| `crates/valgebra-core/src/descr/regular.rs` | `MAX_STATES` | `4096` | limit | a pattern product doubling the exponent twice | its own tests |
+| `crates/valgebra-core/src/descr/regular.rs` | `BUILD_SIZE_LIMIT` | `8 * 1024 * 1024` | limit | a pattern whose determinisation is exponential, which reaches `MAX_STATES` only after the table it refuses has been built | its own tests |
+| `crates/valgebra-core/src/descr/integers.rs` | `MAX_PERIOD` | `4096` | limit | a step set holding one interval set per residue, and the period two steps share | its own tests |
 
 Two of them are the same number for different reasons, and the difference
 matters when one moves: `MAX_SCHEMA_DEPTH` is what a *caller* may build, and

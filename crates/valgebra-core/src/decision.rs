@@ -17,7 +17,16 @@ use std::cell::Cell;
 /// bounds its own work. One budget is threaded through a whole top-level query —
 /// subtyping and the emptiness checks it calls into share it, and the two
 /// directions of an equivalence share it — so the bound cannot be escaped through
-/// a side door or spent twice. The ceiling is far above any schema a real
+/// a side door or spent twice.
+///
+/// **This bound is debt.** Regularity bounds the number of distinct subtyping
+/// goals a query can reach, so a memo over goals terminates by a theorem rather
+/// than by a ceiling -- but a memo needs a cheap key, and a key is cheap only
+/// when structurally equal subtrees are one node. Sharing the nodes is what
+/// makes the memo possible and this constant removable; until then the ceiling
+/// stands in for the argument.
+///
+/// The ceiling is far above any schema a real
 /// annotation produces, so a legitimate relation is always decided; only an
 /// adversarial schema built to blow up the decision reaches it, and there a
 /// `false` ("not proven") is sound by the conservative contract. A complete,
