@@ -19,7 +19,7 @@ mod ir;
 mod simplify;
 mod violation;
 
-pub use decision::{Kind, LeafRelations, NoLeafRelations, Verdict};
+pub use decision::{Kind, LeafRelations, NoLeafRelations, Relation, Verdict};
 pub use ir::{
     ClassIx, Clauses, CollKind, ConstIx, Constraint, Constraints, DefIx, DefShift, Field, Fields,
     Guarded, MapClause, Members, Openness, OperandIx, PathSegment, PoolShift, PredIx, Schema,

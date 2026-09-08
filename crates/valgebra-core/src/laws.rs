@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::decision::DECISION_BUDGET;
+use crate::decision::{DECISION_BUDGET, NoLeafRelations, Relation};
 use proptest::prelude::*;
 
 /// A small schema generator: atoms combined by union, intersection, and
@@ -2738,6 +2738,43 @@ proptest! {
                     "{:?} is a member of a schema decided empty", value
                 );
             }
+        }
+    }
+}
+
+proptest! {
+    /// A refuted relation is a claim, and the sets are the second opinion.
+    ///
+    /// The three-valued answer distinguishes a rule that *refutes* the
+    /// inclusion from one that declines to decide it, which is only worth
+    /// anything if the refutations are true. The descriptor decides the same
+    /// question a different way, so where it says the inclusion holds, no rule
+    /// may say it fails: one of the two would be wrong, and the rules are the
+    /// half that just gained a way to be.
+    #[test]
+    fn a_refuted_inclusion_is_not_one_the_sets_decide(a in schema(), b in schema()) {
+        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        if a.subtype_relation(&b, &NoLeafRelations, &[], &budget) == Relation::Fails {
+            prop_assert!(
+                !a.descriptor_contained_in(&b, &NoLeafRelations, &[]),
+                "the rules refuted {a:?} <= {b:?} and the sets decide it holds"
+            );
+        }
+    }
+
+    /// And the other direction of the same claim: a proof stays a proof.
+    ///
+    /// Every relation the rules prove must still be one the public relation
+    /// reports, so the three values cannot have quietly narrowed what is
+    /// decided.
+    #[test]
+    fn a_proven_inclusion_is_the_relation_the_boundary_reports(
+        a in schema(),
+        b in schema(),
+    ) {
+        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        if a.subtype_relation(&b, &NoLeafRelations, &[], &budget) == Relation::Holds {
+            prop_assert!(a.is_subtype_of(&b));
         }
     }
 }

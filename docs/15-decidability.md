@@ -199,6 +199,19 @@ assert json_value.is_valid({"a": [1, "x", {"b": None}]})
 Here valgebra is correct but not complete: it may answer `False` or "not empty"
 for a relation that does in fact hold.
 
+**A negative answer is one of two different things**, and the core tells them
+apart even though the boundary does not. A relation can be *refuted* -- there is
+a value of the one schema outside the other, so the answer is `False` and will
+stay `False` however much the procedure improves -- or *declined*, which is the
+list below: nothing was found either way, and the same query decides once the
+representation reaches it. The three relations answer with all three values
+inside the core and map both negatives to `False` at the boundary, because
+`False` is what the contract promises and a third value at the surface would
+make every caller handle a case the guarantee does not need. What the split buys
+is that "not proven" is countable: a rule that starts refuting a relation it
+used to decline is a change the tests see rather than one that hides behind an
+unchanged `False`.
+
 The list is short, and it is short for one reason. Two representations answer
 these questions. The **rules** recurse over the schema tree, and where they
 decline the **descriptor** is asked: it holds each kind as a set, so `a ≤ b` is

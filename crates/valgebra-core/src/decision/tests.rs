@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::ir::Openness;
 
 /// The structural inclusion procedure alone, with no descriptor beside it.
 ///
@@ -19,6 +20,7 @@ fn structural(sub: &Schema, sup: &Schema) -> bool {
         },
         &mut Vec::new(),
     )
+    .holds()
 }
 
 /// Every set is below the universe, however the universe is spelled.
@@ -693,6 +695,7 @@ fn by_the_rules(sub: &Schema, sup: &Schema) -> bool {
         },
         &mut Vec::new(),
     )
+    .holds()
 }
 
 /// Emptiness by the structural rules alone, for the reason
@@ -1491,6 +1494,40 @@ fn the_union_rule_asks_the_oracle_only_about_an_instance() {
     assert!(Schema::Instance(ClassIx::new(0)).is_subtype_of_under(&union, &BelowAnyUnion, &[]));
 }
 
+/// A catch-all covers an *optional* field of the supertype, and only an
+/// optional one.
+///
+/// A clause guarantees what a key's value must be if the key is there; it
+/// guarantees nothing about the key being there at all. So a mapping is below a
+/// record that names an extra *optional* field over the same clause -- every
+/// value either lacks that key or carries a value the field admits -- and is
+/// not below the same record with the field required, since the mapping admits
+/// the value that omits it. Both directions, because a rule that answered the
+/// same for the two would be wrong on one of them.
+#[test]
+fn a_catch_all_covers_an_optional_field_and_not_a_required_one() {
+    let clause = || MapClause {
+        key: Schema::Str,
+        value: Schema::Int,
+    };
+    let mapping = Schema::mapping(clause());
+    let with_field = |required| {
+        Schema::keyed_map(
+            vec![Field {
+                name: "a".into(),
+                schema: Schema::Int,
+                required,
+            }],
+            vec![clause()],
+        )
+    };
+    assert!(structural(&mapping, &with_field(false)));
+    assert!(!structural(&mapping, &with_field(true)));
+    // And the value the second one is about: a mapping admits the empty dict,
+    // which a map requiring a key does not.
+    assert!(!Schema::meet([mapping, with_field(true).complement()]).is_empty());
+}
+
 /// A meet with a recursive schema is decided by unfolding it once: the body
 /// names the kinds it admits, and a kind it never admits is disjoint from it.
 #[test]
@@ -1505,4 +1542,90 @@ fn a_meet_with_a_recursive_schema_is_decided_by_one_unfolding() {
     // admit is not proven disjoint.
     let meet = Schema::Intersection(vec![Schema::Ref(DefIx::new(0)), Schema::Int].into());
     assert!(!meet.is_empty_under(&defs));
+}
+
+/// What the rules refute, prove, and decline, enumerated.
+///
+/// The three-valued answer is only worth its plumbing if the three values can
+/// be told apart, and the way a conservative procedure rots is by quietly
+/// turning a decline into a refutation -- which no `bool` test can see, because
+/// both come out `false` at the boundary. Each row below names a pair and the
+/// answer the rules must give it; a rule that starts claiming a proof it does
+/// not have moves a row from `Unknown` to `Fails` and fails here.
+#[test]
+fn the_rules_refute_prove_and_decline_these() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let attr = |name: &str, schema: Schema, required: bool| Schema::AttrRecord {
+        fields: vec![Field {
+            name: name.into(),
+            schema,
+            required,
+        }]
+        .into(),
+    };
+
+    // Proven: the region partition, the lattice bounds, reflexivity.
+    assert_eq!(relation(&Schema::Bool, &Schema::Int), Relation::Holds);
+    assert_eq!(relation(&Schema::Nothing, &Schema::Str), Relation::Holds);
+    assert_eq!(relation(&Schema::Str, &Schema::ANYTHING), Relation::Holds);
+
+    // Refuted: two scalars whose regions are disjoint, an arity that cannot
+    // match, an attribute the subject does not carry, and one it carries only
+    // sometimes.
+    assert_eq!(relation(&Schema::Str, &Schema::Int), Relation::Fails);
+    assert_eq!(
+        relation(
+            &Schema::tuple(SeqShape::fixed([Schema::Int])),
+            &Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Int])),
+        ),
+        Relation::Fails
+    );
+    assert_eq!(
+        relation(&attr("a", Schema::Int, true), &attr("b", Schema::Int, true),),
+        Relation::Fails
+    );
+    assert_eq!(
+        relation(
+            &attr("a", Schema::Int, false),
+            &attr("a", Schema::Int, true),
+        ),
+        Relation::Fails
+    );
+
+    // Declined: a leaf pair only an oracle can relate, and a class beside a
+    // literal. `NoLeafRelations` answers neither, and the rules say so rather
+    // than reporting a refutation they have not earned.
+    assert_eq!(
+        relation(
+            &Schema::Instance(ClassIx::new(0)),
+            &Schema::Instance(ClassIx::new(1)),
+        ),
+        Relation::Unknown
+    );
+    assert_eq!(
+        relation(&Schema::Literal(ConstIx::new(0)), &Schema::Int),
+        Relation::Unknown
+    );
+    // A required key the supertype declares and the subject's catch-all cannot
+    // guarantee present: undecided, not refuted.
+    assert_eq!(
+        relation(
+            &Schema::mapping(MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }),
+            &Schema::record(
+                vec![Field {
+                    name: "a".into(),
+                    schema: Schema::Int,
+                    required: true,
+                }],
+                Openness::Closed,
+            ),
+        ),
+        Relation::Unknown
+    );
 }

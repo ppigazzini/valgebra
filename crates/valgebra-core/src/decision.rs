@@ -9,6 +9,114 @@ use rustc_hash::FxHashMap;
 use std::borrow::Cow;
 use std::cell::Cell;
 
+/// What a decision could establish about a *relation* between two schemas.
+///
+/// The companion of [`Verdict`], which says what could be established about one
+/// schema's set. A `bool` answer to "is this a subtype of that" conflates the
+/// two things a caller most needs to tell apart: a value of the left that is
+/// outside the right, which refutes the relation, and a rule that declined --
+/// an oracle with no answer, a constructor pair no rule relates, a descent the
+/// work bound stopped. Both read as `false`, so the conservative half of the
+/// procedure is invisible from outside and cannot be counted, listed, or held
+/// to a ledger.
+///
+/// The public relations still answer `bool`, because that is what the contract
+/// promises: [`Relation::Holds`] is `true` and both other answers are `false`.
+/// What the three values buy is that "not proven" is a value the tests can
+/// count and the pages can enumerate.
+///
+/// A rule that reports [`Relation::Fails`] is claiming a proof. Where a rule is
+/// sound but incomplete -- it establishes the relation when it fires and says
+/// nothing when it does not -- the answer is [`Relation::Unknown`], and the
+/// combinators below propagate that: a conjunction is unknown when a conjunct
+/// is, and a disjunction is unknown when no disjunct holds and one is unknown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Relation {
+    /// Proven: every value of the subject belongs to the other schema.
+    Holds,
+    /// Refuted: a value of the subject is outside the other schema.
+    Fails,
+    /// Neither, and the procedure says so rather than answering `false`.
+    Unknown,
+}
+
+impl Relation {
+    /// The relation as the boundary reports it: only a proof is `true`.
+    #[must_use]
+    #[inline]
+    pub fn holds(self) -> bool {
+        matches!(self, Relation::Holds)
+    }
+
+    /// A relation from a decision that is exact in both directions.
+    ///
+    /// For a rule whose `false` is a refutation rather than a decline -- set
+    /// inclusion between two region sets, an arity that cannot match. A rule
+    /// that is sound one way and silent the other spells its own arms.
+    #[must_use]
+    #[inline]
+    fn decided(held: bool) -> Relation {
+        if held {
+            Relation::Holds
+        } else {
+            Relation::Fails
+        }
+    }
+
+    /// A relation from a rule that proves inclusion and declines otherwise.
+    #[must_use]
+    #[inline]
+    fn proven(held: bool) -> Relation {
+        if held {
+            Relation::Holds
+        } else {
+            Relation::Unknown
+        }
+    }
+
+    /// Both must hold. The first answer that is not a proof is the answer:
+    /// once the conjunction cannot hold, what is left to learn is whether it is
+    /// refuted or merely unproven, and paying for that would cost the descent
+    /// its early exit. Reporting the weaker of the two is the safe direction.
+    #[must_use]
+    #[inline]
+    fn and(self, other: impl FnOnce() -> Relation) -> Relation {
+        match self {
+            Relation::Holds => other(),
+            answer => answer,
+        }
+    }
+
+    /// Every item, with [`Relation::and`]'s short circuit.
+    #[inline]
+    fn all(items: impl IntoIterator<Item = Relation>) -> Relation {
+        for answer in items {
+            if answer != Relation::Holds {
+                return answer;
+            }
+        }
+        Relation::Holds
+    }
+
+    /// Any item, with [`Relation::or`]'s propagation of a decline.
+    #[inline]
+    fn any(items: impl IntoIterator<Item = Relation>) -> Relation {
+        let mut declined = false;
+        for answer in items {
+            match answer {
+                Relation::Holds => return Relation::Holds,
+                Relation::Unknown => declined = true,
+                Relation::Fails => {}
+            }
+        }
+        if declined {
+            Relation::Unknown
+        } else {
+            Relation::Fails
+        }
+    }
+}
+
 /// The most decision steps one top-level query may take before it stops and
 /// returns the conservative answer. Subtyping distributes over unions and
 /// intersections and emptiness recurses the structural fragment, so a deeply
@@ -206,16 +314,18 @@ impl SeqShape {
         other: &SeqShape,
         cx: SubtypeCx<'_>,
         assumptions: &mut Vec<(Schema, Schema)>,
-    ) -> bool {
-        self == other
-            || linear_subtype(
-                &self.prefix,
-                self.tail.as_deref(),
-                &other.prefix,
-                other.tail.as_deref(),
-                cx,
-                assumptions,
-            )
+    ) -> Relation {
+        if self == other {
+            return Relation::Holds;
+        }
+        linear_subtype(
+            &self.prefix,
+            self.tail.as_deref(),
+            &other.prefix,
+            other.tail.as_deref(),
+            cx,
+            assumptions,
+        )
     }
 }
 
@@ -461,7 +571,7 @@ impl Schema {
     /// the right one at all -- otherwise a schema the descriptor proves empty
     /// would be below nothing whose descriptor it could not build, which is a
     /// pair of answers that contradict each other.
-    fn descriptor_contained_in(
+    pub(crate) fn descriptor_contained_in(
         &self,
         other: &Schema,
         pool: &dyn Constants,
@@ -761,15 +871,33 @@ impl Schema {
         defs: &[Schema],
     ) -> bool {
         let budget = Cell::new(DECISION_BUDGET);
+        self.subtype_relation(other, oracle, defs, &budget).holds()
+            || self.descriptor_contained_in(other, oracle, defs)
+    }
+
+    /// The three-valued subtyping answer under an oracle, the definitions, and a
+    /// work budget the caller owns.
+    ///
+    /// The structural procedure alone: the descriptor's own reading is a second
+    /// decider the public relation asks after this one. Held here so a test can
+    /// count what the rules decline rather than reading `false` for both halves
+    /// of the conservative contract.
+    pub(crate) fn subtype_relation(
+        &self,
+        other: &Schema,
+        oracle: &dyn LeafRelations,
+        defs: &[Schema],
+        budget: &Cell<u32>,
+    ) -> Relation {
         self.is_subtype_rec(
             other,
             SubtypeCx {
                 oracle,
                 defs,
-                budget: &budget,
+                budget,
             },
             &mut Vec::new(),
-        ) || self.descriptor_contained_in(other, oracle, defs)
+        )
     }
 
     fn is_subtype_rec(
@@ -777,7 +905,7 @@ impl Schema {
         other: &Schema,
         cx: SubtypeCx<'_>,
         assumptions: &mut Vec<(Schema, Schema)>,
-    ) -> bool {
+    ) -> Relation {
         // Bound the total work: the distribution rules below can demand effort
         // exponential in the schema depth, so once the shared budget is spent the
         // decision stops and returns the conservative `false` rather than running
@@ -787,10 +915,11 @@ impl Schema {
         // cost, and each answers the whole query on its own, so a cheaper one
         // never hides a verdict a later one would reach.
         if core::ptr::eq(self, other) {
-            return true;
+            return Relation::Holds;
         }
         if !spend(cx.budget) {
-            return false;
+            // The work bound stopping a descent proves nothing about the pair.
+            return Relation::Unknown;
         }
         // Scalar fragment: exact via the region partition. Subtyping there is
         // set inclusion between the two region sets, and nothing else. A
@@ -807,11 +936,14 @@ impl Schema {
         if let Regions::Known(b) = supertype_regions
             && let Regions::Known(a) = self.region_set()
         {
-            return a.subset_of(b);
+            // Exact in both directions: on the scalar fragment the region sets
+            // *are* the schemas, so a region outside the supertype's set is a
+            // value outside it.
+            return Relation::decided(a.subset_of(b));
         }
         // Reflexivity for two equal spellings that are not the same node.
         if self == other {
-            return true;
+            return Relation::Holds;
         }
         // Coinductive hypothesis: a goal already being proven on this path is
         // assumed to hold, so two recursive types are compared at their greatest
@@ -821,7 +953,7 @@ impl Schema {
         // one side, so the structural compare rejects a mismatched goal on the
         // discriminant before walking either subtree.
         if assumptions.iter().any(|(a, b)| a == self && b == other) {
-            return true;
+            return Relation::Holds;
         }
         self.subtype_decide(other, supertype_regions, cx, assumptions)
     }
@@ -892,7 +1024,7 @@ impl Schema {
         other: &Schema,
         cx: SubtypeCx<'_>,
         assumptions: &mut Vec<(Schema, Schema)>,
-    ) -> bool {
+    ) -> Relation {
         match self {
             Schema::Ref(id) => match cx.defs.get(id.get()) {
                 Some(def) => {
@@ -901,11 +1033,91 @@ impl Schema {
                     assumptions.pop();
                     holds
                 }
-                None => false,
+                // A reference into a table that does not hold it: the schema
+                // names a set this query cannot read, which is not a refutation.
+                None => Relation::Unknown,
             },
             Schema::Refine { base, .. } => base.is_subtype_rec(other, cx, assumptions),
-            _ => false,
+            // Nothing on the left reduces, so this rule has nothing to say --
+            // which is not the same as the relation failing.
+            _ => Relation::Unknown,
         }
+    }
+
+    /// `A ⊆ (Y ∪ Z)`: every rule that can place a subject inside a union.
+    ///
+    /// A branch equal to the subject settles it, which is set containment and is
+    /// linear in the branches. Failing that, the subject may land in one branch,
+    /// or -- for a fixed-arity sequence -- split across them, which no
+    /// single-branch rule sees, or be one a left-side rule reduces to something
+    /// the union contains.
+    ///
+    /// Every rule here proves inclusion when it fires and says nothing when it
+    /// does not, so a union none of them places the subject in is a pair this
+    /// procedure declines rather than one it refutes.
+    fn below_a_union(
+        &self,
+        other: &Schema,
+        members: &[Schema],
+        cx: SubtypeCx<'_>,
+        assumptions: &mut Vec<(Schema, Schema)>,
+    ) -> Relation {
+        Relation::proven(
+            members.contains(self)
+                || Relation::any(
+                    members
+                        .iter()
+                        .map(|m| self.is_subtype_rec(m, cx, assumptions)),
+                )
+                .holds()
+                || seq_splits_across_union(self, members, cx, assumptions)
+                || self.left_reduces_below(other, cx, assumptions).holds()
+                // Last, and only for the one subject the oracle can answer about
+                // here: an `Instance` whose *values* the bindings can enumerate
+                // is below a union when each of them is, which is what makes an
+                // enumeration and the union of its members one set. Asked here
+                // because a union on the right never reaches the leaf arm, and
+                // asked for nothing else because every other subject would pay a
+                // call that always declines -- ten percent of the decision
+                // workload, measured.
+                || (matches!(self, Schema::Instance(_))
+                    && cx.oracle.leaf_subtype(self, other).unwrap_or(false)),
+        )
+    }
+
+    /// `(A ∩ B) ⊆ C`: a meet is below whatever one of its conjuncts is below.
+    ///
+    /// When `C` is a union the meet may instead land in one branch, so that
+    /// sound rule is tried here too -- ahead of the plain `_ ⊆ (Y ∪ Z)` rule, so
+    /// a meet that contains its own supertype (a reference beside that union)
+    /// decides, which is what lets such a meet be recognised as a subtype of
+    /// itself.
+    ///
+    /// Both halves are sound and incomplete: a conjunct that does not contain
+    /// the supertype says nothing about the meet, so a disjunction of them that
+    /// finds no proof is unproven rather than refuted.
+    fn meet_below(
+        &self,
+        other: &Schema,
+        members: &[Schema],
+        cx: SubtypeCx<'_>,
+        assumptions: &mut Vec<(Schema, Schema)>,
+    ) -> Relation {
+        Relation::proven(
+            Relation::any(
+                members
+                    .iter()
+                    .map(|m| m.is_subtype_rec(other, cx, assumptions)),
+            )
+            .holds()
+                || matches!(other, Schema::Union(branches)
+                    if Relation::any(
+                        branches
+                            .iter()
+                            .map(|b| self.is_subtype_rec(b, cx, assumptions)),
+                    )
+                    .holds()),
+        )
     }
 
     fn subtype_decide(
@@ -914,58 +1126,27 @@ impl Schema {
         supertype_regions: Regions,
         cx: SubtypeCx<'_>,
         assumptions: &mut Vec<(Schema, Schema)>,
-    ) -> bool {
+    ) -> Relation {
         match (self, other) {
             // Every lattice bound, in one arm: `∅ ⊆ B`, `A ⊆ U`, and `A ⊆ ∅`
             // when A is empty. All three are the same question asked of
             // emptiness, so one guard answers them and a per-atom arm beside it
             // would be dead code -- the mutation sweep says so, by surviving its
             // deletion.
-            _ if self.bounds_the_pair(supertype_regions, cx) => true,
+            _ if self.bounds_the_pair(supertype_regions, cx) => Relation::Holds,
             // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z; A ⊆ (Y ∩ Z) iff A ⊆ Y and A ⊆ Z.
-            (Schema::Union(members), _) => members
-                .iter()
-                .all(|m| m.is_subtype_rec(other, cx, assumptions)),
-            (_, Schema::Intersection(members)) => members
-                .iter()
-                .all(|m| self.is_subtype_rec(m, cx, assumptions)),
-            // (A ∩ B) ⊆ C if some conjunct already is. When C is a union, the meet
-            // may instead land in one branch, so that sound rule is tried too —
-            // ahead of the plain `_ ⊆ (Y ∪ Z)` rule, so a meet that contains its
-            // own supertype (a reference beside that union) decides, which is what
-            // lets such a meet be recognised as a subtype of itself.
-            (Schema::Intersection(members), _) => {
+            (Schema::Union(members), _) => Relation::all(
                 members
                     .iter()
-                    .any(|m| m.is_subtype_rec(other, cx, assumptions))
-                    || matches!(other, Schema::Union(branches)
-                        if branches.iter().any(|b| self.is_subtype_rec(b, cx, assumptions)))
-            }
-            // A ⊆ (Y ∪ Z) if A lands in one branch (sound, conservative), or -- for
-            // a fixed-arity sequence -- if it splits across the branches, which
-            // no single-branch rule can see. Failing both, the subject may still
-            // be one a left-side rule reduces to something the union contains.
-            (_, Schema::Union(members)) => {
-                // A branch equal to the subject settles it, which is set
-                // containment and is linear in the branches. The recursion below
-                // decides the rest, at the cost of a full step per branch.
-                members.contains(self)
-                    || members
-                        .iter()
-                        .any(|m| self.is_subtype_rec(m, cx, assumptions))
-                    || seq_splits_across_union(self, members, cx, assumptions)
-                    || self.left_reduces_below(other, cx, assumptions)
-                    // Last, and only for the one subject the oracle can answer
-                    // about here: an `Instance` whose *values* the bindings can
-                    // enumerate is below a union when each of them is, which is
-                    // what makes an enumeration and the union of its members one
-                    // set. Asked here because a union on the right never reaches
-                    // the leaf arm below, and asked for nothing else because
-                    // every other subject would pay a call that always declines
-                    // -- ten percent of the decision workload, measured.
-                    || (matches!(self, Schema::Instance(_))
-                        && cx.oracle.leaf_subtype(self, other).unwrap_or(false))
-            }
+                    .map(|m| m.is_subtype_rec(other, cx, assumptions)),
+            ),
+            (_, Schema::Intersection(members)) => Relation::all(
+                members
+                    .iter()
+                    .map(|m| self.is_subtype_rec(m, cx, assumptions)),
+            ),
+            (Schema::Intersection(members), _) => self.meet_below(other, members, cx, assumptions),
+            (_, Schema::Union(members)) => self.below_a_union(other, members, cx, assumptions),
             // Unfold a recursive reference — after the lattice rules, so an
             // intersection or union meeting a reference decomposes first (which
             // lets a recursive member be compared against the reference rather
@@ -979,7 +1160,9 @@ impl Schema {
                     assumptions.pop();
                     holds
                 }
-                None => false,
+                // As in `left_reduces_below`: a reference the table does not
+                // resolve names a set this query cannot read.
+                None => Relation::Unknown,
             },
             // Set and frozenset inclusion reduces to element inclusion.
             (
@@ -1022,13 +1205,11 @@ impl Schema {
             }
             // Complement is contravariant: ¬A ⊆ ¬B exactly when B ⊆ A.
             (Schema::Complement(a), Schema::Complement(b)) => b.is_subtype_rec(a, cx, assumptions),
-            (_, Schema::Complement(inner)) => self.shares_no_value_with(inner, cx),
-            // A refinement is a subset of its base. Against another refinement the
-            // base must subtype and every constraint of the supertype must hold of
-            // every subtype value: either it appears verbatim, or it is entailed by
-            // the subtype's bounds (a tighter lower/upper/length bound entails a
-            // looser one, decided through the ordering oracle). A bound the oracle
-            // cannot compare, and a non-order constraint, stay on the verbatim path.
+            // Disjointness is proven or not proven, never refuted here: the
+            // rules that establish it are sound and incomplete.
+            (_, Schema::Complement(inner)) => {
+                Relation::proven(self.shares_no_value_with(inner, cx))
+            }
             (
                 Schema::Refine {
                     base: narrow_base,
@@ -1038,18 +1219,25 @@ impl Schema {
                     base: wide_base,
                     constraints: wide_cons,
                 },
-            ) => {
-                narrow_base.is_subtype_rec(wide_base, cx, assumptions)
-                    && wide_cons.iter().all(|constraint| {
-                        narrow_cons.contains(constraint)
-                            || constraint_entailed(constraint, narrow_cons, cx.oracle)
-                    })
-            }
+            ) => refinement_subtype(
+                narrow_base,
+                narrow_cons,
+                wide_base,
+                wide_cons,
+                cx,
+                assumptions,
+            ),
             // Against a non-refinement, a refinement inherits its base's supertypes.
             (Schema::Refine { .. }, _) => self.left_reduces_below(other, cx, assumptions),
             // A leaf the structural rules cannot relate (an instance or literal):
             // defer to the oracle, conservative when it declines.
-            _ => cx.oracle.leaf_subtype(self, other).unwrap_or(false),
+            // A leaf pair the structural rules cannot relate: the oracle
+            // answers, and its `None` is the decline it says it is.
+            _ => match cx.oracle.leaf_subtype(self, other) {
+                Some(true) => Relation::Holds,
+                Some(false) => Relation::Fails,
+                None => Relation::Unknown,
+            },
         }
     }
 
@@ -1081,7 +1269,7 @@ impl Schema {
             budget: &budget,
         };
         let within = |sub: &Schema, sup: &Schema| {
-            sub.is_subtype_rec(sup, cx, &mut Vec::new())
+            sub.is_subtype_rec(sup, cx, &mut Vec::new()).holds()
                 || sub.descriptor_contained_in(sup, oracle, defs)
         };
         within(self, other) && within(other, self)
@@ -1692,7 +1880,7 @@ fn product_subtype(
         .zip(branch.iter())
         .enumerate()
         .all(|(position, (mine, theirs))| {
-            mine.is_subtype_rec(theirs, cx, assumptions) || {
+            mine.is_subtype_rec(theirs, cx, assumptions).holds() || {
                 // The component this branch does not cover, narrowed by what the
                 // branch takes away, with the rest of the tuple as it was. Built
                 // by mapping rather than by writing at an index: the position
@@ -1811,7 +1999,7 @@ fn linear_subtype(
     tb: Option<&Schema>,
     cx: SubtypeCx<'_>,
     assumptions: &mut Vec<(Schema, Schema)>,
-) -> bool {
+) -> Relation {
     // A repeated tail with an empty element language never repeats, so the left
     // side is then just its fixed prefix. Emptiness is decided with the same
     // oracle and definitions as the rest of the decision, so a tail empty only
@@ -1820,20 +2008,59 @@ fn linear_subtype(
     let ta =
         ta.filter(|element| !element.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget));
     // A's fixed prefix must align with B: against B's prefix where they overlap,
-    // then against B's repeated tail past it (which B must therefore have).
-    let prefix_aligns = pa.len() >= pb.len()
-        && pa.iter().enumerate().all(|(i, element)| match pb.get(i) {
-            Some(expected) => element.is_subtype_rec(expected, cx, assumptions),
-            None => tb.is_some_and(|tail| element.is_subtype_rec(tail, cx, assumptions)),
-        });
-    match (ta, tb) {
-        (None, None) => pa.len() == pb.len() && prefix_aligns,
-        (None, Some(_)) => prefix_aligns,
-        // A repeats without bound but B is finite-length: impossible.
-        (Some(_), None) => false,
-        // A's repeated element must also land in B's repeated tail.
-        (Some(a), Some(tail)) => prefix_aligns && a.is_subtype_rec(tail, cx, assumptions),
+    // then against B's repeated tail past it (which B must therefore have). A
+    // prefix shorter than B's cannot align at all, which is a refutation by
+    // shape: the lengths one side admits are not among the other's.
+    if pa.len() < pb.len() {
+        return Relation::Fails;
     }
+    let aligns = |assumptions: &mut Vec<(Schema, Schema)>| {
+        Relation::all(pa.iter().enumerate().map(|(i, element)| match pb.get(i) {
+            Some(expected) => element.is_subtype_rec(expected, cx, assumptions),
+            // Past B's prefix, B must repeat -- a fixed-length B admits no such
+            // position at all.
+            None => tb.map_or(Relation::Fails, |tail| {
+                element.is_subtype_rec(tail, cx, assumptions)
+            }),
+        }))
+    };
+    match (ta, tb) {
+        (None, None) if pa.len() != pb.len() => Relation::Fails,
+        (None, None | Some(_)) => aligns(assumptions),
+        // A repeats without bound but B is finite-length: impossible.
+        (Some(_), None) => Relation::Fails,
+        // A's repeated element must also land in B's repeated tail.
+        (Some(a), Some(tail)) => {
+            aligns(assumptions).and(|| a.is_subtype_rec(tail, cx, assumptions))
+        }
+    }
+}
+
+/// A refinement below another: the base narrows and every constraint holds.
+///
+/// A refinement is a subset of its base. Against another refinement the base
+/// must subtype and every constraint of the supertype must hold of every
+/// subtype value: either it appears verbatim, or it is entailed by the
+/// subtype's bounds (a tighter lower, upper or length bound entails a looser
+/// one, decided through the ordering oracle). A bound the oracle cannot compare
+/// and a non-order constraint stay on the verbatim path, so a constraint
+/// neither written nor entailed leaves the pair unproven rather than refuted.
+fn refinement_subtype(
+    narrow_base: &Schema,
+    narrow_cons: &[Constraint],
+    wide_base: &Schema,
+    wide_cons: &[Constraint],
+    cx: SubtypeCx<'_>,
+    assumptions: &mut Vec<(Schema, Schema)>,
+) -> Relation {
+    narrow_base
+        .is_subtype_rec(wide_base, cx, assumptions)
+        .and(|| {
+            Relation::proven(wide_cons.iter().all(|constraint| {
+                narrow_cons.contains(constraint)
+                    || constraint_entailed(constraint, narrow_cons, cx.oracle)
+            }))
+        })
 }
 
 /// Whether keyed-map `a` (fields `fa`, default clauses `da`) is a subtype of
@@ -1863,7 +2090,7 @@ fn keyed_map_subtype(
     db: &[MapClause],
     cx: SubtypeCx<'_>,
     assumptions: &mut Vec<(Schema, Schema)>,
-) -> bool {
+) -> Relation {
     // Index both field lists by name once, so the cross-list lookups below are O(1)
     // each rather than a fresh linear scan per field (O(fields²) per comparison).
     let a_by_name = field_index(fa);
@@ -1878,52 +2105,61 @@ fn keyed_map_subtype(
         //
         // Every supertype field is checked against `a`: a field `a` declares is
         // matched field-wise; a field `a` lacks is governed by `a`'s catch-all.
-        let fields_ok = fb.iter().all(|b_field| {
+        let fields_ok = Relation::all(fb.iter().map(|b_field| {
             match a_by_name.get(&*b_field.name) {
                 // Shared field: it must narrow in depth, and a field `b` requires
-                // must be required in `a` too.
-                Some(a_field) => {
-                    a_field
-                        .schema
-                        .is_subtype_rec(&b_field.schema, cx, assumptions)
-                        && (!b_field.required || a_field.required)
-                }
+                // must be required in `a` too. A key the supertype requires and
+                // the subtype does not is a value of the subtype -- the one
+                // leaving that key out -- that the supertype rejects.
+                Some(a_field) => a_field
+                    .schema
+                    .is_subtype_rec(&b_field.schema, cx, assumptions)
+                    .and(|| Relation::decided(!b_field.required || a_field.required)),
                 // A field `b` declares that `a` lacks: a catch-all guarantees a
                 // key's value type but never its presence, so a *required* such
                 // field stays undecided; an *optional* one holds when every value
                 // `a`'s catch-all could place at that key fits `b`'s field schema.
-                None => {
-                    !b_field.required
-                        && da.iter().all(|clause| {
-                            clause
-                                .value
-                                .is_subtype_rec(&b_field.schema, cx, assumptions)
-                        })
-                }
+                None if b_field.required => Relation::Unknown,
+                None => Relation::all(da.iter().map(|clause| {
+                    clause
+                        .value
+                        .is_subtype_rec(&b_field.schema, cx, assumptions)
+                })),
             }
-        });
+        }));
         // Each field `a` declares that `b` does not is read by `b` through its
         // catch-all, so a `str`/`anything`-keyed clause of `b` must cover it.
-        let extra_covered = fa
-            .iter()
-            .filter(|a_field| !b_by_name.contains_key(&*a_field.name))
-            .all(|a_field| {
-                db.iter().any(|clause| {
-                    matches!(clause.key, Schema::Str | Schema::Anything(_))
-                        && a_field
-                            .schema
-                            .is_subtype_rec(&clause.value, cx, assumptions)
-                })
-            });
+        let extra_covered = Relation::all(
+            fa.iter()
+                .filter(|a_field| !b_by_name.contains_key(&*a_field.name))
+                .map(|a_field| {
+                    // The clause has to be one that admits the *name*, and this
+                    // reads only the two spellings that plainly do, so a clause
+                    // it cannot read leaves the field unproven rather than
+                    // uncovered.
+                    Relation::proven(db.iter().any(|clause| {
+                        matches!(clause.key, Schema::Str | Schema::Anything(_))
+                            && a_field
+                                .schema
+                                .is_subtype_rec(&clause.value, cx, assumptions)
+                                .holds()
+                    }))
+                }),
+        );
         // Every catch-all clause of `a` (governing its non-field keys) is subsumed
         // by a clause of `b` with both key and value narrower.
-        let defaults = da.iter().all(|mine| {
-            db.iter().any(|theirs| {
-                mine.key.is_subtype_rec(&theirs.key, cx, assumptions)
-                    && mine.value.is_subtype_rec(&theirs.value, cx, assumptions)
-            })
-        });
-        fields_ok && extra_covered && defaults
+        let defaults = Relation::all(da.iter().map(|mine| {
+            // One clause of `b` subsuming this one settles it; none of them
+            // doing so is a decline, since a clause pair the rules cannot
+            // relate is not a pair they have refuted.
+            Relation::proven(db.iter().any(|theirs| {
+                mine.key
+                    .is_subtype_rec(&theirs.key, cx, assumptions)
+                    .and(|| mine.value.is_subtype_rec(&theirs.value, cx, assumptions))
+                    .holds()
+            }))
+        }));
+        fields_ok.and(|| extra_covered).and(|| defaults)
     }
 }
 
@@ -1943,16 +2179,19 @@ fn attr_record_subtype(
     fb: &[Field],
     cx: SubtypeCx<'_>,
     assumptions: &mut Vec<(Schema, Schema)>,
-) -> bool {
+) -> Relation {
     let a_by_name = field_index(fa);
-    fb.iter().all(|b| {
-        a_by_name.get(&*b.name).is_some_and(|a| {
-            // A supertype field the subtype only *may* carry is not a supertype
-            // field: the subtype holds values with the attribute missing, and
-            // those are outside the supertype.
-            (a.required || !b.required) && a.schema.is_subtype_rec(&b.schema, cx, assumptions)
-        })
-    })
+    Relation::all(fb.iter().map(|b| {
+        match a_by_name.get(&*b.name) {
+            // An attribute the supertype names and the subtype does not: the
+            // subtype holds values without it, and those are outside the
+            // supertype. So is a supertype attribute the subtype only *may*
+            // carry.
+            None => Relation::Fails,
+            Some(a) if b.required && !a.required => Relation::Fails,
+            Some(a) => a.schema.is_subtype_rec(&b.schema, cx, assumptions),
+        }
+    }))
 }
 
 /// Index a field list by name for O(1) cross-list lookup during subtyping.
