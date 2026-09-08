@@ -198,7 +198,10 @@ fn equal(
             // A sequence's elements are positional, so this one is a zip.
             a_kind == b_kind
                 && a.prefix.len() == b.prefix.len()
-                && a.prefix.iter().zip(&b.prefix).all(|(x, y)| recur(x, y))
+                && a.prefix
+                    .iter()
+                    .zip(b.prefix.iter())
+                    .all(|(x, y)| recur(x, y))
                 && match (&a.tail, &b.tail) {
                     (Some(x), Some(y)) => recur(x, y),
                     (None, None) => true,
@@ -303,7 +306,7 @@ pub(crate) fn hash_shape<H: Hasher>(
         Schema::Seq { container, shape } => {
             container.hash(hasher);
             shape.prefix.len().hash(hasher);
-            for element in &shape.prefix {
+            for element in shape.prefix.iter() {
                 hash_shape(py, element, pool, hasher);
             }
             shape.tail.is_some().hash(hasher);

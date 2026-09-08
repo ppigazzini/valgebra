@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 use proptest::prelude::*;
 
@@ -37,9 +39,10 @@ fn indexed_schema() -> impl Strategy<Value = Schema> {
         prop_oneof![
             inner.clone().prop_map(Schema::set),
             inner.clone().prop_map(Schema::frozen_set),
-            inner.clone().prop_map(|s| Schema::Complement(Box::new(s))),
-            proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Union),
-            proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Intersection),
+            inner.clone().prop_map(|s| Schema::Complement(Arc::new(s))),
+            proptest::collection::vec(inner.clone(), 1..3).prop_map(|m| Schema::Union(m.into())),
+            proptest::collection::vec(inner.clone(), 1..3)
+                .prop_map(|m| Schema::Intersection(m.into())),
             inner
                 .clone()
                 .prop_map(|s| Schema::list(SeqShape::homogeneous(s))),
@@ -53,10 +56,10 @@ fn indexed_schema() -> impl Strategy<Value = Schema> {
                 .clone()
                 .prop_map(|s| Schema::record(vec![field(s)], Openness::Closed)),
             inner.clone().prop_map(|s| Schema::AttrRecord {
-                fields: vec![field(s)],
+                fields: vec![field(s)].into(),
             }),
             inner.prop_map(|s| Schema::Refine {
-                base: Box::new(s),
+                base: Arc::new(s),
                 constraints: vec![
                     Constraint::Ge(OperandIx::new(5)),
                     Constraint::MultipleOf(OperandIx::new(5)),
@@ -64,7 +67,8 @@ fn indexed_schema() -> impl Strategy<Value = Schema> {
                     // Neither is a pool index; both must survive untouched.
                     Constraint::MinLen(1),
                     Constraint::Regex("x".to_owned()),
-                ],
+                ]
+                .into(),
             }),
         ]
     })
@@ -103,7 +107,7 @@ fn indices(schema: &Schema, pool: &mut Vec<usize>, defs: &mut Vec<usize>) {
             indices(inner, pool, defs);
         }
         Schema::Union(members) | Schema::Intersection(members) => {
-            for member in members {
+            for member in members.iter() {
                 indices(member, pool, defs);
             }
         }
@@ -113,22 +117,22 @@ fn indices(schema: &Schema, pool: &mut Vec<usize>, defs: &mut Vec<usize>) {
             }
         }
         Schema::KeyedMap { fields, defaults } => {
-            for field in fields {
+            for field in fields.iter() {
                 indices(&field.schema, pool, defs);
             }
-            for clause in defaults {
+            for clause in defaults.iter() {
                 indices(&clause.key, pool, defs);
                 indices(&clause.value, pool, defs);
             }
         }
         Schema::AttrRecord { fields } => {
-            for field in fields {
+            for field in fields.iter() {
                 indices(&field.schema, pool, defs);
             }
         }
         Schema::Refine { base, constraints } => {
             indices(base, pool, defs);
-            for constraint in constraints {
+            for constraint in constraints.iter() {
                 match constraint {
                     Constraint::Ge(index)
                     | Constraint::Gt(index)

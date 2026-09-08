@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 use crate::render::render;
 use rustc_hash::FxHashMap;
@@ -309,8 +311,8 @@ fn each_base_answers_the_constraints_its_values_can() {
 #[test]
 fn a_compound_base_answers_for_its_parts() {
     let refined = Schema::Refine {
-        base: Box::new(Schema::Str),
-        constraints: vec![Constraint::MinLen(1)],
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::MinLen(1)].into(),
     };
     for (base, answer) in [
         (Schema::union([Schema::Str, Schema::Int]), Carries::Yes),
@@ -454,8 +456,8 @@ fn a_seeded_pool_holds_what_it_was_seeded_with() {
 #[test]
 fn a_narrowing_key_is_found_under_every_connective() {
     let narrowing = Schema::Refine {
-        base: Box::new(Schema::Str),
-        constraints: vec![Constraint::MinLen(1)],
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::MinLen(1)].into(),
     };
     for schema in [
         narrowing.clone(),
@@ -472,8 +474,8 @@ fn a_narrowing_key_is_found_under_every_connective() {
         Schema::Str,
         Schema::union([Schema::Str, Schema::Int]),
         Schema::Refine {
-            base: Box::new(Schema::Str),
-            constraints: Vec::new(),
+            base: Arc::new(Schema::Str),
+            constraints: Vec::new().into(),
         },
     ] {
         assert!(!narrows_its_keys(&schema), "{schema:?} keys as it is");

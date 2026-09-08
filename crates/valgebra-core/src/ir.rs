@@ -22,7 +22,8 @@
 //! of combining two pools ([`Remap`]) and why the child set of each variant is
 //! declared in one place ([`Schema::map_children`]).
 
-use std::sync::Arc;
+use std::cell::RefCell;
+use std::sync::{Arc, OnceLock};
 
 /// Remap a pool index through the reindexing map built when two validators merge.
 /// Every index is in range by construction, so a miss is an internal invariant
@@ -376,6 +377,130 @@ pub enum PathSegment {
     Index(usize),
 }
 
+/// The clause list an open record carries, allocated once for the process.
+///
+/// Every open record's catch-all is the same pair -- any key, any value -- and
+/// every record built or reopened was allocating its own copy of it. A shared
+/// list makes the carry a refcount bump, which is what sharing the list is for;
+/// the same goes for the empty lists a closed record and a fieldless one hold.
+fn open_clauses() -> Clauses {
+    static OPEN: OnceLock<Clauses> = OnceLock::new();
+    OPEN.get_or_init(|| Clauses::from([MapClause::top()]))
+        .clone()
+}
+
+/// The empty clause list, shared: a closed record's catch-all.
+fn no_clauses() -> Clauses {
+    static NONE: OnceLock<Clauses> = OnceLock::new();
+    NONE.get_or_init(|| Clauses::from([])).clone()
+}
+
+/// The empty field list, shared: a mapping's declared names.
+fn no_fields() -> Fields {
+    static NONE: OnceLock<Fields> = OnceLock::new();
+    NONE.get_or_init(|| Fields::from([])).clone()
+}
+
+/// The empty member list, shared: a sequence shape with no fixed prefix.
+fn no_members() -> Members {
+    static NONE: OnceLock<Members> = OnceLock::new();
+    NONE.get_or_init(|| Members::from([])).clone()
+}
+
+/// The clause list for an openness, shared either way.
+fn clauses_for(open: Openness) -> Clauses {
+    match open {
+        Openness::Open => open_clauses(),
+        Openness::Closed => no_clauses(),
+    }
+}
+
+/// A field list, shared when it is empty and owned when it is not.
+fn share_fields(fields: Vec<Field>) -> Fields {
+    if fields.is_empty() {
+        no_fields()
+    } else {
+        Fields::from(fields)
+    }
+}
+
+/// A clause list, shared when it is one the whole tree already holds.
+fn share_clauses(defaults: Vec<MapClause>) -> Clauses {
+    if defaults.is_empty() {
+        no_clauses()
+    } else if defaults.len() == 1 && defaults.first() == Some(&MapClause::top()) {
+        open_clauses()
+    } else {
+        Clauses::from(defaults)
+    }
+}
+
+/// Run `build` with a scratch field buffer, returning it to the pool after.
+///
+/// The same pooling as [`with_member_buffer`], for the list a record rebuild
+/// assembles. A pass over a wide record filters and maps its fields into a
+/// buffer and then copies the result into the shared slice the node holds; the
+/// buffer is dead as soon as the node exists, so it is borrowed rather than
+/// allocated.
+fn with_field_buffer<R>(build: impl FnOnce(&mut Vec<Field>) -> R) -> R {
+    thread_local! {
+        static POOL: RefCell<Vec<Vec<Field>>> = const { RefCell::new(Vec::new()) };
+    }
+    let mut buffer = POOL
+        .with(|pool| pool.borrow_mut().pop())
+        .unwrap_or_default();
+    buffer.clear();
+    let made = build(&mut buffer);
+    buffer.clear();
+    POOL.with(|pool| pool.borrow_mut().push(buffer));
+    made
+}
+
+/// Run `build` with a scratch member buffer, returning it to the pool after.
+///
+/// A join or a meet is assembled in a growable buffer -- members flattened in,
+/// then ordered and deduplicated -- and the finished list is copied into the
+/// shared slice the node holds. Allocating that buffer per construction was the
+/// price of the shared slice, and it is a price nothing collects: the buffer is
+/// dead the moment the node exists. Pooling it per thread makes the buffer free
+/// after the first use and leaves one allocation per node, which is what the
+/// owned `Vec` cost before the members were shared.
+///
+/// The pool is a stack rather than a single spare because construction nests
+/// deeply -- a member is built while the join holding it is being assembled --
+/// and a single spare leaves every inner call allocating its own. Measured, the
+/// stack is worth five percent of the core workload over one spare.
+pub(crate) fn with_member_buffer<R>(build: impl FnOnce(&mut Vec<Schema>) -> R) -> R {
+    thread_local! {
+        static POOL: RefCell<Vec<Vec<Schema>>> = const { RefCell::new(Vec::new()) };
+    }
+    let mut buffer = POOL
+        .with(|pool| pool.borrow_mut().pop())
+        .unwrap_or_default();
+    buffer.clear();
+    let made = build(&mut buffer);
+    buffer.clear();
+    POOL.with(|pool| pool.borrow_mut().push(buffer));
+    made
+}
+
+/// The members of a join or a meet.
+///
+/// A shared, immutable slice rather than a `Vec`: the members are written once
+/// by the constructor that normalises them and read for the rest of the node's
+/// life, so what the representation has to be cheap at is *carrying* the list,
+/// not editing it.
+pub type Members = Arc<[Schema]>;
+
+/// A record's declared fields, shared for the same reason as [`Members`].
+pub type Fields = Arc<[Field]>;
+
+/// A map's default clauses, shared for the same reason as [`Members`].
+pub type Clauses = Arc<[MapClause]>;
+
+/// A refinement's constraints, shared for the same reason as [`Members`].
+pub type Constraints = Arc<[Constraint]>;
+
 /// The schema intermediate representation.
 ///
 /// Each variant documents its denotation: the set of Python values it accepts.
@@ -470,7 +595,7 @@ pub enum Schema {
         /// Whether the value is a set or a frozenset.
         container: CollKind,
         /// The set every member of the value must belong to.
-        element: Box<Schema>,
+        element: Arc<Schema>,
     },
     /// Denotes dicts with named fields and key-schema-keyed defaults for the
     /// rest.
@@ -489,7 +614,7 @@ pub enum Schema {
     /// dict.
     KeyedMap {
         /// The declared string-named fields, in order.
-        fields: Vec<Field>,
+        fields: Fields,
         /// `(key-schema, value-schema)` clauses governing every key that is not
         /// a declared field name. A key belongs when **some** clause admits both
         /// it and its value, so the clauses are a disjunction and not a
@@ -497,17 +622,17 @@ pub enum Schema {
         /// carries no meaning to membership or to subtyping. Both consumers ask
         /// `any`, and this comment once said "ordered", which is a semantics no
         /// code here implements.
-        defaults: Vec<MapClause>,
+        defaults: Clauses,
     },
     /// Denotes the union of the member sets: a value is a member iff it belongs
     /// to at least one member schema.
-    Union(Vec<Schema>),
+    Union(Members),
     /// Denotes the intersection of the member sets: a value is a member iff it
     /// belongs to every member schema.
-    Intersection(Vec<Schema>),
+    Intersection(Members),
     /// Denotes the complement of the inner set: a value is a member iff it is
     /// not a member of the inner schema.
-    Complement(Box<Schema>),
+    Complement(Arc<Schema>),
     /// Denotes instances of a class, by `isinstance`. The class is held in the
     /// validator's object pool; the payload is its index.
     Instance(ClassIx),
@@ -523,15 +648,15 @@ pub enum Schema {
     /// split, each half is a set the rules already know.
     AttrRecord {
         /// Per-attribute field schemas.
-        fields: Vec<Field>,
+        fields: Fields,
     },
     /// Denotes the subset of the base set satisfying every constraint
     /// (`{ x in [[base]] | all constraints hold }`). The base is checked first.
     Refine {
         /// The base schema; a value must belong to it before constraints apply.
-        base: Box<Schema>,
+        base: Arc<Schema>,
         /// Constraints that further narrow the base set, checked in order.
-        constraints: Vec<Constraint>,
+        constraints: Constraints,
     },
     /// A reference to a recursive definition: denotes the same set as the
     /// definition at this index in the validator's definitions table. The back
@@ -587,10 +712,10 @@ pub enum SeqKind {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct SeqShape {
     /// The positional element schemas, matched in order from the front.
-    pub prefix: Vec<Schema>,
+    pub prefix: Members,
     /// The schema every element past the prefix must belong to, or `None` when
     /// the sequence ends at the prefix.
-    pub tail: Option<Box<Schema>>,
+    pub tail: Option<Arc<Schema>>,
 }
 
 impl SeqShape {
@@ -598,7 +723,7 @@ impl SeqShape {
     pub(crate) fn map_elems(&self, f: &impl Fn(&Schema) -> Schema) -> SeqShape {
         SeqShape {
             prefix: self.prefix.iter().map(f).collect(),
-            tail: self.tail.as_deref().map(|t| Box::new(f(t))),
+            tail: self.tail.as_deref().map(|t| Arc::new(f(t))),
         }
     }
 
@@ -635,7 +760,7 @@ impl Schema {
     pub fn set(element: Schema) -> Schema {
         Schema::Coll {
             container: CollKind::Set,
-            element: Box::new(element),
+            element: Arc::new(element),
         }
     }
 
@@ -644,7 +769,7 @@ impl Schema {
     pub fn frozen_set(element: Schema) -> Schema {
         Schema::Coll {
             container: CollKind::FrozenSet,
-            element: Box::new(element),
+            element: Arc::new(element),
         }
     }
 
@@ -653,8 +778,8 @@ impl Schema {
     #[must_use]
     pub fn mapping(clause: MapClause) -> Schema {
         Schema::KeyedMap {
-            fields: Vec::new(),
-            defaults: vec![clause],
+            fields: no_fields(),
+            defaults: vec![clause].into(),
         }
     }
 
@@ -699,41 +824,42 @@ impl Schema {
         members: impl IntoIterator<Item = Schema>,
         definitions: &[Schema],
     ) -> Schema {
-        let mut flat: Vec<Schema> = Vec::new();
-        for member in members {
-            match member {
-                // The top absorbs, and keeps the spelling of the member it
-                // absorbed: `Any | int` renders `Any`.
-                top @ Schema::Anything(_) => return top,
-                Schema::Nothing => {}
-                Schema::Union(inner) => flat.extend(inner),
-                other => flat.push(other),
+        with_member_buffer(|flat| {
+            for member in members {
+                match member {
+                    // The top absorbs, and keeps the spelling of the member it
+                    // absorbed: `Any | int` renders `Any`.
+                    top @ Schema::Anything(_) => return top,
+                    Schema::Nothing => {}
+                    Schema::Union(inner) => flat.extend(inner.iter().cloned()),
+                    other => flat.push(other),
+                }
             }
-        }
-        flat.sort();
-        flat.dedup();
-        // A join carrying a schema together with its complement is the top,
-        // whatever those are, so no such join survives construction and no rule
-        // downstream may assume one does. `has_complementary_pair` is the one
-        // statement of the law, shared with the simplifier; it reaches a pairwise
-        // comparison only for a member that is itself a complement.
-        // With no oracle here the law declines for an atom only the bindings can
-        // read, which is the safe direction: a join left unfolded still denotes
-        // what it denotes. `definitions` is what a *recursive* member needs: a
-        // reference is not a set on its own evidence, so without them the law
-        // declines for every fixpoint, `json | ~json` included.
-        if crate::decision::has_complementary_pair_within(
-            &flat,
-            &crate::decision::NoLeafRelations,
-            definitions,
-        ) {
-            return Schema::ANYTHING;
-        }
-        match flat.len() {
-            0 => Schema::Nothing,
-            1 => flat.swap_remove(0),
-            _ => Schema::Union(flat),
-        }
+            flat.sort();
+            flat.dedup();
+            // A join carrying a schema together with its complement is the top,
+            // whatever those are, so no such join survives construction and no rule
+            // downstream may assume one does. `has_complementary_pair` is the one
+            // statement of the law, shared with the simplifier; it reaches a pairwise
+            // comparison only for a member that is itself a complement.
+            // With no oracle here the law declines for an atom only the bindings can
+            // read, which is the safe direction: a join left unfolded still denotes
+            // what it denotes. `definitions` is what a *recursive* member needs: a
+            // reference is not a set on its own evidence, so without them the law
+            // declines for every fixpoint, `json | ~json` included.
+            if crate::decision::has_complementary_pair_within(
+                flat,
+                &crate::decision::NoLeafRelations,
+                definitions,
+            ) {
+                return Schema::ANYTHING;
+            }
+            match flat.len() {
+                0 => Schema::Nothing,
+                1 => flat.swap_remove(0),
+                _ => Schema::Union(flat.drain(..).collect()),
+            }
+        })
     }
 
     /// The meet of `members`, in the lattice normal form dual to
@@ -755,34 +881,35 @@ impl Schema {
         members: impl IntoIterator<Item = Schema>,
         definitions: &[Schema],
     ) -> Schema {
-        let mut flat: Vec<Schema> = Vec::new();
-        for member in members {
-            match member {
-                Schema::Nothing => return Schema::Nothing,
-                Schema::Anything(_) => {}
-                Schema::Intersection(inner) => flat.extend(inner),
-                other => flat.push(other),
+        with_member_buffer(|flat| {
+            for member in members {
+                match member {
+                    Schema::Nothing => return Schema::Nothing,
+                    Schema::Anything(_) => {}
+                    Schema::Intersection(inner) => flat.extend(inner.iter().cloned()),
+                    other => flat.push(other),
+                }
             }
-        }
-        flat.sort();
-        flat.dedup();
-        // The dual of the fold in [`union`](Self::union), and the same law read
-        // the other way: a meet carrying a schema together with its complement
-        // is the bottom. Both constructors state it or neither does -- a law
-        // folded on one side and left standing on the other is two answers to
-        // one question.
-        if crate::decision::has_complementary_pair_within(
-            &flat,
-            &crate::decision::NoLeafRelations,
-            definitions,
-        ) {
-            return Schema::Nothing;
-        }
-        match flat.len() {
-            0 => Schema::ANYTHING,
-            1 => flat.swap_remove(0),
-            _ => Schema::Intersection(flat),
-        }
+            flat.sort();
+            flat.dedup();
+            // The dual of the fold in [`union`](Self::union), and the same law read
+            // the other way: a meet carrying a schema together with its complement
+            // is the bottom. Both constructors state it or neither does -- a law
+            // folded on one side and left standing on the other is two answers to
+            // one question.
+            if crate::decision::has_complementary_pair_within(
+                flat,
+                &crate::decision::NoLeafRelations,
+                definitions,
+            ) {
+                return Schema::Nothing;
+            }
+            match flat.len() {
+                0 => Schema::ANYTHING,
+                1 => flat.swap_remove(0),
+                _ => Schema::Intersection(flat.drain(..).collect()),
+            }
+        })
     }
 
     /// The complement: every value this schema does not admit.
@@ -803,10 +930,10 @@ impl Schema {
     #[must_use]
     pub fn complement(self) -> Schema {
         match self {
-            Schema::Complement(inner) => *inner,
+            Schema::Complement(inner) => Arc::unwrap_or_clone(inner),
             Schema::Anything(_) => Schema::Nothing,
             Schema::Nothing => Schema::ANYTHING,
-            other => Schema::Complement(Box::new(other)),
+            other => Schema::Complement(Arc::new(other)),
         }
     }
 
@@ -814,13 +941,7 @@ impl Schema {
     /// value; a closed one admits none.
     #[must_use]
     pub fn record(fields: Vec<Field>, open: Openness) -> Schema {
-        Schema::keyed_map(
-            fields,
-            match open {
-                Openness::Open => vec![MapClause::top()],
-                Openness::Closed => Vec::new(),
-            },
-        )
+        Schema::keyed_map_within(fields, clauses_for(open))
     }
 
     /// A dict node: named fields, and the catch-all clauses governing every other
@@ -832,9 +953,46 @@ impl Schema {
     /// mixed record-and-catch-all needs it.
     #[must_use]
     pub fn keyed_map(mut fields: Vec<Field>, mut defaults: Vec<MapClause>) -> Schema {
-        canonical_fields(&mut fields);
         canonical_clauses(&mut defaults);
-        Schema::KeyedMap { fields, defaults }
+        canonical_fields(&mut fields);
+        Schema::KeyedMap {
+            fields: share_fields(fields),
+            defaults: share_clauses(defaults),
+        }
+    }
+
+    /// The same node with its clause list already shared and canonical.
+    ///
+    /// The two clause lists a record can carry -- the open catch-all and the
+    /// empty one -- are the same lists every time, so a caller that knows which
+    /// it wants passes the shared one rather than building a list for this node
+    /// alone.
+    #[must_use]
+    pub fn keyed_map_within(mut fields: Vec<Field>, defaults: Clauses) -> Schema {
+        canonical_fields(&mut fields);
+        Schema::KeyedMap {
+            fields: share_fields(fields),
+            defaults,
+        }
+    }
+
+    /// The same, from a buffer the caller keeps: the fields are copied into the
+    /// node's shared list rather than the buffer being consumed, so a rebuild
+    /// that borrowed its buffer can hand it back.
+    #[must_use]
+    // A `Vec` rather than a slice because canonicalising the fields deduplicates
+    // them, which a slice cannot do.
+    #[allow(clippy::ptr_arg)]
+    fn keyed_map_from(fields: &mut Vec<Field>, defaults: Clauses) -> Schema {
+        canonical_fields(fields);
+        Schema::KeyedMap {
+            fields: if fields.is_empty() {
+                no_fields()
+            } else {
+                fields.drain(..).collect()
+            },
+            defaults,
+        }
     }
 
     /// An object node: the attributes an instance must carry, in canonical order.
@@ -845,7 +1003,9 @@ impl Schema {
     #[must_use]
     pub fn attr_record(mut fields: Vec<Field>) -> Schema {
         canonical_fields(&mut fields);
-        Schema::AttrRecord { fields }
+        Schema::AttrRecord {
+            fields: fields.into(),
+        }
     }
 
     /// A refinement node: `base` narrowed by `constraints`, in canonical order.
@@ -861,8 +1021,8 @@ impl Schema {
             return base;
         }
         Schema::Refine {
-            base: Box::new(base),
-            constraints,
+            base: Arc::new(base),
+            constraints: constraints.into(),
         }
     }
 }
@@ -952,8 +1112,8 @@ impl SeqShape {
     #[must_use]
     pub fn homogeneous(element: Schema) -> SeqShape {
         SeqShape {
-            prefix: Vec::new(),
-            tail: Some(Box::new(element)),
+            prefix: no_members(),
+            tail: Some(Arc::new(element)),
         }
     }
 
@@ -972,7 +1132,7 @@ impl SeqShape {
     pub fn prefix_tail(prefix: impl IntoIterator<Item = Schema>, tail: Schema) -> SeqShape {
         SeqShape {
             prefix: prefix.into_iter().collect(),
-            tail: Some(Box::new(tail)),
+            tail: Some(Arc::new(tail)),
         }
     }
 }
@@ -1133,7 +1293,7 @@ impl Schema {
         };
         let mut class = None;
         let mut records = 0usize;
-        for member in members {
+        for member in members.iter() {
             match member {
                 // A second atom of either kind is a meet of two objects, not one
                 // object: there is no single class to name.
@@ -1269,7 +1429,7 @@ impl Schema {
             // from it, so the bound stands in for it too.
             Schema::SelfRef(_) => cut(),
             Schema::Complement(inner) => {
-                Schema::Complement(Box::new(inner.unfolded(definitions, unfolds, !positive)))
+                Schema::Complement(Arc::new(inner.unfolded(definitions, unfolds, !positive)))
             }
             other => other.map_children(&|child| child.unfolded(definitions, unfolds, positive)),
         }
@@ -1296,7 +1456,7 @@ impl Schema {
     /// that only looks does not need to rebuild what it looked at.
     pub(crate) fn push_children<'a>(&'a self, out: &mut Vec<&'a Schema>) {
         match self {
-            Schema::Union(members) | Schema::Intersection(members) => out.extend(members),
+            Schema::Union(members) | Schema::Intersection(members) => out.extend(members.iter()),
             Schema::Complement(inner) | Schema::Coll { element: inner, .. } => {
                 out.push(inner);
             }
@@ -1306,7 +1466,7 @@ impl Schema {
             }
             Schema::KeyedMap { fields, defaults } => {
                 out.extend(fields.iter().map(|field| &field.schema));
-                for clause in defaults {
+                for clause in defaults.iter() {
                     out.push(&clause.key);
                     out.push(&clause.value);
                 }
@@ -1372,9 +1532,9 @@ impl Schema {
             },
             Schema::Coll { container, element } => Schema::Coll {
                 container: *container,
-                element: Box::new(f(element)),
+                element: Arc::new(f(element)),
             },
-            Schema::Complement(inner) => Schema::Complement(Box::new(f(inner))),
+            Schema::Complement(inner) => Schema::Complement(Arc::new(f(inner))),
             Schema::Union(members) => Schema::Union(members.iter().map(f).collect()),
             Schema::Intersection(members) => Schema::Intersection(members.iter().map(f).collect()),
             Schema::KeyedMap { fields, defaults } => Schema::KeyedMap {
@@ -1385,7 +1545,7 @@ impl Schema {
                 fields: fields.iter().map(field).collect(),
             },
             Schema::Refine { base, constraints } => Schema::Refine {
-                base: Box::new(f(base)),
+                base: Arc::new(f(base)),
                 constraints: constraints.clone(),
             },
         }
@@ -1407,7 +1567,7 @@ impl Schema {
             Schema::Instance(index) => Schema::Instance(index.remapped_by(remap)),
             Schema::Ref(index) => Schema::Ref(index.remapped_by(remap)),
             Schema::Refine { base, constraints } => Schema::Refine {
-                base: Box::new(base.remapped_by(remap)),
+                base: Arc::new(base.remapped_by(remap)),
                 constraints: constraints
                     .iter()
                     .map(|constraint| constraint.remapped_by(remap))
@@ -1710,20 +1870,15 @@ impl Schema {
                 // already says -- so the field list's own length is the right
                 // guess, and over-reserving by the one or two it drops costs a
                 // few unused slots and no allocation.
-                let mut kept = Vec::with_capacity(fields.len());
-                kept.extend(
-                    fields
-                        .iter()
-                        .filter(|field| !already_said(field, defaults))
-                        .map(|field| field.map_schema(&|s| s.with_records_open(open))),
-                );
-                Schema::keyed_map(
-                    kept,
-                    match open {
-                        Openness::Open => vec![MapClause::top()],
-                        Openness::Closed => Vec::new(),
-                    },
-                )
+                with_field_buffer(|kept| {
+                    kept.extend(
+                        fields
+                            .iter()
+                            .filter(|field| !already_said(field, defaults))
+                            .map(|field| field.map_schema(&|s| s.with_records_open(open))),
+                    );
+                    Schema::keyed_map_from(kept, clauses_for(open))
+                })
             }
             // Every other node carries the transform to its children and keeps
             // its own payloads. Spelling the descent out here again is what let
@@ -1748,9 +1903,9 @@ impl Schema {
     /// the shape the constructors guarantee.
     fn refolded(self) -> Schema {
         match self {
-            Schema::Union(members) => Schema::union(members),
-            Schema::Intersection(members) => Schema::meet(members),
-            Schema::Complement(inner) => inner.complement(),
+            Schema::Union(members) => Schema::union(members.iter().cloned()),
+            Schema::Intersection(members) => Schema::meet(members.iter().cloned()),
+            Schema::Complement(inner) => Arc::unwrap_or_clone(inner).complement(),
             other => other,
         }
     }

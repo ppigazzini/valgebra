@@ -171,10 +171,10 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
                             .collect(),
                     });
             }
-            for f in fields {
+            for f in fields.iter() {
                 collect(py, &f.schema, pool, index);
             }
-            for clause in defaults {
+            for clause in defaults.iter() {
                 collect(py, &clause.key, pool, index);
                 collect(py, &clause.value, pool, index);
             }
@@ -186,12 +186,12 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
                     .entry(members.as_ptr() as usize)
                     .or_insert(plan);
             }
-            for member in members {
+            for member in members.iter() {
                 collect(py, member, pool, index);
             }
         }
         Schema::Intersection(members) => {
-            for member in members {
+            for member in members.iter() {
                 collect(py, member, pool, index);
             }
         }
@@ -200,7 +200,7 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
         }
         Schema::Refine { base, constraints } => {
             collect(py, base, pool, index);
-            for constraint in constraints {
+            for constraint in constraints.iter() {
                 if let Constraint::Regex(pattern) = constraint
                     && let Ok(compiled) = compile_pattern(pattern)
                 {
@@ -220,7 +220,7 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
                             .collect(),
                     });
             }
-            for f in fields {
+            for f in fields.iter() {
                 collect(py, &f.schema, pool, index);
             }
         }

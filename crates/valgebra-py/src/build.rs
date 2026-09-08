@@ -480,8 +480,8 @@ fn build_type_object(
     }
     if ty.is(py.get_type::<PyDict>()) {
         return Ok(Schema::KeyedMap {
-            fields: Vec::new(),
-            defaults: vec![MapClause::top()],
+            fields: Vec::new().into(),
+            defaults: vec![MapClause::top()].into(),
         });
     }
     let forms = forms(py)?;

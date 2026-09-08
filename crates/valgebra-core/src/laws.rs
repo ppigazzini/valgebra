@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 use crate::decision::DECISION_BUDGET;
 use proptest::prelude::*;
@@ -20,21 +22,22 @@ fn schema() -> impl Strategy<Value = Schema> {
     ];
     atom.prop_recursive(4, 24, 3, |inner| {
         prop_oneof![
-            proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::Union),
-            proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::Intersection),
-            inner.prop_map(|s| Schema::Complement(Box::new(s))),
+            proptest::collection::vec(inner.clone(), 1..4).prop_map(|m| Schema::Union(m.into())),
+            proptest::collection::vec(inner.clone(), 1..4)
+                .prop_map(|m| Schema::Intersection(m.into())),
+            inner.prop_map(|s| Schema::Complement(Arc::new(s))),
         ]
     })
 }
 
 fn union(a: Schema, b: Schema) -> Schema {
-    Schema::Union(vec![a, b])
+    Schema::Union(vec![a, b].into())
 }
 fn intersection(a: Schema, b: Schema) -> Schema {
-    Schema::Intersection(vec![a, b])
+    Schema::Intersection(vec![a, b].into())
 }
 fn not(a: Schema) -> Schema {
-    Schema::Complement(Box::new(a))
+    Schema::Complement(Arc::new(a))
 }
 
 /// One representative value per distinguishable scalar region. The five
@@ -96,9 +99,10 @@ fn scalar_schema() -> impl Strategy<Value = Schema> {
     ];
     atom.prop_recursive(4, 24, 3, |inner| {
         prop_oneof![
-            proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::Union),
-            proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::Intersection),
-            inner.prop_map(|s| Schema::Complement(Box::new(s))),
+            proptest::collection::vec(inner.clone(), 1..4).prop_map(|m| Schema::Union(m.into())),
+            proptest::collection::vec(inner.clone(), 1..4)
+                .prop_map(|m| Schema::Intersection(m.into())),
+            inner.prop_map(|s| Schema::Complement(Arc::new(s))),
         ]
     })
 }
@@ -107,23 +111,27 @@ fn scalar_schema() -> impl Strategy<Value = Schema> {
 fn decides_scalar_emptiness_subtyping_and_equivalence() {
     // Multi-way emptiness the pairwise checks cannot reach.
     assert!(
-        Schema::Intersection(vec![Schema::Int, not(Schema::Bool), not(Schema::Int)]).is_empty()
+        Schema::Intersection(vec![Schema::Int, not(Schema::Bool), not(Schema::Int)].into())
+            .is_empty()
     );
     assert!(
-        Schema::Intersection(vec![
-            Schema::Union(vec![Schema::Int, Schema::Str]),
-            not(Schema::Int),
-            not(Schema::Str),
-        ])
+        Schema::Intersection(
+            vec![
+                Schema::Union(vec![Schema::Int, Schema::Str].into()),
+                not(Schema::Int),
+                not(Schema::Str),
+            ]
+            .into()
+        )
         .is_empty()
     );
-    assert!(!Schema::Intersection(vec![Schema::Int, not(Schema::Bool)]).is_empty());
+    assert!(!Schema::Intersection(vec![Schema::Int, not(Schema::Bool)].into()).is_empty());
     // Subtyping, with bool ⊆ int.
     assert!(Schema::Bool.is_subtype_of(&Schema::Int));
     assert!(!Schema::Int.is_subtype_of(&Schema::Bool));
     assert!(!Schema::Float.is_subtype_of(&Schema::Int));
     // Equivalence between structurally different schemas: bool ∪ int = int.
-    assert!(Schema::Union(vec![Schema::Bool, Schema::Int]).is_equivalent(&Schema::Int));
+    assert!(Schema::Union(vec![Schema::Bool, Schema::Int].into()).is_equivalent(&Schema::Int));
 }
 
 #[test]
@@ -135,7 +143,10 @@ fn is_empty_and_subtype_are_sound_off_the_scalar_fragment() {
     assert!(!Schema::list(SeqShape::homogeneous(Schema::Int)).is_empty());
     // A scalar mixed with a non-scalar leaf is undecidable here, so it is
     // never claimed empty (an instance could subclass the scalar's type).
-    assert!(!Schema::Intersection(vec![Schema::Int, Schema::Instance(ClassIx::new(0))]).is_empty());
+    assert!(
+        !Schema::Intersection(vec![Schema::Int, Schema::Instance(ClassIx::new(0))].into())
+            .is_empty()
+    );
     // Subtyping off the fragment is reflexive only.
     assert!(Schema::Instance(ClassIx::new(0)).is_subtype_of(&Schema::Instance(ClassIx::new(0))));
     assert!(!Schema::Instance(ClassIx::new(0)).is_subtype_of(&Schema::Instance(ClassIx::new(1))));
@@ -160,21 +171,21 @@ fn decides_structural_container_emptiness() {
     };
     assert!(
         Schema::KeyedMap {
-            fields: vec![field(true)],
-            defaults: Vec::new(),
+            fields: vec![field(true)].into(),
+            defaults: Vec::new().into(),
         }
         .is_empty()
     );
     assert!(
         !Schema::KeyedMap {
-            fields: vec![field(false)],
-            defaults: Vec::new(),
+            fields: vec![field(false)].into(),
+            defaults: Vec::new().into(),
         }
         .is_empty()
     );
     // A union is empty only when every member is.
-    assert!(Schema::Union(vec![Schema::Nothing, empty_pair.clone()]).is_empty());
-    assert!(!Schema::Union(vec![Schema::Int, empty_pair]).is_empty());
+    assert!(Schema::Union(vec![Schema::Nothing, empty_pair.clone()].into()).is_empty());
+    assert!(!Schema::Union(vec![Schema::Int, empty_pair].into()).is_empty());
 }
 
 #[test]
@@ -213,7 +224,9 @@ fn decides_structural_subtyping_between_containers() {
             .is_subtype_of(&list(SeqShape::homogeneous(Schema::Int)))
     );
     // Equivalence between structurally different container schemas.
-    assert!(set(Schema::Union(vec![Schema::Bool, Schema::Int])).is_equivalent(&set(Schema::Int)));
+    assert!(
+        set(Schema::Union(vec![Schema::Bool, Schema::Int].into())).is_equivalent(&set(Schema::Int))
+    );
 }
 
 #[test]
@@ -225,32 +238,32 @@ fn decides_record_and_mapping_subtyping() {
     };
     let record = |fields| Schema::KeyedMap {
         fields,
-        defaults: Vec::new(),
+        defaults: Vec::new().into(),
     };
     let mapping = |k, v| Schema::KeyedMap {
-        fields: Vec::new(),
-        defaults: vec![MapClause { key: k, value: v }],
+        fields: Vec::new().into(),
+        defaults: vec![MapClause { key: k, value: v }].into(),
     };
 
     // Width: a closed record with fewer keys is a subtype of one with more.
-    let narrow = record(vec![field("x", Schema::Int, true)]);
-    let wide = record(vec![
-        field("x", Schema::Int, true),
-        field("y", Schema::Str, false),
-    ]);
+    let narrow = record(vec![field("x", Schema::Int, true)].into());
+    let wide = record(
+        vec![
+            field("x", Schema::Int, true),
+            field("y", Schema::Str, false),
+        ]
+        .into(),
+    );
     assert!(narrow.is_subtype_of(&wide));
     assert!(!wide.is_subtype_of(&narrow)); // wide admits key y; narrow (closed) forbids it
     // Depth: shared field schemas covary (bool ⊆ int).
     assert!(
-        record(vec![field("x", Schema::Bool, true)]).is_subtype_of(&record(vec![field(
-            "x",
-            Schema::Int,
-            true
-        )]))
+        record(vec![field("x", Schema::Bool, true)].into())
+            .is_subtype_of(&record(vec![field("x", Schema::Int, true)].into()))
     );
     // Required: a field the supertype requires must be required in the subtype.
-    let required = record(vec![field("x", Schema::Int, true)]);
-    let optional = record(vec![field("x", Schema::Int, false)]);
+    let required = record(vec![field("x", Schema::Int, true)].into());
+    let optional = record(vec![field("x", Schema::Int, false)].into());
     assert!(required.is_subtype_of(&optional));
     assert!(!optional.is_subtype_of(&required));
     // Mappings covary in key and value.
@@ -359,8 +372,11 @@ fn decides_tuple_prefix_tail_distinctly_from_lists() {
 
     // Equivalence collapses a redundant union in the tail (bool ⊆ int).
     assert!(
-        tup(Schema::Int, Schema::Union(vec![Schema::Bool, Schema::Int]))
-            .is_equivalent(&tup(Schema::Int, Schema::Int))
+        tup(
+            Schema::Int,
+            Schema::Union(vec![Schema::Bool, Schema::Int].into())
+        )
+        .is_equivalent(&tup(Schema::Int, Schema::Int))
     );
 }
 
@@ -384,8 +400,8 @@ fn refinement_subtyping_decides_bound_entailment() {
         }
     }
     let refine = |constraints: Vec<Constraint>| Schema::Refine {
-        base: Box::new(Schema::Int),
-        constraints,
+        base: Arc::new(Schema::Int),
+        constraints: constraints.into(),
     };
     let sub = |a: Vec<Constraint>, b: Vec<Constraint>| {
         refine(a).is_subtype_of_under(&refine(b), &ByIndex, &[])
@@ -460,8 +476,8 @@ fn refinement_emptiness_decides_integer_adjacency() {
         }
     }
     let refine = |base, constraints: Vec<Constraint>| Schema::Refine {
-        base: Box::new(base),
-        constraints,
+        base: Arc::new(base),
+        constraints: constraints.into(),
     };
     // Gt(0) & Lt(1): the open interval (0, 1) holds no integer, so it is empty.
     assert!(
@@ -539,13 +555,13 @@ fn an_intersection_is_empty_when_any_member_is() {
     // non-empty intersection.
     let empty_list = Schema::list(SeqShape::fixed([Schema::Nothing]));
     assert!(empty_list.is_empty());
-    assert!(Schema::Intersection(vec![empty_list.clone(), Schema::ANYTHING]).is_empty());
+    assert!(Schema::Intersection(vec![empty_list.clone(), Schema::ANYTHING].into()).is_empty());
     // Order does not matter: the fold runs over every member.
-    assert!(Schema::Intersection(vec![Schema::ANYTHING, empty_list]).is_empty());
+    assert!(Schema::Intersection(vec![Schema::ANYTHING, empty_list].into()).is_empty());
     // And an intersection of two inhabited members with an opaque region is
     // not reported empty, so the fold is not simply answering true.
     let list_of_int = Schema::list(SeqShape::homogeneous(Schema::Int));
-    assert!(!Schema::Intersection(vec![list_of_int, Schema::ANYTHING]).is_empty());
+    assert!(!Schema::Intersection(vec![list_of_int, Schema::ANYTHING].into()).is_empty());
 }
 
 #[test]
@@ -581,8 +597,8 @@ fn only_the_bottom_is_disjoint_from_itself() {
     // A refinement takes its base's disjointness, so it is not self-disjoint
     // either -- unless its base is bottom, which is the same one case.
     let refined = Schema::Refine {
-        base: Box::new(Schema::Int),
-        constraints: vec![Constraint::MinLen(1)],
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::MinLen(1)].into(),
     };
     assert!(!refined.disjoint(&refined));
 }
@@ -621,7 +637,7 @@ fn decision_arms_are_pinned_independently_of_the_python_suite() {
     // structural arm: a list shares no value with an int, so it lies inside
     // the complement of int. Nothing structural can see this -- there is no
     // shape on the right to recurse into.
-    let not = |s| Schema::Complement(Box::new(s));
+    let not = |s| Schema::Complement(Arc::new(s));
     assert!(list(Schema::Int).is_subtype_of(&not(Schema::Int)));
     assert!(map(Schema::Str, Schema::Int).is_subtype_of(&not(Schema::Str)));
     // ...and it stays sound where the two do share values.
@@ -629,12 +645,11 @@ fn decision_arms_are_pinned_independently_of_the_python_suite() {
     assert!(!Schema::Bool.is_subtype_of(&not(Schema::Int)));
     // A meet is below a member of a join, and a conjunct decides a meet's
     // supertype.
-    assert!(list(Schema::Bool).is_subtype_of(&Schema::Intersection(vec![
-        list(Schema::Int),
-        Schema::ANYTHING
-    ])));
+    assert!(list(Schema::Bool).is_subtype_of(&Schema::Intersection(
+        vec![list(Schema::Int), Schema::ANYTHING].into()
+    )));
     assert!(
-        Schema::Intersection(vec![list(Schema::Bool), list(Schema::Int)])
+        Schema::Intersection(vec![list(Schema::Bool), list(Schema::Int)].into())
             .is_subtype_of(&list(Schema::Int))
     );
     // Complement is contravariant, on a non-scalar so the region check does
@@ -645,8 +660,8 @@ fn decision_arms_are_pinned_independently_of_the_python_suite() {
     // the oracle for a refinement with unsatisfiable bounds.
     assert!(
         Schema::Refine {
-            base: Box::new(Schema::Int),
-            constraints: vec![ge(10), le(0)],
+            base: Arc::new(Schema::Int),
+            constraints: vec![ge(10), le(0)].into(),
         }
         .is_subtype_of_under(&Schema::Nothing, &ByIndex, &[])
     );
@@ -655,19 +670,19 @@ fn decision_arms_are_pinned_independently_of_the_python_suite() {
     // a strict pair at the same value is empty; a length window that is exactly
     // satisfiable is not empty.
     let refine = |constraints| Schema::Refine {
-        base: Box::new(Schema::Int),
+        base: Arc::new(Schema::Int),
         constraints,
     };
-    assert!(!refine(vec![ge(5), le(5)]).is_empty_with(&ByIndex, &[]));
-    assert!(refine(vec![gt(5), lt(5)]).is_empty_with(&ByIndex, &[]));
-    assert!(!refine(vec![Constraint::MinLen(5), Constraint::MaxLen(5)]).is_empty());
+    assert!(!refine(vec![ge(5), le(5)].into()).is_empty_with(&ByIndex, &[]));
+    assert!(refine(vec![gt(5), lt(5)].into()).is_empty_with(&ByIndex, &[]));
+    assert!(!refine(vec![Constraint::MinLen(5), Constraint::MaxLen(5)].into()).is_empty());
     // An intersection's refinement bounds are joined: both sides are needed.
     assert!(
-        Schema::Intersection(vec![refine(vec![ge(5)]), refine(vec![le(0)]),])
+        Schema::Intersection(vec![refine(vec![ge(5)].into()), refine(vec![le(0)].into()),].into())
             .is_empty_with(&ByIndex, &[])
     );
     assert!(
-        !Schema::Intersection(vec![refine(vec![ge(0)]), refine(vec![le(5)]),])
+        !Schema::Intersection(vec![refine(vec![ge(0)].into()), refine(vec![le(5)].into()),].into())
             .is_empty_with(&ByIndex, &[])
     );
 }
@@ -709,22 +724,24 @@ fn keyed_map_arms_are_pinned_independently_of_the_python_suite() {
     assert!(!map(Schema::Str, Schema::Int).is_subtype_of(&map(Schema::Bytes, Schema::Int)));
     // Mixed record-and-catch-all: required-coverage must hold there too.
     let mixed = |required| Schema::KeyedMap {
-        fields: vec![field("x", Schema::Int, required)],
+        fields: vec![field("x", Schema::Int, required)].into(),
         defaults: vec![MapClause {
             key: Schema::Str,
             value: Schema::Int,
-        }],
+        }]
+        .into(),
     };
     assert!(!mixed(false).is_subtype_of(&mixed(true)));
     // A pure mapping is not a subtype of a mixed map that requires a field it
     // lacks: the pure-mapping branch must need both sides field-free.
     assert!(
         !map(Schema::Str, Schema::Int).is_subtype_of(&Schema::KeyedMap {
-            fields: vec![field("x", Schema::Int, true)],
+            fields: vec![field("x", Schema::Int, true)].into(),
             defaults: vec![MapClause {
                 key: Schema::Str,
                 value: Schema::Int
-            }],
+            }]
+            .into(),
         })
     );
     // A mixed map is not a subtype of one with an extra field whose catch-all
@@ -732,21 +749,24 @@ fn keyed_map_arms_are_pinned_independently_of_the_python_suite() {
     // names, so its guard needs both an equal count and a name match.
     assert!(
         !Schema::KeyedMap {
-            fields: vec![field("x", Schema::Int, false)],
+            fields: vec![field("x", Schema::Int, false)].into(),
             defaults: vec![MapClause {
                 key: Schema::Str,
                 value: Schema::Int
-            }],
+            }]
+            .into(),
         }
         .is_subtype_of(&Schema::KeyedMap {
             fields: vec![
                 field("x", Schema::Int, false),
                 field("z", Schema::Bool, false),
-            ],
+            ]
+            .into(),
             defaults: vec![MapClause {
                 key: Schema::Str,
                 value: Schema::Int
-            }],
+            }]
+            .into(),
         })
     );
 }
@@ -768,14 +788,12 @@ fn keyed_map_subtyping_decides_supertype_extra_field() {
         defaults: vec![MapClause {
             key: Schema::Str,
             value: Schema::Int,
-        }],
+        }]
+        .into(),
     };
-    let base = || with_catch_all(vec![field("x", Schema::Int, true)]);
+    let base = || with_catch_all(vec![field("x", Schema::Int, true)].into());
     let plus_y = |schema, required| {
-        with_catch_all(vec![
-            field("x", Schema::Int, true),
-            field("y", schema, required),
-        ])
+        with_catch_all(vec![field("x", Schema::Int, true), field("y", schema, required)].into())
     };
     // Optional extra field whose type the catch-all value (int) fits.
     assert!(base().is_subtype_of(&plus_y(Schema::Int, false)));
@@ -791,8 +809,8 @@ fn keyed_map_subtyping_decides_supertype_extra_field() {
 #[test]
 fn decides_refinement_subtyping_structurally() {
     let refine = |base, constraints: Vec<Constraint>| Schema::Refine {
-        base: Box::new(base),
-        constraints,
+        base: Arc::new(base),
+        constraints: constraints.into(),
     };
 
     // A refinement is a subtype of its base, and of anything its base subtypes.
@@ -847,46 +865,55 @@ fn decides_refinement_subtyping_structurally() {
 fn reindexed_remaps_pool_and_definition_indices() {
     // Composing a validator concatenates pools and definitions: `reindexed`
     // remaps each pooled index through the intern map and offsets each `Ref`.
-    let schema = Schema::Union(vec![
-        Schema::Literal(ConstIx::new(0)),
-        Schema::Instance(ClassIx::new(1)),
-        Schema::Ref(DefIx::new(0)),
-        Schema::set(Schema::Literal(ConstIx::new(1))),
-    ]);
+    let schema = Schema::Union(
+        vec![
+            Schema::Literal(ConstIx::new(0)),
+            Schema::Instance(ClassIx::new(1)),
+            Schema::Ref(DefIx::new(0)),
+            Schema::set(Schema::Literal(ConstIx::new(1))),
+        ]
+        .into(),
+    );
     // The second pool interned into the first: old 0 -> 5, old 1 -> 6.
     let lit_map = [5, 6];
     let remapped = schema.reindexed(&lit_map, DefShift::new(3));
     assert_eq!(
         remapped,
-        Schema::Union(vec![
-            Schema::Literal(ConstIx::new(5)),
-            Schema::Instance(ClassIx::new(6)),
-            Schema::Ref(DefIx::new(3)),
-            Schema::set(Schema::Literal(ConstIx::new(6))),
-        ])
+        Schema::Union(
+            vec![
+                Schema::Literal(ConstIx::new(5)),
+                Schema::Instance(ClassIx::new(6)),
+                Schema::Ref(DefIx::new(3)),
+                Schema::set(Schema::Literal(ConstIx::new(6))),
+            ]
+            .into()
+        )
     );
 
     // `shifted` is the identity-map case: every index moves by a fixed offset.
     let shifted = schema.shifted(PoolShift::new(5), DefShift::new(3));
     assert_eq!(
         shifted,
-        Schema::Union(vec![
-            Schema::Literal(ConstIx::new(5)),
-            Schema::Instance(ClassIx::new(6)),
-            Schema::Ref(DefIx::new(3)),
-            Schema::set(Schema::Literal(ConstIx::new(6))),
-        ])
+        Schema::Union(
+            vec![
+                Schema::Literal(ConstIx::new(5)),
+                Schema::Instance(ClassIx::new(6)),
+                Schema::Ref(DefIx::new(3)),
+                Schema::set(Schema::Literal(ConstIx::new(6))),
+            ]
+            .into()
+        )
     );
     // A constraint operand index is remapped too.
     let refined = Schema::Refine {
-        base: Box::new(Schema::Int),
-        constraints: vec![Constraint::Ge(OperandIx::new(0))],
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
     };
     assert_eq!(
         refined.reindexed(&lit_map, DefShift::new(0)),
         Schema::Refine {
-            base: Box::new(Schema::Int),
-            constraints: vec![Constraint::Ge(OperandIx::new(5))],
+            base: Arc::new(Schema::Int),
+            constraints: vec![Constraint::Ge(OperandIx::new(5))].into(),
         }
     );
 }
@@ -894,8 +921,8 @@ fn reindexed_remaps_pool_and_definition_indices() {
 #[test]
 fn simplify_canonicalizes_refinement_constraints() {
     let refine = |base, constraints: Vec<Constraint>| Schema::Refine {
-        base: Box::new(base),
-        constraints,
+        base: Arc::new(base),
+        constraints: constraints.into(),
     };
     // A repeated constraint collapses (idempotence over the conjunction).
     assert_eq!(
@@ -946,7 +973,7 @@ fn simplify_canonicalizes_refinement_constraints() {
     // The base is simplified before the refinement is rebuilt.
     assert_eq!(
         refine(
-            Schema::Union(vec![Schema::Int, Schema::Int]),
+            Schema::Union(vec![Schema::Int, Schema::Int].into()),
             vec![Constraint::Ge(OperandIx::new(0))],
         )
         .simplify(),
@@ -976,14 +1003,14 @@ fn a_transform_over_a_sequence_keeps_its_shape() {
     let mapped = shape.map_elems(&|s| s.clone());
     assert_eq!(mapped, shape);
 
-    let complemented = shape.map_elems(&|s| Schema::Complement(Box::new(s.clone())));
+    let complemented = shape.map_elems(&|s| Schema::Complement(Arc::new(s.clone())));
     assert_eq!(
-        complemented.prefix,
-        vec![Schema::Complement(Box::new(Schema::Str))]
+        complemented.prefix.to_vec(),
+        vec![Schema::Complement(Arc::new(Schema::Str))]
     );
     assert_eq!(
         complemented.tail.as_deref(),
-        Some(&Schema::Complement(Box::new(Schema::Int)))
+        Some(&Schema::Complement(Arc::new(Schema::Int)))
     );
 }
 
@@ -1070,39 +1097,43 @@ fn decides_a_record_beside_its_catch_all() {
     // the field names match; a widening field or value, or differing field
     // names, are not subtypes.
     let mixed = |value_field, value_default| Schema::KeyedMap {
-        fields: vec![field("a", value_field, true)],
+        fields: vec![field("a", value_field, true)].into(),
         defaults: vec![MapClause {
             key: Schema::Str,
             value: value_default,
-        }],
+        }]
+        .into(),
     };
     assert!(mixed(Schema::Bool, Schema::Bool).is_subtype_of(&mixed(Schema::Int, Schema::Int)));
     assert!(!mixed(Schema::Int, Schema::Int).is_subtype_of(&mixed(Schema::Int, Schema::Bool)));
     assert!(!mixed(Schema::Int, Schema::Bool).is_subtype_of(&mixed(Schema::Bool, Schema::Bool)));
     let mixed_b = Schema::KeyedMap {
-        fields: vec![field("b", Schema::Int, true)],
+        fields: vec![field("b", Schema::Int, true)].into(),
         defaults: vec![MapClause {
             key: Schema::Str,
             value: Schema::Int,
-        }],
+        }]
+        .into(),
     };
     assert!(!mixed(Schema::Int, Schema::Int).is_subtype_of(&mixed_b));
 
     // A mixed map with an extra field is a subtype when a supertype catch-all
     // over all string keys covers that field's value.
     let with_extra = Schema::KeyedMap {
-        fields: vec![field("a", Schema::Int, true), field("b", Schema::Str, true)],
+        fields: vec![field("a", Schema::Int, true), field("b", Schema::Str, true)].into(),
         defaults: vec![MapClause {
             key: Schema::Str,
             value: Schema::Bytes,
-        }],
+        }]
+        .into(),
     };
     let covering = Schema::KeyedMap {
-        fields: vec![field("a", Schema::Int, true)],
+        fields: vec![field("a", Schema::Int, true)].into(),
         defaults: vec![MapClause {
             key: Schema::Str,
             value: Schema::ANYTHING,
-        }],
+        }]
+        .into(),
     };
     assert!(with_extra.is_subtype_of(&covering));
     // The extra field is not covered when the catch-all value is too narrow,
@@ -1112,35 +1143,40 @@ fn decides_a_record_beside_its_catch_all() {
         fields: vec![
             field("a", Schema::Int, true),
             field("b", Schema::Bytes, true),
-        ],
+        ]
+        .into(),
         defaults: vec![MapClause {
             key: Schema::Str,
             value: Schema::Int,
-        }],
+        }]
+        .into(),
     };
     let str_catch_all = Schema::KeyedMap {
-        fields: vec![field("a", Schema::Int, true)],
+        fields: vec![field("a", Schema::Int, true)].into(),
         defaults: vec![MapClause {
             key: Schema::Str,
             value: Schema::Int,
-        }],
+        }]
+        .into(),
     };
     assert!(!extra_uncovered.is_subtype_of(&str_catch_all));
     // The catch-all key must admit the field name: an int-keyed catch-all does
     // not cover a string field name even when its value would.
     let extra_str = Schema::KeyedMap {
-        fields: vec![field("a", Schema::Int, true), field("b", Schema::Str, true)],
+        fields: vec![field("a", Schema::Int, true), field("b", Schema::Str, true)].into(),
         defaults: vec![MapClause {
             key: Schema::Int,
             value: Schema::Int,
-        }],
+        }]
+        .into(),
     };
     let int_catch_all = Schema::KeyedMap {
-        fields: vec![field("a", Schema::Int, true)],
+        fields: vec![field("a", Schema::Int, true)].into(),
         defaults: vec![MapClause {
             key: Schema::Int,
             value: Schema::ANYTHING,
-        }],
+        }]
+        .into(),
     };
     assert!(!extra_str.is_subtype_of(&int_catch_all));
     // The reverse direction -- the supertype declaring a *required* field the
@@ -1166,54 +1202,72 @@ fn decides_refinement_bound_emptiness_with_an_ordering_oracle() {
         }
     }
     let refine = |constraints| Schema::Refine {
-        base: Box::new(Schema::Int),
+        base: Arc::new(Schema::Int),
         constraints,
     };
     // A lower bound above the upper bound is empty.
     assert!(
-        refine(vec![
-            Constraint::Ge(OperandIx::new(10)),
-            Constraint::Le(OperandIx::new(0))
-        ])
+        refine(
+            vec![
+                Constraint::Ge(OperandIx::new(10)),
+                Constraint::Le(OperandIx::new(0))
+            ]
+            .into()
+        )
         .is_empty_with(&ByIndex, &[])
     );
     // Equal bounds with one strict end are empty; both closed is a singleton.
     assert!(
-        refine(vec![
-            Constraint::Ge(OperandIx::new(5)),
-            Constraint::Lt(OperandIx::new(5))
-        ])
+        refine(
+            vec![
+                Constraint::Ge(OperandIx::new(5)),
+                Constraint::Lt(OperandIx::new(5))
+            ]
+            .into()
+        )
         .is_empty_with(&ByIndex, &[])
     );
     assert!(
-        !refine(vec![
-            Constraint::Ge(OperandIx::new(5)),
-            Constraint::Le(OperandIx::new(5))
-        ])
+        !refine(
+            vec![
+                Constraint::Ge(OperandIx::new(5)),
+                Constraint::Le(OperandIx::new(5))
+            ]
+            .into()
+        )
         .is_empty_with(&ByIndex, &[])
     );
     // A satisfiable range is not empty.
     assert!(
-        !refine(vec![
-            Constraint::Ge(OperandIx::new(0)),
-            Constraint::Le(OperandIx::new(10))
-        ])
+        !refine(
+            vec![
+                Constraint::Ge(OperandIx::new(0)),
+                Constraint::Le(OperandIx::new(10))
+            ]
+            .into()
+        )
         .is_empty_with(&ByIndex, &[])
     );
     // A length contradiction needs no value comparison.
-    assert!(refine(vec![Constraint::MinLen(5), Constraint::MaxLen(3)]).is_empty());
+    assert!(refine(vec![Constraint::MinLen(5), Constraint::MaxLen(3)].into()).is_empty());
     // Refinements with contradictory bounds across an intersection are empty.
-    let intersection = Schema::Intersection(vec![
-        refine(vec![Constraint::Ge(OperandIx::new(5))]),
-        refine(vec![Constraint::Lt(OperandIx::new(5))]),
-    ]);
+    let intersection = Schema::Intersection(
+        vec![
+            refine(vec![Constraint::Ge(OperandIx::new(5))].into()),
+            refine(vec![Constraint::Lt(OperandIx::new(5))].into()),
+        ]
+        .into(),
+    );
     assert!(intersection.is_empty_with(&ByIndex, &[]));
     // Without an ordering oracle the numeric bounds stay conservative.
     assert!(
-        !refine(vec![
-            Constraint::Ge(OperandIx::new(10)),
-            Constraint::Le(OperandIx::new(0))
-        ])
+        !refine(
+            vec![
+                Constraint::Ge(OperandIx::new(10)),
+                Constraint::Le(OperandIx::new(0))
+            ]
+            .into()
+        )
         .is_empty()
     );
 }
@@ -1231,23 +1285,27 @@ fn detects_uninhabited_recursive_schemas() {
         fields: vec![
             field("value", Schema::Int, true),
             field("next", Schema::Ref(DefIx::new(0)), true),
-        ],
-        defaults: Vec::new(),
+        ]
+        .into(),
+        defaults: Vec::new().into(),
     }];
     assert!(Schema::Ref(DefIx::new(0)).is_empty_under(&uninhabited));
     // t = None | {next: t} — a base case makes it inhabited.
-    let inhabited = [Schema::Union(vec![
-        Schema::NoneType,
-        Schema::KeyedMap {
-            fields: vec![field("next", Schema::Ref(DefIx::new(0)), true)],
-            defaults: Vec::new(),
-        },
-    ])];
+    let inhabited = [Schema::Union(
+        vec![
+            Schema::NoneType,
+            Schema::KeyedMap {
+                fields: vec![field("next", Schema::Ref(DefIx::new(0)), true)].into(),
+                defaults: Vec::new().into(),
+            },
+        ]
+        .into(),
+    )];
     assert!(!Schema::Ref(DefIx::new(0)).is_empty_under(&inhabited));
     // t = {next?: t} — an optional self-reference is inhabited by the empty map.
     let optional = [Schema::KeyedMap {
-        fields: vec![field("next", Schema::Ref(DefIx::new(0)), false)],
-        defaults: Vec::new(),
+        fields: vec![field("next", Schema::Ref(DefIx::new(0)), false)].into(),
+        defaults: Vec::new().into(),
     }];
     assert!(!Schema::Ref(DefIx::new(0)).is_empty_under(&optional));
     // t = [t] — a list of itself is inhabited by the empty list.
@@ -1263,7 +1321,7 @@ fn detects_uninhabited_recursive_schemas() {
 
 #[test]
 fn decides_complement_subtyping_contravariantly() {
-    let not = |s| Schema::Complement(Box::new(s));
+    let not = |s| Schema::Complement(Arc::new(s));
     // ¬A ⊆ ¬B iff B ⊆ A: ¬int ⊆ ¬bool because bool ⊆ int.
     assert!(not(Schema::Int).is_subtype_of(&not(Schema::Bool)));
     assert!(!not(Schema::Bool).is_subtype_of(&not(Schema::Int)));
@@ -1283,16 +1341,20 @@ fn decides_recursive_subtyping_coinductively() {
         required,
     };
     let list_of = |value, next| {
-        Schema::Union(vec![
-            Schema::NoneType,
-            Schema::KeyedMap {
-                fields: vec![
-                    field("value", value, true),
-                    field("next", Schema::Ref(next), true),
-                ],
-                defaults: Vec::new(),
-            },
-        ])
+        Schema::Union(
+            vec![
+                Schema::NoneType,
+                Schema::KeyedMap {
+                    fields: vec![
+                        field("value", value, true),
+                        field("next", Schema::Ref(next), true),
+                    ]
+                    .into(),
+                    defaults: Vec::new().into(),
+                },
+            ]
+            .into(),
+        )
     };
     // Two structurally identical recursive linked-list types are equivalent.
     let identical = [
@@ -1377,9 +1439,10 @@ fn scalar_or_set_schema() -> impl Strategy<Value = Schema> {
     ];
     leaf.prop_recursive(3, 16, 3, |inner| {
         prop_oneof![
-            proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Union),
-            proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Intersection),
-            inner.prop_map(|s| Schema::Complement(Box::new(s))),
+            proptest::collection::vec(inner.clone(), 1..3).prop_map(|m| Schema::Union(m.into())),
+            proptest::collection::vec(inner.clone(), 1..3)
+                .prop_map(|m| Schema::Intersection(m.into())),
+            inner.prop_map(|s| Schema::Complement(Arc::new(s))),
         ]
     })
 }
@@ -1416,15 +1479,16 @@ fn structural_schema() -> impl Strategy<Value = Schema> {
     ];
     leaf.prop_recursive(4, 32, 3, |inner| {
         prop_oneof![
-            proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Union),
-            proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Intersection),
-            inner.clone().prop_map(|s| Schema::Complement(Box::new(s))),
+            proptest::collection::vec(inner.clone(), 1..3).prop_map(|m| Schema::Union(m.into())),
+            proptest::collection::vec(inner.clone(), 1..3)
+                .prop_map(|m| Schema::Intersection(m.into())),
+            inner.clone().prop_map(|s| Schema::Complement(Arc::new(s))),
             inner.clone().prop_map(Schema::set),
             inner.clone().prop_map(Schema::frozen_set),
             (inner.clone(), proptest::collection::vec(constraint(), 0..3)).prop_map(
                 |(base, constraints)| Schema::Refine {
-                    base: Box::new(base),
-                    constraints,
+                    base: Arc::new(base),
+                    constraints: constraints.into(),
                 }
             ),
             inner.clone().prop_map(|s| Schema::Seq {
@@ -1436,11 +1500,13 @@ fn structural_schema() -> impl Strategy<Value = Schema> {
                     name: "a".into(),
                     schema: field,
                     required: true,
-                }],
+                }]
+                .into(),
                 defaults: vec![MapClause {
                     key: Schema::Str,
                     value: default
-                }],
+                }]
+                .into(),
             }),
         ]
     })
@@ -1458,12 +1524,12 @@ fn schema_holding_a_ref() -> impl Strategy<Value = Schema> {
     ];
     leaf.prop_recursive(4, 24, 3, |inner| {
         prop_oneof![
-            prop::collection::vec(inner.clone(), 1..3).prop_map(Schema::Union),
-            prop::collection::vec(inner.clone(), 1..3).prop_map(Schema::Intersection),
-            inner.clone().prop_map(|s| Schema::Complement(Box::new(s))),
+            prop::collection::vec(inner.clone(), 1..3).prop_map(|m| Schema::Union(m.into())),
+            prop::collection::vec(inner.clone(), 1..3).prop_map(|m| Schema::Intersection(m.into())),
+            inner.clone().prop_map(|s| Schema::Complement(Arc::new(s))),
             inner.clone().prop_map(|s| Schema::Refine {
-                base: Box::new(s),
-                constraints: vec![Constraint::MinLen(1)],
+                base: Arc::new(s),
+                constraints: vec![Constraint::MinLen(1)].into(),
             }),
             inner.clone().prop_map(Schema::set),
             inner
@@ -1548,7 +1614,7 @@ proptest! {
         if a.is_empty() {
             prop_assert!(a.is_subtype_of(&b), "empty {a:?} not below {b:?}");
         }
-        if Schema::Complement(Box::new(b.clone())).is_empty() {
+        if Schema::Complement(Arc::new(b.clone())).is_empty() {
             prop_assert!(a.is_subtype_of(&b), "{a:?} not below universal {b:?}");
         }
     }
@@ -1754,10 +1820,10 @@ proptest! {
 /// that and takes tens of seconds at this depth.
 fn complemented_tower(depth: usize) -> Schema {
     if depth == 0 {
-        return Schema::Complement(Box::new(Schema::Int));
+        return Schema::Complement(Arc::new(Schema::Int));
     }
     let child = complemented_tower(depth - 1);
-    Schema::Complement(Box::new(Schema::Union(vec![child.clone(), child])))
+    Schema::Complement(Arc::new(Schema::Union(vec![child.clone(), child].into())))
 }
 
 /// A tower of intersections of unions, the shape whose subtyping decision
@@ -1766,10 +1832,13 @@ fn complemented_tower(depth: usize) -> Schema {
 fn intersection_of_unions_tower(depth: usize, leaf: Schema) -> Schema {
     let mut node = Schema::set(leaf);
     for _ in 0..depth {
-        node = Schema::Intersection(vec![
-            Schema::Union(vec![node.clone(), Schema::set(Schema::Str)]),
-            Schema::Union(vec![node, Schema::set(Schema::Bytes)]),
-        ]);
+        node = Schema::Intersection(
+            vec![
+                Schema::Union(vec![node.clone(), Schema::set(Schema::Str)].into()),
+                Schema::Union(vec![node, Schema::set(Schema::Bytes)].into()),
+            ]
+            .into(),
+        );
     }
     node
 }
@@ -1894,10 +1963,10 @@ fn subtyping_terminates_on_a_distributed_tower() {
 fn depth_counts_nesting_and_treats_refs_as_leaves() {
     assert_eq!(Schema::Int.depth(), 1);
     assert_eq!(Schema::Ref(DefIx::new(0)).depth(), 1);
-    assert_eq!(Schema::Complement(Box::new(Schema::Int)).depth(), 2);
+    assert_eq!(Schema::Complement(Arc::new(Schema::Int)).depth(), 2);
     assert_eq!(union(Schema::Int, Schema::Str).depth(), 2);
     // The max over members, not their sum: one branch is two deep.
-    let branchy = union(Schema::Int, Schema::Complement(Box::new(Schema::Str)));
+    let branchy = union(Schema::Int, Schema::Complement(Arc::new(Schema::Str)));
     assert_eq!(branchy.depth(), 3);
     // A left-nested tower grows by exactly one level per composition.
     let mut tower = Schema::Int;
@@ -2017,9 +2086,10 @@ fn emptiness_decides_a_deep_intersection_in_linear_time() {
     /// ¬Int ∩ ¬Str ∩ … : region-decidable, never empty (the non-scalar
     /// region survives), so the walk visits every level — the worst case.
     fn left_nested_complements(depth: usize) -> Schema {
-        let mut deep = Schema::Complement(Box::new(Schema::Int));
+        let mut deep = Schema::Complement(Arc::new(Schema::Int));
         for _ in 0..depth {
-            deep = Schema::Intersection(vec![deep, Schema::Complement(Box::new(Schema::Str))]);
+            deep =
+                Schema::Intersection(vec![deep, Schema::Complement(Arc::new(Schema::Str))].into());
         }
         deep
     }
@@ -2056,7 +2126,8 @@ fn an_uninhabited_required_attribute_empties_the_schema() {
             name: "x".into(),
             schema,
             required: true,
-        }],
+        }]
+        .into(),
     };
     let empty_field = record(intersection(Schema::Int, Schema::Str));
     assert!(empty_field.is_empty());
@@ -2077,14 +2148,16 @@ fn an_object_meet_knows_which_class_it_is() {
             name: "x".into(),
             schema: Schema::Int,
             required: true,
-        }],
+        }]
+        .into(),
     };
     let other_record = Schema::AttrRecord {
         fields: vec![Field {
             name: "y".into(),
             schema: Schema::Str,
             required: true,
-        }],
+        }]
+        .into(),
     };
     let class = |index| Schema::Instance(ClassIx::new(index));
     let object = Schema::meet([class(3), record.clone()]);
@@ -2133,14 +2206,16 @@ fn attribute_records_subtype_by_width_and_depth() {
                 schema: Schema::Str,
                 required: true,
             },
-        ],
+        ]
+        .into(),
     };
     let wide = Schema::AttrRecord {
         fields: vec![Field {
             name: "x".into(),
             schema: Schema::Int, // bool ⊆ int, and x is narrower; y is extra
             required: true,
-        }],
+        }]
+        .into(),
     };
     assert!(narrow.is_subtype_of(&wide));
     assert!(!wide.is_subtype_of(&narrow)); // wide lacks y
@@ -2152,16 +2227,20 @@ fn attribute_records_subtype_by_width_and_depth() {
             name: "x".into(),
             schema: Schema::Bool,
             required: false,
-        }],
+        }]
+        .into(),
     };
     assert!(!maybe_x.is_subtype_of(&wide));
-    assert!(narrow.is_subtype_of(&Schema::AttrRecord {
-        fields: vec![Field {
-            name: "x".into(),
-            schema: Schema::Int,
-            required: false,
-        }],
-    }));
+    assert!(
+        narrow.is_subtype_of(&Schema::AttrRecord {
+            fields: vec![Field {
+                name: "x".into(),
+                schema: Schema::Int,
+                required: false,
+            }]
+            .into(),
+        })
+    );
     let object = |class, record: &Schema| Schema::meet([Schema::Instance(class), record.clone()]);
     // Same records, different classes: conservative, and the record half is
     // what the meet rule reaches for on the way there.
@@ -2479,11 +2558,12 @@ fn decidable_schema() -> impl Strategy<Value = Schema> {
             inner.clone(),
         )
             .prop_map(|(fields, value)| Schema::KeyedMap {
-                fields: unique_by_name(fields),
+                fields: unique_by_name(fields).into(),
                 defaults: vec![MapClause {
                     key: Schema::Str,
                     value,
-                }],
+                }]
+                .into(),
             });
         prop_oneof![
             inner.clone().prop_map(Schema::set),
@@ -2509,21 +2589,22 @@ fn decidable_schema() -> impl Strategy<Value = Schema> {
                 proptest::collection::vec(constraint_strategy(), 1..3)
             )
                 .prop_map(|(base, constraints)| Schema::Refine {
-                    base: Box::new(base),
-                    constraints,
+                    base: Arc::new(base),
+                    constraints: constraints.into(),
                 }),
             // A closed record. The names are deduplicated: a record with two
             // fields of one name is an IR the frontend refuses to build, and
             // the decision procedure reads the field index on the invariant
             // that it does.
             proptest::collection::vec(field, 0..3).prop_map(|fields| Schema::KeyedMap {
-                fields: unique_by_name(fields),
-                defaults: vec![],
+                fields: unique_by_name(fields).into(),
+                defaults: vec![].into(),
             }),
             open_record,
-            proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Union),
-            proptest::collection::vec(inner.clone(), 1..3).prop_map(Schema::Intersection),
-            inner.prop_map(|s| Schema::Complement(Box::new(s))),
+            proptest::collection::vec(inner.clone(), 1..3).prop_map(|m| Schema::Union(m.into())),
+            proptest::collection::vec(inner.clone(), 1..3)
+                .prop_map(|m| Schema::Intersection(m.into())),
+            inner.prop_map(|s| Schema::Complement(Arc::new(s))),
         ]
     })
 }
@@ -2585,11 +2666,12 @@ fn the_value_oracle_matches_sequences_and_open_records_independently() {
     // Open record `{str: int}` with no declared fields: the `defaults` arm
     // accepts a matching extra entry and rejects a mistyped one.
     let open = Schema::KeyedMap {
-        fields: vec![],
+        fields: vec![].into(),
         defaults: vec![MapClause {
             key: Schema::Str,
             value: Schema::Int,
-        }],
+        }]
+        .into(),
     };
     assert!(member_full(
         &open,

@@ -1,10 +1,12 @@
 //! The membership-preserving simplifier: the lattice-law normalisation of the
 //! IR (flattening, identities, De Morgan, deduplication).
 
+use std::sync::Arc;
+
 use crate::decision::{
     NoLeafRelations, Region, Regions, has_complementary_pair, has_disjoint_pair, unordered_pairs,
 };
-use crate::ir::{Constraint, Schema};
+use crate::ir::{Constraint, Schema, with_member_buffer};
 
 #[cfg(test)]
 thread_local! {
@@ -62,7 +64,7 @@ impl Schema {
             Schema::Intersection(members) => simplify_intersection(members),
             Schema::Complement(inner) => simplify_complement(inner),
             Schema::Refine { base, constraints } => {
-                canonical_refine(base.simplify(), constraints.clone())
+                canonical_refine(base.simplify(), constraints.to_vec())
             }
             // Every other node reduces to itself with its children reduced --
             // which is what `map_children` is, so the descent is not written a
@@ -99,12 +101,13 @@ fn has_disjoint_complement_pair(members: &[Schema]) -> bool {
 fn canonical_refine(mut base: Schema, mut constraints: Vec<Constraint>) -> Schema {
     while let Schema::Refine {
         base: inner_base,
-        constraints: mut inner_constraints,
+        constraints: inner_constraints,
     } = base
     {
-        inner_constraints.append(&mut constraints);
-        constraints = inner_constraints;
-        base = *inner_base;
+        let mut merged = inner_constraints.to_vec();
+        merged.append(&mut constraints);
+        constraints = merged;
+        base = Arc::unwrap_or_clone(inner_base);
     }
     constraints.sort_unstable();
     constraints.dedup();
@@ -112,8 +115,8 @@ fn canonical_refine(mut base: Schema, mut constraints: Vec<Constraint>) -> Schem
         base
     } else {
         Schema::Refine {
-            base: Box::new(base),
-            constraints,
+            base: Arc::new(base),
+            constraints: constraints.into(),
         }
     }
 }
@@ -123,17 +126,19 @@ fn canonical_refine(mut base: Schema, mut constraints: Vec<Constraint>) -> Schem
 /// without normalising the members that follow. This is the entry from the top of
 /// `simplify`, where the members are not yet normal.
 fn simplify_union(members: &[Schema]) -> Schema {
-    let mut flat = Vec::new();
-    for member in members {
-        match member.simplify() {
-            // The top absorbs, and keeps the spelling the member it absorbed had.
-            top @ Schema::Anything(_) => return top,
-            Schema::Nothing => {}
-            Schema::Union(inner) => flat.extend(inner),
-            other => flat.push(other),
+    with_member_buffer(|flat| {
+        for member in members {
+            match member.simplify() {
+                // The top absorbs, and keeps the spelling the member it
+                // absorbed had.
+                top @ Schema::Anything(_) => return top,
+                Schema::Nothing => {}
+                Schema::Union(inner) => flat.extend(inner.iter().cloned()),
+                other => flat.push(other),
+            }
         }
-    }
-    finish_union(flat)
+        finish_union(flat)
+    })
 }
 
 /// Collapse a union of already-normal members without re-normalising them. The
@@ -142,21 +147,22 @@ fn simplify_union(members: &[Schema]) -> Schema {
 /// level it is nested under — the exponential `simplify` blowup. Pushing the
 /// complement inward over already-normal members keeps the pass linear.
 fn union_of_simplified(members: Vec<Schema>) -> Schema {
-    let mut flat = Vec::new();
-    for member in members {
-        match member {
-            top @ Schema::Anything(_) => return top,
-            Schema::Nothing => {}
-            Schema::Union(inner) => flat.extend(inner),
-            other => flat.push(other),
+    with_member_buffer(|flat| {
+        for member in members {
+            match member {
+                top @ Schema::Anything(_) => return top,
+                Schema::Nothing => {}
+                Schema::Union(inner) => flat.extend(inner.iter().cloned()),
+                other => flat.push(other),
+            }
         }
-    }
-    finish_union(flat)
+        finish_union(flat)
+    })
 }
 
 /// Sort, dedup, apply the union completeness laws, and collapse a flattened set
 /// of normal union members to a single schema. Shared by both union entries.
-fn finish_union(mut flat: Vec<Schema>) -> Schema {
+fn finish_union(flat: &mut Vec<Schema>) -> Schema {
     flat.sort();
     flat.dedup();
     // X ∪ ¬X is everything, as is ¬A ∪ ¬B for disjoint A and B; and a union is
@@ -172,8 +178,8 @@ fn finish_union(mut flat: Vec<Schema>) -> Schema {
         .filter_map(Regions::known)
         .fold(Region::EMPTY, Region::union)
         == Region::ALL;
-    if has_complementary_pair(&flat, &NoLeafRelations)
-        || has_disjoint_complement_pair(&flat)
+    if has_complementary_pair(flat, &NoLeafRelations)
+        || has_disjoint_complement_pair(flat)
         || covers_universe
     {
         return Schema::ANYTHING;
@@ -181,7 +187,9 @@ fn finish_union(mut flat: Vec<Schema>) -> Schema {
     match flat.len() {
         0 => Schema::Nothing,
         1 => flat.swap_remove(0),
-        _ => Schema::Union(flat),
+        // Drained rather than copied: the members are moved into the node's
+        // slice from the buffer they were assembled in.
+        _ => Schema::Union(flat.drain(..).collect()),
     }
 }
 
@@ -190,37 +198,39 @@ fn finish_union(mut flat: Vec<Schema>) -> Schema {
 /// member reduces to it, without normalising the members that follow. This is the
 /// entry from the top of `simplify`, where the members are not yet normal.
 fn simplify_intersection(members: &[Schema]) -> Schema {
-    let mut flat = Vec::new();
-    for member in members {
-        match member.simplify() {
-            Schema::Nothing => return Schema::Nothing,
-            Schema::Anything(_) => {}
-            Schema::Intersection(inner) => flat.extend(inner),
-            other => flat.push(other),
+    with_member_buffer(|flat| {
+        for member in members {
+            match member.simplify() {
+                Schema::Nothing => return Schema::Nothing,
+                Schema::Anything(_) => {}
+                Schema::Intersection(inner) => flat.extend(inner.iter().cloned()),
+                other => flat.push(other),
+            }
         }
-    }
-    finish_intersection(flat)
+        finish_intersection(flat)
+    })
 }
 
 /// Collapse an intersection of already-normal members without re-normalising
 /// them — the De Morgan dual of [`union_of_simplified`], used along the complement
 /// path so a nested complement is not re-simplified once per level.
 fn intersection_of_simplified(members: Vec<Schema>) -> Schema {
-    let mut flat = Vec::new();
-    for member in members {
-        match member {
-            Schema::Nothing => return Schema::Nothing,
-            Schema::Anything(_) => {}
-            Schema::Intersection(inner) => flat.extend(inner),
-            other => flat.push(other),
+    with_member_buffer(|flat| {
+        for member in members {
+            match member {
+                Schema::Nothing => return Schema::Nothing,
+                Schema::Anything(_) => {}
+                Schema::Intersection(inner) => flat.extend(inner.iter().cloned()),
+                other => flat.push(other),
+            }
         }
-    }
-    finish_intersection(flat)
+        finish_intersection(flat)
+    })
 }
 
 /// Sort, dedup, apply the intersection emptiness laws, and collapse a flattened
 /// set of normal intersection members. Shared by both intersection entries.
-fn finish_intersection(mut flat: Vec<Schema>) -> Schema {
+fn finish_intersection(flat: &mut Vec<Schema>) -> Schema {
     flat.sort();
     flat.dedup();
     // X ∩ ¬X is empty, as is an intersection of two provably disjoint members;
@@ -235,8 +245,8 @@ fn finish_intersection(mut flat: Vec<Schema>) -> Schema {
         .filter_map(Regions::known)
         .fold(Region::ALL, Region::intersect)
         .is_empty();
-    if has_complementary_pair(&flat, &NoLeafRelations)
-        || has_disjoint_pair(&flat, &NoLeafRelations)
+    if has_complementary_pair(flat, &NoLeafRelations)
+        || has_disjoint_pair(flat, &NoLeafRelations)
         || region_empty
     {
         return Schema::Nothing;
@@ -244,7 +254,7 @@ fn finish_intersection(mut flat: Vec<Schema>) -> Schema {
     match flat.len() {
         0 => Schema::ANYTHING,
         1 => flat.swap_remove(0),
-        _ => Schema::Intersection(flat),
+        _ => Schema::Intersection(flat.drain(..).collect()),
     }
 }
 
@@ -263,18 +273,22 @@ fn simplify_complement(inner: &Schema) -> Schema {
 /// a member, which is the rewrite that made nested complements blow up.
 fn complement_of_simplified(inner: Schema) -> Schema {
     match inner {
-        Schema::Complement(x) => *x,
+        Schema::Complement(x) => Arc::unwrap_or_clone(x),
         Schema::Anything(_) => Schema::Nothing,
         Schema::Nothing => Schema::ANYTHING,
-        Schema::Union(members) => intersection_of_simplified(complement_each(members)),
-        Schema::Intersection(members) => union_of_simplified(complement_each(members)),
-        other => Schema::Complement(Box::new(other)),
+        Schema::Union(members) => intersection_of_simplified(complement_each(&members)),
+        Schema::Intersection(members) => union_of_simplified(complement_each(&members)),
+        other => Schema::Complement(Arc::new(other)),
     }
 }
 
 /// Complement each already-normal member, keeping the result normal: a member that
 /// is itself a complement cancels, a union or intersection pushes the complement
 /// further inward by De Morgan, and an atom gains one complement.
-fn complement_each(members: Vec<Schema>) -> Vec<Schema> {
-    members.into_iter().map(complement_of_simplified).collect()
+fn complement_each(members: &[Schema]) -> Vec<Schema> {
+    members
+        .iter()
+        .cloned()
+        .map(complement_of_simplified)
+        .collect()
 }

@@ -175,7 +175,7 @@ fn map_schemas_rewrites_the_definitions_table() {
             panic!("the definition is a record");
         };
         assert_eq!(
-            defaults.as_slice(),
+            &defaults[..],
             [MapClause::top()],
             "the record in the definitions table gained its catch-all clause"
         );
@@ -188,13 +188,13 @@ fn map_schemas_measures_what_the_rewrite_produced() {
         // Routing through `checked` rather than `new` is what rejects a
         // rewrite that grows the schema past the node bound.
         let wide = Validator::new(
-            Schema::Union(vec![Schema::Int; MAX_SCHEMA_NODES / 2]),
+            Schema::Union(vec![Schema::Int; MAX_SCHEMA_NODES / 2].into()),
             Vec::new(),
             Vec::new(),
         );
         assert!(wide.map_schemas(py, Schema::clone).is_ok());
         let doubled = wide.map_schemas(py, |schema| {
-            Schema::Union(vec![schema.clone(), schema.clone()])
+            Schema::Union(vec![schema.clone(), schema.clone()].into())
         });
         assert!(
             doubled.is_err(),

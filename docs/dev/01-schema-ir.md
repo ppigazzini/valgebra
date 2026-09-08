@@ -669,9 +669,26 @@ argument is worse than one that says it is going.
 
 ## The limit
 
-The IR is a tree with back edges, not a graph with sharing. Two structurally
-equal subtrees are two allocations, and nothing interns them, so the structural
-rules carry a work budget instead of a memo table ([02-decision.md](02-decision.md)).
+The IR is a tree of shared handles with back edges, not an interned graph. A
+node's child is a shared pointer and the lists it holds -- a join's members, a
+record's fields, a map's clauses, a refinement's constraints -- are shared
+slices, so *carrying* a subtree costs a reference count rather than a copy of
+everything under it: passing a schema into a union, holding it on a trail,
+returning it from a transform, and reading it from two validators at once are
+all cheap.
+
+What sharing does not give is identity. Two structurally equal subtrees built
+separately are two allocations, nothing interns them, and equality is therefore
+structural, so the rules carry a work budget instead of a memo table
+([02-decision.md](02-decision.md)).
+
+The trade the shared representation makes is visible in the gates. Carrying a
+subtree got cheaper and the node got smaller, which the membership walk and the
+decision procedures both read; *building* one got dearer, because a list is
+copied into the node's slice where an owned vector used to be moved into it, and
+a pass that rebuilds every node in a tree pays that on each. Both directions are
+budgeted, so neither is a claim: the instruction gate holds seven shapes across
+the three workloads.
 
 What that costs is smaller than it was. Those rules are the fast path now, not
 the whole answer: a shape they run out of budget on is asked again of the sets it

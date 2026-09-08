@@ -13,6 +13,8 @@
 //! and `ITERATIONS` fixed; changing either moves the budget and requires
 //! re-recording it.
 
+use std::sync::Arc;
+
 use valgebra_core::{ConstIx, Field, Openness, Schema, SeqShape};
 
 /// Iterations per relation. Large enough that process startup is a rounding
@@ -68,11 +70,14 @@ fn main() {
     let narrow = literal_union(8);
     let wide = literal_union(9);
     let list_int = Schema::list(SeqShape::homogeneous(Schema::Int));
-    let not_int = Schema::Complement(Box::new(Schema::Int));
-    let disjoint = Schema::Intersection(vec![
-        Schema::list(SeqShape::homogeneous(Schema::Int)),
-        Schema::set(Schema::Int),
-    ]);
+    let not_int = Schema::Complement(Arc::new(Schema::Int));
+    let disjoint = Schema::Intersection(
+        vec![
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Schema::set(Schema::Int),
+        ]
+        .into(),
+    );
 
     // Fold a checksum through each verdict so nothing is optimized away.
     let mut checksum: usize = 0;

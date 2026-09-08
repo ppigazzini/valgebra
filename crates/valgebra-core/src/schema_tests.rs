@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 use std::cell::Cell;
 
@@ -33,20 +35,20 @@ fn every_variant() -> Vec<Schema> {
         Schema::list(SeqShape::fixed([])),
         Schema::set(Schema::Int),
         Schema::frozen_set(Schema::Int),
-        Schema::Complement(Box::new(Schema::Int)),
-        Schema::Union(vec![Schema::Int, Schema::Str]),
-        Schema::Intersection(vec![Schema::Int, Schema::Str]),
+        Schema::Complement(Arc::new(Schema::Int)),
+        Schema::Union(vec![Schema::Int, Schema::Str].into()),
+        Schema::Intersection(vec![Schema::Int, Schema::Str].into()),
         Schema::record(vec![field("a")], Openness::Open),
         Schema::mapping(MapClause {
             key: Schema::Str,
             value: Schema::Int,
         }),
         Schema::AttrRecord {
-            fields: vec![field("a")],
+            fields: vec![field("a")].into(),
         },
         Schema::Refine {
-            base: Box::new(Schema::Int),
-            constraints: vec![Constraint::MinLen(1)],
+            base: Arc::new(Schema::Int),
+            constraints: vec![Constraint::MinLen(1)].into(),
         },
     ]
 }
@@ -59,31 +61,31 @@ fn every_variant() -> Vec<Schema> {
 fn node_count_totals_every_arm() {
     assert_eq!(Schema::Int.node_count(), 1);
     assert_eq!(Schema::Ref(DefIx::new(0)).node_count(), 1);
-    assert_eq!(Schema::Complement(Box::new(Schema::Int)).node_count(), 2);
+    assert_eq!(Schema::Complement(Arc::new(Schema::Int)).node_count(), 2);
     assert_eq!(Schema::set(Schema::Str).node_count(), 2);
     assert_eq!(Schema::frozen_set(Schema::Str).node_count(), 2);
     // Union counts every member, not the deepest: three members, not one.
     assert_eq!(
-        Schema::Union(vec![Schema::Int, Schema::Str, Schema::Bytes]).node_count(),
+        Schema::Union(vec![Schema::Int, Schema::Str, Schema::Bytes].into()).node_count(),
         4
     );
     assert_eq!(
-        Schema::Intersection(vec![Schema::Int, Schema::Complement(Box::new(Schema::Str))])
+        Schema::Intersection(vec![Schema::Int, Schema::Complement(Arc::new(Schema::Str))].into())
             .node_count(),
         4
     );
     // A constraint is a node: base + one per constraint.
     assert_eq!(
         Schema::Refine {
-            base: Box::new(Schema::Str),
-            constraints: vec![Constraint::MinLen(1), Constraint::MaxLen(9)],
+            base: Arc::new(Schema::Str),
+            constraints: vec![Constraint::MinLen(1), Constraint::MaxLen(9)].into(),
         }
         .node_count(),
         4
     );
     // The regex constructor is not itself a node; its element subtree is.
     assert_eq!(
-        Schema::list(SeqShape::homogeneous(Schema::Complement(Box::new(
+        Schema::list(SeqShape::homogeneous(Schema::Complement(Arc::new(
             Schema::Int
         ))))
         .node_count(),
@@ -102,7 +104,7 @@ fn node_count_totals_every_arm() {
             fields: vec![
                 Field {
                     name: "a".into(),
-                    schema: Schema::Complement(Box::new(Schema::Int)),
+                    schema: Schema::Complement(Arc::new(Schema::Int)),
                     required: true,
                 },
                 Field {
@@ -110,7 +112,8 @@ fn node_count_totals_every_arm() {
                     schema: Schema::Str,
                     required: false,
                 },
-            ],
+            ]
+            .into(),
             defaults: vec![
                 MapClause {
                     key: Schema::Str,
@@ -118,9 +121,10 @@ fn node_count_totals_every_arm() {
                 },
                 MapClause {
                     key: Schema::Int,
-                    value: Schema::Complement(Box::new(Schema::Str))
+                    value: Schema::Complement(Arc::new(Schema::Str))
                 },
-            ],
+            ]
+            .into(),
         }
         .node_count(),
         // 1 map + (2 + 1) fields + (2 + 3) defaults
@@ -139,7 +143,8 @@ fn node_count_totals_every_arm() {
                     schema: Schema::Str,
                     required: true
                 },
-            ],
+            ]
+            .into(),
         }
         .node_count(),
         3
@@ -168,15 +173,15 @@ fn depth_descends_every_container_arm() {
     assert_eq!(
         Schema::list(SeqShape::fixed([
             Schema::Int,
-            Schema::Complement(Box::new(Schema::Str))
+            Schema::Complement(Arc::new(Schema::Str))
         ]))
         .depth(),
         3
     );
     assert_eq!(
         Schema::Refine {
-            base: Box::new(Schema::Str),
-            constraints: vec![]
+            base: Arc::new(Schema::Str),
+            constraints: vec![].into()
         }
         .depth(),
         2
@@ -185,10 +190,11 @@ fn depth_descends_every_container_arm() {
         Schema::KeyedMap {
             fields: vec![Field {
                 name: "a".into(),
-                schema: Schema::Complement(Box::new(Schema::Int)),
+                schema: Schema::Complement(Arc::new(Schema::Int)),
                 required: true,
-            }],
-            defaults: vec![],
+            }]
+            .into(),
+            defaults: vec![].into(),
         }
         .depth(),
         3
@@ -199,7 +205,8 @@ fn depth_descends_every_container_arm() {
                 name: "a".into(),
                 schema: Schema::Int,
                 required: true
-            }],
+            }]
+            .into(),
         }
         .depth(),
         2
@@ -214,7 +221,7 @@ fn depth_descends_every_container_arm() {
 #[test]
 fn shifted_remaps_pooled_constraint_operands_only() {
     let refined = Schema::Refine {
-        base: Box::new(Schema::Int),
+        base: Arc::new(Schema::Int),
         constraints: vec![
             Constraint::Ge(OperandIx::new(1)),
             Constraint::Gt(OperandIx::new(2)),
@@ -224,14 +231,15 @@ fn shifted_remaps_pooled_constraint_operands_only() {
             Constraint::Predicate(PredIx::new(8)),
             Constraint::MinLen(6),
             Constraint::MaxLen(7),
-        ],
+        ]
+        .into(),
     };
     let Schema::Refine { constraints, .. } = refined.shifted(PoolShift::new(10), DefShift::new(0))
     else {
         panic!("shifted a Refine into a non-Refine");
     };
     assert_eq!(
-        constraints,
+        constraints.to_vec(),
         vec![
             Constraint::Ge(OperandIx::new(11)),
             Constraint::Gt(OperandIx::new(12)),
@@ -264,7 +272,8 @@ fn shifted_remaps_pooled_constraint_operands_only() {
             name: "a".into(),
             schema: Schema::Literal(ConstIx::new(2)),
             required: true,
-        }],
+        }]
+        .into(),
     };
     let Schema::AttrRecord { fields } = record.shifted(PoolShift::new(10), DefShift::new(3)) else {
         panic!("shifted an attribute record into another variant");
@@ -284,30 +293,29 @@ fn occurs_unguarded_sees_through_the_algebraic_combinators() {
     assert!(!Schema::Ref(DefIx::new(1)).occurs_unguarded(DefIx::new(0), Guarded::No));
     // Complement and Refine do NOT guard: the reference stays exposed.
     assert!(
-        Schema::Complement(Box::new(Schema::Ref(DefIx::new(0))))
+        Schema::Complement(Arc::new(Schema::Ref(DefIx::new(0))))
             .occurs_unguarded(DefIx::new(0), Guarded::No)
     );
     assert!(
         Schema::Refine {
-            base: Box::new(Schema::Ref(DefIx::new(0))),
-            constraints: vec![Constraint::MinLen(1)],
+            base: Arc::new(Schema::Ref(DefIx::new(0))),
+            constraints: vec![Constraint::MinLen(1)].into(),
         }
         .occurs_unguarded(DefIx::new(0), Guarded::No)
     );
     assert!(
-        Schema::Union(vec![Schema::Int, Schema::Ref(DefIx::new(0))])
+        Schema::Union(vec![Schema::Int, Schema::Ref(DefIx::new(0))].into())
             .occurs_unguarded(DefIx::new(0), Guarded::No)
     );
     assert!(
-        Schema::Intersection(vec![Schema::Int, Schema::Ref(DefIx::new(0))])
+        Schema::Intersection(vec![Schema::Int, Schema::Ref(DefIx::new(0))].into())
             .occurs_unguarded(DefIx::new(0), Guarded::No)
     );
     // Nested combinators still pass it through.
     assert!(
-        Schema::Complement(Box::new(Schema::Union(vec![
-            Schema::Int,
-            Schema::Ref(DefIx::new(0))
-        ])))
+        Schema::Complement(Arc::new(Schema::Union(
+            vec![Schema::Int, Schema::Ref(DefIx::new(0))].into()
+        )))
         .occurs_unguarded(DefIx::new(0), Guarded::No)
     );
     // Structural constructors guard.
@@ -322,7 +330,7 @@ fn occurs_unguarded_sees_through_the_algebraic_combinators() {
     );
     // A guarded reference under a combinator is still guarded.
     assert!(
-        !Schema::Complement(Box::new(Schema::set(Schema::Ref(DefIx::new(0)))))
+        !Schema::Complement(Arc::new(Schema::set(Schema::Ref(DefIx::new(0)))))
             .occurs_unguarded(DefIx::new(0), Guarded::No)
     );
 }
@@ -623,10 +631,13 @@ fn with_records_open_refolds_a_pair_it_creates() {
         }],
         Openness::Closed,
     );
-    let pair = Schema::Union(vec![
-        closed.clone(),
-        Schema::Complement(Box::new(closed.with_records_open(Openness::Open))),
-    ]);
+    let pair = Schema::Union(
+        vec![
+            closed.clone(),
+            Schema::Complement(Arc::new(closed.with_records_open(Openness::Open))),
+        ]
+        .into(),
+    );
 
     assert!(
         matches!(pair, Schema::Union(_)),
@@ -646,18 +657,19 @@ fn with_records_open_leaves_a_pure_mapping_closed() {
     // what distinguishes the two, so an empty-field map keeps its own clauses
     // and gains none.
     let mapping = Schema::KeyedMap {
-        fields: Vec::new(),
+        fields: Arc::from([]),
         defaults: vec![MapClause {
             key: Schema::Str,
             value: Schema::Int,
-        }],
+        }]
+        .into(),
     };
     let Schema::KeyedMap { fields, defaults } = mapping.with_records_open(Openness::Open) else {
         panic!("a mapping opened into a non-map");
     };
     assert!(fields.is_empty());
     assert_eq!(
-        defaults,
+        defaults.to_vec(),
         vec![MapClause {
             key: Schema::Str,
             value: Schema::Int
@@ -700,7 +712,7 @@ fn the_nullary_operations_are_their_identities() {
     );
     assert_eq!(
         Schema::Int.complement(),
-        Schema::Complement(Box::new(Schema::Int))
+        Schema::Complement(Arc::new(Schema::Int))
     );
 }
 
@@ -809,14 +821,13 @@ fn contractivity_requires_a_structural_guard() {
     );
     assert!(Schema::Ref(DefIx::new(0)).occurs_unguarded(DefIx::new(0), Guarded::No));
     assert!(
-        Schema::Union(vec![Schema::Int, Schema::Ref(DefIx::new(0))])
+        Schema::Union(vec![Schema::Int, Schema::Ref(DefIx::new(0))].into())
             .occurs_unguarded(DefIx::new(0), Guarded::No)
     );
     assert!(
-        !Schema::list(SeqShape::homogeneous(Schema::Union(vec![
-            Schema::Int,
-            Schema::Ref(DefIx::new(0))
-        ])))
+        !Schema::list(SeqShape::homogeneous(Schema::Union(
+            vec![Schema::Int, Schema::Ref(DefIx::new(0))].into()
+        )))
         .occurs_unguarded(DefIx::new(0), Guarded::No)
     );
 }
@@ -834,36 +845,43 @@ fn shifted_remaps_ref_by_the_definition_offset() {
 
 #[test]
 fn reindexed_maps_pool_indices_through_the_table() {
-    let schema = Schema::Union(vec![
-        Schema::Literal(ConstIx::new(0)),
-        Schema::Instance(ClassIx::new(1)),
-        Schema::Refine {
-            base: Box::new(Schema::Int),
-            constraints: vec![Constraint::Ge(OperandIx::new(0)), Constraint::MinLen(2)],
-        },
-        Schema::Ref(DefIx::new(0)),
-    ]);
+    let schema = Schema::Union(
+        vec![
+            Schema::Literal(ConstIx::new(0)),
+            Schema::Instance(ClassIx::new(1)),
+            Schema::Refine {
+                base: Arc::new(Schema::Int),
+                constraints: vec![Constraint::Ge(OperandIx::new(0)), Constraint::MinLen(2)].into(),
+            },
+            Schema::Ref(DefIx::new(0)),
+        ]
+        .into(),
+    );
     let reindexed = schema.reindexed(&[10, 11], DefShift::new(5));
     assert_eq!(
         reindexed,
-        Schema::Union(vec![
-            Schema::Literal(ConstIx::new(10)),  // 0 -> table[0] = 10
-            Schema::Instance(ClassIx::new(11)), // 1 -> table[1] = 11
-            Schema::Refine {
-                base: Box::new(Schema::Int),
-                // Ge index remaps through the table; MinLen is a length, untouched.
-                constraints: vec![Constraint::Ge(OperandIx::new(10)), Constraint::MinLen(2)],
-            },
-            Schema::Ref(DefIx::new(5)), // ref offset by def_offset = 5
-        ])
+        Schema::Union(
+            vec![
+                Schema::Literal(ConstIx::new(10)),  // 0 -> table[0] = 10
+                Schema::Instance(ClassIx::new(11)), // 1 -> table[1] = 11
+                Schema::Refine {
+                    base: Arc::new(Schema::Int),
+                    // Ge index remaps through the table; MinLen is a length, untouched.
+                    constraints: vec![Constraint::Ge(OperandIx::new(10)), Constraint::MinLen(2)]
+                        .into(),
+                },
+                Schema::Ref(DefIx::new(5)), // ref offset by def_offset = 5
+            ]
+            .into()
+        )
     );
 }
 
 #[test]
 fn refine_delegates_label_and_code_to_its_base() {
     let refined = Schema::Refine {
-        base: Box::new(Schema::Str),
-        constraints: vec![Constraint::MinLen(1)],
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::MinLen(1)].into(),
     };
     assert_eq!(refined.expected(), "str");
     assert_eq!(refined.error_code(), "string_type");
@@ -936,11 +954,11 @@ fn a_shape_is_the_three_spellings_and_nothing_else() {
     assert_eq!(homogeneous.tail.as_deref(), Some(&Schema::Int));
 
     let fixed = SeqShape::fixed([Schema::Int, Schema::Str]);
-    assert_eq!(fixed.prefix, vec![Schema::Int, Schema::Str]);
+    assert_eq!(fixed.prefix.to_vec(), vec![Schema::Int, Schema::Str]);
     assert!(fixed.tail.is_none());
 
     let prefixed = SeqShape::prefix_tail([Schema::Str], Schema::Int);
-    assert_eq!(prefixed.prefix, vec![Schema::Str]);
+    assert_eq!(prefixed.prefix.to_vec(), vec![Schema::Str]);
     assert_eq!(prefixed.tail.as_deref(), Some(&Schema::Int));
 
     // The empty sequence, which `fixed` of nothing is and `Default` gives.
@@ -971,7 +989,7 @@ fn sequence_transforms_reach_the_prefix_and_the_tail() {
     let Schema::Seq { shape, .. } = seq.shifted(PoolShift::new(0), DefShift::new(5)) else {
         panic!("shape preserved")
     };
-    assert_eq!(shape.prefix, vec![Schema::Ref(DefIx::new(5))]);
+    assert_eq!(shape.prefix.to_vec(), vec![Schema::Ref(DefIx::new(5))]);
 
     // resolve_self rewrites the tail's SelfRef into a Ref.
     let Schema::Seq { shape, .. } = seq.resolve_self(7, DefIx::new(3)) else {
@@ -987,11 +1005,13 @@ fn keyed_map_transforms_recurse_through_fields_and_defaults() {
             name: "f".into(),
             schema: Schema::Ref(DefIx::new(0)),
             required: true,
-        }],
+        }]
+        .into(),
         defaults: vec![MapClause {
             key: Schema::Str,
             value: Schema::SelfRef(7),
-        }],
+        }]
+        .into(),
     };
     // Both the field's Ref and the default's SelfRef sit under the map guard.
     assert!(!schema.occurs_unguarded(DefIx::new(0), Guarded::No));
@@ -1009,18 +1029,18 @@ fn keyed_map_transforms_recurse_through_fields_and_defaults() {
 }
 
 fn not(s: Schema) -> Schema {
-    Schema::Complement(Box::new(s))
+    Schema::Complement(Arc::new(s))
 }
 
 #[test]
 fn simplify_decides_the_complement_laws() {
     // X ∩ ¬X = ⊥ and X ∪ ¬X = ⊤.
     assert_eq!(
-        Schema::Intersection(vec![Schema::Int, not(Schema::Int)]).simplify(),
+        Schema::Intersection(vec![Schema::Int, not(Schema::Int)].into()).simplify(),
         Schema::Nothing
     );
     assert_eq!(
-        Schema::Union(vec![Schema::Int, not(Schema::Int)]).simplify(),
+        Schema::Union(vec![Schema::Int, not(Schema::Int)].into()).simplify(),
         Schema::ANYTHING
     );
     // The law is the complementary pair itself, not scalar-region coverage: an
@@ -1028,25 +1048,28 @@ fn simplify_decides_the_complement_laws() {
     // the pair, with the whole universe left unaccounted for by the bitset.
     let opaque = Schema::list(SeqShape::homogeneous(Schema::Int));
     assert_eq!(
-        Schema::Union(vec![opaque.clone(), not(opaque)]).simplify(),
+        Schema::Union(vec![opaque.clone(), not(opaque)].into()).simplify(),
         Schema::ANYTHING
     );
     // Disjoint basics and disjoint container kinds give an empty intersection.
     assert_eq!(
-        Schema::Intersection(vec![Schema::Int, Schema::Str]).simplify(),
+        Schema::Intersection(vec![Schema::Int, Schema::Str].into()).simplify(),
         Schema::Nothing
     );
     assert_eq!(
-        Schema::Intersection(vec![
-            Schema::list(SeqShape::homogeneous(Schema::Int)),
-            Schema::set(Schema::Int),
-        ])
+        Schema::Intersection(
+            vec![
+                Schema::list(SeqShape::homogeneous(Schema::Int)),
+                Schema::set(Schema::Int),
+            ]
+            .into()
+        )
         .simplify(),
         Schema::Nothing
     );
     // bool ⊆ int, so their intersection is not empty.
     assert_ne!(
-        Schema::Intersection(vec![Schema::Bool, Schema::Int]).simplify(),
+        Schema::Intersection(vec![Schema::Bool, Schema::Int].into()).simplify(),
         Schema::Nothing
     );
 }
@@ -1062,9 +1085,9 @@ fn no_relation_can_tell_the_two_spellings_apart() {
     let around = |top: Schema| {
         [
             top.clone(),
-            Schema::Union(vec![top.clone(), Schema::Int]),
-            Schema::Intersection(vec![top.clone(), Schema::Str]),
-            Schema::Complement(Box::new(top.clone())),
+            Schema::Union(vec![top.clone(), Schema::Int].into()),
+            Schema::Intersection(vec![top.clone(), Schema::Str].into()),
+            Schema::Complement(Arc::new(top.clone())),
             Schema::list(SeqShape::homogeneous(top.clone())),
             Schema::set(top),
         ]
@@ -1132,23 +1155,23 @@ fn the_complement_laws_hold_of_the_top_however_it_is_spelled() {
     assert_eq!(Schema::ANY, Schema::ANYTHING);
     for top in [Schema::ANY, Schema::ANYTHING] {
         assert_eq!(
-            Schema::Intersection(vec![top.clone(), not(top.clone())]).simplify(),
+            Schema::Intersection(vec![top.clone(), not(top.clone())].into()).simplify(),
             Schema::Nothing
         );
         assert_eq!(
-            Schema::Union(vec![top.clone(), not(top.clone())]).simplify(),
+            Schema::Union(vec![top.clone(), not(top.clone())].into()).simplify(),
             Schema::ANYTHING
         );
         assert_eq!(not(top.clone()).simplify(), Schema::Nothing);
     }
     // Mixed spellings are one set, so the law fires across them too.
     assert_eq!(
-        Schema::Intersection(vec![Schema::ANY, not(Schema::ANYTHING)]).simplify(),
+        Schema::Intersection(vec![Schema::ANY, not(Schema::ANYTHING)].into()).simplify(),
         Schema::Nothing
     );
     // And the spelling survives an identity, which is what `repr` reads.
     assert!(matches!(
-        Schema::Union(vec![Schema::ANY, Schema::Int]).simplify(),
+        Schema::Union(vec![Schema::ANY, Schema::Int].into()).simplify(),
         Schema::Anything(Spelling::Any)
     ));
 }
@@ -1183,8 +1206,8 @@ fn disjoint_is_sound_for_the_decidable_fragment() {
     assert!(!Schema::Instance(ClassIx::new(0)).disjoint(&Schema::Int));
     // A refinement is disjoint exactly when its base is.
     let refined = Schema::Refine {
-        base: Box::new(Schema::Int),
-        constraints: vec![Constraint::Ge(OperandIx::new(0))],
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
     };
     assert!(refined.disjoint(&Schema::Str));
     assert!(!refined.disjoint(&Schema::Int));
@@ -1205,14 +1228,14 @@ fn unfolding_reads_the_body_then_stands_in_the_bound_the_position_makes_sound() 
 
     // Under a complement the polarity flips, so the cut inside is the other
     // bound: `~Ref` in a positive position over-approximates as `~nothing`.
-    let negated = Schema::Complement(Box::new(reference.clone()));
+    let negated = Schema::Complement(Arc::new(reference.clone()));
     assert_eq!(
         negated.unfolded(&defs, 0, true),
-        Schema::Complement(Box::new(Schema::Nothing))
+        Schema::Complement(Arc::new(Schema::Nothing))
     );
     assert_eq!(
         negated.unfolded(&defs, 0, false),
-        Schema::Complement(Box::new(Schema::ANYTHING))
+        Schema::Complement(Arc::new(Schema::ANYTHING))
     );
 
     // A schema with no reference comes back as it stands.
@@ -1230,9 +1253,9 @@ fn a_reference_is_found_under_every_child_holding_variant() {
         required: true,
     };
     let holders = [
-        Schema::Union(vec![Schema::Int, reference.clone()]),
-        Schema::Intersection(vec![Schema::Int, reference.clone()]),
-        Schema::Complement(Box::new(reference.clone())),
+        Schema::Union(vec![Schema::Int, reference.clone()].into()),
+        Schema::Intersection(vec![Schema::Int, reference.clone()].into()),
+        Schema::Complement(Arc::new(reference.clone())),
         Schema::set(reference.clone()),
         Schema::list(SeqShape::fixed([Schema::Int, reference.clone()])),
         Schema::list(SeqShape::prefix_tail([Schema::Int], reference.clone())),
@@ -1246,11 +1269,11 @@ fn a_reference_is_found_under_every_child_holding_variant() {
             value: reference.clone(),
         }),
         Schema::AttrRecord {
-            fields: vec![field(reference.clone())],
+            fields: vec![field(reference.clone())].into(),
         },
         Schema::Refine {
-            base: Box::new(reference.clone()),
-            constraints: vec![Constraint::MinLen(1)],
+            base: Arc::new(reference.clone()),
+            constraints: vec![Constraint::MinLen(1)].into(),
         },
     ];
     for holder in &holders {
@@ -1275,10 +1298,13 @@ fn pruning_keeps_what_is_reached_and_renumbers_the_rest_in_order() {
     // The middle definition is unreachable; the last one moves up by one and
     // the references to it move with it.
     let (schema, defs) = pruned(
-        Schema::Union(vec![reference(0), reference(2)]),
+        Schema::Union(vec![reference(0), reference(2)].into()),
         vec![Schema::Int, Schema::Str, Schema::Bytes],
     );
-    assert_eq!(schema, Schema::Union(vec![reference(0), reference(1)]));
+    assert_eq!(
+        schema,
+        Schema::Union(vec![reference(0), reference(1)].into())
+    );
     assert_eq!(defs, vec![Schema::Int, Schema::Bytes]);
 
     // Reached through a definition's body rather than the schema itself.
@@ -1286,14 +1312,14 @@ fn pruning_keeps_what_is_reached_and_renumbers_the_rest_in_order() {
         reference(1),
         vec![
             Schema::Str,
-            Schema::Complement(Box::new(reference(2))),
+            Schema::Complement(Arc::new(reference(2))),
             Schema::Int,
         ],
     );
     assert_eq!(schema, reference(0));
     assert_eq!(
         defs,
-        vec![Schema::Complement(Box::new(reference(1))), Schema::Int]
+        vec![Schema::Complement(Arc::new(reference(1))), Schema::Int]
     );
 }
 
@@ -1349,6 +1375,95 @@ fn a_record_and_a_map_are_one_term_however_their_parts_are_written() {
     // And the order is a real one: the two clauses are still two.
     let Schema::KeyedMap { defaults, .. } = &one_way else {
         unreachable!()
+    };
+    assert_eq!(defaults.len(), 2);
+}
+
+/// A record that reopens drops a field its new catch-all already says, and
+/// keeps the rest.
+///
+/// An optional field of the top under an open record is the catch-all written
+/// twice: the clause admits the key with any value, and the field says the same
+/// thing about that one key. The transform drops it -- and that is the one case
+/// where it has to assemble the field list again rather than hand back the one
+/// it mapped, which is why the two paths are asked here together.
+#[test]
+fn reopening_a_record_drops_the_field_its_catch_all_already_says() {
+    let field = |name: &str, schema: Schema, required: bool| Field {
+        name: name.into(),
+        schema,
+        required,
+    };
+    let open = Schema::record(
+        vec![
+            field("kept", Schema::Int, true),
+            field("said", Schema::ANYTHING, false),
+        ],
+        Openness::Open,
+    );
+    let Schema::KeyedMap { fields, defaults } = open.with_records_open(Openness::Open) else {
+        panic!("a record opens to a record")
+    };
+    assert_eq!(
+        fields.iter().map(|f| &*f.name).collect::<Vec<_>>(),
+        ["kept"],
+        "the optional top field is what the catch-all says, so it is dropped"
+    );
+    assert_eq!(defaults.to_vec(), vec![MapClause::top()]);
+
+    // And the field that says something the catch-all does not is kept, which
+    // is the path that returns the mapped list rather than rebuilding it.
+    let closed = Schema::record(vec![field("kept", Schema::Int, false)], Openness::Closed);
+    let Schema::KeyedMap { fields, .. } = closed.with_records_open(Openness::Open) else {
+        panic!("a record opens to a record")
+    };
+    assert_eq!(
+        fields.iter().map(|f| &*f.name).collect::<Vec<_>>(),
+        ["kept"]
+    );
+}
+
+/// A mapping keeps the clause it was built with, and only the catch-all clause
+/// is the shared one.
+///
+/// The empty clause list and the open record's `(anything, anything)` are the
+/// same lists over and over, so both are allocated once and shared. A clause
+/// that is neither is the map's own, and reading it as the catch-all would open
+/// a mapping that names a narrower key or value.
+#[test]
+fn a_map_keeps_a_clause_that_is_not_the_catch_all() {
+    let narrow = MapClause {
+        key: Schema::Str,
+        value: Schema::Int,
+    };
+    // Through the general constructor, which is where the two shared lists are
+    // recognised: a clause that is neither empty nor the catch-all is the map's
+    // own, and reading it as the catch-all would open a map that names a
+    // narrower key or value.
+    let Schema::KeyedMap { defaults, .. } = Schema::keyed_map(Vec::new(), vec![narrow.clone()])
+    else {
+        panic!("a keyed map is a keyed map")
+    };
+    assert_eq!(defaults.to_vec(), vec![narrow.clone()]);
+    // The catch-all itself still reads as the catch-all, and the empty list as
+    // the empty one.
+    let Schema::KeyedMap { defaults, .. } = Schema::keyed_map(Vec::new(), vec![MapClause::top()])
+    else {
+        panic!("a keyed map is a keyed map")
+    };
+    assert_eq!(defaults.to_vec(), vec![MapClause::top()]);
+    let Schema::KeyedMap { defaults, .. } = Schema::keyed_map(Vec::new(), Vec::new()) else {
+        panic!("a keyed map is a keyed map")
+    };
+    assert!(defaults.is_empty());
+    // The catch-all beside another clause stays a list of two: it is the *lone*
+    // catch-all that is the shared list, not every list that begins with one. A
+    // map that lost the second clause would print a set it does not denote,
+    // since a clause list is what `repr` reads.
+    let Schema::KeyedMap { defaults, .. } =
+        Schema::keyed_map(Vec::new(), vec![MapClause::top(), narrow.clone()])
+    else {
+        panic!("a keyed map is a keyed map")
     };
     assert_eq!(defaults.len(), 2);
 }

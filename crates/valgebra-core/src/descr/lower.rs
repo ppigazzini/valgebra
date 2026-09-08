@@ -352,7 +352,7 @@ fn key_cover(key: &Schema, pool: &dyn Constants) -> Option<(Vec<Label>, Vec<Opti
         Schema::Union(members) => {
             let mut labels = Vec::new();
             let mut parts = Vec::new();
-            for member in members {
+            for member in members.iter() {
                 let (mine, theirs) = key_cover(member, pool)?;
                 labels.extend(mine);
                 parts.extend(theirs);
@@ -642,6 +642,8 @@ fn words(pattern: &str, base: &Descr) -> Option<Descr> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::{BUDGET, Bounds, Constants, DEPTH, Operand, lower, lower_within};
     use crate::decision::{Kind, Verdict};
     use crate::descr::classes::Class;
@@ -716,15 +718,18 @@ mod tests {
     #[test]
     fn the_operations_lower_to_the_operations() {
         let pool = empty_pool();
-        let joined =
-            lower(&Schema::Union(vec![Schema::Str, Schema::Float]), &pool).expect("a small union");
+        let joined = lower(
+            &Schema::Union(vec![Schema::Str, Schema::Float].into()),
+            &pool,
+        )
+        .expect("a small union");
         let expected = Descr::of_kind(Kind::Str)
             .union(&Descr::of_kind(Kind::Float))
             .expect("a small union");
         assert_eq!(joined, expected);
 
         let barred =
-            lower(&Schema::Complement(Box::new(Schema::Str)), &pool).expect("a small complement");
+            lower(&Schema::Complement(Arc::new(Schema::Str)), &pool).expect("a small complement");
         assert_eq!(barred, Descr::of_kind(Kind::Str).complement());
     }
 
@@ -736,8 +741,8 @@ mod tests {
         let refined = |constraints: Vec<Constraint>| {
             lower(
                 &Schema::Refine {
-                    base: Box::new(Schema::Int),
-                    constraints,
+                    base: Arc::new(Schema::Int),
+                    constraints: constraints.into(),
                 },
                 &pool,
             )
@@ -778,8 +783,8 @@ mod tests {
         let set = |schema| lower(&schema, &pool).expect("a small schema");
         let step = |at| {
             set(Schema::Refine {
-                base: Box::new(Schema::Int),
-                constraints: vec![Constraint::MultipleOf(OperandIx::new(at))],
+                base: Arc::new(Schema::Int),
+                constraints: vec![Constraint::MultipleOf(OperandIx::new(at))].into(),
             })
         };
         let literal = |at| set(Schema::Literal(ConstIx::new(at)));
@@ -794,26 +799,32 @@ mod tests {
         assert_eq!(within(&step(1), &step(0)), Verdict::Inhabited);
 
         // `bool` is its own kind, so an integer literal is never a boolean.
-        let no_bool = set(Schema::Complement(Box::new(Schema::Bool)));
+        let no_bool = set(Schema::Complement(Arc::new(Schema::Bool)));
         assert_eq!(within(&literal(2), &no_bool), Verdict::Empty);
 
         // A kind with finitely many values is exhausted by naming them all.
-        let both = set(Schema::Union(vec![
-            Schema::Literal(ConstIx::new(3)),
-            Schema::Literal(ConstIx::new(4)),
-        ]));
+        let both = set(Schema::Union(
+            vec![
+                Schema::Literal(ConstIx::new(3)),
+                Schema::Literal(ConstIx::new(4)),
+            ]
+            .into(),
+        ));
         assert_eq!(within(&set(Schema::Bool), &both), Verdict::Empty);
         assert_eq!(within(&both, &set(Schema::Bool)), Verdict::Empty);
 
         // A set is the hole punched in it, put back: `a = (a ∧ ¬v) ∨ v` for a
         // value `a` holds.
-        let split = set(Schema::Union(vec![
-            Schema::meet(vec![
-                Schema::Int,
-                Schema::Complement(Box::new(Schema::Literal(ConstIx::new(2)))),
-            ]),
-            Schema::Literal(ConstIx::new(2)),
-        ]));
+        let split = set(Schema::Union(
+            vec![
+                Schema::meet(vec![
+                    Schema::Int,
+                    Schema::Complement(Arc::new(Schema::Literal(ConstIx::new(2)))),
+                ]),
+                Schema::Literal(ConstIx::new(2)),
+            ]
+            .into(),
+        ));
         assert_eq!(within(&set(Schema::Int), &split), Verdict::Empty);
         assert_eq!(within(&split, &set(Schema::Int)), Verdict::Empty);
     }
@@ -831,8 +842,8 @@ mod tests {
         let bounded = |constraint| {
             lower(
                 &Schema::Refine {
-                    base: Box::new(Schema::Int),
-                    constraints: vec![constraint],
+                    base: Arc::new(Schema::Int),
+                    constraints: vec![constraint].into(),
                 },
                 &pool,
             )
@@ -856,8 +867,8 @@ mod tests {
         // The pool's only operand is the integer 1, so this is "float >= 1".
         let floats_at_least_one = lower(
             &Schema::Refine {
-                base: Box::new(Schema::Float),
-                constraints: vec![Constraint::Ge(OperandIx::new(0))],
+                base: Arc::new(Schema::Float),
+                constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
             },
             &pool,
         )
@@ -878,8 +889,8 @@ mod tests {
         assert!(
             lower(
                 &Schema::Refine {
-                    base: Box::new(Schema::ANYTHING),
-                    constraints: vec![Constraint::Ge(OperandIx::new(0))],
+                    base: Arc::new(Schema::ANYTHING),
+                    constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
                 },
                 &pool,
             )
@@ -902,8 +913,8 @@ mod tests {
         let bounded = |constraint| {
             lower(
                 &Schema::Refine {
-                    base: Box::new(Schema::Float),
-                    constraints: vec![constraint],
+                    base: Arc::new(Schema::Float),
+                    constraints: vec![constraint].into(),
                 },
                 &pool,
             )
@@ -932,11 +943,12 @@ mod tests {
         let pool = Pool(vec![Operand::Integer(2), Operand::Integer(1)]);
         let evens = lower(
             &Schema::Refine {
-                base: Box::new(Schema::Int),
+                base: Arc::new(Schema::Int),
                 constraints: vec![
                     Constraint::MultipleOf(OperandIx::new(0)),
                     Constraint::Ge(OperandIx::new(1)),
-                ],
+                ]
+                .into(),
             },
             &pool,
         )
@@ -958,8 +970,8 @@ mod tests {
             &Schema::Seq {
                 container: SeqKind::List,
                 shape: SeqShape {
-                    prefix: Vec::new(),
-                    tail: Some(Box::new(Schema::Int)),
+                    prefix: Vec::new().into(),
+                    tail: Some(Arc::new(Schema::Int)),
                 },
             },
             &pool,
@@ -984,8 +996,8 @@ mod tests {
             &Schema::set(Schema::Seq {
                 container: SeqKind::List,
                 shape: SeqShape {
-                    prefix: Vec::new(),
-                    tail: Some(Box::new(Schema::Int)),
+                    prefix: Vec::new().into(),
+                    tail: Some(Arc::new(Schema::Int)),
                 },
             }),
             &pool,
@@ -1006,8 +1018,8 @@ mod tests {
         let seq = |tail| Schema::Seq {
             container: SeqKind::List,
             shape: SeqShape {
-                prefix: Vec::new(),
-                tail: Some(Box::new(tail)),
+                prefix: Vec::new().into(),
+                tail: Some(Arc::new(tail)),
             },
         };
         vec![
@@ -1035,10 +1047,12 @@ mod tests {
         let mut corpus = leaves.clone();
         for left in &leaves {
             for right in &leaves {
-                corpus.push(Schema::Union(vec![left.clone(), right.clone()]));
-                corpus.push(Schema::Intersection(vec![left.clone(), right.clone()]));
+                corpus.push(Schema::Union(vec![left.clone(), right.clone()].into()));
+                corpus.push(Schema::Intersection(
+                    vec![left.clone(), right.clone()].into(),
+                ));
             }
-            corpus.push(Schema::Complement(Box::new(left.clone())));
+            corpus.push(Schema::Complement(Arc::new(left.clone())));
         }
         corpus
     }
@@ -1080,7 +1094,7 @@ mod tests {
         let pool = empty_pool();
         let corpus: Vec<Schema> = leaves()
             .iter()
-            .flat_map(|leaf| [leaf.clone(), Schema::Complement(Box::new(leaf.clone()))])
+            .flat_map(|leaf| [leaf.clone(), Schema::Complement(Arc::new(leaf.clone()))])
             .collect();
         for left in &corpus {
             for right in &corpus {
@@ -1191,25 +1205,27 @@ mod tests {
         let refined = |base, constraints| {
             lower(
                 &Schema::Refine {
-                    base: Box::new(base),
+                    base: Arc::new(base),
                     constraints,
                 },
                 &pool,
             )
         };
 
-        let non_empty = refined(Schema::Str, vec![Constraint::MinLen(1)]).expect("a length bound");
+        let non_empty =
+            refined(Schema::Str, vec![Constraint::MinLen(1)].into()).expect("a length bound");
         assert!(non_empty.admits(Value::word(b"a", Kind::Str)));
         assert!(!non_empty.admits(Value::word(b"", Kind::Str)));
 
-        let short = refined(Schema::Str, vec![Constraint::MaxLen(1)]).expect("a length bound");
+        let short =
+            refined(Schema::Str, vec![Constraint::MaxLen(1)].into()).expect("a length bound");
         assert!(
             short.admits(Value::word(b"", Kind::Str)) && short.admits(Value::word(b"a", Kind::Str))
         );
         assert!(!short.admits(Value::word(b"ab", Kind::Str)));
 
-        let matching =
-            refined(Schema::Str, vec![Constraint::Regex("a+".to_owned())]).expect("a pattern");
+        let matching = refined(Schema::Str, vec![Constraint::Regex("a+".to_owned())].into())
+            .expect("a pattern");
         assert!(matching.admits(Value::word(b"a", Kind::Str)));
         assert!(!matching.admits(Value::word(b"b", Kind::Str)));
 
@@ -1217,7 +1233,7 @@ mod tests {
         // is what makes an impossible pair decide.
         let impossible = refined(
             Schema::Str,
-            vec![Constraint::MinLen(2), Constraint::MaxLen(1)],
+            vec![Constraint::MinLen(2), Constraint::MaxLen(1)].into(),
         )
         .expect("two length bounds");
         assert_eq!(impossible.emptiness(), Verdict::Empty);
@@ -1237,8 +1253,8 @@ mod tests {
         assert!(
             lower(
                 &Schema::Refine {
-                    base: Box::new(Schema::ANYTHING),
-                    constraints: vec![Constraint::MinLen(0)],
+                    base: Arc::new(Schema::ANYTHING),
+                    constraints: vec![Constraint::MinLen(0)].into(),
                 },
                 &pool,
             )
@@ -1249,8 +1265,8 @@ mod tests {
         assert!(
             lower(
                 &Schema::Refine {
-                    base: Box::new(Schema::Str),
-                    constraints: vec![Constraint::MinLen(0)],
+                    base: Arc::new(Schema::Str),
+                    constraints: vec![Constraint::MinLen(0)].into(),
                 },
                 &pool,
             )
@@ -1270,8 +1286,8 @@ mod tests {
         assert!(
             lower(
                 &Schema::Refine {
-                    base: Box::new(Schema::Int),
-                    constraints: vec![Constraint::MinLen(1)],
+                    base: Arc::new(Schema::Int),
+                    constraints: vec![Constraint::MinLen(1)].into(),
                 },
                 &pool,
             )
@@ -1292,7 +1308,11 @@ mod tests {
     fn a_schema_past_a_bound_refuses() {
         let pool = empty_pool();
         let wide = |members: usize| {
-            Schema::Union(core::iter::repeat_n(Schema::Str, members).collect::<Vec<_>>())
+            Schema::Union(
+                core::iter::repeat_n(Schema::Str, members)
+                    .collect::<Vec<_>>()
+                    .into(),
+            )
         };
         assert!(
             lower(&wide(BUDGET as usize), &pool).is_none(),
@@ -1301,7 +1321,7 @@ mod tests {
         assert!(lower(&wide(BUDGET as usize / 2), &pool).is_some());
 
         let nested = |levels: u32| {
-            (0..levels).fold(Schema::Str, |inner, _| Schema::Complement(Box::new(inner)))
+            (0..levels).fold(Schema::Str, |inner, _| Schema::Complement(Arc::new(inner)))
         };
         assert!(lower(&nested(DEPTH + 1), &pool).is_none(), "too deep");
         assert!(lower(&nested(DEPTH - 1), &pool).is_some());
@@ -1316,10 +1336,13 @@ mod tests {
     #[test]
     fn a_build_past_its_allowance_refuses() {
         let pool = empty_pool();
-        let meet = Schema::Intersection(vec![
-            Schema::list(SeqShape::homogeneous(Schema::Int)),
-            Schema::list(SeqShape::homogeneous(Schema::Str)),
-        ]);
+        let meet = Schema::Intersection(
+            vec![
+                Schema::list(SeqShape::homogeneous(Schema::Int)),
+                Schema::list(SeqShape::homogeneous(Schema::Str)),
+            ]
+            .into(),
+        );
 
         assert!(
             lower_within(
@@ -1415,14 +1438,15 @@ mod tests {
             // A key schema that is neither a kind nor a constant covers part of
             // a part, and the default is a function on the parts.
             Schema::KeyedMap {
-                fields: Vec::new(),
+                fields: Vec::new().into(),
                 defaults: vec![MapClause {
                     key: Schema::Refine {
-                        base: Box::new(Schema::Str),
-                        constraints: vec![Constraint::MinLen(1)],
+                        base: Arc::new(Schema::Str),
+                        constraints: vec![Constraint::MinLen(1)].into(),
                     },
                     value: Schema::Int,
-                }],
+                }]
+                .into(),
             },
         ] {
             assert!(lower(&schema, &pool).is_none(), "{schema:?}");
@@ -1431,7 +1455,7 @@ mod tests {
         // the part it could not read.
         assert!(
             lower(
-                &Schema::Union(vec![Schema::Str, Schema::Ref(crate::ir::DefIx::new(0))]),
+                &Schema::Union(vec![Schema::Str, Schema::Ref(crate::ir::DefIx::new(0))].into()),
                 &pool
             )
             .is_none()
@@ -1458,7 +1482,7 @@ mod tests {
             required,
         };
         let record = Schema::AttrRecord {
-            fields: vec![field("a", Schema::Int, true)],
+            fields: vec![field("a", Schema::Int, true)].into(),
         };
         let lowered = lower(&record, &pool).expect("an attribute record lowers");
         assert!(lowered.admits(Value::object(CARRIED)));
@@ -1468,7 +1492,7 @@ mod tests {
         assert!(!lowered.admits(Value::integer(7)));
         // A field whose type admits nothing empties the record.
         let empty = Schema::AttrRecord {
-            fields: vec![field("a", Schema::Nothing, true)],
+            fields: vec![field("a", Schema::Nothing, true)].into(),
         };
         assert!(lower(&empty, &pool).expect("it lowers").is_empty());
     }
@@ -1483,7 +1507,10 @@ mod tests {
     fn the_maps_that_name_nothing_are_the_empty_map() {
         let pool = empty_pool();
         let closed =
-            |fields: Vec<crate::ir::Field>, defaults| Schema::KeyedMap { fields, defaults };
+            |fields: Vec<crate::ir::Field>, defaults: Vec<crate::ir::MapClause>| Schema::KeyedMap {
+                fields: fields.into(),
+                defaults: defaults.into(),
+            };
         let field = |name: &str, schema, required| crate::ir::Field {
             name: name.into(),
             schema,
@@ -1539,8 +1566,8 @@ mod tests {
         };
         let shut = lower(
             &Schema::KeyedMap {
-                fields: vec![field.clone()],
-                defaults: Vec::new(),
+                fields: vec![field.clone()].into(),
+                defaults: Vec::new().into(),
             },
             &pool,
         )
@@ -1551,8 +1578,8 @@ mod tests {
 
         let open = lower(
             &Schema::KeyedMap {
-                fields: vec![field],
-                defaults: vec![MapClause::top()],
+                fields: vec![field].into(),
+                defaults: vec![MapClause::top()].into(),
             },
             &pool,
         )
@@ -1602,11 +1629,12 @@ mod tests {
         for (kind, _) in KEYS {
             let opened = lower(
                 &Schema::KeyedMap {
-                    fields: Vec::new(),
+                    fields: Vec::new().into(),
                     defaults: vec![MapClause {
                         key: atom(kind),
                         value: Schema::Int,
-                    }],
+                    }]
+                    .into(),
                 },
                 &pool,
             )
@@ -1631,11 +1659,12 @@ mod tests {
         let pool = empty_pool();
         let either = lower(
             &Schema::KeyedMap {
-                fields: Vec::new(),
+                fields: Vec::new().into(),
                 defaults: vec![MapClause {
-                    key: Schema::Union(vec![Schema::Str, Schema::Int]),
+                    key: Schema::Union(vec![Schema::Str, Schema::Int].into()),
                     value: Schema::Int,
-                }],
+                }]
+                .into(),
             },
             &pool,
         )
@@ -1648,11 +1677,12 @@ mod tests {
         let named = Pool(vec![Operand::Word(b"a".to_vec(), Kind::Str)]);
         let one_key = lower(
             &Schema::KeyedMap {
-                fields: Vec::new(),
+                fields: Vec::new().into(),
                 defaults: vec![MapClause {
                     key: Schema::Literal(ConstIx::new(0)),
                     value: Schema::Int,
-                }],
+                }]
+                .into(),
             },
             &named,
         )
@@ -1699,11 +1729,12 @@ mod tests {
             let pool = Pool(vec![constant.clone()]);
             let map = lower(
                 &Schema::KeyedMap {
-                    fields: Vec::new(),
+                    fields: Vec::new().into(),
                     defaults: vec![MapClause {
                         key: Schema::Literal(ConstIx::new(0)),
                         value: Schema::Int,
-                    }],
+                    }]
+                    .into(),
                 },
                 &pool,
             )
@@ -1723,8 +1754,8 @@ mod tests {
         assert!(
             lower(
                 &Schema::Refine {
-                    base: Box::new(Schema::Int),
-                    constraints: vec![Constraint::Ge(OperandIx::new(0))],
+                    base: Arc::new(Schema::Int),
+                    constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
                 },
                 &pool,
             )
@@ -1741,8 +1772,8 @@ mod tests {
         let pool = empty_pool();
         let over_words = lower(
             &Schema::Refine {
-                base: Box::new(Schema::Str),
-                constraints: vec![Constraint::MinLen(1)],
+                base: Arc::new(Schema::Str),
+                constraints: vec![Constraint::MinLen(1)].into(),
             },
             &pool,
         )
@@ -1752,8 +1783,8 @@ mod tests {
 
         let over_lists = lower(
             &Schema::Refine {
-                base: Box::new(Schema::list(SeqShape::homogeneous(Schema::ANYTHING))),
-                constraints: vec![Constraint::MinLen(1)],
+                base: Arc::new(Schema::list(SeqShape::homogeneous(Schema::ANYTHING))),
+                constraints: vec![Constraint::MinLen(1)].into(),
             },
             &pool,
         )

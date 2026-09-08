@@ -53,7 +53,7 @@ pub(crate) fn render(
         Schema::Literal(i) => format!("Literal[{}]", pool_repr(py, pool, i.get())),
         Schema::Seq { container, shape } => {
             let list = matches!(container, SeqKind::List);
-            match (shape.prefix.as_slice(), shape.tail.as_deref()) {
+            match (&shape.prefix[..], shape.tail.as_deref()) {
                 // Homogeneous: list[T] / tuple[T, ...].
                 ([], Some(t)) if list => format!("list[{}]", r(t)),
                 ([], Some(t)) => format!("tuple[{}, ...]", r(t)),

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 /// The structural inclusion procedure alone, with no descriptor beside it.
@@ -30,22 +32,26 @@ fn structural(sub: &Schema, sup: &Schema) -> bool {
 #[test]
 fn every_set_is_below_the_universe_however_it_is_spelled() {
     let bare = Schema::Refine {
-        base: Box::new(Schema::ANYTHING),
-        constraints: Vec::new(),
+        base: Arc::new(Schema::ANYTHING),
+        constraints: Vec::new().into(),
     };
     // The complement of the universe is empty, which is the same fact read
     // through the *other* fold: `region_set` decides the inclusion above,
     // and `empty_and_region` decides this. Both carry the rule, so both are
     // asked -- a fix in one of two folds is half a fix.
-    assert!(Schema::Complement(Box::new(bare.clone())).is_empty());
+    assert!(Schema::Complement(Arc::new(bare.clone())).is_empty());
     assert!(!bare.is_empty(), "and the universe itself is not");
 
-    for universe in [Schema::ANYTHING, bare.clone(), Schema::Union(vec![bare])] {
+    for universe in [
+        Schema::ANYTHING,
+        bare.clone(),
+        Schema::Union(vec![bare].into()),
+    ] {
         for sub in [
             Schema::ANY,
             Schema::ANYTHING,
             Schema::Int,
-            Schema::Union(vec![Schema::ANY, Schema::ANYTHING]),
+            Schema::Union(vec![Schema::ANY, Schema::ANYTHING].into()),
         ] {
             assert!(
                 sub.is_subtype_of(&universe),
@@ -65,7 +71,7 @@ fn every_set_is_below_the_universe_however_it_is_spelled() {
 fn the_structural_inclusion_rules_decide_without_the_descriptor() {
     // Built raw rather than through the smart constructors, which fold a
     // meet of two kinds before it ever reaches the rule under test.
-    let meet = |members: [Schema; 2]| Schema::Intersection(members.to_vec());
+    let meet = |members: [Schema; 2]| Schema::Intersection(members.into());
     let joined = Schema::union([Schema::Int, Schema::Float]);
 
     // `A ⊆ (Y ∩ Z)` needs both conjuncts.
@@ -107,8 +113,8 @@ fn the_structural_inclusion_rules_decide_without_the_descriptor() {
     // a callback is exactly one, since the complement law does not hold of
     // it. So each rule is pinned over a schema the reduction cannot read.
     let opaque = Schema::Refine {
-        base: Box::new(Schema::Int),
-        constraints: vec![Constraint::Predicate(PredIx::new(0))],
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
     };
     assert!(structural(&opaque, &meet([opaque.clone(), opaque.clone()])));
     assert!(structural(&meet([opaque.clone(), Schema::Str]), &opaque));
@@ -118,14 +124,14 @@ fn the_structural_inclusion_rules_decide_without_the_descriptor() {
     ));
 
     // Complement is contravariant: the inclusion under it runs the other way.
-    let wider = Schema::Complement(Box::new(Schema::Int));
-    let narrower = Schema::Complement(Box::new(joined));
+    let wider = Schema::Complement(Arc::new(Schema::Int));
+    let narrower = Schema::Complement(Arc::new(joined));
     assert!(structural(&narrower, &wider));
     assert!(!structural(&wider, &narrower));
     // And over an atom the reduction cannot read, where nothing else does.
     assert!(structural(
-        &Schema::Complement(Box::new(opaque.clone())),
-        &Schema::Complement(Box::new(meet([opaque.clone(), Schema::Str])))
+        &Schema::Complement(Arc::new(opaque.clone())),
+        &Schema::Complement(Arc::new(meet([opaque.clone(), Schema::Str])))
     ));
 }
 
@@ -174,8 +180,8 @@ fn a_product_splits_across_a_union_without_the_descriptor() {
 #[test]
 fn a_callback_is_found_through_every_container() {
     let predicate = Schema::Refine {
-        base: Box::new(Schema::Int),
-        constraints: vec![Constraint::Predicate(PredIx::new(0))],
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
     };
     let field = |schema: Schema| Field {
         name: "x".into(),
@@ -186,30 +192,32 @@ fn a_callback_is_found_through_every_container() {
         predicate.clone(),
         Schema::set(predicate.clone()),
         Schema::frozen_set(predicate.clone()),
-        Schema::Complement(Box::new(predicate.clone())),
+        Schema::Complement(Arc::new(predicate.clone())),
         Schema::union([predicate.clone(), Schema::Int]),
         Schema::list(SeqShape::fixed([predicate.clone()])),
         Schema::list(SeqShape::homogeneous(predicate.clone())),
         Schema::KeyedMap {
-            fields: vec![field(predicate.clone())],
-            defaults: Vec::new(),
+            fields: vec![field(predicate.clone())].into(),
+            defaults: Vec::new().into(),
         },
         Schema::KeyedMap {
-            fields: Vec::new(),
+            fields: Vec::new().into(),
             defaults: vec![MapClause {
                 key: Schema::Str,
                 value: predicate.clone(),
-            }],
+            }]
+            .into(),
         },
         Schema::KeyedMap {
-            fields: Vec::new(),
+            fields: Vec::new().into(),
             defaults: vec![MapClause {
                 key: predicate.clone(),
                 value: Schema::Str,
-            }],
+            }]
+            .into(),
         },
         Schema::AttrRecord {
-            fields: vec![field(predicate.clone())],
+            fields: vec![field(predicate.clone())].into(),
         },
     ];
     for wrapper in wrappers {
@@ -217,10 +225,13 @@ fn a_callback_is_found_through_every_container() {
             !denotes_a_set_within(&wrapper, &NoLeafRelations, &[]),
             "a predicate inside {wrapper:?} is still a predicate"
         );
-        let meet = Schema::Intersection(vec![
-            wrapper.clone(),
-            Schema::Complement(Box::new(wrapper.clone())),
-        ]);
+        let meet = Schema::Intersection(
+            vec![
+                wrapper.clone(),
+                Schema::Complement(Arc::new(wrapper.clone())),
+            ]
+            .into(),
+        );
         assert!(
             !meet.is_empty_under(&[]),
             "so the law must decline {wrapper:?}"
@@ -231,7 +242,7 @@ fn a_callback_is_found_through_every_container() {
     let plain = Schema::set(Schema::Int);
     assert!(denotes_a_set_within(&plain, &NoLeafRelations, &[]));
     assert!(
-        Schema::Intersection(vec![plain.clone(), Schema::Complement(Box::new(plain))])
+        Schema::Intersection(vec![plain.clone(), Schema::Complement(Arc::new(plain))].into())
             .is_empty_under(&[])
     );
 }
@@ -267,7 +278,7 @@ fn a_reference_is_not_a_set_the_fold_may_cancel() {
         let nested = Schema::set(reference.clone());
         assert!(!denotes_a_set_within(&nested, &NoLeafRelations, &[]));
         // And the constructors decline the two cancelling laws for it.
-        let not = |s: Schema| Schema::Complement(Box::new(s));
+        let not = |s: Schema| Schema::Complement(Arc::new(s));
         assert_ne!(
             Schema::union([reference.clone(), not(reference.clone())]),
             Schema::ANYTHING
@@ -351,9 +362,10 @@ fn schema() -> impl Strategy<Value = Schema> {
     ];
     leaf.prop_recursive(4, 24, 3, |inner| {
         prop_oneof![
-            proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::Union),
-            proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::Intersection),
-            inner.prop_map(|s| Schema::Complement(Box::new(s))),
+            proptest::collection::vec(inner.clone(), 1..4).prop_map(|m| Schema::Union(m.into())),
+            proptest::collection::vec(inner.clone(), 1..4)
+                .prop_map(|m| Schema::Intersection(m.into())),
+            inner.prop_map(|s| Schema::Complement(Arc::new(s))),
         ]
     })
 }
@@ -368,7 +380,7 @@ proptest! {
     #[test]
     fn covering_the_universe_is_the_complement_being_empty(s in schema()) {
         let budget = Cell::new(DECISION_BUDGET);
-        let via_complement = Schema::Complement(Box::new(s.clone()))
+        let via_complement = Schema::Complement(Arc::new(s.clone()))
             .is_empty_rec(&NoLeafRelations, &[], &mut Vec::new(), &budget);
         let budget = Cell::new(DECISION_BUDGET);
         let (_, regions) =
@@ -442,34 +454,39 @@ fn a_union_fold_stops_only_once_a_member_is_inhabited() {
 #[test]
 fn is_empty_decides_complement_and_disjoint_intersections() {
     let list = |e| Schema::list(SeqShape::homogeneous(e));
-    let not = |s| Schema::Complement(Box::new(s));
+    let not = |s| Schema::Complement(Arc::new(s));
 
     // A ∩ ¬A is empty for a structural A the scalar region bitset cannot see.
     let a = list(Schema::Int);
-    assert!(Schema::Intersection(vec![a.clone(), not(a)]).is_empty());
+    assert!(Schema::Intersection(vec![a.clone(), not(a)].into()).is_empty());
 
     // `Any` is the top, spelled, so it obeys the law the top obeys: the
     // spelling is not a set and no rule reads it.
-    assert!(Schema::Intersection(vec![Schema::ANY, not(Schema::ANY)]).is_empty());
-    assert!(Schema::Intersection(vec![Schema::ANY, not(Schema::ANYTHING)]).is_empty());
+    assert!(Schema::Intersection(vec![Schema::ANY, not(Schema::ANY)].into()).is_empty());
+    assert!(Schema::Intersection(vec![Schema::ANY, not(Schema::ANYTHING)].into()).is_empty());
 
     // Disjoint structural kinds: a list is never a set.
-    assert!(Schema::Intersection(vec![list(Schema::Int), Schema::set(Schema::Int)]).is_empty());
+    assert!(
+        Schema::Intersection(vec![list(Schema::Int), Schema::set(Schema::Int)].into()).is_empty()
+    );
 
     // A refined int is still an int, disjoint from str.
     assert!(
-        Schema::Intersection(vec![
-            Schema::Refine {
-                base: Box::new(Schema::Int),
-                constraints: vec![Constraint::Ge(OperandIx::new(0))],
-            },
-            Schema::Str,
-        ])
+        Schema::Intersection(
+            vec![
+                Schema::Refine {
+                    base: Arc::new(Schema::Int),
+                    constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
+                },
+                Schema::Str,
+            ]
+            .into()
+        )
         .is_empty()
     );
 
     // Sanity: two same-kind lists share the empty list, so not empty.
-    assert!(!Schema::Intersection(vec![list(Schema::Int), list(Schema::Bool)]).is_empty());
+    assert!(!Schema::Intersection(vec![list(Schema::Int), list(Schema::Bool)].into()).is_empty());
 }
 
 /// The two rules that read only the left side -- a reference unfolds, a
@@ -484,8 +501,8 @@ fn a_reference_and_a_refinement_are_read_beside_the_union_rule() {
     let reference = Schema::Ref(DefIx::new(0));
     let body = Schema::union([Schema::Int, Schema::Str]);
     let refined = |base: Schema| Schema::Refine {
-        base: Box::new(base),
-        constraints: vec![Constraint::Ge(OperandIx::new(0))],
+        base: Arc::new(base),
+        constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
     };
 
     // Against a union: only the left-side rule decides these. The reference
@@ -540,19 +557,20 @@ fn field(name: &str, schema: Schema, required: bool) -> Field {
 /// A record: declared fields and no catch-all clause, so it is closed.
 fn closed(fields: Vec<Field>) -> Schema {
     Schema::KeyedMap {
-        fields,
-        defaults: Vec::new(),
+        fields: fields.into(),
+        defaults: Vec::new().into(),
     }
 }
 
 /// A record with a catch-all clause, which is what makes it open.
 fn open(fields: Vec<Field>) -> Schema {
     Schema::KeyedMap {
-        fields,
+        fields: fields.into(),
         defaults: vec![MapClause {
             key: Schema::Str,
             value: Schema::ANYTHING,
-        }],
+        }]
+        .into(),
     }
 }
 
@@ -627,10 +645,13 @@ fn a_record_meet_is_empty_only_where_a_required_key_cannot_hold() {
         open(vec![]),
     ]));
     assert!(
-        Schema::Intersection(vec![
-            closed(vec![field("a", Schema::Nothing, true)]),
-            open(vec![]),
-        ])
+        Schema::Intersection(
+            vec![
+                closed(vec![field("a", Schema::Nothing, true)]),
+                open(vec![]),
+            ]
+            .into()
+        )
         .is_empty()
     );
 
@@ -696,22 +717,25 @@ fn empty_by_the_rules_under(schema: &Schema, oracle: &dyn LeafRelations) -> bool
 #[test]
 fn the_rules_read_a_refinement_with_no_constraint_as_its_base() {
     let bare = |base| Schema::Refine {
-        base: Box::new(base),
-        constraints: Vec::new(),
+        base: Arc::new(base),
+        constraints: Vec::new().into(),
     };
     assert!(by_the_rules(&Schema::ANY, &bare(Schema::ANYTHING)));
     assert!(by_the_rules(
-        &Schema::Union(vec![Schema::ANY, Schema::ANYTHING]),
+        &Schema::Union(vec![Schema::ANY, Schema::ANYTHING].into()),
         &bare(Schema::ANYTHING),
     ));
     // And the same reading on the emptiness side, where it is the *regions*
     // that the base lends: a bare refinement over the universe covers every
     // region, so its complement covers none and the meet below is empty.
     // Without that the complement has no region set and nothing decides it.
-    assert!(empty_by_the_rules(&Schema::Intersection(vec![
-        Schema::ANYTHING,
-        Schema::Complement(Box::new(bare(Schema::ANYTHING))),
-    ])));
+    assert!(empty_by_the_rules(&Schema::Intersection(
+        vec![
+            Schema::ANYTHING,
+            Schema::Complement(Arc::new(bare(Schema::ANYTHING))),
+        ]
+        .into()
+    )));
     assert!(empty_by_the_rules(&bare(Schema::Nothing)));
     assert!(!empty_by_the_rules(&bare(Schema::Str)));
 }
@@ -728,14 +752,13 @@ fn the_rules_read_a_refinement_with_no_constraint_as_its_base() {
 #[test]
 fn the_complementary_pair_rule_answers_where_the_regions_cannot() {
     let bounded = Schema::Refine {
-        base: Box::new(Schema::Int),
-        constraints: vec![Constraint::Ge(OperandIx::new(0))],
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
     };
     assert_eq!(bounded.region_set(), Regions::Unknown, "no regions to read");
-    assert!(empty_by_the_rules(&Schema::Intersection(vec![
-        bounded.clone(),
-        Schema::Complement(Box::new(bounded)),
-    ])));
+    assert!(empty_by_the_rules(&Schema::Intersection(
+        vec![bounded.clone(), Schema::Complement(Arc::new(bounded)),].into()
+    )));
 }
 
 /// The two complement arms of the subtyping rules, asked of the rules.
@@ -752,7 +775,7 @@ fn the_rules_relate_a_complement_on_either_side() {
     // list[int]` is decided by recursing on the element, while the meet
     // `¬list[int] ∧ list[bool]` is not decided empty, so the arm below
     // cannot answer this.
-    let not = |schema| Schema::Complement(Box::new(schema));
+    let not = |schema| Schema::Complement(Arc::new(schema));
     let list = |element| Schema::list(SeqShape::homogeneous(element));
     assert!(by_the_rules(
         &not(list(Schema::Int)),
@@ -785,11 +808,11 @@ fn the_rules_decide_that_two_schemas_share_no_value() {
     // subtyping question here.
     assert!(by_the_rules(
         &Schema::Str,
-        &Schema::Complement(Box::new(Schema::Int)),
+        &Schema::Complement(Arc::new(Schema::Int)),
     ));
     assert!(!by_the_rules(
-        &Schema::Union(vec![Schema::Str, Schema::Int]),
-        &Schema::Complement(Box::new(Schema::Int)),
+        &Schema::Union(vec![Schema::Str, Schema::Int].into()),
+        &Schema::Complement(Arc::new(Schema::Int)),
     ));
 }
 
@@ -802,38 +825,41 @@ fn the_rules_decide_that_two_schemas_share_no_value() {
 #[test]
 fn the_rules_reach_each_way_a_meet_is_empty() {
     // A member that is itself empty empties the meet.
-    assert!(empty_by_the_rules(&Schema::Intersection(vec![
-        Schema::Nothing,
-        Schema::Str,
-    ])));
+    assert!(empty_by_the_rules(&Schema::Intersection(
+        vec![Schema::Nothing, Schema::Str,].into()
+    )));
     // Two kinds that share no region.
-    assert!(empty_by_the_rules(&Schema::Intersection(vec![
-        Schema::Str,
-        Schema::Float,
-    ])));
+    assert!(empty_by_the_rules(&Schema::Intersection(
+        vec![Schema::Str, Schema::Float,].into()
+    )));
     // A schema beside its own complement.
-    assert!(empty_by_the_rules(&Schema::Intersection(vec![
-        Schema::Str,
-        Schema::Complement(Box::new(Schema::Str)),
-    ])));
+    assert!(empty_by_the_rules(&Schema::Intersection(
+        vec![Schema::Str, Schema::Complement(Arc::new(Schema::Str)),].into()
+    )));
     // Two bounds that no value satisfies, which needs an oracle to order
     // the two pooled operands.
     let bounded = |constraint| Schema::Refine {
-        base: Box::new(Schema::Int),
-        constraints: vec![constraint],
+        base: Arc::new(Schema::Int),
+        constraints: vec![constraint].into(),
     };
     assert!(empty_by_the_rules_under(
-        &Schema::Intersection(vec![
-            bounded(Constraint::Ge(OperandIx::new(1))),
-            bounded(Constraint::Le(OperandIx::new(0))),
-        ]),
+        &Schema::Intersection(
+            vec![
+                bounded(Constraint::Ge(OperandIx::new(1))),
+                bounded(Constraint::Le(OperandIx::new(0))),
+            ]
+            .into()
+        ),
         &ByIndex,
     ));
     // And a meet that is inhabited is not reported empty by any of them.
-    assert!(!empty_by_the_rules(&Schema::Intersection(vec![
-        Schema::Str,
-        Schema::Union(vec![Schema::Str, Schema::Int]),
-    ])));
+    assert!(!empty_by_the_rules(&Schema::Intersection(
+        vec![
+            Schema::Str,
+            Schema::Union(vec![Schema::Str, Schema::Int].into()),
+        ]
+        .into()
+    )));
 }
 
 /// A sequence is empty exactly when a prefix element is, and the rule says
@@ -861,8 +887,8 @@ fn the_rules_read_a_sequence_s_emptiness_off_its_prefix() {
 #[test]
 fn the_descriptor_proves_an_emptiness_the_rules_decline() {
     let bools = Schema::list(SeqShape::homogeneous(Schema::Bool));
-    let not_ints = Schema::Complement(Box::new(Schema::list(SeqShape::homogeneous(Schema::Int))));
-    let meet = Schema::Intersection(vec![bools, not_ints]);
+    let not_ints = Schema::Complement(Arc::new(Schema::list(SeqShape::homogeneous(Schema::Int))));
+    let meet = Schema::Intersection(vec![bools, not_ints].into());
 
     assert!(
         !empty_by_the_rules(&meet),
@@ -1070,7 +1096,7 @@ fn two_sets_of_literals_are_asked_as_sets() {
     // and is disjoint from everything, which the arm below these settles; an
     // empty set of constants would be a different question, and one this oracle
     // would answer `true` for whatever stood against it.
-    assert!(!Schema::Union(Vec::new()).disjoint_with(&lit(0), &oracle));
+    assert!(!Schema::Union(Vec::new().into()).disjoint_with(&lit(0), &oracle));
     assert!(oracle.asked.take().is_empty());
 }
 
@@ -1217,15 +1243,15 @@ impl LeafRelations for Adjacent {
 #[test]
 fn both_meets_ask_the_same_question_of_their_base() {
     let refine = |constraints| Schema::Refine {
-        base: Box::new(Schema::Int),
+        base: Arc::new(Schema::Int),
         constraints,
     };
     let (gt0, lt1) = (
         Constraint::Gt(OperandIx::new(0)),
         Constraint::Lt(OperandIx::new(1)),
     );
-    let on_one = refine(vec![gt0.clone(), lt1.clone()]);
-    let across = Schema::meet([refine(vec![gt0]), refine(vec![lt1])]);
+    let on_one = refine(vec![gt0.clone(), lt1.clone()].into());
+    let across = Schema::meet([refine(vec![gt0].into()), refine(vec![lt1].into())]);
     assert!(on_one.is_empty_with(&Adjacent, &[]));
     assert_eq!(
         on_one.is_empty_with(&Adjacent, &[]),
@@ -1245,7 +1271,8 @@ fn each_half_of_an_attribute_schema_is_reachable_through_the_meet() {
             name: "a".into(),
             schema,
             required: true,
-        }],
+        }]
+        .into(),
     };
     let object = Schema::meet([Schema::Instance(ClassIx::new(0)), record(Schema::Bool)]);
     assert!(object.is_subtype_of(&Schema::Instance(ClassIx::new(0))));
@@ -1269,7 +1296,8 @@ fn an_attribute_record_is_inhabited_by_its_fields() {
             name: "a".into(),
             schema,
             required: true,
-        }],
+        }]
+        .into(),
     };
     assert_eq!(record(Schema::Int).verdict(), Verdict::Inhabited);
     assert_eq!(record(Schema::Nothing).verdict(), Verdict::Empty);
@@ -1280,7 +1308,8 @@ fn an_attribute_record_is_inhabited_by_its_fields() {
             name: "a".into(),
             schema: Schema::Nothing,
             required: false,
-        }],
+        }]
+        .into(),
     };
     assert_eq!(optional.verdict(), Verdict::Inhabited);
     // Meeting it with a class is unknown in the other direction only: the
@@ -1300,20 +1329,20 @@ fn an_attribute_record_is_inhabited_by_its_fields() {
 #[test]
 fn a_boolean_base_counts_integers() {
     let refine = |base, constraints| Schema::Refine {
-        base: Box::new(base),
+        base: Arc::new(base),
         constraints,
     };
     let open_unit = vec![
         Constraint::Gt(OperandIx::new(0)),
         Constraint::Lt(OperandIx::new(1)),
     ];
-    assert!(refine(Schema::Bool, open_unit).is_empty_with(&Adjacent, &[]));
+    assert!(refine(Schema::Bool, open_unit.into()).is_empty_with(&Adjacent, &[]));
     // A dense base is not bounded to the integers and stays inhabited.
     let dense = vec![
         Constraint::Gt(OperandIx::new(0)),
         Constraint::Lt(OperandIx::new(1)),
     ];
-    assert!(!refine(Schema::Float, dense).is_empty_with(&Adjacent, &[]));
+    assert!(!refine(Schema::Float, dense.into()).is_empty_with(&Adjacent, &[]));
 }
 
 #[test]
@@ -1322,11 +1351,11 @@ fn tighter_refinement_bounds_subtype_looser_ones_through_the_oracle() {
     // refinement a subtype of a refinement with a looser one, even when the
     // constraints are not identical (so the verbatim path does not apply).
     let refine = |constraints| Schema::Refine {
-        base: Box::new(Schema::Int),
+        base: Arc::new(Schema::Int),
         constraints,
     };
-    let tight = refine(vec![Constraint::Ge(OperandIx::new(5))]);
-    let loose = refine(vec![Constraint::Ge(OperandIx::new(3))]);
+    let tight = refine(vec![Constraint::Ge(OperandIx::new(5))].into());
+    let loose = refine(vec![Constraint::Ge(OperandIx::new(3))].into());
     assert!(tight.is_subtype_of_under(&loose, &ByIndex, &[]));
     assert!(!loose.is_subtype_of_under(&tight, &ByIndex, &[]));
 }
@@ -1352,20 +1381,26 @@ fn equal_bounds_keep_the_strict_end_when_narrowing() {
     // the lower bound would relax to Ge(5) and the range {5} would look
     // inhabited, so this pins the strictness combination.
     let refine = |constraints| Schema::Refine {
-        base: Box::new(Schema::Int),
+        base: Arc::new(Schema::Int),
         constraints,
     };
-    let empty = Schema::Intersection(vec![
-        refine(vec![Constraint::Ge(OperandIx::new(5))]),
-        refine(vec![Constraint::Gt(OperandIx::new(5))]),
-        refine(vec![Constraint::Le(OperandIx::new(5))]),
-    ]);
+    let empty = Schema::Intersection(
+        vec![
+            refine(vec![Constraint::Ge(OperandIx::new(5))].into()),
+            refine(vec![Constraint::Gt(OperandIx::new(5))].into()),
+            refine(vec![Constraint::Le(OperandIx::new(5))].into()),
+        ]
+        .into(),
+    );
     assert!(empty.is_empty_with(&ByIndex, &[]));
     // Both bounds non-strict: the singleton {5} is inhabited.
-    let inhabited = Schema::Intersection(vec![
-        refine(vec![Constraint::Ge(OperandIx::new(5))]),
-        refine(vec![Constraint::Le(OperandIx::new(5))]),
-    ]);
+    let inhabited = Schema::Intersection(
+        vec![
+            refine(vec![Constraint::Ge(OperandIx::new(5))].into()),
+            refine(vec![Constraint::Le(OperandIx::new(5))].into()),
+        ]
+        .into(),
+    );
     assert!(!inhabited.is_empty_with(&ByIndex, &[]));
 }
 
@@ -1373,17 +1408,23 @@ fn equal_bounds_keep_the_strict_end_when_narrowing() {
 fn a_union_of_disjoint_complements_simplifies_to_the_top() {
     // De Morgan: ¬A ∪ ¬B = ¬(A ∩ B), which is ⊤ when A and B are disjoint. int
     // and str are disjoint, so their complements cover the universe.
-    let disjoint = Schema::Union(vec![
-        Schema::Complement(Box::new(Schema::Int)),
-        Schema::Complement(Box::new(Schema::Str)),
-    ]);
+    let disjoint = Schema::Union(
+        vec![
+            Schema::Complement(Arc::new(Schema::Int)),
+            Schema::Complement(Arc::new(Schema::Str)),
+        ]
+        .into(),
+    );
     assert_eq!(disjoint.simplify(), Schema::ANYTHING);
     // bool is a subtype of int, so int and bool overlap and their complements
     // do not cover the universe.
-    let overlapping = Schema::Union(vec![
-        Schema::Complement(Box::new(Schema::Int)),
-        Schema::Complement(Box::new(Schema::Bool)),
-    ]);
+    let overlapping = Schema::Union(
+        vec![
+            Schema::Complement(Arc::new(Schema::Int)),
+            Schema::Complement(Arc::new(Schema::Bool)),
+        ]
+        .into(),
+    );
     assert_ne!(overlapping.simplify(), Schema::ANYTHING);
 }
 
@@ -1394,11 +1435,11 @@ fn a_union_of_disjoint_complements_simplifies_to_the_top() {
 fn an_empty_member_with_an_opaque_region_does_not_decide_the_union() {
     // A refinement over an empty base is empty with an unknown region.
     let emptied = Schema::Refine {
-        base: Box::new(Schema::Intersection(vec![Schema::Int, Schema::Str])),
-        constraints: vec![Constraint::MinLen(1)],
+        base: Arc::new(Schema::Intersection(vec![Schema::Int, Schema::Str].into())),
+        constraints: vec![Constraint::MinLen(1)].into(),
     };
     assert!(emptied.is_empty());
-    let union = Schema::Union(vec![emptied, Schema::Str]);
+    let union = Schema::Union(vec![emptied, Schema::Str].into());
     assert!(!union.is_empty());
 }
 
@@ -1408,16 +1449,16 @@ fn an_empty_member_with_an_opaque_region_does_not_decide_the_union() {
 #[test]
 fn a_reference_on_the_left_is_read_through_its_body_against_any_right_side() {
     let narrowed = Schema::Refine {
-        base: Box::new(Schema::Int),
-        constraints: vec![Constraint::Ge(OperandIx::new(0))],
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
     };
     let defs = vec![narrowed.clone()];
     let reference = Schema::Ref(DefIx::new(0));
     assert!(reference.is_subtype_of_under(&narrowed, &NoLeafRelations, &defs));
     // And through nothing else: a bound the body does not carry is not entailed.
     let other = Schema::Refine {
-        base: Box::new(Schema::Int),
-        constraints: vec![Constraint::Gt(OperandIx::new(0))],
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Gt(OperandIx::new(0))].into(),
     };
     assert!(!reference.is_subtype_of_under(&other, &NoLeafRelations, &defs));
 }
@@ -1443,8 +1484,8 @@ fn the_union_rule_asks_the_oracle_only_about_an_instance() {
     // A subject the region partition cannot settle, so the union rule is the
     // one that answers.
     let narrowed = Schema::Refine {
-        base: Box::new(Schema::Int),
-        constraints: vec![Constraint::MinLen(1)],
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::MinLen(1)].into(),
     };
     assert!(!narrowed.is_subtype_of_under(&union, &BelowAnyUnion, &[]));
     assert!(Schema::Instance(ClassIx::new(0)).is_subtype_of_under(&union, &BelowAnyUnion, &[]));
@@ -1458,10 +1499,10 @@ fn a_meet_with_a_recursive_schema_is_decided_by_one_unfolding() {
         Schema::Int,
         Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
     ])];
-    let meet = Schema::Intersection(vec![Schema::Ref(DefIx::new(0)), Schema::Bytes]);
+    let meet = Schema::Intersection(vec![Schema::Ref(DefIx::new(0)), Schema::Bytes].into());
     assert!(meet.is_empty_under(&defs));
     // And the unfolding is sound in the other direction: a kind the body does
     // admit is not proven disjoint.
-    let meet = Schema::Intersection(vec![Schema::Ref(DefIx::new(0)), Schema::Int]);
+    let meet = Schema::Intersection(vec![Schema::Ref(DefIx::new(0)), Schema::Int].into());
     assert!(!meet.is_empty_under(&defs));
 }

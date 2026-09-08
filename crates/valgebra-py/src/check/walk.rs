@@ -323,7 +323,7 @@ fn check_seq(
         SeqKind::List => ("list", "list_type", "list_length"),
         SeqKind::Tuple => ("tuple", "tuple_type", "tuple_length"),
     };
-    let (prefix, tail) = (shape.prefix.as_slice(), shape.tail.as_deref());
+    let (prefix, tail) = (&shape.prefix[..], shape.tail.as_deref());
     match (container, value) {
         (SeqKind::List, Value::Py(v)) => {
             let Ok(list) = v.cast::<PyList>() else {
@@ -1119,7 +1119,7 @@ impl BranchLabels {
 fn push_branch_label(schema: &Schema, ctx: Ctx<'_>, py: Python<'_>, out: &mut BranchLabels) {
     match schema {
         Schema::Union(members) => {
-            for member in members {
+            for member in members.iter() {
                 push_branch_label(member, ctx, py, out);
             }
         }

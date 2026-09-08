@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 use crate::check::index::ValidatorIndex;
 use crate::check::{WalkMode, WalkState, build_index};
@@ -287,13 +289,16 @@ fn a_union_names_its_branches_by_their_constants() {
             .iter()
             .map(|name| PyString::new(py, name).into_any().unbind())
             .collect();
-        let table = Schema::Union(vec![
-            Schema::Literal(ConstIx::new(0)),
-            Schema::Literal(ConstIx::new(1)),
-        ]);
+        let table = Schema::Union(
+            vec![
+                Schema::Literal(ConstIx::new(0)),
+                Schema::Literal(ConstIx::new(1)),
+            ]
+            .into(),
+        );
         // Nested, which is the shape `Literal[...]` beside another branch
         // builds: the inner union's members are the branches, not the union.
-        let schema = Schema::Union(vec![table, Schema::Int]);
+        let schema = Schema::Union(vec![table, Schema::Int].into());
         let index = build_index(py, &schema, &[], &pool);
         let state = WalkState::new();
         let ctx = Ctx {
@@ -337,7 +342,7 @@ fn a_meet_stops_at_the_member_that_rejects_the_value() {
         let object = Schema::meet([
             Schema::Instance(ClassIx::new(0)),
             Schema::AttrRecord {
-                fields: vec![field("x", Schema::Int, true)],
+                fields: vec![field("x", Schema::Int, true)].into(),
             },
         ]);
 
@@ -363,7 +368,7 @@ fn a_meet_stops_at_the_member_that_rejects_the_value() {
         // Two members that each fail inside the value both report: neither
         // rejected the value itself, so neither silences the other.
         let deep = |element| Schema::list(SeqShape::homogeneous(element));
-        let both = Schema::Intersection(vec![deep(Schema::Int), deep(Schema::Bool)]);
+        let both = Schema::Intersection(vec![deep(Schema::Int), deep(Schema::Bool)].into());
         let list = PyList::new(py, [PyString::new(py, "a")]).expect("list");
         let (ok, violations) = explain(py, &both, &list.into_any(), &[], &[]);
         assert!(!ok);
@@ -371,7 +376,7 @@ fn a_meet_stops_at_the_member_that_rejects_the_value() {
 
         // And a member that rejects the value itself stops the rest even
         // when no class is involved.
-        let scalars = Schema::Intersection(vec![Schema::Int, Schema::Str]);
+        let scalars = Schema::Intersection(vec![Schema::Int, Schema::Str].into());
         let number = PyFloat::new(py, 1.5).into_any();
         let (ok, violations) = explain(py, &scalars, &number, &[], &[]);
         assert!(!ok);
@@ -398,14 +403,18 @@ fn a_union_names_a_class_branch_by_its_class() {
                     name: "x".into(),
                     schema: Schema::Int,
                     required: true,
-                }],
+                }]
+                .into(),
             },
         ]);
-        let schema = Schema::Union(vec![
-            object,
-            Schema::Instance(ClassIx::new(1)),
-            Schema::meet([Schema::Int, Schema::Str]),
-        ]);
+        let schema = Schema::Union(
+            vec![
+                object,
+                Schema::Instance(ClassIx::new(1)),
+                Schema::meet([Schema::Int, Schema::Str]),
+            ]
+            .into(),
+        );
         let index = build_index(py, &schema, &[], &pool);
         let state = WalkState::new();
         let ctx = Ctx {
@@ -655,8 +664,8 @@ fn a_violation_names_the_constraint_the_value_failed() {
         let pool = vec![PyInt::new(py, 10).into_any().unbind()];
         let ten = OperandIx::new(0);
         let refine = |base: Schema, constraint: Constraint| Schema::Refine {
-            base: Box::new(base),
-            constraints: vec![constraint],
+            base: Arc::new(base),
+            constraints: vec![constraint].into(),
         };
         let int = |n: i64| PyInt::new(py, n).into_any();
         let text = |s: &str| PyString::new(py, s).into_any();
@@ -706,24 +715,23 @@ fn the_boolean_combinators_compose_the_member_sets() {
         let text = PyString::new(py, "x").into_any();
         let float = PyFloat::new(py, 1.5).into_any();
 
-        let union = Schema::Union(vec![Schema::Int, Schema::Str]);
+        let union = Schema::Union(vec![Schema::Int, Schema::Str].into());
         case(py, &union, &int, true);
         case(py, &union, &text, true);
         case(py, &union, &float, false);
 
-        let intersection = Schema::Intersection(vec![
-            Schema::Int,
-            Schema::Complement(Box::new(Schema::Bool)),
-        ]);
+        let intersection = Schema::Intersection(
+            vec![Schema::Int, Schema::Complement(Arc::new(Schema::Bool))].into(),
+        );
         case(py, &intersection, &int, true);
         let truth = PyBool::new(py, true).to_owned().into_any();
         case(py, &intersection, &truth, false);
 
-        let complement = Schema::Complement(Box::new(Schema::Int));
+        let complement = Schema::Complement(Arc::new(Schema::Int));
         case(py, &complement, &int, false);
         case(py, &complement, &text, true);
         // Double negation returns the original set.
-        let doubled = Schema::Complement(Box::new(complement));
+        let doubled = Schema::Complement(Arc::new(complement));
         case(py, &doubled, &int, true);
         case(py, &doubled, &text, false);
     });
@@ -735,8 +743,8 @@ fn a_refinement_narrows_its_base_by_every_constraint() {
         let five = PyInt::new(py, 5i64).into_any();
         let pool = vec![five.clone().unbind()];
         let refine = |constraints: Vec<Constraint>| Schema::Refine {
-            base: Box::new(Schema::Int),
-            constraints,
+            base: Arc::new(Schema::Int),
+            constraints: constraints.into(),
         };
         let int = |n: i64| PyInt::new(py, n).into_any();
 
@@ -765,8 +773,8 @@ fn a_refinement_narrows_its_base_by_every_constraint() {
         assert!(!decide(py, &multiple, &int(11), &pool, &[]));
 
         let sized = Schema::Refine {
-            base: Box::new(Schema::Str),
-            constraints: vec![Constraint::MinLen(2), Constraint::MaxLen(3)],
+            base: Arc::new(Schema::Str),
+            constraints: vec![Constraint::MinLen(2), Constraint::MaxLen(3)].into(),
         };
         for (text, want) in [("a", false), ("ab", true), ("abc", true), ("abcd", false)] {
             let value = PyString::new(py, text).into_any();
@@ -775,8 +783,8 @@ fn a_refinement_narrows_its_base_by_every_constraint() {
 
         // A pattern is anchored: `re.fullmatch` semantics, not a search.
         let pattern = Schema::Refine {
-            base: Box::new(Schema::Str),
-            constraints: vec![Constraint::Regex("a+".to_owned())],
+            base: Arc::new(Schema::Str),
+            constraints: vec![Constraint::Regex("a+".to_owned())].into(),
         };
         for (text, want) in [("a", true), ("aaa", true), ("ab", false), ("ba", false)] {
             let value = PyString::new(py, text).into_any();
@@ -797,17 +805,20 @@ fn a_refinement_narrows_its_base_by_every_constraint() {
 fn a_reference_unfolds_its_definition_and_a_cycle_is_refused() {
     Python::attach(|py| {
         // `T = None | {"next": T}`: a finite chain is a member.
-        let defs = vec![Schema::Union(vec![
-            Schema::NoneType,
-            Schema::record(
-                vec![Field {
-                    name: "next".into(),
-                    schema: Schema::Ref(DefIx::new(0)),
-                    required: true,
-                }],
-                Openness::Closed,
-            ),
-        ])];
+        let defs = vec![Schema::Union(
+            vec![
+                Schema::NoneType,
+                Schema::record(
+                    vec![Field {
+                        name: "next".into(),
+                        schema: Schema::Ref(DefIx::new(0)),
+                        required: true,
+                    }],
+                    Openness::Closed,
+                ),
+            ]
+            .into(),
+        )];
         let schema = Schema::Ref(DefIx::new(0));
 
         let none = py.None().into_bound(py);
@@ -919,7 +930,10 @@ fn an_attribute_record_checks_the_class_then_every_attribute() {
                 Schema::AttrRecord { fields },
             ])
         };
-        let schema = object(0, vec![field("x", Schema::Int), field("y", Schema::Int)]);
+        let schema = object(
+            0,
+            vec![field("x", Schema::Int), field("y", Schema::Int)].into(),
+        );
 
         let good = point_class.call1((1i64, 2i64)).expect("Point(1, 2)");
         assert!(decide(py, &schema, &good, &pool, &[]));
@@ -937,7 +951,7 @@ fn an_attribute_record_checks_the_class_then_every_attribute() {
         assert!(!decide(py, &schema, &impostor, &pool, &[]));
 
         // A missing attribute is a rejection, not a raise.
-        let missing = object(1, vec![field("absent", Schema::Int)]);
+        let missing = object(1, vec![field("absent", Schema::Int)].into());
         let bare = bare_class.call0().expect("NoAttrs()");
         assert!(!decide(py, &missing, &bare, &pool, &[]));
 
@@ -955,7 +969,8 @@ fn an_attribute_record_checks_the_class_then_every_attribute() {
                 name: "absent".into(),
                 schema: Schema::Int,
                 required: false,
-            }],
+            }]
+            .into(),
         };
         assert!(decide(py, &optional, &bare, &pool, &[]));
         bare.setattr("absent", "not an int")
@@ -1183,7 +1198,7 @@ fn a_union_explains_the_branch_that_descended_furthest() {
         // the deeper branch's, so a reader is shown the branch the value was
         // closest to rather than every branch's noise.
         let deep = Schema::record(vec![field("x", Schema::Int, true)], Openness::Closed);
-        let schema = Schema::Union(vec![Schema::Int, deep]);
+        let schema = Schema::Union(vec![Schema::Int, deep].into());
         let value = PyDict::new(py);
         value.set_item("x", PyString::new(py, "a")).expect("set");
         let (ok, violations) = explain(py, &schema, &value.into_any(), &[], &[]);
@@ -1194,7 +1209,7 @@ fn a_union_explains_the_branch_that_descended_furthest() {
 
         // No branch makes any progress: a single union error, not two flat
         // mismatches. This is the arm the depth comparison selects between.
-        let flat = Schema::Union(vec![Schema::Int, Schema::Str]);
+        let flat = Schema::Union(vec![Schema::Int, Schema::Str].into());
         let number = PyFloat::new(py, 1.5).into_any();
         let (ok, violations) = explain(py, &flat, &number, &[], &[]);
         assert!(!ok);
@@ -1244,7 +1259,7 @@ fn a_union_explains_the_branch_that_descended_furthest() {
             vec![field("p", Schema::Int, true), field("q", Schema::Int, true)],
             Openness::Closed,
         );
-        let union_wide = Schema::Union(vec![Schema::Int, wide]);
+        let union_wide = Schema::Union(vec![Schema::Int, wide].into());
         let wide_value = PyDict::new(py);
         for key in ["p", "q"] {
             wide_value
@@ -1260,7 +1275,7 @@ fn a_union_explains_the_branch_that_descended_furthest() {
         // A tie keeps the earliest branch, so the choice is deterministic.
         let left = Schema::record(vec![field("a", Schema::Int, true)], Openness::Closed);
         let right = Schema::record(vec![field("b", Schema::Int, true)], Openness::Closed);
-        let tied = Schema::Union(vec![left, right]);
+        let tied = Schema::Union(vec![left, right].into());
         let value = PyDict::new(py);
         value.set_item("a", PyString::new(py, "s")).expect("set");
         value.set_item("b", PyString::new(py, "s")).expect("set");
@@ -1469,8 +1484,8 @@ fn a_raising_comparison_folds_and_a_fatal_signal_does_not() {
         // The same split at a length bound, which reaches the value through
         // `__len__` rather than `__eq__`.
         let sized = Schema::Refine {
-            base: Box::new(Schema::ANYTHING),
-            constraints: vec![Constraint::MinLen(1)],
+            base: Arc::new(Schema::ANYTHING),
+            constraints: vec![Constraint::MinLen(1)].into(),
         };
         let no_len = module.getattr("NoLen").expect("NoLen").call0().expect("()");
         let (ok, fatal) = decide_with_fatal(py, &sized, &no_len, &[]);
@@ -1501,8 +1516,8 @@ fn a_predicate_constraint_runs_the_pooled_callable() {
         let is_even = module.getattr("is_even").expect("is_even");
         let pool = vec![is_even.unbind()];
         let schema = Schema::Refine {
-            base: Box::new(Schema::Int),
-            constraints: vec![Constraint::Predicate(PredIx::new(0))],
+            base: Arc::new(Schema::Int),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
         };
         assert!(decide(
             py,
@@ -1664,7 +1679,7 @@ fn a_fatal_signal_propagates_from_an_attribute_and_from_a_predicate() {
         let attrs = Schema::meet([
             Schema::Instance(ClassIx::new(0)),
             Schema::AttrRecord {
-                fields: vec![field("missing", Schema::Int, true)],
+                fields: vec![field("missing", Schema::Int, true)].into(),
             },
         ]);
         let pool = vec![base.clone().unbind()];
@@ -1682,8 +1697,8 @@ fn a_fatal_signal_propagates_from_an_attribute_and_from_a_predicate() {
             let predicate = module.getattr(name).expect("callable");
             let pool = vec![predicate.unbind()];
             let schema = Schema::Refine {
-                base: Box::new(Schema::Int),
-                constraints: vec![Constraint::Predicate(PredIx::new(0))],
+                base: Arc::new(Schema::Int),
+                constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
             };
             assert_eq!(
                 decide_with_fatal(py, &schema, &one, &pool),
@@ -1703,13 +1718,16 @@ fn recursion_deeper_than_the_bound_is_refused() {
         // `T = None | {"next": T}`. A chain the walk can carry is a member; a
         // chain past the guard's depth bound is refused rather than recursed
         // into, because the walk descends one native frame per level.
-        let defs = vec![Schema::Union(vec![
-            Schema::NoneType,
-            Schema::record(
-                vec![field("next", Schema::Ref(DefIx::new(0)), true)],
-                Openness::Closed,
-            ),
-        ])];
+        let defs = vec![Schema::Union(
+            vec![
+                Schema::NoneType,
+                Schema::record(
+                    vec![field("next", Schema::Ref(DefIx::new(0)), true)],
+                    Openness::Closed,
+                ),
+            ]
+            .into(),
+        )];
         let schema = Schema::Ref(DefIx::new(0));
 
         let chain = |depth: usize| {

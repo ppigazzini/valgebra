@@ -11,6 +11,8 @@
 //! iteration count is large. Keep the corpus and `ITERATIONS` fixed; changing
 //! either moves the budget and requires re-recording it.
 
+use std::sync::Arc;
+
 use valgebra_core::{ConstIx, DefShift, Field, Openness, PoolShift, Schema, SeqShape};
 
 /// Iterations per operation. Large enough that startup is a rounding error.
@@ -18,17 +20,23 @@ const ITERATIONS: usize = 2_000;
 
 /// A redundant Boolean expression exercising every simplifier rewrite.
 fn boolean_corpus(depth: usize) -> Schema {
-    let mut node = Schema::Union(vec![
-        Schema::Int,
-        Schema::Int,
-        Schema::Nothing,
-        Schema::Complement(Box::new(Schema::Complement(Box::new(Schema::Str)))),
-    ]);
+    let mut node = Schema::Union(
+        vec![
+            Schema::Int,
+            Schema::Int,
+            Schema::Nothing,
+            Schema::Complement(Arc::new(Schema::Complement(Arc::new(Schema::Str)))),
+        ]
+        .into(),
+    );
     for _ in 0..depth {
-        node = Schema::Complement(Box::new(Schema::Intersection(vec![
-            node.clone(),
-            Schema::Union(vec![Schema::Bool, Schema::ANYTHING, node]),
-        ])));
+        node = Schema::Complement(Arc::new(Schema::Intersection(
+            vec![
+                node.clone(),
+                Schema::Union(vec![Schema::Bool, Schema::ANYTHING, node].into()),
+            ]
+            .into(),
+        )));
     }
     node
 }

@@ -14,6 +14,8 @@
 //! law suite. Duplicating it here would only cover the sub-fragment the fuzzer's
 //! wide generator is built to exceed, so the split is intentional, not a gap.
 
+use std::sync::Arc;
+
 use arbitrary::{Arbitrary, Result, Unstructured};
 use valgebra_core::{
     ClassIx, ConstIx, Constraint, Field, MapClause, OperandIx, PredIx, Schema, SeqKind, SeqShape,
@@ -74,11 +76,14 @@ fn build_shape(u: &mut Unstructured, depth: u32) -> Result<SeqShape> {
         prefix.push(build_schema(u, element_depth)?);
     }
     let tail = if u.arbitrary::<bool>()? {
-        Some(Box::new(build_schema(u, element_depth)?))
+        Some(Arc::new(build_schema(u, element_depth)?))
     } else {
         None
     };
-    Ok(SeqShape { prefix, tail })
+    Ok(SeqShape {
+        prefix: prefix.into(),
+        tail,
+    })
 }
 
 /// Build one schema from the fuzzer's bytes, bounded by `depth` recursion levels.
@@ -110,7 +115,7 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
             for _ in 0..n {
                 members.push(build_schema(u, depth - 1)?);
             }
-            Schema::Union(members)
+            Schema::Union(members.into())
         }
         11 => {
             let n = 1 + count(u, 3)?;
@@ -118,17 +123,20 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
             for _ in 0..n {
                 members.push(build_schema(u, depth - 1)?);
             }
-            Schema::Intersection(members)
+            Schema::Intersection(members.into())
         }
-        12 => Schema::Complement(Box::new(build_schema(u, depth - 1)?)),
+        12 => Schema::Complement(Arc::new(build_schema(u, depth - 1)?)),
         13 => {
-            let base = Box::new(build_schema(u, depth - 1)?);
+            let base = Arc::new(build_schema(u, depth - 1)?);
             let n = count(u, 3)?;
             let mut constraints = Vec::with_capacity(n);
             for _ in 0..n {
                 constraints.push(build_constraint(u)?);
             }
-            Schema::Refine { base, constraints }
+            Schema::Refine {
+                base,
+                constraints: constraints.into(),
+            }
         }
         14 => Schema::set(build_schema(u, depth - 1)?),
         15 => Schema::frozen_set(build_schema(u, depth - 1)?),
@@ -169,7 +177,10 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
                     value: build_schema(u, depth - 1)?,
                 });
             }
-            Schema::KeyedMap { fields, defaults }
+            Schema::KeyedMap {
+                fields: fields.into(),
+                defaults: defaults.into(),
+            }
         }
     })
 }
@@ -220,7 +231,7 @@ pub fn check_relations(a: &Schema, b: &Schema) {
             "empty {a:?} not below {b:?}: the empty set is a subset of every set"
         );
     }
-    if Schema::Complement(Box::new(b.clone())).is_empty() {
+    if Schema::Complement(Arc::new(b.clone())).is_empty() {
         assert!(
             a.is_subtype_of(b),
             "{a:?} not below universal {b:?}: every set is a subset of the universe"
@@ -255,7 +266,7 @@ mod tests {
         match schema {
             Schema::KeyedMap { fields, defaults } => {
                 let mut seen = std::collections::HashSet::new();
-                for field in fields {
+                for field in fields.iter() {
                     assert!(
                         seen.insert(&*field.name),
                         "duplicate field name {:?} in {schema:?}",
@@ -263,7 +274,7 @@ mod tests {
                     );
                     assert_unique_field_names(&field.schema);
                 }
-                for clause in defaults {
+                for clause in defaults.iter() {
                     assert_unique_field_names(&clause.key);
                     assert_unique_field_names(&clause.value);
                 }

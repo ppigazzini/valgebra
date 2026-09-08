@@ -354,7 +354,7 @@ impl Schema {
             Schema::Anything(_) => Region::ALL,
             Schema::Union(members) => {
                 let mut acc = Regions::UNION_UNIT;
-                for member in members {
+                for member in members.iter() {
                     acc = acc.union(member.region_set());
                     if acc.is_absorbing() {
                         return acc;
@@ -364,7 +364,7 @@ impl Schema {
             }
             Schema::Intersection(members) => {
                 let mut acc = Regions::MEET_UNIT;
-                for member in members {
+                for member in members.iter() {
                     acc = acc.intersect(member.region_set());
                     if acc.is_absorbing() {
                         return acc;
@@ -690,7 +690,7 @@ impl Schema {
             Schema::Union(members) => {
                 let mut verdict = Verdict::Empty;
                 let mut region = Regions::UNION_UNIT;
-                for m in members {
+                for m in members.iter() {
                     let (member, member_region) =
                         m.empty_and_region(oracle, defs, visiting, budget);
                     verdict = Verdict::any([verdict, member].into_iter());
@@ -865,7 +865,7 @@ impl Schema {
         if self.disjoint_with(other, cx.oracle) {
             return true;
         }
-        Schema::Intersection(vec![self.clone(), other.clone()]).is_empty_rec(
+        Schema::Intersection(vec![self.clone(), other.clone()].into()).is_empty_rec(
             cx.oracle,
             cx.defs,
             &mut Vec::new(),
@@ -1564,10 +1564,12 @@ pub(crate) fn denotes_a_set_within(
             Schema::Coll { element: inner, .. } | Schema::Complement(inner) => {
                 pending.push(inner);
             }
-            Schema::Union(members) | Schema::Intersection(members) => pending.extend(members),
+            Schema::Union(members) | Schema::Intersection(members) => {
+                pending.extend(members.iter());
+            }
             Schema::KeyedMap { fields, defaults } => {
                 pending.extend(fields.iter().map(|field| &field.schema));
-                for clause in defaults {
+                for clause in defaults.iter() {
                     pending.push(&clause.key);
                     pending.push(&clause.value);
                 }
@@ -1610,7 +1612,7 @@ fn keyed_map_meet_empty(
     let maps: Vec<(&[Field], bool)> = members
         .iter()
         .filter_map(|member| match member {
-            Schema::KeyedMap { fields, defaults } => Some((fields.as_slice(), defaults.is_empty())),
+            Schema::KeyedMap { fields, defaults } => Some((&fields[..], defaults.is_empty())),
             _ => None,
         })
         .collect();
@@ -1648,7 +1650,7 @@ fn keyed_map_meet_empty(
 /// so there is no tuple of components to split over. An empty prefix with no
 /// tail is the nullary product.
 fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
-    shape.tail.is_none().then(|| shape.prefix.clone())
+    shape.tail.is_none().then(|| shape.prefix.to_vec())
 }
 
 /// Whether the product `components` is contained in the union of the products in
@@ -1790,7 +1792,7 @@ fn intersection_bounds_unsatisfiable(members: &[Schema], oracle: &dyn LeafRelati
     let merged: Vec<&Constraint> = members
         .iter()
         .filter_map(|m| match m {
-            Schema::Refine { constraints, .. } => Some(constraints.as_slice()),
+            Schema::Refine { constraints, .. } => Some(&constraints[..]),
             _ => None,
         })
         .flatten()

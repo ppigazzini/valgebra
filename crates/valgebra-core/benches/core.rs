@@ -8,6 +8,7 @@
 //! Python; this harness isolates the work that is independent of `PyO3`.
 
 use std::hint::black_box;
+use std::sync::Arc;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use valgebra_core::descr::classes::Class;
@@ -20,17 +21,23 @@ use valgebra_core::{
 /// nested unions and intersections, duplicate members, top/bottom identities,
 /// and double-negated complements.
 fn boolean_corpus(depth: usize) -> Schema {
-    let mut node = Schema::Union(vec![
-        Schema::Int,
-        Schema::Int,
-        Schema::Nothing,
-        Schema::Complement(Box::new(Schema::Complement(Box::new(Schema::Str)))),
-    ]);
+    let mut node = Schema::Union(
+        vec![
+            Schema::Int,
+            Schema::Int,
+            Schema::Nothing,
+            Schema::Complement(Arc::new(Schema::Complement(Arc::new(Schema::Str)))),
+        ]
+        .into(),
+    );
     for _ in 0..depth {
-        node = Schema::Complement(Box::new(Schema::Intersection(vec![
-            node.clone(),
-            Schema::Union(vec![Schema::Bool, Schema::ANYTHING, node]),
-        ])));
+        node = Schema::Complement(Arc::new(Schema::Intersection(
+            vec![
+                node.clone(),
+                Schema::Union(vec![Schema::Bool, Schema::ANYTHING, node].into()),
+            ]
+            .into(),
+        )));
     }
     node
 }
@@ -167,12 +174,12 @@ impl Constants for Indexed {
 fn bench_lowering(c: &mut Criterion) {
     let list = |element| Schema::list(SeqShape::homogeneous(element));
     let pattern = |text: &str| Schema::Refine {
-        base: Box::new(Schema::Str),
-        constraints: vec![Constraint::Regex(text.to_owned())],
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex(text.to_owned())].into(),
     };
     let step = |at| Schema::Refine {
-        base: Box::new(Schema::Int),
-        constraints: vec![Constraint::MultipleOf(OperandIx::new(at))],
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::MultipleOf(OperandIx::new(at))].into(),
     };
 
     // The wins: each is a difference the structural rules decline and the sets
@@ -219,9 +226,9 @@ fn bench_lowering(c: &mut Criterion) {
     // is the shape that spent a third of a second and then refused because the
     // result was too wide.
     let members: Vec<Schema> = (0..4).map(|_| nested_records(3)).collect();
-    let whole = Schema::Union(members.clone());
-    let siblings = Schema::Union(members.into_iter().skip(1).collect());
-    let difference = Schema::Intersection(vec![whole, siblings.complement()]);
+    let whole = Schema::Union(members.clone().into());
+    let siblings = Schema::Union(members.into_iter().skip(1).collect::<Vec<_>>().into());
+    let difference = Schema::Intersection(vec![whole, siblings.complement()].into());
     c.bench_function("lower_sibling_union_difference_unheld", |b| {
         b.iter(|| lower_within(Bounds::UNHELD, black_box(&difference), &Indexed));
     });

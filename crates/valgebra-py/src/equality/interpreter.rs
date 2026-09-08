@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 /// A node built around another, so one pair can be asked of every container.
@@ -156,7 +158,7 @@ fn a_constant_inside_any_container_is_read_through_its_slot() {
         };
         assert_ne!(left, right, "the two sides must differ structurally");
         let wrappers: [(&str, Wrap); 8] = [
-            ("complement", |s| Schema::Complement(Box::new(s))),
+            ("complement", |s| Schema::Complement(Arc::new(s))),
             ("set", |s| Schema::set(s)),
             ("frozenset", |s| Schema::frozen_set(s)),
             ("homogeneous list", |s| {
@@ -344,20 +346,20 @@ fn the_hash_is_blind_to_the_slot_and_to_the_order() {
         );
         // Order is not part of a union, so the fold over its members is not
         // allowed to see one.
-        let left = Schema::Union(vec![Schema::Int, Schema::Str]);
-        let right = Schema::Union(vec![Schema::Str, Schema::Int]);
+        let left = Schema::Union(vec![Schema::Int, Schema::Str].into());
+        let right = Schema::Union(vec![Schema::Str, Schema::Int].into());
         assert_eq!(digest(&left, &[]), digest(&right, &[]));
         // And a hash that ignored everything would pass the two lines above
         // having read nothing.
         assert_ne!(digest(&Schema::Int, &[]), digest(&Schema::Str, &[]));
         assert_ne!(
             digest(&left, &[]),
-            digest(&Schema::Union(vec![Schema::Int]), &[])
+            digest(&Schema::Union(vec![Schema::Int].into()), &[])
         );
         // What a complement holds is part of its shape, and so is which collection
         // kind a node names.
-        let not_int = Schema::Complement(Box::new(Schema::Int));
-        let not_str = Schema::Complement(Box::new(Schema::Str));
+        let not_int = Schema::Complement(Arc::new(Schema::Int));
+        let not_str = Schema::Complement(Arc::new(Schema::Str));
         assert_ne!(digest(&not_int, &[]), digest(&not_str, &[]));
         assert_ne!(digest(&not_int, &[]), digest(&Schema::Int, &[]));
         assert_ne!(
