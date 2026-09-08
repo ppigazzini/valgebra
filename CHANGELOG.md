@@ -94,6 +94,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a bound over floats is a set the descriptor can hold
 - fix: build the error model when it is asked for
 - perf: a field name is shared rather than copied into every rebuilt schema
+- perf: size a reopened record's field list from the list it rebuilds
 
 -->
 

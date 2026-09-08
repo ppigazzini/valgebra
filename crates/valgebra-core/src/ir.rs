@@ -1700,12 +1700,25 @@ impl Schema {
             // *closed* record is a record, and the empty clause list is what says
             // so; a mapping has a clause and no field.
             Schema::KeyedMap { fields, defaults } if !fields.is_empty() || defaults.is_empty() => {
-                Schema::keyed_map(
+                // Sized from the field list rather than collected into a
+                // vector that grows. A filter cannot say in advance how many
+                // elements survive it, so `collect` starts a record's fields at
+                // capacity zero and reallocates its way up, copying every field
+                // it has built so far each time; a wide record pays that on
+                // every pass over it. Dropping a field here is the rare case --
+                // it happens only when a name says exactly what the catch-all
+                // already says -- so the field list's own length is the right
+                // guess, and over-reserving by the one or two it drops costs a
+                // few unused slots and no allocation.
+                let mut kept = Vec::with_capacity(fields.len());
+                kept.extend(
                     fields
                         .iter()
                         .filter(|field| !already_said(field, defaults))
-                        .map(|field| field.map_schema(&|s| s.with_records_open(open)))
-                        .collect(),
+                        .map(|field| field.map_schema(&|s| s.with_records_open(open))),
+                );
+                Schema::keyed_map(
+                    kept,
                     match open {
                         Openness::Open => vec![MapClause::top()],
                         Openness::Closed => Vec::new(),
