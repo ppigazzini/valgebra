@@ -94,6 +94,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a bound over floats is a set the descriptor can hold
 - fix: build the error model when it is asked for
 - fix: a timing harness names the build it measured, and refuses a debug one -- internal
+- fix: an instruction count says how much history it is comparing -- internal
 
 -->
 

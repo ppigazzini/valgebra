@@ -22,17 +22,28 @@ Two ways to compare, and the relative one is the merge gate:
   wide enough not to flake is too wide to see a real 5% regression. That is what
   ``--against`` exists to fix, and why the merge gate uses it.
 
-Two workloads:
+Three workloads, and seven shapes across them:
 
 * The default **core** workload (`perf_workload`, pure Rust) measures the schema
   operations and is fully deterministic, so its budget is tight.
-* The **binding** workload (`--binding`) measures the membership walk over a live
-  Python value -- the shipped hot path the core workload does not reach. It embeds
-  CPython, whose startup is not a fixed instruction count, so the gate measures
-  the *difference* between two iteration counts: startup cancels, leaving the
-  deterministic per-iteration walk cost. Its budget carries a wider tolerance to
-  absorb cross-interpreter FFI variance while still catching a per-node regression
-  (the ``ctx.fatal.borrow`` tax), which is far larger.
+* The **decision** workload (`--decision`) measures the three relations, which
+  the core one never calls.
+* The **binding** workload measures live Python values through the shipped
+  entry points -- the hot path the pure-Rust workloads do not reach -- in five
+  shapes: the membership walk (`--binding`), the call boundary alone
+  (`--binding-boundary`), the walk over a wide record (`--binding-record`),
+  building one from its Python spelling (`--binding-build`), and explaining a
+  failure in one (`--binding-explain`). Each is the deterministic twin of a
+  shape the comparison gate times, so a wall-clock movement there can be
+  confirmed or refuted here. They embed CPython, whose startup is not a fixed
+  instruction count, so each is measured as the *difference* between two
+  iteration counts: startup cancels, leaving the deterministic per-iteration
+  cost. Their budgets carry a wider tolerance to absorb cross-interpreter FFI
+  variance while still catching a per-node regression, which is far larger.
+
+``--against`` takes every shape named on the command line and measures them all
+against **one** build of the base: the build is minutes and a measurement is
+seconds, so shapes are cheap and invocations are not.
 
 Three refusals, because a measurement that did not happen must not read as a
 verdict:
@@ -60,10 +71,12 @@ Usage:
     python scripts/perf_gate.py --update             # re-record the core budget
     python scripts/perf_gate.py --binding            # check the binding budget
     python scripts/perf_gate.py --binding --update   # re-record it
+    python scripts/perf_gate.py --binding-build      # one of the other shapes
+    python scripts/perf_gate.py --against HEAD~1 --binding --binding-build
 
-Requires valgrind on PATH and a Rust toolchain. ``--binding`` also needs an
-embedded interpreter: the build links libpython, so run it with the interpreter's
-library directory on the loader path.
+Requires valgrind on PATH and a Rust toolchain. The binding shapes also need an
+embedded interpreter: the build links libpython, so run them with the
+interpreter's library directory on the loader path.
 """
 
 from __future__ import annotations
@@ -328,6 +341,57 @@ def resolve_rev(rev: str) -> str:
     return result.stdout.strip()
 
 
+def commits_since(sha: str, root: Path = ROOT) -> int | None:
+    """How many commits this checkout carries that the base does not.
+
+    `None` where the question cannot be answered: a shallow clone may not reach
+    the base at all, and an unrelated history has no path between the two.
+    """
+    result = subprocess.run(
+        ["git", "rev-list", "--count", f"{sha}..HEAD"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        return int(result.stdout.strip())
+    except ValueError:
+        return None
+
+
+def describe_window(count: int | None) -> tuple[str, bool]:
+    """Say how much history one comparison is covering, and whether it is a batch.
+
+    A relative gate compares two counts and applies one ceiling to the
+    difference. That ceiling is written for a *push*: one commit's worth of
+    movement, the amount a reviewer can look at. What the base actually names is
+    whatever the event carried, and a force-push, a re-pushed branch or a first
+    push of a long-lived branch make that twenty-odd commits, whose movements
+    sum -- so a regression in one is paid for by an improvement in another and
+    the gate says nothing, or the sum trips the ceiling and names no commit.
+
+    Neither reading is wrong, and they are not the same reading. This does not
+    widen the ceiling or refuse the run: it says which one is being taken, so a
+    figure read off a batch is never mistaken for a figure read off a change.
+    """
+    if count is None:
+        unknown = (
+            "window:   unknown -- the base is not reachable from this checkout, "
+            "so what the difference covers cannot be said"
+        )
+        return (unknown, True)
+    if count <= 1:
+        return (f"window:   {count} commit", False)
+    batch = (
+        f"window:   {count} commits -- a batch, so the difference below is "
+        "their sum and no single commit is named by it"
+    )
+    return (batch, True)
+
+
 def check_against_base(head: Measurement, base: Measurement, subject: str) -> int:
     """Hold this change's count to its own merge base's, measured beside it.
 
@@ -351,17 +415,24 @@ def check_against_base(head: Measurement, base: Measurement, subject: str) -> in
     return 0
 
 
-def run_relative(mode: str, rev: str) -> int:
-    """Measure this checkout and `rev` side by side, and hold the difference.
+def run_relative(modes: list[str], rev: str) -> int:
+    """Measure this checkout and `rev` side by side, and hold each difference.
 
     The base is built in a throwaway worktree with its own target directory, so
     the two builds neither share nor overwrite each other's output, and both use
     whatever toolchain is on PATH -- which is the point: an absolute budget
     compares against a number recorded on a machine that is not this one.
+
+    Several shapes are measured against **one** base build. Building the base
+    once per shape is what kept the gate to a single shape: the build is minutes
+    and the measurement is seconds, so a second shape costs almost nothing while
+    a second invocation costs another build.
+
+    The verdicts are aggregated by severity, and every shape is measured before
+    any is judged, so one regression does not hide the next one's number.
     """
     sha = resolve_rev(rev)
-    _, subject = MODES[mode]
-    head = measure_mode(mode)
+    head = {mode: measure_mode(mode) for mode in modes}
     worktree = Path(tempfile.mkdtemp(prefix="valgebra-perf-base-"))
     checkout = worktree / "tree"
     try:
@@ -370,7 +441,9 @@ def run_relative(mode: str, rev: str) -> int:
             cwd=ROOT,
             check=True,
         )
-        base = measure_mode(mode, checkout, worktree / "target")
+        base = {
+            mode: measure_mode(mode, checkout, worktree / "target") for mode in modes
+        }
     finally:
         subprocess.run(
             ["git", "worktree", "remove", "--force", str(checkout)],
@@ -379,8 +452,27 @@ def run_relative(mode: str, rev: str) -> int:
         )
         shutil.rmtree(worktree, ignore_errors=True)
 
-    print(f"comparing {subject} against {rev} ({sha[:12]})")
-    return judge_relative(head, base, subject)
+    print(f"comparing against {rev} ({sha[:12]})")
+    note, batch = describe_window(commits_since(sha))
+    print(note)
+    outcomes = []
+    for mode in modes:
+        subject = MODES[mode][1]
+        print(f"\n--- {subject}")
+        outcomes.append(judge_relative(head[mode], base[mode], subject))
+    outcome = EXIT_OK
+    if EXIT_CANNOT_RUN in outcomes:
+        outcome = EXIT_CANNOT_RUN
+    elif EXIT_FAIL in outcomes:
+        outcome = EXIT_FAIL
+    if batch and outcome == EXIT_FAIL:
+        print("\nThe ceiling is written for one commit and this reading covers")
+        print("more, so the first step is `git bisect` over the window rather")
+        print("than a repair to the tip.")
+    elif batch:
+        print("\nA pass over a batch is a pass on the sum: a regression inside it")
+        print("cancelled by an improvement beside it reads exactly like this.")
+    return outcome
 
 
 def judge_relative(head: Measurement, base: Measurement, subject: str) -> int:
@@ -485,21 +577,30 @@ def main() -> int:
     args = sys.argv[1:]
     # `--binding` keeps its meaning -- the walk -- so an existing invocation and
     # the budget recorded under it still name the same measurement.
-    flagged = [name for name in MODES if f"--{name}" in args]
-    mode = flagged[0] if flagged else "core"
+    flagged = [name for name in MODES if f"--{name}" in args] or ["core"]
     if "--against" in args:
         at = args.index("--against")
         if at + 1 >= len(args):
             print("--against needs a revision: --against origin/main")
             return EXIT_CANNOT_RUN
-        return run_relative(mode, args[at + 1])
+        # Every flagged shape against one base build, since the build is the
+        # expensive half and the shapes share it.
+        return run_relative(flagged, args[at + 1])
     update = "--update" in args
     budget = json.loads(BUDGET_FILE.read_text(encoding="utf-8"))
-    if mode in BINDING_SHAPES:
-        return run_binding(budget, mode, update=update)
-    if mode == "decision":
-        return run_decision(budget, update=update)
-    return run_core(budget, update=update)
+    outcomes = []
+    for mode in flagged:
+        if len(flagged) > 1:
+            print(f"\n--- {MODES[mode][1]}")
+        if mode in BINDING_SHAPES:
+            outcomes.append(run_binding(budget, mode, update=update))
+        elif mode == "decision":
+            outcomes.append(run_decision(budget, update=update))
+        else:
+            outcomes.append(run_core(budget, update=update))
+    if EXIT_CANNOT_RUN in outcomes:
+        return EXIT_CANNOT_RUN
+    return EXIT_FAIL if EXIT_FAIL in outcomes else EXIT_OK
 
 
 if __name__ == "__main__":

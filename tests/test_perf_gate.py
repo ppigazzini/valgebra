@@ -317,3 +317,42 @@ def test_the_merge_base_is_never_the_commit_being_measured(
     # and a comparison with itself.
     _git(upstream, "branch", "--force", "main", head)
     assert _run_step(tree, "0" * 40, "main") == parent
+
+
+def test_a_base_more_than_one_commit_back_is_read_as_a_batch(tmp_path: Path) -> None:
+    """The window a relative reading covers, said out loud.
+
+    The ceiling this gate applies is written for one push. What names the base
+    is the event, and a force-push or a first push of a long-lived branch makes
+    that twenty-odd commits, whose movements sum: a regression in one paid for
+    by an improvement in another reads as a pass, and a sum over the ceiling
+    names no commit to repair. The gate still measures and still judges -- it
+    says which of the two readings it is taking.
+    """
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    _git(tree, "init", "--quiet", "--initial-branch=main")
+    _git(tree, "config", "user.email", "gate@example.invalid")
+    _git(tree, "config", "user.name", "gate")
+    _git(tree, "commit", "--quiet", "--allow-empty", "-m", "root")
+    base = _git(tree, "rev-parse", "HEAD")
+    for step in range(26):
+        _git(tree, "commit", "--quiet", "--allow-empty", "-m", f"step {step}")
+    parent = _git(tree, "rev-parse", "HEAD~1")
+
+    assert gate.commits_since(base, root=tree) == 26
+    assert gate.commits_since(parent, root=tree) == 1
+    # A base this checkout cannot reach: a shallow clone's, or an unrelated
+    # history's. Unanswerable is not zero.
+    assert gate.commits_since("0" * 40, root=tree) is None
+
+    note, batch = gate.describe_window(26)
+    assert batch
+    assert "26 commits" in note
+    note, batch = gate.describe_window(1)
+    assert not batch
+    assert "1 commit" in note
+    assert not gate.describe_window(0)[1]
+    note, batch = gate.describe_window(None)
+    assert batch
+    assert "unknown" in note
