@@ -96,6 +96,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a timing harness names the build it measured, and refuses a debug one -- internal
 - fix: an instruction count says how much history it is comparing -- internal
 - feat: subtyping answers in three values, and the boundary keeps two -- internal
+- fix: a subject disjoint from a meet is below that meet's complement
 
 -->
 

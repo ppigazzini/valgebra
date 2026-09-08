@@ -997,7 +997,15 @@ impl Schema {
         if self.disjoint_with(other, cx.oracle) {
             return true;
         }
-        Schema::Intersection(vec![self.clone(), other.clone()].into()).is_empty_rec(
+        // Built through the meet constructor rather than as a raw node: the
+        // emptiness rule that decides most pairs compares the *members* of one
+        // intersection pairwise, and a member that is itself an intersection
+        // hides its own members from it. `tuple[int, str]` against
+        // `dict[str, int] & ~{"a": int}` was the shape that showed it -- the
+        // tuple and the dict never met, so `A <= ~B` declined for a pair whose
+        // meet `is_empty` decides, and the two relations disagreed about one
+        // question asked two ways.
+        Schema::meet_within([self.clone(), other.clone()], cx.defs).is_empty_rec(
             cx.oracle,
             cx.defs,
             &mut Vec::new(),

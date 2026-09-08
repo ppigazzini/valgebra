@@ -659,6 +659,18 @@ _DECIDED = [
         {},
         id="{a?:int}&{b?:int}=={}",
     ),
+    # A subject disjoint from a meet is below that meet's complement, which is
+    # the same question `is_empty` answers about the meet -- and the two used to
+    # disagree. The rule that decides most meets empty compares the members of
+    # one intersection pairwise, and the meet this rule builds held the second
+    # operand as a nested intersection, so the tuple and the dict inside it were
+    # never compared.
+    pytest.param(
+        "subtype",
+        tuple[int, str],
+        complement(intersection(dict[str, int], complement({"a": int}))),
+        id="tuple<=~(dict&~{a:int})",
+    ),
 ]
 
 # Known decision-completeness misses: true relations neither the rules nor the

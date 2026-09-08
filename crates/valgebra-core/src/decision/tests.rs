@@ -1629,3 +1629,32 @@ fn the_rules_refute_prove_and_decline_these() {
         Relation::Unknown
     );
 }
+
+/// A subject disjoint from a meet is below that meet's complement.
+///
+/// `A <= ~B` and `A & B = {}` are one question asked two ways, and the rules
+/// answered them differently: the meet this rule builds held `B` as a nested
+/// intersection, and the emptiness rule that decides most meets compares the
+/// members of *one* intersection pairwise, so a tuple and the dict inside the
+/// nested meet were never compared. Built through the meet constructor, the
+/// members are flattened into one list and the pair meets.
+#[test]
+fn a_subject_disjoint_from_a_meet_is_below_its_complement() {
+    let record = Schema::record(
+        vec![Field {
+            name: "a".into(),
+            schema: Schema::Int,
+            required: true,
+        }],
+        Openness::Closed,
+    );
+    let dicts = Schema::mapping(MapClause {
+        key: Schema::Str,
+        value: Schema::Int,
+    });
+    let inner = Schema::meet([dicts, record.complement()]);
+    let tuples = Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Str]));
+    // The meet is empty, so the inclusion holds; both readings must say so.
+    assert!(Schema::meet([tuples.clone(), inner.clone()]).is_empty());
+    assert!(tuples.is_subtype_of(&inner.complement()));
+}
