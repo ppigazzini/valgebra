@@ -206,15 +206,32 @@ why the rules answer first.
 ## The budget, and what exhausting it means
 
 Subtyping distributes over unions and intersections; emptiness recurses the
-structural fragment. Without interning to share equal subtrees there is no cheap
-memo, so a deeply nested Boolean combination can demand work exponential in its
-depth. The procedure bounds its own work with a counter, threaded through a whole
-top-level query so the two directions of an equivalence share it and the bound
-cannot be spent twice or escaped through a side door.
+structural fragment. A deeply nested Boolean combination can therefore demand
+work exponential in its depth unless a goal already decided can be recognised
+when it comes back — and recognising one cheaply needs *identity*, not sharing.
+The IR shares its nodes: carrying a subtree into a goal is a reference count
+([01-schema-ir.md](01-schema-ir.md)). What it does not give is one allocation per
+structurally equal subtree, so a memo would have to key on structure, which
+costs a walk of the goal to look one up. The procedure bounds its own work with
+a counter instead, threaded through a whole top-level query so the two
+directions of an equivalence share it and the bound cannot be spent twice or
+escaped through a side door.
+
+That counter is the one bound in the core that is neither a limit of the
+representation nor a shape a caller wrote ([00-architecture.md](00-architecture.md)
+groups the three), and the honest thing to say about it is what it is measured
+to reach. The ceiling is a million steps. Records nested six deep with
+union-of-literal fields decide in 1,834; a union of two hundred literals against
+one of three hundred, in 403; a fixed tuple of unions against the union of all
+its expansions, at the width where the right-hand side is a thousand nodes, in
+7,377. The step count grows with the size of the query rather than exponentially
+in its depth on every shape that has been probed, and the build limits cap that
+size, so nothing yet constructed comes within two orders of magnitude of the
+ceiling.
 
 Exhaustion returns the conservative answer. That is sound by the contract above,
-and the ceiling is far above any schema a real annotation produces — only an
-adversarial one reaches it.
+and the numbers say it is a ceiling no real annotation reaches — only an
+adversarial one, if one exists, would.
 
 **Two tests exist to prove that bound and they leave the mutation sweep**, because
 a mutation that removes the bound makes them run without end. They are marked in
