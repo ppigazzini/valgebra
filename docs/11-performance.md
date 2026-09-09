@@ -167,25 +167,27 @@ pydantic.
 ### One of those margins moves with the interpreter
 
 A ratio cancels the machine — a slower box slows both sides — and it does not
-cancel the interpreter. Running the comparison gate on one box against two of
+cancel the interpreter. Running the comparison gate on one box against three of
 them, as the fraction of pydantic's time each shape takes:
 
-| Shape | CPython 3.12 | CPython 3.14 |
-| --- | --- | --- |
-| `list[int]`, 10,000 elements | 0.516 | 0.155 |
-| Closed record, 50 int fields | 0.314 | 0.349 |
-| Nested `list[...]`, depth 25 | 0.162 | 0.142 |
-| One `int` | 0.250 | 0.214 |
+| Shape | CPython 3.12 | CPython 3.14 | 3.14 free-threaded |
+| --- | --- | --- | --- |
+| `list[int]`, 10,000 elements | 0.191 | 0.151 | 0.159 |
+| Closed record, 50 int fields | 0.341 | 0.349 | 0.341 |
+| Nested `list[...]`, depth 25 | 0.158 | 0.138 | 0.332 |
+| One `int` | 0.227 | 0.215 | 0.233 |
 
-Six of the seven gated shapes read within a fifth of each other across the two.
-The large array does not, and the reason is the *element*, not the check: a list
-hands out each of its items as an owned reference, which is a count written on
-the object when the handle is made and again when it drops. CPython 3.14 makes
-those writes cheap; 3.12 and 3.13 do not, and there they cost more than the type
-test they surround — measured at 4.7 ns per element against 1.3 for a list of
-small integers, whose counts are never written at all. So read the large array's
-margin as about 6x on 3.14 and about 2x on 3.12 and 3.13, and the other shapes as
-carrying across.
+The **element** is what moves, not the check. A list hands out each of its items
+as an owned reference — a count written on the object when the handle is made
+and again when it drops — and the free-threaded build takes the list's lock for
+each one besides. A schema nested twenty-five deep is twenty-five containers of
+one element, so it is almost nothing but that cost, and it reads two and a half
+times dearer there than under a global lock. A flat array of ten thousand is
+read through a snapshot of the list instead, which pays the counts in two loops
+inside the interpreter and none in the walk, and it carries across all three.
+
+That is why the ceiling file holds a second set for the free-threaded build:
+what the project claims of that build is what that build can hold.
 
 The scalar shape is absent from the table because it sits near timer resolution:
 the competitive gate measures it at a 32.1 ns median with a spread reaching a

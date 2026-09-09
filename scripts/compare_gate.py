@@ -15,10 +15,10 @@ down as what the project says of itself -- "at most this much of pydantic-core
 here". A recorded measurement would be a fourth number that travels badly: the
 two libraries respond differently to a PGO build and to an interpreter version,
 so a ratio recorded in one environment is not the ratio of another. The gap is
-the interpreter rather than the box: on a single machine `large_array` takes
-0.516 of pydantic's time under CPython 3.12 and 0.155 under 3.14, because a list
-hands out each element as an owned reference -- a count written when the handle
-is made and again when it drops -- and 3.14 makes those writes cheap. A claim
+the interpreter rather than the box: on a single machine a schema nested
+twenty-five deep takes 0.14 to 0.16 of pydantic's time under CPython 3.12 and
+3.14 and 0.33 under the free-threaded build, where every read of an element out
+of a mutable container takes that container's lock. A claim
 does not move when the environment does, and changing one is an edit somebody
 argues for.
 

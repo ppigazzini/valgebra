@@ -159,9 +159,10 @@ Each shape's ceiling is a **claim, not a recorded measurement**: the ratio the
 project says it stays under, with headroom. A recorded ratio would be another
 number that travels badly, because the two libraries respond differently to a
 PGO build and to an interpreter. The interpreter is the one that moves a shape
-far: on a single box `large_array` reads 0.516 under CPython 3.12 and 0.155
-under 3.14, because a list hands out each element as an owned reference and 3.14
-makes the reference count cheap to write. This gate is the coarse tripwire for
+far: on a single box a schema nested twenty-five deep reads 0.14 to 0.16 under
+CPython 3.12 and 3.14 and 0.33 under the free-threaded build, where every read
+of an element out of a mutable container takes that container's lock. This gate
+is the coarse tripwire for
 ceding ground, with `perf_gate.py --against` doing the fine-grained work at 2%.
 Changing a ceiling is an edit with an argument in its commit message.
 
