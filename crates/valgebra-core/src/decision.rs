@@ -181,7 +181,15 @@ impl Relation {
 /// intersections and emptiness recurses the structural fragment, so a deeply
 /// nested Boolean combination can demand work exponential in its depth; without
 /// interning to share equal subtrees there is no cheap memo, so the procedure
-/// bounds its own work. One budget is threaded through a whole top-level query —
+/// bounds its own work.
+///
+/// The trail carries part of the termination argument already: a goal that comes
+/// back returns against its hypothesis rather than unfolding again, which is
+/// what decides a recursive schema. It does not carry all of it, because not
+/// every goal is a subterm of the query -- [`seq_splits_across_union`] builds a
+/// sequence per branch expansion -- so the set of goals the trail draws from is
+/// not obviously finite, and this counter is what stands where that argument
+/// would go. One budget is threaded through a whole top-level query —
 /// subtyping and the emptiness checks it calls into share it, and the two
 /// directions of an equivalence share it — so the bound cannot be escaped through
 /// a side door or spent twice.

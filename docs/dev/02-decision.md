@@ -217,10 +217,19 @@ a counter instead, threaded through a whole top-level query so the two
 directions of an equivalence share it and the bound cannot be spent twice or
 escaped through a side door.
 
-That counter is the one bound in the core that is neither a limit of the
-representation nor a shape a caller wrote ([00-architecture.md](00-architecture.md)
-groups the three), and the honest thing to say about it is what it is measured
-to reach. The ceiling is a million steps. Records nested six deep with
+Part of the argument the counter stands in for is already in the code: the trail
+holds each `(subject, supertype)` pair it is deciding, and a pair that comes back
+returns against the hypothesis rather than unfolding again, which is what makes a
+recursive schema decide at all. What it does not cover is the goals a rule
+*builds*: deciding a fixed-length sequence against a union expands the branches
+and constructs a sequence per expansion, and those are not subterms of anything
+the query was handed, so the set the trail draws from is not obviously finite.
+That is the gap between this counter and a theorem, and it is why the bound is
+carried as debt rather than as a limit ([00-architecture.md](00-architecture.md)
+groups the kinds).
+
+The honest thing to say about the ceiling meanwhile is what it is measured to
+reach. The ceiling is a million steps. Records nested six deep with
 union-of-literal fields decide in 1,834; a union of two hundred literals against
 one of three hundred, in 403; a fixed tuple of unions against the union of all
 its expansions, at the width where the right-hand side is a thousand nodes, in

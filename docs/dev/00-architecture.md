@@ -106,9 +106,13 @@ sort of thing and only one of them is a defect.
   how many members it has, how much of it an error message prints. A caller can
   see these and work within them.
 * **debt** -- a budget on *work*, standing in for a termination argument that is
-  already available. Regularity bounds the number of distinct subtyping goals, so
-  a memo over shared nodes terminates by a theorem; these budgets exist because
-  the nodes are not shared, and each names the work that removes it.
+  not written. Regularity bounds the goals drawn from one query's own subterms,
+  so a memo over shared nodes would terminate by a theorem for those -- but not
+  every goal is a subterm: deciding a fixed-length sequence against a union
+  builds sequences out of the branch expansions, and a goal a rule *constructs*
+  is outside the set regularity counts. So the argument is a step short of the
+  procedure it would cover, each budget names the work that removes it, and none
+  of them is called a limit in the meantime.
 
 A bound that is `debt` carries the change that retires it in its own doc
 comment. A `limit` or a `shape` carries the reason it is where it is.
