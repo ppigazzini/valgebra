@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::decision::{DECISION_BUDGET, NoLeafRelations, Relation};
+use crate::decision::{DECISION_BUDGET, Kind, LeafRelations, NoLeafRelations, Relation};
+use crate::descr::classes::Class;
+use crate::descr::lower::{Constants, Operand};
 use proptest::prelude::*;
 
 /// A small schema generator: atoms combined by union, intersection, and
@@ -49,6 +51,11 @@ fn shaped_schema() -> impl Strategy<Value = Schema> {
         Just(Schema::Bool),
         Just(Schema::Int),
         Just(Schema::Str),
+        // The two atoms only an oracle can read: a class, and a constant. The
+        // corpus reached neither, so every property over it asked its question
+        // where nothing could be looked up.
+        (0usize..3).prop_map(|i| Schema::Instance(ClassIx::new(i))),
+        (0usize..3).prop_map(|i| Schema::Literal(ConstIx::new(i))),
     ];
     atom.prop_recursive(3, 24, 3, |inner| {
         prop_oneof![
@@ -90,6 +97,81 @@ fn shaped_schema() -> impl Strategy<Value = Schema> {
             }),
         ]
     })
+}
+
+/// A small, self-consistent oracle: three classes and three constants.
+///
+/// Every property in this file that compares the two deciders runs with no
+/// oracle, and an oracle is the only place the core learns anything about
+/// Python -- where a class becomes a kind, a constant becomes a value, and two
+/// literals become disjoint or not. So the one question this pair of properties
+/// exists to ask, whether the rules and the set representation ever contradict
+/// each other, was asked only where neither of them could look anything up.
+///
+/// The two halves are consistent *by construction* rather than by agreement
+/// between hand-written tables: `leaf_subtype` answers about a pair of
+/// instances with `Class::derives_from`, which is the same relation the set
+/// representation reads out of [`Constants::class`]. An oracle whose halves
+/// disagreed would fail these properties by itself and say nothing about the
+/// deciders, which is the trap a throwaway oracle in this tree fell into.
+///
+/// Class 0 derives from class 1 and neither lays down a layout; class 2 lays
+/// one down and confines its instances to the tuple kind, which is the shape a
+/// class deriving from a builtin has.
+struct CorpusOracle;
+
+impl CorpusOracle {
+    fn class_at(index: ClassIx) -> Option<Class> {
+        let base = Class::plain(1);
+        match index.get() {
+            0 => Some(Class::new(0, Class::PLAIN, &[base])),
+            1 => Some(base),
+            2 => Some(Class::laid_out(2, 9).of_kind(Kind::Tuple)),
+            _ => None,
+        }
+    }
+}
+
+impl Constants for CorpusOracle {
+    fn constant(&self, index: ConstIx) -> Option<Operand> {
+        match index.get() {
+            0 => Some(Operand::Integer(0)),
+            1 => Some(Operand::Integer(1)),
+            2 => Some(Operand::Word(b"a".to_vec(), Kind::Str)),
+            _ => None,
+        }
+    }
+
+    fn operand(&self, index: OperandIx) -> Option<Operand> {
+        self.constant(ConstIx::new(index.get()))
+    }
+
+    fn class(&self, index: ClassIx) -> Option<Class> {
+        Self::class_at(index)
+    }
+}
+
+impl LeafRelations for CorpusOracle {
+    fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
+        match (sub, sup) {
+            (Schema::Instance(a), Schema::Instance(b)) => {
+                Some(Self::class_at(*a)?.derives_from(&Self::class_at(*b)?))
+            }
+            _ => None,
+        }
+    }
+
+    fn literal_kind(&self, constant: ConstIx) -> Option<Kind> {
+        Some(match self.constant(constant)? {
+            Operand::Integer(_) => Kind::Int,
+            Operand::Word(_, kind) => kind,
+            _ => return None,
+        })
+    }
+
+    fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+        Some(self.constant(left)? != self.constant(right)?)
+    }
 }
 
 fn union(a: Schema, b: Schema) -> Schema {
@@ -2820,6 +2902,33 @@ proptest! {
             prop_assert!(
                 a.descriptor_contained_in(&b, &NoLeafRelations, &[]) != Relation::Holds,
                 "the rules refuted {a:?} <= {b:?} and the sets decide it holds"
+            );
+        }
+    }
+
+    /// The same claim where the two deciders can look something up.
+    ///
+    /// An oracle is the only place the core learns about Python -- a class's
+    /// derivation and kind, a constant's value -- and both deciders read it.
+    /// Two readings of one oracle that contradict each other is the defect this
+    /// pair of properties exists for, and it is unreachable while neither
+    /// decider can look anything up.
+    #[test]
+    fn the_two_deciders_agree_under_an_oracle(a in shaped_schema(), b in shaped_schema()) {
+        let oracle = CorpusOracle;
+        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        let rules = a.subtype_relation(&b, &oracle, &[], &budget);
+        let sets = a.descriptor_contained_in(&b, &oracle, &[]);
+        if rules == Relation::Fails {
+            prop_assert!(
+                sets != Relation::Holds,
+                "the rules refuted {a:?} <= {b:?} and the sets decide it holds"
+            );
+        }
+        if sets == Relation::Fails {
+            prop_assert!(
+                rules != Relation::Holds,
+                "the sets refuted {a:?} <= {b:?} and the rules prove it holds"
             );
         }
     }
