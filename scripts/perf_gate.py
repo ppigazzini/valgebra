@@ -263,6 +263,7 @@ def check_against_budget(measured: int, recorded: int, tolerance: float) -> int:
 MODES = {
     "core": ("perf_workload", "core workload"),
     "decision": ("decision_workload", "decision workload"),
+    "decision-refute": ("decision_refute_workload", "refuting decision workload"),
     "binding": ("binding_workload", "binding walk"),
     "binding-boundary": ("binding_workload", "binding call boundary"),
     "binding-record": ("binding_workload", "binding record walk"),
@@ -447,6 +448,22 @@ def check_against_base(
     return 0
 
 
+def _absent_at(checkout: Path, mode: str) -> bool:
+    """Whether the workload this mode measures is missing from `checkout`.
+
+    A shape added in the change being measured has no counterpart at the base,
+    and building one there fails with "no example target". That is not a
+    regression and not a pass: there is no comparison to make, and saying so is
+    the honest reading. The absolute budget still gates such a shape, in the
+    same job.
+
+    Asked of the source rather than of cargo's message, so a genuine build
+    failure at the base stays a failure rather than reading as a new shape.
+    """
+    example = MODES[mode][0]
+    return not any(checkout.glob(f"crates/*/examples/{example}.rs"))
+
+
 def run_relative(modes: list[str], rev: str) -> int:
     """Measure this checkout and `rev` side by side, and hold each difference.
 
@@ -473,8 +490,11 @@ def run_relative(modes: list[str], rev: str) -> int:
             cwd=ROOT,
             check=True,
         )
+        fresh = [mode for mode in modes if _absent_at(checkout, mode)]
         base = {
-            mode: measure_mode(mode, checkout, worktree / "target") for mode in modes
+            mode: measure_mode(mode, checkout, worktree / "target")
+            for mode in modes
+            if mode not in fresh
         }
     finally:
         subprocess.run(
@@ -491,6 +511,11 @@ def run_relative(modes: list[str], rev: str) -> int:
     for mode in modes:
         subject = MODES[mode][1]
         print(f"\n--- {subject}")
+        if mode in fresh:
+            print(f"head:     {head[mode].irefs:,} instructions")
+            print("NEW SHAPE: the base does not carry this workload, so there is")
+            print("no comparison to make. Its recorded budget gates it instead.")
+            continue
         outcomes.append(judge_relative(head[mode], base[mode], subject, mode))
     outcome = EXIT_OK
     if EXIT_CANNOT_RUN in outcomes:
@@ -548,31 +573,36 @@ def run_core(budget: dict, *, update: bool) -> int:
     )
 
 
-def run_decision(budget: dict, *, update: bool) -> int:
+def run_decision(budget: dict, mode: str, *, update: bool) -> int:
     """Gate the decision procedures: subtyping, emptiness, equivalence.
 
     A separate workload from the core one because it measures a separate
     surface. Without it a rule added to `decision.rs` is invisible to the gate in
     both directions -- neither the cost of a new one nor the saving from a
     cheaper one shows up.
+
+    Two shapes, because a proof and a refutation walk different paths and the
+    first workload only ever asked for proofs. A rule that refutes by comparing
+    shapes runs where no reading reached, so work put there -- an emptiness
+    asked before a mismatch is believed, say -- cost nothing any budget held.
     """
-    build_workload("decision_workload")
-    result = measure(DECISION_WORKLOAD)
+    example, subject = MODES[mode]
+    key = mode.replace("-", "_") + "_workload"
+    build_workload(example)
+    result = measure(ROOT / "target" / "release" / "examples" / example)
     if update:
-        budget["decision_workload_irefs"] = result.irefs
-        budget["decision_workload_checksum"] = result.checksum
+        budget[f"{key}_irefs"] = result.irefs
+        budget[f"{key}_checksum"] = result.checksum
         BUDGET_FILE.write_text(json.dumps(budget, indent=2) + "\n", encoding="utf-8")
-        print(f"recorded decision budget: {result.irefs:,} instructions")
-        print(f"recorded decision checksum: {result.checksum}")
+        print(f"recorded {subject} budget: {result.irefs:,} instructions")
+        print(f"recorded {subject} checksum: {result.checksum}")
         return 0
-    failed = check_checksum(
-        result.checksum, int(budget["decision_workload_checksum"]), "decision workload"
-    )
+    failed = check_checksum(result.checksum, int(budget[f"{key}_checksum"]), subject)
     if failed:
         return failed
     return check_against_budget(
         result.irefs,
-        int(budget["decision_workload_irefs"]),
+        int(budget[f"{key}_irefs"]),
         float(budget["tolerance"]),
     )
 
@@ -628,8 +658,8 @@ def main() -> int:
             print(f"\n--- {MODES[mode][1]}")
         if mode in BINDING_SHAPES:
             outcomes.append(run_binding(budget, mode, update=update))
-        elif mode == "decision":
-            outcomes.append(run_decision(budget, update=update))
+        elif mode.startswith("decision"):
+            outcomes.append(run_decision(budget, mode, update=update))
         else:
             outcomes.append(run_core(budget, update=update))
     if EXIT_CANNOT_RUN in outcomes:
