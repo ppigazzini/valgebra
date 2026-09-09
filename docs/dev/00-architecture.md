@@ -7,7 +7,7 @@ direction their dependencies run, and the two invariants the compiler holds.
 
 | Zone | Owns | Page |
 |---|---|---|
-| `crates/valgebra-core/src/ir.rs` | the schema IR: the node set, and what each node denotes | [01-schema-ir.md](01-schema-ir.md) |
+| `crates/valgebra-core/src/ir.rs` | the schema IR: the node set, what each node denotes, and (in `ir/transform.rs`) the rewrites from one node to another | [01-schema-ir.md](01-schema-ir.md) |
 | `crates/valgebra-core/src/decision.rs` | emptiness, subtyping, equivalence, disjointness | [02-decision.md](02-decision.md) |
 | `crates/valgebra-py/src/build.rs` | typing annotations and native forms into the IR | [03-frontend.md](03-frontend.md) |
 | `crates/valgebra-py/src/check/` | the membership walk | [04-walk.md](04-walk.md) |

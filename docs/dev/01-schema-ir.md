@@ -1,8 +1,17 @@
 # The schema IR
 
-`crates/valgebra-core/src/ir.rs` owns the node set and the pure structural
-operations over it: construction, index shifting, self-reference resolution, and
-the guardedness check.
+`crates/valgebra-core/src/ir.rs` owns the node set: what each node is, the
+construction that keeps one canonical, and the questions a node answers about
+itself -- its depth, its node count, whether a reference occurs under a guard.
+
+`ir/transform.rs` owns the rewrites: a schema into another schema with one
+thing changed -- an index shifted into another validator's pool, a
+self-reference resolved, a recursive definition unfolded once, a record opened,
+a definitions table pruned of what nothing reaches. Every rewrite is written
+against the child set declared in `Schema::map_children` rather than against
+the variants a second time, and none of them adds a shape: what a node denotes
+is settled here, and a rewrite carries the denotation across a renumbering
+rather than changing it.
 
 ## A node denotes a set of Python values
 
