@@ -196,6 +196,21 @@ PLANTS = (
         ),
     ),
     Plant(
+        "tests/test_clock_ledger.py",
+        ("tests/test_records.py",),
+        # A fourth test reading the clock, in a file that reads none: the ledger
+        # closes the list, so a new one is a new argument rather than a new line.
+        lambda tree: _edit(
+            tree,
+            "tests/test_records.py",
+            "import pytest\n",
+            "import pytest\nimport time\n\n\n"
+            "def test_a_planted_clock() -> None:\n"
+            "    started = time.perf_counter()\n"
+            "    assert time.perf_counter() >= started\n",
+        ),
+    ),
+    Plant(
         "tests/test_commit_messages.py",
         (),
         # The subject is a message rather than a file, and the stage is a real

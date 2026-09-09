@@ -81,7 +81,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Eighteen of them:
+for and misses the other. Nineteen of them:
 
 | Ledger | Holds |
 |---|---|
@@ -100,6 +100,7 @@ for and misses the other. Eighteen of them:
 | `tests/test_closure_ledger.py` | every schema variant is a generator, a representative, or a marker |
 | `tests/test_local_gate.py` | every merge-gate step is planned by the local gate or excused by name |
 | `tests/test_commit_messages.py` | no commit message names the internal working area |
+| `tests/test_clock_ledger.py` | no test measures time except the three that argue for it |
 | `tests/test_fuzz_lane.py` | the fuzz soak names its allocation ceiling and forks its batches |
 | `tests/test_floor_names.py` | every typing and enum name read at import time exists on the floor |
 | `tests/test_ledger_plants.py` | every ledger fails on the defect it exists to catch |
@@ -107,7 +108,7 @@ for and misses the other. Eighteen of them:
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are eighteen.
+because a table nothing counts is the one that drifts: there are nineteen.
 
 The last is a ledger over the rest, and it exists because reading a
 ledger cannot tell you whether it can fail. `test_local_gate.py` filtered its

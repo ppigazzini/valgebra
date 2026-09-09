@@ -416,10 +416,17 @@ def test_explaining_a_deep_value_does_not_scale_with_its_size() -> None:
         value: object = "not an int"
         for _ in range(depth):
             value = [value]
-        started = time.perf_counter()
-        with pytest.raises(ValidationError):
-            schema.validate(value)
-        return time.perf_counter() - started
+
+        def once() -> float:
+            started = time.perf_counter()
+            with pytest.raises(ValidationError):
+                schema.validate(value)
+            return time.perf_counter() - started
+
+        # The fastest of three, for the reason the sibling bound in
+        # `tests/test_equivalence.py` takes the fastest of five: a loaded
+        # machine only ever adds to a reading.
+        return min(once() for _ in range(3))
 
     small, large = explain(2_000), explain(20_000)
     # Ten times the value, and the work must not follow it. Generous, because a
