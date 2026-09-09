@@ -49,6 +49,7 @@ BINDING = ROOT / "crates" / "valgebra-py"
 SWEPT = {
     "crates/valgebra-py/src/check/walk.rs",
     "crates/valgebra-py/src/check/walk/record.rs",
+    "crates/valgebra-py/src/check/walk/sequence.rs",
     "crates/valgebra-py/src/check/ctx.rs",
     "crates/valgebra-py/src/build.rs",
     "crates/valgebra-py/src/equality.rs",

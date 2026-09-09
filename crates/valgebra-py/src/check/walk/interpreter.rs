@@ -1,11 +1,17 @@
 use std::sync::Arc;
 
 use super::record::{keyed_map_matches_json, scan_dict};
+use super::sequence::scan_list;
 use super::*;
 use crate::check::index::ValidatorIndex;
 use crate::check::{WalkMode, WalkState, build_index};
 use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyModule};
 use std::borrow::Cow;
+use std::ops::ControlFlow;
+
+use jiter::JsonValue;
+use pyo3::types::{PyFrozenSet, PySet};
+use valgebra_core::SeqShape;
 use valgebra_core::{Field, MapClause, Openness};
 
 /// Decide membership of a Python value against a schema, through the real

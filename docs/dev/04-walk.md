@@ -94,13 +94,24 @@ source of truth for behaviour.
 ## Where the walk lives
 
 `crates/valgebra-py/src/check/walk.rs` holds the dispatcher `member` and the
-arms that read a value as a scalar, a sequence, a union, a meet, a complement,
-a class or a reference. `walk/record.rs` holds the arms that read one as a
-**keyed map or an attribute record**, which is the shape whose membership is a
-question per key rather than per position: which keys the value carries, which
-of them the schema declares, and what a key the schema does not declare is
-covered by. The walk's other containers ask about elements and share none of
-that.
+arms that read a value as a scalar, a union, a meet, a complement, a class or a
+reference. Two kinds of container have a module each, because what they share
+with the rest is the dispatcher and little else.
+
+`walk/record.rs` reads a value as a **keyed map or an attribute record**: the
+shape whose membership is a question per key rather than per position -- which
+keys the value carries, which of them the schema declares, and what a key the
+schema does not declare is covered by. `walk/sequence.rs` reads one as a run of
+**elements** -- a list, a tuple, a parsed array, a set, a frozenset -- which
+differ in how an element is reached and agree on what each must be, and which
+share an arity, a count taken once and compared again, and the snapshot a list
+of one scalar kind is read through.
+
+The three entry points `walk.rs` calls into `sequence.rs` are marked `#[inline]`,
+and the reason is measured rather than assumed: without it the *record* walk --
+which reaches no sequence at all -- executes 3.1% more instructions, because
+what the dispatcher can inline changes what fits around it. With it, that shape
+reads 1.8% fewer than before the split.
 
 Both read the same `Frame`: where the walk is in the value, what it has found
 there, and the context it may look things up in. A walk needing a different one
