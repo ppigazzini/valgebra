@@ -36,14 +36,11 @@ pub enum Relation {
     Holds,
     /// Refuted: a value of the subject is outside the other schema.
     ///
-    /// A witness is what makes this answer, and only the descriptor's reading
-    /// produces one -- it refutes by proving the difference holds a value. The
-    /// structural rules refute from a mismatch instead, which is a witness only
-    /// when the subject has a value to offer: `[X, anything]` and `[]` cannot
-    /// match on arity, and when `X` is empty the subject admits nothing at all
-    /// and is below every set including that one. So a rule's `Fails` is read as
-    /// "no rule places it inside", and the public relations read them for their
-    /// proof alone.
+    /// A witness is what makes this answer. The descriptor's reading produces
+    /// one directly, by proving the difference holds a value; the structural
+    /// rules produce one by finding a mismatch of shapes, which stands on
+    /// *some* value of the subject and so is read against the subject's own
+    /// emptiness before it is believed.
     Fails,
     /// Neither, and the procedure says so rather than answering `false`.
     Unknown,
@@ -110,6 +107,26 @@ impl Relation {
         match self {
             Relation::Holds => Relation::Holds,
             _ => Relation::Unknown,
+        }
+    }
+
+    /// The refutation a mismatch carries, read against what the subject holds.
+    ///
+    /// A rule refutes by finding a mismatch -- two arities that cannot align, a
+    /// key one side requires and the other does not guarantee -- and names the
+    /// value that stands against the inclusion only implicitly: it is *some*
+    /// value of the subject, shaped the way the subject says. A subject with no
+    /// value names none, and the empty set is below every set, the shape it can
+    /// never take included. So the mismatch is read against the subject: proved
+    /// inhabited it refutes, proved empty it establishes the opposite, and
+    /// undecided it decides nothing.
+    #[must_use]
+    #[inline]
+    const fn of_mismatch(subject: Verdict) -> Relation {
+        match subject {
+            Verdict::Inhabited => Relation::Fails,
+            Verdict::Empty => Relation::Holds,
+            Verdict::Unknown => Relation::Unknown,
         }
     }
 
@@ -946,7 +963,6 @@ impl Schema {
     ) -> bool {
         let budget = Cell::new(DECISION_BUDGET);
         self.subtype_relation(other, oracle, defs, &budget)
-            .proof_only()
             .or_else(|| self.descriptor_contained_in(other, oracle, defs))
             .holds()
     }
@@ -965,15 +981,33 @@ impl Schema {
         defs: &[Schema],
         budget: &Cell<u32>,
     ) -> Relation {
-        self.is_subtype_rec(
-            other,
-            SubtypeCx {
-                oracle,
-                defs,
-                budget,
-            },
-            &mut Vec::new(),
-        )
+        let cx = SubtypeCx {
+            oracle,
+            defs,
+            budget,
+        };
+        self.witnessed(self.is_subtype_rec(other, cx, &mut Vec::new()), cx)
+    }
+
+    /// One rule's answer about this subject, with a refutation believed only
+    /// where the subject has a value to stand on.
+    ///
+    /// Every refutation the rules reach is a mismatch of shapes, and every
+    /// composition that carries one preserves that: a conjunction hands on the
+    /// refutation of a part, and the one disjunction that could invent a
+    /// refutation out of parts each failing for a different reason is read for
+    /// its proof alone. So one reading of the subject at the top settles them
+    /// all, and it is taken once per query rather than once per rule.
+    fn witnessed(&self, answer: Relation, cx: SubtypeCx<'_>) -> Relation {
+        if answer == Relation::Fails {
+            return Relation::of_mismatch(self.verdict_rec(
+                cx.oracle,
+                cx.defs,
+                &mut Vec::new(),
+                cx.budget,
+            ));
+        }
+        answer
     }
 
     fn is_subtype_rec(
@@ -1357,8 +1391,7 @@ impl Schema {
             budget: &budget,
         };
         let within = |sub: &Schema, sup: &Schema| {
-            sub.is_subtype_rec(sup, cx, &mut Vec::new())
-                .proof_only()
+            sub.witnessed(sub.is_subtype_rec(sup, cx, &mut Vec::new()), cx)
                 .or_else(|| sub.descriptor_contained_in(sup, oracle, defs))
         };
         // Equivalence is the meet of two inclusions, taken in the vocabulary

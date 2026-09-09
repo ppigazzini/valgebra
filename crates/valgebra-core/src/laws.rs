@@ -61,13 +61,32 @@ fn shaped_schema() -> impl Strategy<Value = Schema> {
                 .prop_map(|s| Schema::list(SeqShape::homogeneous(s))),
             proptest::collection::vec(inner.clone(), 0..3)
                 .prop_map(|e| Schema::list(SeqShape::fixed(e))),
-            (inner, 0usize..3, proptest::bool::ANY).prop_map(|(s, n, upper)| {
+            (inner.clone(), 0usize..3, proptest::bool::ANY).prop_map(|(s, n, upper)| {
                 let bound = if upper {
                     Constraint::MaxLen(n)
                 } else {
                     Constraint::MinLen(n)
                 };
                 Schema::refine(Schema::list(SeqShape::homogeneous(s)), vec![bound])
+            }),
+            // A closed record over the same elements, with each field required
+            // or not. A record refutes by a key one side requires and the other
+            // does not carry, which is a mismatch like an arity: the same claim
+            // as the sequences above, reached by a different rule, and the
+            // corpus reaches both since both are believed.
+            proptest::collection::vec((inner, proptest::bool::ANY), 0..3).prop_map(|fields| {
+                Schema::record(
+                    fields
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, (schema, required))| Field {
+                            name: format!("f{i}").into(),
+                            schema,
+                            required,
+                        })
+                        .collect(),
+                    Openness::Closed,
+                )
             }),
         ]
     })

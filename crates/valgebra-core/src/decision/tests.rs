@@ -1575,11 +1575,12 @@ fn a_subject_with_no_value_is_below_a_shape_it_cannot_match() {
     assert!(bounded.is_subtype_of(&empty_list));
     assert!(bounded.is_equivalent(&empty_list));
 
-    // The mismatch a rule still refutes on: a fixed sequence whose first
-    // position admits no value. The subject is empty, so the inclusion holds and
-    // the arity rule says otherwise -- which is why the public relation reads
-    // the rules for a proof and the sets for a refutation, rather than taking
-    // the first answer either one offers.
+    // And the mismatch that decides nothing: a fixed sequence whose first
+    // position admits no value is empty, so it is below the shape it cannot
+    // match -- but the rules cannot prove it empty here, because proving it
+    // takes the descriptor's reading of a bounded length over a base with no
+    // values. Unable to say whether the subject has a value, the arity rule
+    // declines rather than refuting, and the descriptor settles it.
     let unfillable = Schema::list(SeqShape::fixed([
         Schema::refine(
             Schema::list(SeqShape::homogeneous(Schema::Nothing)),
@@ -1587,7 +1588,7 @@ fn a_subject_with_no_value_is_below_a_shape_it_cannot_match() {
         ),
         Schema::ANYTHING,
     ]));
-    assert_eq!(relation(&unfillable, &empty_list), Relation::Fails);
+    assert_eq!(relation(&unfillable, &empty_list), Relation::Unknown);
     assert!(unfillable.is_subtype_of(&empty_list));
 }
 
@@ -1634,16 +1635,37 @@ fn the_rules_refute_prove_and_decline_these() {
         Relation::Fails
     );
 
-    // A length that cannot match refutes on its own, whatever the elements
-    // are: the pair below has an element pair no oracle here can relate, so a
-    // rule that fell through to comparing them would answer `Unknown` where the
-    // shapes alone say `Fails`.
+    // A length that cannot match refutes whatever the elements are *provided
+    // the subject has a value*: the refutation is a value of the subject with
+    // the wrong number of positions, and a subject that admits none offers no
+    // such value. The pair below carries an opaque class no oracle here can
+    // decide inhabited, so the arity rule declines. The same pair with elements
+    // the core can read refutes on the shapes alone.
     assert_eq!(
         relation(
             &Schema::tuple(SeqShape::fixed([
                 Schema::Instance(ClassIx::new(0)),
                 Schema::Int,
             ])),
+            &Schema::tuple(SeqShape::fixed([Schema::Instance(ClassIx::new(1))])),
+        ),
+        Relation::Unknown
+    );
+    assert_eq!(
+        relation(
+            &Schema::tuple(SeqShape::fixed([Schema::Str, Schema::Int])),
+            &Schema::tuple(SeqShape::fixed([Schema::Str])),
+        ),
+        Relation::Fails
+    );
+    // The lengths decide before the elements are asked, and the pair below is
+    // what says so: a subject the core can read against a supertype whose one
+    // position it cannot relate to anything. Comparing position by position
+    // would meet the opaque class first and decline; the arities settle it
+    // without looking, and the subject has values, so it refutes.
+    assert_eq!(
+        relation(
+            &Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Int])),
             &Schema::tuple(SeqShape::fixed([Schema::Instance(ClassIx::new(1))])),
         ),
         Relation::Fails

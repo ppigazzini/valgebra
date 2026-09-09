@@ -5,7 +5,7 @@
   "_checksum_comment": "The value the core workload folds through every result and prints. It depends only on the fixed corpus and iteration count, so it is a constant of the workload, not of the machine or the build. The gate compares it before it compares any instruction count: a workload whose body collapsed measures low, and a budget cannot tell that from an optimization.",
   "core_workload_checksum": 134000,
   "_decision_comment": "Instruction-count budget for the decision procedures -- subtyping, emptiness, equivalence -- measured the same way. A separate entry because it measures a separate surface: the core workload runs the transformations and never calls a decision, so without this one a rule added to decision.rs costs nothing the gate can see, and a rule that makes a comparison cheaper earns nothing it can see. Re-record with scripts/perf_gate.py --decision --update.",
-  "decision_workload_irefs": 17973844,
+  "decision_workload_irefs": 18248150,
   "decision_workload_checksum": 14000,
   "_binding_comment": "Binding hot-path budget: the per-iteration instruction cost of the membership walk over a live Python value, isolated as the difference between two iteration counts so the embedded interpreter's startup cancels out (scripts/perf_gate.py --binding). Recorded on a local CPython 3.12 rather than in the bench job, which is a change from how it used to be read: valgrind cannot run the workload against a 3.14 interpreter (it aborts on an instruction it does not model), and 3.12 is the interpreter the mutation lanes already use, so the leg is now reproducible off CI. The absolute count is the machine's, not the runner's -- this environment measured 968,944,450 against the 893,274,256 the bench job had recorded for the same code, an offset of +8.5% -- so the band is what makes the number portable rather than the number itself. Re-record with --binding --update on a 3.12 and say what moved. The wider tolerance absorbs that offset plus FFI and codegen drift while still catching a per-node regression, which is far larger.",
   "binding_workload_irefs": 266911896,
@@ -24,7 +24,7 @@
       "why": "a list of one scalar kind is read through a snapshot of it, which executes more instructions and spends less time: the reference counts land in two tight loops inside the interpreter instead of one chain of dependent reads, so a sixty-four element walk costs 47% more instructions and 2.1x less wall clock on CPython 3.12"
     }
   ],
-  "decision_refute_workload_irefs": 1697916770,
+  "decision_refute_workload_irefs": 735388600,
   "decision_refute_workload_checksum": 200,
   "_decision_refute_comment": "The refuting half of the decision surface, budgeted apart from the proving half. A rule that refutes by comparing shapes runs where the sibling workload never goes: every relation it asks either holds or is settled by the descriptor after the rules decline, so the path a refutation walks carried no reading at all. It is the dearer half by two orders of magnitude, because a relation the rules do not prove is asked of the descriptor, and lowering a schema costs what the decision page records it costing."
 }

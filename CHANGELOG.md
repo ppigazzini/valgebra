@@ -99,6 +99,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a subject disjoint from a meet is below that meet's complement
 - fix: a code fence closed with a sentence took a section into the block -- internal
 - fix: a refinement carries its base's proof and not its refutation -- internal
+- fix: a mismatch refutes an inclusion only where the subject has a value -- internal
 
 -->
 
