@@ -961,10 +961,29 @@ impl Schema {
         oracle: &dyn LeafRelations,
         defs: &[Schema],
     ) -> bool {
+        self.subtype_relation_under(other, oracle, defs).holds()
+    }
+
+    /// The inclusion in three values: proven, refuted, or neither.
+    ///
+    /// [`is_subtype_of_under`](Self::is_subtype_of_under) is this reduced to the
+    /// two a boundary reports. Held inside the crate rather than published,
+    /// because the reduction is what makes the third value safe to ignore: a
+    /// refutation the *set* reading makes is a difference it proved inhabited,
+    /// and its components do not relate a class to the shape its instances
+    /// have, so it reports a named tuple of two integers outside `tuple[int,
+    /// int]`. A boundary that reported that as a refutation would state
+    /// something false; one that reports it as "not proven" states what the
+    /// procedure knows.
+    fn subtype_relation_under(
+        &self,
+        other: &Schema,
+        oracle: &dyn LeafRelations,
+        defs: &[Schema],
+    ) -> Relation {
         let budget = Cell::new(DECISION_BUDGET);
         self.subtype_relation(other, oracle, defs, &budget)
             .or_else(|| self.descriptor_contained_in(other, oracle, defs))
-            .holds()
     }
 
     /// The three-valued subtyping answer under an oracle, the definitions, and a
