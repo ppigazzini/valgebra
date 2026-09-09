@@ -48,7 +48,10 @@ conservative](#sound-but-conservative)).
   by `issubclass`, and a literal is a subtype of any schema it is a member of. A
   dataclass or named tuple relates the same way: its schema is below one over a
   base class it carries every attribute of, each with a narrower schema, and below
-  the bare class it is an instance of. A class built on a builtin relates to that
+  the bare class it is an instance of. A **named tuple** relates to the tuple its
+  fields lay out as well, in both directions where both hold: its positions are
+  its fields, the schema says so, and the ordinary sequence rules decide from
+  there. A class built on a builtin relates to that
   builtin too: `Validator(MyInt)` is below `Validator(int)` and
   `Validator(MyStr)` below `Validator(str)`, because every instance of such a
   class is a value of that kind and the class narrows the kind rather than

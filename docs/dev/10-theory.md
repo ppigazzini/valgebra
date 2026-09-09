@@ -270,13 +270,18 @@ one the next reader rediscovers as a bug.
 | 4 | Clauses are unordered where the source orders them | a narrowing: a key belongs when *some* clause admits it |
 | 5 | Clauses are quasi-K-step rather than quasi-constant | nothing against the literature, which introduces exactly this generalisation |
 | 6 | The assumption trail is popped rather than threaded | every relation proved on the way is discarded, so a goal reached twice by different paths is decided twice |
-| 7 | A refutation from the *set* reading is not sound across components | a class atom and a sequence sit in different components, so the difference reads a named tuple of two integers as outside `tuple[int, int]`. The public relations report two values, where that reads as "not proven"; a three-valued answer at the boundary waits on this |
+| 7 | A class is described by what the frontend can read of it | a class laying down a layout the frontend cannot read is its `isinstance` test and its kind, and nothing else; every relation about the structure its instances have is then a question no rule can answer |
 
-Two departures earlier drafts of this table carried are closed. The trail held
-whole terms, which cost a subtree copy per step; it holds shared handles, and a
-copy is a reference count. And the gradual atom was a variant every lattice rule
-had to remember to exclude; `Any` is the top, spelled, so no rule can tell them
-apart.
+Three departures earlier drafts of this table carried are closed. The trail
+held whole terms, which cost a subtree copy per step; it holds shared handles,
+and a copy is a reference count. The gradual atom was a variant every lattice
+rule had to remember to exclude; `Any` is the top, spelled, so no rule can tell
+them apart. And a draft of row seven blamed the *set* reading for refuting that
+a named tuple of two integers is a `tuple[int, int]` -- the reading was right
+about the schema it was given, which described the instance's attributes and
+not its positions. The frontend reads both and says both, so the question is
+one the rules answer; the departure that remains is the general one above, for
+a class whose layout the frontend cannot read at all.
 
 Tooling and toolchain facts are [11-references.md](11-references.md), not this
 page.
