@@ -175,7 +175,12 @@ jobs:
       - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
         with:
           tool: cargo-llvm-cov@0.9.0
+        # The version-gated reading of a list is live below 3.14, so coverage
+        # of the binding measured on a newer interpreter would report the
+        # snapshot arm as unreached code rather than as a path with tests.
       - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.12"
       # Binding coverage combines two drivers under one instrumentation
       # environment: the Python suite exercising the extension, and the
       # binding-internal Rust unit tests (interner, index remap, fast-path
@@ -341,6 +346,8 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.12"
       - name: Install the differential oracles
         run: uv sync --locked --group bench
       - name: Build the extension into the venv
@@ -372,6 +379,8 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.12"
       - run: uv sync --locked
       - run: uv run maturin develop --uv
       # Run the corpus through this build and compare it against the recorded
@@ -395,6 +404,8 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.12"
       - run: uv sync --locked
       - run: uv run maturin develop --uv
       # Execute every runnable example in the README and the docs site; fail on
@@ -414,6 +425,8 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.12"
       - run: uv sync --locked --group docs
       # mkdocstrings imports the package to read its docstrings.
       - run: uv run --group docs maturin develop --uv
@@ -444,7 +457,14 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Install valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
+        # The ceilings in `scripts/perf_compare.json` and the bands in
+        # `scripts/perf_budget.json` are claims about a ratio and a count on
+        # *this* interpreter, and a ratio is a property of the interpreter as
+        # much as of the code. Moving this lane moves what every one of them
+        # means, so the version is written here rather than left to the image.
       - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.12"
       - run: uv sync --locked --no-install-project --group bench
       # The wall-clock benches must measure the shipped artifact, not a debug
       # build, so build the release wheel with LTO and profile-guided
@@ -735,7 +755,12 @@ jobs:
       - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
         with:
           tool: cargo-mutants@27.1.0
+        # A mutation sweep can only kill a mutant on a branch its interpreter
+        # takes: the list's snapshot read compiles in below 3.14 and out at
+        # 3.14, so the same mutant is killable on one and unviable on the next.
       - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.12"
       - name: List the Rust files the diff touches
         id: diff
         # Both values reach the script through the environment rather than
@@ -1039,7 +1064,11 @@ jobs:
       # path -- without them every mutant reads as unviable, which is a sweep that
       # measured nothing rather than a clean one.
       - name: Set up the Python toolchain for the walk sweep
+        # As the diff sweep above: which mutants are reachable is a property of
+        # the interpreter the extension is built against.
         uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.12"
       # The recursion-depth case leaves the SWEEP -- not the test lane, where it
       # runs on every push. It drives a 130-level chain through a two-branch
       # union, so any mutation that removes a short-circuit turns it exponential
@@ -1149,6 +1178,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.12"
       - name: Audit the locked Python dependencies
         run: |
           uv export --locked --format requirements-txt --no-emit-project --all-groups > requirements-audit.txt
@@ -1165,6 +1196,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.12"
       - name: Audit the workflows
         # GH_TOKEN lets zizmor run its online audits (action ref resolution) in
         # addition to the static ones.

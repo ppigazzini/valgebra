@@ -196,6 +196,21 @@ PLANTS = (
         ),
     ),
     Plant(
+        "tests/test_lane_interpreters.py",
+        (".github/workflows/ci.yml",),
+        # A lane that installs an interpreter and names none, which is what
+        # every lane did until the versions were written down.
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "      - uses: $/.github/actions/setup-uv\n        with:\n"
+            '          python-version: "3.12"\n'
+            "      - run: uv sync --locked --no-install-project --group bench\n",
+            "      - uses: $/.github/actions/setup-uv\n"
+            "      - run: uv sync --locked --no-install-project --group bench\n",
+        ),
+    ),
+    Plant(
         "tests/test_clock_ledger.py",
         ("tests/test_records.py",),
         # A fourth test reading the clock, in a file that reads none: the ledger
