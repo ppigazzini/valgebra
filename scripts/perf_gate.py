@@ -392,7 +392,36 @@ def describe_window(count: int | None) -> tuple[str, bool]:
     return (batch, True)
 
 
-def check_against_base(head: Measurement, base: Measurement, subject: str) -> int:
+def recorded_step(mode: str, base: Measurement) -> dict | None:
+    """Return the argued step this shape takes over this base, if one is recorded.
+
+    A shape's instruction count is a proxy for its cost, and once in a while a
+    change moves the two apart: reading a list's elements through a snapshot of
+    it executes *more* instructions and spends less time, because the reference
+    counts it pays land in two tight loops instead of one dependent chain. The
+    ceiling below is written for the case where the two agree, and refusing a
+    change the wall clock says is two and a half times faster would be the
+    proxy governing the thing it stands for.
+
+    So a step is recorded against **the base count it steps from**, not against
+    a commit. That is what makes it expire on its own: once the base is a commit
+    at or past the step, the base measures the new count, this record no longer
+    matches it, and the ordinary ceiling applies again. A record can therefore
+    excuse the one comparison it was written for and no later one.
+    """
+    budget = json.loads(BUDGET_FILE.read_text(encoding="utf-8"))
+    for step in budget.get("steps", []):
+        if step.get("shape") != mode:
+            continue
+        recorded = int(step["base_irefs"])
+        if abs(base.irefs - recorded) <= RELATIVE_TOLERANCE * recorded:
+            return step
+    return None
+
+
+def check_against_base(
+    head: Measurement, base: Measurement, subject: str, step: dict | None = None
+) -> int:
     """Hold this change's count to its own merge base's, measured beside it.
 
     One-sided, unlike the recorded-budget check. The floor there guards against a
@@ -403,10 +432,13 @@ def check_against_base(head: Measurement, base: Measurement, subject: str) -> in
     faster is the outcome this gate exists to allow.
     """
     delta = (head.irefs - base.irefs) / base.irefs
+    ceiling = float(step["ceiling"]) if step else RELATIVE_TOLERANCE
     print(f"base:     {base.irefs:,} instructions ({subject})")
     print(f"head:     {head.irefs:,} instructions")
-    print(f"delta:    {delta:+.2%} (ceiling +{RELATIVE_TOLERANCE:.0%})")
-    if delta > RELATIVE_TOLERANCE:
+    print(f"delta:    {delta:+.2%} (ceiling +{ceiling:.0%})")
+    if step:
+        print(f"recorded step from this base: {step['why']}")
+    if delta > ceiling:
         print("REGRESSION: this change costs more than its own merge base.")
         print("Both counts were measured in this job, with one toolchain, so the")
         print("difference is the change rather than the environment.")
@@ -459,7 +491,7 @@ def run_relative(modes: list[str], rev: str) -> int:
     for mode in modes:
         subject = MODES[mode][1]
         print(f"\n--- {subject}")
-        outcomes.append(judge_relative(head[mode], base[mode], subject))
+        outcomes.append(judge_relative(head[mode], base[mode], subject, mode))
     outcome = EXIT_OK
     if EXIT_CANNOT_RUN in outcomes:
         outcome = EXIT_CANNOT_RUN
@@ -475,7 +507,9 @@ def run_relative(modes: list[str], rev: str) -> int:
     return outcome
 
 
-def judge_relative(head: Measurement, base: Measurement, subject: str) -> int:
+def judge_relative(
+    head: Measurement, base: Measurement, subject: str, mode: str
+) -> int:
     """Compare two measurements of the same workload, or refuse to compare them.
 
     The checksum is asked first, as it is in the recorded-budget path and for a
@@ -491,7 +525,7 @@ def judge_relative(head: Measurement, base: Measurement, subject: str) -> int:
         print("changes the workload, and say what moved.")
         return EXIT_CANNOT_RUN
     print(f"checksum: {head.checksum} ({subject}, unchanged from the base)")
-    return check_against_base(head, base, subject)
+    return check_against_base(head, base, subject, recorded_step(mode, base))
 
 
 def run_core(budget: dict, *, update: bool) -> int:

@@ -53,6 +53,29 @@ BUDGET = 1_000_000
 TOLERANCE = 0.10
 
 
+def test_a_recorded_step_applies_to_its_own_base_and_no_other() -> None:
+    """A step excuses the one comparison it was written for.
+
+    It is recorded against the base count it steps from, so a base at or past
+    the step measures the new count, stops matching the record, and is held to
+    the ordinary ceiling again. That is what keeps a step from becoming a
+    standing excuse for a shape.
+    """
+    budget = json.loads((ROOT / "scripts" / "perf_budget.json").read_text("utf-8"))
+    steps = budget.get("steps", [])
+    for step in steps:
+        assert step["shape"] in gate.MODES, step["shape"]
+        assert step["why"].strip(), step
+        assert 0 < float(step["ceiling"]) < 5
+
+    stepped = gate.Measurement(irefs=181_424_346, checksum=1)
+    moved_on = gate.Measurement(irefs=266_911_896, checksum=1)
+    if any(s["shape"] == "binding" for s in steps):
+        assert gate.recorded_step("binding", stepped) is not None
+        assert gate.recorded_step("binding", moved_on) is None
+    assert gate.recorded_step("core", stepped) is None
+
+
 def test_a_count_inside_the_band_passes() -> None:
     assert gate.check_against_budget(BUDGET, BUDGET, TOLERANCE) == 0
     assert gate.check_against_budget(1_050_000, BUDGET, TOLERANCE) == 0
@@ -120,7 +143,10 @@ BASE = gate.Measurement(irefs=100_000_000, checksum=134000)
 
 def _relative(head_irefs: int, checksum: int = 134000) -> int:
     return gate.judge_relative(
-        gate.Measurement(irefs=head_irefs, checksum=checksum), BASE, "core workload"
+        gate.Measurement(irefs=head_irefs, checksum=checksum),
+        BASE,
+        "core workload",
+        "core",
     )
 
 
