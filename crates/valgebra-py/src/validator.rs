@@ -22,7 +22,7 @@ use pyo3::{PyTraverseError, PyVisit};
 use rustc_hash::FxHashMap;
 use valgebra_core::descr::classes::Class;
 use valgebra_core::descr::lower::{Constants, Operand};
-use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, Openness, OperandIx, Schema};
+use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, Openness, OperandIx, Relation, Schema};
 
 use crate::build::{Pool, build_schema};
 use crate::check::{Ctx, ValidatorIndex, WalkMode, WalkState, build_index, member};
@@ -1161,6 +1161,52 @@ impl Validator {
         Ok(self
             .schema
             .is_subtype_of_under(&other, &oracle, &definitions))
+    }
+
+    /// The inclusion in three answers rather than two.
+    ///
+    /// `is_subtype_of` reports a proof as `True` and everything else as
+    /// `False`, which folds together the two cases a caller most often wants
+    /// apart: a value of this schema that `other` rejects, and a question the
+    /// decision procedure declines. This reports them separately.
+    ///
+    /// `"subset"` is the proof `is_subtype_of` returns `True` for.
+    /// `"not_subset"` is a refutation: some value of this schema is outside
+    /// `other`. `"undecided"` is neither, and the schemas it happens for are the
+    /// conservative boundary the decidability page describes -- an alternation
+    /// of sequence shapes, a leaf relation the oracle declines, a query that
+    /// spends its work budget.
+    ///
+    /// Runs the same work `is_subtype_of` runs and calls back into Python
+    /// wherever it does.
+    ///
+    /// Args:
+    ///     other: The candidate supertype, as a schema spec or validator.
+    ///
+    /// Returns:
+    ///     One of `"subset"`, `"not_subset"` or `"undecided"`.
+    #[pyo3(signature = (other, /))]
+    fn relation_to(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<&'static str> {
+        let mut literals =
+            Pool::seeded(py, self.literals.iter().map(|o| o.clone_ref(py)).collect());
+        let mut definitions = self.definitions.clone();
+        let other = build_schema(other, &mut literals, &mut definitions)?;
+        let oracle = PoolRelations {
+            py,
+            literals: literals.items(),
+            definitions: &definitions,
+            classes: RefCell::default(),
+        };
+        Ok(
+            match self
+                .schema
+                .subtype_relation_under(&other, &oracle, &definitions)
+            {
+                Relation::Holds => "subset",
+                Relation::Fails => "not_subset",
+                Relation::Unknown => "undecided",
+            },
+        )
     }
 
     /// Whether this schema and `other` denote the same set — mutual inclusion.

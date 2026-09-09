@@ -259,6 +259,49 @@ def test_the_probe_actually_compared_something(survey) -> None:
     assert len(SCHEMAS) > 20, "the schema universe covers too few kinds"
 
 
+def test_a_refutation_names_a_value_outside(survey) -> None:
+    """A reported refutation stands on a value, or it is a false claim.
+
+    `is_subtype_of` folds "a value of this schema is outside the other" and "no
+    rule here answers" into one `False`, and a caller reading it can tell them
+    apart only by `relation_to`. That answer promises more than the `False`
+    does: `"not_subset"` asserts the witness exists. So the universe below is
+    asked for it -- a refutation over a pair whose members it can enumerate must
+    name a value in the subject and outside the supertype.
+
+    The direction the sibling checks cannot reach: they search for a `False`
+    that no value refutes, which is a *gap* and is sound. This searches for a
+    refutation no value supports, which is not.
+    """
+    memberships = {name: _members(schema) for name, schema in SCHEMAS}
+    unsupported = []
+    for name_a, a in SCHEMAS:
+        for name_b, b in SCHEMAS:
+            if name_a == name_b:
+                continue
+            if a.relation_to(b) != "not_subset":
+                continue
+            if not memberships[name_a] - memberships[name_b]:
+                unsupported.append(f"{name_a} <= {name_b}")
+    assert not unsupported, (
+        "refutations no value in the universe supports: "
+        f"{sorted(unsupported)[:8]}. A `not_subset` claims a value of the "
+        "subject that the supertype rejects; where none exists the answer "
+        "belongs on the conservative side as `undecided`."
+    )
+
+
+def test_the_three_answers_agree_with_the_two(survey) -> None:
+    """`relation_to` and `is_subtype_of` answer the same question."""
+    for name_a, a in SCHEMAS:
+        for name_b, b in SCHEMAS:
+            answer = a.relation_to(b)
+            assert answer in {"subset", "not_subset", "undecided"}, answer
+            assert a.is_subtype_of(b) == (answer == "subset"), (
+                f"{name_a} <= {name_b}: {answer} against {a.is_subtype_of(b)}"
+            )
+
+
 def test_no_decided_relation_is_refuted_by_a_value(survey) -> None:
     # Unsoundness. Not a ledger matter -- this is the contract itself.
     _, unsound, _, _ = survey

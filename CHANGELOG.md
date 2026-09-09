@@ -102,10 +102,29 @@ answer of its own, or a repair to a change not yet released.
 - fix: a mismatch refutes an inclusion only where the subject has a value -- internal
 - fix: a closed record is refuted by a key it does not declare -- internal
 - feat: a named tuple denotes the tuple its fields lay out
+- feat: a relation says whether it was refuted or undecided
 
 -->
 
 ### Added
+
+- `Validator.relation_to(other)` reports the inclusion in three answers where
+  `is_subtype_of` reports two. A `False` from the latter folds together a value
+  of this schema the other rejects and a question the procedure declines;
+  `"subset"`, `"not_subset"` and `"undecided"` keep them apart:
+
+  ```python
+  from valgebra import Validator
+
+  assert Validator(bool).relation_to(int) == "subset"
+  assert Validator(str).relation_to(int) == "not_subset"
+  assert Validator(bool).is_subtype_of(int) is True
+  ```
+
+  `"subset"` is exactly what `is_subtype_of` answers `True` for, so no existing
+  answer moves. A `"not_subset"` is a statement about a value: some member of
+  this schema is outside the other, which the completeness probe holds by asking
+  its universe for that value.
 
 - A `NamedTuple` denotes the tuple its fields lay out, so a relation between one
   and that tuple is decided rather than declined:

@@ -29,6 +29,11 @@ gated, exercised guarantee, not a proved theorem over the whole fragment. Outsid
 this fragment the procedure stays sound (see [Sound but
 conservative](#sound-but-conservative)).
 
+`relation_to` reports which of the two a `False` is: `"not_subset"` where a
+value of the subject is outside the other schema, and `"undecided"` where no
+rule and no set reading answers. Everything in the conservative list below
+answers `"undecided"`.
+
 - **The scalar Boolean algebra.** Every union, intersection, and complement of the
   scalar atoms (`None`, `bool`, `int`, `float`, `str`, `bytes`), with `bool` a
   subtype of `int`. The complement laws hold: `int & ~int` is empty, `int | ~int`

@@ -315,6 +315,33 @@ assert intersection(int, complement(int)).is_empty()
 assert not Validator(int).is_empty()
 ```
 
+A `False` from `is_subtype_of` folds together two answers a caller often wants
+apart: a value of the subject that the other schema rejects, and a question the
+procedure declines. `relation_to` reports them separately, and answers the same
+question `is_subtype_of` does -- `"subset"` is exactly its `True`:
+
+```python
+from typing import NamedTuple
+
+from valgebra import Validator
+
+
+class Point(NamedTuple):
+    x: int
+    y: int
+
+
+assert Validator(bool).relation_to(int) == "subset"
+# A refutation: some string is not an integer.
+assert Validator(str).relation_to(int) == "not_subset"
+# A named tuple lays out a tuple, and the schema says so.
+assert Validator(Point).relation_to(tuple[int, int]) == "subset"
+```
+
+Which relations answer `"undecided"` is the conservative boundary
+[the decidability page](15-decidability.md) describes. A `"not_subset"` is a
+statement about a value: some member of the subject is outside the other schema.
+
 `is_equivalent` is **semantic**: it compares the value sets, however the two
 schemas are spelled. Keep it distinct from `==` on validators, which compares the
 schema's **normal form** — the shape construction builds. The lattice laws are

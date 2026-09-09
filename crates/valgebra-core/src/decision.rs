@@ -967,15 +967,14 @@ impl Schema {
     /// The inclusion in three values: proven, refuted, or neither.
     ///
     /// [`is_subtype_of_under`](Self::is_subtype_of_under) is this reduced to the
-    /// two a boundary reports. Held inside the crate rather than published,
-    /// because the reduction is what makes the third value safe to ignore: a
-    /// refutation the *set* reading makes is a difference it proved inhabited,
-    /// and its components do not relate a class to the shape its instances
-    /// have, so it reports a named tuple of two integers outside `tuple[int,
-    /// int]`. A boundary that reported that as a refutation would state
-    /// something false; one that reports it as "not proven" states what the
-    /// procedure knows.
-    fn subtype_relation_under(
+    /// two a boundary reports, and the reduction loses the distinction a caller
+    /// most often wants: whether a `false` is a value outside the supertype or
+    /// a question no rule here answers. Both deciders are asked, the second
+    /// only where the first declines, and a refutation from either stands on a
+    /// value of the subject -- which the rules' answer is read against, and
+    /// which the set reading proves by finding the difference inhabited.
+    #[must_use]
+    pub fn subtype_relation_under(
         &self,
         other: &Schema,
         oracle: &dyn LeafRelations,
