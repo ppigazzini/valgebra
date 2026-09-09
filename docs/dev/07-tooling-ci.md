@@ -162,9 +162,19 @@ PGO build and to an interpreter. The interpreter is the one that moves a shape
 far: on a single box a schema nested twenty-five deep reads 0.14 to 0.16 under
 CPython 3.12 and 3.14 and 0.33 under the free-threaded build, where every read
 of an element out of a mutable container takes that container's lock. This gate
-is the coarse tripwire for
-ceding ground, with `perf_gate.py --against` doing the fine-grained work at 2%.
-Changing a ceiling is an edit with an argument in its commit message.
+is the coarse tripwire for ceding ground, with `perf_gate.py --against` doing
+the fine-grained work at 2%. Changing a ceiling is an edit with an argument in
+its commit message.
+
+**The lane names the interpreter these are read on**, which is CPython 3.12,
+and it is written in `ci.yml` rather than left to the runner image: a ratio
+belongs to the pair of libraries *and* the interpreter running them, and a lane
+that inherits one from an image makes claims nobody chose. The same holds for
+the instruction budgets' bands, which cover the distance between two releases,
+and for both mutation sweeps, where a mutant on a version-gated branch is
+killable on the interpreter that takes the branch and unviable on the one that
+compiles it out. `tests/test_lane_interpreters.py` holds every lane to naming
+one.
 
 The **free-threaded** build is held to its own set, in the same file, for the
 shapes where it is a different environment rather than the same one on a slower
