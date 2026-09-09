@@ -1592,6 +1592,44 @@ fn a_subject_with_no_value_is_below_a_shape_it_cannot_match() {
     assert!(unfillable.is_subtype_of(&empty_list));
 }
 
+/// A key the supertype requires and the subject does not declare, read against
+/// what the subject carries.
+///
+/// A catch-all guarantees a key's value type and never its presence, so a
+/// subject carrying one may or may not place the key. A subject carrying none
+/// is closed, and a closed record admits no value with a key it does not
+/// declare -- every value it has is one the supertype rejects.
+#[test]
+fn a_required_key_a_closed_subject_lacks_refutes_the_inclusion() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let field = |name: &str, required: bool| Field {
+        name: name.into(),
+        schema: Schema::Int,
+        required,
+    };
+    let complete = Schema::record(vec![field("f0", true), field("f1", true)], Openness::Closed);
+    let closed_without = Schema::record(vec![field("f1", true)], Openness::Closed);
+    let open_without = Schema::record(vec![field("f1", true)], Openness::Open);
+    assert_eq!(relation(&closed_without, &complete), Relation::Fails);
+    assert_eq!(relation(&open_without, &complete), Relation::Unknown);
+
+    // The reading that keeps the refutation honest: a subject whose own
+    // required field admits nothing has no value to stand against the
+    // inclusion, so the same missing key decides the other way.
+    let empty_subject = Schema::record(
+        vec![Field {
+            name: "f1".into(),
+            schema: Schema::Nothing,
+            required: true,
+        }],
+        Openness::Closed,
+    );
+    assert_eq!(relation(&empty_subject, &complete), Relation::Holds);
+}
+
 #[test]
 fn the_rules_refute_prove_and_decline_these() {
     let relation = |sub: &Schema, sup: &Schema| {

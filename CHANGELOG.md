@@ -100,6 +100,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a code fence closed with a sentence took a section into the block -- internal
 - fix: a refinement carries its base's proof and not its refutation -- internal
 - fix: a mismatch refutes an inclusion only where the subject has a value -- internal
+- fix: a closed record is refuted by a key it does not declare -- internal
 
 -->
 

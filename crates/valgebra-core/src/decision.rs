@@ -2220,15 +2220,16 @@ fn refinement_subtype(
 ///    is subsumed by a clause of `b` with both key and value narrower.
 /// 3. **Mixed record-and-catch-all ≤ mixed** (general): each shared field narrows
 ///    and respects required-ness; each field `a` declares that `b` does not is
-///    covered by `b`'s catch-all; each field `b` declares that `a` lacks is
-///    governed by `a`'s catch-all — decidable only when it is **optional** (a
-///    catch-all guarantees a key's value type, never its presence, so a required
-///    such field stays `false`) and every catch-all value of `a` fits it; and
-///    every catch-all clause of `a` is subsumed by one of `b`.
+///    covered by `b`'s catch-all; each field `b` requires that `a` lacks is
+///    governed by `a`'s catch-all — decidable when it is **optional** and every
+///    catch-all value of `a` fits it, and *refuted* when `a` carries no
+///    catch-all at all, since a closed record admits no value with a key it does
+///    not declare; and every catch-all clause of `a` is subsumed by one of `b`.
 ///
-/// Sound throughout — a required supertype field the subtype cannot guarantee
-/// present, or a clause an oracle cannot relate, is reported `false`, never an
-/// unsound `true`.
+/// Sound throughout — a required supertype field a subject with a catch-all
+/// cannot guarantee present, or a clause an oracle cannot relate, is undecided
+/// rather than an unsound proof, and a refutation stands on a value of the
+/// subject, which the query's witness guard reads against its emptiness.
 fn keyed_map_subtype(
     fa: &[Field],
     da: &[MapClause],
@@ -2261,11 +2262,23 @@ fn keyed_map_subtype(
                     .schema
                     .is_subtype_rec(&b_field.schema, cx, assumptions)
                     .and(|| Relation::decided(!b_field.required || a_field.required)),
-                // A field `b` declares that `a` lacks: a catch-all guarantees a
-                // key's value type but never its presence, so a *required* such
-                // field stays undecided; an *optional* one holds when every value
-                // `a`'s catch-all could place at that key fits `b`'s field schema.
-                None if b_field.required => Relation::Unknown,
+                // A field `b` requires that `a` lacks. A catch-all guarantees a
+                // key's value type and never its presence, so a subject carrying
+                // one may or may not place the key and the relation is undecided
+                // -- but a subject carrying *no* catch-all is closed, and a
+                // closed record admits no value with a key it does not declare.
+                // Every value it has is one `b` rejects, which is a refutation
+                // by the same reading as a key `a` declares optional two arms
+                // above. The empty subject is not an exception: it has no such
+                // value, and the witness guard at the top of the query reads
+                // this refutation against its emptiness before believing it.
+                None if b_field.required => {
+                    if da.is_empty() {
+                        Relation::Fails
+                    } else {
+                        Relation::Unknown
+                    }
+                }
                 None => Relation::all(da.iter().map(|clause| {
                     clause
                         .value
