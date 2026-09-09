@@ -270,6 +270,21 @@ def _per_call_ns(call: Callable[[object], object], data: object, number: int) ->
     return best / number * 1e9
 
 
+def _gil_enabled() -> bool:
+    """Whether this interpreter runs under a global lock.
+
+    The free-threaded build is a separate performance environment, not the same
+    one running slower: every read of an element out of a mutable container
+    takes that container's lock, so a shape whose cost is per-element pays a
+    price no interpreter with a global lock pays. It is a supported lane, so it
+    is held to ceilings it can hold, recorded beside the shared ones.
+
+    A build too old to answer runs under a global lock, which is the safe read:
+    it selects the tighter set.
+    """
+    return getattr(sys, "_is_gil_enabled", lambda: True)()
+
+
 def _prepare() -> tuple[dict[str, float], dict[str, Shape]] | None:
     """Read the ceilings and build the shapes, or report why neither happened.
 
@@ -281,6 +296,11 @@ def _prepare() -> tuple[dict[str, float], dict[str, Shape]] | None:
     try:
         recorded = json.loads(CEILING_FILE.read_text(encoding="utf-8"))
         ceilings = {name: float(v) for name, v in recorded["ceilings"].items()}
+        if not _gil_enabled():
+            ceilings |= {
+                name: float(v)
+                for name, v in recorded.get("free_threaded_ceilings", {}).items()
+            }
     except (OSError, ValueError, KeyError, TypeError) as err:
         print(f"compare_gate: cannot read the ceilings: {err}")
         return None

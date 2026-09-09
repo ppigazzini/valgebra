@@ -277,6 +277,24 @@ jobs:
         env:
           HYPOTHESIS_PROFILE: ci
         run: uv run pytest --cov=valgebra --cov-report=term-missing
+      # The free-threaded build is a supported lane, and a supported lane that
+      # nothing times is one the project makes claims about without reading
+      # them. Every read of an element out of a mutable container takes that
+      # container's lock there, so the shapes whose cost is per-element are a
+      # different performance environment rather than the same one on a slower
+      # clock -- which is why the ceiling file carries a set for it.
+      #
+      # The tests above run against the debug build this lane installs, and a
+      # timing must not: the comparison gate refuses a build with debug
+      # assertions, because a figure from one says nothing about the wheel a
+      # user gets. So the extension is rebuilt optimized after the tests have
+      # had it, in place, and the gate reads that.
+      - name: Build the optimized extension for the timing
+        if: ${{ matrix.python-version == '3.14t' }}
+        run: uv run maturin develop --uv --release
+      - name: Competitive comparison gate (free-threaded)
+        if: ${{ matrix.python-version == '3.14t' }}
+        run: uv run --group bench python scripts/compare_gate.py
       # ruff and ty are static and pinned to a target version, so their result
       # does not depend on the runner's Python; run them once on the floor.
       - name: Ruff lint

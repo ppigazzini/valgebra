@@ -157,11 +157,23 @@ measurement gate at all.
 
 Each shape's ceiling is a **claim, not a recorded measurement**: the ratio the
 project says it stays under, with headroom. A recorded ratio would be another
-number that travels badly -- the two libraries respond differently to a PGO
-build and an interpreter version, so `large_array` reads 0.52 on the bench
-runner and 0.88 on a developer's box -- and this gate is the coarse tripwire for
+number that travels badly, because the two libraries respond differently to a
+PGO build and to an interpreter. The interpreter is the one that moves a shape
+far: on a single box `large_array` reads 0.516 under CPython 3.12 and 0.155
+under 3.14, because a list hands out each element as an owned reference and 3.14
+makes the reference count cheap to write. This gate is the coarse tripwire for
 ceding ground, with `perf_gate.py --against` doing the fine-grained work at 2%.
 Changing a ceiling is an edit with an argument in its commit message.
+
+The **free-threaded** build is held to its own set, in the same file, for the
+shapes where it is a different environment rather than the same one on a slower
+clock: reading an element out of a mutable container takes that container's lock
+there, so a shape whose cost is per-element pays what no interpreter with a
+global lock pays. A schema nested twenty-five deep is twenty-five
+single-element lists, and it reads 0.31 to 0.34 against the 0.14 to 0.16 of the
+builds with a lock. A shape absent from that set is held to the shared ceiling,
+and the gate selects between them by asking the interpreter whether its global
+lock is enabled.
 
 It asserts each payload is **accepted** before timing it. A correctness
 regression that made valgebra reject the data would take the fast reject path and

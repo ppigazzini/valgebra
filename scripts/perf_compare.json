@@ -8,5 +8,9 @@
     "json_document": 1.0,
     "build": 0.04,
     "error_report": 2.0
+  },
+  "_free_threaded_comment": "Ceilings the free-threaded build is held to instead, for the shapes where it is a different performance environment rather than the same one on a slower clock. A shape absent from here is held to the shared ceiling above. Reading an element out of a list takes the list's lock there, and a shape whose cost is per-element pays it: a schema nested twenty-five deep is twenty-five single-element lists, and it measures 0.309 to 0.338 of pydantic's time across four runs where the interpreters with a global lock read 0.142 to 0.162. The claim this project makes of that build is the true one, and the way to lower it is to stop owning an element the walk only reads.",
+  "free_threaded_ceilings": {
+    "deep_nesting": 0.45
   }
 }
