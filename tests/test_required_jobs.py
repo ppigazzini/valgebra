@@ -33,7 +33,9 @@ WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 GATE = "ci"
 
 #: Jobs a push never runs, so the gate does not wait on them.
-SCHEDULED_ONLY = frozenset({"nightly-fuzz", "nightly-libfuzzer", "nightly-mutants"})
+SCHEDULED_ONLY = frozenset(
+    {"nightly-fuzz", "nightly-libfuzzer", "nightly-mutants", "nightly-floor-names"}
+)
 
 #: `needs.<job>.result` as the condition spells it, in both forms the expression
 #: language offers: a name with a hyphen in it cannot be read with a dot, since

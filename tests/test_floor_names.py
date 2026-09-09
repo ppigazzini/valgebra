@@ -26,6 +26,13 @@ test below the floor skips), anything under `if TYPE_CHECKING:` (it never runs),
 and annotations in a module carrying `from __future__ import annotations` (they
 are strings). Those are the forms the tree uses deliberately.
 
+`scripts/floor_names.py` assembles the table by asking every release it spans,
+and the nightly lane runs it with `--check`, so a release adding or removing a
+name is read rather than remembered. It asks `hasattr` and not `dir`, which are
+different questions here: a deprecated alias `typing` serves through a module
+`__getattr__` is absent from one and present to the other, and the first access
+writes it into the module so that asking in the wrong order changes the answer.
+
 The table is held to the interpreter running this suite, in both directions, by
 `test_the_table_agrees_with_this_interpreter`: every name it dates at or below
 this release exists here, and every name it dates above this one does not. The

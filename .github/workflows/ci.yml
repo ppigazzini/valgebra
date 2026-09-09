@@ -968,6 +968,29 @@ jobs:
           name: fuzz-artifacts
           path: fuzz/artifacts
 
+  nightly-floor-names:
+    name: nightly floor names
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # `tests/floor_names.json` dates every public `typing` and `enum` name, and
+    # a push cannot check it: the fact it records is a property of six
+    # interpreters, and the suite runs on one. Reading it costs six downloads
+    # and a `hasattr` per name, which is a nightly's work rather than a merge's.
+    #
+    # A release adding or removing a name is what this catches, on the day the
+    # release lands rather than the day someone notices a lane behaving oddly on
+    # the floor.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.12"
+      - name: The floor table agrees with every interpreter it spans
+        run: uv run --no-sync python scripts/floor_names.py --check
+
   nightly-mutants:
     name: nightly mutation report
     # cargo-mutants over the core, auditing whether the Rust unit tests register

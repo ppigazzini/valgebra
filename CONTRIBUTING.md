@@ -98,6 +98,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | Python lint and format | `pyproject.toml` `[tool.ruff]` | `uv run ruff check . && uv run ruff format --check .` |
 | Python types | `pyproject.toml` | `uv run ty check` |
 | documentation claims | every tracked `*.md` | `uv run python scripts/docs_lint.py` |
+| when a `typing` or `enum` name arrived | `tests/floor_names.json` | `uv run python scripts/floor_names.py --check` |
 | doc examples run | `docs/` | `uv run python scripts/run_doc_examples.py` |
 | the rendered site builds | `mkdocs.yml` | `uv run --group docs mkdocs build --strict` |
 | core instruction budget | `scripts/perf_budget.json` | `uv run python scripts/perf_gate.py` |
