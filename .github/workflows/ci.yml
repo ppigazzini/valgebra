@@ -817,6 +817,7 @@ jobs:
           cargo mutants --package valgebra-py \
             --file crates/valgebra-py/src/check/walk.rs \
             --file crates/valgebra-py/src/check/walk/record.rs \
+            --file crates/valgebra-py/src/check/walk/scalar.rs \
             --file crates/valgebra-py/src/check/walk/sequence.rs \
             --file crates/valgebra-py/src/check/ctx.rs \
             --file crates/valgebra-py/src/build.rs \
@@ -1128,6 +1129,7 @@ jobs:
           cargo mutants --package valgebra-py \
             --file crates/valgebra-py/src/check/walk.rs \
             --file crates/valgebra-py/src/check/walk/record.rs \
+            --file crates/valgebra-py/src/check/walk/scalar.rs \
             --file crates/valgebra-py/src/check/walk/sequence.rs \
             --file crates/valgebra-py/src/check/ctx.rs \
             --features interpreter-tests -j 4 --timeout-multiplier 20 \

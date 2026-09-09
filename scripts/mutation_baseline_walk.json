@@ -12,7 +12,7 @@
     "crates/valgebra-py/src/check/walk/record.rs: replace == with != in keyed_map_matches_json": "The same guard on the JSON side, and the same argument: the counts agree by construction, so flipping the comparison retires the fast path and the document search answers instead.",
     "crates/valgebra-py/src/check/walk.rs: replace > with == in check_ref": "The recursion depth bound. Killed by `recursion_deeper_than_the_bound_is_refused`, which the sweep skips: that case drives a 130-level chain through a two-branch union, so any mutation removing a short-circuit turns it exponential and the whole run returns no verdict. Skipping it buys a judged verdict for every other mutant at the cost of these two. The case still runs on every push in the ordinary test lane.",
     "crates/valgebra-py/src/check/walk.rs: replace > with >= in check_ref": "As above.",
-    "crates/valgebra-py/src/check/walk.rs: replace homogeneous_scalar -> Option<Scalar> with None": "The fast path's switch. `None` means \"this sequence is not one scalar kind\", so the walk takes the general element loop -- which is the path this one was measured against and must agree with (`the_scalar_loop_and_the_walk_admit_the_same_values`). Turning it off changes no answer and costs 70% of a list of integers, and no test can see the difference in an answer, which is what makes it equivalent rather than untested.",
+    "crates/valgebra-py/src/check/walk/scalar.rs: replace homogeneous_scalar -> Option<Scalar> with None": "The fast path's switch. `None` means \"this sequence is not one scalar kind\", so the walk takes the general element loop -- which is the path this one was measured against and must agree with (`the_scalar_loop_and_the_walk_admit_the_same_values`). Turning it off changes no answer and costs 70% of a list of integers, and no test can see the difference in an answer, which is what makes it equivalent rather than untested.",
     "crates/valgebra-py/src/check/walk/record.rs: replace keyed_map_asks_for_its_keys -> Option<bool> with None": "The fast path's switch: `None` sends the walk to the scan it replaced, which decides the same values. `a_closed_record_answers_for_each_of_its_keys` holds the two to the same answers; the difference between them is the cost, and the sweep cannot read a cost."
   },
   "survivors": [
@@ -21,7 +21,7 @@
     "crates/valgebra-py/src/check/walk.rs: delete field mode from struct Ctx expression in fast",
     "crates/valgebra-py/src/check/walk.rs: replace > with == in check_ref",
     "crates/valgebra-py/src/check/walk.rs: replace > with >= in check_ref",
-    "crates/valgebra-py/src/check/walk.rs: replace homogeneous_scalar -> Option<Scalar> with None",
+    "crates/valgebra-py/src/check/walk/scalar.rs: replace homogeneous_scalar -> Option<Scalar> with None",
     "crates/valgebra-py/src/check/walk/record.rs: replace != with == in keyed_map_asks_for_its_keys",
     "crates/valgebra-py/src/check/walk/record.rs: replace += with *= in keyed_map_explain",
     "crates/valgebra-py/src/check/walk/record.rs: replace += with *= in scan_dict",

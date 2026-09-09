@@ -94,9 +94,15 @@ source of truth for behaviour.
 ## Where the walk lives
 
 `crates/valgebra-py/src/check/walk.rs` holds the dispatcher `member` and the
-arms that read a value as a scalar, a union, a meet, a complement, a class or a
-reference. Two kinds of container have a module each, because what they share
-with the rest is the dispatcher and little else.
+arms that read a value as a union, a meet, a complement, a class or a
+reference. What the dispatcher descends into, and what it stops at, have a
+module each, because what each shares with the rest is the dispatcher and
+little else.
+
+`walk/scalar.rs` answers what a value is **without descending into it**: a
+scalar kind, a literal, and the constraints that narrow one. A container's
+length is answered there too, for the same reason -- `MinLen` counts what a
+value holds without reading any of it.
 
 `walk/record.rs` reads a value as a **keyed map or an attribute record**: the
 shape whose membership is a question per key rather than per position -- which
@@ -113,7 +119,7 @@ which reaches no sequence at all -- executes 3.1% more instructions, because
 what the dispatcher can inline changes what fits around it. With it, that shape
 reads 1.8% fewer than before the split.
 
-Both read the same `Frame`: where the walk is in the value, what it has found
+All three read the same `Frame`: where the walk is in the value, what it has found
 there, and the context it may look things up in. A walk needing a different one
 -- a union probing a branch into a buffer of its own, a clause pair deciding on
 the fast path -- builds it from the parts it keeps.
