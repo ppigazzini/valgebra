@@ -693,6 +693,71 @@ fn a_set_and_a_frozenset_are_distinct_containers() {
 /// takes the general walk. The rules are the same rules: one element outside
 /// the schema makes the value a non-member, and a walk that stops at the first
 /// failure must not stop before it.
+/// A tuple's elements are borrowed rather than owned, and the walk runs Python
+/// between the borrow and the answer -- an `isinstance` reaches a metaclass that
+/// can run anything at all. What keeps the borrow good is the tuple: it is
+/// frozen, so an element cannot be replaced, and the caller's own handle holds
+/// it for the whole walk, so nothing it contains can be freed. The check here
+/// drops every other reference to the tuple and collects, which is the strongest
+/// form of that pressure the interpreter offers.
+#[test]
+fn a_tuple_element_survives_the_python_its_own_check_runs() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new(
+                "import gc\n\
+                 held = None\n\
+                 class Meta(type):\n\
+                 \x20   def __instancecheck__(cls, obj):\n\
+                 \x20       global held\n\
+                 \x20       held = None\n\
+                 \x20       gc.collect()\n\
+                 \x20       return type(obj).__name__ == 'Thing'\n\
+                 class Thing(metaclass=Meta):\n\
+                 \x20   pass\n\
+                 class Other:\n\
+                 \x20   pass\n",
+            )
+            .expect("no interior nul")
+            .as_c_str(),
+            std::ffi::CString::new("borrowed.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("borrowed")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+        let thing_class = module.getattr("Thing").expect("Thing");
+        let other_class = module.getattr("Other").expect("Other");
+        let pool = vec![thing_class.clone().unbind()];
+        let schema = Schema::tuple(SeqShape::homogeneous(Schema::Instance(ClassIx::new(0))));
+
+        let thing = || thing_class.call0().expect("Thing()");
+        let good = PyTuple::new(py, [thing(), thing(), thing()])
+            .expect("a tuple builds")
+            .into_any();
+        module
+            .setattr("held", &good)
+            .expect("the module holds the tuple");
+        assert!(decide(py, &schema, &good, &pool, &[]));
+
+        // And the same pressure on the rejecting answer, where the walk stops
+        // part-way through the elements it borrowed.
+        let mixed = PyTuple::new(
+            py,
+            [thing(), other_class.call0().expect("Other()"), thing()],
+        )
+        .expect("a tuple builds")
+        .into_any();
+        module
+            .setattr("held", &mixed)
+            .expect("the module holds the tuple");
+        assert!(!decide(py, &schema, &mixed, &pool, &[]));
+    });
+}
+
 #[test]
 fn a_sequence_of_a_container_element_is_walked_element_by_element() {
     Python::attach(|py| {

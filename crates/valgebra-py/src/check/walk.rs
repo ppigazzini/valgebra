@@ -475,13 +475,22 @@ fn check_seq(
             // The list arm's reasoning, for the immutable container: `tuple[int,
             // ...]` tests one scalar at every position, so the walk's
             // per-element bookkeeping is paid once for the tuple.
+            //
+            // Both arms borrow their elements rather than owning them. An owned
+            // handle is a reference-count increment when it is made and a
+            // decrement when it drops, and the walk keeps no element past the
+            // test it runs on it: it reads the value and answers. A tuple is
+            // frozen and is held for the whole walk by the caller's own handle,
+            // so an element cannot be removed or freed underneath the borrow --
+            // which is why `PyO3` offers this iterator for a tuple and for no
+            // mutable container.
             if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
                 return tuple
-                    .iter()
+                    .iter_borrowed()
                     .all(|item| scalar_admits(kind, &Value::Py(&item)));
             }
             let mut ok = true;
-            for (i, item) in tuple.iter().enumerate() {
+            for (i, item) in tuple.iter_borrowed().enumerate() {
                 ok &= seq_element(prefix, tail, i, &Value::Py(&item), path, ctx, out);
                 if !ok && stop(ctx) {
                     return false;
