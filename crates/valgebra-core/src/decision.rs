@@ -1016,6 +1016,12 @@ impl Schema {
     /// refutation out of parts each failing for a different reason is read for
     /// its proof alone. So one reading of the subject at the top settles them
     /// all, and it is taken once per query rather than once per rule.
+    ///
+    /// It costs the *proving* half of the decision surface 1.4%, measured by
+    /// disabling it: sixteen instructions per top-level query that never
+    /// refutes, which is the price of reading a refutation honestly on the
+    /// queries that do. An `#[inline]` recovers none of it -- the compiler is
+    /// already free to, within the crate -- so the reading stands as the cost.
     fn witnessed(&self, answer: Relation, cx: SubtypeCx<'_>) -> Relation {
         if answer == Relation::Fails {
             return Relation::of_mismatch(self.verdict_rec(
