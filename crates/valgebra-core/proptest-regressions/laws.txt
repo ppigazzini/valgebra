@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 9be25b195ef2868cdc542ab25720d071a404463e631a1580fcda36da6e364213 # shrinks to a = Union([NoneType, Intersection([Bool])]), b = Seq { container: List, shape: SeqShape { prefix: [], tail: Some(Anything(Top)) } }
+cc 1f95fa3523cd491eb6005a60f9716e35fc65e7f76ac32d3e62fccfe919b47634 # shrinks to a = Refine { base: Seq { container: List, shape: SeqShape { prefix: [], tail: Some(NoneType) } }, constraints: [MaxLen(0)] }, b = Seq { container: List, shape: SeqShape { prefix: [], tail: Some(Nothing) } }
+cc 20597015218dd01669b0fd8b37a43f81871f9b089c8870f3342e1658577f6659 # shrinks to a = Seq { container: List, shape: SeqShape { prefix: [Refine { base: Seq { container: List, shape: SeqShape { prefix: [], tail: Some(Nothing) } }, constraints: [MinLen(1)] }, Anything(Top)], tail: None } }, b = Seq { container: List, shape: SeqShape { prefix: [], tail: None } }

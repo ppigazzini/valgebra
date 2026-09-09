@@ -35,6 +35,15 @@ pub enum Relation {
     /// Proven: every value of the subject belongs to the other schema.
     Holds,
     /// Refuted: a value of the subject is outside the other schema.
+    ///
+    /// A witness is what makes this answer, and only the descriptor's reading
+    /// produces one -- it refutes by proving the difference holds a value. The
+    /// structural rules refute from a mismatch instead, which is a witness only
+    /// when the subject has a value to offer: `[X, anything]` and `[]` cannot
+    /// match on arity, and when `X` is empty the subject admits nothing at all
+    /// and is below every set including that one. So a rule's `Fails` is read as
+    /// "no rule places it inside", and the public relations read them for their
+    /// proof alone.
     Fails,
     /// Neither, and the procedure says so rather than answering `false`.
     Unknown,
@@ -84,6 +93,56 @@ impl Relation {
         match self {
             Relation::Holds => other(),
             answer => answer,
+        }
+    }
+
+    /// The proof this answer carries, with its refutation dropped.
+    ///
+    /// For a step that is sound in one direction only. Reducing a refinement to
+    /// its base is the case: a refinement is a *subset* of its base, so the
+    /// base's inclusion carries it -- but the base's refutation does not, since
+    /// the value that puts the base outside may be one the constraints exclude.
+    /// `list[int]` is not below the empty list and `list[int]` of length at most
+    /// zero is, and both are read from the same base.
+    #[must_use]
+    #[inline]
+    fn proof_only(self) -> Relation {
+        match self {
+            Relation::Holds => Relation::Holds,
+            _ => Relation::Unknown,
+        }
+    }
+
+    /// The second decider, asked only where the first declines.
+    ///
+    /// Two procedures answer inclusion here: the structural rules and the
+    /// difference the descriptor builds. A proof from either is a proof, and a
+    /// *refutation* from either is a refutation -- so the only answer worth a
+    /// second opinion is `Unknown`. Reaching for the second decider after the
+    /// first has refuted would be asking a question already answered, and
+    /// discarding the answer it gave.
+    #[must_use]
+    #[inline]
+    fn or_else(self, second: impl FnOnce() -> Relation) -> Relation {
+        match self {
+            Relation::Unknown => second(),
+            answer => answer,
+        }
+    }
+
+    /// The inclusion a difference decides: `a <= b` is `a & ~b = {}`.
+    ///
+    /// The whole of the descriptor's reading, named where the two vocabularies
+    /// meet. An empty difference proves the inclusion; a difference proved to
+    /// hold a value refutes it, because that value is in `a` and outside `b`;
+    /// and a difference the descriptor cannot decide decides nothing.
+    #[must_use]
+    #[inline]
+    const fn of_difference(difference: Verdict) -> Relation {
+        match difference {
+            Verdict::Empty => Relation::Holds,
+            Verdict::Inhabited => Relation::Fails,
+            Verdict::Unknown => Relation::Unknown,
         }
     }
 
@@ -576,20 +635,27 @@ impl Schema {
         other: &Schema,
         pool: &dyn Constants,
         defs: &[Schema],
-    ) -> bool {
+    ) -> Relation {
         // The two sides are unfolded in opposite directions, which is what makes
         // a difference over a recursive schema sound: the left grows and the
         // right shrinks, so a difference proved empty here was empty before.
+        //
+        // A side this reading cannot lower, and a difference it cannot build,
+        // are declines rather than refutations: nothing about the inclusion is
+        // known from a set that was never constructed.
         let Some(mine) = lower(&unfolded_for(self, defs, true), pool) else {
-            return false;
+            return Relation::Unknown;
         };
         if mine.emptiness() == Verdict::Empty {
-            return true;
+            return Relation::Holds;
         }
-        lower(&unfolded_for(other, defs, false), pool).is_some_and(|theirs| {
-            mine.intersect(&theirs.complement())
-                .is_some_and(|difference| difference.emptiness() == Verdict::Empty)
-        })
+        let Some(theirs) = lower(&unfolded_for(other, defs, false), pool) else {
+            return Relation::Unknown;
+        };
+        mine.intersect(&theirs.complement())
+            .map_or(Relation::Unknown, |difference| {
+                Relation::of_difference(difference.emptiness())
+            })
     }
 
     /// The decision steps [`is_empty`](Self::is_empty) spends on this schema.
@@ -871,8 +937,10 @@ impl Schema {
         defs: &[Schema],
     ) -> bool {
         let budget = Cell::new(DECISION_BUDGET);
-        self.subtype_relation(other, oracle, defs, &budget).holds()
-            || self.descriptor_contained_in(other, oracle, defs)
+        self.subtype_relation(other, oracle, defs, &budget)
+            .proof_only()
+            .or_else(|| self.descriptor_contained_in(other, oracle, defs))
+            .holds()
     }
 
     /// The three-valued subtyping answer under an oracle, the definitions, and a
@@ -1045,7 +1113,11 @@ impl Schema {
                 // names a set this query cannot read, which is not a refutation.
                 None => Relation::Unknown,
             },
-            Schema::Refine { base, .. } => base.is_subtype_rec(other, cx, assumptions),
+            // A refinement carries its base's *proof* and not its refutation:
+            // the constraints can exclude every value that would stand against
+            // the inclusion, which is how a bounded-length list lands inside a
+            // fixed-length one whose base it is nowhere near.
+            Schema::Refine { base, .. } => base.is_subtype_rec(other, cx, assumptions).proof_only(),
             // Nothing on the left reduces, so this rule has nothing to say --
             // which is not the same as the relation failing.
             _ => Relation::Unknown,
@@ -1277,10 +1349,15 @@ impl Schema {
             budget: &budget,
         };
         let within = |sub: &Schema, sup: &Schema| {
-            sub.is_subtype_rec(sup, cx, &mut Vec::new()).holds()
-                || sub.descriptor_contained_in(sup, oracle, defs)
+            sub.is_subtype_rec(sup, cx, &mut Vec::new())
+                .proof_only()
+                .or_else(|| sub.descriptor_contained_in(sup, oracle, defs))
         };
-        within(self, other) && within(other, self)
+        // Equivalence is the meet of two inclusions, taken in the vocabulary
+        // both of them answer in: mutual inclusion, and the conjunction's own
+        // short circuit, rather than two booleans that have each forgotten
+        // whether they were refuted or merely unproven.
+        within(self, other).and(|| within(other, self)).holds()
     }
 }
 
@@ -2063,6 +2140,7 @@ fn refinement_subtype(
 ) -> Relation {
     narrow_base
         .is_subtype_rec(wide_base, cx, assumptions)
+        .proof_only()
         .and(|| {
             Relation::proven(wide_cons.iter().all(|constraint| {
                 narrow_cons.contains(constraint)

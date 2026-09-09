@@ -30,6 +30,49 @@ fn schema() -> impl Strategy<Value = Schema> {
     })
 }
 
+/// The Boolean fragment with the shapes a *rule* reads: sequences by arity, and
+/// the length-bounded refinements that denote the same sets a different way.
+///
+/// [`schema`] is the corpus the laws above are written over, and it reaches no
+/// rule that looks at a shape. That is where the two deciders can disagree: the
+/// arm reducing a refinement to its base answered a refutation it had no grounds
+/// for -- a list of at most zero elements is the empty list, and its base is
+/// nowhere near it -- and no pair drawn from atoms and connectives would have
+/// shown it. The laws are left over the fragment they were written for, because
+/// their claim is structural equality after simplification and a sequence is
+/// ordered into a normal form differently; the claim here is about answers.
+fn shaped_schema() -> impl Strategy<Value = Schema> {
+    let atom = prop_oneof![
+        Just(Schema::ANYTHING),
+        Just(Schema::Nothing),
+        Just(Schema::NoneType),
+        Just(Schema::Bool),
+        Just(Schema::Int),
+        Just(Schema::Str),
+    ];
+    atom.prop_recursive(3, 24, 3, |inner| {
+        prop_oneof![
+            proptest::collection::vec(inner.clone(), 1..3).prop_map(|m| Schema::Union(m.into())),
+            proptest::collection::vec(inner.clone(), 1..3)
+                .prop_map(|m| Schema::Intersection(m.into())),
+            inner.clone().prop_map(|s| Schema::Complement(Arc::new(s))),
+            inner
+                .clone()
+                .prop_map(|s| Schema::list(SeqShape::homogeneous(s))),
+            proptest::collection::vec(inner.clone(), 0..3)
+                .prop_map(|e| Schema::list(SeqShape::fixed(e))),
+            (inner, 0usize..3, proptest::bool::ANY).prop_map(|(s, n, upper)| {
+                let bound = if upper {
+                    Constraint::MaxLen(n)
+                } else {
+                    Constraint::MinLen(n)
+                };
+                Schema::refine(Schema::list(SeqShape::homogeneous(s)), vec![bound])
+            }),
+        ]
+    })
+}
+
 fn union(a: Schema, b: Schema) -> Schema {
     Schema::Union(vec![a, b].into())
 }
@@ -2756,8 +2799,29 @@ proptest! {
         let budget = std::cell::Cell::new(DECISION_BUDGET);
         if a.subtype_relation(&b, &NoLeafRelations, &[], &budget) == Relation::Fails {
             prop_assert!(
-                !a.descriptor_contained_in(&b, &NoLeafRelations, &[]),
+                a.descriptor_contained_in(&b, &NoLeafRelations, &[]) != Relation::Holds,
                 "the rules refuted {a:?} <= {b:?} and the sets decide it holds"
+            );
+        }
+    }
+
+    /// The claim the other decider makes, held the same way.
+    ///
+    /// The descriptor refutes an inclusion by proving the difference holds a
+    /// value, and that value is in the subject and outside the other schema.
+    /// No rule may prove the inclusion over it: as above, one of the two would
+    /// be wrong, and this is the direction that opened when the descriptor
+    /// started answering in three values rather than two.
+    #[test]
+    fn an_inclusion_the_sets_refute_is_not_one_the_rules_prove(
+        a in shaped_schema(),
+        b in shaped_schema(),
+    ) {
+        if a.descriptor_contained_in(&b, &NoLeafRelations, &[]) == Relation::Fails {
+            let budget = std::cell::Cell::new(DECISION_BUDGET);
+            prop_assert!(
+                a.subtype_relation(&b, &NoLeafRelations, &[], &budget) != Relation::Holds,
+                "the sets refuted {a:?} <= {b:?} and the rules prove it holds"
             );
         }
     }

@@ -1553,6 +1553,45 @@ fn a_meet_with_a_recursive_schema_is_decided_by_one_unfolding() {
 /// answer the rules must give it; a rule that starts claiming a proof it does
 /// not have moves a row from `Unknown` to `Fails` and fails here.
 #[test]
+fn a_subject_with_no_value_is_below_a_shape_it_cannot_match() {
+    // A rule refutes from a mismatch, and a mismatch is a witness only when the
+    // subject has a value to offer. A subject with none is below every set,
+    // including one whose shape it could never take.
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let empty_list = Schema::list(SeqShape::fixed([]));
+
+    // A list of at most zero elements *is* the empty list, and its base is
+    // nowhere near it. Reading the refinement through its base reaches the arity
+    // rule, which refutes what the constraint has already settled -- so the base
+    // is read for its proof alone and the rule declines instead.
+    let bounded = Schema::refine(
+        Schema::list(SeqShape::homogeneous(Schema::Int)),
+        vec![Constraint::MaxLen(0)],
+    );
+    assert_eq!(relation(&bounded, &empty_list), Relation::Unknown);
+    assert!(bounded.is_subtype_of(&empty_list));
+    assert!(bounded.is_equivalent(&empty_list));
+
+    // The mismatch a rule still refutes on: a fixed sequence whose first
+    // position admits no value. The subject is empty, so the inclusion holds and
+    // the arity rule says otherwise -- which is why the public relation reads
+    // the rules for a proof and the sets for a refutation, rather than taking
+    // the first answer either one offers.
+    let unfillable = Schema::list(SeqShape::fixed([
+        Schema::refine(
+            Schema::list(SeqShape::homogeneous(Schema::Nothing)),
+            vec![Constraint::MinLen(1)],
+        ),
+        Schema::ANYTHING,
+    ]));
+    assert_eq!(relation(&unfillable, &empty_list), Relation::Fails);
+    assert!(unfillable.is_subtype_of(&empty_list));
+}
+
+#[test]
 fn the_rules_refute_prove_and_decline_these() {
     let relation = |sub: &Schema, sup: &Schema| {
         let budget = Cell::new(DECISION_BUDGET);
