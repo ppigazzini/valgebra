@@ -103,6 +103,27 @@ answer of its own, or a repair to a change not yet released.
 
 -->
 
+### Fixed
+
+- A schema disjoint from a meet is below that meet's complement. `A <= ~B` asks
+  whether `A` and `B` share a value, and the meet it built for that question
+  held `B` as a nested intersection where the rule that decides a meet empty
+  compares the members of *one* intersection pairwise. Built through the meet
+  constructor the members flatten, the pair meets, and the relation decides:
+
+  ```python
+  from valgebra import Validator, complement, intersection
+
+  small = Validator(int)
+  meet = intersection(Validator(str), Validator(bytes))
+  assert small.is_subtype_of(complement(meet))
+  ```
+
+  The two deciders answered one question differently, which is what a
+  disagreement between them looks like from outside: a relation that holds,
+  reported as not proven.
+
+
 ### Added
 
 - Relations over a bound on a **float** are decided. A bound was lowered into

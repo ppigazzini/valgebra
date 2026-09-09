@@ -105,6 +105,29 @@ def _option(args: list[str], name: str, default: str) -> str:
     return default
 
 
+def _orphan_notes(recorded: dict, baseline: set[str]) -> bool:
+    """Report accepted notes naming no survivor, and whether any were found.
+
+    An accepted survivor carries a hand-written argument beside it, and nothing
+    read those arguments: a note could name a mutant that stopped surviving, or
+    name one in a spelling no survivor takes, and the set passed either way.
+    Both were true of this tree. An argument matching nothing is an excuse
+    outliving the thing it excused, which is what the ratchet exists to refuse.
+    """
+    orphans = sorted(
+        key for key in recorded.get("_accepted", {}) if key not in baseline
+    )
+    for key in orphans:
+        print(f"ACCEPTED WITHOUT A SURVIVOR: {key}")
+    if orphans:
+        print(
+            f"\nmutation_gate: {len(orphans)} accepted note(s) name no survivor "
+            "in this baseline. Delete each whose mutant a test kills, and spell "
+            "the rest as the survivor line spells them."
+        )
+    return bool(orphans)
+
+
 def main() -> int:
     args = sys.argv[1:]
     update = "--update" in args
@@ -157,7 +180,11 @@ def main() -> int:
 
     if not baseline_file.exists():
         _cannot_run(f"no {which} baseline; create one with --update")
-    baseline = set(json.loads(baseline_file.read_text())["survivors"])
+    recorded = json.loads(baseline_file.read_text())
+    baseline = set(recorded["survivors"])
+
+    if _orphan_notes(recorded, baseline):
+        return EXIT_FAIL
 
     new = sorted(measured - baseline)
     killed = sorted(baseline - measured)

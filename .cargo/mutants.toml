@@ -57,6 +57,13 @@ exclude_re = [
     # sixty-four elements takes the snapshot and a narrow one does not, and an
     # interpreter test asks both.
     "snapshot_pays",
+    # The explain pass over a keyed map runs only where the map did not match.
+    # Running it always reports nothing extra -- a value that matched has no
+    # violation to find -- and in the fast mode the violations go to a buffer
+    # nothing reads. Only the cost moves, and how much of it moves depends on
+    # the machine: the mutant reads as caught on one runner and as surviving on
+    # another, which is a target no baseline can hold steady.
+    "replace && with \\|\\| in member",
     # The three `LeafRelations` defaults are read through call sites that
     # collapse `None` and `Some(false)` to the same answer: `leaf_subtype(..)
     # .unwrap_or(false)`, `no_int_between(..) == Some(true)`, and

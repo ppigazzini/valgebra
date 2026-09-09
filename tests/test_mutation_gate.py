@@ -27,6 +27,7 @@ def _run(
     missed: list[str],
     baseline: list[str],
     extra: list[str] | None = None,
+    accepted: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     out = work / "mutants.out"
     out.mkdir(parents=True, exist_ok=True)
@@ -34,8 +35,11 @@ def _run(
     (out / "missed.txt").write_text("".join(line + "\n" for line in missed))
     (work / "scripts").mkdir(exist_ok=True)
     (work / "scripts" / "mutation_gate.py").write_text(GATE.read_text())
+    recorded: dict[str, object] = {"survivors": baseline}
+    if accepted is not None:
+        recorded["_accepted"] = accepted
     (work / "scripts" / "mutation_baseline.json").write_text(
-        json.dumps({"survivors": baseline}) + "\n"
+        json.dumps(recorded) + "\n"
     )
     return subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
         [sys.executable, str(work / "scripts" / "mutation_gate.py"), *(extra or [])],
@@ -44,6 +48,37 @@ def _run(
         text=True,
         check=False,
     )
+
+
+def test_an_accepted_note_naming_no_survivor_fails(tmp_path: Path) -> None:
+    """An excuse must not outlive the thing it excuses.
+
+    The accepted set carries a hand-written argument per survivor, and nothing
+    read those arguments: a note whose mutant a test started killing, or one
+    spelled the way no survivor line spells it, sat in the file and the gate
+    passed. Both were true of this tree at once.
+    """
+    survivor = "crates/x/src/a.rs: replace + with - in f"
+    result = _run(
+        tmp_path,
+        missed=["crates/x/src/a.rs:10:5: replace + with - in f"],
+        baseline=[survivor],
+        accepted={"a.rs: replace + with - in f": "spelled as no survivor is"},
+    )
+    assert result.returncode == 1
+    assert "ACCEPTED WITHOUT A SURVIVOR" in result.stdout
+
+
+def test_an_accepted_note_matching_a_survivor_passes(tmp_path: Path) -> None:
+    survivor = "crates/x/src/a.rs: replace + with - in f"
+    result = _run(
+        tmp_path,
+        missed=["crates/x/src/a.rs:10:5: replace + with - in f"],
+        baseline=[survivor],
+        accepted={survivor: "equivalent: it cannot change an answer"},
+    )
+    assert result.returncode == 0
+    assert "no new survivors" in result.stdout
 
 
 def test_a_new_survivor_fails_the_gate(tmp_path: Path) -> None:
