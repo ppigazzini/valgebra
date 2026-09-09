@@ -237,11 +237,6 @@ the shape. What is left below is what the descriptor cannot hold.
   empty list. A set and a dict have a length their components do not count, and
   a bound over one of those refuses rather than being lowered as if it did.
 
-- **An attribute record beside a builtin kind.** An object schema is a class met
-  with a record of attributes, and the shape a `NamedTuple`'s instances have is a
-  tuple, so relating the two means relating an attribute record to a sequence
-  kind. The descriptor holds each in a different place and does not relate them.
-
 - **A schema too large to build.** The descriptor is bounded three ways: the
   nodes it will read, the nesting it will descend, and the work a build may
   spend. Past any of them it refuses, and the caller keeps the rules' answer.
@@ -283,8 +278,9 @@ class Pair(NamedTuple):
 # count one. Over a word or a sequence it is decided.
 assert not Validator(Annotated[set[int], at.MinLen(3)]).is_empty()
 assert Validator(Annotated[tuple[int, int], at.MinLen(3)]).is_empty()
-# An attribute record and the shape its instances have are held apart.
-assert not Validator(Pair).is_subtype_of(tuple[int, int])
+# A named tuple's positions are its fields, and the schema says so, so the
+# relation is structural.
+assert Validator(Pair).is_subtype_of(tuple[int, int])
 # A recursive schema: the laws reach it, and one unfolding decides the kinds its
 # body admits. What one unfolding does not reach is a relation needing the body
 # twice -- here, that every value of the integer tree is a value of the list

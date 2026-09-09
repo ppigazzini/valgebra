@@ -101,8 +101,35 @@ answer of its own, or a repair to a change not yet released.
 - fix: a refinement carries its base's proof and not its refutation -- internal
 - fix: a mismatch refutes an inclusion only where the subject has a value -- internal
 - fix: a closed record is refuted by a key it does not declare -- internal
+- feat: a named tuple denotes the tuple its fields lay out
 
 -->
+
+### Added
+
+- A `NamedTuple` denotes the tuple its fields lay out, so a relation between one
+  and that tuple is decided rather than declined:
+
+  ```python
+  from typing import NamedTuple
+
+  from valgebra import Validator
+
+
+  class Pair(NamedTuple):
+      x: int
+      y: int
+
+
+  assert Validator(Pair).is_subtype_of(tuple[int, int])
+  ```
+
+  A named tuple's positions *are* its attributes -- the class lays both down at
+  once -- and the schema says so instead of describing the attributes alone,
+  which denoted a wider set than the class has. A failing field reports its
+  **position** rather than its name, because the shape carries positions; a
+  passing instance is read once rather than twice, and checks about a third
+  faster.
 
 ### Fixed
 

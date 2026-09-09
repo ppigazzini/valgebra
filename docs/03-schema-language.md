@@ -492,7 +492,7 @@ assert fully_open.is_valid({"name": "Ada", "age": "old"})
 | --- | --- |
 | `TypedDict` | a record, **open** as the typing spec defines one; `Required`/`NotRequired`/`ReadOnly` honored, `closed=True`/`extra_items` obeyed |
 | dataclass | `isinstance` plus a deep check of each declared field |
-| `NamedTuple` | `isinstance` plus a deep check of each declared field |
+| `NamedTuple` | `isinstance` plus the tuple its fields lay out, checked by position |
 | `Enum` | an instance of the enumeration (any member) |
 | runtime-checkable `Protocol` | `isinstance` against the protocol |
 | `NewType` | validates the supertype it wraps |

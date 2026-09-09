@@ -497,6 +497,10 @@ _DECIDED = [
     # covered through a catch-all as undecided, though the general rule beside it
     # already decided exactly that.
     pytest.param("subtype", {"x": int}, {str: int}, id="map:closed-record<=mapping"),
+    # A named tuple's positions are its attributes, and the frontend reads them,
+    # so the shape its instances have is in the schema and the relation is
+    # structural rather than a question about a class's layout.
+    pytest.param("subtype", _Pair, tuple[int, int], id="NamedTuple<=tuple[int,int]"),
     pytest.param(
         "subtype", {"x": int}, {str: object}, id="map:closed-record<=wide-mapping"
     ),
@@ -704,17 +708,6 @@ _LEDGERED = [
             "a fixpoint every unfolding of which needs one more element has no "
             "finite value, and the coinductive rule assumes its goal rather than "
             "deriving that"
-        ),
-    ),
-    # An attribute schema and the shape its instances have are unrelated.
-    pytest.param(
-        "subtype",
-        _Pair,
-        tuple[int, int],
-        id="NamedTuple<=tuple[int,int]",
-        marks=_missed(
-            "an attribute record and a sequence kind sit in different components, "
-            "and nothing relates a class's layout to the shape its instances have"
         ),
     ),
 ]

@@ -761,10 +761,58 @@ fn build_object(
         });
     }
     let instance = Schema::Instance(class_index);
-    if fields.is_empty() {
-        return Ok(instance);
+    let mut parts = vec![instance];
+    let positions = named_tuple_positions(ty, hints, lits, defs)?;
+    if positions.is_none() && !fields.is_empty() {
+        parts.push(Schema::attr_record(fields));
     }
-    Ok(Schema::meet([instance, Schema::attr_record(fields)]))
+    if let Some(positions) = positions {
+        parts.push(positions);
+    }
+    if parts.len() == 1 {
+        return Ok(parts.remove(0));
+    }
+    Ok(Schema::meet(parts))
+}
+
+/// The tuple shape a named tuple's fields lay out, or `None` for a class that
+/// lays out none.
+///
+/// A named tuple's positions *are* its attributes: an instance is a tuple of
+/// exactly as many elements as the class declares, the i-th holding the i-th
+/// field. The class says so and the frontend reads it, so the schema says it
+/// too -- otherwise the set the schema denotes is wider than the set the class
+/// has, admitting an instance whose attributes are integers and whose positions
+/// are anything, which no instance is.
+///
+/// It is the shape *instead of* an attribute record rather than beside one,
+/// because the two would say the same thing about the same values: a wrong
+/// field would be reported twice, and every passing value would be read twice.
+/// The shape is the more precise of the pair -- it carries the arity as well as
+/// the types -- and every rule that reads a shape reads it, so a relation
+/// between a named tuple and the tuple it lays out is decided structurally
+/// rather than declined. What the attribute record carried and this does not is
+/// the field's *name* in a failure's path, which becomes its position.
+///
+/// A field the annotations do not carry -- a `collections.namedtuple` has none
+/// -- takes `anything` at its position, which is the arity without the types.
+fn named_tuple_positions(
+    ty: &Bound<'_, PyType>,
+    hints: &Bound<'_, PyDict>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Option<Schema>> {
+    if !(ty.is_subclass_of::<PyTuple>()? && ty.hasattr("_fields")?) {
+        return Ok(None);
+    }
+    let mut positions = Vec::new();
+    for name in declared_fields(ty)? {
+        positions.push(match hints.get_item(&name)? {
+            Some(hint) => build_schema(&hint, lits, defs)?,
+            None => Schema::ANYTHING,
+        });
+    }
+    Ok(Some(Schema::tuple(SeqShape::fixed(positions))))
 }
 
 /// Build the IR for a parametrized typing generic given its origin and args.

@@ -541,6 +541,9 @@ fn a_declared_field_becomes_an_attribute_beside_the_class() {
                  \x20   right: str\n\
                  class Bare(tuple):\n\
                  \x20   pass\n\
+                 @dataclasses.dataclass\n\
+                 class Boxed(tuple):\n\
+                 \x20   x: int\n\
                  @typing.runtime_checkable\n\
                  class Sized(typing.Protocol):\n\
                  \x20   def __len__(self) -> int: ...\n\
@@ -576,11 +579,43 @@ fn a_declared_field_becomes_an_attribute_beside_the_class() {
                 .unwrap_or_default(),
             _ => Vec::new(),
         };
-        // A dataclass and a named tuple carry their fields; a tuple subclass
-        // that names none carries none, and is the class alone.
+        // The positions a class lays out, where it lays any out.
+        let positions = |name: &str| match build(name) {
+            Ok(Schema::Intersection(members)) => members
+                .iter()
+                .find_map(|member| match member {
+                    Schema::Seq { shape, .. } => Some(shape.prefix.to_vec()),
+                    _ => None,
+                })
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        };
+        // A dataclass carries its fields as attributes. A named tuple lays the
+        // same fields out as *positions* -- its instances are tuples, and the
+        // two readings would describe the same values twice -- so it carries
+        // them there and not beside them.
         assert_eq!(fields("Point"), vec!["x".to_owned()]);
-        assert_eq!(fields("Pair"), vec!["left".to_owned(), "right".to_owned()]);
+        assert!(
+            fields("Pair").is_empty(),
+            "a named tuple's fields are its positions"
+        );
+        assert_eq!(positions("Pair"), vec![Schema::Int, Schema::Str]);
+        assert!(
+            positions("Point").is_empty(),
+            "a dataclass lays out no positions"
+        );
         assert!(fields("Bare").is_empty(), "a tuple subclass declares none");
+        // Deriving from `tuple` is not laying out a tuple. A dataclass that
+        // does carries fields the class never puts at a position -- its
+        // instances are tuples of whatever they were built from -- so it keeps
+        // its attribute record and lays out nothing. The two conditions that
+        // separate it from a named tuple are both needed, and each alone admits
+        // this class.
+        assert_eq!(fields("Boxed"), vec!["x".to_owned()]);
+        assert!(
+            positions("Boxed").is_empty(),
+            "deriving from tuple is not laying one out"
+        );
         assert!(
             matches!(build("Bare"), Ok(Schema::Instance(_))),
             "a class with no declared field is the isinstance atom"
