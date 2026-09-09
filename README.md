@@ -301,10 +301,13 @@ and discarding them — and valgebra deep-checks neither a pydantic `BaseModel`
 nor a msgspec `Struct`: each reaches the frontend as a bare class, denoting the
 set of its instances. Check either one's fields through a mapping view of them.
 
-On a synthetic benchmark (the PGO release wheel) a passing check is faster than a
-strict pydantic `TypeAdapter` — roughly 3× on a 50-field record, 5× on a large
-`list[int]` and 7× on deep nesting — and far faster than pure-Python jsonschema. The
-comparison is not apples-to-apples and is gated against regression in CI; see the
+On a synthetic benchmark a passing check is faster than a strict pydantic
+`TypeAdapter`: on CPython 3.14, roughly 3× on a 50-field record, 6× on a large
+`list[int]` and 7× on deep nesting. On CPython 3.12 and 3.13 the record and the
+nesting hold and the large list falls to about 2×, because reading an element
+out of a list costs more on those interpreters than checking it does. All three
+are far faster than pure-Python jsonschema. The comparison is not
+apples-to-apples and is gated against regression in CI; see the
 [performance page](docs/11-performance.md) for the method, the matrix, and the limits.
 
 ## Install

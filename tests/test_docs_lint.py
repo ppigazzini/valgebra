@@ -166,6 +166,24 @@ def test_a_budget_number_in_prose_fails() -> None:
     assert not lint.check_pinned_numbers("the budget is in perf_budget.json", numbers)
 
 
+def test_a_comparison_multiplier_that_names_no_interpreter_fails() -> None:
+    unqualified = "## Speed\n\nA check is 5x faster than pydantic here.\n"
+    assert lint.check_comparison_claims(unqualified)
+    qualified = "## Speed\n\nOn CPython 3.14 a check is 5x faster than pydantic here.\n"
+    assert not lint.check_comparison_claims(qualified)
+    # The interpreter belongs in the section that states the figure: a page that
+    # names one three headings earlier leaves the reader of this claim without it.
+    elsewhere = (
+        "## Method\n\nMeasured on CPython 3.14.\n\n"
+        "## Speed\n\nA check is 5x faster than pydantic here.\n"
+    )
+    assert lint.check_comparison_claims(elsewhere)
+    # A multiplier that compares nothing to another checker is prose, not a claim
+    # this rule is about, and a fenced example is not prose at all.
+    assert not lint.check_comparison_claims("## Scale\n\nA union of 5x members.\n")
+    assert not lint.check_comparison_claims("## Speed\n\n```text\n5x pydantic\n```\n")
+
+
 def test_the_shipped_tree_is_clean() -> None:
     # The gate's own subject. Run as a subprocess so the exit code is the
     # assertion, which is what a lane reads.

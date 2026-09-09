@@ -1,7 +1,9 @@
 """The mechanical half of documentation rot.
 
-Reads every tracked Markdown file and fails on six things a reader cannot be
-expected to catch by eye. Four are per-file claims:
+Reads every tracked Markdown file and fails on the things below, none of which a
+reader can be expected to catch by eye. A count of them belongs here about as
+well as a budget belongs in a page, so there is not one. Most are per-file
+claims:
 
 * **A dead internal link.** Any ``[text](target)`` that is not a URL, a
   ``mailto:`` or a bare ``#anchor`` must resolve, relative to the linking file or
@@ -25,7 +27,15 @@ expected to catch by eye. Four are per-file claims:
   copied into a page is stale the next time it moves, and a stale number is worse
   than an absent one -- it tells a reader to hold the wrong invariant.
 
-Two more hold a specific list to the tree in **both** directions, because a
+* **A comparison multiplier that names no interpreter.** A ratio against another
+  checker cancels the machine and not the interpreter: one gated shape takes
+  0.516 of pydantic's time under CPython 3.12 and 0.155 under 3.14, on one box.
+  A page stating "5x" without saying which interpreter states something true for
+  one reader and false for the next, so the version is part of the claim and
+  lives in the section that makes it. The changelog is exempt, being a dated
+  record rather than a description of this tree.
+
+The rest hold a specific list to the tree in **both** directions, because a
 hand-written index satisfies the direction it was written for and misses the
 other:
 
@@ -218,6 +228,63 @@ def check_fences(text: str) -> list[str]:
         problems.append(
             f"line {number}: a fence whose language is a sentence "
             f'("{info[:40]}...") opens a code block rather than closing one'
+        )
+    return problems
+
+
+#: A multiplier a page states about another checker: `5x`, `2.6x`, `2,600x`,
+#: spelled with either the letter or the multiplication sign.
+MULTIPLIER = re.compile(r"(?<![\w.])\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*[x\u00d7](?![\w])")
+
+#: The interpreter a comparison is measured on. A ratio between two checkers is
+#: a property of the pair *and* the interpreter running them, so the version is
+#: part of the claim rather than part of the setup.
+INTERPRETER = re.compile(r"(?:CPython|Python) 3\.\d+")
+
+#: The library a multiplier is a comparison against. jsonschema rides along with
+#: pydantic in every table that carries one, so naming the fast one is enough.
+COMPARED = re.compile(r"pydantic", re.IGNORECASE)
+
+
+def check_comparison_claims(text: str) -> list[str]:
+    """Refuse a multiplier against another checker that names no interpreter.
+
+    A ratio cancels the machine, which is why the gate reads one: a slower box
+    slows both sides. It does not cancel the *interpreter*, and one shape here
+    moves by three and a half times across two of them -- a large list of
+    integers reads 0.155 of pydantic's time on CPython 3.14 and 0.516 on 3.12,
+    on one box, because reading an element costs more there than checking it.
+
+    A page that states "5x on a large list" without saying which interpreter
+    therefore states something true of one reader and false of the next, and the
+    figure was read on a bench runner whose interpreter nobody had looked at.
+    So a multiplier in a section that compares against another checker names the
+    interpreter it holds on, in that same section, beside the number. The
+    changelog is exempt: a released entry records what a release measured, under
+    a heading that dates it, and is not re-measured or amended.
+    """
+    problems = []
+    heading, body, start = "the opening", [], 1
+    sections = []
+    fenced = False
+    for number, line in enumerate(text.splitlines(), start=1):
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+        elif not fenced and line.startswith("#"):
+            sections.append((heading, "\n".join(body), start))
+            heading, body, start = line.strip("# ").strip(), [], number
+            continue
+        if not fenced:
+            body.append(line)
+    sections.append((heading, "\n".join(body), start))
+    for name, section, number in sections:
+        if not COMPARED.search(section) or INTERPRETER.search(section):
+            continue
+        problems.extend(
+            f"line {number}: {name!r} states {figure} against another checker "
+            "and names no interpreter; a ratio moves with the interpreter, so "
+            "the claim carries the one it holds on"
+            for figure in MULTIPLIER.findall(section)
         )
     return problems
 
@@ -518,6 +585,7 @@ def main() -> int:
             + check_internal_reference(text)
             + check_pinned_numbers(text, numbers)
             + check_fences(text)
+            + ([] if path.name == "CHANGELOG.md" else check_comparison_claims(text))
         ]
     for path in referencing:
         if path.suffix == ".md":

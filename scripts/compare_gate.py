@@ -13,11 +13,14 @@ estimator that scheduling jitter inflates but never deflates.
 must stay under, chosen with headroom over what the shape measures and written
 down as what the project says of itself -- "at most this much of pydantic-core
 here". A recorded measurement would be a fourth number that travels badly: the
-two libraries respond differently to a PGO build, an interpreter version and a
-cache size, so ratios measured on one machine are 1.7x ratios measured on
-another (`large_array`, 0.52 recorded on the bench runner against 0.88 on a
-developer's box). A claim does not move when the machine does, and changing one
-is an edit somebody argues for.
+two libraries respond differently to a PGO build and to an interpreter version,
+so a ratio recorded in one environment is not the ratio of another. The gap is
+the interpreter rather than the box: on a single machine `large_array` takes
+0.516 of pydantic's time under CPython 3.12 and 0.155 under 3.14, because a list
+hands out each element as an owned reference -- a count written when the handle
+is made and again when it drops -- and 3.14 makes those writes cheap. A claim
+does not move when the environment does, and changing one is an edit somebody
+argues for.
 
 So this gate is the coarse tripwire: it catches ceding ground to pydantic-core,
 on any machine, with no re-recording. The fine-grained work is

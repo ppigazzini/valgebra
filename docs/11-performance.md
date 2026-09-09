@@ -156,12 +156,36 @@ End-to-end validation of a value that passes (lower is better):
 | Closed record, 50 int fields | 0.704 +/- 0.010 us | 1.90 +/- 0.087 us | 130 +/- 4.3 us |
 | Nested `list[...]`, depth 25 | 0.201 +/- 0.021 us | 1.97 +/- 0.031 us | 75.1 +/- 2.0 us |
 
-valgebra relative to pydantic on this machine: **9.8x** faster on deep nesting,
-**8.0x** on the large flat array, **2.7x** on the wide record. It is consistently
-far ahead of pure-Python jsonschema — 2,600x on the array, 374x on the nesting
-and 185x on the record. pydantic does strictly more work on the record (it
-constructs output), so read that shape as a margin over a heavier operation, not
-a like-for-like loss for pydantic.
+valgebra relative to pydantic on this machine, under the CPython 3.14 the matrix
+above names: **9.8x** faster on deep nesting, **8.0x** on the large flat array,
+**2.7x** on the wide record. It is consistently far ahead of pure-Python
+jsonschema — 2,600x on the array, 374x on the nesting and 185x on the record.
+pydantic does strictly more work on the record (it constructs output), so read
+that shape as a margin over a heavier operation, not a like-for-like loss for
+pydantic.
+
+### One of those margins moves with the interpreter
+
+A ratio cancels the machine — a slower box slows both sides — and it does not
+cancel the interpreter. Running the comparison gate on one box against two of
+them, as the fraction of pydantic's time each shape takes:
+
+| Shape | CPython 3.12 | CPython 3.14 |
+| --- | --- | --- |
+| `list[int]`, 10,000 elements | 0.516 | 0.155 |
+| Closed record, 50 int fields | 0.314 | 0.349 |
+| Nested `list[...]`, depth 25 | 0.162 | 0.142 |
+| One `int` | 0.250 | 0.214 |
+
+Six of the seven gated shapes read within a fifth of each other across the two.
+The large array does not, and the reason is the *element*, not the check: a list
+hands out each of its items as an owned reference, which is a count written on
+the object when the handle is made and again when it drops. CPython 3.14 makes
+those writes cheap; 3.12 and 3.13 do not, and there they cost more than the type
+test they surround — measured at 4.7 ns per element against 1.3 for a list of
+small integers, whose counts are never written at all. So read the large array's
+margin as about 6x on 3.14 and about 2x on 3.12 and 3.13, and the other shapes as
+carrying across.
 
 The scalar shape is absent from the table because it sits near timer resolution:
 the competitive gate measures it at a 32.1 ns median with a spread reaching a
