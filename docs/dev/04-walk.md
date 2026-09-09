@@ -114,6 +114,37 @@ The cost is one length read per element, which is a pointer dereference: the
 `large_array` shape of the comparative gate moved 0.881 to 0.886 against
 pydantic-core when the sequence guard landed.
 
+## A list of one scalar kind is read through a snapshot of it
+
+Reading an element out of a list hands back an *owned* handle: a reference count
+written when the handle is made and again when it drops, on an object the walk
+only type-tests. Copying the list into a tuple pays the same two counts inside
+the interpreter, in two loops carrying no dependent work between them, and the
+tuple is frozen -- so its elements are read borrowed and the walk pays neither.
+A ten-thousand element `list[int]` costs 1.64 ns per element against 4.38 on
+CPython 3.12, and 2.45 against 8.31 on the free-threaded build, where the copy
+also takes the container's lock once rather than once per element.
+
+Which reading is cheaper is a property of the **interpreter**, so the walk asks
+one. CPython 3.14 makes the count pair cheap enough that the copy is pure cost
+and the walk reads in place there. Asking requires the interpreter's own flags,
+which reach the crate that emits them and no other, so `crates/valgebra-py/build.rs`
+re-emits them; without it such a question reads "an older interpreter" against
+every interpreter, silently, and the fast path is taken everywhere.
+
+Two widths bound the copy, `SNAPSHOT_MIN_ELEMENTS` and `SNAPSHOT_MAX_ELEMENTS`
+in `crates/valgebra-py/src/check/walk.rs`: below the first it cannot pay for its
+own allocation, above the second walking it costs more cache than the counts it
+avoids, and the transient stops at two mebibytes. Both are in the bounds table of
+[00-architecture.md](00-architecture.md), and neither changes an answer.
+
+The contract of the section above is kept: the copy answers about the list as it
+was when the copy was taken, so the count is compared again afterwards and a
+value that moved reports the move. The **instruction** count moves the other way
+-- the copy is instructions and the stall it removes is not, so a sixty-four
+element walk executes 47% more of them -- which is why `scripts/perf_budget.json`
+carries that reading as a recorded step against the base it steps from.
+
 ## Recursion is guarded by value identity
 
 `check_ref` records `(object id, definition index)` on the path. A value that

@@ -12,14 +12,35 @@ it decides.
 schema tree, matching shapes and applying rules. It answers first, and the
 descriptor answers where it declines.
 
-That ordering is not a second opinion. Both are asked the same question, and the
-descriptor can only turn "not proved" into "proved", so the pair gives the
-descriptor's answers wherever the descriptor can build. The rules are an
-optimisation of a relation the descriptor defines --
-[01-schema-ir.md](01-schema-ir.md) records that decision under "Which
+That ordering is not a second opinion. Both are asked the same question and
+both answer in three values -- proved, refuted, or neither -- so the descriptor
+is asked only where the rules reach the third, and the pair gives whichever of
+them decides. The rules are an optimisation of a relation the descriptor defines
+-- [01-schema-ir.md](01-schema-ir.md) records that decision under "Which
 representation decides" -- and the reason they are worth having is measured:
 building a set representation costs about two orders of magnitude more than a
-rule that already answers.
+rule that already answers, which is what a relation the rules *refute* stops
+paying.
+
+**A refutation stands on a value.** The descriptor's is direct: it proves the
+difference `a & ~b` holds one. A rule's is a mismatch of shapes -- two arities
+that cannot align, a key one side requires and a closed record does not declare
+-- and the value it names is implicit, *some* value of the subject shaped the
+way the subject says. A subject with no value names none, and the empty set is
+below every set including the shape it can never take, so a rule's refutation is
+read against the subject's own emptiness before it is believed: proved inhabited
+it refutes, proved empty it establishes the opposite, and undecided it decides
+nothing and the descriptor is asked. One reading at the top of the query settles
+every rule, because every composition that carries a refutation preserves the
+claim, and the one disjunction that could invent one out of parts each failing
+for a different reason is read for its proof alone.
+
+Both halves are gated. `scripts/perf_gate.py --decision` measures the relations
+that hold; `--decision-refute` measures the ones a rule refutes, which is the
+path the first workload never walks and where work therefore costs nothing any
+budget holds. `Validator.relation_to` is the boundary's reading of the same
+three values, and `tests/test_completeness_probe.py` holds a reported refutation
+to naming a value its universe contains.
 
 `crates/valgebra-core/src/simplify.rs` is the pass that used to normalise a
 term afterwards. It is **deprecated** and goes in the next minor version: a
