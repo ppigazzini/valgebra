@@ -48,6 +48,7 @@ BINDING = ROOT / "crates" / "valgebra-py"
 # asserted over every mode by its own tests.
 SWEPT = {
     "crates/valgebra-py/src/check/walk.rs",
+    "crates/valgebra-py/src/check/walk/record.rs",
     "crates/valgebra-py/src/check/ctx.rs",
     "crates/valgebra-py/src/build.rs",
     "crates/valgebra-py/src/equality.rs",

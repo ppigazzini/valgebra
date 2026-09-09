@@ -21,7 +21,7 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **pool** | the validator's `Vec<Py<PyAny>>`, holding four kinds of object addressed by four index types ([06-type-design.md](06-type-design.md)) |
 | **definition** | an entry in the validator's definitions table; the target of a `Ref` back edge, produced by `recursive` |
 | **contractive** | a recursive definition whose every self-reference sits under a structural constructor. `Schema::occurs_unguarded` decides it |
-| **the walk** | `member` in `crates/valgebra-py/src/check/walk.rs`. There is one, and it serves both input paths and all three modes |
+| **the walk** | `member` in `crates/valgebra-py/src/check/walk.rs`, with the keyed-map and attribute-record arms in `walk/record.rs`. There is one, and it serves both input paths and all three modes |
 | **violation** | the structured failure: a stable code, a path, an expected label and a value summary ([05-errors.md](05-errors.md)) |
 
 ## The decision procedure

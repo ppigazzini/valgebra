@@ -91,6 +91,22 @@ for an exact int or str — an explain walk, a non-literal union, another value
 type and a JSON value all fall through to the linear scan, which stays the one
 source of truth for behaviour.
 
+## Where the walk lives
+
+`crates/valgebra-py/src/check/walk.rs` holds the dispatcher `member` and the
+arms that read a value as a scalar, a sequence, a union, a meet, a complement,
+a class or a reference. `walk/record.rs` holds the arms that read one as a
+**keyed map or an attribute record**, which is the shape whose membership is a
+question per key rather than per position: which keys the value carries, which
+of them the schema declares, and what a key the schema does not declare is
+covered by. The walk's other containers ask about elements and share none of
+that.
+
+Both read the same `Frame`: where the walk is in the value, what it has found
+there, and the context it may look things up in. A walk needing a different one
+-- a union probing a branch into a buffer of its own, a clause pair deciding on
+the fast path -- builds it from the parts it keeps.
+
 ## A container is read against a count taken once
 
 Membership runs arbitrary Python at almost every entry — a predicate, an
