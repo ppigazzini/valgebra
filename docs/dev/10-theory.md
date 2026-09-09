@@ -256,5 +256,27 @@ procedure is a sound, budget-bounded structural one that is exact on a published
 fragment; it is not the interning automata engine. Where a page here says
 otherwise, the page is wrong.
 
+### Where this tree departs from its sources
+
+Each row is a decision, and none is unsoundness: a `True` from any relation
+remains a proof. They are collected because a departure nobody writes down is
+one the next reader rediscovers as a bug.
+
+| # | The departure | What it costs |
+| --- | --- | --- |
+| 1 | The subtyping decision is structural, not the emptiness reduction applied uniformly | a hole wherever an arm is missing; the boundary is [15-decidability.md](../15-decidability.md) |
+| 2 | Simplification produces negation normal form and stops; NNF is not canonical | `simplify(a) == simplify(b)` is not an equivalence test, and two spellings of one set can order differently -- which is why the laws are asserted over Boolean combinations and the deciders' agreement over a corpus that adds shapes |
+| 3 | A keyed map carries no negative component and is not canonicalised | a negated record has no representation, and `open`/`close` read a spelling |
+| 4 | Clauses are unordered where the source orders them | a narrowing: a key belongs when *some* clause admits it |
+| 5 | Clauses are quasi-K-step rather than quasi-constant | nothing against the literature, which introduces exactly this generalisation |
+| 6 | The assumption trail is popped rather than threaded | every relation proved on the way is discarded, so a goal reached twice by different paths is decided twice |
+| 7 | A refutation from the *set* reading is not sound across components | a class atom and a sequence sit in different components, so the difference reads a named tuple of two integers as outside `tuple[int, int]`. The public relations report two values, where that reads as "not proven"; a three-valued answer at the boundary waits on this |
+
+Two departures earlier drafts of this table carried are closed. The trail held
+whole terms, which cost a subtree copy per step; it holds shared handles, and a
+copy is a reference count. And the gradual atom was a variant every lattice rule
+had to remember to exclude; `Any` is the top, spelled, so no rule can tell them
+apart.
+
 Tooling and toolchain facts are [11-references.md](11-references.md), not this
 page.
