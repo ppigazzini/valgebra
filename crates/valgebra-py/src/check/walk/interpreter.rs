@@ -700,6 +700,67 @@ fn a_set_and_a_frozenset_are_distinct_containers() {
 /// it for the whole walk, so nothing it contains can be freed. The check here
 /// drops every other reference to the tuple and collects, which is the strongest
 /// form of that pressure the interpreter offers.
+/// A closed record holding exactly the keys it declares has no undeclared key
+/// to find, and the report reaches that by counting what the field walk found
+/// against the entries the value held. Checking a field runs Python, and Python
+/// can add a key, so the count is a claim about the value as it was: the length
+/// is read again before it is believed.
+///
+/// The arrangement below is the one where a stale count would say there is
+/// nothing to look for -- the first field fails and the second grows the value,
+/// which leaves as many declared fields found as there were entries to begin
+/// with. The key the growth added is still reported.
+#[test]
+fn a_key_added_while_a_record_is_explained_is_still_reported() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new(
+                "payload = {'a': 1, 'b': 2}\n\
+                 def grow(x):\n\
+                 \x20   payload['x%d' % len(payload)] = 0\n\
+                 \x20   return True\n",
+            )
+            .expect("no interior nul")
+            .as_c_str(),
+            std::ffi::CString::new("grow.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("grow")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+        let payload = module.getattr("payload").expect("payload");
+        let pool = vec![module.getattr("grow").expect("grow").unbind()];
+
+        let field = |name: &str, schema| Field {
+            name: name.into(),
+            schema,
+            required: true,
+        };
+        let schema = Schema::keyed_map(
+            vec![
+                field("a", Schema::Str),
+                field(
+                    "b",
+                    Schema::Refine {
+                        base: Arc::new(Schema::Int),
+                        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+                    },
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let (ok, violations) = explain(py, &schema, &payload, &pool, &[]);
+        assert!(!ok);
+        let codes: Vec<&str> = violations.iter().map(|v| v.code).collect();
+        assert!(codes.contains(&"string_type"), "{codes:?}");
+        assert!(codes.contains(&"extra_forbidden"), "{codes:?}");
+    });
+}
+
 #[test]
 fn a_tuple_element_survives_the_python_its_own_check_runs() {
     Python::attach(|py| {

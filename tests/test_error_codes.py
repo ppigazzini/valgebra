@@ -81,6 +81,24 @@ def test_record_codes_and_paths() -> None:
     assert _first({"a": int}, {"a": "x"}) == ("int_type", ("a",))
 
 
+def test_an_undeclared_key_is_reported_beside_an_absent_optional_field() -> None:
+    """A record holding its own keys has no undeclared key to look for.
+
+    A closed record that holds exactly the keys it declares reaches that answer
+    by counting, rather than by reading the value again.
+
+    An *optional* field left out is the case the count has to get right: the
+    value carries as many entries as the record has fields, and one of those
+    entries is a key the record never declares. Counting the fields *found*
+    against the entries held is what separates the two.
+    """
+    pair = {"a": int, "b?": int}
+    assert _first(pair, {"a": 1, "zz": 2}) == ("extra_forbidden", ("zz",))
+    # And the shape the count answers on its own: every key declared, one value
+    # wrong, nothing undeclared to find.
+    assert _first(pair, {"a": 1, "b": "x"}) == ("int_type", ("b",))
+
+
 def test_class_codes_and_paths() -> None:
     assert _first(_Color, 1) == ("instance_type", ())
     assert _first(_Point, {"x": 1, "y": 2}) == ("instance_type", ())

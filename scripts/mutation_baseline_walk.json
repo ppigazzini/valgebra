@@ -13,13 +13,15 @@
     "check/walk.rs: replace keyed_map_asks_for_its_keys -> Option<bool> with None": "The fast path's switch: `None` sends the walk to the scan it replaced, which decides the same values. `a_closed_record_answers_for_each_of_its_keys` holds the two to the same answers; the difference between them is the cost, and the sweep cannot read a cost.",
     "check/walk.rs: replace != with == in keyed_map_asks_for_its_keys": "`plan.keys.len() != fields.len()` is a defensive refusal: the plan is built from the same field list and a caller cannot spell two fields with one name (the frontend rejects duplicates), so the counts are always equal and the guard never fires. Flipping it makes the guard always fire, which turns the fast path off and leaves the scan to answer -- the same equivalence as the switch above.",
     "check/walk.rs: replace homogeneous_scalar -> Option<Scalar> with None": "The fast path's switch. `None` means \"this sequence is not one scalar kind\", so the walk takes the general element loop -- which is the path this one was measured against and must agree with (`the_scalar_loop_and_the_walk_admit_the_same_values`). Turning it off changes no answer and costs 70% of a list of integers, and no test can see the difference in an answer, which is what makes it equivalent rather than untested.",
-    "check/walk.rs: replace == with != in keyed_map_matches_json": "The same guard on the JSON side, and the same argument: the counts agree by construction, so flipping the comparison retires the fast path and the document search answers instead."
+    "check/walk.rs: replace == with != in keyed_map_matches_json": "The same guard on the JSON side, and the same argument: the counts agree by construction, so flipping the comparison retires the fast path and the document search answers instead.",
+    "crates/valgebra-py/src/check/walk.rs: replace += with *= in keyed_map_explain": "Cannot change a report. The counter it disables is what lets a closed record holding exactly its own keys skip a scan that would find nothing: stuck at zero, the count matches only an empty value, so every other record falls through to the scan and the scan reports what the count would have. Only the cost moves, and cost is the instruction budget's business. The other half of the same condition is not equivalent and is killed by tests/test_mutation.py: a value that grows while it is explained leaves the count matching entries it no longer has, which is why the length is read again before the skip is taken."
   },
   "survivors": [
     "crates/valgebra-py/src/build.rs: delete match arm Schema::Intersection(_) | Schema::Complement(_) | Schema::Ref(_) | Schema::SelfRef(_) in carries_through",
     "crates/valgebra-py/src/build.rs: replace || with && in is_union_origin",
     "crates/valgebra-py/src/check/walk.rs: delete field mode from struct Ctx expression in fast",
     "crates/valgebra-py/src/check/walk.rs: replace != with == in keyed_map_asks_for_its_keys",
+    "crates/valgebra-py/src/check/walk.rs: replace += with *= in keyed_map_explain",
     "crates/valgebra-py/src/check/walk.rs: replace += with *= in scan_dict",
     "crates/valgebra-py/src/check/walk.rs: replace < with <= in scan_dict",
     "crates/valgebra-py/src/check/walk.rs: replace < with <= in scan_list",

@@ -1228,13 +1228,14 @@ fn keyed_map_explain(
         out.push(type_mismatch("dict_type", "dict", value, path));
         return;
     };
-    let declared: FxHashSet<&str> = fields.iter().map(|field| &*field.name).collect();
     // The interned keys, in field order. Asking the dict by Rust text decodes a
     // fresh `PyString` and hashes it before the probe can start, once per field
     // per call; an interned key carries its hash. A schema absent from the index
     // falls back to its own text, so correctness never depends on the plan being
     // complete -- the two spellings name the same key.
     let interned = ctx.records.get(&(fields.as_ptr() as usize));
+    let entries = dict.len();
+    let mut present = 0usize;
     for (position, field) in fields.iter().enumerate() {
         let key = interned.and_then(|plan| plan.keys.get(position));
         let found = match key {
@@ -1243,6 +1244,7 @@ fn keyed_map_explain(
         };
         match found {
             Ok(Some(item)) => {
+                present += 1;
                 path.push(PathSegment::Key(Arc::clone(&field.name)));
                 member(&field.schema, &Value::Py(&item), path, ctx, out);
                 path.pop();
@@ -1261,6 +1263,19 @@ fn keyed_map_explain(
             return;
         }
     }
+    // A closed record that holds exactly the keys it declares has no undeclared
+    // key to find, and the field loop above has already established it: a dict
+    // cannot repeat a key, so finding as many declared keys as the value has
+    // entries accounts for every one of them. The length is re-read because the
+    // walk of a field's value runs Python, which can resize the dict -- and a
+    // value that moved under the reading falls through to the scan, which is
+    // where a mutation is reported.
+    if defaults.is_empty() && present == entries && dict.len() == entries {
+        return;
+    }
+    // Built here rather than above, because the scan is the only reader and a
+    // record that answers by count never reaches it.
+    let declared: FxHashSet<&str> = fields.iter().map(|field| &*field.name).collect();
     let scan = scan_dict(dict, |key, val| {
         if let Some(name) = key.cast::<PyString>().ok().and_then(|s| s.to_str().ok())
             && declared.contains(name)

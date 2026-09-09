@@ -87,6 +87,32 @@ def test_a_dict_grown_by_a_predicate_is_reported_not_a_panic() -> None:
     assert info.value.code == MUTATED
 
 
+def test_a_key_added_while_a_record_is_explained_is_still_reported() -> None:
+    """The report reads the value it has, not the one it counted.
+
+    A closed record holding exactly the keys it declares has no undeclared key
+    to look for, and the report reaches that by counting what the field walk
+    found against the entries the value held. Checking a field runs Python, and
+    Python can add a key -- so the count is a claim about the value as it was,
+    and the length is read again before it is believed. Here the first field
+    fails and the second grows the value, which leaves as many declared fields
+    found as there were entries to begin with: the one arrangement where a stale
+    count would say there is nothing to look for.
+    """
+    payload = {"a": 1, "b": 2}
+
+    def grow(_: object) -> bool:
+        payload[f"x{len(payload)}"] = 0
+        return True
+
+    record = Validator({"a": str, "b": Annotated[int, at.Predicate(grow)]})
+    with pytest.raises(ValidationError) as info:
+        record.validate(payload)
+    codes = [item["code"] for item in info.value.errors]
+    assert "string_type" in codes
+    assert "extra_forbidden" in codes
+
+
 def test_a_list_grown_by_a_predicate_is_reported_not_answered() -> None:
     """The positions past the length read at entry are never visited.
 
