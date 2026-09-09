@@ -10,6 +10,11 @@ publish = false
 name = "_valgebra"
 crate-type = ["cdylib", "rlib"]
 
+[build-dependencies]
+# Re-emits the interpreter's `Py_3_x` and `Py_GIL_DISABLED` flags for this
+# crate; see `build.rs`. Already in the tree as `pyo3`'s own build dependency.
+pyo3-build-config = "0.29"
+
 [dependencies]
 # The pyo3 `extension-module` feature is intentionally not set here. maturin
 # (>= 1.9.4) injects it at wheel-build time via PYO3_BUILD_EXTENSION_MODULE.

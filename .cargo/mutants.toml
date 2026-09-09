@@ -20,6 +20,10 @@
 # `tests/test_mutation_scope.py` holds this list to the tree in both directions.
 exclude_globs = [
     "crates/valgebra-py/examples/**",
+    # A build script runs before the crate exists and decides how it is
+    # compiled, so a mutation of it is not a change the test suite can observe:
+    # every mutant either builds the same extension or none at all.
+    "crates/valgebra-py/build.rs",
     "crates/valgebra-py/src/check.rs",
     "crates/valgebra-py/src/exception.rs",
     "crates/valgebra-py/src/validator.rs",
@@ -44,6 +48,15 @@ exclude_globs = [
 # the coverage claim that argues for a target that no longer exists.
 exclude_re = [
     "has_disjoint_complement_pair",
+    # `snapshot_pays` chooses between two readings of a list of one scalar kind
+    # -- the elements in place, or a snapshot of them read borrowed -- that test
+    # the same elements against the same schema and report the same membership.
+    # Every mutant of it moves cost and nothing else, which is the instruction
+    # budget's business and not a test's, so none is killable by construction.
+    # The two arms it chooses between are exercised either way: a list of
+    # sixty-four elements takes the snapshot and a narrow one does not, and an
+    # interpreter test asks both.
+    "snapshot_pays",
     # The three `LeafRelations` defaults are read through call sites that
     # collapse `None` and `Some(false)` to the same answer: `leaf_subtype(..)
     # .unwrap_or(false)`, `no_int_between(..) == Some(true)`, and

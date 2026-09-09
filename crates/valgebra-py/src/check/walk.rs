@@ -416,6 +416,27 @@ fn check_seq(
             // scalar cannot recurse, cannot run Python, and is the same schema at
             // every position, so they are paid once for the list.
             if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
+                // A snapshot of the list is a tuple, and a tuple's elements are
+                // read borrowed. The reading it answers about is the list as it
+                // was when the copy was taken, so the count is compared again
+                // afterwards and a value that moved reports the move, exactly as
+                // the in-place scan does. A copy the interpreter cannot make is
+                // not a verdict: the walk reads in place instead.
+                if snapshot_pays(list.len())
+                    && let Ok(snapshot) = list.as_sequence().to_tuple()
+                {
+                    let ok = snapshot
+                        .iter_borrowed()
+                        .all(|item| scalar_admits(kind, &Value::Py(&item)));
+                    if !ok {
+                        return false;
+                    }
+                    return if list.len() == snapshot.len() {
+                        true
+                    } else {
+                        mutated(value, path, ctx, out)
+                    };
+                }
                 let mut ok = true;
                 let scan = scan_list(list, |_, item| {
                     ok &= scalar_admits(kind, &Value::Py(item));
@@ -1315,6 +1336,56 @@ fn keyed_map_explain(
     // there is nothing else to report, and the mutation is the finding.
     if matches!(scan, Scan::Unreadable) {
         mutated(value, path, ctx, out);
+    }
+}
+
+/// The narrowest list a snapshot pays for, and the widest.
+///
+/// A list of one scalar kind is read through a snapshot of it (see
+/// [`snapshot_pays`]), and the two ends of that band are where the snapshot
+/// stops paying. Below the first, its fixed cost -- one call, one allocation --
+/// outweighs what it saves: sixteen elements is where the two meet, and a
+/// four-element list reads thirteen percent dearer through a snapshot on
+/// `CPython` 3.12. Above the second, the copy is large enough that walking it
+/// costs more cache than the reference counts it avoids: measured on one box,
+/// a snapshot reads a hundred thousand elements at 1.68 ns each against 4.57
+/// in place, two hundred thousand at 1.73 against 4.74, four hundred thousand
+/// at 3.88 against 4.68, and six hundred thousand at 5.76 against 4.61 -- so
+/// the crossing is between four and six hundred thousand, and the cap sits
+/// below it with margin, at two mebibytes of transient.
+///
+/// Neither end changes an answer: both sides of each read the same elements and
+/// report the same membership. They are where one reading of a value stops
+/// being cheaper than another, which is why the walk holds them rather than the
+/// frontend refusing anything.
+const SNAPSHOT_MIN_ELEMENTS: usize = 16;
+
+/// The widest list a snapshot pays for; see [`SNAPSHOT_MIN_ELEMENTS`].
+const SNAPSHOT_MAX_ELEMENTS: usize = 262_144;
+
+/// Whether a list of `len` elements is cheaper read through a snapshot than in
+/// place, on the interpreter this extension is built against.
+///
+/// Reading an element out of a list hands back an *owned* handle: a reference
+/// count written when it is made and again when it drops, on an object the walk
+/// only type-tests. Copying the list into a tuple pays the same two writes in
+/// two tight loops inside the interpreter, and the tuple is frozen, so its
+/// elements are read borrowed and the walk pays neither.
+///
+/// Which is cheaper is a property of the interpreter. `CPython` 3.14 makes the
+/// pair cheap enough that the copy is pure cost -- a ten-thousand element list
+/// reads 1.44 ns per element in place there and 1.65 through a snapshot -- so
+/// it reads in place. Below 3.14 the pair dominates: 4.77 against 1.66. The
+/// free-threaded build pays a lock per element on top of the pair, and the copy
+/// takes one lock for the whole list: 8.90 against 2.22, and it pays at every
+/// width, so the lower end of the band does not apply there.
+const fn snapshot_pays(len: usize) -> bool {
+    if cfg!(Py_GIL_DISABLED) {
+        len <= SNAPSHOT_MAX_ELEMENTS
+    } else if cfg!(Py_3_14) {
+        false
+    } else {
+        len >= SNAPSHOT_MIN_ELEMENTS && len <= SNAPSHOT_MAX_ELEMENTS
     }
 }
 

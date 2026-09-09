@@ -693,6 +693,41 @@ fn a_set_and_a_frozenset_are_distinct_containers() {
 /// takes the general walk. The rules are the same rules: one element outside
 /// the schema makes the value a non-member, and a walk that stops at the first
 /// failure must not stop before it.
+/// A list wide enough to be read through a snapshot of it answers what a
+/// narrow one answers.
+///
+/// The walk copies a list of one scalar kind into a tuple and reads the tuple's
+/// elements borrowed, on the interpreters where owning them is dear, and only
+/// between two widths: a list too narrow cannot pay for the copy's allocation.
+/// Every list in the rest of this file is under that floor, so the copy is a
+/// path nothing here walked -- and the verdict it produces, and the mutation it
+/// reports when the list moves underneath it, went unread.
+#[test]
+fn a_list_wide_enough_for_a_snapshot_answers_as_a_narrow_one_does() {
+    Python::attach(|py| {
+        let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let wide: Vec<i64> = (0..64).collect();
+
+        let good = PyList::new(py, &wide).expect("a list builds").into_any();
+        case(py, &ints, &good, true);
+
+        // One element of another kind, at the end, so the answer depends on the
+        // whole copy being read rather than on where the walk gives up.
+        let mixed = PyList::new(py, &wide).expect("a list builds");
+        mixed
+            .set_item(63, PyString::new(py, "x"))
+            .expect("a list takes an item");
+        case(py, &ints, &mixed.into_any(), false);
+
+        // And a kind that is not the element's, at the front.
+        let front = PyList::new(py, &wide).expect("a list builds");
+        front
+            .set_item(0, PyString::new(py, "x"))
+            .expect("a list takes an item");
+        case(py, &ints, &front.into_any(), false);
+    });
+}
+
 /// A tuple's elements are borrowed rather than owned, and the walk runs Python
 /// between the borrow and the answer -- an `isinstance` reaches a metaclass that
 /// can run anything at all. What keeps the borrow good is the tuple: it is

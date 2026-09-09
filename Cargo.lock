@@ -953,6 +953,7 @@ version = "0.0.9"
 dependencies = [
  "jiter",
  "pyo3",
+ "pyo3-build-config",
  "regex",
  "rustc-hash",
  "valgebra-core",
