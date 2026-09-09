@@ -196,6 +196,18 @@ PLANTS = (
         ),
     ),
     Plant(
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        # A job the merge gate does not wait on: it runs, it can go red, and it
+        # blocks nothing, which is what a gate over other gates exists to catch.
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "        bench,\n        bench-free-threaded,\n",
+            "        bench,\n",
+        ),
+    ),
+    Plant(
         "tests/test_lane_interpreters.py",
         (".github/workflows/ci.yml",),
         # A lane that installs an interpreter and names none, which is what

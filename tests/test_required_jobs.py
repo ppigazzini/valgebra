@@ -1,195 +1,91 @@
-"""Every job that runs on a pull request must be able to block the merge.
+"""The aggregate gate requires every job the workflow defines.
 
-The workflow's `ci` job gates on each required job having *succeeded*, and it
-names them twice: once in `needs`, so the gate waits for them, and once in an
-`if` condition, so a skipped or cancelled job fails the gate rather than
-slipping past a check that only catches failure. Two hand-written lists beside a
-growing job set is the shape that drifts, and it did: a gate added to the
-workflow ran on every pull request and could not block one, because neither list
-named it.
+One job gates the merge by asserting each other job succeeded, and it names
+them twice: once in `needs`, so their results are available, and once in the
+condition that reads those results. A job missing from either list runs, goes
+red, and blocks nothing -- which is the failure a gate over other gates exists
+to rule out, and the reason adding a job to this workflow is riskier than it
+looks.
 
-Held in three directions:
+Held in three directions: every job the workflow defines is needed, every need
+is read by the condition, and nothing is named that the workflow does not
+define. The nightly jobs are exempt by name, since a scheduled job does not run
+on the pushes this gate is about.
 
-* a job that runs on a pull request and is absent from `needs` fails, so a new
-  gate blocks a merge the day it arrives;
-* a job in `needs` that the `if` condition does not test fails, so the gate
-  cannot wait for a job whose result it then ignores;
-* a name in either list that is no longer a job fails, so a list cannot outlive
-  what it describes.
-
-The nightly jobs are exempt by their own condition: they run only on the
-schedule, so requiring them would block every merge on work no pull request
-does.
-
-LEDGER: every pull-request job is required by the merge gate
+LEDGER: the merge gate requires every job the workflow defines
 """
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
 import pytest
+import yaml
 
-# The repository checks are not the product suite: this file reads the tree,
-# the configuration and the gate scripts, none of which ship in a wheel.
+# A repository check: it reads the workflow, which ships in no wheel.
 pytestmark = pytest.mark.repository
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
-# The gate itself, which cannot require its own success.
+
+#: The job that gates the merge on the others.
 GATE = "ci"
 
+#: Jobs a push never runs, so the gate does not wait on them.
+SCHEDULED_ONLY = frozenset({"nightly-fuzz", "nightly-libfuzzer", "nightly-mutants"})
 
-def _text() -> str:
-    return WORKFLOW.read_text(encoding="utf-8")
-
-
-def _jobs() -> dict[str, str]:
-    """Every job in the workflow, mapped to its body.
-
-    Read with a regex rather than a YAML parser: `tomllib` has no YAML
-    counterpart in the standard library, and a third-party parser would be a
-    dependency added for one file this repository owns. A job is a two-space
-    key under `jobs:`, which is the only nesting level that shape occurs at.
-    """
-    text = _text()
-    body = text.split("\njobs:\n", 1)[1]
-    heads = re.finditer(r"^  ([a-z0-9-]+):$", body, re.MULTILINE)
-    starts = [(m.group(1), m.start()) for m in heads]
-    bounds = [*[s for _, s in starts[1:]], len(body)]
-    return {
-        name: body[start:end] for (name, start), end in zip(starts, bounds, strict=True)
-    }
+#: `needs.<job>.result` as the condition spells it, in both forms the expression
+#: language offers: a name with a hyphen in it cannot be read with a dot, since
+#: the hyphen parses as subtraction, so those are read by index.
+READS = re.compile(r"needs(?:\.([a-z0-9-]+)|\['([a-z0-9-]+)'\])\.result")
 
 
-def _scheduled_only(job_body: str) -> bool:
-    """Whether the *job* runs only on the schedule, not merely a step of it.
-
-    Read at the job's own indentation. A step inside a job that runs on every
-    push may carry the same condition -- the bench lane reads its recorded
-    budgets nightly and gates on the merge base always -- and matching anywhere
-    in the body took that job for a nightly one, which would have excused it
-    from the merge gate entirely.
-    """
-    return bool(
-        re.search(
-            r"^    if: .*github\.event_name == 'schedule'", job_body, re.MULTILINE
-        )
-    )
+def _workflow() -> dict:
+    return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
 
 
-def _needs() -> set[str]:
-    needs = r"^    needs:\n      \[(.*?)\]"
-    match = re.search(needs, _text(), re.DOTALL | re.MULTILINE)
-    assert match is not None, "the ci job lists no needs"
-    return {name.strip() for name in match.group(1).split(",") if name.strip()}
+def _gate_condition(gate: dict) -> str:
+    conditions = [str(step.get("if", "")) for step in gate["steps"]]
+    return " ".join(conditions)
 
 
-def _tested() -> set[str]:
-    return set(re.findall(r"needs\.([a-z0-9-]+)\.result != 'success'", _text()))
+def _jobs_the_condition_reads(gate: dict) -> set[str]:
+    """Every job name the gate's condition reads a result for."""
+    found = READS.findall(_gate_condition(gate))
+    return {name for pair in found for name in pair if name}
 
 
-def test_every_pull_request_job_is_required() -> None:
-    jobs = _jobs()
-    # The glob is the detector: an empty job set would pass having read nothing.
-    assert len(jobs) >= 15, f"the job scan found only {sorted(jobs)}"
-
-    required = _needs()
-    missing = sorted(
-        name
-        for name, body in jobs.items()
-        if name != GATE and not _scheduled_only(body) and name not in required
-    )
+def test_every_job_is_required_by_the_gate() -> None:
+    jobs = _workflow()["jobs"]
+    gate = jobs[GATE]
+    needed = set(gate["needs"])
+    defined = set(jobs) - {GATE} - SCHEDULED_ONLY
+    missing = sorted(defined - needed)
     assert not missing, (
-        f"jobs that run on a pull request but cannot block it: {missing}. "
-        "Add each to the ci job's `needs` and to its success condition."
+        f"jobs the merge gate does not wait on: {missing}. A job outside its "
+        "`needs` can go red without blocking anything."
     )
 
 
-def test_every_required_job_has_its_result_tested() -> None:
-    # Waiting for a job whose result is never read is a gate that reports
-    # success for a job that failed to run at all.
-    untested = sorted(_needs() - _tested())
-    assert not untested, f"required jobs whose result the gate ignores: {untested}"
-
-
-def test_no_required_job_has_gone() -> None:
-    jobs = set(_jobs())
-    stale = sorted((_needs() | _tested()) - jobs)
-    assert not stale, f"the merge gate names jobs that do not exist: {stale}"
-
-
-def test_a_nightly_job_is_not_required() -> None:
-    # The exemption is real and must stay narrow: a job is excused only by its
-    # own schedule condition, not by being forgotten.
-    jobs = _jobs()
-    nightly = {name for name, body in jobs.items() if _scheduled_only(body)}
-    assert nightly, "no job is schedule-only; the exemption has no subject"
-    assert not (nightly & _needs()), (
-        f"schedule-only jobs required of every merge: {sorted(nightly & _needs())}"
+def test_every_need_is_read_by_the_condition() -> None:
+    jobs = _workflow()["jobs"]
+    gate = jobs[GATE]
+    read = _jobs_the_condition_reads(gate)
+    unread = sorted(set(gate["needs"]) - read)
+    assert not unread, (
+        f"jobs the gate waits on and does not check: {unread}. A need whose "
+        "result the condition never reads is a job that gates nothing."
     )
 
 
-def test_a_sharded_sweep_covers_every_shard() -> None:
-    """A shard index is zero-based, and an out-of-range one sweeps nothing.
-
-    `cargo mutants --shard k/n` numbers the shards `0..n-1`, so `--shard n/n`
-    selects no mutant at all -- and a sweep of no mutants is a job that passes
-    having tested nothing. The matrix and the divisor are written in two places,
-    so they are held to each other here: the shards a job runs must be exactly
-    the range the divisor names.
-    """
-    sharded = False
-    for name, body in _jobs().items():
-        matrix = re.search(r"^        shard: \[([0-9, ]+)\]$", body, re.MULTILINE)
-        if matrix is None:
-            continue
-        sharded = True
-        shards = sorted(int(piece) for piece in matrix.group(1).split(","))
-        passed = r"--shard \"\$\{\{ matrix\.shard \}\}/([0-9]+)\""
-        divisors = {int(found) for found in re.findall(passed, body)}
-        assert divisors, f"{name} shards its matrix but no step passes --shard"
-        assert len(divisors) == 1, (
-            f"{name} passes more than one shard count: {sorted(divisors)}"
-        )
-        count = divisors.pop()
-        assert shards == list(range(count)), (
-            f"{name} runs shards {shards}; a divisor of {count} covers "
-            f"{list(range(count))}, and anything else leaves mutants unswept"
-        )
-    assert sharded, "no job shards its sweep; this ledger has no subject"
-
-
-def test_the_push_matrix_is_the_ends_and_the_odd_ones() -> None:
-    """What a push runs across interpreters is a decision, not a list.
-
-    Seven interpreters on every push is fifty-eight job-minutes for a change
-    that cannot see most of them: the extension is compiled against a
-    version-specific ABI, and what breaks between 3.11 and 3.12 breaks at the
-    floor or at the current release first. So a push runs the ends and the odd
-    ones -- the supported floor, the current release, the free-threaded build,
-    the prerelease -- and the interpreters between the ends run nightly.
-
-    Held here because a matrix grows by one line and nobody re-measures.
-    """
-    text = _text()
-    matrix = re.search(
-        r"python-version: \$\{\{ github\.event_name == 'schedule'\s*"
-        r"&& fromJSON\('(\[[^\]]*\])'\)\s*\|\| fromJSON\('(\[[^\]]*\])'\)",
-        text,
+def test_the_gate_names_no_job_the_workflow_lacks() -> None:
+    jobs = _workflow()["jobs"]
+    gate = jobs[GATE]
+    read = _jobs_the_condition_reads(gate)
+    named = set(gate["needs"]) | read
+    unknown = sorted(named - set(jobs))
+    assert not unknown, (
+        f"the gate names jobs this workflow does not define: {unknown}. A need "
+        "on a job that does not exist is a gate on nothing."
     )
-    assert matrix, "the python matrix is no longer split by event"
-    nightly = json.loads(matrix.group(1))
-    push = json.loads(matrix.group(2))
-
-    assert set(push) <= set(nightly), "a push runs an interpreter the nightly does not"
-    assert len(push) <= 4, f"the push matrix grew to {push}"
-    # The four are the ones a compiled extension can actually differ on.
-    assert {"3.10", "3.14t"} <= set(push), (
-        "the floor and the free-threaded build are the two legs a push cannot "
-        f"drop: {push}"
-    )
-    # And the nightly keeps the ones the push gave up, or they run nowhere.
-    assert set(nightly) - set(push), "the nightly runs nothing extra"

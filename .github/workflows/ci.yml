@@ -282,24 +282,6 @@ jobs:
         env:
           HYPOTHESIS_PROFILE: ci
         run: uv run pytest --cov=valgebra --cov-report=term-missing
-      # The free-threaded build is a supported lane, and a supported lane that
-      # nothing times is one the project makes claims about without reading
-      # them. Every read of an element out of a mutable container takes that
-      # container's lock there, so the shapes whose cost is per-element are a
-      # different performance environment rather than the same one on a slower
-      # clock -- which is why the ceiling file carries a set for it.
-      #
-      # The tests above run against the debug build this lane installs, and a
-      # timing must not: the comparison gate refuses a build with debug
-      # assertions, because a figure from one says nothing about the wheel a
-      # user gets. So the extension is rebuilt optimized after the tests have
-      # had it, in place, and the gate reads that.
-      - name: Build the optimized extension for the timing
-        if: ${{ matrix.python-version == '3.14t' }}
-        run: uv run maturin develop --uv --release
-      - name: Competitive comparison gate (free-threaded)
-        if: ${{ matrix.python-version == '3.14t' }}
-        run: uv run --group bench python scripts/compare_gate.py
       # ruff and ty are static and pinned to a target version, so their result
       # does not depend on the runner's Python; run them once on the floor.
       - name: Ruff lint
@@ -570,6 +552,40 @@ jobs:
       # pydantic-core, measured on the optimized wheel. A ratio cancels the
       # runner's absolute speed, so it gates on the merge path where an absolute
       # wall-clock budget could not.
+      - name: Competitive comparison gate
+        run: uv run --no-sync --group bench python scripts/compare_gate.py
+
+  bench-free-threaded:
+    name: bench (free-threaded)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # A supported lane that nothing times is one the project makes claims about
+    # without reading them. Every read of an element out of a mutable container
+    # takes that container's lock on the free-threaded build, so the shapes
+    # whose cost is per-element are a different performance environment rather
+    # than the same one on a slower clock -- which is why the ceiling file
+    # carries a set for it.
+    #
+    # A job of its own rather than a step in the interpreter matrix, because a
+    # timing needs an optimized build and that matrix installs a debug one for
+    # its tests: sharing the lane meant compiling the extension twice in it,
+    # once for each purpose.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: free-threaded
+      - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.14t"
+      - run: uv sync --locked --no-install-project --group bench
+      - name: Build and install the optimized extension
+        run: uv run --no-sync --group bench maturin develop --uv --release
       - name: Competitive comparison gate
         run: uv run --no-sync --group bench python scripts/compare_gate.py
 
@@ -1222,6 +1238,7 @@ jobs:
         doc-examples,
         docs,
         bench,
+        bench-free-threaded,
         wheel,
         fuzz-build,
         mutants-diff-core,
@@ -1251,6 +1268,7 @@ jobs:
           needs.doc-examples.result != 'success' ||
           needs.docs.result != 'success' ||
           needs.bench.result != 'success' ||
+          needs['bench-free-threaded'].result != 'success' ||
           needs.wheel.result != 'success' ||
           needs.fuzz-build.result != 'success' ||
           needs.mutants-diff-core.result != 'success' ||
