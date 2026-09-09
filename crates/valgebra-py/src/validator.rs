@@ -25,7 +25,7 @@ use valgebra_core::descr::lower::{Constants, Operand};
 use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, Openness, OperandIx, Relation, Schema};
 
 use crate::build::{Pool, build_schema};
-use crate::check::{Ctx, ValidatorIndex, WalkMode, WalkState, build_index, member};
+use crate::check::{Ctx, Frame, ValidatorIndex, WalkMode, WalkState, build_index, member};
 use crate::errors::{into_pyerr, json_invalid_error};
 use crate::input::Value;
 use crate::render::render;
@@ -307,9 +307,7 @@ impl PoolRelations<'_, '_> {
         member(
             schema,
             &Value::Py(value),
-            &mut Vec::new(),
-            ctx,
-            &mut Vec::new(),
+            &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
         )
     }
 }
@@ -849,9 +847,11 @@ impl Validator {
         let ok = member(
             &self.schema,
             &Value::Json(py, &json),
-            &mut Vec::new(),
-            self.context(py, &state, WalkMode::Fast),
-            &mut Vec::new(),
+            &mut Frame::new(
+                &mut Vec::new(),
+                &mut Vec::new(),
+                self.context(py, &state, WalkMode::Fast),
+            ),
         );
         reraise_fatal(state, ok)
     }
@@ -949,9 +949,11 @@ impl Validator {
         let ok = member(
             &self.schema,
             &Value::Py(obj),
-            &mut path,
-            self.context(obj.py(), &state, WalkMode::explaining(fail_fast)),
-            &mut violations,
+            &mut Frame::new(
+                &mut path,
+                &mut violations,
+                self.context(obj.py(), &state, WalkMode::explaining(fail_fast)),
+            ),
         );
         if let Some(err) = state.into_fatal() {
             return Err(err);
@@ -986,9 +988,11 @@ impl Validator {
         let ok = member(
             &self.schema,
             &Value::Py(obj),
-            &mut Vec::new(),
-            self.context(obj.py(), &state, WalkMode::Fast),
-            &mut Vec::new(),
+            &mut Frame::new(
+                &mut Vec::new(),
+                &mut Vec::new(),
+                self.context(obj.py(), &state, WalkMode::Fast),
+            ),
         );
         reraise_fatal(state, ok)
     }

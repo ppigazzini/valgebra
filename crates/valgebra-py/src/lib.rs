@@ -34,7 +34,7 @@ pub use crate::validator::Validator;
 use crate::validator::{MAX_DEFINITIONS, MAX_SCHEMA_DEPTH, MAX_SCHEMA_NODES, OpenDefinition};
 
 use crate::build::{Pool, build_schema, combine};
-use crate::check::{WalkMode, WalkState, member};
+use crate::check::{Frame, WalkMode, WalkState, member};
 use crate::input::Value;
 
 /// Which deterministic workload to run.
@@ -155,9 +155,11 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
                 let ok = member(
                     std::hint::black_box(&validator.schema),
                     &Value::Py(std::hint::black_box(&obj)),
-                    &mut Vec::new(),
-                    validator.context(py, &state, WalkMode::Fast),
-                    &mut Vec::new(),
+                    &mut Frame::new(
+                        &mut Vec::new(),
+                        &mut Vec::new(),
+                        validator.context(py, &state, WalkMode::Fast),
+                    ),
                 );
                 checksum = checksum.wrapping_add(u64::from(ok));
             }
@@ -173,9 +175,11 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
                 let ok = member(
                     std::hint::black_box(&validator.schema),
                     &Value::Py(std::hint::black_box(&obj)),
-                    &mut Vec::new(),
-                    validator.context(py, &state, WalkMode::Fast),
-                    &mut Vec::new(),
+                    &mut Frame::new(
+                        &mut Vec::new(),
+                        &mut Vec::new(),
+                        validator.context(py, &state, WalkMode::Fast),
+                    ),
                 );
                 checksum = checksum.wrapping_add(u64::from(ok));
             }
@@ -206,9 +210,11 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
                 let ok = member(
                     std::hint::black_box(&validator.schema),
                     &Value::Py(std::hint::black_box(&obj)),
-                    &mut Vec::new(),
-                    validator.context(py, &state, WalkMode::Explain),
-                    &mut out,
+                    &mut Frame::new(
+                        &mut Vec::new(),
+                        &mut out,
+                        validator.context(py, &state, WalkMode::Explain),
+                    ),
                 );
                 checksum = checksum
                     .wrapping_add(u64::from(ok))
@@ -245,9 +251,11 @@ pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
         let ok = member(
             std::hint::black_box(&validator.schema),
             &Value::Py(std::hint::black_box(&obj)),
-            &mut Vec::new(),
-            validator.context(py, &state, WalkMode::Fast),
-            &mut Vec::new(),
+            &mut Frame::new(
+                &mut Vec::new(),
+                &mut Vec::new(),
+                validator.context(py, &state, WalkMode::Fast),
+            ),
         );
         checksum = checksum.wrapping_add(u64::from(ok));
     }

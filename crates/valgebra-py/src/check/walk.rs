@@ -53,6 +53,36 @@ use crate::check::violation::{
 use crate::errors::{class_label, summarize};
 use crate::input::Value;
 
+/// Where a walk is, and what it has found there, beside the context it reads.
+///
+/// The three travel together through every arm of the walk, and passing them
+/// one at a time put the same three names in fourteen signatures and on every
+/// recursive call. They are one value here, and a walk that needs a different
+/// one -- a union probing a branch into its own buffer, a complement deciding
+/// its inner schema on the fast path -- builds one from the parts it keeps,
+/// which is why the three are named rather than folded into methods: what a
+/// sub-walk changes differs at every site.
+pub(crate) struct Frame<'a, 'ctx> {
+    /// Where the walk is in the value: the location a violation is reported at.
+    /// Written only in the modes that explain, since a fast walk reports none.
+    pub(crate) path: &'a mut Vec<PathSegment>,
+    /// What the walk has found. A fast walk writes to a buffer nothing reads.
+    pub(crate) out: &'a mut Vec<Violation>,
+    /// What the walk may look up, and what it is being run for.
+    pub(crate) ctx: Ctx<'ctx>,
+}
+
+impl<'a, 'ctx> Frame<'a, 'ctx> {
+    /// A frame over a caller's buffers.
+    pub(crate) fn new(
+        path: &'a mut Vec<PathSegment>,
+        out: &'a mut Vec<Violation>,
+        ctx: Ctx<'ctx>,
+    ) -> Self {
+        Frame { path, out, ctx }
+    }
+}
+
 fn stop(ctx: Ctx<'_>) -> bool {
     ctx.mode.stops_at_first()
 }
@@ -156,13 +186,8 @@ fn predicate_at<'a, 'py>(
 /// failure and `path` accumulates the location of the current value; in fast
 /// mode nothing is allocated. The returned bool is authoritative: it is the same
 /// answer `is_valid` and `validate` report.
-pub(crate) fn member(
-    schema: &Schema,
-    value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
+pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
     // A fatal interpreter signal recorded earlier in the walk unwinds the whole
     // traversal: every remaining node reports a non-member at once, so a large
     // value stops promptly instead of finishing the walk after a KeyboardInterrupt.
@@ -177,9 +202,9 @@ pub(crate) fn member(
     // refused the way an over-deep one already is.
     let Some(_level) = ctx.descend() else {
         if ctx.mode.explains() {
-            out.push(Violation {
+            frame.out.push(Violation {
                 code: "recursion_limit",
-                path: path.clone(),
+                path: frame.path.clone(),
                 expected: format!("at most {MAX_WALK_DEPTH} levels of nesting"),
                 value_summary: summarize_value(value),
             });
@@ -189,56 +214,54 @@ pub(crate) fn member(
     match schema {
         Schema::Anything(_) => true,
         // Bottom admits nothing; an unresolved self-reference is never a member.
-        Schema::Nothing => admit(false, schema, value, path, ctx, out),
+        Schema::Nothing => admit(false, schema, value, frame),
         Schema::SelfRef(_) => {
             if ctx.mode.explains() {
-                out.push(Violation {
+                frame.out.push(Violation {
                     code: "unresolved_recursion",
-                    path: path.clone(),
+                    path: frame.path.clone(),
                     expected: "a resolved recursive value".to_owned(),
                     value_summary: summarize_value(value),
                 });
             }
             false
         }
-        Schema::NoneType => admit(value.is_none(), schema, value, path, ctx, out),
-        Schema::Bool => admit(value.is_bool(), schema, value, path, ctx, out),
+        Schema::NoneType => admit(value.is_none(), schema, value, frame),
+        Schema::Bool => admit(value.is_bool(), schema, value, frame),
         // bool subclasses int, so True/False are ints: Bool is a subset of Int.
-        Schema::Int => admit(value.is_int(), schema, value, path, ctx, out),
-        Schema::Float => admit(value.is_float(), schema, value, path, ctx, out),
-        Schema::Str => admit(value.is_str(), schema, value, path, ctx, out),
-        Schema::Bytes => admit(value.is_bytes(), schema, value, path, ctx, out),
-        Schema::Literal(index) => check_literal(*index, value, path, ctx, out),
-        Schema::Seq { container, shape } => check_seq(*container, shape, value, path, ctx, out),
+        Schema::Int => admit(value.is_int(), schema, value, frame),
+        Schema::Float => admit(value.is_float(), schema, value, frame),
+        Schema::Str => admit(value.is_str(), schema, value, frame),
+        Schema::Bytes => admit(value.is_bytes(), schema, value, frame),
+        Schema::Literal(index) => check_literal(*index, value, frame),
+        Schema::Seq { container, shape } => check_seq(*container, shape, value, frame),
         Schema::Coll { container, element } => match container {
-            CollKind::Set => check_set(element, value, path, ctx, out),
-            CollKind::FrozenSet => check_frozenset(element, value, path, ctx, out),
+            CollKind::Set => check_set(element, value, frame),
+            CollKind::FrozenSet => check_frozenset(element, value, frame),
         },
         Schema::KeyedMap { fields, defaults } => {
             // Membership is the single-pass fast check; on failure the explain
             // pass re-walks in declared order to aggregate ordered violations.
             let ok = keyed_map_matches(fields, defaults, value, ctx);
             if !ok && ctx.mode.explains() {
-                let before = out.len();
-                keyed_map_explain(fields, defaults, value, path, ctx, out);
-                if out.len() == before {
+                let before = frame.out.len();
+                keyed_map_explain(fields, defaults, value, frame);
+                if frame.out.len() == before {
                     // Two passes read the same dict and disagreed, so the dict
                     // did not stay still between them: report that rather than a
                     // failure with nothing behind it.
-                    mutated(value, path, ctx, out);
+                    mutated(value, frame);
                 }
             }
             ok
         }
-        Schema::Union(members) => check_union(members, value, path, ctx, out),
-        Schema::Intersection(members) => check_intersection(members, value, path, ctx, out),
-        Schema::Complement(inner) => check_complement(inner, value, path, ctx, out),
-        Schema::Instance(index) => check_instance(*index, value, path, ctx, out),
-        Schema::AttrRecord { fields } => check_attr_record(fields, value, path, ctx, out),
-        Schema::Refine { base, constraints } => {
-            check_refine(base, constraints, value, path, ctx, out)
-        }
-        Schema::Ref(id) => check_ref(*id, value, path, ctx, out),
+        Schema::Union(members) => check_union(members, value, frame),
+        Schema::Intersection(members) => check_intersection(members, value, frame),
+        Schema::Complement(inner) => check_complement(inner, value, frame),
+        Schema::Instance(index) => check_instance(*index, value, frame),
+        Schema::AttrRecord { fields } => check_attr_record(fields, value, frame),
+        Schema::Refine { base, constraints } => check_refine(base, constraints, value, frame),
+        Schema::Ref(id) => check_ref(*id, value, frame),
     }
 }
 
@@ -329,16 +352,10 @@ fn homogeneous_scalar(prefix: &[Schema], tail: Option<&Schema>, ctx: Ctx<'_>) ->
 /// element in explain mode reaches -- it is marked cold so the branch predicts
 /// the accepting path and the code sits away from it.
 #[inline]
-fn admit(
-    ok: bool,
-    schema: &Schema,
-    value: &Value<'_, '_>,
-    path: &[PathSegment],
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
+fn admit(ok: bool, schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
     if !ok && ctx.mode.explains() {
-        record_mismatch(schema, value, path, out);
+        record_mismatch(schema, value, frame);
     }
     ok
 }
@@ -346,22 +363,12 @@ fn admit(
 /// Record a leaf's type or value mismatch. The half of [`admit`] that allocates.
 #[cold]
 #[inline(never)]
-fn record_mismatch(
-    schema: &Schema,
-    value: &Value<'_, '_>,
-    path: &[PathSegment],
-    out: &mut Vec<Violation>,
-) {
-    out.push(mismatch(schema, value, path));
+fn record_mismatch(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) {
+    frame.out.push(mismatch(schema, value, frame.path));
 }
 
-fn check_literal(
-    index: ConstIx,
-    value: &Value<'_, '_>,
-    path: &[PathSegment],
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
+fn check_literal(index: ConstIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
     let Some(literal) = const_at(ctx, index, value.py()) else {
         return false;
     };
@@ -373,9 +380,9 @@ fn check_literal(
         ctx,
     );
     if !ok && ctx.mode.explains() {
-        out.push(Violation {
+        frame.out.push(Violation {
             code: "literal_error",
-            path: path.to_vec(),
+            path: frame.path.clone(),
             expected: format!("the literal {}", summarize(literal)),
             value_summary: summarize_value(value),
         });
@@ -392,10 +399,9 @@ fn check_seq(
     container: SeqKind,
     shape: &SeqShape,
     value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
+    frame: &mut Frame<'_, '_>,
 ) -> bool {
+    let ctx = frame.ctx;
     let (kind_word, type_code, len_code) = match container {
         SeqKind::List => ("list", "list_type", "list_length"),
         SeqKind::Tuple => ("tuple", "tuple_type", "tuple_length"),
@@ -404,10 +410,12 @@ fn check_seq(
     match (container, value) {
         (SeqKind::List, Value::Py(v)) => {
             let Ok(list) = v.cast::<PyList>() else {
-                return type_fail(type_code, kind_word, value, path, ctx, out);
+                return type_fail(
+                    type_code, kind_word, value, frame.path, frame.ctx, frame.out,
+                );
             };
             if !SeqArity::of(prefix.len(), tail).admits(list.len()) {
-                return seq_length_fail(len_code, kind_word, prefix, tail, value, path, ctx, out);
+                return seq_length_fail(len_code, kind_word, prefix, tail, value, frame);
             }
             // A list of one scalar kind -- `list[int]`, `list[str]` -- is the
             // shape whose per-element cost is almost all bookkeeping: the walk's
@@ -434,7 +442,7 @@ fn check_seq(
                     return if list.len() == snapshot.len() {
                         true
                     } else {
-                        mutated(value, path, ctx, out)
+                        mutated(value, frame)
                     };
                 }
                 let mut ok = true;
@@ -449,12 +457,12 @@ fn check_seq(
                 return match scan {
                     Scan::Complete => ok,
                     Scan::Stopped => false,
-                    Scan::Unreadable => mutated(value, path, ctx, out),
+                    Scan::Unreadable => mutated(value, frame),
                 };
             }
             let mut ok = true;
             let scan = scan_list(list, |i, item| {
-                ok &= seq_element(prefix, tail, i, &Value::Py(item), path, ctx, out);
+                ok &= seq_element(prefix, tail, i, &Value::Py(item), frame);
                 if !ok && stop(ctx) {
                     ControlFlow::Break(())
                 } else {
@@ -464,34 +472,23 @@ fn check_seq(
             match scan {
                 Scan::Complete => ok,
                 Scan::Stopped => false,
-                Scan::Unreadable => mutated(value, path, ctx, out),
+                Scan::Unreadable => mutated(value, frame),
             }
         }
         (SeqKind::List, Value::Json(py, JsonValue::Array(items))) => {
             if !SeqArity::of(prefix.len(), tail).admits(items.len()) {
-                return seq_length_fail(len_code, kind_word, prefix, tail, value, path, ctx, out);
+                return seq_length_fail(len_code, kind_word, prefix, tail, value, frame);
             }
-            // The same shape over a parsed JSON array.
-            if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
-                return items
-                    .iter()
-                    .all(|item| scalar_admits(kind, &Value::Json(*py, item)));
-            }
-            let mut ok = true;
-            for (i, item) in items.iter().enumerate() {
-                ok &= seq_element(prefix, tail, i, &Value::Json(*py, item), path, ctx, out);
-                if !ok && stop(ctx) {
-                    return false;
-                }
-            }
-            ok
+            json_array_matches(prefix, tail, *py, items, frame)
         }
         (SeqKind::Tuple, Value::Py(v)) => {
             let Ok(tuple) = v.cast::<PyTuple>() else {
-                return type_fail(type_code, kind_word, value, path, ctx, out);
+                return type_fail(
+                    type_code, kind_word, value, frame.path, frame.ctx, frame.out,
+                );
             };
             if !SeqArity::of(prefix.len(), tail).admits(tuple.len()) {
-                return seq_length_fail(len_code, kind_word, prefix, tail, value, path, ctx, out);
+                return seq_length_fail(len_code, kind_word, prefix, tail, value, frame);
             }
             // The list arm's reasoning, for the immutable container: `tuple[int,
             // ...]` tests one scalar at every position, so the walk's
@@ -512,7 +509,7 @@ fn check_seq(
             }
             let mut ok = true;
             for (i, item) in tuple.iter_borrowed().enumerate() {
-                ok &= seq_element(prefix, tail, i, &Value::Py(&item), path, ctx, out);
+                ok &= seq_element(prefix, tail, i, &Value::Py(&item), frame);
                 if !ok && stop(ctx) {
                     return false;
                 }
@@ -520,7 +517,9 @@ fn check_seq(
             ok
         }
         // A tuple is never a JSON value; a list needs a JSON array.
-        _ => type_fail(type_code, kind_word, value, path, ctx, out),
+        _ => type_fail(
+            type_code, kind_word, value, frame.path, frame.ctx, frame.out,
+        ),
     }
 }
 
@@ -558,6 +557,38 @@ impl SeqArity {
     }
 }
 
+/// The element-by-element half of a parsed JSON array's walk, its arity already
+/// admitted.
+///
+/// Its own function so the three containers `check_seq` reads share the arm
+/// that dispatches and not the arm that walks: a list, a tuple and a document's
+/// array differ in how their elements are *reached*, and agree on what each
+/// element must be.
+fn json_array_matches(
+    prefix: &[Schema],
+    tail: Option<&Schema>,
+    py: Python<'_>,
+    items: &[JsonValue<'_>],
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let ctx = frame.ctx;
+    // The homogeneous shape over a parsed array: one scalar kind at every
+    // position, and nothing per element but the test.
+    if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
+        return items
+            .iter()
+            .all(|item| scalar_admits(kind, &Value::Json(py, item)));
+    }
+    let mut ok = true;
+    for (i, item) in items.iter().enumerate() {
+        ok &= seq_element(prefix, tail, i, &Value::Json(py, item), frame);
+        if !ok && stop(ctx) {
+            return false;
+        }
+    }
+    ok
+}
+
 /// Match one element at position `i`: the prefix schema at `i`, or the repeated
 /// tail past the prefix. The index segment is pushed only in explain mode.
 ///
@@ -571,10 +602,9 @@ fn seq_element(
     tail: Option<&Schema>,
     i: usize,
     item: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
+    frame: &mut Frame<'_, '_>,
 ) -> bool {
+    let ctx = frame.ctx;
     let Some(schema) = prefix.get(i).or(tail) else {
         // Unreachable: the caller's length check guarantees `i` lands in the
         // prefix, or a repeated tail covers the overflow. Fold to non-member
@@ -582,37 +612,35 @@ fn seq_element(
         return false;
     };
     if ctx.mode.explains() {
-        path.push(PathSegment::Index(i));
+        frame.path.push(PathSegment::Index(i));
     }
-    let ok = member(schema, item, path, ctx, out);
+    let ok = member(schema, item, frame);
     if ctx.mode.explains() {
-        path.pop();
+        frame.path.pop();
     }
     ok
 }
 
 /// A sequence-length mismatch: terminal, since the positional match is then
 /// meaningless. A tailless shape wants an exact length; a tailed one a minimum.
-#[allow(clippy::too_many_arguments)]
 fn seq_length_fail(
     len_code: &'static str,
     kind_word: &str,
     prefix: &[Schema],
     tail: Option<&Schema>,
     value: &Value<'_, '_>,
-    path: &[PathSegment],
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
+    frame: &mut Frame<'_, '_>,
 ) -> bool {
+    let ctx = frame.ctx;
     if ctx.mode.explains() {
         let expected = if tail.is_some() {
             format!("{kind_word} of length at least {}", prefix.len())
         } else {
             format!("{kind_word} of length {}", prefix.len())
         };
-        out.push(Violation {
+        frame.out.push(Violation {
             code: len_code,
-            path: path.to_vec(),
+            path: frame.path.clone(),
             expected,
             value_summary: summarize_value(value),
         });
@@ -648,16 +676,12 @@ const MUTATED_CODE: &str = "mutated_during_validation";
 const MUTATED_EXPECTED: &str = "a value that does not change while it is checked";
 
 /// Record that a container changed under the walk, and report a non-member.
-fn mutated(
-    value: &Value<'_, '_>,
-    path: &[PathSegment],
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
+fn mutated(value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
     if ctx.mode.explains() {
-        out.push(Violation {
+        frame.out.push(Violation {
             code: MUTATED_CODE,
-            path: path.to_vec(),
+            path: frame.path.clone(),
             expected: MUTATED_EXPECTED.to_owned(),
             value_summary: summarize_value(value),
         });
@@ -804,25 +828,13 @@ const FROZEN_SET: Collection = Collection {
 
 /// A set whose every element matches `element`. Set order is not meaningful, so
 /// element failures carry no index segment. JSON has no sets.
-fn check_set(
-    element: &Schema,
-    value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
-    check_elements(&SET, element, value, path, ctx, out)
+fn check_set(element: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    check_elements(&SET, element, value, frame)
 }
 
 /// A frozenset whose every element matches `element`. JSON has no frozensets.
-fn check_frozenset(
-    element: &Schema,
-    value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
-    check_elements(&FROZEN_SET, element, value, path, ctx, out)
+fn check_frozenset(element: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    check_elements(&FROZEN_SET, element, value, frame)
 }
 
 /// Membership for either set-like container: the value is of the container's
@@ -832,18 +844,31 @@ fn check_elements(
     collection: &Collection,
     element: &Schema,
     value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
+    frame: &mut Frame<'_, '_>,
 ) -> bool {
+    let ctx = frame.ctx;
     let Value::Py(container) = value else {
-        return type_fail(collection.code, collection.word, value, path, ctx, out);
+        return type_fail(
+            collection.code,
+            collection.word,
+            value,
+            frame.path,
+            frame.ctx,
+            frame.out,
+        );
     };
     if !(collection.is_kind)(container) {
-        return type_fail(collection.code, collection.word, value, path, ctx, out);
+        return type_fail(
+            collection.code,
+            collection.word,
+            value,
+            frame.path,
+            frame.ctx,
+            frame.out,
+        );
     }
     if ctx.mode.explains() {
-        return explain_elements(element, container, value, path, ctx, out);
+        return explain_elements(element, container, value, frame);
     }
     // A set of one scalar kind, as a sequence of one is: the element schema is
     // read once and each element tested against the kind, without the walk's
@@ -854,7 +879,7 @@ fn check_elements(
         let value = Value::Py(item);
         ok &= match scalar {
             Some(kind) => scalar_admits(kind, &value),
-            None => member(element, &value, path, ctx, out),
+            None => member(element, &value, frame),
         };
         if !ok && stop(ctx) {
             ControlFlow::Break(())
@@ -865,7 +890,7 @@ fn check_elements(
     match scan {
         Scan::Complete => ok,
         Scan::Stopped => false,
-        Scan::Unreadable => mutated(value, path, ctx, out),
+        Scan::Unreadable => mutated(value, frame),
     }
 }
 
@@ -883,14 +908,18 @@ fn explain_elements(
     element: &Schema,
     container: &Bound<'_, PyAny>,
     value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
+    frame: &mut Frame<'_, '_>,
 ) -> bool {
+    let ctx = frame.ctx;
+    let where_it_is = &mut *frame.path;
     let mut failures: Vec<(String, Vec<Violation>)> = Vec::new();
     let scan = scan_set(container, ctx, |item| {
         let mut reported = Vec::new();
-        if !member(element, &Value::Py(item), path, ctx, &mut reported) {
+        let held = {
+            let mut probe = Frame::new(&mut *where_it_is, &mut reported, ctx);
+            member(element, &Value::Py(item), &mut probe)
+        };
+        if !held {
             let key = reported
                 .first()
                 .map(|violation| format!("{} {}", violation.value_summary, violation.code))
@@ -900,7 +929,7 @@ fn explain_elements(
         ControlFlow::Continue(())
     });
     if matches!(scan, Scan::Unreadable) {
-        return mutated(value, path, ctx, out);
+        return mutated(value, frame);
     }
     let ok = failures.is_empty();
     failures.sort_by(|left, right| left.0.cmp(&right.0));
@@ -910,7 +939,7 @@ fn explain_elements(
         failures.len()
     };
     for (_, group) in failures.into_iter().take(reported) {
-        out.extend(group);
+        frame.out.extend(group);
     }
     ok
 }
@@ -938,17 +967,16 @@ fn keyed_map_matches(
 /// clause's key schema and the value to that clause's value schema. The clauses
 /// denote a union of key×value rectangles.
 fn covered(defaults: &[MapClause], key: &Value<'_, '_>, val: &Value<'_, '_>, ctx: Ctx<'_>) -> bool {
-    let sub = fast(ctx);
     // One pair of scratch buffers for every clause rather than a pair per call
     // into the walk. Neither is written on this path -- a fast walk reports
     // nothing and records no location -- but each is a value with a destructor,
     // and building and dropping four of them per key is work the answer does
     // not depend on.
     let (mut path, mut out) = (Vec::new(), Vec::new());
-    defaults.iter().any(|clause| {
-        member(&clause.key, key, &mut path, sub, &mut out)
-            && member(&clause.value, val, &mut path, sub, &mut out)
-    })
+    let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
+    defaults
+        .iter()
+        .any(|clause| member(&clause.key, key, &mut sub) && member(&clause.value, val, &mut sub))
 }
 
 /// A closed record's membership, asked key by key rather than read entry by
@@ -981,10 +1009,10 @@ fn keyed_map_asks_for_its_keys(
     if !defaults.is_empty() || plan.keys.len() != fields.len() {
         return None;
     }
-    let sub = fast(ctx);
     // One pair of scratch buffers for the record, as the scan takes: a fast
     // walk writes to neither.
     let (mut path, mut out) = (Vec::new(), Vec::new());
+    let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
     with_critical_section(dict.as_any(), || {
         let entries = dict.len();
         let mut present = 0usize;
@@ -993,7 +1021,7 @@ fn keyed_map_asks_for_its_keys(
             match dict.get_item(key) {
                 Ok(Some(value)) => {
                     present += 1;
-                    if !member(&field.schema, &Value::Py(&value), &mut path, sub, &mut out) {
+                    if !member(&field.schema, &Value::Py(&value), &mut sub) {
                         return Some(false);
                     }
                 }
@@ -1069,11 +1097,11 @@ fn keyed_map_scan(
     mut required_remaining: usize,
     lookup: impl Fn(&str) -> Option<usize>,
 ) -> bool {
-    let sub = fast(ctx);
     // Scratch buffers for the whole record, not one pair per field: a fast walk
     // writes to neither, and a fifty-field record was building and dropping a
     // hundred of them to answer one membership question.
     let (mut path, mut out) = (Vec::new(), Vec::new());
+    let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
     let scan = scan_dict(dict, |key, val| {
         // A non-string key, or a string carrying a lone surrogate (which cannot
         // equal a field name, since names are valid UTF-8 by build-time check),
@@ -1085,7 +1113,7 @@ fn keyed_map_scan(
             .and_then(&lookup);
         match index.and_then(|i| fields.get(i)) {
             Some(field) => {
-                if !member(&field.schema, &Value::Py(val), &mut path, sub, &mut out) {
+                if !member(&field.schema, &Value::Py(val), &mut sub) {
                     return ControlFlow::Break(());
                 }
                 if field.required {
@@ -1116,8 +1144,8 @@ fn keyed_map_matches_json(
     entries: &[(Cow<'_, str>, JsonValue<'_>)],
     ctx: Ctx<'_>,
 ) -> bool {
-    let sub = fast(ctx);
     let (mut path, mut out) = (Vec::new(), Vec::new());
+    let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
     // A closed record resolves the document's keys through the plan instead of
     // searching the document once per field. The search is quadratic in the
     // width -- a fifty-field record read a fifty-entry object fifty times -- and
@@ -1147,13 +1175,7 @@ fn keyed_map_matches_json(
         for (field, value) in fields.iter().zip(found) {
             match value {
                 Some(value) => {
-                    if !member(
-                        &field.schema,
-                        &Value::Json(py, value),
-                        &mut path,
-                        sub,
-                        &mut out,
-                    ) {
+                    if !member(&field.schema, &Value::Json(py, value), &mut sub) {
                         return false;
                     }
                 }
@@ -1170,13 +1192,7 @@ fn keyed_map_matches_json(
             .find(|(key, _)| &*field.name == key.as_ref())
         {
             Some((_, val)) => {
-                if !member(
-                    &field.schema,
-                    &Value::Json(py, val),
-                    &mut path,
-                    sub,
-                    &mut out,
-                ) {
+                if !member(&field.schema, &Value::Json(py, val), &mut sub) {
                     return false;
                 }
             }
@@ -1235,18 +1251,21 @@ fn keyed_map_explain(
     fields: &[Field],
     defaults: &[MapClause],
     value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
+    frame: &mut Frame<'_, '_>,
 ) {
+    let ctx = frame.ctx;
     let Value::Py(v) = value else {
         // The explain pass only ever sees a Python value; a JSON value here is
         // unreachable, but keep the false-implies-a-violation invariant.
-        out.push(type_mismatch("dict_type", "dict", value, path));
+        frame
+            .out
+            .push(type_mismatch("dict_type", "dict", value, frame.path));
         return;
     };
     let Ok(dict) = v.cast::<PyDict>() else {
-        out.push(type_mismatch("dict_type", "dict", value, path));
+        frame
+            .out
+            .push(type_mismatch("dict_type", "dict", value, frame.path));
         return;
     };
     // The interned keys, in field order. Asking the dict by Rust text decodes a
@@ -1266,21 +1285,23 @@ fn keyed_map_explain(
         match found {
             Ok(Some(item)) => {
                 present += 1;
-                path.push(PathSegment::Key(Arc::clone(&field.name)));
-                member(&field.schema, &Value::Py(&item), path, ctx, out);
-                path.pop();
+                frame.path.push(PathSegment::Key(Arc::clone(&field.name)));
+                member(&field.schema, &Value::Py(&item), frame);
+                frame.path.pop();
             }
-            Ok(None) if field.required => out.push(located(
-                path,
+            Ok(None) if field.required => frame.out.push(located(
+                frame.path,
                 Arc::clone(&field.name),
                 "missing_key",
                 format!("required key {:?}", field.name),
                 "missing".to_owned(),
             )),
             Ok(None) => {}
-            Err(_) => out.push(type_mismatch("dict_type", "dict", value, path)),
+            Err(_) => frame
+                .out
+                .push(type_mismatch("dict_type", "dict", value, frame.path)),
         }
-        if ctx.mode.stops_at_first() && !out.is_empty() {
+        if ctx.mode.stops_at_first() && !frame.out.is_empty() {
             return;
         }
     }
@@ -1309,24 +1330,24 @@ fn keyed_map_explain(
         if let Some(clause) = defaults.first() {
             // A clause exists but did not cover this key: surface the key and
             // value violations against it (the homogeneous-mapping error).
-            path.push(key_segment(key));
-            member(&clause.key, &Value::Py(key), path, ctx, out);
-            member(&clause.value, &Value::Py(val), path, ctx, out);
-            path.pop();
+            frame.path.push(key_segment(key));
+            member(&clause.key, &Value::Py(key), frame);
+            member(&clause.value, &Value::Py(val), frame);
+            frame.path.pop();
         } else {
             // A closed record: the key is simply not allowed.
             let key_text = key
                 .str()
                 .map_or_else(|_| String::new(), |text| text.to_string());
-            out.push(located(
-                path,
+            frame.out.push(located(
+                frame.path,
                 Arc::from(key_text.as_str()),
                 "extra_forbidden",
                 "no unexpected key".to_owned(),
                 format!("{key_text:?}"),
             ));
         }
-        if ctx.mode.stops_at_first() && !out.is_empty() {
+        if ctx.mode.stops_at_first() && !frame.out.is_empty() {
             ControlFlow::Break(())
         } else {
             ControlFlow::Continue(())
@@ -1335,7 +1356,7 @@ fn keyed_map_explain(
     // The fast pass reported a non-member; if the dict moved underneath this one
     // there is nothing else to report, and the mutation is the finding.
     if matches!(scan, Scan::Unreadable) {
-        mutated(value, path, ctx, out);
+        mutated(value, frame);
     }
 }
 
@@ -1487,13 +1508,8 @@ fn class_name(index: ClassIx, schema: &Schema, ctx: Ctx<'_>, py: Python<'_>) -> 
     class_at(ctx, index, py).map_or_else(|| schema.expected().to_owned(), |c| class_label(c))
 }
 
-fn check_union(
-    members: &[Schema],
-    value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
+fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
     // Fast path for an all-literal union: an exact int or str value is decided by
     // a single set lookup. Only the membership decision uses it; the explain walk
     // below, and every value type the plan does not cover, fall through to the
@@ -1505,14 +1521,18 @@ fn check_union(
         return decided;
     }
     if ctx.mode.explains() {
-        return explain_union(members, value, path, ctx, out);
+        return explain_union(members, value, frame);
     }
     // A value is a member iff it matches at least one branch; decide that on the
-    // fast path, where a discarded branch pays for no path or violation.
+    // fast path, where a discarded branch pays for no location or violation.
     let sub = fast(ctx);
-    members
-        .iter()
-        .any(|m| member(m, value, &mut Vec::new(), sub, &mut Vec::new()))
+    members.iter().any(|m| {
+        member(
+            m,
+            value,
+            &mut Frame::new(&mut Vec::new(), &mut Vec::new(), sub),
+        )
+    })
 }
 
 /// Decide a union **and** explain it in one walk of each branch.
@@ -1530,13 +1550,8 @@ fn check_union(
 /// matched, and it reports what failed if it did not. Asking once makes the
 /// recursion linear, and the walk that used to be thrown away is the one that
 /// is kept.
-fn explain_union(
-    members: &[Schema],
-    value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
+fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
     // The *closest* branch -- the one that descended furthest into the value
     // before failing -- is reported, rather than every branch. "Furthest" is the
     // greatest path depth past the union's own location. Where no branch makes
@@ -1544,7 +1559,7 @@ fn explain_union(
     // for all of them. Violations are aggregated regardless of fail_fast so the
     // deepest progress is visible; this runs only where a value is being
     // explained.
-    let base_depth = path.len();
+    let base_depth = frame.path.len();
     let probe = Ctx {
         mode: WalkMode::Explain,
         ..ctx
@@ -1558,16 +1573,18 @@ fn explain_union(
             if member(
                 branch_schema,
                 value,
-                &mut Vec::new(),
-                fast(ctx),
-                &mut Vec::new(),
+                &mut Frame::new(&mut Vec::new(), &mut Vec::new(), fast(ctx)),
             ) {
                 return true;
             }
             continue;
         }
         let mut branch = Vec::new();
-        if member(branch_schema, value, path, probe, &mut branch) {
+        let matched = {
+            let mut probing = Frame::new(&mut *frame.path, &mut branch, probe);
+            member(branch_schema, value, &mut probing)
+        };
+        if matched {
             return true;
         }
         let progress = branch
@@ -1585,15 +1602,15 @@ fn explain_union(
         }
     }
     match best {
-        Some((progress, branch)) if progress > 0 => out.extend(branch),
+        Some((progress, branch)) if progress > 0 => frame.out.extend(branch),
         _ => {
             let mut labels = BranchLabels::new();
             for member in members {
                 push_branch_label(member, ctx, value.py(), &mut labels);
             }
-            out.push(Violation {
+            frame.out.push(Violation {
                 code: "union_error",
-                path: path.clone(),
+                path: frame.path.clone(),
                 expected: labels.render(),
                 value_summary: summarize_value(value),
             });
@@ -1605,17 +1622,16 @@ fn explain_union(
 fn check_intersection(
     members: &[Schema],
     value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
+    frame: &mut Frame<'_, '_>,
 ) -> bool {
+    let ctx = frame.ctx;
     // Every member must hold; in explain mode each member's failure is collected,
     // until one rejects the value itself.
     let mut ok = true;
     for member_schema in members {
-        let before = out.len();
-        ok &= member(member_schema, value, path, ctx, out);
-        if !ok && (stop(ctx) || rejected_the_value(out, before, path.len())) {
+        let before = frame.out.len();
+        ok &= member(member_schema, value, frame);
+        if !ok && (stop(ctx) || rejected_the_value(frame.out, before, frame.path.len())) {
             return false;
         }
     }
@@ -1644,20 +1660,19 @@ fn rejected_the_value(out: &[Violation], before: usize, depth: usize) -> bool {
         .is_some_and(|since| since.iter().any(|v| v.path.len() == depth))
 }
 
-fn check_complement(
-    inner: &Schema,
-    value: &Value<'_, '_>,
-    path: &[PathSegment],
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
+fn check_complement(inner: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
     // A value matches the complement iff it does not match the inner schema; the
     // inner explanation is irrelevant, so decide it on the fast path.
-    if member(inner, value, &mut Vec::new(), fast(ctx), &mut Vec::new()) {
+    if member(
+        inner,
+        value,
+        &mut Frame::new(&mut Vec::new(), &mut Vec::new(), fast(ctx)),
+    ) {
         if ctx.mode.explains() {
-            out.push(Violation {
+            frame.out.push(Violation {
                 code: "unexpected_match",
-                path: path.to_vec(),
+                path: frame.path.clone(),
                 expected: format!("not {}", inner.expected()),
                 value_summary: summarize_value(value),
             });
@@ -1667,13 +1682,8 @@ fn check_complement(
     true
 }
 
-fn check_instance(
-    index: ClassIx,
-    value: &Value<'_, '_>,
-    path: &[PathSegment],
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
+fn check_instance(index: ClassIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
     let Some(class) = class_at(ctx, index, value.py()) else {
         return false;
     };
@@ -1683,23 +1693,18 @@ fn check_instance(
         ctx,
     );
     if !ok && ctx.mode.explains() {
-        out.push(type_mismatch(
+        frame.out.push(type_mismatch(
             "instance_type",
             &class_label(class),
             value,
-            path,
+            frame.path,
         ));
     }
     ok
 }
 
-fn check_attr_record(
-    fields: &[Field],
-    value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
+fn check_attr_record(fields: &[Field], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
     // Attributes are read off a Python object, so a value that will not
     // materialize into one carries none and belongs to no record.
     let Ok(obj) = value.to_python() else {
@@ -1719,11 +1724,11 @@ fn check_attr_record(
         match attribute {
             Ok(attr) => {
                 if ctx.mode.explains() {
-                    path.push(PathSegment::Key(Arc::clone(&field.name)));
+                    frame.path.push(PathSegment::Key(Arc::clone(&field.name)));
                 }
-                ok &= member(&field.schema, &Value::Py(&attr), path, ctx, out);
+                ok &= member(&field.schema, &Value::Py(&attr), frame);
                 if ctx.mode.explains() {
-                    path.pop();
+                    frame.path.pop();
                 }
             }
             // A fatal signal during attribute access is the interpreter
@@ -1736,8 +1741,8 @@ fn check_attr_record(
             Err(_) if !field.required => {}
             Err(_) => {
                 if ctx.mode.explains() {
-                    out.push(located(
-                        path,
+                    frame.out.push(located(
+                        frame.path,
                         Arc::clone(&field.name),
                         "missing_attribute",
                         format!("attribute {:?}", field.name),
@@ -1758,13 +1763,12 @@ fn check_refine(
     base: &Schema,
     constraints: &[Constraint],
     value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
+    frame: &mut Frame<'_, '_>,
 ) -> bool {
+    let ctx = frame.ctx;
     // Constraints narrow the base set, so they are meaningful only on a base
     // member: if the base fails, report that and do not run the constraints.
-    if !member(base, value, path, ctx, out) {
+    if !member(base, value, frame) {
         return false;
     }
     let Ok(obj) = value.to_python() else {
@@ -1772,7 +1776,7 @@ fn check_refine(
     };
     let mut ok = true;
     for constraint in constraints {
-        ok &= check_constraint(constraint, &obj, path, ctx, out);
+        ok &= check_constraint(constraint, &obj, ctx, frame);
         if !ok && stop(ctx) {
             return false;
         }
@@ -1866,9 +1870,8 @@ fn order_bound<'py>(
 fn check_constraint<'py>(
     constraint: &'py Constraint,
     value: &Bound<'py, PyAny>,
-    path: &[PathSegment],
     ctx: Ctx<'py>,
-    out: &mut Vec<Violation>,
+    frame: &mut Frame<'_, '_>,
 ) -> bool {
     let py = value.py();
     let (ok, code, expected): (bool, &'static str, Expected<'py>) = match constraint {
@@ -1970,9 +1973,9 @@ fn check_constraint<'py>(
     // The message is rendered here and nowhere else: a check that passes never
     // reads the operand it would have named.
     if !ok && ctx.mode.explains() {
-        out.push(Violation {
+        frame.out.push(Violation {
             code,
-            path: path.to_vec(),
+            path: frame.path.clone(),
             expected: expected.render(),
             value_summary: summarize(value),
         });
@@ -1985,21 +1988,16 @@ fn check_constraint<'py>(
 /// value fails with `recursion_limit` instead of overflowing the native stack.
 const MAX_RECURSION_DEPTH: usize = 128;
 
-fn check_ref(
-    id: DefIx,
-    value: &Value<'_, '_>,
-    path: &mut Vec<PathSegment>,
-    ctx: Ctx<'_>,
-    out: &mut Vec<Violation>,
-) -> bool {
+fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
+    let ctx = frame.ctx;
     let key = (value.id(), id.get());
     let depth = {
         let mut guard = ctx.guard.borrow_mut();
         if !guard.insert(key) {
             if ctx.mode.explains() {
-                out.push(Violation {
+                frame.out.push(Violation {
                     code: "recursion_loop",
-                    path: path.clone(),
+                    path: frame.path.clone(),
                     expected: "a finite (non-cyclic) value".to_owned(),
                     value_summary: summarize_value(value),
                 });
@@ -2011,9 +2009,9 @@ fn check_ref(
     if depth > MAX_RECURSION_DEPTH {
         ctx.guard.borrow_mut().remove(&key);
         if ctx.mode.explains() {
-            out.push(Violation {
+            frame.out.push(Violation {
                 code: "recursion_limit",
-                path: path.clone(),
+                path: frame.path.clone(),
                 expected: format!("at most {MAX_RECURSION_DEPTH} levels of recursion"),
                 value_summary: summarize_value(value),
             });
@@ -2024,11 +2022,11 @@ fn check_ref(
         // A reference past the definitions table is an internal invariant break,
         // not reachable from user input; release builds degrade to a non-member
         // rather than panicking across the language boundary.
-        debug_assert!(false, "definition index {} out of range", id.get());
+        debug_assert!(false, "definition index {} frame.out of range", id.get());
         ctx.guard.borrow_mut().remove(&key);
         return false;
     };
-    let result = member(def, value, path, ctx, out);
+    let result = member(def, value, frame);
     ctx.guard.borrow_mut().remove(&key);
     result
 }

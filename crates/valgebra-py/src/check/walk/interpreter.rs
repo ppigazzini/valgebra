@@ -33,9 +33,7 @@ fn holds(
     member(
         schema,
         &Value::Py(value),
-        &mut Vec::new(),
-        ctx,
-        &mut Vec::new(),
+        &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
     )
 }
 
@@ -65,7 +63,11 @@ fn explain(
         mode: WalkMode::Explain,
     };
     let mut out = Vec::new();
-    let ok = member(schema, &Value::Py(value), &mut Vec::new(), ctx, &mut out);
+    let ok = member(
+        schema,
+        &Value::Py(value),
+        &mut Frame::new(&mut Vec::new(), &mut out, ctx),
+    );
     (ok, out)
 }
 
@@ -261,7 +263,10 @@ fn a_changed_container_is_a_non_member_that_names_itself() {
         };
 
         let mut out = Vec::new();
-        let held = mutated(&Value::Py(&value), &[], ctx(WalkMode::Explain), &mut out);
+        let held = mutated(
+            &Value::Py(&value),
+            &mut Frame::new(&mut Vec::new(), &mut out, ctx(WalkMode::Explain)),
+        );
         assert!(!held, "a value that changed under the walk is a non-member");
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].code, MUTATED_CODE);
@@ -270,7 +275,10 @@ fn a_changed_container_is_a_non_member_that_names_itself() {
         // Fast mode reports the same verdict and writes nothing: the
         // violations it would build go to a buffer nothing reads.
         let mut fast_out = Vec::new();
-        let held = mutated(&Value::Py(&value), &[], ctx(WalkMode::Fast), &mut fast_out);
+        let held = mutated(
+            &Value::Py(&value),
+            &mut Frame::new(&mut Vec::new(), &mut fast_out, ctx(WalkMode::Fast)),
+        );
         assert!(!held);
         assert!(fast_out.is_empty());
     });
@@ -1382,9 +1390,7 @@ fn decide_with_fatal(
     let ok = member(
         schema,
         &Value::Py(value),
-        &mut Vec::new(),
-        ctx,
-        &mut Vec::new(),
+        &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
     );
     (ok, state.fatal.borrow().is_some())
 }
@@ -1409,9 +1415,7 @@ fn holds_json(py: Python<'_>, schema: &Schema, json: &JsonValue<'_>) -> bool {
     member(
         schema,
         &Value::Json(py, json),
-        &mut Vec::new(),
-        ctx,
-        &mut Vec::new(),
+        &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
     )
 }
 
@@ -1635,24 +1639,23 @@ fn a_union_explains_the_branch_that_descended_furthest() {
         let deep_value = deep_value.into_any();
         let state = WalkState::new();
         let mut out = Vec::new();
+        let ctx = Ctx {
+            pool: &[],
+            defs: &[],
+            records: &index.records,
+            attrs: &index.attrs,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
+            mode: WalkMode::ExplainFailFast,
+        };
         let ok = member(
             &schema,
             &Value::Py(&deep_value),
-            &mut Vec::new(),
-            Ctx {
-                pool: &[],
-                defs: &[],
-                records: &index.records,
-                attrs: &index.attrs,
-                unions: &index.unions,
-                regexes: &index.regexes,
-                guard: &state.guard,
-                depth: &state.depth,
-                fatal: &state.fatal,
-                fatal_seen: &state.fatal_seen,
-                mode: WalkMode::ExplainFailFast,
-            },
-            &mut out,
+            &mut Frame::new(&mut Vec::new(), &mut out, ctx),
         );
         assert!(!ok);
         assert_eq!(out.len(), 1);
@@ -1728,7 +1731,11 @@ fn an_explaining_walk_aggregates_every_independent_failure() {
                 mode,
             };
             let mut out = Vec::new();
-            let ok = member(&schema, &Value::Py(&value), &mut Vec::new(), ctx, &mut out);
+            let ok = member(
+                &schema,
+                &Value::Py(&value),
+                &mut Frame::new(&mut Vec::new(), &mut out, ctx),
+            );
             (ok, out.len())
         };
         assert_eq!(run(WalkMode::Explain), (false, 3));
@@ -1761,7 +1768,11 @@ fn run_mode(
         mode,
     };
     let mut out = Vec::new();
-    let ok = member(schema, &Value::Py(value), &mut Vec::new(), ctx, &mut out);
+    let ok = member(
+        schema,
+        &Value::Py(value),
+        &mut Frame::new(&mut Vec::new(), &mut out, ctx),
+    );
     (ok, out.len())
 }
 
@@ -2041,7 +2052,11 @@ fn a_closed_record_reports_every_extra_key_unless_fail_fast_stops_it() {
                 mode,
             };
             let mut out = Vec::new();
-            let ok = member(&schema, &Value::Py(&value), &mut Vec::new(), ctx, &mut out);
+            let ok = member(
+                &schema,
+                &Value::Py(&value),
+                &mut Frame::new(&mut Vec::new(), &mut out, ctx),
+            );
             (ok, out.len())
         };
         assert_eq!(run(WalkMode::Explain), (false, 2));
@@ -2256,9 +2271,7 @@ fn the_json_path_and_the_object_path_agree() {
         assert!(member(
             &schema,
             &Value::Json(py, &json),
-            &mut Vec::new(),
-            ctx,
-            &mut Vec::new()
+            &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx)
         ));
         assert!(holds(py, &schema, &list_of(py, vec![1, 2]), &[], &[]));
 
@@ -2266,9 +2279,7 @@ fn the_json_path_and_the_object_path_agree() {
         assert!(!member(
             &schema,
             &Value::Json(py, &bad),
-            &mut Vec::new(),
-            ctx,
-            &mut Vec::new()
+            &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx)
         ));
     });
 }
