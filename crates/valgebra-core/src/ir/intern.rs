@@ -702,13 +702,34 @@ mod tests {
         }
     }
 
+    /// An index of a family whose node takes a slot none of its parts take.
+    ///
+    /// A tree is put bottom-up, and a node landing on a part's slot evicts the
+    /// part. The next build of the same tree then makes that part afresh at a
+    /// new address, the node's hash -- which reads the address -- names a slot
+    /// the first node is not in, and the build misses. That is the miss of a
+    /// direct-mapped cache and not a defect, and which index takes it depends
+    /// on where the allocator put the part, so a test claiming a hit picks an
+    /// index the miss cannot happen to.
+    fn settled(make: impl Fn(usize) -> Schema) -> (usize, Schema) {
+        for index in 0..100_000 {
+            let candidate = make(index);
+            let own = slot(&candidate);
+            if candidate.children().all(|part| slot(part) != own) {
+                return (index, candidate);
+            }
+        }
+        panic!("a hundred thousand nodes of one family each land on a part");
+    }
+
     /// Every family is shared when it is built twice: the table answers for the
     /// whole node set and not for the variants somebody thought of.
     #[test]
     fn a_node_built_twice_is_one_node_in_every_family() {
         for (name, family, _) in families() {
-            let one = node(family(7));
-            let two = node(family(7));
+            let (index, first) = settled(&family);
+            let one = node(first);
+            let two = node(family(index));
             assert!(
                 Arc::ptr_eq(&one, &two),
                 "{name}: the second build made a second node"
