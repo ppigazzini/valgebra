@@ -32,10 +32,10 @@ WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 #: The job that gates the merge on the others.
 GATE = "ci"
 
-#: Jobs a push never runs, so the gate does not wait on them.
-SCHEDULED_ONLY = frozenset(
-    {"nightly-fuzz", "nightly-libfuzzer", "nightly-mutants", "nightly-floor-names"}
-)
+#: How a job says it runs on a schedule and not on a push. Read from the job's
+#: own `if` rather than listed here, so a nightly job added to the workflow is
+#: one this ledger already knows about.
+SCHEDULED = re.compile(r"github\.event_name == 'schedule'")
 
 #: `needs.<job>.result` as the condition spells it, in both forms the expression
 #: language offers: a name with a hyphen in it cannot be read with a dot, since
@@ -58,16 +58,63 @@ def _jobs_the_condition_reads(gate: dict) -> set[str]:
     return {name for pair in found for name in pair if name}
 
 
+def _scheduled_only(jobs: dict) -> set[str]:
+    """Read which jobs a push does not run, from their own conditions."""
+    return {
+        name
+        for name, job in jobs.items()
+        if SCHEDULED.search(str(job.get("if", ""))) is not None
+    }
+
+
 def test_every_job_is_required_by_the_gate() -> None:
     jobs = _workflow()["jobs"]
     gate = jobs[GATE]
     needed = set(gate["needs"])
-    defined = set(jobs) - {GATE} - SCHEDULED_ONLY
+    defined = set(jobs) - {GATE}
     missing = sorted(defined - needed)
     assert not missing, (
         f"jobs the merge gate does not wait on: {missing}. A job outside its "
         "`needs` can go red without blocking anything."
     )
+
+
+def test_a_scheduled_job_may_be_skipped_and_no_other_may() -> None:
+    """The gate reads every job's result, and only a nightly may be `skipped`.
+
+    A push skips the scheduled jobs, so the gate has to accept that answer from
+    them -- and from nothing else, since `skipped` from a job a push does run is
+    a job that did not run. What both readings refuse is everything else, which
+    is where a **cancellation** lives: a job that reaches its timeout is
+    reported cancelled rather than failed, and one that nothing waits on takes a
+    whole scheduled run red without a red job to point at.
+    """
+    jobs = _workflow()["jobs"]
+    gate = jobs[GATE]
+    condition = " ".join(str(gate["steps"][0]["if"]).split())
+    scheduled = _scheduled_only(jobs)
+    assert scheduled, "no job reads as scheduled-only; the pattern has gone stale"
+    for name in sorted(set(gate["needs"])):
+        # Either spelling the expression language offers, since the condition
+        # uses both and which one a name takes is not this ledger's business.
+        spellings = (f"needs['{name}'].result", f"needs.{name}.result")
+        reads = [reading for reading in spellings if reading in condition]
+        assert reads, f"the gate does not read {name}'s result"
+        allows_skipped = any(
+            f"{reading} != 'skipped'" in condition for reading in reads
+        )
+        if name in scheduled:
+            assert allows_skipped, (
+                f"{name} runs only on a schedule and the gate demands success "
+                "from it, which fails every push"
+            )
+        else:
+            assert not allows_skipped, (
+                f"{name} runs on a push and the gate accepts `skipped` from it"
+            )
+        assert any(f"{reading} != 'success'" in condition for reading in reads), (
+            f"the gate does not refuse a non-success from {name}"
+        )
 
 
 def test_every_need_is_read_by_the_condition() -> None:

@@ -145,6 +145,13 @@ STANDINS = {
     ),
 }
 
+#: How a job says it runs on a schedule and not on a push, read from the job's
+#: own condition. The merge gate waits on the nightly jobs so that one reaching
+#: its timeout takes the scheduled run red -- a job nothing waits on is
+#: cancelled in silence -- and a push skips them. This gate stands in for what a
+#: push runs, so it stands in for none of those.
+SCHEDULED_ONLY = re.compile(r"github\.event_name == 'schedule'")
+
 #: Jobs whose every step is a runner's, so naming each would say nothing more.
 RUNNER_ONLY_JOBS = {
     "wheel",
@@ -171,7 +178,13 @@ def required_jobs(spec: dict) -> list[str]:
     if not needs:
         print("gate: the ci job lists no needs; there is no merge gate to run")
         raise SystemExit(EXIT_CANNOT_RUN)
-    return [name for name in needs if name in jobs and name not in RUNNER_ONLY_JOBS]
+    return [
+        name
+        for name in needs
+        if name in jobs
+        and name not in RUNNER_ONLY_JOBS
+        and not SCHEDULED_ONLY.search(str(jobs[name].get("if", "")))
+    ]
 
 
 def steps(spec: dict, job: str) -> Iterator[tuple[str, str]]:

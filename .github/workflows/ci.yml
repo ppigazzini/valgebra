@@ -996,16 +996,27 @@ jobs:
         run: uv run --no-sync python scripts/floor_names.py --check
 
   nightly-mutants:
-    name: nightly mutation report
+    name: nightly mutation sweep ${{ matrix.shard }}
     # cargo-mutants over the core, auditing whether the Rust unit tests register
     # an injected defect. Scheduled and manual only, never a merge gate, and not a
     # zero-survivor policy: surviving mutants are an early-warning signal of a test
     # gap, reported in the job summary as warnings rather than failing the lane. A
     # broken baseline or a usage error still fails, because those are real breakage
     # unrelated to test coverage.
+    #
+    # Sharded, as the diff sweep beside it is. The whole core is sixteen hundred
+    # mutants at fifteen to twenty seconds each: one job reached its two-hour
+    # timeout every night for a week and was cancelled before the ratchet below
+    # it ran, so the strict ratchet -- the only place a baseline entry is held to
+    # a survivor that still exists -- ran nowhere. Each shard reports its own
+    # slice and uploads it; the job after merges them and ratchets once.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1033,13 +1044,14 @@ jobs:
           # that bound makes it run without end and the whole run returns no
           # verdict. tests/test_sweep_skips.py holds this list to the sources.
           cargo mutants --package valgebra-core -j 4 --timeout-multiplier 20 \
+            --shard "${{ matrix.shard }}/12" \
             -- -- --skip deep_subtype_into_bottom_terminates \
             --skip subtyping_terminates_on_a_distributed_tower
           status=$?
           set -e
 
           report() {
-            echo "## Mutation report over the core"
+            echo "## Mutation report over the core, shard ${{ matrix.shard }}"
             echo
             missed=0 caught=0 timeout=0 unviable=0
             [ -f mutants.out/missed.txt ] && missed=$(wc -l < mutants.out/missed.txt)
@@ -1092,14 +1104,72 @@ jobs:
             0 | 2 | 3) exit 0 ;;
             *) exit "$status" ;;
           esac
-      # Ratchet: fail when a survivor appears that the committed baseline does
-      # not accept, and when a baseline entry is no longer a survivor. The
-      # baseline is an accepted hole, not a target -- equivalent mutants stay in
-      # it with a reason -- and it only ever shrinks. A survivor the sweep step
-      # reported as a warning becomes a hard failure here unless it is already
-      # known.
+      # Each shard's results, for the job that ratchets the whole sweep. A
+      # shard's own outcome says nothing about the baseline: a survivor is a
+      # survivor of the *sweep*, and an entry no longer a survivor is only
+      # known to be so once every shard has reported.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: core-mutants-${{ matrix.shard }}
+          path: mutants.out
+          retention-days: 7
+
+  nightly-mutants-ratchet:
+    name: nightly mutation report
+    # Ratchet: fail when a survivor appears that the committed baseline does not
+    # accept, and when a baseline entry is no longer a survivor. The baseline is
+    # an accepted hole, not a target -- equivalent mutants stay in it with a
+    # reason -- and it only ever shrinks. A survivor the sweep reported as a
+    # warning becomes a hard failure here unless it is already known.
+    #
+    # The whole sweep, merged from its shards: a `missed.txt` is a list of
+    # survivors and the shards partition the mutants, so concatenating them is
+    # the sweep's own result. `needs` the sweep rather than the walk, and runs
+    # even where a shard failed, so a broken shard is reported by that shard
+    # rather than hidden behind a ratchet that never ran.
+    needs: nightly-mutants
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: core-mutants-*
+          path: shards
+      - name: Merge the shards into one sweep
+        run: |
+          mkdir -p mutants.out
+          for name in caught missed timeout unviable; do
+            # `find -exec cat` rather than a glob: a shard that produced no
+            # mutants of a kind writes no file, and a glob that matches nothing
+            # would make the shell say so instead of leaving the file empty.
+            find shards -name "$name.txt" -exec cat {} + > "mutants.out/$name.txt"
+          done
+          # The ratchet refuses to run over a sweep that produced nothing, which
+          # is what a download of no shards looks like.
+          wc -l mutants.out/*.txt
       - name: Ratchet core survivors against the baseline
         run: python3 scripts/mutation_gate.py --baseline core
+
+  nightly-mutants-walk:
+    name: nightly mutation report (walk)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
+        with:
+          tool: cargo-mutants@27.1.0
       # The membership walk is the product's hottest correctness surface and the
       # one file of the binding worth a mutation number rather than a line count.
       # It is reachable from `cargo test` only with an embedded interpreter, so
@@ -1276,6 +1346,12 @@ jobs:
         cargo-deny,
         pip-audit,
         zizmor,
+        nightly-fuzz,
+        nightly-libfuzzer,
+        nightly-mutants,
+        nightly-mutants-ratchet,
+        nightly-mutants-walk,
+        nightly-floor-names,
       ]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1284,6 +1360,12 @@ jobs:
       # non-successful job blocks the merge rather than slipping through a check
       # that only catches failure and cancellation. Each need is listed
       # explicitly so the gate cannot silently drift from the job set.
+      #
+      # The scheduled jobs are read the same way with one value more allowed:
+      # a push skips them, and `skipped` is the answer that says so. Everything
+      # else is refused, **cancellation included** -- a job that reaches its
+      # timeout is reported cancelled rather than failed, and the nightly ran
+      # red for a week behind a two-hour cancellation nothing waited on.
       - name: Fail unless every required job succeeded
         if: >-
           needs.rust-lint.result != 'success' ||
@@ -1305,6 +1387,18 @@ jobs:
           needs.mutants-diff-walk.result != 'success' ||
           needs.cargo-deny.result != 'success' ||
           needs.pip-audit.result != 'success' ||
-          needs.zizmor.result != 'success'
+          needs.zizmor.result != 'success' ||
+          (needs['nightly-fuzz'].result != 'success' &&
+           needs['nightly-fuzz'].result != 'skipped') ||
+          (needs['nightly-libfuzzer'].result != 'success' &&
+           needs['nightly-libfuzzer'].result != 'skipped') ||
+          (needs['nightly-mutants'].result != 'success' &&
+           needs['nightly-mutants'].result != 'skipped') ||
+          (needs['nightly-mutants-ratchet'].result != 'success' &&
+           needs['nightly-mutants-ratchet'].result != 'skipped') ||
+          (needs['nightly-mutants-walk'].result != 'success' &&
+           needs['nightly-mutants-walk'].result != 'skipped') ||
+          (needs['nightly-floor-names'].result != 'success' &&
+           needs['nightly-floor-names'].result != 'skipped')
         run: exit 1
       - run: echo "All required jobs passed."
