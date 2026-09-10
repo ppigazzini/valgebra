@@ -102,11 +102,14 @@ gate only catches what it exercises:
   refutation and a repeated goal walk different paths, and a workload that
   asks only for proofs holds a refuting rule to nothing;
 - the **binding** shapes (`--binding`, `--binding-boundary`,
-  `--binding-record`, `--binding-build`, `--binding-explain`) — membership
-  over a live Python value, the call boundary alone, a wide record, building a
-  validator, explaining a failure. The walk is the shipped hot path neither
-  pure-Rust workload reaches, and schema construction grew twelve percent over
-  a release cycle while only the walk was counted.
+  `--binding-record`, `--binding-open`, `--binding-build`,
+  `--binding-explain`) — membership over a live Python value, the call
+  boundary alone, a wide record closed and the same record open the way a
+  `TypedDict` is, building a validator, explaining a failure. The walk is the
+  shipped hot path neither pure-Rust workload reaches; schema construction
+  grew twelve percent over a release cycle while only the walk was counted,
+  and an open record was read a third dearer than a closed one while only the
+  closed one was.
 
 The binding workload embeds CPython, whose startup is not a fixed instruction
 count, so the gate measures the **difference** between two iteration counts:

@@ -13,7 +13,12 @@
     "crates/valgebra-py/src/check/walk.rs: replace > with == in check_ref": "The recursion depth bound. Killed by `recursion_deeper_than_the_bound_is_refused`, which the sweep skips: that case drives a 130-level chain through a two-branch union, so any mutation removing a short-circuit turns it exponential and the whole run returns no verdict. Skipping it buys a judged verdict for every other mutant at the cost of these two. The case still runs on every push in the ordinary test lane.",
     "crates/valgebra-py/src/check/walk.rs: replace > with >= in check_ref": "As above.",
     "crates/valgebra-py/src/check/walk/scalar.rs: replace homogeneous_scalar -> Option<Scalar> with None": "The fast path's switch. `None` means \"this sequence is not one scalar kind\", so the walk takes the general element loop -- which is the path this one was measured against and must agree with (`the_scalar_loop_and_the_walk_admit_the_same_values`). Turning it off changes no answer and costs 70% of a list of integers, and no test can see the difference in an answer, which is what makes it equivalent rather than untested.",
-    "crates/valgebra-py/src/check/walk/record.rs: replace keyed_map_asks_for_its_keys -> Option<bool> with None": "The fast path's switch: `None` sends the walk to the scan it replaced, which decides the same values. `a_closed_record_answers_for_each_of_its_keys` holds the two to the same answers; the difference between them is the cost, and the sweep cannot read a cost."
+    "crates/valgebra-py/src/check/walk/record.rs: replace keyed_map_asks_for_its_keys -> Option<bool> with None": "The fast path's switch: `None` sends the walk to the scan it replaced, which decides the same values. `a_closed_record_answers_for_each_of_its_keys` holds the two to the same answers; the difference between them is the cost, and the sweep cannot read a cost.",
+    "crates/valgebra-py/src/check/walk/record.rs: delete match arm [] in Undeclared::of": "The closed record's classification. Without its arm a closed record reads as one whose clause must be read, and takes the scan: a closed record has no clause, so the scan refuses an undeclared key as the reading by keys does, and every answer is the same. What moves is the cost -- the scan resolves each key by name where the reading by keys probes each field -- and `scripts/perf_gate.py --binding-record` is the gate that holds it.",
+    "crates/valgebra-py/src/check/walk/record.rs: replace match guard *clause == MapClause::top() with false in Undeclared::of": "The top clause's classification. Without it the top clause reads as one to be read, and a record open under it takes the scan, which asks the clause about each undeclared key and hears yes every time. Same answers; the cost is the scan's, and no binding shape carries the top clause -- the open shape carries the `TypedDict` clause, which is the one a frontend builds.",
+    "crates/valgebra-py/src/check/walk/record.rs: replace match guard clause.key == Schema::Str && clause.value == Schema::ANYTHING with false in Undeclared::of": "The `TypedDict` clause's classification. Without it every `TypedDict` value takes the scan, as it did before the reading by keys admitted it, and every answer is the same: the scan asks `str: anything` about each undeclared key and hears what the type test says. `scripts/perf_gate.py --binding-open` is the gate that holds it, at 29% of the shape.",
+    "crates/valgebra-py/src/check/walk/record.rs: replace == with != in keyed_map_asks_for_its_keys": "The guard that keeps a record whose clause reads a key off the by-keys path. Inverted, such a record is read by its keys first and then, since its clause cannot be answered without the key, handed to the scan -- the answer the scan gives, at the cost of the reading before it -- while every other record goes straight to the scan. No answer moves; the two record shapes on the gate hold the cost.",
+    "crates/valgebra-py/src/check/walk/record.rs: replace || with && in keyed_map_asks_for_its_keys": "The same guard, weakened rather than inverted: a record whose clause reads a key and whose plan is complete is read by its keys and then handed to the scan. Same answers, by the same fallback, and the same gate."
   },
   "survivors": [
     "crates/valgebra-py/src/build.rs: delete match arm Schema::Intersection(_) | Schema::Complement(_) | Schema::Ref(_) | Schema::SelfRef(_) in carries_through",
@@ -21,13 +26,18 @@
     "crates/valgebra-py/src/check/walk.rs: delete field mode from struct Ctx expression in fast",
     "crates/valgebra-py/src/check/walk.rs: replace > with == in check_ref",
     "crates/valgebra-py/src/check/walk.rs: replace > with >= in check_ref",
-    "crates/valgebra-py/src/check/walk/scalar.rs: replace homogeneous_scalar -> Option<Scalar> with None",
+    "crates/valgebra-py/src/check/walk/record.rs: delete match arm [] in Undeclared::of",
     "crates/valgebra-py/src/check/walk/record.rs: replace != with == in keyed_map_asks_for_its_keys",
     "crates/valgebra-py/src/check/walk/record.rs: replace += with *= in keyed_map_explain",
     "crates/valgebra-py/src/check/walk/record.rs: replace += with *= in scan_dict",
     "crates/valgebra-py/src/check/walk/record.rs: replace < with <= in scan_dict",
+    "crates/valgebra-py/src/check/walk/record.rs: replace == with != in keyed_map_asks_for_its_keys",
     "crates/valgebra-py/src/check/walk/record.rs: replace == with != in keyed_map_matches_json",
     "crates/valgebra-py/src/check/walk/record.rs: replace keyed_map_asks_for_its_keys -> Option<bool> with None",
+    "crates/valgebra-py/src/check/walk/record.rs: replace match guard *clause == MapClause::top() with false in Undeclared::of",
+    "crates/valgebra-py/src/check/walk/record.rs: replace match guard clause.key == Schema::Str && clause.value == Schema::ANYTHING with false in Undeclared::of",
+    "crates/valgebra-py/src/check/walk/record.rs: replace || with && in keyed_map_asks_for_its_keys",
+    "crates/valgebra-py/src/check/walk/scalar.rs: replace homogeneous_scalar -> Option<Scalar> with None",
     "crates/valgebra-py/src/check/walk/sequence.rs: replace < with <= in scan_list"
   ]
 }

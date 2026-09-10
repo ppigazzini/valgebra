@@ -15,7 +15,7 @@ use pyo3::prelude::*;
 use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyDict, PyString};
 use rustc_hash::{FxHashMap, FxHashSet};
-use valgebra_core::{Field, MapClause, PathSegment};
+use valgebra_core::{Field, MapClause, PathSegment, Schema};
 
 use super::{Frame, Scan, fast, is_fatal, member, mutated, record_fatal, stop};
 use crate::check::ctx::Ctx;
@@ -118,6 +118,37 @@ fn covered(defaults: &[MapClause], key: &Value<'_, '_>, val: &Value<'_, '_>, ctx
 /// field; or a probe raised, which is not an answer. A value that changes size
 /// under the probes is not one of those: it is answered here, as the scan
 /// answers it, because there is no reading of it left to fall back to.
+/// What a record's clauses say about a key it does not declare, where that can
+/// be said without reading the key and its value together.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Undeclared {
+    /// No clause: a closed record, and a key to spare refuses it.
+    Refused,
+    /// The top clause, `anything: anything`: any key, any value, by definition.
+    Admitted,
+    /// `str: anything` -- the clause a `TypedDict` carries, since its keys are
+    /// strings by the typing spec -- admits a key exactly when the key is a
+    /// `str`, whatever its value. Every declared key is a `str` too, so the
+    /// question is asked of every key alike and no key need be resolved.
+    AnyStr,
+    /// A clause that reads the key or the value: each undeclared key is asked of
+    /// it, which is the scan.
+    Read,
+}
+
+impl Undeclared {
+    fn of(defaults: &[MapClause]) -> Undeclared {
+        match defaults {
+            [] => Undeclared::Refused,
+            [clause] if *clause == MapClause::top() => Undeclared::Admitted,
+            [clause] if clause.key == Schema::Str && clause.value == Schema::ANYTHING => {
+                Undeclared::AnyStr
+            }
+            _ => Undeclared::Read,
+        }
+    }
+}
+
 fn keyed_map_asks_for_its_keys(
     fields: &[Field],
     defaults: &[MapClause],
@@ -125,7 +156,12 @@ fn keyed_map_asks_for_its_keys(
     ctx: Ctx<'_>,
     plan: &RecordPlan,
 ) -> Option<bool> {
-    if !defaults.is_empty() || plan.keys.len() != fields.len() {
+    // By its keys where the keys settle it. A record whose clause reads an
+    // undeclared key together with its value has to be scanned, and the scan
+    // walks the declared fields as it goes, so reading those by key first would
+    // be work done twice; such a record is not read here.
+    let undeclared = Undeclared::of(defaults);
+    if undeclared == Undeclared::Read || plan.keys.len() != fields.len() {
         return None;
     }
     // One pair of scratch buffers for the record, as the scan takes: a fast
@@ -160,8 +196,31 @@ fn keyed_map_asks_for_its_keys(
             return Some(false);
         }
         // Every key the value carries is one of the declared ones exactly when
-        // the count of declared keys found equals the count it holds.
-        Some(present == entries)
+        // the count of declared keys found equals the count it holds; there is
+        // then nothing for a clause to govern, whatever the clause.
+        if present == entries {
+            return Some(true);
+        }
+        match undeclared {
+            Undeclared::Refused => Some(false),
+            Undeclared::Admitted => Some(true),
+            // A `str` key is admitted whatever it names, so the keys are read for
+            // their type and nothing else -- no name is resolved, no value is
+            // walked -- and the first key of another type refuses the record.
+            Undeclared::AnyStr => {
+                let keys = scan_dict(dict, |key, _| {
+                    if key.is_instance_of::<PyString>() {
+                        ControlFlow::Continue(())
+                    } else {
+                        ControlFlow::Break(())
+                    }
+                });
+                Some(matches!(keys, Scan::Complete))
+            }
+            // Kept out by the guard above; were it not, the scan still decides,
+            // at the cost of the reading just done.
+            Undeclared::Read => None,
+        }
     })
 }
 
@@ -265,14 +324,19 @@ pub(super) fn keyed_map_matches_json(
 ) -> bool {
     let (mut path, mut out) = (Vec::new(), Vec::new());
     let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
-    // A closed record resolves the document's keys through the plan instead of
-    // searching the document once per field. The search is quadratic in the
-    // width -- a fifty-field record read a fifty-entry object fifty times -- and
-    // the plan already holds the name-to-position map the resolution wants.
+    // A record whose keys settle it resolves the document's keys through the
+    // plan instead of searching the document once per field. The search is
+    // quadratic in the width -- a fifty-field record read a fifty-entry object
+    // fifty times -- and the plan already holds the name-to-position map the
+    // resolution wants. A closed record refuses an undeclared key; the top
+    // clause admits it, and so does `str: anything`, since a JSON key is a
+    // string. A record whose clause reads a key takes the search below.
+    let undeclared = Undeclared::of(defaults);
+    let open = matches!(undeclared, Undeclared::Admitted | Undeclared::AnyStr);
     if let Some(plan) = ctx
         .records
         .get(&(fields.as_ptr() as usize))
-        .filter(|plan| defaults.is_empty() && plan.by_name.len() == fields.len())
+        .filter(|plan| undeclared != Undeclared::Read && plan.by_name.len() == fields.len())
     {
         // The document's value for each declared field, last occurrence winning
         // as `json.loads` does, gathered before any of them is checked: an
@@ -287,8 +351,10 @@ pub(super) fn keyed_map_matches_json(
                     // rather than indexing.
                     None => return false,
                 },
-                // A closed record has no clause to cover an undeclared key.
-                None => return false,
+                // A closed record has no clause to cover an undeclared key; an
+                // open one's top clause covers it by definition.
+                None if !open => return false,
+                None => {}
             }
         }
         for (field, value) in fields.iter().zip(found) {
@@ -424,14 +490,15 @@ pub(super) fn keyed_map_explain(
             return;
         }
     }
-    // A closed record that holds exactly the keys it declares has no undeclared
-    // key to find, and the field loop above has already established it: a dict
-    // cannot repeat a key, so finding as many declared keys as the value has
-    // entries accounts for every one of them. The length is re-read because the
-    // walk of a field's value runs Python, which can resize the dict -- and a
-    // value that moved under the reading falls through to the scan, which is
-    // where a mutation is reported.
-    if defaults.is_empty() && present == entries && dict.len() == entries {
+    // A record that holds exactly the keys it declares has no undeclared key to
+    // find, and the field loop above has already established it: a dict cannot
+    // repeat a key, so finding as many declared keys as the value has entries
+    // accounts for every one of them. Open or closed -- a clause governs the
+    // keys a record does not declare, and there are none. The length is
+    // re-read because the walk of a field's value runs Python, which can
+    // resize the dict -- and a value that moved under the reading falls through
+    // to the scan, which is where a mutation is reported.
+    if present == entries && dict.len() == entries {
         return;
     }
     // Built here rather than above, because the scan is the only reader and a

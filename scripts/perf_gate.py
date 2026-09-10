@@ -287,6 +287,7 @@ MODES = {
     "binding-record": ("binding_workload", "binding record walk"),
     "binding-build": ("binding_workload", "binding record build"),
     "binding-explain": ("binding_workload", "binding record explain"),
+    "binding-open": ("binding_workload", "binding open record walk"),
 }
 
 #: The workload argument each binding mode passes, and the budget key it reads.
@@ -300,6 +301,7 @@ BINDING_ITERATIONS = {
     "binding-record": (20_000, 5_000),
     "binding-build": (4_000, 1_000),
     "binding-explain": (8_000, 2_000),
+    "binding-open": (20_000, 5_000),
 }
 
 BINDING_SHAPES = {
@@ -308,6 +310,7 @@ BINDING_SHAPES = {
     "binding-record": "record",
     "binding-build": "build",
     "binding-explain": "explain",
+    "binding-open": "open",
 }
 
 
@@ -466,7 +469,7 @@ def check_against_base(
     return 0
 
 
-def _absent_at(checkout: Path, mode: str) -> bool:
+def absent_at(checkout: Path, mode: str) -> bool:
     """Whether the workload this mode measures is missing from `checkout`.
 
     A shape added in the change being measured has no counterpart at the base,
@@ -477,9 +480,24 @@ def _absent_at(checkout: Path, mode: str) -> bool:
 
     Asked of the source rather than of cargo's message, so a genuine build
     failure at the base stays a failure rather than reading as a new shape.
+
+    A binding shape is an argument of one example, and the base can carry the
+    example without the shape: its parser has no arm for the name, and the
+    binary refuses the argument. That is a shape the base does not carry, read
+    where the base names its shapes rather than from the refusal.
     """
     example = MODES[mode][0]
-    return not any(checkout.glob(f"crates/*/examples/{example}.rs"))
+    sources = list(checkout.glob(f"crates/*/examples/{example}.rs"))
+    if not sources:
+        return True
+    shape = BINDING_SHAPES.get(mode)
+    if shape is None:
+        return False
+    crate = sources[0].parent.parent
+    return not any(
+        f'"{shape}" =>' in path.read_text(encoding="utf-8")
+        for path in crate.glob("src/**/*.rs")
+    )
 
 
 def run_relative(modes: list[str], rev: str) -> int:
@@ -508,7 +526,7 @@ def run_relative(modes: list[str], rev: str) -> int:
             cwd=ROOT,
             check=True,
         )
-        fresh = [mode for mode in modes if _absent_at(checkout, mode)]
+        fresh = [mode for mode in modes if absent_at(checkout, mode)]
         base = {
             mode: measure_mode(mode, checkout, worktree / "target")
             for mode in modes

@@ -191,6 +191,38 @@ def test_every_mode_names_an_example_the_tree_builds() -> None:
         assert subject
 
 
+def test_a_shape_the_base_does_not_name_is_absent_there(tmp_path: Path) -> None:
+    """A base that carries the example but not the shape has no count to give.
+
+    A binding shape is one argument of one example, parsed where the binding
+    names its shapes. The base built for the comparison can be older than the
+    shape: its example builds, and its binary refuses the name. That is a new
+    shape and not a measurement, and the gate reads it from the base's source
+    -- the arm that names the shape -- so it says "new shape" before it runs
+    anything. The tree itself names every shape the gate can ask for.
+    """
+    mode = next(iter(gate.BINDING_SHAPES))
+    example = gate.MODES[mode][0]
+    base = tmp_path / "base"
+    (base / "crates" / "valgebra-py" / "examples").mkdir(parents=True)
+    (base / "crates" / "valgebra-py" / "src").mkdir(parents=True)
+    assert gate.absent_at(base, mode), "no example, so no shape"
+    (base / "crates" / "valgebra-py" / "examples" / f"{example}.rs").write_text("")
+    assert gate.absent_at(base, mode), (
+        "the example without the arm that names the shape"
+    )
+    (base / "crates" / "valgebra-py" / "src" / "lib.rs").write_text(
+        f'"{gate.BINDING_SHAPES[mode]}" => BindingShape::Walk,'
+    )
+    assert not gate.absent_at(base, mode)
+    for other in gate.BINDING_SHAPES:
+        if other != mode:
+            assert gate.absent_at(base, other), other
+    for known in gate.BINDING_SHAPES:
+        assert not gate.absent_at(ROOT, known), f"the tree does not name {known}"
+    assert not gate.absent_at(ROOT, "core"), "a core workload is its example alone"
+
+
 def test_every_binding_shape_has_iterations_and_a_budget() -> None:
     """A shape the gate can name is one it can measure and judge.
 

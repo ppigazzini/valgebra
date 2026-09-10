@@ -2346,3 +2346,230 @@ fn the_scalar_loop_and_the_walk_admit_the_same_values() {
         assert!(scalar_of(&Schema::Instance(ClassIx::new(0))).is_none());
     });
 }
+
+/// A record open under `str: anything` -- the clause a `TypedDict` carries,
+/// since the typing spec makes its keys strings -- is answered by its keys.
+///
+/// Reading a record by its declared keys was a closed record's path alone,
+/// and every `TypedDict` value was scanned instead: each key resolved by name
+/// and asked of the clause, for a clause that admits any string. The keys
+/// settle this record as they settle a closed one: every declared field is
+/// probed, and a key to spare is admitted when it is a `str` and refuses the
+/// record when it is not -- which no key need be resolved to say. The general
+/// scan and the reading by keys must agree on every one of these, and `case`
+/// asks both walks.
+#[test]
+fn a_typed_dict_shaped_record_answers_for_each_of_its_keys() {
+    Python::attach(|py| {
+        let field = |name: &str, schema, required| Field {
+            name: name.into(),
+            schema,
+            required,
+        };
+        let any_str_key = MapClause {
+            key: Schema::Str,
+            value: Schema::ANYTHING,
+        };
+        let record = Schema::keyed_map(
+            vec![
+                field("a", Schema::Int, true),
+                field("b", Schema::Str, false),
+            ],
+            vec![any_str_key],
+        );
+        let dict = |pairs: Vec<(Bound<'_, PyAny>, Bound<'_, PyAny>)>| {
+            let value = PyDict::new(py);
+            for (key, item) in pairs {
+                value.set_item(key, item).expect("a fresh dict takes a key");
+            }
+            value.into_any()
+        };
+        let int = |n: i64| n.into_pyobject(py).expect("an int").into_any();
+        let text = |s: &str| PyString::new(py, s).into_any();
+
+        // Exactly the declared keys, and the optional one absent.
+        case(py, &record, &dict(vec![(text("a"), int(1))]), true);
+        case(
+            py,
+            &record,
+            &dict(vec![(text("a"), int(1)), (text("b"), text("x"))]),
+            true,
+        );
+        // A declared key's value is the field's business, not the clause's.
+        case(py, &record, &dict(vec![(text("a"), text("x"))]), false);
+        case(
+            py,
+            &record,
+            &dict(vec![(text("a"), int(1)), (text("b"), int(2))]),
+            false,
+        );
+        // A required key the value does not carry.
+        case(py, &record, &dict(vec![(text("b"), text("x"))]), false);
+        // A key to spare: admitted with any value when it is a string ...
+        case(
+            py,
+            &record,
+            &dict(vec![(text("a"), int(1)), (text("z"), int(2))]),
+            true,
+        );
+        case(
+            py,
+            &record,
+            &dict(vec![(text("a"), int(1)), (text("z"), list_of(py, vec![]))]),
+            true,
+        );
+        // ... and refused, whatever its value, when it is not.
+        case(
+            py,
+            &record,
+            &dict(vec![(text("a"), int(1)), (int(3), int(2))]),
+            false,
+        );
+    });
+}
+
+/// The same record over a JSON document, whose keys are strings by the
+/// grammar: a key to spare is admitted outright, and the document is read
+/// through the plan rather than searched once per field.
+#[test]
+fn a_typed_dict_shaped_record_reads_a_document_by_its_keys() {
+    Python::attach(|py| {
+        let field = |name: &str, schema, required| Field {
+            name: name.into(),
+            schema,
+            required,
+        };
+        let record = Schema::keyed_map(
+            vec![
+                field("a", Schema::Int, true),
+                field("b", Schema::Str, false),
+            ],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::ANYTHING,
+            }],
+        );
+        for (entries, expected) in [
+            (vec![("a", JsonValue::Int(1))], true),
+            (
+                vec![("a", JsonValue::Int(1)), ("b", JsonValue::Str("x".into()))],
+                true,
+            ),
+            (vec![("a", JsonValue::Str("x".into()))], false),
+            (vec![("b", JsonValue::Str("x".into()))], false),
+            (
+                vec![("a", JsonValue::Int(1)), ("z", JsonValue::Int(2))],
+                true,
+            ),
+            // The last of a repeated key is the one the document means.
+            (
+                vec![("a", JsonValue::Str("x".into())), ("a", JsonValue::Int(1))],
+                true,
+            ),
+        ] {
+            let json = json_object(entries);
+            assert_eq!(
+                holds_json(py, &record, &json),
+                expected,
+                "{record:?} against {json:?}"
+            );
+        }
+    });
+}
+
+/// A record with fields *and* a clause that reads a key is scanned, and the
+/// scan answers every rule the reading by keys answers for a closed record.
+///
+/// The by-keys path is for a record whose keys settle it -- closed, or open
+/// under a clause that admits any string. `{str: int}` beside declared fields
+/// reads each undeclared key with its value, so the scan is the only walk such
+/// a record takes, and the four rules must hold there: a declared key's value
+/// is the field's business, a required key must be present, an undeclared key
+/// is the clause's to admit or refuse, and a key of another type is refused.
+#[test]
+fn a_record_whose_clause_reads_a_key_is_scanned_for_every_rule() {
+    Python::attach(|py| {
+        let field = |name: &str, schema, required| Field {
+            name: name.into(),
+            schema,
+            required,
+        };
+        let mixed = Schema::keyed_map(
+            vec![
+                field("a", Schema::Str, true),
+                field("b", Schema::Int, false),
+            ],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        );
+        let dict = |pairs: Vec<(Bound<'_, PyAny>, Bound<'_, PyAny>)>| {
+            let value = PyDict::new(py);
+            for (key, item) in pairs {
+                value.set_item(key, item).expect("a fresh dict takes a key");
+            }
+            value.into_any()
+        };
+        let int = |n: i64| n.into_pyobject(py).expect("an int").into_any();
+        let text = |s: &str| PyString::new(py, s).into_any();
+
+        // A declared field's value is the field's, not the clause's: `a` holds
+        // a string the clause would refuse, and the record admits it.
+        case(py, &mixed, &dict(vec![(text("a"), text("x"))]), true);
+        case(py, &mixed, &dict(vec![(text("a"), int(1))]), false);
+        case(
+            py,
+            &mixed,
+            &dict(vec![(text("a"), text("x")), (text("b"), text("y"))]),
+            false,
+        );
+        // The required key.
+        case(py, &mixed, &dict(vec![(text("b"), int(1))]), false);
+        // An undeclared key is the clause's: an int value is covered, a string
+        // value is not, and a key that is not a string is not.
+        case(
+            py,
+            &mixed,
+            &dict(vec![(text("a"), text("x")), (text("k"), int(2))]),
+            true,
+        );
+        case(
+            py,
+            &mixed,
+            &dict(vec![(text("a"), text("x")), (text("k"), text("v"))]),
+            false,
+        );
+        case(
+            py,
+            &mixed,
+            &dict(vec![(text("a"), text("x")), (int(3), int(2))]),
+            false,
+        );
+
+        // A clause over keys of another type is read, not assumed: `int:
+        // anything` admits an int key the string rule would refuse, and
+        // refuses a string key it would admit. No frontend spells this
+        // record -- a `TypedDict`'s keys are strings by the spec -- and the
+        // walk decides it by what the clause says all the same.
+        let int_keyed = Schema::keyed_map(
+            vec![field("a", Schema::Str, true)],
+            vec![MapClause {
+                key: Schema::Int,
+                value: Schema::ANYTHING,
+            }],
+        );
+        case(
+            py,
+            &int_keyed,
+            &dict(vec![(text("a"), text("x")), (int(3), text("v"))]),
+            true,
+        );
+        case(
+            py,
+            &int_keyed,
+            &dict(vec![(text("a"), text("x")), (text("k"), text("v"))]),
+            false,
+        );
+    });
+}

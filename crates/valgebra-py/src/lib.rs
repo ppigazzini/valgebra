@@ -25,7 +25,9 @@ mod validator;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
-use valgebra_core::{DefIx, Field, Guarded, Schema, SeqKind, SeqShape, fresh_self_token};
+use valgebra_core::{
+    DefIx, Field, Guarded, MapClause, Schema, SeqKind, SeqShape, fresh_self_token,
+};
 
 use crate::errors::install_lazy_attributes;
 pub use crate::exception::ValidationError;
@@ -84,6 +86,13 @@ pub enum BindingShape {
     /// to the end: the twin of `error_report`, and the only shape here that
     /// builds violations rather than answering a bool.
     Explain,
+    /// The accepting walk over the same fifty fields declared by a record that
+    /// is **open** the way a `TypedDict` is: its clause admits any further
+    /// `str` key. The shape the record walk takes for the annotation users
+    /// write most, and the one the closed twin above could not see -- an open
+    /// record was scanned key by key where a closed one was read by its keys,
+    /// and nothing counted the difference.
+    Open,
 }
 
 impl BindingShape {
@@ -96,6 +105,7 @@ impl BindingShape {
             "record" => BindingShape::Record,
             "build" => BindingShape::Build,
             "explain" => BindingShape::Explain,
+            "open" => BindingShape::Open,
             _ => return None,
         })
     }
@@ -106,6 +116,21 @@ impl BindingShape {
 /// Fifty fields is the comparison gate's width, kept identical so the two
 /// measurements are of the same size of problem.
 fn wide_record(py: Python<'_>) -> (Schema, Py<PyAny>) {
+    let (fields, value) = wide_fields(py);
+    (Schema::keyed_map(fields, Vec::new()), value)
+}
+
+/// The same fifty fields and value under the clause a `TypedDict` carries.
+fn open_record(py: Python<'_>) -> (Schema, Py<PyAny>) {
+    let (fields, value) = wide_fields(py);
+    let any_str_key = MapClause {
+        key: Schema::Str,
+        value: Schema::ANYTHING,
+    };
+    (Schema::keyed_map(fields, vec![any_str_key]), value)
+}
+
+fn wide_fields(py: Python<'_>) -> (Vec<Field>, Py<PyAny>) {
     let fields: Vec<Field> = (0..50)
         .map(|i| Field {
             name: format!("f{i}").into(),
@@ -119,10 +144,7 @@ fn wide_record(py: Python<'_>) -> (Schema, Py<PyAny>) {
             .set_item(format!("f{i}"), i)
             .expect("a fresh dict of small ints always builds");
     }
-    (
-        Schema::keyed_map(fields, Vec::new()),
-        value.into_any().unbind(),
-    )
+    (fields, value.into_any().unbind())
 }
 
 /// A deterministic, binding-level instruction workload for the perf gate.
@@ -165,8 +187,12 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             }
             checksum
         }
-        BindingShape::Record => {
-            let (schema, value) = wide_record(py);
+        BindingShape::Record | BindingShape::Open => {
+            let (schema, value) = if matches!(shape, BindingShape::Record) {
+                wide_record(py)
+            } else {
+                open_record(py)
+            };
             let validator = Validator::new(schema, Vec::new(), Vec::new());
             let obj = value.bind(py).clone();
             let mut checksum: u64 = 0;

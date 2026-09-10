@@ -185,6 +185,15 @@ answer of its own, or a repair to a change not yet released.
 
 ### Changed
 
+- A `TypedDict` value is read by its declared keys, as a closed record's is.
+  A `TypedDict` is open -- the typing spec admits keys it does not declare --
+  and an open record was scanned key by key where a closed one was read by its
+  keys, for a clause that admits any string. The keys settle it either way:
+  every declared field is probed, and a key to spare is admitted when it is a
+  string and refuses the record when it is not, which no key need be resolved
+  to say. The same fifty-field value reads about a quarter faster as a
+  `TypedDict` and its error report about a sixth, and neither answer moves.
+
 - Two schemas built alike share their nodes, so a question that reaches both is
   answered by identity rather than by walking two trees. A relation between a
   record schema and an equal one built separately reads **1.07M instructions

@@ -521,7 +521,7 @@ jobs:
           PYO3_PYTHON="$py" LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}" \
             uv run --no-sync python scripts/perf_gate.py \
               --binding --binding-boundary --binding-record \
-              --binding-build --binding-explain --against "$BASE"
+              --binding-build --binding-explain --binding-open --against "$BASE"
         env:
           BASE: ${{ steps.base.outputs.sha }}
       # And the recorded numbers, on the nightly only. They are a record of one
@@ -541,7 +541,7 @@ jobs:
           PYO3_PYTHON="$py" LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}" \
             uv run --no-sync python scripts/perf_gate.py \
               --binding --binding-boundary --binding-record \
-              --binding-build --binding-explain
+              --binding-build --binding-explain --binding-open
       # Smoke-run the wall-clock benches once (timing disabled) so the suites
       # keep working; their numbers are recorded by hand in the performance
       # page. The files are named bench_*, so override the collection pattern.
