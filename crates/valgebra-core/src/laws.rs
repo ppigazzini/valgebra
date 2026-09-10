@@ -55,8 +55,22 @@ fn shaped_schema() -> impl Strategy<Value = Schema> {
         // corpus reached neither, so every property over it asked its question
         // where nothing could be looked up.
         (0usize..3).prop_map(|i| Schema::Instance(ClassIx::new(i))),
-        (0usize..3).prop_map(|i| Schema::Literal(ConstIx::new(i))),
+        (0usize..4).prop_map(|i| Schema::Literal(ConstIx::new(i))),
     ];
+    // A table of codes: a union of nothing but literals, in the canonical order
+    // its constructor leaves it in, which is the shape read as a *set* rather
+    // than walked as a list. Built through `Schema::union` and not the variant,
+    // so what the rule is asked about is what a frontend builds; the raw unions
+    // below stay raw, and a rule that reads an unordered list as a set would
+    // answer one of the two wrongly.
+    let table = proptest::collection::vec(0usize..4, 1..5).prop_map(|indices| {
+        Schema::union(
+            indices
+                .into_iter()
+                .map(|i| Schema::Literal(ConstIx::new(i))),
+        )
+    });
+    let atom = prop_oneof![atom, table];
     atom.prop_recursive(3, 24, 3, |inner| {
         prop_oneof![
             proptest::collection::vec(inner.clone(), 1..3).prop_map(|m| Schema::Union(m.into())),
@@ -117,7 +131,8 @@ fn shaped_schema() -> impl Strategy<Value = Schema> {
 ///
 /// Class 0 derives from class 1 and neither lays down a layout; class 2 lays
 /// one down and confines its instances to the tuple kind, which is the shape a
-/// class deriving from a builtin has.
+/// class deriving from a builtin has. Constant 3 repeats constant 0's value,
+/// so an index and a value are two things here.
 struct CorpusOracle;
 
 impl CorpusOracle {
@@ -135,7 +150,11 @@ impl CorpusOracle {
 impl Constants for CorpusOracle {
     fn constant(&self, index: ConstIx) -> Option<Operand> {
         match index.get() {
-            0 => Some(Operand::Integer(0)),
+            // Index 3 repeats index 0's value. A pool whose every index holds
+            // a different value cannot tell a rule that reads a set of
+            // *indices* from one that reads a set of values, and telling those
+            // apart is what a literal oracle is for.
+            0 | 3 => Some(Operand::Integer(0)),
             1 => Some(Operand::Integer(1)),
             2 => Some(Operand::Word(b"a".to_vec(), Kind::Str)),
             _ => None,
@@ -171,6 +190,21 @@ impl LeafRelations for CorpusOracle {
 
     fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
         Some(self.constant(left)? != self.constant(right)?)
+    }
+
+    /// The same relation over two sets, which is the form the finite-set rule
+    /// asks it in. Answered here rather than left to the default so that rule's
+    /// *refutation* is under the properties below: an oracle that declines it
+    /// leaves the rule proving and never refuting, and the agreement between
+    /// the two deciders would be held over half of what the rule does.
+    fn literal_sets_disjoint(&self, left: &[ConstIx], right: &[ConstIx]) -> Option<bool> {
+        let read = |set: &[ConstIx]| {
+            set.iter()
+                .map(|index| self.constant(*index))
+                .collect::<Option<Vec<_>>>()
+        };
+        let (left, right) = (read(left)?, read(right)?);
+        Some(!left.iter().any(|value| right.contains(value)))
     }
 }
 
