@@ -483,6 +483,10 @@ mod tests {
             .intersect(&wide.complement())
             .expect("two small lattices");
         assert!(covered.is_empty());
+        // And it is the empty lattice as a value, not a lattice of one line
+        // that happens to hold nothing: the line is dropped where the union is
+        // put in order, so equality reads one form for one set of sets.
+        assert_eq!(covered, SetLattice::empty());
 
         // The other way round it is not: `{0}` is a subset of `0..=9` and not
         // of `{1}`.
