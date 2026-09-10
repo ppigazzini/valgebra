@@ -199,9 +199,12 @@ is opaque.
 ## Decision procedures, for widening the decided fragment
 
 **Gesbert, Genevès & Layaïda, "A Logical Approach to Deciding Semantic
-Subtyping".** **[PLANNED]** — the interning and automata engine that would decide
-the cases [02-decision.md](02-decision.md) records as conservative. Not built;
-saying so is the point of the tag.
+Subtyping".** **[IN PROGRESS]** — the interning and automata engine that would
+decide the cases [02-decision.md](02-decision.md) records as conservative. Its
+interning half is in the tree: `crates/valgebra-core/src/ir/intern.rs` shares
+the nodes of two schemas built alike, which is the identity a memo over goals
+needs for its key. The memo itself, and the automata engine the paper builds
+around it, are not written; the tag says the half rather than the whole.
 
 **The descriptor**, the representation the two Castagna papers above give and
 Elixir's `Module.Types.Descr` implements, is **[IN PROGRESS]** in
@@ -253,7 +256,8 @@ That page's trust base records it.
 
 **None of these is implemented as its paper describes it.** The decision
 procedure is a sound, budget-bounded structural one that is exact on a published
-fragment; it is not the interning automata engine. Where a page here says
+fragment; it is not the automata engine, and the interning it shares a name with
+is a table of nodes rather than a decision procedure. Where a page here says
 otherwise, the page is wrong.
 
 ### Where this tree departs from its sources

@@ -232,14 +232,24 @@ why the rules answer first.
 Subtyping distributes over unions and intersections; emptiness recurses the
 structural fragment. A deeply nested Boolean combination can therefore demand
 work exponential in its depth unless a goal already decided can be recognised
-when it comes back — and recognising one cheaply needs *identity*, not sharing.
-The IR shares its nodes: carrying a subtree into a goal is a reference count
-([01-schema-ir.md](01-schema-ir.md)). What it does not give is one allocation per
-structurally equal subtree, so a memo would have to key on structure, which
-costs a walk of the goal to look one up. The procedure bounds its own work with
-a counter instead, threaded through a whole top-level query so the two
-directions of an equivalence share it and the bound cannot be spent twice or
-escaped through a side door.
+when it comes back — and recognising one cheaply needs *identity*, not structure.
+The IR gives that: two subtrees built alike are one allocation
+([01-schema-ir.md](01-schema-ir.md)), so a goal is named by a pair of pointers
+and a memo over goals has the cheap key it wants. What a memo does not yet have
+is its soundness argument, and that is not about keys: an answer reached under
+the coinductive hypothesis the trail carries is not an answer without it, so
+what may be remembered is a goal decided with an empty trail and nothing else.
+The procedure bounds its own work with a counter until one is written, threaded
+through a whole top-level query so the two directions of an equivalence share it
+and the bound cannot be spent twice or escaped through a side door.
+
+One shape needs neither the memo nor the counter. A union of nothing but
+literals denotes a **finite set of values**, and inclusion between two finite
+sets is membership of every value of one in the other -- a walk of the two
+tables, exact in both directions, where distributing one against the other is a
+decision step per pair. The rule reads a table only in the canonical order its
+constructor leaves it in, and its refutation is the oracle's: two constants at
+two pool positions are two values only where the bindings can compare them.
 
 Part of the argument the counter stands in for is already in the code: the trail
 holds each `(subject, supertype)` pair it is deciding, and a pair that comes back
