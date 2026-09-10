@@ -245,6 +245,17 @@ is an instruction count, so it holds across machine classes. The bool fast path
 and the aggregating explain walk stay membership-equivalent, locked by tests
 that assert both reach the same verdict across record shapes.
 
+A **report** on that record -- one field wrong, explained, raised -- costs about
+three accepting walks, and the count attributes the three. Two are the walks:
+the fast pass, which stops at the field that fails, and the explaining pass,
+which reads every field so the report names all of them, a hundred dict probes
+between them. The third is the raise itself, which the interpreter charges for
+building the exception and unwinding to the caller. Nothing in the three is a
+walk over what the schema already knows, so a further cut would be a cheaper
+report rather than a shorter walk -- and the shape the same count *did* find
+was the open record, read a third dearer than the closed one until it was read
+by its keys.
+
 ## How large literal unions dispatch
 
 A union whose members are all literals (a `Literal["a", "b", ...]` enum, or a
