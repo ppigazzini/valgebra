@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::descr::classes::Class;
+use crate::descr::lower::Operand;
 use crate::ir::Openness;
 
 /// The structural inclusion procedure alone, with no descriptor beside it.
@@ -1936,4 +1938,77 @@ fn a_constant_that_does_not_equal_itself_denotes_no_value() {
     let literal = Schema::Literal(ConstIx::new(0));
     // The empty set is below every set, and a refutation over it is not one.
     assert!(literal.is_subtype_of_under(&Schema::Str, &NotAValue, &[]));
+}
+
+/// A schema the rules prove **inhabited** is not lowered.
+///
+/// The descriptor is the second reading of one question, asked where the rules
+/// reach neither answer. A proof of inhabitation is an answer: a value of the
+/// schema is a value of it, and a sound second reading cannot say otherwise --
+/// so asking is work that cannot change a verdict, and a lowering determinises
+/// automata and takes products to do it.
+///
+/// The instrument is the pool: a lowering reads every constant it meets, so a
+/// pool nobody asked is a lowering that did not happen.
+#[test]
+fn a_schema_proven_inhabited_is_not_lowered() {
+    /// A pool that counts what it is asked, and holds one constant that is a
+    /// value -- enough for the rules to prove the record inhabited.
+    struct Counted(Cell<usize>);
+
+    impl Constants for Counted {
+        fn constant(&self, _index: ConstIx) -> Option<Operand> {
+            self.0.set(self.0.get() + 1);
+            None
+        }
+
+        fn operand(&self, _index: OperandIx) -> Option<Operand> {
+            self.0.set(self.0.get() + 1);
+            None
+        }
+
+        fn class(&self, _index: ClassIx) -> Option<Class> {
+            self.0.set(self.0.get() + 1);
+            None
+        }
+    }
+
+    impl LeafRelations for Counted {
+        fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
+            None
+        }
+
+        fn literals_disjoint(&self, _left: ConstIx, _right: ConstIx) -> Option<bool> {
+            Some(false)
+        }
+    }
+
+    let record = Schema::record(
+        vec![Field {
+            name: "leaf".into(),
+            schema: Schema::Literal(ConstIx::new(0)),
+            required: true,
+        }],
+        Openness::Closed,
+    );
+    let pool = Counted(Cell::new(0));
+    assert!(
+        !record.is_empty_with(&pool, &[]),
+        "the record holds a value"
+    );
+    assert_eq!(
+        pool.0.get(),
+        0,
+        "the descriptor was asked to overturn a proof of inhabitation"
+    );
+
+    // And the schema the rules cannot read is still asked about, which is what
+    // makes the reading above a saving rather than a narrowing.
+    let opaque = Schema::Instance(ClassIx::new(0));
+    let pool = Counted(Cell::new(0));
+    assert!(!opaque.is_empty_with(&pool, &[]));
+    assert!(
+        pool.0.get() > 0,
+        "an unknown verdict left the descriptor unasked"
+    );
 }

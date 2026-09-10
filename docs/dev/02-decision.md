@@ -10,7 +10,10 @@ it decides.
 
 `crates/valgebra-core/src/decision.rs` is the **fast path**. It recurses over the
 schema tree, matching shapes and applying rules. It answers first, and the
-descriptor answers where it declines.
+descriptor answers where it declines -- where it *declines*, not where it says
+no: a schema the rules prove inhabited is not lowered, because a sound second
+reading cannot overturn a proof and lowering one determinises automata and takes
+products to fail to.
 
 That ordering is not a second opinion. Both are asked the same question and
 both answer in three values -- proved, refuted, or neither -- so the descriptor

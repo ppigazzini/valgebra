@@ -626,8 +626,20 @@ impl Schema {
     /// bound conjunction (a lower bound above an upper bound) is detected.
     #[must_use]
     pub fn is_empty_with(&self, oracle: &dyn LeafRelations, defs: &[Schema]) -> bool {
-        self.is_empty_rec(oracle, defs, &mut Vec::new(), &Cell::new(DECISION_BUDGET))
-            || self.denotes_no_value(oracle, defs)
+        // The rules answer in three values and the descriptor is asked where
+        // they reach the third -- which is what makes the pair one procedure
+        // rather than a second opinion. A proof of *inhabitation* is an answer
+        // like a proof of emptiness: a value of the schema is a value of it,
+        // whatever a second reading would say, so the descriptor is not asked
+        // to overturn what it cannot. Reading the bool instead of the verdict
+        // asked it on every inhabited schema, and lowering one determinises
+        // automata and takes products -- a third of the decision workload,
+        // spent on a question already answered.
+        match self.verdict_rec(oracle, defs, &mut Vec::new(), &Cell::new(DECISION_BUDGET)) {
+            Verdict::Empty => true,
+            Verdict::Inhabited => false,
+            Verdict::Unknown => self.denotes_no_value(oracle, defs),
+        }
     }
 
     /// Whether the descriptor proves this schema admits no value.
