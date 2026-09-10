@@ -419,8 +419,26 @@ BOUND = re.compile(
     re.MULTILINE,
 )
 BOUND_ROW = re.compile(r"^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|", re.MULTILINE)
+#: Where a source file's test module begins: a `cfg(test)` attribute on a `mod`,
+#: and not on whatever else a file gates behind one.
+TEST_MODULE_START = re.compile(
+    r"^#\[cfg\((?:test|all\(test[^\n]*)\)\]\n(?:pub(?:\([a-z()]+\))? )?mod ",
+    re.MULTILINE,
+)
 #: `#[cfg(test)] mod name;` -- a module whose body is a sibling file.
 TEST_MODULE = re.compile(r"#\[cfg\((?:test|all\(test[^\n]*)\)\]\s*\nmod (\w+);")
+
+
+def before_the_test_module(text: str) -> str:
+    """Read a source file down to where its test module starts.
+
+    What a file *defines* is what is compiled into the library, and a fixture in
+    a test module is not that. The two are told apart by the `mod` a
+    `cfg(test)` sits on rather than by the attribute alone: a file may gate a
+    re-export or an import behind one and go on defining constants below it.
+    """
+    start = TEST_MODULE_START.search(text)
+    return text if start is None else text[: start.start()]
 
 
 def test_module_files(sources: list[Path]) -> set[str]:
@@ -457,8 +475,12 @@ def check_bounds_ledger() -> list[str]:
     source. That reads a couple of things that are not bounds -- an arity, say --
     and the table carries them with a row saying so, which is cheaper than an
     exclusion list nobody maintains and honest about what the rule can see. A
-    constant inside a test module is not in it: the scan stops at the first
-    ``#[cfg(test)]``, so a fixture is not a bound.
+    constant inside a test module is not in it: the scan stops where the test
+    module begins, so a fixture is not a bound. It stops *there* rather than at
+    the first ``#[cfg(test)]`` in the file, because a file gates other things
+    behind one -- a re-export a sibling's tests read, say -- and stopping at the
+    attribute hid every bound below it. Three constants left this table that
+    way, and the table reported no problems.
 
     Values are compared too, verbatim. A bound whose figure moves in the source
     and not on the page is the failure this exists to catch, and it is the one a
@@ -482,7 +504,7 @@ def check_bounds_ledger() -> list[str]:
         where = source.relative_to(ROOT).as_posix()
         if where in test_only:
             continue  # a test module's constants are fixtures, not bounds
-        text = source.read_text(encoding="utf-8").partition("#[cfg(test)]")[0]
+        text = before_the_test_module(source.read_text(encoding="utf-8"))
         for name, value in BOUND.findall(text):
             tree[where, name] = value.strip()
     listed = {

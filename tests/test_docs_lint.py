@@ -212,6 +212,28 @@ def test_each_index_is_held_in_both_directions(relative: str) -> None:
     assert len(pages) >= 10, f"{relative} holds only {sorted(pages)}"
 
 
+def test_a_test_gated_item_does_not_hide_the_bounds_below_it() -> None:
+    # The scan reads what a file *defines*, so it stops at the file's test
+    # module. Stopping at the first `#[cfg(test)]` instead hid every bound
+    # under a test-gated re-export or helper -- silently, since a table that
+    # reads no constants reports no problems about them.
+    hidden = (
+        "const ABOVE: usize = 1;\n"
+        "#[cfg(test)]\n"
+        "pub(crate) fn helper() {}\n"
+        "const BELOW: usize = 2;\n"
+        "#[cfg(test)]\n"
+        "mod tests {\n"
+        "    const FIXTURE: usize = 3;\n"
+        "}\n"
+    )
+    read = lint.before_the_test_module(hidden)
+    assert "ABOVE" in read
+    assert "BELOW" in read, "a test-gated helper hid the bound below it"
+    assert "FIXTURE" not in read, "a fixture is not a bound"
+    assert {name for name, _ in lint.BOUND.findall(read)} == {"ABOVE", "BELOW"}
+
+
 def test_the_bounds_ledger_is_held_in_both_directions() -> None:
     # Driven against the real tree, since the check reads a fixed page. The
     # value comparison is the half a name check would miss, so it is the one

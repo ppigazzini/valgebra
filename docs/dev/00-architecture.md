@@ -131,6 +131,7 @@ comment. A `limit` or a `shape` carries the reason it is where it is.
 | `crates/valgebra-py/src/check/walk/sequence.rs` | `SNAPSHOT_MAX_ELEMENTS` | `262_144` | shape | a snapshot large enough that walking the copy costs more cache than the reference counts it avoids, and two mebibytes of transient with it | its own tests, and `scripts/perf_gate.py --binding` |
 | `crates/valgebra-py/src/check/walk.rs` | `CLOSEST_BRANCH_PROBE_LIMIT` | `64` | shape | the error path's second walk costing the branch count | `tests/test_union_messages.py` |
 | `crates/valgebra-py/src/check/walk.rs` | `UNION_LABEL_LIMIT` | `64` | shape | a union naming a thousand labels in one `expected` | its own tests |
+| `crates/valgebra-core/src/decision.rs` | `UNFOLDS` | `1` | shape | a fixpoint unfolded past its own body, which multiplies the schema the descriptor must build against its node bound for relations nobody asks about | its own tests, and `tests/test_completeness_ledger.py` |
 | `crates/valgebra-core/src/decision.rs` | `DECISION_BUDGET` | `1_000_000` | debt | one query spending unbounded work before answering conservatively | its own tests, and `tests/test_decision_adversarial.py` |
 | `crates/valgebra-core/src/descr/lower.rs` | `BUDGET` | `64` | debt | the schema nodes one lowering reads | its own tests, and `crates/valgebra-core/benches/core.rs` |
 | `crates/valgebra-core/src/descr/lower.rs` | `DEPTH` | `5` | debt | the nesting one lowering descends, which is the exponential | its own tests, and `crates/valgebra-core/benches/core.rs` |
