@@ -107,6 +107,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a table of literals is decided as the set it denotes
 - fix: the bounds scan stops at the test module, not at the first attribute -- internal
 - fix: a renumbered member set is canonical again
+- fix: a tail the rules cannot read is not a repeat
 
 -->
 
@@ -206,6 +207,28 @@ answer of its own, or a repair to a change not yet released.
   was written.
 
 ### Fixed
+
+- A sequence whose repeated element the rules cannot read is not refuted
+  against a fixed length. `tuple[X, ...] <= tuple[()]` was refuted on the
+  ground that a repeating tail cannot fit a fixed length, which stands only
+  where `X` has a value: an `X` the rules cannot decide may admit none, and
+  `tuple[X, ...]` is then the empty tuple, which fits. The refutation is
+  believed where the element is proven inhabited and declined where it is not,
+  and the descriptor -- which reads the element -- decides the pair:
+
+  ```python
+  from typing import Annotated, Never
+
+  import annotated_types as at
+
+  from valgebra import Validator
+
+  no_value = Annotated[list[Never], at.MinLen(1)]
+  assert Validator(tuple[no_value, ...]).is_equivalent(Validator(tuple[()]))
+  ```
+
+  Found by the law that holds the two deciders to one answer: the rules
+  refuted an inclusion the sets prove.
 
 - A schema disjoint from a meet is below that meet's complement. `A <= ~B` asks
   whether `A` and `B` share a value, and the meet it built for that question

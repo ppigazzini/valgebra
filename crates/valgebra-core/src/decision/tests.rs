@@ -1592,6 +1592,20 @@ fn a_subject_with_no_value_is_below_a_shape_it_cannot_match() {
     ]));
     assert_eq!(relation(&unfillable, &empty_list), Relation::Unknown);
     assert!(unfillable.is_subtype_of(&empty_list));
+
+    // A repeated tail the rules cannot read is not a repeat. A list of that
+    // same refinement is inhabited -- the empty list is in it whatever the
+    // element admits -- so the subject offers a value; but the refutation
+    // "a tail repeats past a fixed length" stands on the *element* having one,
+    // and this element has none. The rules decline, and the descriptor, which
+    // reads the element empty, proves the list is the empty list.
+    let unrepeating = Schema::list(SeqShape::homogeneous(Schema::refine(
+        Schema::list(SeqShape::homogeneous(Schema::Nothing)),
+        vec![Constraint::MinLen(1)],
+    )));
+    assert_eq!(relation(&unrepeating, &empty_list), Relation::Unknown);
+    assert!(unrepeating.is_subtype_of(&empty_list));
+    assert!(unrepeating.is_equivalent(&empty_list));
 }
 
 /// A key the supertype requires and the subject does not declare, read against

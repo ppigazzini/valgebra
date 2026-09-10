@@ -2285,8 +2285,13 @@ fn linear_subtype(
     // oracle and definitions as the rest of the decision, so a tail empty only
     // under a refinement bound or an uninhabited recursive reference is
     // recognised here too, consistent with the context-aware recursion around it.
-    let ta =
-        ta.filter(|element| !element.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget));
+    //
+    // The verdict is kept in three values, because the one refutation below
+    // that stands on the tail *repeating* needs the element proven to have a
+    // value: a tail the rules cannot read either way may be no tail at all.
+    let repeats =
+        ta.map(|element| element.verdict_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget));
+    let ta = ta.filter(|_| repeats != Some(Verdict::Empty));
     // A's fixed prefix must align with B: against B's prefix where they overlap,
     // then against B's repeated tail past it (which B must therefore have). A
     // prefix shorter than B's cannot align at all, which is a refutation by
@@ -2326,8 +2331,13 @@ fn linear_subtype(
     match (ta, tb) {
         (None, None) if pa.len() != pb.len() => Relation::Fails,
         (None, None | Some(_)) => aligns(assumptions),
-        // A repeats without bound but B is finite-length: impossible.
-        (Some(_), None) => Relation::Fails,
+        // A repeats without bound but B is finite-length: no value with a
+        // repeat is in B. That is a mismatch of the repeated element's values,
+        // and it is read the way the query reads the subject's: refuted where
+        // the element has one, declined where the rules cannot tell. An
+        // element they cannot tell is also not proven empty, or the tail would
+        // have been dropped above, so `Holds` is not an answer this arm gives.
+        (Some(_), None) => Relation::of_mismatch(repeats.unwrap_or(Verdict::Unknown)),
         // A's repeated element must also land in B's repeated tail.
         (Some(a), Some(tail)) => {
             aligns(assumptions).and(|| a.is_subtype_rec(tail, cx, assumptions))
