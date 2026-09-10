@@ -1014,7 +1014,10 @@ jobs:
     # slice and uploads it; the job after merges them and ratchets once.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # The slowest shard of twelve runs forty-five minutes on a shared runner
+    # and the others twenty-five to forty, so a ceiling at forty-five cancels
+    # a healthy sweep and a cancelled job is red. Twice the slowest reading.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
