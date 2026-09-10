@@ -427,10 +427,21 @@ from valgebra import Validator
 codes = Validator(Literal[tuple(range(10_000))])
 wider = Validator(Literal[tuple(range(10_001))])
 shifted = Validator(Literal[tuple(range(1, 10_001))])
+backwards = Validator(Literal[tuple(reversed(range(10_000)))])
 
 assert codes.relation_to(wider) == "subset"
 assert codes.relation_to(shifted) == "not_subset"  # 0 is in one and not the other
+assert codes.relation_to(backwards) == "subset"  # the same set, written the other way
 ```
+
+"However they were written" is a claim about the pools: each validator numbers
+its constants in the order it met them, relating two validators renumbers one
+pool into the other, and a table written backwards is renumbered backwards. A
+member list is read as a set only in the canonical order its constructor leaves
+it in, so the transform that renumbers one sorts it again
+(`crates/valgebra-core/src/ir/transform.rs`, `mapped_member_set`). Before it
+did, two tables that agreed on nothing about where each constant sat were
+distributed against each other as if the rule were not there.
 
 The refutation is the bindings' to give: two constants at two pool positions are
 two *values* only where their type's equality can be trusted, and a constant

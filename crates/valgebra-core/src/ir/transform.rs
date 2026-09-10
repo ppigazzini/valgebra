@@ -49,27 +49,65 @@ fn remapped_constraints(constraints: &Constraints, remap: Remap<'_>) -> Option<C
 /// whole point of asking whether it changed.
 fn mapped_members(members: &Members, f: &impl Fn(&Schema) -> Option<Schema>) -> Option<Members> {
     with_member_buffer(|buffer| {
-        let mut changed = false;
-        for (at, member) in members.iter().enumerate() {
-            match f(member) {
-                None => {
-                    if changed {
-                        buffer.push(member.clone());
-                    }
-                }
-                Some(mapped) => {
-                    if !changed {
-                        buffer.extend(members.iter().take(at).cloned());
-                        changed = true;
-                    }
-                    buffer.push(mapped);
-                }
-            }
-        }
         // Shared rather than allocated: a list this walk has assembled before
         // -- which a repeated transform over a repeated subtree assembles again
         // -- is the handle the table gives back, and the buffer is dropped.
-        changed.then(|| share_members(buffer))
+        fill_mapped(buffer, members, f).then(|| share_members(buffer))
+    })
+}
+
+/// Fill `buffer` with `members` mapped through `f`, and say whether `f` changed
+/// any. Nothing is written until a member changes: a list `f` has nothing to
+/// say about costs one call per member and no memory at all.
+fn fill_mapped(
+    buffer: &mut Vec<Schema>,
+    members: &Members,
+    f: &impl Fn(&Schema) -> Option<Schema>,
+) -> bool {
+    let mut changed = false;
+    for (at, member) in members.iter().enumerate() {
+        match f(member) {
+            None => {
+                if changed {
+                    buffer.push(member.clone());
+                }
+            }
+            Some(mapped) => {
+                if !changed {
+                    buffer.extend(members.iter().take(at).cloned());
+                    changed = true;
+                }
+                buffer.push(mapped);
+            }
+        }
+    }
+    changed
+}
+
+/// Map a member **set**, rebuilding it only where `f` changed a member -- and
+/// rebuilding it canonical.
+///
+/// A join's or a meet's members are a set: the constructor sorts and
+/// deduplicates them, and a reader is entitled to that order -- a table of
+/// literals is read as the set it denotes by searching the list, and a search
+/// over an unordered one answers by where a member happens to sit. Renumbering
+/// is the one operation that puts a canonical list out of order: two
+/// validators' pools are interned into one, each constant takes the position
+/// it already has there or is given on arrival, and a table written the other
+/// way round arrives with its indices descending. Two constants can also land
+/// on one index, which is a duplicate. So a list this rebuilt is sorted and
+/// deduplicated again, where the order it held is what `f` moved.
+///
+/// [`mapped_members`] is the positional half, for a sequence's prefix, where
+/// order *is* the shape and may not be touched.
+fn mapped_member_set(members: &Members, f: &impl Fn(&Schema) -> Option<Schema>) -> Option<Members> {
+    with_member_buffer(|buffer| {
+        if !fill_mapped(buffer, members, f) {
+            return None;
+        }
+        buffer.sort();
+        buffer.dedup();
+        Some(share_members(buffer))
     })
 }
 
@@ -266,8 +304,10 @@ impl Schema {
             Schema::Complement(inner) => {
                 f(inner).map(|inner| Schema::Complement(share_node(inner)))
             }
-            Schema::Union(members) => mapped_members(members, f).map(Schema::Union),
-            Schema::Intersection(members) => mapped_members(members, f).map(Schema::Intersection),
+            Schema::Union(members) => mapped_member_set(members, f).map(Schema::Union),
+            Schema::Intersection(members) => {
+                mapped_member_set(members, f).map(Schema::Intersection)
+            }
             Schema::KeyedMap { fields, defaults } => {
                 let mapped_fields = mapped_fields(fields, f);
                 let mapped_clauses = mapped_clauses(defaults, f);

@@ -1052,36 +1052,23 @@ fn reindexed_remaps_pool_and_definition_indices() {
         ]
         .into(),
     );
-    // The second pool interned into the first: old 0 -> 5, old 1 -> 6.
+    // The second pool interned into the first: old 0 -> 5, old 1 -> 6. The
+    // members come back in canonical order -- a remap that renumbers a member
+    // set sorts it again -- so the expectation is written through the
+    // constructor rather than as the list the schema above was written as.
     let lit_map = [5, 6];
     let remapped = schema.reindexed(&lit_map, DefShift::new(3));
-    assert_eq!(
-        remapped,
-        Schema::Union(
-            vec![
-                Schema::Literal(ConstIx::new(5)),
-                Schema::Instance(ClassIx::new(6)),
-                Schema::Ref(DefIx::new(3)),
-                Schema::set(Schema::Literal(ConstIx::new(6))),
-            ]
-            .into()
-        )
-    );
+    let expected = Schema::union([
+        Schema::Literal(ConstIx::new(5)),
+        Schema::Instance(ClassIx::new(6)),
+        Schema::Ref(DefIx::new(3)),
+        Schema::set(Schema::Literal(ConstIx::new(6))),
+    ]);
+    assert_eq!(remapped, expected);
 
     // `shifted` is the identity-map case: every index moves by a fixed offset.
     let shifted = schema.shifted(PoolShift::new(5), DefShift::new(3));
-    assert_eq!(
-        shifted,
-        Schema::Union(
-            vec![
-                Schema::Literal(ConstIx::new(5)),
-                Schema::Instance(ClassIx::new(6)),
-                Schema::Ref(DefIx::new(3)),
-                Schema::set(Schema::Literal(ConstIx::new(6))),
-            ]
-            .into()
-        )
-    );
+    assert_eq!(shifted, expected);
     // A constraint operand index is remapped too.
     let refined = Schema::Refine {
         base: Arc::new(Schema::Int),

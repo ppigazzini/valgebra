@@ -724,11 +724,18 @@ def test_decision_decides_true_relations(
 # shape that grows: an error-code table, a currency list, a set of tags.
 
 
-def _codes(members: int, *, extra: bool = False) -> Validator:
-    """Build a literal union of `members` codes, pooling its own constants."""
+def _codes(members: int, *, extra: bool = False, backwards: bool = False) -> Validator:
+    """Build a literal union of `members` codes, pooling its own constants.
+
+    `backwards` writes the same codes in the other order, so the table's own
+    pool numbers them the other way round: two tables that denote one set and
+    agree on nothing about where each constant sits.
+    """
     codes = [f"code_{index:05d}" for index in range(members)]
     if extra:
         codes.append("extra")
+    if backwards:
+        codes.reverse()
     return union(*[Validator(code) for code in codes])
 
 
@@ -744,6 +751,24 @@ def test_widening_a_table_is_decided_at_the_sizes_a_table_reaches(
     # distributing. Before constants were pooled by value the two largest sizes
     # spent the decision budget instead.
     assert _codes(members).is_subtype_of(_codes(members, extra=True))
+
+
+@pytest.mark.parametrize("members", [8, 64, 256, 512, 1024, 4096])
+def test_a_table_is_decided_however_it_was_written(members: int) -> None:
+    # The same two tables with one side written in reverse. Relating two
+    # validators interns one pool into the other, which numbers the second
+    # table's constants by the order the first met them -- for a table written
+    # backwards, its own reverse -- and the union is rebuilt in that order. A
+    # table is decided as a set only in canonical order, so the transform that
+    # renumbers a member set leaves it canonical; before it did, these four
+    # read exactly as they read before tables were decided by membership.
+    forward = _codes(members)
+    same_backwards = _codes(members, backwards=True)
+    wider_backwards = _codes(members, extra=True, backwards=True)
+    assert forward.relation_to(same_backwards) == "subset"
+    assert same_backwards.relation_to(forward) == "subset"
+    assert forward.relation_to(wider_backwards) == "subset"
+    assert wider_backwards.relation_to(forward) == "not_subset"
 
 
 @pytest.mark.parametrize("members", [8, 64, 256, 512, 1024, 4096])

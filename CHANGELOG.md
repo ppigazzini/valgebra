@@ -106,6 +106,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the binding shapes are measured with the interpreter's hash seed fixed -- internal
 - feat: a table of literals is decided as the set it denotes
 - fix: the bounds scan stops at the test module, not at the first attribute -- internal
+- fix: a renumbered member set is canonical again
 
 -->
 
@@ -177,6 +178,10 @@ answer of its own, or a repair to a change not yet released.
   prove falls from 237 ms to 6 ms. `Literal[float("nan")]` is the empty set --
   no value equals `nan` -- and the empty set is below every schema, which the
   core could not say before because a literal had no emptiness of its own.
+  Two tables written in different orders are the same case: relating two
+  validators renumbers one pool into the other, and a member set that is
+  renumbered is put back in canonical order rather than left as the other
+  validator happened to number it.
 
 ### Changed
 

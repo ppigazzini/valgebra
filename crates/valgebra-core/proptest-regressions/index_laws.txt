@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 600bcecb297681fa42e4321ae513a58be0d8312a5eb38e20a3087ff2bbaf81f9 # shrinks to schema = Complement(Union([Instance(ClassIx(1)), Literal(ConstIx(0))])), pool_by = 1, defs_by = 1
+cc 58874d730b052f8f6639c2d22586874be1191df9a0f9d86c7809336ac36642eb # shrinks to schema = Seq { container: Tuple, shape: SeqShape { prefix: [Intersection([Literal(ConstIx(0)), Literal(ConstIx(0))])], tail: Some(Int) } }, pool_by = 1, defs_by = 1
+cc e415d5a6f7af8a83471e318627d7a4cf84f2399f87b74440cf89be78e3f04cd9 # shrinks to schema = Union([Literal(ConstIx(0)), Literal(ConstIx(1))])

@@ -74,6 +74,79 @@ fn indexed_schema() -> impl Strategy<Value = Schema> {
     })
 }
 
+/// The same leaves under constructors that leave a set **canonical**, which is
+/// what the law below is about: a join or a meet built by hand may hold its
+/// members in any order, and only one built by `union` or `meet` promises the
+/// order a reader may search.
+fn canonical_indexed_schema() -> impl Strategy<Value = Schema> {
+    let leaf = prop_oneof![
+        Just(Schema::Str),
+        Just(Schema::Literal(ConstIx::new(0))),
+        Just(Schema::Literal(ConstIx::new(1))),
+        Just(Schema::Literal(ConstIx::new(2))),
+        Just(Schema::Literal(ConstIx::new(3))),
+        Just(Schema::Instance(ClassIx::new(1))),
+    ];
+    leaf.prop_recursive(3, 24, 3, |inner| {
+        prop_oneof![
+            proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::union),
+            proptest::collection::vec(inner.clone(), 1..4).prop_map(Schema::meet),
+            inner
+                .clone()
+                .prop_map(|s| Schema::list(SeqShape::homogeneous(s))),
+            inner.prop_map(|s| Schema::record(vec![field(s)], Openness::Closed)),
+        ]
+    })
+}
+
+/// The interning table that reverses the pool: slot `i` becomes `n - 1 - i`.
+///
+/// The table two validators produce when one wrote its constants in the other's
+/// reverse order, and the one that puts a canonical member list out of order
+/// where a shift cannot.
+fn reversing_table(n: usize) -> Vec<usize> {
+    (0..n).rev().collect()
+}
+
+/// Whether every join and meet under `schema` holds its members sorted and
+/// distinct -- the order the constructors leave and a search may rely on.
+fn member_sets_are_canonical(schema: &Schema) -> bool {
+    let this = match schema {
+        Schema::Union(members) | Schema::Intersection(members) => {
+            members.windows(2).all(|pair| pair[0] < pair[1])
+        }
+        _ => true,
+    };
+    this && schema.children().all(member_sets_are_canonical)
+}
+
+/// The pool and definition indices under `schema`, each as a **set**: sorted
+/// and distinct.
+///
+/// A set rather than the sequence the walk meets them in, because a join's or
+/// a meet's members are a set and a remap that renumbers them puts them back
+/// in canonical order -- so two indices that were neighbours may not be after.
+/// The laws below ask whether every index moved and by how much, which the
+/// set answers as well as the sequence did: an index that stood still keeps
+/// a value the image of a shift by one or more does not hold.
+fn index_sets(schema: &Schema) -> (Vec<usize>, Vec<usize>) {
+    let (mut pool, mut defs) = (Vec::new(), Vec::new());
+    indices(schema, &mut pool, &mut defs);
+    pool.sort_unstable();
+    pool.dedup();
+    defs.sort_unstable();
+    defs.dedup();
+    (pool, defs)
+}
+
+/// `values` sent through `f`, as the set they become.
+fn image(values: &[usize], f: impl Fn(usize) -> usize) -> Vec<usize> {
+    let mut sent: Vec<usize> = values.iter().map(|value| f(*value)).collect();
+    sent.sort_unstable();
+    sent.dedup();
+    sent
+}
+
 /// The interning table that sends every pool slot `by` places along, so
 /// reindexing through it is a shift and the two operations are comparable.
 fn shift_table(by: usize) -> Vec<usize> {
@@ -193,20 +266,12 @@ proptest! {
         pool_by in 1..MAX_SHIFT,
         defs_by in 1..MAX_SHIFT,
     ) {
-        let (mut pool_before, mut defs_before) = (Vec::new(), Vec::new());
-        indices(&schema, &mut pool_before, &mut defs_before);
+        let (pool_before, defs_before) = index_sets(&schema);
         let shifted = schema.shifted(PoolShift::new(pool_by), DefShift::new(defs_by));
-        let (mut pool_after, mut defs_after) = (Vec::new(), Vec::new());
-        indices(&shifted, &mut pool_after, &mut defs_after);
+        let (pool_after, defs_after) = index_sets(&shifted);
 
-        prop_assert_eq!(
-            pool_after,
-            pool_before.iter().map(|slot| slot + pool_by).collect::<Vec<_>>()
-        );
-        prop_assert_eq!(
-            defs_after,
-            defs_before.iter().map(|slot| slot + defs_by).collect::<Vec<_>>()
-        );
+        prop_assert_eq!(pool_after, image(&pool_before, |slot| slot + pool_by));
+        prop_assert_eq!(defs_after, image(&defs_before, |slot| slot + defs_by));
     }
 
     /// Interning sends every pool payload through the table, and every
@@ -219,19 +284,31 @@ proptest! {
         defs_by in 1..MAX_SHIFT,
     ) {
         let table = shift_table(pool_by);
-        let (mut pool_before, mut defs_before) = (Vec::new(), Vec::new());
-        indices(&schema, &mut pool_before, &mut defs_before);
+        let (pool_before, defs_before) = index_sets(&schema);
         let interned = schema.reindexed(&table, DefShift::new(defs_by));
-        let (mut pool_after, mut defs_after) = (Vec::new(), Vec::new());
-        indices(&interned, &mut pool_after, &mut defs_after);
+        let (pool_after, defs_after) = index_sets(&interned);
 
-        prop_assert_eq!(
-            pool_after,
-            pool_before.iter().map(|slot| table[*slot]).collect::<Vec<_>>()
-        );
-        prop_assert_eq!(
-            defs_after,
-            defs_before.iter().map(|slot| slot + defs_by).collect::<Vec<_>>()
+        prop_assert_eq!(pool_after, image(&pool_before, |slot| table[slot]));
+        prop_assert_eq!(defs_after, image(&defs_before, |slot| slot + defs_by));
+    }
+
+    /// A member set is canonical after it is renumbered.
+    ///
+    /// The constructors sort and deduplicate a join's and a meet's members,
+    /// and a reader is entitled to that: a table of literals is decided as the
+    /// set it denotes by *searching* its list, and a search over an unordered
+    /// list answers by where a member happens to sit. Renumbering through a
+    /// table that reverses the pool is the operation that puts a canonical
+    /// list out of order, so the transform that renumbers is the one that has
+    /// to put it back. A sequence's prefix is a list and not a set, and this
+    /// law does not read it.
+    #[test]
+    fn a_renumbered_member_set_is_canonical(schema in canonical_indexed_schema()) {
+        prop_assume!(member_sets_are_canonical(&schema));
+        let reversed = schema.reindexed(&reversing_table(4), DefShift::new(0));
+        prop_assert!(
+            member_sets_are_canonical(&reversed),
+            "renumbering left a member set out of order: {reversed:?}"
         );
     }
 
