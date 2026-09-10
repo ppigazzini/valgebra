@@ -2012,3 +2012,80 @@ fn a_schema_proven_inhabited_is_not_lowered() {
         "an unknown verdict left the descriptor unasked"
     );
 }
+
+/// The field cache answers the goal it was asked and not one beside it.
+///
+/// A record whose fields repeat a schema asks one goal per field, and the rule
+/// remembers the last pair to answer it once. Both halves of that pair are the
+/// goal: a subject field equal to the last one says nothing about the relation
+/// when the supertype's field is a different schema, and a cache reading one
+/// side would report the second field decided by the first.
+#[test]
+fn the_field_cache_reads_both_halves_of_the_goal() {
+    let record = |fields: Vec<(&str, Schema)>| {
+        Schema::record(
+            fields
+                .into_iter()
+                .map(|(name, schema)| Field {
+                    name: name.into(),
+                    schema,
+                    required: true,
+                })
+                .collect(),
+            Openness::Closed,
+        )
+    };
+    // Two fields of one schema, against two fields of two: the first pair holds
+    // and the second does not, so the record does not.
+    let subject = record(vec![("a", Schema::Int), ("b", Schema::Int)]);
+    let mixed = record(vec![("a", Schema::Int), ("b", Schema::Str)]);
+    assert!(!structural(&subject, &mixed));
+    assert!(!subject.is_subtype_of(&mixed));
+    // And the shape the cache exists for still decides: one goal, twice.
+    let wider = record(vec![
+        ("a", Schema::union([Schema::Int, Schema::Str])),
+        ("b", Schema::union([Schema::Int, Schema::Str])),
+    ]);
+    assert!(structural(&subject, &wider));
+    // The other side of the same reading: the supertype's fields repeat and the
+    // subject's do not, so the second field is a goal of its own.
+    let mixed_subject = record(vec![("a", Schema::Int), ("b", Schema::NoneType)]);
+    assert!(!structural(&mixed_subject, &wider));
+}
+
+/// The position cache answers the goal it was asked, as the field cache does.
+///
+/// A tuple whose positions repeat a schema asks one goal per position, and the
+/// rule remembers the last pair to answer it once. A position whose element
+/// equals the last one says nothing where the other side's element differs, and
+/// a cache that read the question as answered would report the second position
+/// decided by the first.
+#[test]
+fn the_position_cache_reads_both_halves_of_the_goal() {
+    let tuple = |elements: Vec<Schema>| Schema::tuple(SeqShape::fixed(elements));
+    // Two positions of one schema, against two positions of two: the first
+    // aligns and the second does not, so the tuple does not.
+    let subject = tuple(vec![Schema::Int, Schema::Int]);
+    let mixed = tuple(vec![Schema::Int, Schema::Str]);
+    assert!(!structural(&subject, &mixed));
+    assert!(!subject.is_subtype_of(&mixed));
+    // The shape the cache exists for decides: one goal, twice.
+    let wider = tuple(vec![
+        Schema::union([Schema::Int, Schema::Str]),
+        Schema::union([Schema::Int, Schema::Str]),
+    ]);
+    assert!(structural(&subject, &wider));
+    // And the other side: the supertype's positions repeat and the subject's do
+    // not, so the second position is a goal of its own.
+    assert!(!structural(
+        &tuple(vec![Schema::Int, Schema::NoneType]),
+        &wider
+    ));
+    // A repeated tail is the same question past the prefix, so a prefix element
+    // equal to the last one does not answer for the tail either.
+    let by_tail = Schema::tuple(SeqShape::prefix_tail(vec![Schema::Int], Schema::Str));
+    assert!(!structural(
+        &tuple(vec![Schema::Int, Schema::Int]),
+        &by_tail
+    ));
+}

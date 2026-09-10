@@ -8,10 +8,12 @@
 //! (`DECISION_BUDGET`, and the descriptor's three) is argued over a workload
 //! that could not show one working.
 //!
-//! This is the shape that can. A record whose fields all carry one schema,
+//! These are the shapes that can. A record whose fields all carry one schema,
 //! against a record whose fields all carry a wider one: the inclusion at every
 //! field is the same goal, because the fields share their element schema and
-//! construction shares equal subtrees. One key, asked `WIDTH` times.
+//! construction shares equal subtrees. One key, asked `WIDTH` times. And the
+//! same repetition in a tuple, whose elements are reached by position and
+//! walked by a rule of their own.
 //!
 //! Run under cachegrind its count is deterministic for a given build, so the
 //! saving a memo would make is the difference between this count and the one it
@@ -35,6 +37,14 @@ fn nested_lists(depth: usize, leaf: Schema) -> Schema {
     (0..depth).fold(leaf, |inner, _| Schema::list(SeqShape::homogeneous(inner)))
 }
 
+/// A tuple whose positions all carry `element`.
+///
+/// The record's repetition in the other container: elements reached by
+/// position rather than by name, walked by the rule that aligns two shapes.
+fn repeating_tuple(width: usize, element: &Schema) -> Schema {
+    Schema::tuple(SeqShape::fixed((0..width).map(|_| element.clone())))
+}
+
 /// A record whose fields all carry `element`.
 fn repeating(width: usize, element: &Schema) -> Schema {
     Schema::record(
@@ -50,11 +60,12 @@ fn repeating(width: usize, element: &Schema) -> Schema {
 }
 
 fn main() {
-    let narrow = repeating(WIDTH, &nested_lists(DEPTH, Schema::Int));
-    let wide = repeating(
-        WIDTH,
-        &nested_lists(DEPTH, Schema::union([Schema::Int, Schema::Str])),
-    );
+    let element = nested_lists(DEPTH, Schema::Int);
+    let wider_element = nested_lists(DEPTH, Schema::union([Schema::Int, Schema::Str]));
+    let narrow = repeating(WIDTH, &element);
+    let wide = repeating(WIDTH, &wider_element);
+    let narrow_tuple = repeating_tuple(WIDTH, &element);
+    let wide_tuple = repeating_tuple(WIDTH, &wider_element);
     // Fold a checksum through each verdict so nothing is optimized away.
     let mut checksum: usize = 0;
     for _ in 0..ITERATIONS {
@@ -67,6 +78,11 @@ fn main() {
         // settles it -- so the pair is here to show that a memo may not turn a
         // walk that stops early into one that does not.
         checksum += usize::from(b(&wide).is_subtype_of(b(&narrow)));
+        // The same pair of questions in the container whose elements are
+        // reached by position, which repeats a goal the same way and is walked
+        // by a different rule.
+        checksum += usize::from(b(&narrow_tuple).is_subtype_of(b(&wide_tuple)));
+        checksum += usize::from(b(&wide_tuple).is_subtype_of(b(&narrow_tuple)));
     }
     // Printing forces the checksum to be observed.
     println!("checksum={checksum}");

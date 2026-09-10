@@ -28,6 +28,6 @@
   "decision_refute_workload_checksum": 200,
   "_decision_refute_comment": "The refuting half of the decision surface, budgeted apart from the proving half. A rule that refutes by comparing shapes runs where the sibling workload never goes: every relation it asks either holds or is settled by the descriptor after the rules decline, so the path a refutation walks carried no reading at all. It is the dearer half by two orders of magnitude, because a relation the rules do not prove is asked of the descriptor, and lowering a schema costs what the decision page records it costing. The proving workload beside it carries 1.4% for the same reading: every top-level query pays the test even where it proves its relation and the test does nothing, which is sixteen instructions a query and was measured by disabling the test rather than left as an unattributed rise.",
   "_decision_repeat_comment": "The decision surface over goals that repeat, budgeted apart from the two beside it. Neither of those has a repeated goal at all -- a wide record's fields are distinct literals, a nesting's levels are distinct -- so the saving a memo over goals would make is invisible to them, and the budget that stands in for such a memo was argued over shapes that would not use one. This asks one goal once per field, in both directions, so a memo reads here and the cost of keeping one reads there.",
-  "decision_repeat_workload_irefs": 42212420,
-  "decision_repeat_workload_checksum": 2000
+  "decision_repeat_workload_irefs": 41263728,
+  "decision_repeat_workload_checksum": 4000
 }

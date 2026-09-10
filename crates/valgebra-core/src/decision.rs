@@ -2294,14 +2294,31 @@ fn linear_subtype(
     if pa.len() < pb.len() {
         return Relation::Fails;
     }
-    let aligns = |assumptions: &mut Vec<(Schema, Schema)>| {
-        Relation::all(pa.iter().enumerate().map(|(i, element)| match pb.get(i) {
-            Some(expected) => element.is_subtype_rec(expected, cx, assumptions),
-            // Past B's prefix, B must repeat -- a fixed-length B admits no such
-            // position at all.
-            None => tb.map_or(Relation::Fails, |tail| {
-                element.is_subtype_rec(tail, cx, assumptions)
-            }),
+    // One goal, asked again -- the sequence's reading of what a record's fields
+    // do, and remembered the same way. A tuple whose positions carry one schema
+    // asks one question per position, and the positions are walked in order, so
+    // a repeat is the position before this one. See `keyed_map_subtype` for why
+    // the pair is compared by equality rather than by address.
+    let mut last: Option<(&Schema, &Schema, Relation)> = None;
+    let mut aligns = |assumptions: &mut Vec<(Schema, Schema)>| {
+        Relation::all(pa.iter().enumerate().map(|(i, element)| {
+            let expected = match pb.get(i) {
+                Some(expected) => expected,
+                // Past B's prefix, B must repeat -- a fixed-length B admits no
+                // such position at all.
+                None => match tb {
+                    Some(tail) => tail,
+                    None => return Relation::Fails,
+                },
+            };
+            match last {
+                Some((sub, sup, answer)) if sub == element && sup == expected => answer,
+                _ => {
+                    let answer = element.is_subtype_rec(expected, cx, assumptions);
+                    last = Some((element, expected, answer));
+                    answer
+                }
+            }
         }))
     };
     match (ta, tb) {
@@ -2387,16 +2404,46 @@ fn keyed_map_subtype(
         //
         // Every supertype field is checked against `a`: a field `a` declares is
         // matched field-wise; a field `a` lacks is governed by `a`'s catch-all.
+        // One goal, asked again. A record whose fields repeat a type asks the
+        // same question once per field, and answering it once is the whole of
+        // what a memo over goals would do here.
+        //
+        // Compared by *equality* rather than by address: two fields carrying one
+        // schema hold two `Schema` values, each in its own slot of the field
+        // list, and what they share is everything under them. Equality between
+        // two nodes whose payloads are the same allocations is a discriminant
+        // and a pointer per payload, which is what makes this cheaper than the
+        // walk it skips.
+        //
+        // One entry rather than a table: the fields are walked in order, so a
+        // repeat is the field before this one. A table of goals over the whole
+        // query was measured beside this and cost the shapes with nothing to
+        // repeat more than it saved the shapes with something.
+        let mut last: Option<(&Schema, &Schema, Relation)> = None;
         let fields_ok = Relation::all(fb.iter().map(|b_field| {
             match a_by_name.get(&*b_field.name) {
                 // Shared field: it must narrow in depth, and a field `b` requires
                 // must be required in `a` too. A key the supertype requires and
                 // the subtype does not is a value of the subtype -- the one
                 // leaving that key out -- that the supertype rejects.
-                Some(a_field) => a_field
-                    .schema
-                    .is_subtype_rec(&b_field.schema, cx, assumptions)
-                    .and(|| Relation::decided(!b_field.required || a_field.required)),
+                Some(a_field) => {
+                    let depth = match last {
+                        Some((sub, sup, answer))
+                            if sub == &a_field.schema && sup == &b_field.schema =>
+                        {
+                            answer
+                        }
+                        _ => {
+                            let answer =
+                                a_field
+                                    .schema
+                                    .is_subtype_rec(&b_field.schema, cx, assumptions);
+                            last = Some((&a_field.schema, &b_field.schema, answer));
+                            answer
+                        }
+                    };
+                    depth.and(|| Relation::decided(!b_field.required || a_field.required))
+                }
                 // A field `b` requires that `a` lacks. A catch-all guarantees a
                 // key's value type and never its presence, so a subject carrying
                 // one may or may not place the key and the relation is undecided
