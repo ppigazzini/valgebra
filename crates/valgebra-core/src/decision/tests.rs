@@ -1772,3 +1772,168 @@ fn a_subject_disjoint_from_a_meet_is_below_its_complement() {
     assert!(Schema::meet([tuples.clone(), inner.clone()]).is_empty());
     assert!(tuples.is_subtype_of(&inner.complement()));
 }
+
+/// A pool where the index is the value, except that two indices hold one.
+///
+/// The duplicate is the whole point. An oracle whose every index holds a
+/// different value cannot tell a rule that reads a *set of indices* from one
+/// that reads a set of **values**, so the difference the literal oracle exists
+/// for is invisible to it -- and a rule refuting a membership by index alone
+/// would pass every property written over such a pool.
+struct Values;
+
+impl Values {
+    /// The value at an index: its own number, except that the last index of the
+    /// three below repeats the first.
+    fn at(index: ConstIx) -> Option<usize> {
+        match index.get() {
+            0..=2 => Some(index.get()),
+            3 => Some(0),
+            _ => None,
+        }
+    }
+}
+
+impl Constants for Values {}
+
+impl LeafRelations for Values {
+    fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
+        None
+    }
+
+    fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+        Some(Values::at(left)? != Values::at(right)?)
+    }
+
+    fn literal_sets_disjoint(&self, left: &[ConstIx], right: &[ConstIx]) -> Option<bool> {
+        let read = |set: &[ConstIx]| {
+            set.iter()
+                .map(|index| Values::at(*index))
+                .collect::<Option<Vec<_>>>()
+        };
+        let (left, right) = (read(left)?, read(right)?);
+        Some(!left.iter().any(|value| right.contains(value)))
+    }
+}
+
+/// A table of literals against another, decided as the two sets they denote.
+///
+/// The relation asked here is the rules' alone: the descriptor decides these
+/// too, on a table small enough for it to hold, and asking through the public
+/// relation would report a right answer for the other reason.
+fn table_relation(subject: &[usize], supertype: &[usize], oracle: &dyn LeafRelations) -> Relation {
+    let table = |indices: &[usize]| {
+        Schema::union(
+            indices
+                .iter()
+                .map(|index| Schema::Literal(ConstIx::new(*index))),
+        )
+    };
+    let (subject, supertype) = (table(subject), table(supertype));
+    let budget = Cell::new(DECISION_BUDGET);
+    subject.subtype_relation(&supertype, oracle, &[], &budget)
+}
+
+/// Every constant found is a proof, and one found nowhere is a refutation.
+///
+/// The refutation is what a shape rule cannot give: a union of literals is a
+/// *finite set*, so a constant of the subject that is in no member of the
+/// supertype is a value in one and outside the other, which is the whole of
+/// what refuting an inclusion means.
+#[test]
+fn a_table_of_literals_is_decided_as_the_set_it_denotes() {
+    assert_eq!(
+        table_relation(&[0, 1], &[0, 1, 2], &Values),
+        Relation::Holds
+    );
+    assert_eq!(table_relation(&[0, 1], &[0, 1], &Values), Relation::Holds);
+    assert_eq!(table_relation(&[0, 2], &[0, 1], &Values), Relation::Fails);
+    assert_eq!(table_relation(&[2], &[0, 1], &Values), Relation::Fails);
+}
+
+/// A constant the subject holds and the supertype spells at another index is
+/// not missing, and the rule that reads the two lists by index does not say it
+/// is. Index three holds the value of index zero.
+#[test]
+fn a_constant_spelled_at_another_index_is_not_a_refutation() {
+    assert_ne!(table_relation(&[3], &[0, 1], &Values), Relation::Fails);
+    assert_ne!(table_relation(&[0, 3], &[0, 1], &Values), Relation::Fails);
+}
+
+/// Without an oracle the core cannot read a constant, so a member found nowhere
+/// is not a refutation: two indices may hold one value, and the rules say only
+/// what they can prove.
+#[test]
+fn a_table_without_an_oracle_proves_and_does_not_refute() {
+    assert_eq!(
+        table_relation(&[0, 1], &[0, 1, 2], &NoLeafRelations),
+        Relation::Holds
+    );
+    assert_ne!(
+        table_relation(&[2], &[0, 1], &NoLeafRelations),
+        Relation::Fails
+    );
+}
+
+/// A union a caller built by hand is not in the canonical order, and reading an
+/// unordered list as a set answers by where a member happens to sit. Such a
+/// union keeps the member walk it had, which decides the inclusion the slow way
+/// and gets it right.
+#[test]
+fn an_unordered_union_of_literals_is_not_read_as_a_set() {
+    let raw = |indices: &[usize]| {
+        Schema::Union(
+            indices
+                .iter()
+                .map(|index| Schema::Literal(ConstIx::new(*index)))
+                .collect::<Vec<_>>()
+                .into(),
+        )
+    };
+    // The list the constructor would order as [0, 1, 2], written backwards. The
+    // subject is in it, so the inclusion holds however the list is read -- and
+    // a binary search over it would look at the middle, find 1, and go the
+    // wrong way for 2.
+    let backwards = raw(&[2, 1, 0]);
+    assert_eq!(
+        finite_set(&backwards),
+        None,
+        "an unordered list is not a set"
+    );
+    let budget = Cell::new(DECISION_BUDGET);
+    assert_eq!(
+        Schema::Literal(ConstIx::new(2)).subtype_relation(&backwards, &Values, &[], &budget),
+        Relation::Holds
+    );
+}
+
+/// A literal denotes the values equal to its constant, which for a constant
+/// that does not equal itself is none of them. The oracle answers it as the
+/// question it has: a singleton disjoint from itself is the empty set.
+#[test]
+fn a_constant_that_does_not_equal_itself_denotes_no_value() {
+    /// A pool of one constant, which is not equal to itself.
+    struct NotAValue;
+    impl Constants for NotAValue {}
+    impl LeafRelations for NotAValue {
+        fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
+            None
+        }
+        fn literals_disjoint(&self, _left: ConstIx, _right: ConstIx) -> Option<bool> {
+            Some(true)
+        }
+    }
+    let verdict = |oracle: &dyn LeafRelations| {
+        Schema::Literal(ConstIx::new(0)).verdict_rec(
+            oracle,
+            &[],
+            &mut Vec::new(),
+            &Cell::new(DECISION_BUDGET),
+        )
+    };
+    assert_eq!(verdict(&NotAValue), Verdict::Empty);
+    assert_eq!(verdict(&Values), Verdict::Inhabited);
+    let literal = Schema::Literal(ConstIx::new(0));
+    // The empty set is below every set, and a refutation over it is not one.
+    assert!(literal.is_subtype_of_under(&Schema::Str, &NotAValue, &[]));
+}

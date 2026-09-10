@@ -923,10 +923,33 @@ impl Schema {
                 };
                 (region.verdict(), region)
             }
-            // The gradual `Any`, literals, and instances are not scalar-decidable
-            // and the core cannot read them: a literal's constant may be `nan`,
-            // which is equal to nothing and denotes the empty set, and a class may
-            // have no instances. Neither direction is proven.
+            // A literal denotes `{x | type(x) is type(c) and x == c}`, which
+            // holds `c` itself exactly when `c` equals itself. A constant that
+            // does not -- a `nan` -- denotes the empty set, and every other
+            // constant is a value, which is what makes a refutation naming one
+            // a refutation at all.
+            //
+            // The core cannot read a constant, and this asks the oracle the
+            // question it already answers: whether two constants denote
+            // disjoint singletons, asked of one constant *against itself*. A
+            // set disjoint from itself is the empty one, and a set that shares
+            // a value with itself has a value. The oracle declines for a type
+            // whose equality it does not trust, and the literal stays unknown
+            // there, which is where it was for every constant before.
+            Schema::Literal(constant) => (
+                match oracle.literals_disjoint(*constant, *constant) {
+                    Some(true) => Verdict::Empty,
+                    Some(false) => Verdict::Inhabited,
+                    None => Verdict::Unknown,
+                },
+                // A literal is a *subset* of its kind's region rather than the
+                // whole of it, so it has no region set of its own: one would
+                // read `int <= Literal[1]` as proven.
+                Regions::Unknown,
+            ),
+            // The gradual `Any` and an instance are not scalar-decidable and the
+            // core cannot read them: a class may have no instances. Neither
+            // direction is proven.
             _ => (Verdict::Unknown, Regions::Unknown),
         }
     }
@@ -1277,6 +1300,17 @@ impl Schema {
         cx: SubtypeCx<'_>,
         assumptions: &mut Vec<(Schema, Schema)>,
     ) -> Relation {
+        // Two finite sets of constants, before the lattice rules distribute
+        // them: inclusion between them is membership, and membership is a
+        // lookup. What the distribution below would make of the same pair is a
+        // decision step per pair of members, which is the product the budget
+        // binds; this is a walk of the two lists, which is a sum.
+        if let (Some(subject), Some(supertype)) = (finite_set(self), finite_set(other)) {
+            let answer = finite_set_below(subject, supertype, other, cx.oracle);
+            if answer != Relation::Unknown {
+                return answer;
+            }
+        }
         match (self, other) {
             // Every lattice bound, in one arm: `∅ ⊆ B`, `A ⊆ U`, and `A ⊆ ∅`
             // when A is empty. All three are the same question asked of
@@ -2114,6 +2148,86 @@ fn literal_constants(schema: &Schema) -> Option<Vec<ConstIx>> {
             })
             .collect(),
         _ => None,
+    }
+}
+
+/// The members of a schema that denotes a **finite set of constants**: a
+/// literal, or a union of nothing but literals in the canonical order its
+/// constructor leaves them in.
+///
+/// `None` for everything else, and for a union whose literals are not strictly
+/// increasing. The variant is public and a caller may build one by hand, and
+/// the rule below reads the list as a *set* by searching it, which an unordered
+/// list would answer wrongly; a union the constructors did not order keeps the
+/// member walk it had. The order is the derived one, so it is the order of the
+/// pool indices, and the constructors sort and deduplicate.
+fn finite_set(schema: &Schema) -> Option<&[Schema]> {
+    match schema {
+        Schema::Literal(_) => Some(std::slice::from_ref(schema)),
+        Schema::Union(members) => {
+            let mut previous: Option<ConstIx> = None;
+            for member in members.iter() {
+                let Schema::Literal(index) = member else {
+                    return None;
+                };
+                if previous.is_some_and(|held| held >= *index) {
+                    return None;
+                }
+                previous = Some(*index);
+            }
+            // An empty union is the bottom rather than a set of constants, and
+            // the lattice bound below decides it.
+            previous.is_some().then(|| members.as_ref())
+        }
+        _ => None,
+    }
+}
+
+/// `A ⊆ B` between two finite sets of constants, decided by membership.
+///
+/// A literal denotes a singleton, so a union of literals denotes the set of its
+/// constants, and inclusion between two such sets is membership of every
+/// constant of one in the other. That is **exact in both directions**, which is
+/// what a set gives that a shape does not: every member found is a proof, and
+/// one member found nowhere is a refutation naming the value that stands
+/// against the inclusion.
+///
+/// Both readings are one walk. The lists are canonical, so a member is found by
+/// binary search rather than by a scan, and the pair costs `n log m` where the
+/// distribution it stands in front of costs a decision step per pair of
+/// members. A table of a thousand codes against another is a million steps
+/// there and ten thousand comparisons here, which is the difference between the
+/// product the budget binds and a sum it does not
+/// (`docs/15-decidability.md`).
+///
+/// The refutation is the oracle's to give. Two constants at two indices are two
+/// *values* only where the bindings can compare them, and a constant that does
+/// not equal itself denotes no value at all -- so a member found nowhere asks
+/// whether it is disjoint from the whole supertype set, in the one call that
+/// question has, and declines to the rules below where the oracle does. A
+/// refutation from here is a mismatch like any other: the subject's own
+/// emptiness is read against it once, at the top of the query.
+fn finite_set_below(
+    subject: &[Schema],
+    supertype: &[Schema],
+    other: &Schema,
+    oracle: &dyn LeafRelations,
+) -> Relation {
+    let Some(missing) = subject
+        .iter()
+        .find(|member| supertype.binary_search(member).is_err())
+    else {
+        return Relation::Holds;
+    };
+    // Both sides are literals by construction, so both readings are `Some`; a
+    // `None` here would be this rule and `literal_constants` disagreeing about
+    // what a set of constants is, and the pair keeps the rules it had.
+    let (Some(alone), Some(whole)) = (literal_constants(missing), literal_constants(other)) else {
+        return Relation::Unknown;
+    };
+    match oracle.literal_sets_disjoint(&alone, &whole) {
+        Some(true) => Relation::Fails,
+        _ => Relation::Unknown,
     }
 }
 

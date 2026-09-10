@@ -746,6 +746,25 @@ def test_widening_a_table_is_decided_at_the_sizes_a_table_reaches(
     assert _codes(members).is_subtype_of(_codes(members, extra=True))
 
 
+@pytest.mark.parametrize("members", [8, 64, 256, 512, 1024, 4096])
+def test_a_table_missing_a_member_refutes_at_every_size(members: int) -> None:
+    # The other direction of the same pair, and the one a shape rule cannot
+    # reach: the wider table holds a code the narrow one does not, so a value of
+    # one is outside the other and the inclusion is *refuted* rather than left
+    # unproven. A union of literals denotes a finite set, and a finite set is
+    # decided by membership in both directions -- before that rule the answer
+    # was "undecided" from a thousand members up, because the procedure
+    # distributed one table against the other and spent its budget on the
+    # product.
+    narrow = _codes(members)
+    wider = _codes(members, extra=True)
+    assert wider.relation_to(narrow) == "not_subset"
+    # And the refutation is a statement about a value: the code the narrow table
+    # lacks is one the wide table admits.
+    assert wider.is_valid("extra")
+    assert not narrow.is_valid("extra")
+
+
 @pytest.mark.parametrize("members", [1024, 4096])
 def test_widening_a_table_by_a_member_is_decided_at_every_size(members: int) -> None:
     # The same relation with the wide table built *from* the narrow one, which
