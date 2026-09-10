@@ -113,12 +113,6 @@ differ in how an element is reached and agree on what each must be, and which
 share an arity, a count taken once and compared again, and the snapshot a list
 of one scalar kind is read through.
 
-The three entry points `walk.rs` calls into `sequence.rs` are marked `#[inline]`,
-and the reason is measured rather than assumed: without it the *record* walk --
-which reaches no sequence at all -- executes 3.1% more instructions, because
-what the dispatcher can inline changes what fits around it. With it, that shape
-reads 1.8% fewer than before the split.
-
 All three read the same `Frame`: where the walk is in the value, what it has found
 there, and the context it may look things up in. A walk needing a different one
 -- a union probing a branch into a buffer of its own, a clause pair deciding on

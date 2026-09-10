@@ -27,7 +27,6 @@ use crate::input::Value;
 /// tail. The elements are walked lazily against the shape the node holds, with
 /// no automaton and no collection, identical in cost to a direct positional or
 /// homogeneous check. JSON arrays are lists.
-#[inline]
 pub(super) fn check_seq(
     container: SeqKind,
     shape: &SeqShape,
@@ -380,7 +379,6 @@ const FROZEN_SET: Collection = Collection {
 
 /// A set whose every element matches `element`. Set order is not meaningful, so
 /// element failures carry no index segment. JSON has no sets.
-#[inline]
 pub(super) fn check_set(
     element: &Schema,
     value: &Value<'_, '_>,
@@ -390,7 +388,6 @@ pub(super) fn check_set(
 }
 
 /// A frozenset whose every element matches `element`. JSON has no frozensets.
-#[inline]
 pub(super) fn check_frozenset(
     element: &Schema,
     value: &Value<'_, '_>,
