@@ -306,14 +306,16 @@ impl PartialEq for IntSet {
         match self.aligned(other) {
             Some((mine, theirs)) => mine == theirs,
             // The two periods meet past the bound, so neither table can be
-            // read in the other's coordinates and the tables as they stand are
-            // all there is to compare. Conservative rather than wrong: it can
+            // read in the other's coordinates. Two sets that reach here have
+            // two periods -- one period meets itself under the bound every
+            // set is built to -- so they are two spellings, and two spellings
+            // are read as two sets. Conservative rather than wrong: it can
             // answer `false` for two sets that hold the same integers, and it
             // reaches that only for a pair whose periods are near-coprime and
             // large, which `without_a_step` keeps a cancelled step from
             // producing. What it cannot do is answer `true` for two sets that
             // differ, which is the direction a decision rests on.
-            None => self.modulus == other.modulus && self.classes == other.classes,
+            None => false,
         }
     }
 }
@@ -694,5 +696,26 @@ mod tests {
         assert_eq!(lcm(1, 7), 7);
         // Coprime periods multiply, which is the case that grows fastest.
         assert_eq!(lcm(3, 5), 15);
+    }
+
+    /// Two periods that meet past the bound are two sets, whatever they hold.
+    ///
+    /// Equality lifts both tables to the period they share; past the bound
+    /// there is no such table, and the conservative answer is that the two
+    /// spellings differ. Each is still itself: one period meets itself under
+    /// the bound every set is built to.
+    #[test]
+    fn periods_that_meet_past_the_bound_are_two_sets() {
+        let coarse = IntSet::multiple_of(MAX_PERIOD - 3).expect("a step within the bound");
+        let fine = IntSet::multiple_of(MAX_PERIOD - 5).expect("a step within the bound");
+        assert!(
+            coarse.aligned(&fine).is_none(),
+            "the periods meet under the bound"
+        );
+
+        assert_ne!(coarse, fine);
+        assert_ne!(coarse.cmp(&fine), core::cmp::Ordering::Equal);
+        assert_eq!(coarse, coarse.clone());
+        assert_eq!(fine, fine.clone());
     }
 }
