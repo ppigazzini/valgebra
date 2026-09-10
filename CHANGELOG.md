@@ -105,6 +105,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: a relation says whether it was refuted or undecided
 - fix: the binding shapes are measured with the interpreter's hash seed fixed -- internal
 - feat: a table of literals is decided as the set it denotes
+- fix: the bounds scan stops at the test module, not at the first attribute -- internal
 
 -->
 

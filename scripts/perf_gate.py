@@ -281,6 +281,7 @@ MODES = {
     "core": ("perf_workload", "core workload"),
     "decision": ("decision_workload", "decision workload"),
     "decision-refute": ("decision_refute_workload", "refuting decision workload"),
+    "decision-repeat": ("decision_repeat_workload", "repeating decision workload"),
     "binding": ("binding_workload", "binding walk"),
     "binding-boundary": ("binding_workload", "binding call boundary"),
     "binding-record": ("binding_workload", "binding record walk"),
@@ -598,10 +599,12 @@ def run_decision(budget: dict, mode: str, *, update: bool) -> int:
     both directions -- neither the cost of a new one nor the saving from a
     cheaper one shows up.
 
-    Two shapes, because a proof and a refutation walk different paths and the
-    first workload only ever asked for proofs. A rule that refutes by comparing
-    shapes runs where no reading reached, so work put there -- an emptiness
-    asked before a mismatch is believed, say -- cost nothing any budget held.
+    Three shapes. A proof and a refutation walk different paths and the first
+    workload only ever asked for proofs: a rule that refutes by comparing shapes
+    runs where no reading reached, so work put there -- an emptiness asked
+    before a mismatch is believed, say -- cost nothing any budget held. And no
+    two goals of either are the same pair of nodes, so neither can show what a
+    memo over goals would save; the third asks one goal once per field.
     """
     example, subject = MODES[mode]
     key = mode.replace("-", "_") + "_workload"
