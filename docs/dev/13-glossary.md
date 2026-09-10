@@ -57,6 +57,8 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **excused** | named on a ledger with the reason it is a hole. An excuse expires in its own direction: one that stops being true fails |
 | **suspected gap** | a relation the procedure answers `False` that no value in the probe's universe refutes, so it looks true and was not seen. Suspected because the universe is finite ([08-testing.md](08-testing.md)) |
 | **probe** | an instrument that *searches* for a defect rather than checking an enumerated list of them. `tests/test_completeness_probe.py` is the one here, and it exists because a list can only confirm the rules it was built from |
+| **finite set** | a union of nothing but literals, read as the set of constants it denotes: inclusion between two is membership of every constant of one in the other, decided by search over the canonical order the constructor leaves and a remap restores (`finite_set` in `crates/valgebra-core/src/decision.rs`; `mapped_member_set` in `ir/transform.rs`). A list not in that order is walked as a list |
+| **the field cache** | the one-entry memo in `keyed_map_subtype` and `linear_subtype`: a record's fields or a tuple's positions carrying one schema ask one goal each, in order, and the rule remembers the last pair it was asked. A table over the whole query was measured and refused, in the commit that added the cache |
 | **witness** | a value that settles a relation by example: one inside the subtype and outside the supertype disproves inclusion. A `False` with no witness is the probe's subject |
 | **detached surface** | a `Cargo.toml` outside the root workspace, which no workspace-wide command reaches ([07-tooling-ci.md](07-tooling-ci.md)) |
 

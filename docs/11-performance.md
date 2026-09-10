@@ -263,18 +263,38 @@ tests over the cross-type cases.
 
 The wall-clock numbers above are for humans reading results; they are too noisy
 on shared CI runners to gate a merge. The merge gate is instead a deterministic
-instruction count: a fixed workload exercises the core schema operations
-(`crates/valgebra-core/examples/perf_workload.rs`), runs under cachegrind, and
-its executed-instruction count is compared against a committed budget
+instruction count: fixed workloads run under cachegrind, and each
+executed-instruction count is compared against a committed budget
 (`scripts/perf_budget.json`) by `scripts/perf_gate.py`. The count is identical
 across runs of a given build, so a regression past the budget ceiling fails the
 build without flaking. The tolerance absorbs cross-environment startup and
 compiler-codegen drift while still catching algorithmic regressions, which are
 far larger than the tolerance.
 
-The gate covers the pure-Rust schema engine, which is portable enough for a
-committed budget. The end-to-end wall-clock suites run on the same CI lane with
-timing disabled, as a smoke test that they keep working.
+The gate holds one workload per surface, because a gate only catches what it
+exercises. `crates/valgebra-core/examples/` holds the pure-Rust ones: the schema
+transformations (`perf_workload`), and three over the decision procedures -- the
+relations that hold, the relations that are refuted, and the relations whose
+goals repeat, since a proof, a refutation and a repeated goal walk three
+different paths and a workload that asks only one of them measures only that
+one. The binding's shapes are the membership walk over a live value, the call
+boundary alone, a wide record, building a validator, and explaining a failure
+(`crates/valgebra-py/examples/binding_workload.rs`): the walk is the shipped hot
+path neither pure-Rust workload reaches, and schema construction grew twelve
+percent over a release cycle while only the walk was counted. Each binding shape
+embeds CPython, whose startup is not a fixed count, so the gate measures the
+difference between two iteration counts.
+
+One thing an embedded interpreter brings with it is its **string hash seed**,
+drawn per process; a shape that probes a dict of string keys executes a
+different number of instructions under every seed, and on the difference of two
+counts that is a few percent -- the size of the ceiling. The gate fixes the seed
+where every measurement passes through, so a reading is of the code and not of
+the interpreter's draw. A number in this page is a wall-clock figure for a
+human; the counts belong to the budget file and are not repeated here.
+
+The end-to-end wall-clock suites run on the same CI lane with timing disabled,
+as a smoke test that they keep working.
 
 The headline claim — that valgebra is pydantic-core-class — is gated too, by
 `scripts/compare_gate.py`. For each shape in a matrix it measures the *ratio* of
@@ -289,6 +309,6 @@ whether from valgebra slowing down or ceding ground.
 Re-record the budgets after an intentional change with:
 
 ```bash
-python scripts/perf_gate.py --update            # core instruction budget
+python scripts/perf_gate.py --update            # the core budget; --decision, --binding-record, ... for the others
 python scripts/compare_gate.py --update         # competitive ratios
 ```

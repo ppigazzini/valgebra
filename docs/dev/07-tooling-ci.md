@@ -93,12 +93,20 @@ gate only catches what it exercises:
 
 - the **core** transformations — the constructors' normal form, the composition
   remap, the record transform;
-- the **decision** procedures (`--decision`) — subtyping, emptiness,
-  equivalence. The core workload never calls one, so without this the whole
-  decision surface is unmeasured in both directions: neither what a new rule
-  costs nor what a cheaper one saves;
-- the **binding** walk (`--binding`) — membership over a live Python value,
-  which is the shipped hot path neither pure-Rust workload reaches.
+- the **decision** procedures (`--decision`, `--decision-refute`,
+  `--decision-repeat`) — subtyping, emptiness, equivalence, in three
+  workloads: one whose relations hold, one whose relations are refuted, and one
+  whose goals repeat. The core workload never calls a decision, so without
+  these the whole decision surface is unmeasured in both directions: neither
+  what a new rule costs nor what a cheaper one saves. Three because a proof, a
+  refutation and a repeated goal walk different paths, and a workload that
+  asks only for proofs holds a refuting rule to nothing;
+- the **binding** shapes (`--binding`, `--binding-boundary`,
+  `--binding-record`, `--binding-build`, `--binding-explain`) — membership
+  over a live Python value, the call boundary alone, a wide record, building a
+  validator, explaining a failure. The walk is the shipped hot path neither
+  pure-Rust workload reaches, and schema construction grew twelve percent over
+  a release cycle while only the walk was counted.
 
 The binding workload embeds CPython, whose startup is not a fixed instruction
 count, so the gate measures the **difference** between two iteration counts:
@@ -119,6 +127,14 @@ verdict:
   workload's checksum counts verdicts, so a change that decides *differently*
   fails on the checksum before its instruction count is read.
 - **An unreadable measurement exits 2.**
+- **The interpreter's hash seed is fixed.** A binding shape embeds CPython,
+  which draws a string hash seed per process, and a shape that probes a dict of
+  string keys executes a different number of instructions under every seed. On
+  the difference of two counts that is a few percent, which is the ceiling.
+  `perf_gate.py` sets the seed in the one place every measurement passes
+  through, so a reading taken by hand is the reading the gate takes — and a
+  reading on a shape whose profile names no function of the changed file is
+  read as the instrument's before it is read as the change's.
 
 ### What the merge gate compares against, and why not a number
 
@@ -231,6 +247,15 @@ mechanism:
 `needs:` *and* fails unless each result is `success` rather than merely
 not-failure. The duplicated list is a deliberate second copy.
 
+**A cancelled job is red.** A job that reaches its timeout is reported
+`cancelled` rather than `failure`, and a job nothing waits on is cancelled in
+silence: the strict mutation ratchet ran nowhere for a week behind a two-hour
+cancellation the aggregate never read. So the aggregate waits on the scheduled
+jobs too, allowing one answer more from them than from the others — `skipped`,
+which is what a push gives a job it does not run — and refusing everything
+else. `tests/test_required_jobs.py` reads which jobs those are from their own
+conditions and holds each reading to the kind of job it is.
+
 **A push runs the ends of the interpreter range, not the middle.** The floor
 (3.10), the current release (3.14), the free-threaded build (3.14t) and the
 prerelease (3.15), plus one macOS and one Windows leg; 3.11, 3.12 and 3.13 run
@@ -242,7 +267,12 @@ line and nobody re-measures.
 
 **The full sweeps are scheduled, and a diff-scoped one is not.** A full sweep is
 minutes of rebuilds and does not belong on a push, so a regression it catches is
-visible the night after. Every push runs the same sweeps restricted to the
+visible the night after. The core's full sweep runs sharded, as the diff sweep
+does (the shard count is `ci.yml`'s), each shard reporting its own slice; a job
+after them merges the slices and ratchets once, since a survivor is a survivor
+of the *sweep* and an entry that survives nothing is known to only when every
+shard has reported. One unsharded job over the whole core reached its timeout
+every night for a week. Every push runs the same sweeps restricted to the
 **whole files the change touches** — bounded by the change rather than by the
 tree — and blocks the merge. It checks the new-survivor direction alone, because
 a partial sweep never generates most of the baseline.
