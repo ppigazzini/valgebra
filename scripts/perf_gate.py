@@ -196,6 +196,22 @@ def parse_measurement(stdout: str, stderr: str) -> Measurement:
 
 
 def measure(binary: Path, *args: str) -> Measurement:
+    """Count the instructions one run of a workload executes.
+
+    The count of a given binary is deterministic, which is the whole premise of
+    this gate -- but a workload that embeds CPython inherits the interpreter's
+    own randomness, and one of those is enough to break it. A **string hash seed
+    is drawn per process**, and the record shapes probe a dict of fifty string
+    keys: a different seed lays that dict out differently, collides differently,
+    and executes a different number of instructions. Three runs of one binary
+    measured 255,472,587, 255,818,996 and 256,656,284; three with the seed fixed
+    measured 258,773,618 three times.
+
+    Half a percent on a raw count is several percent on the *difference* of two
+    counts this gate reads, which is the two-percent ceiling it holds changes to.
+    So the seed is fixed here, in the one place every measurement passes through,
+    rather than left to the caller's environment.
+    """
     result = subprocess.run(
         [
             "valgrind",
@@ -208,6 +224,7 @@ def measure(binary: Path, *args: str) -> Measurement:
         check=True,
         capture_output=True,
         text=True,
+        env=os.environ | {"PYTHONHASHSEED": "0"},
     )
     return parse_measurement(result.stdout, result.stderr)
 
