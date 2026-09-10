@@ -2297,8 +2297,10 @@ fn linear_subtype(
     // One goal, asked again -- the sequence's reading of what a record's fields
     // do, and remembered the same way. A tuple whose positions carry one schema
     // asks one question per position, and the positions are walked in order, so
-    // a repeat is the position before this one. See `keyed_map_subtype` for why
-    // the pair is compared by equality rather than by address.
+    // a repeat is the position before this one -- under the same trail, since a
+    // position's own decision pushes and pops its way back to it. See
+    // `keyed_map_subtype` for that argument and for why the pair is compared by
+    // equality rather than by address.
     let mut last: Option<(&Schema, &Schema, Relation)> = None;
     let mut aligns = |assumptions: &mut Vec<(Schema, Schema)>| {
         Relation::all(pa.iter().enumerate().map(|(i, element)| {
@@ -2419,6 +2421,13 @@ fn keyed_map_subtype(
         // repeat is the field before this one. A table of goals over the whole
         // query was measured beside this and cost the shapes with nothing to
         // repeat more than it saved the shapes with something.
+        //
+        // The coinductive hypothesis needs no thought here, which is the other
+        // reason this is the place for it: the trail is the same at every field
+        // of one record -- a field's own decision pushes and pops its way back
+        // to it -- so the answer read is the answer to the same goal under the
+        // same hypotheses. A table spanning a whole query cannot say that, and
+        // has to refuse every goal decided under a hypothesis at all.
         let mut last: Option<(&Schema, &Schema, Relation)> = None;
         let fields_ok = Relation::all(fb.iter().map(|b_field| {
             match a_by_name.get(&*b_field.name) {

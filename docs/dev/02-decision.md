@@ -251,6 +251,16 @@ decision step per pair. The rule reads a table only in the canonical order its
 constructor leaves it in, and its refutation is the oracle's: two constants at
 two pool positions are two values only where the bindings can compare them.
 
+And one repetition is removed rather than bounded. A record whose fields carry
+one schema, or a tuple whose positions do, asks the *same goal* once per field
+or position -- in one loop, in order, so the repeat is the entry before this
+one. Each of those two rules remembers the last pair it was asked and the
+answer it gave, which is a memo of one entry where a table over the whole query
+would be. That is not an accident of size: a table was measured against a
+workload whose goals repeat and two whose goals do not, in four designs, and
+every one of them charged the queries with nothing to remember more than it
+saved the queries with something.
+
 Part of the argument the counter stands in for is already in the code: the trail
 holds each `(subject, supertype)` pair it is deciding, and a pair that comes back
 returns against the hypothesis rather than unfolding again, which is what makes a
