@@ -409,17 +409,39 @@ distributes over both sides of a union, so relating two unions can cost the
 product of their member counts, and a Boolean combination nested past a handful
 of levels demands work exponential in its depth.
 
-One shortcut avoids the product, and it is worth knowing exactly what reaches it:
-a union whose branches are *contained* in the supertype's is settled by
-containment, and containment is structural equality over one validator's
-constants. Two schemas share those when one is built from the other — a table
-widened by a member, `union(codes, Validator("extra"))` — and not when both are
-written out. So a table widened in place is decided at any size, while two tables
-written separately, as a codebase with the same schema in two modules has them,
-distribute against each other and reach the ceiling above roughly a thousand
-members each. Both sizes are on the ledger.
+One shape avoids the product entirely, and it is the one a contract writes most:
+a union of nothing but **literals**. A literal denotes a singleton, so such a
+union denotes a *finite set of values*, and inclusion between two finite sets is
+membership of every value of one in the other. That is decided by lookup rather
+than by distribution, and it is exact in both directions — every value found is
+a proof, and one value found nowhere is a refutation, since it is in the subject
+and outside the other schema. Two tables of ten thousand codes each are decided
+in a few milliseconds, in either direction, whether they were written out
+separately or one was built from the other:
 
-So a `False` on a wide literal union or a deep Boolean tower may mean "not proven
+```python
+from typing import Literal
+
+from valgebra import Validator
+
+codes = Validator(Literal[tuple(range(10_000))])
+wider = Validator(Literal[tuple(range(10_001))])
+shifted = Validator(Literal[tuple(range(1, 10_001))])
+
+assert codes.relation_to(wider) == "subset"
+assert codes.relation_to(shifted) == "not_subset"  # 0 is in one and not the other
+```
+
+The refutation is the bindings' to give: two constants at two pool positions are
+two *values* only where their type's equality can be trusted, and a constant
+that does not equal itself — `float("nan")` — denotes no value at all, so
+`Literal[float("nan")]` is the empty set and is below everything. Where the
+equality cannot be trusted, the relation stays undecided rather than guessing.
+
+What is left under the budget is the Boolean tower: a deeply nested combination
+of unions, meets and complements, where subtyping distributes over both sides
+and the work is a product of the branches. A `False` there may mean "not proven
 within the bound" rather than "not a subtype"; on anything else it means the
 relation is outside the decided fragment above. The bound is the price of a
-procedure with no memo, and removing it is the interning work the theory names.
+procedure with no memo over its goals, and writing one is the work the theory
+names.

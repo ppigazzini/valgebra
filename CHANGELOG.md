@@ -103,6 +103,8 @@ answer of its own, or a repair to a change not yet released.
 - fix: a closed record is refuted by a key it does not declare -- internal
 - feat: a named tuple denotes the tuple its fields lay out
 - feat: a relation says whether it was refuted or undecided
+- fix: the binding shapes are measured with the interpreter's hash seed fixed -- internal
+- feat: a table of literals is decided as the set it denotes
 
 -->
 
@@ -149,6 +151,31 @@ answer of its own, or a repair to a change not yet released.
   **position** rather than its name, because the shape carries positions; a
   passing instance is read once rather than twice, and checks about a third
   faster.
+
+- A union of literals is decided as the **finite set** it denotes, at any width
+  and in both directions. A literal denotes one value, so a union of them
+  denotes a set of values, and inclusion between two such sets is membership of
+  every value of one in the other -- found is a proof, and one value found
+  nowhere is a refutation naming what stands against the inclusion:
+
+  ```python
+  from typing import Literal
+
+  from valgebra import Validator
+
+  codes = Validator(Literal[tuple(range(10_000))])
+  shifted = Validator(Literal[tuple(range(1, 10_001))])
+
+  assert codes.relation_to(shifted) == "not_subset"
+  ```
+
+  That pair read `"undecided"` at a thousand members, because the rules
+  distributed one table against the other and spent the decision budget on the
+  product. Membership is a walk of the two tables instead: ten thousand codes
+  against ten thousand decide in about 9 ms, and the containment they *do*
+  prove falls from 237 ms to 6 ms. `Literal[float("nan")]` is the empty set --
+  no value equals `nan` -- and the empty set is below every schema, which the
+  core could not say before because a literal had no emptiness of its own.
 
 ### Changed
 
