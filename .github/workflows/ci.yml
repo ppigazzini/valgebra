@@ -974,7 +974,9 @@ jobs:
 
   nightly-floor-names:
     name: nightly floor names
-    if: github.event_name == 'schedule'
+    # Dispatchable like the other nightly jobs, so a run started by hand to see
+    # the nightly exercises all of it.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # `tests/floor_names.json` dates every public `typing` and `enum` name, and
