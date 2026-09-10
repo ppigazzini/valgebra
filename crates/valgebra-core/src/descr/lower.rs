@@ -109,9 +109,10 @@ impl Constants for NoConstants {}
 ///
 /// **This bound is debt.** It counts work rather than limiting what the
 /// representation can hold, and it is here for the reason the decision's own
-/// budget is: a lowering repeats itself over structurally equal subtrees
-/// because they are separate nodes. Sharing them makes the repetition
-/// unnecessary and this constant removable.
+/// budget is: a lowering repeats itself over structurally equal subtrees.
+/// Construction shares those subtrees where they are built alike
+/// (`ir/intern.rs`), which is what gives the memo that would replace this
+/// ceiling a cheap key; the memo is the half not written.
 pub const BUDGET: u32 = 64;
 
 /// The set a schema denotes, or `None` where the descriptor cannot yet hold it.
@@ -188,9 +189,10 @@ impl Bounds {
 ///
 /// **This bound is debt.** It counts work rather than limiting what the
 /// representation can hold, and it is here for the reason the decision's own
-/// budget is: a lowering repeats itself over structurally equal subtrees
-/// because they are separate nodes. Sharing them makes the repetition
-/// unnecessary and this constant removable.
+/// budget is: a lowering repeats itself over structurally equal subtrees.
+/// Construction shares those subtrees where they are built alike
+/// (`ir/intern.rs`), which is what gives the memo that would replace this
+/// ceiling a cheap key; the memo is the half not written.
 pub const WORK: u64 = 1024;
 
 /// The schema nesting this will descend before refusing.
@@ -218,9 +220,10 @@ pub const WORK: u64 = 1024;
 ///
 /// **This bound is debt.** It counts work rather than limiting what the
 /// representation can hold, and it is here for the reason the decision's own
-/// budget is: a lowering repeats itself over structurally equal subtrees
-/// because they are separate nodes. Sharing them makes the repetition
-/// unnecessary and this constant removable.
+/// budget is: a lowering repeats itself over structurally equal subtrees.
+/// Construction shares those subtrees where they are built alike
+/// (`ir/intern.rs`), which is what gives the memo that would replace this
+/// ceiling a cheap key; the memo is the half not written.
 pub const DEPTH: u32 = 5;
 
 /// [`lower`] under explicit bounds, for a caller measuring one of them.

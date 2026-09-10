@@ -32,6 +32,7 @@
 use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 
+mod intern;
 mod transform;
 
 pub use transform::pruned;
@@ -433,23 +434,41 @@ fn clauses_for(open: Openness) -> Clauses {
 }
 
 /// A field list, shared when it is empty and owned when it is not.
-fn share_fields(fields: Vec<Field>) -> Fields {
+fn share_fields(fields: &mut Vec<Field>) -> Fields {
     if fields.is_empty() {
         no_fields()
     } else {
-        Fields::from(fields)
+        intern::fields(fields)
     }
 }
 
 /// A clause list, shared when it is one the whole tree already holds.
-fn share_clauses(defaults: Vec<MapClause>) -> Clauses {
+fn share_clauses(defaults: &mut Vec<MapClause>) -> Clauses {
     if defaults.is_empty() {
         no_clauses()
     } else if defaults.len() == 1 && defaults.first() == Some(&MapClause::top()) {
         open_clauses()
     } else {
-        Clauses::from(defaults)
+        intern::clauses(defaults)
     }
+}
+
+/// A member list, shared when it is empty and interned when it is not.
+///
+/// The counterpart of [`share_fields`] for the list a join, a meet or a fixed
+/// sequence prefix carries.
+pub(crate) fn share_members(members: &[Schema]) -> Members {
+    if members.is_empty() {
+        no_members()
+    } else {
+        intern::members(members)
+    }
+}
+
+/// A child node, shared: the counterpart of [`share_members`] for the single
+/// schema a complement, a collection, a sequence tail or a refinement holds.
+pub(crate) fn share_node(schema: Schema) -> Arc<Schema> {
+    intern::node(schema)
 }
 
 /// Run `build` with a scratch field buffer, returning it to the pool after.
@@ -769,7 +788,7 @@ impl Schema {
     pub fn set(element: Schema) -> Schema {
         Schema::Coll {
             container: CollKind::Set,
-            element: Arc::new(element),
+            element: share_node(element),
         }
     }
 
@@ -778,7 +797,7 @@ impl Schema {
     pub fn frozen_set(element: Schema) -> Schema {
         Schema::Coll {
             container: CollKind::FrozenSet,
-            element: Arc::new(element),
+            element: share_node(element),
         }
     }
 
@@ -866,7 +885,7 @@ impl Schema {
             match flat.len() {
                 0 => Schema::Nothing,
                 1 => flat.swap_remove(0),
-                _ => Schema::Union(flat.drain(..).collect()),
+                _ => Schema::Union(share_members(flat)),
             }
         })
     }
@@ -916,7 +935,7 @@ impl Schema {
             match flat.len() {
                 0 => Schema::ANYTHING,
                 1 => flat.swap_remove(0),
-                _ => Schema::Intersection(flat.drain(..).collect()),
+                _ => Schema::Intersection(share_members(flat)),
             }
         })
     }
@@ -942,7 +961,7 @@ impl Schema {
             Schema::Complement(inner) => Arc::unwrap_or_clone(inner),
             Schema::Anything(_) => Schema::Nothing,
             Schema::Nothing => Schema::ANYTHING,
-            other => Schema::Complement(Arc::new(other)),
+            other => Schema::Complement(share_node(other)),
         }
     }
 
@@ -965,8 +984,8 @@ impl Schema {
         canonical_clauses(&mut defaults);
         canonical_fields(&mut fields);
         Schema::KeyedMap {
-            fields: share_fields(fields),
-            defaults: share_clauses(defaults),
+            fields: share_fields(&mut fields),
+            defaults: share_clauses(&mut defaults),
         }
     }
 
@@ -980,14 +999,16 @@ impl Schema {
     pub fn keyed_map_within(mut fields: Vec<Field>, defaults: Clauses) -> Schema {
         canonical_fields(&mut fields);
         Schema::KeyedMap {
-            fields: share_fields(fields),
+            fields: share_fields(&mut fields),
             defaults,
         }
     }
 
-    /// The same, from a buffer the caller keeps: the fields are copied into the
-    /// node's shared list rather than the buffer being consumed, so a rebuild
-    /// that borrowed its buffer can hand it back.
+    /// The same, from a buffer the caller keeps rather than owns, so a rebuild
+    /// that borrowed its buffer from the pool can hand it back. What the buffer
+    /// holds afterwards is the sharing's business: a list the table already
+    /// holds leaves the fields where they are and drops them, and one it does
+    /// not takes them.
     #[must_use]
     // A `Vec` rather than a slice because canonicalising the fields deduplicates
     // them, which a slice cannot do.
@@ -995,11 +1016,7 @@ impl Schema {
     fn keyed_map_from(fields: &mut Vec<Field>, defaults: Clauses) -> Schema {
         canonical_fields(fields);
         Schema::KeyedMap {
-            fields: if fields.is_empty() {
-                no_fields()
-            } else {
-                fields.drain(..).collect()
-            },
+            fields: share_fields(fields),
             defaults,
         }
     }
@@ -1013,7 +1030,7 @@ impl Schema {
     pub fn attr_record(mut fields: Vec<Field>) -> Schema {
         canonical_fields(&mut fields);
         Schema::AttrRecord {
-            fields: fields.into(),
+            fields: share_fields(&mut fields),
         }
     }
 
@@ -1030,7 +1047,7 @@ impl Schema {
             return base;
         }
         Schema::Refine {
-            base: Arc::new(base),
+            base: share_node(base),
             constraints: constraints.into(),
         }
     }
@@ -1068,7 +1085,7 @@ impl SeqShape {
     pub fn homogeneous(element: Schema) -> SeqShape {
         SeqShape {
             prefix: no_members(),
-            tail: Some(Arc::new(element)),
+            tail: Some(share_node(element)),
         }
     }
 
@@ -1076,7 +1093,7 @@ impl SeqShape {
     #[must_use]
     pub fn fixed(elements: impl IntoIterator<Item = Schema>) -> SeqShape {
         SeqShape {
-            prefix: elements.into_iter().collect(),
+            prefix: share_members(&elements.into_iter().collect::<Vec<_>>()),
             tail: None,
         }
     }
@@ -1086,8 +1103,8 @@ impl SeqShape {
     #[must_use]
     pub fn prefix_tail(prefix: impl IntoIterator<Item = Schema>, tail: Schema) -> SeqShape {
         SeqShape {
-            prefix: prefix.into_iter().collect(),
-            tail: Some(Arc::new(tail)),
+            prefix: share_members(&prefix.into_iter().collect::<Vec<_>>()),
+            tail: Some(share_node(tail)),
         }
     }
 }

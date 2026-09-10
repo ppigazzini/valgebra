@@ -4,6 +4,15 @@
 construction that keeps one canonical, and the questions a node answers about
 itself -- its depth, its node count, whether a reference occurs under a guard.
 
+`ir/intern.rs` owns the sharing: a member list, a field list, a clause list or
+a child node built twice is one handle, held in a fixed per-thread table of weak
+references. It is why two equal schemas built apart answer each other's
+questions by pointer rather than by a walk, and why a rebuild that changes
+nothing near the root does not copy what it did not change. The test that
+decides sharing is **stricter** than the crate's structural equality -- children
+must be the same allocation, and the two spellings of the top are two nodes --
+so a caller cannot observe which handle it was given.
+
 `ir/transform.rs` owns the rewrites: a schema into another schema with one
 thing changed -- an index shifted into another validator's pool, a
 self-reference resolved, a recursive definition unfolded once, a record opened,

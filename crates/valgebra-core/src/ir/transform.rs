@@ -17,8 +17,8 @@ use std::sync::Arc;
 
 use super::{
     Clauses, Constraint, Constraints, DefIx, DefShift, Fields, MapClause, Members, Openness,
-    OperandIx, PoolShift, Remap, Schema, SeqShape, already_said, clauses_for, with_field_buffer,
-    with_member_buffer,
+    OperandIx, PoolShift, Remap, Schema, SeqShape, already_said, clauses_for, share_clauses,
+    share_fields, share_members, share_node, with_field_buffer, with_member_buffer,
 };
 
 /// Move a constraint list's indices, rebuilding it only where one moves.
@@ -66,11 +66,10 @@ fn mapped_members(members: &Members, f: &impl Fn(&Schema) -> Option<Schema>) -> 
                 }
             }
         }
-        // Drained rather than copied: the finished list is moved into the
-        // node's slice, so a member does not pay a clone -- which is a
-        // reference count on every handle it carries -- to be put where it
-        // was going anyway.
-        changed.then(|| buffer.drain(..).collect())
+        // Shared rather than allocated: a list this walk has assembled before
+        // -- which a repeated transform over a repeated subtree assembles again
+        // -- is the handle the table gives back, and the buffer is dropped.
+        changed.then(|| share_members(buffer))
     })
 }
 
@@ -98,7 +97,7 @@ fn mapped_fields(fields: &Fields, f: &impl Fn(&Schema) -> Option<Schema>) -> Opt
                 }
             }
         }
-        changed.then(|| buffer.drain(..).collect())
+        changed.then(|| share_fields(buffer))
     })
 }
 
@@ -124,7 +123,7 @@ fn mapped_clauses(clauses: &Clauses, f: &impl Fn(&Schema) -> Option<Schema>) -> 
             value.unwrap_or_else(|| clause.value.clone()),
         ));
     }
-    rebuilt.map(|buffer| Clauses::from(&buffer[..]))
+    rebuilt.map(|mut buffer| share_clauses(&mut buffer))
 }
 
 impl SeqShape {
@@ -138,7 +137,7 @@ impl SeqShape {
             _ => Some(SeqShape {
                 prefix: prefix.unwrap_or_else(|| self.prefix.clone()),
                 tail: match (tail, &self.tail) {
-                    (Some(Some(mapped)), _) => Some(Arc::new(mapped)),
+                    (Some(Some(mapped)), _) => Some(share_node(mapped)),
                     (_, held) => held.clone(),
                 },
             }),
@@ -188,7 +187,7 @@ impl Schema {
             // from it, so the bound stands in for it too.
             Schema::SelfRef(_) => cut(),
             Schema::Complement(inner) => {
-                Schema::Complement(Arc::new(inner.unfolded(definitions, unfolds, !positive)))
+                Schema::Complement(share_node(inner.unfolded(definitions, unfolds, !positive)))
             }
             other => other.map_children(&|child| child.unfolded(definitions, unfolds, positive)),
         }
@@ -262,9 +261,11 @@ impl Schema {
             }),
             Schema::Coll { container, element } => f(element).map(|element| Schema::Coll {
                 container: *container,
-                element: Arc::new(element),
+                element: share_node(element),
             }),
-            Schema::Complement(inner) => f(inner).map(|inner| Schema::Complement(Arc::new(inner))),
+            Schema::Complement(inner) => {
+                f(inner).map(|inner| Schema::Complement(share_node(inner)))
+            }
             Schema::Union(members) => mapped_members(members, f).map(Schema::Union),
             Schema::Intersection(members) => mapped_members(members, f).map(Schema::Intersection),
             Schema::KeyedMap { fields, defaults } => {
@@ -282,7 +283,7 @@ impl Schema {
                 mapped_fields(fields, f).map(|fields| Schema::AttrRecord { fields })
             }
             Schema::Refine { base, constraints } => f(base).map(|base| Schema::Refine {
-                base: Arc::new(base),
+                base: share_node(base),
                 constraints: constraints.clone(),
             }),
         }

@@ -142,6 +142,8 @@ comment. A `limit` or a `shape` carries the reason it is where it is.
 | `crates/valgebra-core/src/descr/records.rs` | `MAX_ATOMS` | `256` | limit | the atoms a record union holds, which a complement multiplies | its own tests |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_STATES` | `4096` | limit | a product of two automata multiplying past memory | its own tests |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_ROW` | `MAX_STATES` | limit | one row of a product growing past the alternatives a shape has | its own tests |
+| `crates/valgebra-core/src/ir/intern.rs` | `SLOTS` | `1024` | shape | the table of shared handles growing into a record of every schema a process has built: it is direct-mapped, so a collision evicts | its own tests, and `scripts/perf_gate.py --core` |
+| `crates/valgebra-core/src/ir/intern.rs` | `SUMMARY` | `4` | shape | a wide list paying a hash per entry for a table that is about to compare the entries anyway; the hash chooses a slot and the comparison decides, so reading fewer costs a collision and never an answer | its own tests, and `scripts/perf_gate.py --binding-build` |
 | `crates/valgebra-py/src/errors.rs` | `SUMMARY_CHARS` | `80` | shape | a value summary built in full and then cut, so a huge repr is paid for and thrown away | its own tests |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_EDGES` | `1 << 16` | limit | a table inside both dimensions and still too large: 4,096 states each with a 4,096-wide row is sixteen million edges | its own tests |
 | `crates/valgebra-core/src/descr/regular.rs` | `MAX_STATES` | `4096` | limit | a pattern product doubling the exponent twice | its own tests |

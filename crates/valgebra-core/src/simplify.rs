@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::decision::{
     NoLeafRelations, Region, Regions, has_complementary_pair, has_disjoint_pair, unordered_pairs,
 };
-use crate::ir::{Constraint, Schema, with_member_buffer};
+use crate::ir::{Constraint, Schema, share_members, share_node, with_member_buffer};
 
 #[cfg(test)]
 thread_local! {
@@ -115,7 +115,7 @@ fn canonical_refine(mut base: Schema, mut constraints: Vec<Constraint>) -> Schem
         base
     } else {
         Schema::Refine {
-            base: Arc::new(base),
+            base: share_node(base),
             constraints: constraints.into(),
         }
     }
@@ -187,9 +187,9 @@ fn finish_union(flat: &mut Vec<Schema>) -> Schema {
     match flat.len() {
         0 => Schema::Nothing,
         1 => flat.swap_remove(0),
-        // Drained rather than copied: the members are moved into the node's
-        // slice from the buffer they were assembled in.
-        _ => Schema::Union(flat.drain(..).collect()),
+        // Shared rather than allocated: a member list this simplifier has
+        // assembled before is the handle the table gives back.
+        _ => Schema::Union(share_members(flat)),
     }
 }
 
@@ -254,7 +254,7 @@ fn finish_intersection(flat: &mut Vec<Schema>) -> Schema {
     match flat.len() {
         0 => Schema::ANYTHING,
         1 => flat.swap_remove(0),
-        _ => Schema::Intersection(flat.drain(..).collect()),
+        _ => Schema::Intersection(share_members(flat)),
     }
 }
 
@@ -278,7 +278,7 @@ fn complement_of_simplified(inner: Schema) -> Schema {
         Schema::Nothing => Schema::ANYTHING,
         Schema::Union(members) => intersection_of_simplified(complement_each(&members)),
         Schema::Intersection(members) => union_of_simplified(complement_each(&members)),
-        other => Schema::Complement(Arc::new(other)),
+        other => Schema::Complement(share_node(other)),
     }
 }
 

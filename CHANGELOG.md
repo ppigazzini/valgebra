@@ -150,6 +150,19 @@ answer of its own, or a repair to a change not yet released.
   passing instance is read once rather than twice, and checks about a third
   faster.
 
+### Changed
+
+- Two schemas built alike share their nodes, so a question that reaches both is
+  answered by identity rather than by walking two trees. A relation between a
+  record schema and an equal one built separately reads **1.07M instructions
+  against 4.97M** under the core decision workload; the whole of that workload
+  reads 21% down and the schema-transformation workload 4.5% down
+  (`scripts/perf_gate.py --decision --core`). Building a validator pays 0.6% for
+  the sharing, and the membership walk is unmoved. Nothing about what a schema
+  denotes changes: the test that decides sharing is stricter than equality --
+  two spellings of the top stay two nodes, and `repr` gives back the one that
+  was written.
+
 ### Fixed
 
 - A schema disjoint from a meet is below that meet's complement. `A <= ~B` asks

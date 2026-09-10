@@ -196,9 +196,9 @@ impl Relation {
 /// The most decision steps one top-level query may take before it stops and
 /// returns the conservative answer. Subtyping distributes over unions and
 /// intersections and emptiness recurses the structural fragment, so a deeply
-/// nested Boolean combination can demand work exponential in its depth; without
-/// interning to share equal subtrees there is no cheap memo, so the procedure
-/// bounds its own work.
+/// nested Boolean combination can demand work exponential in its depth; a memo
+/// over goals is what would collapse that, and until one is written the
+/// procedure bounds its own work.
 ///
 /// The trail carries part of the termination argument already: a goal that comes
 /// back returns against its hypothesis rather than unfolding again, which is
@@ -211,12 +211,16 @@ impl Relation {
 /// directions of an equivalence share it — so the bound cannot be escaped through
 /// a side door or spent twice.
 ///
-/// **This bound is debt.** Regularity bounds the number of distinct subtyping
-/// goals a query can reach, so a memo over goals terminates by a theorem rather
-/// than by a ceiling -- but a memo needs a cheap key, and a key is cheap only
-/// when structurally equal subtrees are one node. Sharing the nodes is what
-/// makes the memo possible and this constant removable; until then the ceiling
-/// stands in for the argument.
+/// **This bound is debt, and half of what it names is paid.** Regularity bounds
+/// the number of distinct subtyping goals a query can reach, so a memo over
+/// goals terminates by a theorem rather than by a ceiling -- but a memo needs a
+/// cheap key, and a key is cheap only when structurally equal subtrees are one
+/// node. Construction shares them: two subtrees built alike are one handle
+/// (`ir/intern.rs`), and a handle is a cheap key. What is left is the memo
+/// itself, whose entries are goals rather than nodes and whose soundness is the
+/// coinductive hypothesis the trail carries -- a cached answer that was reached
+/// under a hypothesis is not an answer without it. The ceiling stands in for
+/// that argument, and for nothing else.
 ///
 /// The ceiling is far above any schema a real
 /// annotation produces, so a legitimate relation is always decided; only an
