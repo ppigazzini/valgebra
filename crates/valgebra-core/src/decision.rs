@@ -1043,26 +1043,56 @@ impl Schema {
             defs,
             budget,
         };
-        self.witnessed(self.is_subtype_rec(other, cx, &mut Vec::new()), cx)
+        self.is_subtype_rec(other, cx, &mut Vec::new())
+    }
+
+    /// Whether this schema has a value by its own shape, read without descent.
+    ///
+    /// The witness guard runs on every refutation and at every level of one, so
+    /// the shapes whose inhabitance is their own form answer here rather than
+    /// through the general fold: a scalar atom is a value, a container that
+    /// admits an empty one has that value whatever its elements say, and a
+    /// union has one where a member does. `false` is "not seen from here" and
+    /// costs the descent, never an answer -- and `laws.rs` holds this to the
+    /// fold in the direction it claims.
+    pub(crate) fn holds_a_value_shallowly(&self) -> bool {
+        match self {
+            Schema::Anything(_)
+            | Schema::Bool
+            | Schema::Int
+            | Schema::Float
+            | Schema::Str
+            | Schema::Bytes
+            | Schema::NoneType
+            | Schema::Coll { .. } => true,
+            Schema::Seq { shape, .. } => shape.prefix.is_empty(),
+            Schema::KeyedMap { fields, .. } => fields.iter().all(|f| !f.required),
+            Schema::Union(members) => members.iter().any(Schema::holds_a_value_shallowly),
+            _ => false,
+        }
     }
 
     /// One rule's answer about this subject, with a refutation believed only
     /// where the subject has a value to stand on.
     ///
-    /// Every refutation the rules reach is a mismatch of shapes, and every
-    /// composition that carries one preserves that: a conjunction hands on the
-    /// refutation of a part, and the one disjunction that could invent a
-    /// refutation out of parts each failing for a different reason is read for
-    /// its proof alone. So one reading of the subject at the top settles them
-    /// all, and it is taken once per query rather than once per rule.
+    /// Every refutation the rules reach is a mismatch of shapes: a value of the
+    /// subject the other schema rejects. A subject with no value has no such
+    /// value, so the reading is what turns a mismatch into a claim -- and it is
+    /// taken about the subject of *this* comparison, at every level, because a
+    /// composition carries a part's refutation up and the part is a subject of
+    /// its own. A list of an empty element is the empty list and is below a
+    /// list of anything; the mismatch its element reports is about no value.
     ///
     /// It costs the *proving* half of the decision surface 1.4%, measured by
-    /// disabling it: sixteen instructions per top-level query that never
-    /// refutes, which is the price of reading a refutation honestly on the
-    /// queries that do. An `#[inline]` recovers none of it -- the compiler is
-    /// already free to, within the crate -- so the reading stands as the cost.
+    /// disabling it: sixteen instructions per query that never refutes, which
+    /// is the price of reading a refutation honestly on the queries that do. An
+    /// `#[inline]` recovers none of it -- the compiler is already free to,
+    /// within the crate -- so the reading stands as the cost.
     fn witnessed(&self, answer: Relation, cx: SubtypeCx<'_>) -> Relation {
         if answer == Relation::Fails {
+            if self.holds_a_value_shallowly() {
+                return answer;
+            }
             return Relation::of_mismatch(self.verdict_rec(
                 cx.oracle,
                 cx.defs,
@@ -1073,7 +1103,19 @@ impl Schema {
         answer
     }
 
+    /// The rules' answer about this pair, with every refutation read against
+    /// the subject it is about. See [`witnessed`](Self::witnessed).
     fn is_subtype_rec(
+        &self,
+        other: &Schema,
+        cx: SubtypeCx<'_>,
+        assumptions: &mut Vec<(Schema, Schema)>,
+    ) -> Relation {
+        let answer = self.subtype_by_rules(other, cx, assumptions);
+        self.witnessed(answer, cx)
+    }
+
+    fn subtype_by_rules(
         &self,
         other: &Schema,
         cx: SubtypeCx<'_>,
@@ -1465,7 +1507,7 @@ impl Schema {
             budget: &budget,
         };
         let within = |sub: &Schema, sup: &Schema| {
-            sub.witnessed(sub.is_subtype_rec(sup, cx, &mut Vec::new()), cx)
+            sub.is_subtype_rec(sup, cx, &mut Vec::new())
                 .or_else(|| sub.descriptor_contained_in(sup, oracle, defs))
         };
         // Equivalence is the meet of two inclusions, taken in the vocabulary
@@ -2473,8 +2515,8 @@ fn keyed_map_subtype(
                 // Every value it has is one `b` rejects, which is a refutation
                 // by the same reading as a key `a` declares optional two arms
                 // above. The empty subject is not an exception: it has no such
-                // value, and the witness guard at the top of the query reads
-                // this refutation against its emptiness before believing it.
+                // value, and the reading that believes this refutation is taken
+                // about `a` itself.
                 None if b_field.required => {
                     if da.is_empty() {
                         Relation::Fails

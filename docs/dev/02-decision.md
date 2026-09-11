@@ -27,16 +27,25 @@ paying.
 
 **A refutation stands on a value.** The descriptor's is direct: it proves the
 difference `a & ~b` holds one. A rule's is a mismatch of shapes -- two arities
-that cannot align, a key one side requires and a closed record does not declare
--- and the value it names is implicit, *some* value of the subject shaped the
-way the subject says. A subject with no value names none, and the empty set is
+that cannot align, a key one side requires and the other does not declare --
+and the value it names is implicit, *some* value of the subject shaped the way
+the subject says. A subject with no value names none, and the empty set is
 below every set including the shape it can never take, so a rule's refutation is
 read against the subject's own emptiness before it is believed: proved inhabited
 it refutes, proved empty it establishes the opposite, and undecided it decides
-nothing and the descriptor is asked. One reading at the top of the query settles
-every rule, because every composition that carries a refutation preserves the
-claim, and the one disjunction that could invent one out of parts each failing
-for a different reason is read for its proof alone.
+nothing and the descriptor is asked.
+
+**The reading is taken where the refutation is made**, at every level of a
+query and not once at its top. A composition carries a part's refutation up,
+and the part is a subject of its own: a list of an element with no value is the
+empty list, which is below a list of anything, and the mismatch its element
+reports is about no value. The subject one level up says nothing about that --
+it has the empty list, whatever its element admits. The shapes whose own form
+names a value are read without a descent, which is what keeps the cost of
+reading at every level near the cost of reading once: a scalar atom, a
+container that admits an empty one, a keyed map that requires no key, a union
+with such a member. `laws.rs` holds that shallow reading to the value corpus,
+and `decision/tests.rs` pins its edge.
 
 Both halves are gated. `scripts/perf_gate.py --decision` measures the relations
 that hold; `--decision-refute` measures the ones a rule refutes, which is the

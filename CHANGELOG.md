@@ -108,6 +108,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the bounds scan stops at the test module, not at the first attribute -- internal
 - fix: a renumbered member set is canonical again
 - fix: a tail the rules cannot read is not a repeat
+- fix: a refutation is read against the subject it is about
 
 -->
 
@@ -207,6 +208,31 @@ answer of its own, or a repair to a change not yet released.
   was written.
 
 ### Fixed
+
+- A relation is refuted only where the subject of *that* comparison has a
+  value, at every level of it. A container's rule carries its element's
+  refutation up, and the reading that says whether a refutation is a claim was
+  taken once, about the whole subject -- so a list of an element with no value,
+  which is the empty list and below a list of anything, was reported outside
+  it. The reading is taken where the refutation is made:
+
+  ```python
+  from typing import Annotated, Never
+
+  import annotated_types as at
+
+  from valgebra import Validator
+
+  no_value = Annotated[list[Never], at.MinLen(1)]
+  small = Validator({"f": no_value})
+  large = Validator({"f": no_value, "g": int})
+  assert Validator(list[small]).is_subtype_of(Validator(list[large]))
+  ```
+
+  The same held for a set, a repeated tuple, a record whose field is optional,
+  and any nesting of those. Shapes whose own form names a value -- a scalar, a
+  container that admits an empty one, a union with such a member -- are read
+  without a descent, which is what keeps the reading's cost where it was.
 
 - A sequence whose repeated element the rules cannot read is not refuted
   against a fixed length. `tuple[X, ...] <= tuple[()]` was refuted on the

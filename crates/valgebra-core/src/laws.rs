@@ -2908,6 +2908,39 @@ proptest! {
 }
 
 proptest! {
+    /// A schema read as inhabited without a descent has a value, and the
+    /// corpus holds it.
+    ///
+    /// Every refutation is read against the subject's own emptiness, at every
+    /// level of one, so the shapes whose inhabitance is their own form answer
+    /// without the descent the general fold takes: a scalar atom, a container
+    /// that admits an empty one, a union with such a member. That reading is a
+    /// *claim about values*, and the claim is checked against values rather
+    /// than against the other reading -- the fold is conservative where this is
+    /// exact (an empty closed record holds the empty mapping and the fold
+    /// declines to say so), so agreement between the two would be the weaker
+    /// property and would fail for the wrong reason.
+    ///
+    /// Over the generator the value corpus can decide, since the claim is
+    /// checked by finding a value: an `Instance` is a class the corpus does not
+    /// model, and a property that cannot look for a witness cannot make this
+    /// claim.
+    #[test]
+    fn a_shallow_reading_of_a_value_names_one(a in decidable_schema()) {
+        if a.holds_a_value_shallowly() {
+            let pool = const_pool();
+            prop_assert!(
+                sample_values().iter().any(|value| member_full(&a, value, &pool)),
+                "no value of the corpus is in a schema read as inhabited: {:?}", a
+            );
+            prop_assert_ne!(
+                a.verdict(),
+                Verdict::Empty,
+                "the fold proves empty a schema read as inhabited: {:?}", a
+            );
+        }
+    }
+
     /// A refuted relation is a claim, and the sets are the second opinion.
     ///
     /// The three-valued answer distinguishes a rule that *refutes* the

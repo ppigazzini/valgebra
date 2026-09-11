@@ -1608,6 +1608,170 @@ fn a_subject_with_no_value_is_below_a_shape_it_cannot_match() {
     assert!(unrepeating.is_equivalent(&empty_list));
 }
 
+/// What the shallow reading of a value may and may not say.
+///
+/// The reading answers from a schema's own form, so its boundary is where the
+/// form stops deciding: a container that admits an empty one has a value
+/// whatever its elements are, and one that must be filled does not. A reading
+/// that widened to the whole variant -- every sequence, every record -- would
+/// claim a value for a schema that has none, which is the claim a refutation
+/// stands on. The search over the value corpus in `laws.rs` makes the same
+/// claim over generated schemas; these are the rows that pin the edge.
+#[test]
+fn the_shallow_reading_answers_for_a_form_and_declines_the_rest() {
+    let nothing = Schema::Nothing;
+    let has_a_value = [
+        Schema::Int,
+        Schema::Str,
+        Schema::ANYTHING,
+        // Every container that admits an empty one: the value is the empty
+        // list, tuple, set or mapping, whatever the elements say.
+        Schema::list(SeqShape::homogeneous(nothing.clone())),
+        Schema::tuple(SeqShape::homogeneous(nothing.clone())),
+        Schema::set(nothing.clone()),
+        open(vec![field("f", nothing.clone(), false)]),
+        closed(vec![]),
+        // A union has a value where a member does. Written as the node: the
+        // constructor drops a member it can see is empty, and the member this
+        // row needs is one only a descent would see is empty.
+        Schema::Union(
+            vec![
+                Schema::list(SeqShape::fixed([nothing.clone()])),
+                Schema::Int,
+            ]
+            .into(),
+        ),
+    ];
+    for schema in has_a_value {
+        assert!(
+            schema.holds_a_value_shallowly(),
+            "{schema:?} has a value by its form"
+        );
+        assert_ne!(schema.verdict(), Verdict::Empty, "{schema:?}");
+    }
+    let declines = [
+        // A position that must be filled, and a key that must be there: the
+        // form does not say, and the descent does.
+        Schema::list(SeqShape::fixed([nothing.clone()])),
+        Schema::tuple(SeqShape::fixed([Schema::Int])),
+        closed(vec![field("f", nothing.clone(), true)]),
+        open(vec![field("f", nothing.clone(), true)]),
+        // A union of members that do not answer either -- written as the node,
+        // since the constructor collapses a union of the empty set to it.
+        Schema::Union(
+            vec![
+                Schema::list(SeqShape::fixed([nothing.clone()])),
+                closed(vec![field("f", nothing.clone(), true)]),
+            ]
+            .into(),
+        ),
+        // And the shapes with no form of their own to read.
+        nothing.clone(),
+        Schema::Complement(Arc::new(Schema::Int)),
+        Schema::refine(Schema::Int, vec![Constraint::MinLen(1)]),
+    ];
+    for schema in declines {
+        assert!(
+            !schema.holds_a_value_shallowly(),
+            "{schema:?} is not answered by its form"
+        );
+    }
+}
+
+/// A refutation about a part is about that part's values, and a part with none
+/// refutes nothing.
+///
+/// The subject of a comparison one level down is a part of the subject above
+/// it, and the composition that carries its refutation up is only as good as
+/// the values it stands on: a list of an element with no value is the empty
+/// list, which is below a list of anything, however the element compares. The
+/// reading that settles this is the subject's own emptiness, taken at the level
+/// the refutation is made rather than once at the top -- where the list is
+/// inhabited by the empty list and says nothing about its element.
+#[test]
+fn a_refutation_about_a_part_with_no_value_is_not_one() {
+    // A part that is empty, and that the rules cannot prove empty: proving it
+    // takes the descriptor's reading of a bounded length over a base with no
+    // values, which is what makes this the case the guard is for.
+    let empty = Schema::refine(
+        Schema::list(SeqShape::homogeneous(Schema::Nothing)),
+        vec![Constraint::MinLen(1)],
+    );
+    let narrow = closed(vec![field("f", empty.clone(), true)]);
+    let wide = closed(vec![
+        field("f", empty.clone(), true),
+        field("g", Schema::Int, true),
+    ]);
+    let cases: Vec<(&str, Schema, Schema)> = vec![
+        // The part itself: the subject has no value, so the refutation its
+        // fields report is about nothing and the inclusion holds vacuously.
+        ("the part itself", narrow.clone(), wide.clone()),
+        // The same part below each container that carries an element's
+        // refutation up. Every one of these subjects has a value -- the empty
+        // list, the empty set, the mapping with no keys -- and none of those
+        // values is outside the supertype.
+        (
+            "in a list",
+            Schema::list(SeqShape::homogeneous(narrow.clone())),
+            Schema::list(SeqShape::homogeneous(wide.clone())),
+        ),
+        (
+            "in a tuple's repeated tail",
+            Schema::tuple(SeqShape::homogeneous(narrow.clone())),
+            Schema::tuple(SeqShape::homogeneous(wide.clone())),
+        ),
+        (
+            "in a set",
+            Schema::set(narrow.clone()),
+            Schema::set(wide.clone()),
+        ),
+        // A record whose field is optional: the record holds the mapping with
+        // no keys whatever the field's schema admits, so the field's
+        // refutation is about values the record need not have.
+        (
+            "under an optional field",
+            closed(vec![field("k", narrow.clone(), false)]),
+            closed(vec![field("k", wide.clone(), false)]),
+        ),
+    ];
+    for (label, sub, sup) in cases {
+        let budget = Cell::new(DECISION_BUDGET);
+        assert_ne!(
+            sub.subtype_relation(&sup, &NoLeafRelations, &[], &budget),
+            Relation::Fails,
+            "{label}: the rules refuted an inclusion that holds"
+        );
+        assert_eq!(
+            sub.descriptor_contained_in(&sup, &NoLeafRelations, &[]),
+            Relation::Holds,
+            "{label}: the sets decide it"
+        );
+        assert!(sub.is_subtype_of(&sup), "{label}");
+    }
+
+    // One level further down, where neither decider reaches the answer: the
+    // rules decline, as above, and the sets decline too -- lowering a record
+    // inside a list inside a list is past what the set representation builds.
+    // The pair is unproven, which the relation is allowed to be; what it may
+    // not be is refuted.
+    let deeper = |record: &Schema| {
+        Schema::list(SeqShape::homogeneous(closed(vec![field(
+            "k",
+            record.clone(),
+            true,
+        )])))
+    };
+    let budget = Cell::new(DECISION_BUDGET);
+    assert_eq!(
+        deeper(&narrow).subtype_relation(&deeper(&wide), &NoLeafRelations, &[], &budget),
+        Relation::Unknown,
+    );
+    assert_eq!(
+        deeper(&narrow).descriptor_contained_in(&deeper(&wide), &NoLeafRelations, &[]),
+        Relation::Unknown,
+    );
+}
+
 /// A key the supertype requires and the subject does not declare, read against
 /// what the subject carries.
 ///
