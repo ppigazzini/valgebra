@@ -2289,9 +2289,11 @@ fn linear_subtype(
     // The verdict is kept in three values, because the one refutation below
     // that stands on the tail *repeating* needs the element proven to have a
     // value: a tail the rules cannot read either way may be no tail at all.
-    let repeats =
-        ta.map(|element| element.verdict_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget));
-    let ta = ta.filter(|_| repeats != Some(Verdict::Empty));
+    // No tail repeats nothing, which is what `Empty` says of it.
+    let repeats = ta.map_or(Verdict::Empty, |element| {
+        element.verdict_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget)
+    });
+    let ta = ta.filter(|_| repeats != Verdict::Empty);
     // A's fixed prefix must align with B: against B's prefix where they overlap,
     // then against B's repeated tail past it (which B must therefore have). A
     // prefix shorter than B's cannot align at all, which is a refutation by
@@ -2337,7 +2339,7 @@ fn linear_subtype(
         // the element has one, declined where the rules cannot tell. An
         // element they cannot tell is also not proven empty, or the tail would
         // have been dropped above, so `Holds` is not an answer this arm gives.
-        (Some(_), None) => Relation::of_mismatch(repeats.unwrap_or(Verdict::Unknown)),
+        (Some(_), None) => Relation::of_mismatch(repeats),
         // A's repeated element must also land in B's repeated tail.
         (Some(a), Some(tail)) => {
             aligns(assumptions).and(|| a.is_subtype_rec(tail, cx, assumptions))
