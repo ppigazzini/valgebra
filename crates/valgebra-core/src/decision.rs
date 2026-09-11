@@ -3,7 +3,8 @@
 
 use crate::descr::lower::{Constants, lower};
 use crate::ir::{
-    CollKind, ConstIx, Constraint, DefIx, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
+    CollKind, ConstIx, Constraint, Constraints, DefIx, Field, MapClause, OperandIx, Schema,
+    SeqKind, SeqShape,
 };
 use rustc_hash::FxHashMap;
 use std::borrow::Cow;
@@ -852,22 +853,10 @@ impl Schema {
             Schema::Refine { base, constraints } if constraints.is_empty() => {
                 base.empty_and_region(oracle, defs, visiting, budget)
             }
-            Schema::Refine { base, constraints } => {
-                let int_discrete = bounded_to_the_integers([base.as_ref()]);
-                let empty = base.is_empty_rec(oracle, defs, visiting, budget)
-                    || bounds_unsatisfiable(constraints.iter(), oracle, int_discrete);
-                // A satisfiable bound over an inhabited base is not a proof of
-                // inhabitance: the constraints narrow the base, and whether any
-                // value survives them is what the bounds check declines to say.
-                (
-                    if empty {
-                        Verdict::Empty
-                    } else {
-                        Verdict::Unknown
-                    },
-                    Regions::Unknown,
-                )
-            }
+            Schema::Refine { base, constraints } => (
+                refinement_verdict(base, constraints, oracle, defs, visiting, budget),
+                Regions::Unknown,
+            ),
             Schema::Intersection(members) => {
                 intersection_verdict(members, oracle, defs, visiting, budget)
             }
@@ -1466,7 +1455,15 @@ impl Schema {
                 assumptions,
             ),
             // Against a non-refinement, a refinement inherits its base's supertypes.
-            (Schema::Refine { .. }, _) => self.left_reduces_below(other, cx, assumptions),
+            (Schema::Refine { .. }, _) => {
+                self.left_reduces_below(other, cx, assumptions).or_else(|| {
+                    if self.disjoint_with(other, cx.oracle) {
+                        Relation::Fails
+                    } else {
+                        Relation::Unknown
+                    }
+                })
+            }
             // Two schemas that share no value: every value of the subject is
             // outside the supertype, which is a refutation on the same reading
             // as a mismatched arity -- and read, as every refutation is,
@@ -1712,6 +1709,70 @@ fn intersection_verdict(
 /// above the upper bound (or equal with a strict end). Sound: it reports
 /// unsatisfiable only when the ordering the oracle returns forces it, and stays
 /// conservative when the oracle cannot compare two bounds.
+/// What a refinement's emptiness is, read from its base and its constraints.
+///
+/// A refinement is a subset of its base, so an empty base empties it and so
+/// does a bound conjunction nothing satisfies. Inhabitance is the harder half:
+/// a satisfiable bound over an inhabited base proves nothing in general, since
+/// whether any value of the base survives the constraints is what the bounds
+/// check declines to say.
+///
+/// One shape is the exception, and it is the shape a length bound is written
+/// for: a container that repeats one element, where a value of any length is
+/// built by repeating one. Its element decides it -- a shortest length of zero
+/// is met by the empty container whatever the element admits, and a longer one
+/// by as many copies of an element as it asks for. Which is also the reading
+/// that gives `mu t. list[t] & MinLen(1)` the answer it has: each unfolding
+/// demands one more element and the cycle has no finite value.
+fn refinement_verdict(
+    base: &Schema,
+    constraints: &Constraints,
+    oracle: &dyn LeafRelations,
+    defs: &[Schema],
+    visiting: &mut Vec<DefIx>,
+    budget: &Cell<u32>,
+) -> Verdict {
+    let int_discrete = bounded_to_the_integers([base]);
+    if base.is_empty_rec(oracle, defs, visiting, budget)
+        || bounds_unsatisfiable(constraints.iter(), oracle, int_discrete)
+    {
+        return Verdict::Empty;
+    }
+    let lengths_only = constraints
+        .iter()
+        .all(|c| matches!(c, Constraint::MinLen(_) | Constraint::MaxLen(_)));
+    match repeated_element(base).filter(|_| lengths_only) {
+        Some(_) if shortest(constraints.iter()) == 0 => Verdict::Inhabited,
+        Some(element) => element.verdict_rec(oracle, defs, visiting, budget),
+        None => Verdict::Unknown,
+    }
+}
+
+/// The one element schema a container repeats, for the containers that repeat
+/// one: a sequence with no fixed position, a set, a frozenset.
+///
+/// A value of such a container is any number of values of that element, which
+/// is what lets a length bound be met by building one.
+fn repeated_element(base: &Schema) -> Option<&Schema> {
+    match base {
+        Schema::Seq { shape, .. } if shape.prefix.is_empty() => shape.tail.as_deref(),
+        Schema::Coll { element, .. } => Some(element),
+        _ => None,
+    }
+}
+
+/// The shortest length a conjunction of bounds admits, which is the largest
+/// `MinLen` among them and zero where none is written.
+fn shortest<'a>(constraints: impl Iterator<Item = &'a Constraint>) -> usize {
+    constraints
+        .filter_map(|c| match c {
+            Constraint::MinLen(n) => Some(*n),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0)
+}
+
 fn bounds_unsatisfiable<'a>(
     constraints: impl Iterator<Item = &'a Constraint> + Clone,
     oracle: &dyn LeafRelations,

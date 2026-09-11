@@ -187,6 +187,18 @@ answer of its own, or a repair to a change not yet released.
 
 ### Changed
 
+- A length bound over a container that repeats one element decides whether the
+  schema has a value, where it was left unknown. A value of any length is as
+  many copies of one element, so the element decides it: a bound of zero is met
+  by the empty container, a longer one by repeating an element. Three things
+  follow. A recursive schema every unfolding of which needs one more element is
+  reported empty, which the completeness ledger carried as a relation it could
+  not decide. A refutation about such a schema is believed, so `list[int]` with
+  a length bound is decided not below a tuple -- **0.7 us against 458**. And the
+  refuting half of the decision workload, whose hardest case was a fixed
+  sequence with an unfillable position, reads a two-hundred-and-seventieth of
+  the instructions it did.
+
 - A pair whose kinds cannot overlap decides by a rule. Two distinct container
   kinds share no value, so every value of the subject is outside the supertype
   and the inclusion is refuted -- where the relation was left unproven and

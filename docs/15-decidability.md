@@ -132,6 +132,14 @@ answers `"undecided"`.
   or because the other side is closed and does not declare it. Only a required key
   can do this — a meet of two mappings, or of two optional fields, always contains
   the empty dict.
+- **A length bound over a container that repeats one element.** Whether such a
+  schema has a value is its element's question: a bound of zero is met by the
+  empty container whatever the element admits, and a longer one by as many
+  copies of an element as it asks for. That decides a fixpoint every unfolding
+  of which needs one more element -- each element is a value of the fixpoint,
+  and no finite value satisfies it. A bound over a *fixed* position is not this
+  shape and stays conservative, since the bound says nothing about what fills
+  the position.
 - **Two schemas that share no value.** The inclusion is *refuted*, whatever
   either side holds: every value of the subject is outside the supertype. The
   disjointness read here is the one the concrete types settle -- two distinct
@@ -192,6 +200,9 @@ assert Validator(list[int]).is_subtype_of(
 assert Validator(tuple[int | str, int]).is_subtype_of(
     union(tuple[int, int], tuple[str, int])
 )  # a product splits across branches
+assert Validator(
+    recursive(lambda t: Annotated[list[t], at.MinLen(1)])
+).is_empty()  # every unfolding needs one more element
 assert intersection({"a": int}, {"a": str}).is_empty()  # 'a' cannot hold both
 assert not intersection(
     {"a?": int}, {"a?": str}

@@ -1577,12 +1577,12 @@ fn a_subject_with_no_value_is_below_a_shape_it_cannot_match() {
     assert!(bounded.is_subtype_of(&empty_list));
     assert!(bounded.is_equivalent(&empty_list));
 
-    // And the mismatch that decides nothing: a fixed sequence whose first
+    // And the mismatch that decides the other way: a fixed sequence whose first
     // position admits no value is empty, so it is below the shape it cannot
-    // match -- but the rules cannot prove it empty here, because proving it
-    // takes the descriptor's reading of a bounded length over a base with no
-    // values. Unable to say whether the subject has a value, the arity rule
-    // declines rather than refuting, and the descriptor settles it.
+    // match. The position is a length bound over a container of nothing, which
+    // the fold reads -- a list of at least one element of a set with none has
+    // none -- so the arity rule's refutation is read against a subject proven
+    // empty and establishes the opposite.
     let unfillable = Schema::list(SeqShape::fixed([
         Schema::refine(
             Schema::list(SeqShape::homogeneous(Schema::Nothing)),
@@ -1590,22 +1590,86 @@ fn a_subject_with_no_value_is_below_a_shape_it_cannot_match() {
         ),
         Schema::ANYTHING,
     ]));
-    assert_eq!(relation(&unfillable, &empty_list), Relation::Unknown);
+    assert_eq!(relation(&unfillable, &empty_list), Relation::Holds);
     assert!(unfillable.is_subtype_of(&empty_list));
 
-    // A repeated tail the rules cannot read is not a repeat. A list of that
-    // same refinement is inhabited -- the empty list is in it whatever the
-    // element admits -- so the subject offers a value; but the refutation
-    // "a tail repeats past a fixed length" stands on the *element* having one,
-    // and this element has none. The rules decline, and the descriptor, which
-    // reads the element empty, proves the list is the empty list.
+    // A repeated tail with no value is not a repeat. A list of that same
+    // refinement is inhabited -- the empty list is in it whatever the element
+    // admits -- so the subject offers a value; but the refutation "a tail
+    // repeats past a fixed length" stands on the *element* having one, and this
+    // element has none. The tail is dropped and the subject is its prefix,
+    // which is the empty list.
     let unrepeating = Schema::list(SeqShape::homogeneous(Schema::refine(
         Schema::list(SeqShape::homogeneous(Schema::Nothing)),
         vec![Constraint::MinLen(1)],
     )));
-    assert_eq!(relation(&unrepeating, &empty_list), Relation::Unknown);
+    assert_eq!(relation(&unrepeating, &empty_list), Relation::Holds);
     assert!(unrepeating.is_subtype_of(&empty_list));
     assert!(unrepeating.is_equivalent(&empty_list));
+}
+
+/// A length bound over a container that repeats one element is read for the
+/// values it has, not only for the values it cannot have.
+///
+/// A bound is satisfiable in the abstract and still empty over its base, which
+/// is why a refinement is unknown in general. A container that repeats one
+/// element is the exception the bound is written for: a value of any length is
+/// as many copies of one element, so the element decides it. That is what
+/// closes the fixpoint whose every unfolding needs one more element.
+#[test]
+fn a_length_bound_over_a_repeated_element_is_decided_by_the_element() {
+    let bounded = |base: Schema, min: usize| Schema::refine(base, vec![Constraint::MinLen(min)]);
+    let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let nothings = Schema::list(SeqShape::homogeneous(Schema::Nothing));
+    // An element with values: any length is built from it.
+    assert_eq!(bounded(ints.clone(), 2).verdict(), Verdict::Inhabited);
+    assert_eq!(
+        bounded(Schema::set(Schema::Int), 2).verdict(),
+        Verdict::Inhabited
+    );
+    // An element with none: only the empty container is left, and a bound above
+    // zero rules it out.
+    assert_eq!(bounded(nothings.clone(), 1).verdict(), Verdict::Empty);
+    // A bound of zero is met by the empty container whatever the element says.
+    assert_eq!(bounded(nothings.clone(), 0).verdict(), Verdict::Inhabited);
+    assert_eq!(
+        Schema::refine(nothings.clone(), vec![Constraint::MaxLen(3)]).verdict(),
+        Verdict::Inhabited
+    );
+    // A fixed position is not a repeated element: the bound says nothing about
+    // what fills it, and the reading declines rather than guessing. The second
+    // row is the one that matters -- a shape with a prefix *and* a tail, whose
+    // tail has values and whose one fixed position may have none, so reading
+    // the tail alone would claim a value the shape may not have.
+    assert_eq!(
+        bounded(Schema::tuple(SeqShape::fixed([Schema::Int])), 1).verdict(),
+        Verdict::Unknown
+    );
+    assert_eq!(
+        bounded(
+            Schema::list(SeqShape::prefix_tail(
+                [Schema::Instance(ClassIx::new(0))],
+                Schema::Int,
+            )),
+            1,
+        )
+        .verdict(),
+        Verdict::Unknown
+    );
+    // Nor is a constraint that is not a length: a predicate may refuse every
+    // value of the base.
+    assert_eq!(
+        Schema::refine(
+            ints.clone(),
+            vec![Constraint::MinLen(1), Constraint::MaxLen(9)]
+        )
+        .verdict(),
+        Verdict::Inhabited
+    );
+    assert_eq!(
+        Schema::refine(ints, vec![Constraint::Predicate(PredIx::new(0))]).verdict(),
+        Verdict::Unknown
+    );
 }
 
 /// What the shallow reading of a value may and may not say.
@@ -1690,13 +1754,15 @@ fn the_shallow_reading_answers_for_a_form_and_declines_the_rest() {
 /// inhabited by the empty list and says nothing about its element.
 #[test]
 fn a_refutation_about_a_part_with_no_value_is_not_one() {
-    // A part that is empty, and that the rules cannot prove empty: proving it
-    // takes the descriptor's reading of a bounded length over a base with no
-    // values, which is what makes this the case the guard is for.
-    let empty = Schema::refine(
-        Schema::list(SeqShape::homogeneous(Schema::Nothing)),
-        vec![Constraint::MinLen(1)],
-    );
+    // A part that is empty, and that the rules cannot prove empty: two
+    // sequences of one position each whose positions share no value. No rule
+    // reads a meet of two shapes for the values it holds, so proving it empty
+    // takes the descriptor -- which is what makes this the case the guard is
+    // for.
+    let empty = Schema::meet([
+        Schema::tuple(SeqShape::fixed([Schema::Int])),
+        Schema::tuple(SeqShape::fixed([Schema::Str])),
+    ]);
     let narrow = closed(vec![field("f", empty.clone(), true)]);
     let wide = closed(vec![
         field("f", empty.clone(), true),

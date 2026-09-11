@@ -191,6 +191,17 @@ _DECIDED = [
         "subtype", [bool, int, ...], [int, int, ...], id="[bool,int,...]<=[int,int,...]"
     ),
     pytest.param("empty", intersection(int, str), None, id="empty:int&str"),
+    # A fixpoint every unfolding of which needs one more element: each element
+    # is a value of the same fixpoint, so no finite value satisfies it. Decided
+    # by reading a length bound over a container that repeats one element --
+    # the element is the reference, and a reference reached again while it is
+    # being resolved has no finite value.
+    pytest.param(
+        "empty",
+        recursive(lambda t: Annotated[list[t], at.MinLen(1)]),  # ty: ignore[invalid-type-form]
+        None,
+        id="empty:mu-t.list[t]&MinLen(1)",
+    ),
     # `Any` is the top, spelled: the same node as `anything`, so every relation
     # the top decides it decides too. The spelling is not a set, and no rule can
     # read it.
@@ -695,23 +706,17 @@ _DECIDED = [
 
 
 def _missed(why: str) -> pytest.MarkDecorator:
-    """Mark a relation that holds and is not decided, with the limit that leaves it."""
+    """Mark a relation that holds and is not decided, with the limit that leaves it.
+
+    `_LEDGERED` is empty: every relation this ledger enumerates is decided. The
+    marker stays because the ledger fails in both directions -- a relation that
+    regresses to conservatism fails here, and it is this marker that records the
+    regression with the reason for it rather than deleting the row.
+    """
     return pytest.mark.xfail(strict=True, reason=why)
 
 
-_LEDGERED = [
-    pytest.param(
-        "empty",
-        recursive(lambda t: Annotated[list[t], at.MinLen(1)]),  # ty: ignore[invalid-type-form]
-        None,
-        id="empty:mu-t.list[t]&MinLen(1)",
-        marks=_missed(
-            "a fixpoint every unfolding of which needs one more element has no "
-            "finite value, and the coinductive rule assumes its goal rather than "
-            "deriving that"
-        ),
-    ),
-]
+_LEDGERED: list[object] = []
 
 
 @pytest.mark.parametrize(("operation", "left", "right"), _DECIDED + _LEDGERED)
@@ -801,9 +806,13 @@ def test_a_record_missing_a_required_key_refutes_however_open_it_is() -> None:
     # Decided by a rule, which is what the ledger asks. The set representation
     # decides it too, by lowering both records, and takes two hundred times
     # longer to say the same thing.
+    # Built from a comprehension rather than written out: the row is about the
+    # width, and a checker wants a literal where the fields are a type.
     fields = {f"f{i}": int for i in range(8)}
-    complete = Validator(TypedDict("Complete", fields))
-    missing = Validator(TypedDict("Missing", dict(list(fields.items())[:-1])))
+    complete = Validator(TypedDict("Complete", fields))  # ty: ignore[invalid-argument-type]
+    missing = Validator(
+        TypedDict("Missing", dict(list(fields.items())[:-1]))  # ty: ignore[invalid-argument-type]
+    )
     assert missing.relation_to(complete) == "not_subset"
     # The refutation is a statement about a value: the mapping the subject holds
     # without the key, which the supertype refuses.
