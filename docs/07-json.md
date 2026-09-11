@@ -191,14 +191,31 @@ hundred records of five fields, one of them a list and one a mapping, 17 KB --
 | jiter's pull parser over the same bytes, building nothing | 21 us | the parse alone, in Rust, release |
 
 The tree costs three times the parse that builds nothing: the cost is the
-tree's containers -- an index map per object, a vector per array, a string
-slice per string -- and not the scanning. pydantic-core validates from the
-parser's events and builds no tree, which is why it reads this shape in the
-time valgebra reads the tree. **A walk over the parser's events is not built.**
-It would pay the pull parse and the walk's own reading, about half of today's
-call on this shape, and it is a JSON arm for every container rule of the walk
-rather than an edit to one; until it exists, the document shape is a tree the
-walk reads once and drops.
+tree's containers -- a vector per array and per object, each behind its own
+allocation -- and not the scanning. pydantic-core validates from the parser's
+events and builds no tree, which is why it reads this shape in the time
+valgebra reads the tree.
+
+Two readings would remove that cost, and the page states both as the limits
+they are.
+
+**A tree of the walk's own** -- one fixed-size node per value in one vector,
+strings as ranges into one buffer -- pays no allocation per container and pays
+a push per *value* instead. It is a gain exactly while a document holds a
+container per few dozen scalars: this one holds one per four and parses **2.4x
+faster** that way, while an array of ten thousand bare numbers holds one per
+ten thousand and parses slower. A representation that wins the document and
+loses the array is a trade and not an improvement, so the reading in place is
+the one that never loses.
+
+**A walk over the parser's events**, building nothing at all, would pay the
+pull parse and the walk's own reading -- about half of today's call on this
+shape. It needs a value the walk can read *twice*: a union tries its members
+against one value, an intersection every member, a complement the inner
+schema, and a pull parser has moved on. So it is a walk with a buffer for the
+rules that backtrack rather than a walk with no tree, and it is a JSON arm for
+every container rule rather than an edit to one. Until it exists, the document
+shape is a tree the walk reads once and drops.
 `benches/bench_json.py` measures a strict `TypeAdapter.validate_json` over the
 same three shapes; that column is not recorded above, so read the comparison
 from the benchmark rather than from this page.
