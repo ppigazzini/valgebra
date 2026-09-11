@@ -47,6 +47,17 @@ container that admits an empty one, a keyed map that requires no key, a union
 with such a member. `laws.rs` holds that shallow reading to the value corpus,
 and `decision/tests.rs` pins its edge.
 
+**A pair no rule decided is worth three readings**, in this order, and every
+arm that answers for a shape and then declines hands its pair to them rather
+than ending the match: two sets that *share no value*, which refutes; then the
+oracle, the only reader of a class or a constant; then the supertype's own
+shape, where a **refinement** takes its base's refutation and not its proof --
+the value outside the base is outside a subset of it, while being inside the
+base says nothing about the constraints. The oracle is asked before the
+refinement because it proves where the refinement reading only refutes: a
+literal below a predicate refinement is settled by running the predicate on the
+constant.
+
 Both halves are gated. `scripts/perf_gate.py --decision` measures the relations
 that hold; `--decision-refute` measures the ones a rule refutes, which is the
 path the first workload never walks and where work therefore costs nothing any
@@ -161,7 +172,14 @@ trait is how it asks:
   constants answers in one pass; the default declines and the member walk
   stands;
 - `compare` — order two pooled refinement bounds;
-- `no_int_between` — does the open interval between two bounds admit no integer.
+- `no_int_between` — does the open interval between two bounds admit no integer;
+- `class_admits_kind` — can a value of this kind be an instance of that class.
+  Asked this way round because a class need not *have* a kind: one deriving from
+  no builtin lays down no layout, and the bindings decline rather than answer,
+  since `isinstance` reads the whole subtree beneath a class and a subclass may
+  derive from a builtin as well. A class that does lay one down confines its
+  instances to that kind, because Python refuses a subclass that would lay down
+  a second, and `Some(false)` is then a refutation the rules can make.
 
 `NoLeafRelations` is the core's default and decides nothing. **Its `None` and a
 `Some(false)` are the same conservative verdict** at both call sites —

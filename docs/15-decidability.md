@@ -272,13 +272,15 @@ the shape. What is left below is what the descriptor cannot hold.
   bodies only agree after two steps — and there the coinductive rule is the
   whole of the answer.
 
-- **A length bound over a set or a dict.** A length is not a word's alone, and
+- **A length bound over a set or a dict, in the sets.** A length is not a word's alone, and
   two of the kinds that have one now state it: a word's length is a pattern over
   its alphabet, and a *sequence's* is "any element, that many times", which the
   automaton holds like any other shape. So `Annotated[tuple[int, int],
   MinLen(3)]` is decided empty and `Annotated[list[int], MaxLen(0)]` is the
   empty list. A set and a dict have a length their components do not count, and
   a bound over one of those refuses rather than being lowered as if it did.
+  Whether such a schema *has a value* is a different question and the rules
+  answer it, since a set of any length is built by repeating one element.
 
 - **A schema too large to build.** The descriptor is bounded three ways: the
   nodes it will read, the nesting it will descend, and the work a build may
@@ -291,9 +293,13 @@ the shape. What is left below is what the descriptor cannot hold.
 - **A predicate.** Its satisfiability is undecidable (below), so neither
   representation reasons about one.
 
-Every relation named here is a strict expected failure in
-`tests/test_completeness_ledger.py`, so the day one is decided the mark fails and
-the entry leaves both the ledger and this list.
+`tests/test_completeness_ledger.py` is where a relation that leaves this list
+lands: it enumerates what the procedure must *decide* and fails in both
+directions, so a relation that regresses to conservatism fails there and one
+that becomes decided is added there. It also carries a strict expected-failure
+mark for a relation that holds and is not decided, which names none today --
+the last, a fixpoint every unfolding of which needs one more element, became a
+row of the decided list.
 
 ```python
 from typing import Annotated, Literal, NamedTuple

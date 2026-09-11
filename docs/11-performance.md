@@ -270,6 +270,31 @@ that remains the single source of truth. On a 32-literal union this cuts the
 per-call median several-fold; the decision is identical to the scan, locked by
 tests over the cross-type cases.
 
+## What a relation between two validators costs
+
+`is_subtype_of`, `relation_to` and `is_equivalent` are not the membership walk,
+and they have a cost of their own with two clear levels. A pair a **rule**
+decides costs about a microsecond: the rules recurse over the two schemas and
+answer from their shapes. A pair the rules decline goes to the **set
+representation**, which lowers both sides into automata and takes tens to
+hundreds of microseconds -- two orders of magnitude, the figure
+[02-decision.md](dev/02-decision.md) records and the reason a rule that stops
+declining is worth writing.
+
+Which pairs land on which side is the interesting part, and it moves. Most do
+not reach the sets: a mismatch of kinds, a record missing a required key, a
+sequence of the wrong arity, a subject outside a refinement's base. What still
+reaches them is a schema whose atom only the bindings can read on one side and
+a structure on the other -- a class deriving from no builtin, a complement as
+the subject -- and a bound that has to be *compared* rather than matched, such
+as a list against a length-bounded list of the same element.
+
+There is no gate on this, and that is deliberate: the instruction budgets cover
+the three decision workloads -- the relations that hold, the ones a rule
+refutes, and the ones whose goals repeat, which `crates/valgebra-core/examples/`
+holds and which are what a change to the rules moves. A relation's wall-clock cost is a property of the
+pair, and pinning one would be pinning a number the next rule changes.
+
 ## Regression gate
 
 The wall-clock numbers above are for humans reading results; they are too noisy
