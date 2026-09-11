@@ -107,7 +107,25 @@ value holds without reading any of it.
 `walk/record.rs` reads a value as a **keyed map or an attribute record**: the
 shape whose membership is a question per key rather than per position -- which
 keys the value carries, which of them the schema declares, and what a key the
-schema does not declare is covered by. `walk/sequence.rs` reads one as a run of
+schema does not declare is covered by. A keyed map is read one of three ways.
+**By its keys** (`keyed_map_asks_for_its_keys`): one probe per declared field,
+through the `RecordPlan` built with the validator, and a count of the entries
+found against the entries the value holds -- a value holding exactly its
+declared keys has no undeclared key for any clause to govern. **By a scan**
+(`keyed_map_scan`): every entry of the value, each key resolved by name and
+each undeclared key read against the clause that covers it. **Explaining**
+(`keyed_map_explain`): the scan that reports every violation rather than the
+first. Which of the first two a record takes is `Undeclared::of` reading the
+record's clauses: an undeclared key is *refused* (no clause), *admitted* (the
+top clause), *admitted when it is a string* (`str: anything`, which is what a
+`TypedDict` builds), or *read* (any other clause). The invariant that makes
+the by-keys path sound is that it never probes an undeclared key, so it may
+take a record only where the clause's verdict on such a key is stated without
+the key's value: the three readings above say it -- refused is `False`,
+admitted is `True`, a string clause is `isinstance(key, str)` over every key
+alike -- and a clause that reads a key together with its value keeps the scan.
+The JSON reading takes the plan for an open record too, since a document's
+keys are strings by the grammar. `walk/sequence.rs` reads one as a run of
 **elements** -- a list, a tuple, a parsed array, a set, a frozenset -- which
 differ in how an element is reached and agree on what each must be, and which
 share an arity, a count taken once and compared again, and the snapshot a list
