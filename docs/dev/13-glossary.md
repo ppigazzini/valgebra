@@ -38,6 +38,7 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **line** | one summand of a kind's normal form: a structure met with a lattice of object guards. `Lines` is a set of them with a negation flag, which is what closes a kind under complement |
 | **bounds** (of a build) | `descr::lower::Bounds`, the three ceilings a lowering is held to — schema nodes read, nesting descended, units of multiplying work spent. Distinct from the budget, which is the rules' own step counter. [00-architecture.md](00-architecture.md) lists every bound in the tree |
 | **the oracle** (in the core) | `LeafRelations`, the trait through which the decision procedure asks the bindings about a class or a value |
+| **verdict** | `Verdict` in `crates/valgebra-core/src/decision.rs`: what a schema's emptiness is proven to be -- empty, inhabited, or neither. The three-valued reading a refutation needs; a bool of it turns *unknown* into *inhabited* |
 | **the budget** (in the core) | `DECISION_BUDGET`, the work ceiling one top-level query may spend before returning the conservative answer |
 | **the ledger** (of completeness) | `tests/test_completeness_ledger.py`, enumerated relations the procedure must *decide*, failing in both directions |
 

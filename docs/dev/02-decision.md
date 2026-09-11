@@ -83,6 +83,16 @@ asserts nothing beyond the procedure's reach.
 That asymmetry is deliberate and it is what makes the procedure safe to extend.
 Adding a rule can only move answers from false to true, so no extension can make
 an accept wrong. The published boundary is `docs/15-decidability.md`; the enumerated
+
+A **refutation** is a claim too, and it stands on a value: the subject has one
+that the other schema rejects. The query reads the subject's emptiness once,
+at the top (`witnessed`), and believes a refutation only where the subject is
+proven inhabited. A rule that refutes on a *part* of the subject reads the
+part's own verdict the same way, in three values: a sequence whose repeated
+element the rules cannot read is not refuted against a fixed length, because
+the element may admit no value and the sequence is then its prefix alone
+(`linear_subtype`). A bool would make *unknown* count as *inhabited*; the
+verdict is what keeps the claim a claim.
 relations the procedure is required to *decide* are
 `tests/test_completeness_ledger.py`, which fails in both directions —
 a relation that regresses to conservatism fails, and a closed hole whose ledger
