@@ -469,6 +469,36 @@ impl Constants for PoolRelations<'_, '_> {
 }
 
 impl LeafRelations for PoolRelations<'_, '_> {
+    /// Whether a value of `kind` can be an instance of the pooled class.
+    ///
+    /// Read from the layout the class lays down, which is what `isinstance`
+    /// answers for a pure class: a class deriving from a builtin holds values
+    /// of that builtin's kind and of no other, and a class deriving from none
+    /// holds values of no kind the partition names -- its instances are plain
+    /// objects. A class whose `isinstance` runs user code is declined here, as
+    /// it is everywhere else: what such a class holds is not a property of a
+    /// value's type.
+    ///
+    /// `true` is the conservative answer and is given where the layouts agree,
+    /// without asking whether this particular class holds the value: a list is
+    /// not an instance of every list subclass, and this question does not need
+    /// it to be.
+    fn class_admits_kind(&self, class: ClassIx, kind: Kind) -> Option<bool> {
+        let value = self.literals.get(class.get())?.bind(self.py);
+        let class = value.cast::<PyType>().ok()?;
+        if !self.denotes_a_set(class)? {
+            return None;
+        }
+        let (_, own) = layout_of(class);
+        Some(match own {
+            // `bool` lays down `int`'s layout, so a class laid out as an int
+            // may be `bool` itself and hold booleans. Sound and coarse: the
+            // pair is never refuted here.
+            Some(own) => own == kind || matches!((own, kind), (Kind::Int, Kind::Bool)),
+            None => false,
+        })
+    }
+
     /// Whether the class behind an `Instance` atom denotes a set, on the test
     /// [`PoolRelations::denotes_a_set`] states.
     fn atom_denotes_a_set(&self, atom: &Schema) -> Option<bool> {

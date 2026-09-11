@@ -3,8 +3,8 @@
 
 use crate::descr::lower::{Constants, lower};
 use crate::ir::{
-    CollKind, ConstIx, Constraint, Constraints, DefIx, Field, MapClause, OperandIx, Schema,
-    SeqKind, SeqShape,
+    ClassIx, CollKind, ConstIx, Constraint, Constraints, DefIx, Field, MapClause, OperandIx,
+    Schema, SeqKind, SeqShape,
 };
 use rustc_hash::FxHashMap;
 use std::borrow::Cow;
@@ -1608,6 +1608,26 @@ pub trait LeafRelations: Constants {
     /// literal in the partition, which is what decides it against another kind.
     /// The default declines, so a core with no value oracle stays conservative.
     fn literal_kind(&self, _constant: ConstIx) -> Option<Kind> {
+        None
+    }
+
+    /// Whether a value of `kind` can be an instance of the class behind a
+    /// [`Schema::Instance`], or `None` when the bindings decline to say.
+    ///
+    /// A class is the one atom the core cannot read at all, and disjointness is
+    /// the question it most often needs answered about one: a value of a kind
+    /// the class cannot hold is a value the class's set does not contain. The
+    /// question is asked this way round, rather than as "what kind is this
+    /// class", because a class need not have one -- a class deriving from no
+    /// builtin lays down no kind, and *that* is the answer that decides, since
+    /// its instances are none of the kinds the partition names.
+    ///
+    /// `Some(false)` is the only answer that refutes, so an implementor may
+    /// answer `Some(true)` for every kind its class could conceivably hold. It
+    /// must decline for a class whose `isinstance` runs user code, where
+    /// membership is not a property of the value's type at all. The default
+    /// declines, so a core with no oracle keeps every class conservative.
+    fn class_admits_kind(&self, _class: ClassIx, _kind: Kind) -> Option<bool> {
         None
     }
 

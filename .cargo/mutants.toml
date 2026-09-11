@@ -72,9 +72,17 @@ exclude_re = [
     # defaults, so no test can tell the two apart. The `Some(true)` mutant of each
     # IS killable and stays in the sweep: it turns a declined question into a
     # claim, which is the direction that would be unsound.
+    #
+    # `class_admits_kind` is the same argument with the polarity reversed. Its
+    # one call site reads `== Some(false)`, because a class that cannot hold a
+    # kind is the answer that refutes, so cannot-decide and *admits* collapse
+    # there and `Some(true)` is the unkillable one. `Some(false)` stays in the
+    # sweep, and is the unsound direction: it would refute every pair holding a
+    # class no oracle reads.
     "replace <impl LeafRelations for NoLeafRelations>::leaf_subtype -> Option<bool> with Some\\(false\\)",
     "replace LeafRelations::no_int_between -> Option<bool> with Some\\(false\\)",
     "replace LeafRelations::literals_disjoint -> Option<bool> with Some\\(false\\)",
+    "replace LeafRelations::class_admits_kind -> Option<bool> with Some\\(true\\)",
     # The collection arm of `empty_and_region` returns exactly what the match's
     # default returns. It is written out because the two answer the same thing
     # for OPPOSITE reasons -- a collection is known non-empty, the default is
