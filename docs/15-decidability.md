@@ -237,6 +237,26 @@ json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j
 assert json_value.is_valid({"a": [1, "x", {"b": None}]})
 ```
 
+## The one assumption: a class the bindings can read has an instance
+
+Every other answer here rests on the value model alone. This one rests on an
+assumption, and it is the only place a `True` can be wrong.
+
+A class is opaque: what it holds is `isinstance`, and the library reads the
+class hierarchy rather than running it. A class whose metaclass leaves
+`isinstance` and `issubclass` alone is taken to **hold at least one object**,
+which is what lets `A` be reported not below `B` for two classes neither
+deriving from the other -- the difference `A ∧ ¬B` is read as holding a value.
+A class no value can instantiate (a `__new__` that always raises, an abstract
+class with no concrete subclass) is empty, and is below everything; the library
+reports it not below, because the assumption says otherwise.
+
+The assumption is the set representation's open world, which both readings now
+share. Neither decides it; the bindings could not answer it without running a
+constructor at decision time, which is the same code the pure-metaclass test
+exists to refuse. What it buys is every relation between two classes decided by
+a rule, at about a microsecond rather than a hundred.
+
 ## Sound but conservative
 
 Here valgebra is correct but not complete: it may answer `False` or "not empty"

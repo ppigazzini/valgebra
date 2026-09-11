@@ -751,6 +751,12 @@ impl Schema {
         self.subtype_steps_under(other, &NoLeafRelations)
     }
 
+    /// The emptiness verdict where the rules can look a constant or a class up.
+    #[cfg(test)]
+    pub(crate) fn verdict_under(&self, oracle: &dyn LeafRelations) -> Verdict {
+        self.verdict_rec(oracle, &[], &mut Vec::new(), &Cell::new(DECISION_BUDGET))
+    }
+
     /// The same count where the rules can look a constant or a class up, for a
     /// rule whose work depends on what the oracle answers.
     #[cfg(test)]
@@ -985,9 +991,28 @@ impl Schema {
                 // read `int <= Literal[1]` as proven.
                 Regions::Unknown,
             ),
-            // The gradual `Any` and an instance are not scalar-decidable and the
-            // core cannot read them: a class may have no instances. Neither
-            // direction is proven.
+            // A class is a set of objects the core cannot read, so this asks
+            // the oracle the one question it already answers about one:
+            // whether the atom denotes a set at all -- a class whose metaclass
+            // leaves `isinstance` alone. Such a class reads as **inhabited**,
+            // which is the open world the set representation already works in:
+            // it lowers the same class to an atom holding an object, and every
+            // refutation this library makes about a class rests on that. A
+            // class no value can instantiate is where the assumption is wrong,
+            // and it was already wrong there -- the descriptor was making the
+            // claim and the rules were paying to defer to it.
+            //
+            // A class with a hooked metaclass is not a set here, and stays
+            // unknown as it is everywhere else.
+            Schema::Instance(_) => (
+                match oracle.atom_denotes_a_set(self) {
+                    Some(true) => Verdict::Inhabited,
+                    _ => Verdict::Unknown,
+                },
+                Regions::Unknown,
+            ),
+            // The gradual `Any` is not scalar-decidable and neither direction
+            // is proven of it.
             _ => (Verdict::Unknown, Regions::Unknown),
         }
     }

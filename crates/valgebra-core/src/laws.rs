@@ -231,6 +231,16 @@ impl LeafRelations for CorpusOracle {
         }
     }
 
+    /// Each of the three classes is one the bindings would read: a plain
+    /// metaclass, so `isinstance` answers from the hierarchy. An index past
+    /// them names no class, and declines.
+    fn atom_denotes_a_set(&self, atom: &Schema) -> Option<bool> {
+        match atom {
+            Schema::Instance(index) => Some(CorpusOracle::class_at(*index).is_some()),
+            _ => None,
+        }
+    }
+
     fn literal_kind(&self, constant: ConstIx) -> Option<Kind> {
         Some(match self.constant(constant)? {
             Operand::Integer(_) => Kind::Int,

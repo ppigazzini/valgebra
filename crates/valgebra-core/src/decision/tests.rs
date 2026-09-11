@@ -1001,6 +1001,61 @@ impl LeafRelations for Kinded {
     }
 }
 
+/// A class the oracle reads as a set has a value, and a refutation about one
+/// is therefore believed.
+///
+/// The open world the set representation works in says so already: it lowers
+/// such a class to an atom holding an object, and every refutation this
+/// library makes about a class rests on that -- `A` below `B`, for two classes
+/// neither deriving from the other, is reported `not_subset` because the
+/// difference is read as holding a value. The rules declined to say it and
+/// deferred to the sets, which cost two orders of magnitude for an answer the
+/// library had already committed to.
+///
+/// A class no value can instantiate is where the assumption is wrong, and it
+/// was wrong there before: what changes is which decider says it.
+#[test]
+fn a_class_the_oracle_reads_as_a_set_has_a_value() {
+    /// An oracle that reads class zero and declines class one, which is what
+    /// the bindings do for a class whose metaclass answers `isinstance` with
+    /// code of its own.
+    struct Pure;
+    impl Constants for Pure {}
+    impl LeafRelations for Pure {
+        fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
+            match (sub, sup) {
+                (Schema::Instance(a), Schema::Instance(b)) => Some(a == b),
+                _ => None,
+            }
+        }
+        fn atom_denotes_a_set(&self, atom: &Schema) -> Option<bool> {
+            match atom {
+                Schema::Instance(index) => Some(index.get() == 0),
+                _ => None,
+            }
+        }
+    }
+    let read = Schema::Instance(ClassIx::new(0));
+    let hooked = Schema::Instance(ClassIx::new(1));
+
+    assert_eq!(read.verdict_under(&Pure), Verdict::Inhabited);
+    assert_eq!(hooked.verdict_under(&Pure), Verdict::Unknown);
+    // Without an oracle the core reads no class at all.
+    assert_eq!(read.verdict(), Verdict::Unknown);
+
+    // What the reading buys: the oracle refutes the pair, and the refutation is
+    // now believed rather than handed to the set representation.
+    let relation = |sub: &Schema, sup: &Schema, oracle: &dyn LeafRelations| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, oracle, &[], &budget)
+    };
+    assert_eq!(relation(&read, &hooked, &Pure), Relation::Fails);
+    assert_eq!(relation(&read, &read, &Pure), Relation::Holds);
+    // The class the oracle declines to read keeps the answer it had: its
+    // refutation stands on a value nothing has shown it to have.
+    assert_eq!(relation(&hooked, &read, &Pure), Relation::Unknown);
+}
+
 /// What a class contributes to disjointness, and what it may not.
 ///
 /// A class is the atom the core cannot read, so the oracle answers for it: a

@@ -200,6 +200,17 @@ answer of its own, or a repair to a change not yet released.
   sequence with an unfillable position, reads a two-hundred-and-seventieth of
   the instructions it did.
 
+- A relation between two classes is decided by a rule. A class whose metaclass
+  leaves `isinstance` alone is read as holding an object -- the open world the
+  set representation already works in, and the assumption every refutation this
+  library makes about a class already rested on -- so the rules stop deferring
+  to the sets for an answer the library had committed to: two unrelated classes
+  read **1.2 us against 100**, a `dict` subclass against a list 1.4 against 37,
+  and a plain class against a dataclass 2.2 against 472. The answers are
+  unchanged. A class whose metaclass answers with code of its own is read as
+  before, which is not at all, and the decidability page states the assumption
+  and where it is wrong.
+
 - A length bound over a string or a bytes decides whether the schema has a
   value, where it was left unknown. A string takes any length, so a bound its
   own lengths admit is met -- `Annotated[str, MinLen(1)]` is the non-empty
