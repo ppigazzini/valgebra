@@ -37,6 +37,7 @@ from typing import (
     NamedTuple,
     NoReturn,
     Optional,
+    TypedDict,
     TypeVar,
     Union,
 )
@@ -788,6 +789,31 @@ def test_a_table_missing_a_member_refutes_at_every_size(members: int) -> None:
     # lacks is one the wide table admits.
     assert wider.is_valid("extra")
     assert not narrow.is_valid("extra")
+
+
+def test_a_record_missing_a_required_key_refutes_however_open_it_is() -> None:
+    # A `TypedDict` is open -- the typing spec admits keys it does not declare --
+    # so this is the shape of every relation between two of them, and the answer
+    # is a refutation rather than a decline: a clause governs the keys a value
+    # carries and requires none, so the subject holds a value without the key
+    # the supertype requires, and that value is one the supertype rejects.
+    #
+    # Decided by a rule, which is what the ledger asks. The set representation
+    # decides it too, by lowering both records, and takes two hundred times
+    # longer to say the same thing.
+    fields = {f"f{i}": int for i in range(8)}
+    complete = Validator(TypedDict("Complete", fields))
+    missing = Validator(TypedDict("Missing", dict(list(fields.items())[:-1])))
+    assert missing.relation_to(complete) == "not_subset"
+    # The refutation is a statement about a value: the mapping the subject holds
+    # without the key, which the supertype refuses.
+    value = {f"f{i}": i for i in range(7)}
+    assert missing.is_valid(value)
+    assert not complete.is_valid(value)
+    # A mapping is the same shape with no declared field at all, and it holds
+    # the value with no keys, which every record requiring one refuses.
+    assert Validator(dict[str, int]).relation_to(complete) == "not_subset"
+    assert Validator(dict[str, int]).is_valid({})
 
 
 @pytest.mark.parametrize("members", [1024, 4096])

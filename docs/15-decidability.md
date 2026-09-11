@@ -123,7 +123,11 @@ answers `"undecided"`.
   in the supertype and the subtype's catch-all covers its value type (each extra
   or optional field covered by a catch-all over all string keys). A closed record
   is compared against a catch-all mapping by the same rule, so `{"x": int}` is
-  decided below `dict[str, int]`. A **meet** of two of them is empty when some key
+  decided below `dict[str, int]`. A key the supertype **requires** and the
+  subtype does not declare refutes the inclusion however open the subtype is: a
+  clause governs the keys a value carries and requires none, so the subtype
+  holds a value without that key, and `dict[str, int]` is decided *not* below a
+  record that requires one. A **meet** of two of them is empty when some key
   one side requires cannot hold: because the types the two give it share no value,
   or because the other side is closed and does not declare it. Only a required key
   can do this — a meet of two mappings, or of two optional fields, always contains

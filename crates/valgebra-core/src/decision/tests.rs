@@ -1772,15 +1772,17 @@ fn a_refutation_about_a_part_with_no_value_is_not_one() {
     );
 }
 
-/// A key the supertype requires and the subject does not declare, read against
-/// what the subject carries.
+/// A key the supertype requires and the subject does not declare refutes the
+/// inclusion, whatever the subject's clauses say.
 ///
-/// A catch-all guarantees a key's value type and never its presence, so a
-/// subject carrying one may or may not place the key. A subject carrying none
-/// is closed, and a closed record admits no value with a key it does not
-/// declare -- every value it has is one the supertype rejects.
+/// A clause governs the keys a value carries and never requires one, so a
+/// subject admits a value without such a key however open it is: take a value
+/// of the subject and drop the key, and every required field is still there
+/// and every key left is one a clause already covered. That value is one the
+/// supertype rejects. The reading around the rule is what keeps it honest: a
+/// subject with no value at all is below every schema, this one included.
 #[test]
-fn a_required_key_a_closed_subject_lacks_refutes_the_inclusion() {
+fn a_required_key_the_subject_does_not_declare_refutes_the_inclusion() {
     let relation = |sub: &Schema, sup: &Schema| {
         let budget = Cell::new(DECISION_BUDGET);
         sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
@@ -1794,7 +1796,10 @@ fn a_required_key_a_closed_subject_lacks_refutes_the_inclusion() {
     let closed_without = Schema::record(vec![field("f1", true)], Openness::Closed);
     let open_without = Schema::record(vec![field("f1", true)], Openness::Open);
     assert_eq!(relation(&closed_without, &complete), Relation::Fails);
-    assert_eq!(relation(&open_without, &complete), Relation::Unknown);
+    // The open subject refutes for the same reason: its clause admits a key it
+    // does not declare and requires none, so the value without that key is one
+    // it has and the supertype rejects.
+    assert_eq!(relation(&open_without, &complete), Relation::Fails);
 
     // The reading that keeps the refutation honest: a subject whose own
     // required field admits nothing has no value to stand against the
@@ -1904,7 +1909,8 @@ fn the_rules_refute_prove_and_decline_these() {
         Relation::Unknown
     );
     // A required key the supertype declares and the subject's catch-all cannot
-    // guarantee present: undecided, not refuted.
+    // guarantee present: refuted, because a clause never requires a key. The
+    // mapping holds the value with no keys at all, and the record rejects it.
     assert_eq!(
         relation(
             &Schema::mapping(MapClause {
@@ -1920,7 +1926,7 @@ fn the_rules_refute_prove_and_decline_these() {
                 Openness::Closed,
             ),
         ),
-        Relation::Unknown
+        Relation::Fails
     );
 }
 

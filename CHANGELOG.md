@@ -187,6 +187,15 @@ answer of its own, or a repair to a change not yet released.
 
 ### Changed
 
+- A key one record requires and the other does not declare decides the pair by
+  a rule. A clause governs the keys a value carries and requires none, so a
+  record open to undeclared keys still holds a value without that key, and that
+  value is one the supertype rejects. The relation was left to the set
+  representation, which lowers both records to answer it -- and since a
+  `TypedDict` is open by the typing spec, that was every relation between two of
+  them: **1.0 us against 268 us** for two eight-field `TypedDict`s, on the
+  machine the performance page names.
+
 - A `TypedDict` value is read by its declared keys, as a closed record's is.
   A `TypedDict` is open -- the typing spec admits keys it does not declare --
   and an open record was scanned key by key where a closed one was read by its

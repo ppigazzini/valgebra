@@ -2507,23 +2507,17 @@ fn keyed_map_subtype(
                     };
                     depth.and(|| Relation::decided(!b_field.required || a_field.required))
                 }
-                // A field `b` requires that `a` lacks. A catch-all guarantees a
-                // key's value type and never its presence, so a subject carrying
-                // one may or may not place the key and the relation is undecided
-                // -- but a subject carrying *no* catch-all is closed, and a
-                // closed record admits no value with a key it does not declare.
-                // Every value it has is one `b` rejects, which is a refutation
-                // by the same reading as a key `a` declares optional two arms
-                // above. The empty subject is not an exception: it has no such
-                // value, and the reading that believes this refutation is taken
-                // about `a` itself.
-                None if b_field.required => {
-                    if da.is_empty() {
-                        Relation::Fails
-                    } else {
-                        Relation::Unknown
-                    }
-                }
+                // A field `b` requires that `a` does not declare. A clause
+                // governs the keys a value carries and never requires one, so
+                // `a` admits a value without this key whatever its clauses say:
+                // take a value of `a` and drop the key, and every required
+                // field is still there and every key left is one a clause
+                // already covered. That value is one `b` rejects, which is a
+                // refutation by the same reading as a key `a` declares optional
+                // two arms above. It stands on `a` having a value at all, which
+                // is what the reading around this rule settles -- an empty `a`
+                // is below every schema, this one included.
+                None if b_field.required => Relation::Fails,
                 None => Relation::all(da.iter().map(|clause| {
                     clause
                         .value
