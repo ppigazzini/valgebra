@@ -109,6 +109,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a renumbered member set is canonical again
 - fix: a tail the rules cannot read is not a repeat
 - fix: a refutation is read against the subject it is about
+- feat: the oracle answers what kinds a class can hold -- internal
 
 -->
 
@@ -198,6 +199,15 @@ answer of its own, or a repair to a change not yet released.
   refuting half of the decision workload, whose hardest case was a fixed
   sequence with an unfillable position, reads a two-hundred-and-seventieth of
   the instructions it did.
+
+- A class laid out as a builtin decides a relation by a rule. A class deriving
+  from `dict` holds mappings and nothing else -- a subclass inherits the layout
+  and cannot lay down a second -- so a list is not below it and the pair is
+  refuted where it was left to the set representation: `list[int]` against such
+  a class reads **1.2 us against 35**. A class deriving from no builtin is not
+  read this way and stays undecided, because a subclass of it may derive from
+  one: an instance of a class built on that one and on `str` is a string and an
+  instance of the first.
 
 - A pair whose kinds cannot overlap decides by a rule. Two distinct container
   kinds share no value, so every value of the subject is outside the supertype

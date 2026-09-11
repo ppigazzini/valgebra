@@ -471,13 +471,22 @@ impl Constants for PoolRelations<'_, '_> {
 impl LeafRelations for PoolRelations<'_, '_> {
     /// Whether a value of `kind` can be an instance of the pooled class.
     ///
-    /// Read from the layout the class lays down, which is what `isinstance`
-    /// answers for a pure class: a class deriving from a builtin holds values
-    /// of that builtin's kind and of no other, and a class deriving from none
-    /// holds values of no kind the partition names -- its instances are plain
-    /// objects. A class whose `isinstance` runs user code is declined here, as
-    /// it is everywhere else: what such a class holds is not a property of a
-    /// value's type.
+    /// Read from the layout the class lays down. A class deriving from a
+    /// builtin holds values of that builtin's kind and of no other, and a
+    /// *subclass* of it cannot escape that: Python refuses a class body that
+    /// would lay down a second layout, so the kind an instance has is fixed by
+    /// the base and inherited by everything below it.
+    ///
+    /// A class laying down no layout is declined rather than answered. Its own
+    /// instances are plain objects, but `isinstance` reads the whole subtree
+    /// beneath it, and a subclass may derive from a builtin as well -- a class
+    /// deriving from a plain class and from `str` is a `str` and an instance of
+    /// the plain one. That is the direction a claim would be unsound in, and it
+    /// is the case `tests/test_classes.py` was written for.
+    ///
+    /// A class whose `isinstance` runs user code is declined here as it is
+    /// everywhere else: what such a class holds is not a property of a value's
+    /// type at all.
     ///
     /// `true` is the conservative answer and is given where the layouts agree,
     /// without asking whether this particular class holds the value: a list is
@@ -490,13 +499,10 @@ impl LeafRelations for PoolRelations<'_, '_> {
             return None;
         }
         let (_, own) = layout_of(class);
-        Some(match own {
-            // `bool` lays down `int`'s layout, so a class laid out as an int
-            // may be `bool` itself and hold booleans. Sound and coarse: the
-            // pair is never refuted here.
-            Some(own) => own == kind || matches!((own, kind), (Kind::Int, Kind::Bool)),
-            None => false,
-        })
+        // `bool` lays down `int`'s layout, so a class laid out as an int may be
+        // `bool` itself and hold booleans. Sound and coarse: the pair is never
+        // refuted here.
+        own.map(|own| own == kind || matches!((own, kind), (Kind::Int, Kind::Bool)))
     }
 
     /// Whether the class behind an `Instance` atom denotes a set, on the test

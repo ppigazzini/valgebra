@@ -473,8 +473,24 @@ impl Schema {
             (Some(a), Some(b)) => {
                 a != b && !matches!((a, b), (Kind::Bool, Kind::Int) | (Kind::Int, Kind::Bool))
             }
-            _ => false,
+            // One side has no tag of its own, which a class never has: only the
+            // bindings read a class, so the kind goes to them as a question.
+            (None, Some(kind)) => self.class_excludes(kind, oracle),
+            (Some(kind), None) => other.class_excludes(kind, oracle),
+            (None, None) => false,
         }
+    }
+
+    /// Whether this schema is a class the oracle says holds no value of `kind`.
+    ///
+    /// A class is the one atom the core cannot read at all, and the answer is
+    /// the bindings' -- `false` for a class laid out as another kind, since a
+    /// subclass inherits the layout and cannot lay down a second. A class
+    /// laying down none is declined there rather than refuted: a subclass of it
+    /// may derive from a builtin too, and its instances are then of that kind.
+    fn class_excludes(&self, kind: Kind, oracle: &dyn LeafRelations) -> bool {
+        matches!(self, Schema::Instance(class)
+            if oracle.class_admits_kind(*class, kind) == Some(false))
     }
 
     /// A concrete type tag for nodes whose disjointness the core can decide
@@ -1455,15 +1471,7 @@ impl Schema {
                 assumptions,
             ),
             // Against a non-refinement, a refinement inherits its base's supertypes.
-            (Schema::Refine { .. }, _) => {
-                self.left_reduces_below(other, cx, assumptions).or_else(|| {
-                    if self.disjoint_with(other, cx.oracle) {
-                        Relation::Fails
-                    } else {
-                        Relation::Unknown
-                    }
-                })
-            }
+            (Schema::Refine { .. }, _) => self.left_reduces_below(other, cx, assumptions),
             // Two schemas that share no value: every value of the subject is
             // outside the supertype, which is a refutation on the same reading
             // as a mismatched arity -- and read, as every refutation is,

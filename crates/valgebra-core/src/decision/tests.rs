@@ -971,6 +971,11 @@ fn a_fixed_sequence_splits_across_the_branches_that_share_its_shape() {
 /// Index 0 is an `int`, 1 a `str`, 2 a second `int`. Two constants are
 /// disjoint when their kinds differ or their indices do -- the same rule the
 /// bindings apply to a builtin scalar, whose equality is Python's own.
+///
+/// It reads classes on the same terms the bindings do: class 0 is laid out as
+/// a `list` and holds list values and nothing else, class 1 lays down no
+/// layout and is declined -- a subclass of it may derive from a builtin, so
+/// its instances are not confined to any kind.
 struct Kinded;
 impl Constants for Kinded {}
 
@@ -985,9 +990,77 @@ impl LeafRelations for Kinded {
             _ => None,
         }
     }
+    fn class_admits_kind(&self, class: ClassIx, kind: Kind) -> Option<bool> {
+        match class.get() {
+            0 => Some(kind == Kind::List),
+            _ => None,
+        }
+    }
     fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
         Some(left != right)
     }
+}
+
+/// What a class contributes to disjointness, and what it may not.
+///
+/// A class is the atom the core cannot read, so the oracle answers for it: a
+/// class laid out as a builtin holds values of that kind and of no other, and
+/// a subclass inherits the layout rather than laying down a second. A class
+/// laying down none is a different matter -- a subclass of it may derive from
+/// a builtin as well -- and the oracle declines, which must leave the pair
+/// undecided rather than refuted.
+#[test]
+fn a_class_is_disjoint_by_the_layout_its_oracle_reads() {
+    let laid_out = Schema::Instance(ClassIx::new(0));
+    let no_layout = Schema::Instance(ClassIx::new(1));
+    let list_of_int = Schema::list(SeqShape::homogeneous(Schema::Int));
+
+    // Laid out as a list: every other kind is disjoint from it, and its own
+    // kind is not.
+    for other in [
+        Schema::Int,
+        Schema::Str,
+        Schema::set(Schema::Int),
+        Schema::tuple(SeqShape::fixed([Schema::Int])),
+        Schema::mapping(MapClause {
+            key: Schema::Str,
+            value: Schema::Int,
+        }),
+    ] {
+        assert!(
+            laid_out.disjoint_with(&other, &Kinded),
+            "{other:?} shares no value with a class laid out as a list"
+        );
+        assert!(other.disjoint_with(&laid_out, &Kinded), "{other:?}");
+    }
+    assert!(!laid_out.disjoint_with(&list_of_int, &Kinded));
+    assert!(!list_of_int.disjoint_with(&laid_out, &Kinded));
+
+    // Laying down no layout: the oracle declines and the pair stays undecided
+    // in both directions. A class whose instances a subclass may give a builtin
+    // layout confines nothing.
+    assert!(!no_layout.disjoint_with(&list_of_int, &Kinded));
+    assert!(!list_of_int.disjoint_with(&no_layout, &Kinded));
+    assert!(!no_layout.disjoint_with(&Schema::Int, &Kinded));
+
+    // And with no oracle at all, a class says nothing either way.
+    assert!(!laid_out.disjoint_with(&Schema::Int, &NoLeafRelations));
+
+    // The relation the reading decides: a container below a class of another
+    // layout is refuted, and the subject has values to refute with.
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &Kinded, &[], &budget)
+    };
+    assert_eq!(relation(&list_of_int, &laid_out), Relation::Unknown);
+    assert_eq!(
+        relation(&Schema::set(Schema::Int), &laid_out),
+        Relation::Fails
+    );
+    assert_eq!(
+        relation(&Schema::set(Schema::Int), &no_layout),
+        Relation::Unknown
+    );
 }
 
 /// What a literal contributes to disjointness, and where each answer comes
