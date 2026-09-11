@@ -187,6 +187,13 @@ answer of its own, or a repair to a change not yet released.
 
 ### Changed
 
+- A pair whose kinds cannot overlap decides by a rule. Two distinct container
+  kinds share no value, so every value of the subject is outside the supertype
+  and the inclusion is refuted -- where the relation was left unproven and
+  settled by lowering both sides into the set representation. `list[int]`
+  against `tuple[int, int]` reads **0.6 us against 75 us**, a mapping against a
+  list 0.7 against 37, with the same answers.
+
 - A key one record requires and the other does not declare decides the pair by
   a rule. A clause governs the keys a value carries and requires none, so a
   record open to undeclared keys still holds a value without that key, and that

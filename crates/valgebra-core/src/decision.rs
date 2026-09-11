@@ -1467,8 +1467,15 @@ impl Schema {
             ),
             // Against a non-refinement, a refinement inherits its base's supertypes.
             (Schema::Refine { .. }, _) => self.left_reduces_below(other, cx, assumptions),
-            // A leaf the structural rules cannot relate (an instance or literal):
-            // defer to the oracle, conservative when it declines.
+            // Two schemas that share no value: every value of the subject is
+            // outside the supertype, which is a refutation on the same reading
+            // as a mismatched arity -- and read, as every refutation is,
+            // against the subject having a value at all. Disjointness here is
+            // the cheap one, two discriminants that cannot overlap: a list
+            // beside a tuple, a set beside a mapping. It is asked last, after
+            // every rule that relates a pair structurally, so a pair with a
+            // rule of its own never reaches it.
+            _ if self.disjoint_with(other, cx.oracle) => Relation::Fails,
             // A leaf pair the structural rules cannot relate: the oracle
             // answers, and its `None` is the decline it says it is.
             _ => match cx.oracle.leaf_subtype(self, other) {

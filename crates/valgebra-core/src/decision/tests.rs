@@ -1815,6 +1815,50 @@ fn a_required_key_the_subject_does_not_declare_refutes_the_inclusion() {
     assert_eq!(relation(&empty_subject, &complete), Relation::Holds);
 }
 
+/// A pair whose kinds cannot overlap is refuted, with nothing else read.
+///
+/// The shapes below have no structural rule between them -- a list is not
+/// compared to a tuple position by position, a mapping not to either -- so the
+/// pair reaches the end of the match, where disjointness answers it: every
+/// value of the subject is outside the supertype. Without that reading the
+/// pair went unproven and the set representation was asked to lower both
+/// sides.
+#[test]
+fn a_pair_that_shares_no_value_is_refuted() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let list_of_int = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let tuple_of_two = Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Int]));
+    let mapping = Schema::mapping(MapClause {
+        key: Schema::Str,
+        value: Schema::Int,
+    });
+    for (sub, sup) in [
+        (&list_of_int, &tuple_of_two),
+        (&list_of_int, &mapping),
+        (&mapping, &list_of_int),
+        (&Schema::set(Schema::Int), &list_of_int),
+    ] {
+        assert_eq!(relation(sub, sup), Relation::Fails, "{sub:?} <= {sup:?}");
+    }
+    // The reading that keeps it honest: a subject of one kind with no value is
+    // below the other kind, not outside it.
+    let empty_list = Schema::list(SeqShape::fixed([Schema::Nothing]));
+    assert_eq!(relation(&empty_list, &mapping), Relation::Holds);
+    // And a pair the rule must not reach: two lists whose elements differ have
+    // a rule of their own, and it refutes on the elements rather than on the
+    // kinds -- which are the same.
+    assert_eq!(
+        relation(
+            &list_of_int,
+            &Schema::list(SeqShape::homogeneous(Schema::Str))
+        ),
+        Relation::Fails
+    );
+}
+
 #[test]
 fn the_rules_refute_prove_and_decline_these() {
     let relation = |sub: &Schema, sup: &Schema| {

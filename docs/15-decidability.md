@@ -132,6 +132,12 @@ answers `"undecided"`.
   or because the other side is closed and does not declare it. Only a required key
   can do this — a meet of two mappings, or of two optional fields, always contains
   the empty dict.
+- **Two schemas that share no value.** The inclusion is *refuted*, whatever
+  either side holds: every value of the subject is outside the supertype. The
+  disjointness read here is the one the concrete types settle -- two distinct
+  builtin scalars, two distinct container kinds -- so `list[int]` is decided not
+  below `tuple[int, int]`, and a mapping not below a list. A subject with no
+  value is the exception the reading catches: it is below both.
 - **Inclusion in a complement.** `A` is below `~B` exactly when `A` and `B` share
   no value, so the relation is decided wherever emptiness decides disjointness:
   `list[int]` is below `~int`, and `dict[str, int]` below `~str`. This is the
