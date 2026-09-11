@@ -145,7 +145,19 @@ answers `"undecided"`.
   disjointness read here is the one the concrete types settle -- two distinct
   builtin scalars, two distinct container kinds -- so `list[int]` is decided not
   below `tuple[int, int]`, and a mapping not below a list. A subject with no
-  value is the exception the reading catches: it is below both.
+  value is the exception the reading catches: it is below both. A **class**
+  joins the comparison through the bindings, which read the builtin it derives
+  from: a class built on `dict` holds mappings and nothing else, since a
+  subclass inherits that layout and cannot lay down a second, so a list is
+  decided not below it. A class built on no builtin is *not* read this way, and
+  the reason is a value: a class deriving from that one and from `str` is a
+  string and an instance of it.
+- **A subject outside a base.** A refinement is a subset of its base, so a
+  subject the base refutes is refuted against every refinement of it -- the
+  same value settles both. The proof does not carry, since being inside the
+  base says nothing about the constraints, which is why `list[int]` below
+  `Annotated[list[int], MinLen(2)]` is left to the set representation while
+  `list[str]` below it is refuted by a rule.
 - **Inclusion in a complement.** `A` is below `~B` exactly when `A` and `B` share
   no value, so the relation is decided wherever emptiness decides disjointness:
   `list[int]` is below `~int`, and `dict[str, int]` below `~str`. This is the

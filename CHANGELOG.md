@@ -200,6 +200,20 @@ answer of its own, or a repair to a change not yet released.
   sequence with an unfillable position, reads a two-hundred-and-seventieth of
   the instructions it did.
 
+- A rule that answers for a shape and then declines hands the pair on, where
+  it used to end the question. A refinement takes its base's supertypes and
+  nothing else; a union supertype takes a subject that lands in one branch. A
+  pair either leaves unproven now reaches the readings that decide what a pair
+  with no rule is worth -- two sets that share no value, then the oracle, then
+  the supertype's own shape. A bounded list against a mapping or a union of
+  scalars reads **1.2 us against 395**.
+
+- A subject outside a base is outside every refinement of that base. The value
+  that refutes the one refutes the other, and it is the same value, so the
+  refutation carries where the proof cannot: being inside the base says nothing
+  about the constraints. A tuple against a length-bounded list reads **0.8 us
+  against 460**.
+
 - A class laid out as a builtin decides a relation by a rule. A class deriving
   from `dict` holds mappings and nothing else -- a subclass inherits the layout
   and cannot lay down a second -- so a list is not below it and the pair is

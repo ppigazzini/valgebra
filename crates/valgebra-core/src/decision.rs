@@ -111,6 +111,20 @@ impl Relation {
         }
     }
 
+    /// The refutation this answer carries, with its proof dropped.
+    ///
+    /// For a rule that narrows the supertype: a value outside the wider set is
+    /// outside the narrower one, so the refutation carries, and a value inside
+    /// the wider set says nothing about the narrower.
+    #[must_use]
+    #[inline]
+    fn refutation_only(self) -> Relation {
+        match self {
+            Relation::Fails => Relation::Fails,
+            _ => Relation::Unknown,
+        }
+    }
+
     /// The refutation a mismatch carries, read against what the subject holds.
     ///
     /// A rule refutes by finding a mismatch -- two arities that cannot align, a
@@ -734,11 +748,18 @@ impl Schema {
     /// same argument as [`empty_steps`](Self::empty_steps).
     #[cfg(test)]
     pub(crate) fn subtype_steps(&self, other: &Schema) -> u32 {
+        self.subtype_steps_under(other, &NoLeafRelations)
+    }
+
+    /// The same count where the rules can look a constant or a class up, for a
+    /// rule whose work depends on what the oracle answers.
+    #[cfg(test)]
+    pub(crate) fn subtype_steps_under(&self, other: &Schema, oracle: &dyn LeafRelations) -> u32 {
         let budget = Cell::new(DECISION_BUDGET);
         self.is_subtype_rec(
             other,
             SubtypeCx {
-                oracle: &NoLeafRelations,
+                oracle,
                 defs: &[],
                 budget: &budget,
             },
@@ -1389,7 +1410,9 @@ impl Schema {
                     .map(|m| self.is_subtype_rec(m, cx, assumptions)),
             ),
             (Schema::Intersection(members), _) => self.meet_below(other, members, cx, assumptions),
-            (_, Schema::Union(members)) => self.below_a_union(other, members, cx, assumptions),
+            (_, Schema::Union(members)) => self
+                .below_a_union(other, members, cx, assumptions)
+                .or_else(|| self.unstructured(other, cx, assumptions)),
             // Unfold a recursive reference — after the lattice rules, so an
             // intersection or union meeting a reference decomposes first (which
             // lets a recursive member be compared against the reference rather
@@ -1470,23 +1493,56 @@ impl Schema {
                 cx,
                 assumptions,
             ),
-            // Against a non-refinement, a refinement inherits its base's supertypes.
-            (Schema::Refine { .. }, _) => self.left_reduces_below(other, cx, assumptions),
-            // Two schemas that share no value: every value of the subject is
-            // outside the supertype, which is a refutation on the same reading
-            // as a mismatched arity -- and read, as every refutation is,
-            // against the subject having a value at all. Disjointness here is
-            // the cheap one, two discriminants that cannot overlap: a list
-            // beside a tuple, a set beside a mapping. It is asked last, after
-            // every rule that relates a pair structurally, so a pair with a
-            // rule of its own never reaches it.
-            _ if self.disjoint_with(other, cx.oracle) => Relation::Fails,
-            // A leaf pair the structural rules cannot relate: the oracle
-            // answers, and its `None` is the decline it says it is.
-            _ => match cx.oracle.leaf_subtype(self, other) {
-                Some(true) => Relation::Holds,
-                Some(false) => Relation::Fails,
-                None => Relation::Unknown,
+            // Against a non-refinement, a refinement inherits its base's
+            // supertypes -- and inherits nothing else, so a pair this leaves
+            // unproven is a pair with no rule of its own.
+            (Schema::Refine { .. }, _) => self
+                .left_reduces_below(other, cx, assumptions)
+                .or_else(|| self.unstructured(other, cx, assumptions)),
+            _ => self.unstructured(other, cx, assumptions),
+        }
+    }
+
+    /// What a pair no structural rule decided is worth, asked in one place.
+    ///
+    /// Three readings, in this order. Two schemas that **share no value**:
+    /// every value of the subject is outside the supertype, which is a
+    /// refutation on the same reading as a mismatched arity, and the
+    /// disjointness here is the cheap one -- two discriminants that cannot
+    /// overlap, a list beside a tuple, a set beside a mapping. Then the
+    /// **oracle**, the only reader of a class or a constant, whose `None` is
+    /// the decline it says it is. Then the supertype's own shape: a
+    /// **refinement** is a subset of its base, so a subject outside the base is
+    /// outside the refinement -- the value that refutes the one refutes the
+    /// other, and it is the same value. Its proof does not carry, since being
+    /// inside the base says nothing about the constraints, so only the
+    /// refutation is taken.
+    ///
+    /// The oracle is asked before the refinement because it *proves* where the
+    /// refinement reading only refutes: a literal below a predicate refinement
+    /// is settled by running the predicate on the constant, and a reading that
+    /// answered first would take that proof away.
+    ///
+    /// Every arm above that answers for a shape and then *declines* ends here
+    /// rather than ending the match, because a decline is not an answer: such a
+    /// pair has had no rule, and this is what a pair with no rule is worth.
+    fn unstructured(
+        &self,
+        other: &Schema,
+        cx: SubtypeCx<'_>,
+        assumptions: &mut Vec<(Schema, Schema)>,
+    ) -> Relation {
+        if self.disjoint_with(other, cx.oracle) {
+            return Relation::Fails;
+        }
+        match cx.oracle.leaf_subtype(self, other) {
+            Some(true) => Relation::Holds,
+            Some(false) => Relation::Fails,
+            None => match other {
+                Schema::Refine { base, .. } => {
+                    self.is_subtype_rec(base, cx, assumptions).refutation_only()
+                }
+                _ => Relation::Unknown,
             },
         }
     }

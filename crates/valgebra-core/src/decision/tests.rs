@@ -1954,6 +1954,155 @@ fn a_required_key_the_subject_does_not_declare_refutes_the_inclusion() {
     assert_eq!(relation(&empty_subject, &complete), Relation::Holds);
 }
 
+/// An arm that answers for a shape and then declines hands the pair on.
+///
+/// A decline is not an answer: a pair the arm could not settle has had no rule,
+/// and what a pair with no rule is worth is the reading at the end of the match
+/// -- two sets that share no value, then the oracle, then the supertype's own
+/// shape. An arm that ended the match instead kept its pair from all three, and
+/// the set representation was asked what a discriminant already decides.
+#[test]
+fn an_arm_that_declines_hands_the_pair_to_the_reading_below() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let bounded = Schema::refine(
+        Schema::list(SeqShape::homogeneous(Schema::Int)),
+        vec![Constraint::MinLen(2)],
+    );
+    let mapping = Schema::mapping(MapClause {
+        key: Schema::Str,
+        value: Schema::Int,
+    });
+
+    // A refinement as the subject: its base's supertypes are its own, and a
+    // base that proves nothing leaves the pair to the reading, which refutes on
+    // the kinds -- a bounded list is still a list, and a list is not a mapping.
+    assert_eq!(relation(&bounded, &mapping), Relation::Fails);
+    assert_eq!(
+        relation(&bounded, &Schema::union([Schema::Int, Schema::Str])),
+        Relation::Fails
+    );
+    // The proof the base does carry is untouched.
+    assert_eq!(
+        relation(&bounded, &Schema::list(SeqShape::homogeneous(Schema::Int))),
+        Relation::Holds
+    );
+
+    // A union as the supertype: no branch holds the subject, and the reading
+    // refutes because no branch shares a value with it either.
+    assert_eq!(
+        relation(&mapping, &Schema::union([Schema::Int, Schema::Str])),
+        Relation::Fails
+    );
+    // And a union one of whose branches does hold it is proven, not refuted.
+    assert_eq!(
+        relation(&Schema::Int, &Schema::union([Schema::Int, Schema::Str])),
+        Relation::Holds
+    );
+}
+
+/// A subject outside a base is outside every refinement of it.
+///
+/// A refinement is a subset of its base, so the value that refutes the base
+/// refutes the refinement -- it is the same value, and it was already found.
+/// The proof does not carry the other way: being inside the base says nothing
+/// about the constraints, which is what makes this reading refutation-only.
+#[test]
+fn a_refinement_as_the_supertype_carries_its_base_s_refutation() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let bounded_list = Schema::refine(
+        Schema::list(SeqShape::homogeneous(Schema::Int)),
+        vec![Constraint::MinLen(2)],
+    );
+    // Outside the base and *not* by a kind: a list of strings is a list, so the
+    // disjointness reading beside this one says nothing, and what refutes the
+    // pair is the base's own rule reading the elements. This is the row the
+    // reading exists for; the kinds cover the rest.
+    assert_eq!(
+        relation(
+            &Schema::list(SeqShape::homogeneous(Schema::Str)),
+            &bounded_list
+        ),
+        Relation::Fails
+    );
+    assert_eq!(
+        relation(
+            &Schema::list(SeqShape::fixed([Schema::Int, Schema::Str])),
+            &bounded_list
+        ),
+        Relation::Fails
+    );
+    // Outside the base by a kind, which the reading above the refinement
+    // settles before this one is asked.
+    assert_eq!(
+        relation(
+            &Schema::tuple(SeqShape::fixed([Schema::Int])),
+            &bounded_list
+        ),
+        Relation::Fails
+    );
+    assert_eq!(relation(&Schema::Int, &bounded_list), Relation::Fails);
+    // Inside the base and nothing said about the bound: unproven, not proven.
+    assert_eq!(
+        relation(
+            &Schema::list(SeqShape::homogeneous(Schema::Int)),
+            &bounded_list
+        ),
+        Relation::Unknown
+    );
+    // A refinement of the same base is the refinements' own rule, which reads
+    // the constraints rather than this one.
+    assert_eq!(
+        relation(
+            &Schema::refine(
+                Schema::list(SeqShape::homogeneous(Schema::Int)),
+                vec![Constraint::MinLen(2), Constraint::MaxLen(4)],
+            ),
+            &bounded_list
+        ),
+        Relation::Holds
+    );
+}
+
+/// The oracle is asked before the supertype's shape, because it proves.
+///
+/// A refinement carries its base's refutation and nothing else, so a reading
+/// that answered before the oracle would turn every proof the oracle can make
+/// about a refinement into a decline -- and the oracle is the only reader of a
+/// constant, which is what decides a literal against a predicate.
+#[test]
+fn the_oracle_answers_a_refinement_before_its_base_is_read() {
+    /// An oracle that proves one leaf pair: the constant at index 0 belongs to
+    /// every set, which stands in for the bindings running a predicate on it.
+    struct Proving;
+    impl Constants for Proving {}
+    impl LeafRelations for Proving {
+        fn leaf_subtype(&self, sub: &Schema, _: &Schema) -> Option<bool> {
+            matches!(sub, Schema::Literal(index) if index.get() == 0).then_some(true)
+        }
+    }
+    let literal = Schema::Literal(ConstIx::new(0));
+    let refined = Schema::refine(Schema::Str, vec![Constraint::Predicate(PredIx::new(0))]);
+    let budget = Cell::new(DECISION_BUDGET);
+    assert_eq!(
+        literal.subtype_relation(&refined, &Proving, &[], &budget),
+        Relation::Holds,
+        "the oracle's proof is not taken away by the reading below it"
+    );
+    // Without that oracle the same pair is unproven: the base is a string and a
+    // literal the core cannot read is not outside it.
+    let budget = Cell::new(DECISION_BUDGET);
+    assert_eq!(
+        literal.subtype_relation(&refined, &NoLeafRelations, &[], &budget),
+        Relation::Unknown
+    );
+}
+
 /// A pair whose kinds cannot overlap is refuted, with nothing else read.
 ///
 /// The shapes below have no structural rule between them -- a list is not
@@ -2218,6 +2367,85 @@ fn a_table_of_literals_is_decided_as_the_set_it_denotes() {
     assert_eq!(table_relation(&[0, 1], &[0, 1], &Values), Relation::Holds);
     assert_eq!(table_relation(&[0, 2], &[0, 1], &Values), Relation::Fails);
     assert_eq!(table_relation(&[2], &[0, 1], &Values), Relation::Fails);
+}
+
+/// Deciding one table against another is a walk of two lists, not a product of
+/// their members.
+///
+/// The *answers* below are reachable without this rule: the union arms walk
+/// member against member and reach the same verdicts, and the set
+/// representation reaches them too. What the rule is for is the work -- the
+/// product is a decision step per pair, which is what made a ten-thousand
+/// member table take a tenth of a second -- so what pins it is a step count,
+/// which is the quantity the bound is about and the same number on every
+/// machine, where a wall clock is neither.
+///
+/// Stated as a property rather than as a ceiling: the work of deciding a table
+/// against a wider one does not grow with either width. A rule that walked the
+/// members would double when the table doubles.
+#[test]
+fn a_table_is_decided_without_the_work_growing_with_it() {
+    /// An oracle that reads a *set* of constants at once, which is the question
+    /// the rule asks when it refutes: the index is the value, so two sets are
+    /// disjoint when they share no index.
+    struct Sets;
+    impl Constants for Sets {}
+    impl LeafRelations for Sets {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            None
+        }
+        fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+            Some(left != right)
+        }
+        fn literal_sets_disjoint(&self, left: &[ConstIx], right: &[ConstIx]) -> Option<bool> {
+            Some(!left.iter().any(|index| right.contains(index)))
+        }
+    }
+
+    let table = |n: usize, from: usize| {
+        Schema::union((0..n).map(|index| Schema::Literal(ConstIx::new(from + index))))
+    };
+    let proof = |n: usize| table(n, 0).subtype_steps(&table(2 * n, 0));
+    assert_eq!(
+        proof(32),
+        proof(64),
+        "the proof walks the members rather than looking them up"
+    );
+    assert_eq!(
+        proof(64),
+        proof(256),
+        "the proof walks the members rather than looking them up"
+    );
+
+    // A single constant is a table of one, and is read as one: the subject
+    // here is the bare literal the constructor leaves rather than a union of
+    // it, and looking it up in the wide table is the same walk of two lists.
+    let one = |n: usize| Schema::Literal(ConstIx::new(0)).subtype_steps(&table(n, 0));
+    assert_eq!(
+        one(32),
+        one(64),
+        "a constant is looked up in the table rather than compared to each member"
+    );
+    assert_eq!(one(64), one(256));
+    // One step, which is the query itself: the lookup answers before any rule
+    // is asked. A constant the rule does not read as a table of one is
+    // answered by the union rule instead, which costs a step more.
+    assert_eq!(one(256), 1, "the lookup is the whole of the query");
+
+    let refutation = |n: usize| table(n, 0).subtype_steps_under(&table(n, 1_000), &Sets);
+    assert_eq!(
+        refutation(32),
+        refutation(64),
+        "the refutation asks the oracle about the two sets, once"
+    );
+    assert_eq!(refutation(64), refutation(256));
+    // And the refutation is the answer, not a decline the descriptor would have
+    // to settle: every constant of the subject is outside the supertype.
+    let budget = Cell::new(DECISION_BUDGET);
+    assert_eq!(
+        table(64, 0).subtype_relation(&table(64, 1_000), &Sets, &[], &budget),
+        Relation::Fails
+    );
 }
 
 /// A constant the subject holds and the supertype spells at another index is
