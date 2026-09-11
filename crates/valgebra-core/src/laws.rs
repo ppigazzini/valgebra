@@ -43,6 +43,56 @@ fn schema() -> impl Strategy<Value = Schema> {
 /// shown it. The laws are left over the fragment they were written for, because
 /// their claim is structural equality after simplification and a sequence is
 /// ordered into a normal form differently; the claim here is about answers.
+/// A set with no value that no rule proves empty.
+///
+/// Two sequences of one position each whose positions share no value. Every
+/// rule that reads a meet reads its members, and none reads two shapes for the
+/// values they hold *together*, so proving this empty takes the descriptor --
+/// which is the whole point: a refutation is read against the subject's own
+/// emptiness, and the reading that cannot see this one is the reading a law
+/// must attack.
+///
+/// Named rather than waited for. The generators draw every piece of it, and the
+/// laws holding the two deciders to one answer went many reports without
+/// drawing the combination.
+fn without_a_value() -> impl Strategy<Value = Schema> {
+    (0usize..2).prop_map(|which| {
+        let sides = [Schema::Int, Schema::Str];
+        Schema::Intersection(
+            (0..sides.len())
+                .map(|i| Schema::tuple(SeqShape::fixed([sides[(i + which) % sides.len()].clone()])))
+                .collect::<Vec<_>>()
+                .into(),
+        )
+    })
+}
+
+/// The containers that carry an element's refutation up to their own, each as
+/// a rule that wraps one schema.
+///
+/// A list and a set take any number of elements, a tuple repeats one, and a
+/// record's optional field need not be there -- so each of these holds a value
+/// (the empty one) whatever the schema inside it admits. That is what makes
+/// them the shapes where a refutation about the part says nothing about the
+/// whole.
+fn carriers() -> Vec<fn(Schema) -> Schema> {
+    vec![
+        |s| Schema::list(SeqShape::homogeneous(s)),
+        |s| Schema::tuple(SeqShape::homogeneous(s)),
+        Schema::set,
+        |s| {
+            Schema::record(
+                vec![Field {
+                    name: "k".into(),
+                    schema: s,
+                    required: false,
+                }],
+                Openness::Closed,
+            )
+        },
+    ]
+}
+
 fn shaped_schema() -> impl Strategy<Value = Schema> {
     let atom = prop_oneof![
         Just(Schema::ANYTHING),
@@ -71,6 +121,7 @@ fn shaped_schema() -> impl Strategy<Value = Schema> {
         )
     });
     let atom = prop_oneof![atom, table];
+    let atom = prop_oneof![9 => atom, 1 => without_a_value()];
     atom.prop_recursive(3, 24, 3, |inner| {
         prop_oneof![
             proptest::collection::vec(inner.clone(), 1..3).prop_map(|m| Schema::Union(m.into())),
@@ -2939,6 +2990,38 @@ proptest! {
                 "the fold proves empty a schema read as inhabited: {:?}", a
             );
         }
+    }
+
+    /// A refutation about a part with no value is not one, whatever the part
+    /// is compared against.
+    ///
+    /// The laws below draw their two schemas independently, so the shape this
+    /// one is about -- a part with no value, inside a container, against the
+    /// same container over something that part is not below -- is a
+    /// coincidence they wait for, and waited many reports for. It is named
+    /// here instead: whatever the other schema is, the subject denotes the
+    /// *empty* container and nothing else, the supertype holds that container
+    /// too, and the inclusion holds. A rule may decline it; no rule may refute
+    /// it.
+    #[test]
+    fn a_refutation_about_a_part_with_no_value_is_not_one(
+        part in without_a_value(),
+        other in shaped_schema(),
+        carrier in 0usize..4,
+    ) {
+        let wrap = carriers();
+        let Some(wrap) = wrap.get(carrier) else {
+            return Err(TestCaseError::reject("the carrier table is shorter than the draw"));
+        };
+        let (sub, sup) = (wrap(part.clone()), wrap(other.clone()));
+        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        prop_assert_ne!(
+            sub.subtype_relation(&sup, &CorpusOracle, &[], &budget),
+            Relation::Fails,
+            "a container of a part with no value is the empty container, which {:?} holds: {:?}",
+            other,
+            part
+        );
     }
 
     /// A refuted relation is a claim, and the sets are the second opinion.
