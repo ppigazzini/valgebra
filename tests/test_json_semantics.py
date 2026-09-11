@@ -22,7 +22,9 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import (
+    ValidationError,
     Validator,
+    anything,
     complement,
     intersection,
     recursive,
@@ -120,6 +122,29 @@ def test_recursive_tree_over_json() -> None:
     tree = recursive(lambda t: {"value": int, "left?": t, "right?": t})
     assert tree.is_valid_json('{"value": 1, "left": {"value": 2}}')
     assert not tree.is_valid_json('{"value": 1, "left": {"value": "x"}}')
+
+
+def test_the_two_readings_agree_about_how_deep_a_document_may_be() -> None:
+    """Nesting past the parser's limit is malformed input, on both readings.
+
+    The parser refuses a document nested past its own recursion limit, and the
+    two readings of a document share that parser. Where they stopped agreeing,
+    one call would answer "not a member" and the other would raise
+    `json_invalid` for the same bytes. The boundary itself is the parser's to
+    move, so this asks for agreement at every depth rather than for a number.
+    """
+    v = Validator(anything)
+    for depth in (1, 2, 100, 199, 200, 201, 202, 300, 1000):
+        doc = "[" * depth + "]" * depth
+        parses = True
+        try:
+            v.validate_json(doc)
+        except ValidationError as err:
+            parses = err.code != "json_invalid"
+        assert v.is_valid_json(doc) is parses, f"the two readings differ at {depth}"
+    # The detector: the deepest document here really is past the limit, so the
+    # agreement above is agreement about a refusal and not about acceptance.
+    assert not v.is_valid_json("[" * 1000 + "]" * 1000)
 
 
 def test_deeply_nested_json_recursion_is_bounded() -> None:

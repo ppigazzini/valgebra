@@ -152,6 +152,15 @@ except ValidationError as err:
 
 A non-`str`, non-`bytes` argument is a `TypeError`, not a validation failure.
 
+**A document nested past the parser's own recursion limit is malformed input
+too**, not a deep document the walk then refuses: jiter stops at a couple of
+hundred levels of arrays and objects, and stops on both readings alike, so a
+document either is a document for both or is one for neither.
+`tests/test_json_semantics.py` holds the two to each other across that
+boundary rather than pinning where it falls, which is jiter's to move. A
+document inside the limit but deeper than the walk descends is a different
+refusal, reported by the walk's own depth guard.
+
 ## Performance
 
 `is_valid_json` parses with jiter and validates the parsed JSON value **in
