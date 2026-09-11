@@ -200,6 +200,15 @@ answer of its own, or a repair to a change not yet released.
   sequence with an unfillable position, reads a two-hundred-and-seventieth of
   the instructions it did.
 
+- A length bound over a string or a bytes decides whether the schema has a
+  value, where it was left unknown. A string takes any length, so a bound its
+  own lengths admit is met -- `Annotated[str, MinLen(1)]` is the non-empty
+  string and it has one. Every refutation about such a schema is believed
+  rather than left to the set representation: a non-empty string against
+  another kind reads **0.9 us against 195**, and against a mapping 0.9 against
+  243. A bound over a base whose values have no length still says nothing, and
+  the reading declines.
+
 - A rule that answers for a shape and then declines hands the pair on, where
   it used to end the question. A refinement takes its base's supertypes and
   nothing else; a union supertype takes a subject that lands in one branch. A

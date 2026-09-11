@@ -1681,19 +1681,44 @@ fn a_subject_with_no_value_is_below_a_shape_it_cannot_match() {
     assert!(unrepeating.is_equivalent(&empty_list));
 }
 
-/// A length bound over a container that repeats one element is read for the
-/// values it has, not only for the values it cannot have.
+/// A length bound is read for the values its base has, not only for the values
+/// it cannot have.
 ///
 /// A bound is satisfiable in the abstract and still empty over its base, which
-/// is why a refinement is unknown in general. A container that repeats one
-/// element is the exception the bound is written for: a value of any length is
-/// as many copies of one element, so the element decides it. That is what
-/// closes the fixpoint whose every unfolding needs one more element.
+/// is why a refinement is unknown in general. The bases a length bound is
+/// *written* for are the exception: a string and a bytes take any length, and a
+/// container takes any length by repeating one element -- so the string decides
+/// itself and the container's element decides it. That is also what closes the
+/// fixpoint whose every unfolding needs one more element.
 #[test]
 fn a_length_bound_over_a_repeated_element_is_decided_by_the_element() {
     let bounded = |base: Schema, min: usize| Schema::refine(base, vec![Constraint::MinLen(min)]);
     let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
     let nothings = Schema::list(SeqShape::homogeneous(Schema::Nothing));
+    // A string and a bytes take any length, so a bound their own lengths admit
+    // is met by a value: `Annotated[str, MinLen(1)]` is the non-empty string,
+    // and it has one.
+    assert_eq!(bounded(Schema::Str, 1).verdict(), Verdict::Inhabited);
+    assert_eq!(bounded(Schema::Bytes, 4).verdict(), Verdict::Inhabited);
+    assert_eq!(
+        Schema::refine(Schema::Str, vec![Constraint::MaxLen(0)]).verdict(),
+        Verdict::Inhabited,
+        "the empty string is a string of at most no characters"
+    );
+    // Bounds that cannot both hold empty it, which the bounds check reads
+    // before this one.
+    assert_eq!(
+        Schema::refine(
+            Schema::Str,
+            vec![Constraint::MinLen(3), Constraint::MaxLen(2)]
+        )
+        .verdict(),
+        Verdict::Empty
+    );
+    // A length bound over a base whose values have no length says nothing the
+    // form can read, and the reading declines rather than guessing.
+    assert_eq!(bounded(Schema::Int, 1).verdict(), Verdict::Unknown);
+
     // An element with values: any length is built from it.
     assert_eq!(bounded(ints.clone(), 2).verdict(), Verdict::Inhabited);
     assert_eq!(

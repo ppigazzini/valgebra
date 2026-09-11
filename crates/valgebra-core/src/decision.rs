@@ -1825,10 +1825,22 @@ fn refinement_verdict(
     let lengths_only = constraints
         .iter()
         .all(|c| matches!(c, Constraint::MinLen(_) | Constraint::MaxLen(_)));
-    match repeated_element(base).filter(|_| lengths_only) {
-        Some(_) if shortest(constraints.iter()) == 0 => Verdict::Inhabited,
-        Some(element) => element.verdict_rec(oracle, defs, visiting, budget),
-        None => Verdict::Unknown,
+    if !lengths_only {
+        return Verdict::Unknown;
+    }
+    match base {
+        // A string and a bytes take any length, so a bound the lengths
+        // themselves satisfy -- which the check above has already read -- is met
+        // by a value of the shortest length it admits.
+        Schema::Str | Schema::Bytes => Verdict::Inhabited,
+        // A container takes any length too, and is built by repeating one
+        // element: a bound of zero is met by the empty container whatever the
+        // element admits, and a longer one by as many copies as it asks for.
+        _ => match repeated_element(base) {
+            Some(_) if shortest(constraints.iter()) == 0 => Verdict::Inhabited,
+            Some(element) => element.verdict_rec(oracle, defs, visiting, budget),
+            None => Verdict::Unknown,
+        },
     }
 }
 
