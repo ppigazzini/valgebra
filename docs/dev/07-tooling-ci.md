@@ -162,6 +162,14 @@ checksum exactly, so a disagreement says the workload moved between the two
 commits and the counts are of different work. That exits 2 -- neither a pass nor
 a regression.
 
+**A shape the base does not carry is a new shape**, not a comparison and not a
+pass: it is held to its recorded budget in the same job. The gate reads this
+from the base's *source* before it builds anything -- the example the mode
+names, and for a binding shape the arm that names the shape (`absent_at` in
+`scripts/perf_gate.py`) -- because a base older than a shape builds the example
+and its binary refuses the name, and a refusal read from the binary would look
+like a broken build.
+
 Do not copy a budget into prose: `scripts/docs_lint.py` fails on it, because a
 figure that moves when the budget is re-recorded is stale the next time it
 moves.
@@ -223,12 +231,21 @@ The target is never zero. Equivalent mutants exist and are undecidable in
 general, so an accepted survivor carries the argument for why no test can kill
 it, in the baseline beside it.
 
-**Read a mutation score with its skip list.** Three tests exist to prove a bound;
-a mutation that removes the bound makes each run without end, so the whole run
-returns no verdict. Each leaves the *sweep* and stays in the test lane, marked
-`SWEEP-SKIP` in its own source with the reason, and `tests/test_sweep_skips.py`
-holds the marks and the workflow's skip list to each other in both directions. A
-mutant whose experiment cannot finish is a rig fault, not a detection.
+**Read a mutation score with its skip list.** A test that exists to prove a
+bound runs without end under a mutation that removes the bound, so the whole
+run returns no verdict. Each such test leaves the *sweep* and stays in the test
+lane, marked `SWEEP-SKIP` in its own source with the reason;
+`tests/test_sweep_skips.py` owns the list and holds the marks and the
+workflow's skip list to each other in both directions. A mutant whose
+experiment cannot finish is a rig fault, not a detection -- and a mutant the
+skipped tests would hang on is still caught by the rest of the suite, which is
+what the bound's own tests are for.
+
+**The walk sweep links one interpreter.** `cargo test` for the binding embeds
+the interpreter `ci.yml` names for that lane (CPython 3.12), and a survivor's
+note in `scripts/mutation_baseline_walk.json` is an argument about *that*
+interpreter: a mutant two spellings of `typing.Union` cannot tell apart on 3.14
+is caught where they are two objects, and the ratchet reads it as caught.
 
 ## A gate that compared nothing must not pass
 
@@ -274,8 +291,10 @@ visible the night after. The core's full sweep runs sharded, as the diff sweep
 does (the shard count is `ci.yml`'s), each shard reporting its own slice; a job
 after them merges the slices and ratchets once, since a survivor is a survivor
 of the *sweep* and an entry that survives nothing is known to only when every
-shard has reported. One unsharded job over the whole core reached its timeout
-every night for a week. Every push runs the same sweeps restricted to the
+shard has reported. A shard's ceiling (`timeout-minutes` in `ci.yml`) is twice
+the slowest shard's reading, because a job that reaches its ceiling is
+cancelled and a cancelled job is red. Every push runs the same sweeps
+restricted to the
 **whole files the change touches** — bounded by the change rather than by the
 tree — and blocks the merge. It checks the new-survivor direction alone, because
 a partial sweep never generates most of the baseline.
