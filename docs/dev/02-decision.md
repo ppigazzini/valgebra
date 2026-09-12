@@ -162,21 +162,54 @@ trait is how it asks:
   four hundred million calls and six seconds. An implementor that can hash its
   constants answers in one pass; the default declines and the member walk
   stands;
+- `literals_disjoint` — do these two constants share a value, the one-pair form
+  of the question above;
 - `compare` — order two pooled refinement bounds;
 - `no_int_between` — does the open interval between two bounds admit no integer;
+- `literal_kind` — which kind does this constant's value have, which is what
+  puts a `Literal` on a kind's line at all;
+- `atom_denotes_a_set` — does this atom denote a set the order can read. A class
+  whose metaclass computes `isinstance` or `issubclass` answers membership by
+  running code, and no snapshot of the class order predicts what that code says,
+  so every class question below declines on one;
 - `class_admits_kind` — can a value of this kind be an instance of that class.
   Asked this way round because a class need not *have* a kind: one deriving from
   no builtin lays down no layout, and the bindings decline rather than answer,
   since `isinstance` reads the whole subtree beneath a class and a subclass may
   derive from a builtin as well. A class that does lay one down confines its
   instances to that kind, because Python refuses a subclass that would lay down
-  a second, and `Some(false)` is then a refutation the rules can make.
+  a second, and `Some(false)` is then a refutation the rules can make;
+- `direct_instance_of_kind` — does a value whose *type is* this class have that
+  kind. The narrower question beside the one above, and the one that can refute
+  where it cannot: `class_admits_kind` reads the whole subtree and so must
+  decline a class laying down no layout, while a *direct* instance of such a
+  class is a plain object and has none of the kinds the partition names. A meet
+  of a class and its attributes holds exactly such a value, which is what makes
+  the answer a value rather than a guess about which classes exist;
+- `kind_derives_from` — is every value of this kind an instance of that class,
+  asked of the kind's own builtin so the answer is one `issubclass` over the
+  order. The dual of the question above, with the kind and the class swapping
+  sides.
 
-`NoLeafRelations` is the core's default and decides nothing. **Its `None` and a
-`Some(false)` are the same conservative verdict** at both call sites —
-`leaf_subtype(..).unwrap_or(false)` and `no_int_between(..) == Some(true)` — which
-is what the defaults are for, and which is why a mutation replacing either with
-`Some(false)` cannot be killed by any test.
+`NoLeafRelations` is the core's default and decides nothing. Where **every** call
+site of a question reads one of the two answers as the conservative one, its
+`None` and that answer are indistinguishable, and a mutation replacing the
+default with it cannot be killed by any test. That is a property of the call
+sites rather than of the default, and it holds for exactly three of the ten:
+
+| question | its one reading | the unkillable default |
+|---|---|---|
+| `no_int_between` | `== Some(true)` | `Some(false)` |
+| `class_admits_kind` | `== Some(false)` | `Some(true)` |
+| `direct_instance_of_kind`, `kind_derives_from` | `== Some(false)` | `Some(true)` |
+
+The other direction of each is killable and is swept: it turns a declined
+question into a claim, which is the unsound direction. `leaf_subtype` used to
+belong to this table and does not: it has three call sites, and the one the meet
+rule added reads `== Some(false)` as a refutation, so a default of `Some(false)`
+now refutes a pair the oracle declined and dies in about a minute.
+`.cargo/mutants.toml` carries the same argument beside each excluded row, and
+`tests/test_oracle_ledger.py` holds this list to the trait in both directions.
 
 ## When a class is the union of the values it lists
 
@@ -228,6 +261,56 @@ than a target: a change making either route less complete widens it, and a
 disagreement over anything but a fixpoint is a new fact that fails on arrival.
 The same test checks the emptiness route for soundness against the value
 universe, which the survey beside it does not walk.
+
+## What a refutation stands on
+
+A proof is a proof of inclusion; a refutation is a claim that **a value exists**
+in the subject and outside the supertype. So every rule that refutes has to be
+able to name that value, and the witness guard drops any refutation whose
+subject is not proven inhabited. A rule that cannot name a value declines
+instead, and the pair stays undecided.
+
+These are the readings that refute, each with the value it stands on:
+
+- `disjoint_with` — the two share no value, so any value of the subject is
+  outside the supertype. Two distinct kinds are disjoint, except `bool` under
+  `int` -- the one pair in the partition that shares values, which
+  `Kind::shares_values_with` is the single place to ask about. Two sequences of
+  one container meet in the sequences of their elements' meet — `a* ∩ b* = (a ∩
+  b)*`, reading a homogeneous sequence as a regular expression over its element
+  — and where the elements share no value that is the star of nothing, which
+  still holds the *empty* sequence. So disjoint elements are not enough: a
+  length bound of one or more is what rules that one value out, and only a
+  refinement carries one (`star_element`, `holds_an_element`).
+- `spills_past` — the subject's regions are exact and reach outside the bound
+  the supertype's kind puts on its own.
+- `outside_the_class` — the subject's kind holds a value the supertype's class
+  does not, asked of the kind's own builtin so the answer is one `issubclass`
+  over the order. A *complement* has no kind of its own and something better:
+  every kind but one. Any of those the class refutes names the witness — a value
+  built as that kind's builtin is outside the class, and outside the inner
+  schema because its kind is not that one — and `bool` is the kind it may not
+  name against `~int`, every boolean being an integer.
+- `shorter_than` — the supertype carries a length bound and the subject is a
+  bare sequence shape, which holds the empty sequence that the bound leaves out.
+  Read as a bare shape on purpose: a constraint on the subject may exclude the
+  empty sequence too, and then there is no value left to stand on.
+- `outside_every_kind` — the meet of a class and its attributes holds a *direct*
+  instance of the class, so `type(v) is C` settles `isinstance(v, D)` through the
+  order alone. That witness is **one** value and the same value in every branch
+  of a union, which is what lets the branches be read one at a time: a value in
+  no branch is outside the union. A reference is unfolded once to the kind of
+  what it names, since it denotes that set; once and not through what it finds,
+  so the walk descends only into union branches and owes termination no argument
+  about cycles.
+
+Two of these carry the whole reason the fast path exists. `disjoint_with` and
+`outside_every_kind` answer from two nodes and an oracle call what the descriptor
+answers by building both sets and walking them — about two orders of magnitude
+more ([11-performance.md](../11-performance.md)). And they answer where the
+descriptor *declines*: a predicate is the constraint the sets will not read
+through, and a schema nested past the lowering's depth is one they give up on, so
+a pair carrying either is decided here or not at all.
 
 ## Four bounds, each measured
 
