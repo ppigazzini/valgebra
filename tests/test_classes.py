@@ -16,7 +16,13 @@ from typing import (
 import annotated_types as at
 import pytest
 
-from valgebra import ValidationError, Validator, complement, intersection
+from valgebra import (
+    ValidationError,
+    Validator,
+    complement,
+    intersection,
+    recursive,
+)
 
 
 class User(TypedDict):
@@ -571,3 +577,34 @@ def test_a_dataclass_outside_every_branch_of_a_union_is_outside_the_union() -> N
 
     # Its own branch proves it instead, and the union is not refuted.
     assert schema.is_subtype_of(Point | int)
+
+
+def test_a_dataclass_is_read_against_the_kind_a_reference_names() -> None:
+    """A reference denotes its definition's set, so it carries that set's kind.
+
+    The witness a dataclass stands on is a direct instance of its class, and a
+    class laying down no builtin layout has one that is a plain object -- no
+    kind the partition names. A recursive record's values are dicts, so the
+    witness is not one of them; but the record reaches the reading as a
+    *reference*, which carries no kind of its own until it is followed.
+
+    Following it is what puts the pair on the reading at all. A definition that
+    names itself ends the walk instead of circling, and says nothing.
+    """
+
+    @dataclasses.dataclass
+    class Point:
+        x: int
+
+    tree = recursive(lambda t: {"value": int, "left?": t, "right?": t})
+    assert Validator(Point).relation_to(Validator(tree)) == "not_subset"
+
+    # A predicate is what the descriptor will not read through, and nesting is
+    # where it gives up; the kind settles both without reading either.
+    guarded = recursive(
+        lambda t: {"value": Annotated[int, at.Predicate(bool)], "left?": t}
+    )
+    assert Validator(Point).relation_to(Validator(guarded)) == "not_subset"
+
+    nested = recursive(lambda t: {"value": list[list[list[list[int]]]], "left?": t})
+    assert Validator(Point).relation_to(Validator(nested)) == "not_subset"

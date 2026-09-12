@@ -3739,3 +3739,50 @@ fn sequences_whose_elements_are_disjoint_meet_only_in_the_empty_one() {
         at_least(prefixed, 1)
     )));
 }
+
+/// A meet is read against the kind of what a reference names.
+///
+/// A reference denotes its definition's set, so it has that set's kind -- and
+/// without following it a recursive record reaches the kind reading as a node
+/// with no kind at all, which is why a dataclass against the recursive record
+/// of the documentation walked two descriptors.
+///
+/// The unfolding is one step. What it reaches is read for its kind and not
+/// followed further, so the walk descends only into union branches -- the
+/// schema's own finite tree -- and ends without a trail to keep.
+#[test]
+fn a_meet_is_read_against_what_a_reference_names() {
+    let dataclass = Schema::meet([
+        Schema::Instance(Classes::PLAIN),
+        Schema::AttrRecord {
+            fields: vec![field("x", Schema::Int, true)].into(),
+        },
+    ]);
+    let record = Schema::KeyedMap {
+        fields: vec![field("value", Schema::Int, true)].into(),
+        defaults: Vec::new().into(),
+    };
+    // 0 names a record, and 1 names a union.
+    let defs = vec![record.clone(), Schema::union([record, Schema::Str])];
+    let relation = |sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        dataclass.subtype_relation(sup, &Classes, &defs, &budget)
+    };
+
+    // A direct instance of a class laying down no layout is a plain object,
+    // and the record's values are dicts.
+    assert_eq!(relation(&Schema::Ref(DefIx::new(0))), Relation::Fails);
+    // Through a union, and through a reference to one.
+    assert_eq!(
+        relation(&Schema::union([Schema::Ref(DefIx::new(0)), Schema::Str])),
+        Relation::Fails
+    );
+
+    // The unfolding is one step: a reference naming a union is not followed
+    // into its branches, so it says nothing, and the walk owes termination no
+    // argument about cycles.
+    assert_ne!(relation(&Schema::Ref(DefIx::new(1))), Relation::Fails);
+
+    // A reference to no definition is not an answer either.
+    assert_ne!(relation(&Schema::Ref(DefIx::new(9))), Relation::Fails);
+}
