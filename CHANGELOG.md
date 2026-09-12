@@ -115,6 +115,8 @@ answer of its own, or a repair to a change not yet released.
 - perf: a conjunct that refutes refutes the meet -- internal
 - perf: a reference under a union carries its definition's refutation -- internal
 - perf: a region outside a kind's bound refutes the pair -- internal
+- perf: a field no clause of the supertype admits refutes the map -- internal
+- perf: a bound over the integers has a value the oracle names -- internal
 
 -->
 

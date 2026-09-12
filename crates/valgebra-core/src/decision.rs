@@ -1538,10 +1538,21 @@ impl Schema {
             }
             // Complement is contravariant: ¬A ⊆ ¬B exactly when B ⊆ A.
             (Schema::Complement(a), Schema::Complement(b)) => b.is_subtype_rec(a, cx, assumptions),
-            // Disjointness is proven or not proven, never refuted here: the
-            // rules that establish it are sound and incomplete.
+            // `A ⊆ ¬B` is disjointness, which the rules prove or fail to
+            // prove -- they are sound and incomplete, so not proving it is not
+            // refuting it. There is one shape where the pair *is* refuted, and
+            // it is the opposite proof: `A ⊆ B` holding means every value of
+            // `A` is in `B`, so a value of `A` is a value outside `¬B`. That
+            // needs `A` to have one, which the reading around this settles.
             (_, Schema::Complement(inner)) => {
-                Relation::proven(self.shares_no_value_with(inner, cx))
+                if self.shares_no_value_with(inner, cx) {
+                    return Relation::Holds;
+                }
+                if self.is_subtype_rec(inner, cx, assumptions).holds() {
+                    Relation::of_mismatch(self.verdict_of(cx))
+                } else {
+                    Relation::Unknown
+                }
             }
             (
                 Schema::Refine {
@@ -1615,6 +1626,16 @@ impl Schema {
                 _ => Relation::Unknown,
             },
         }
+    }
+
+    /// This schema's emptiness verdict, under the query's oracle and budget.
+    ///
+    /// The fold that reads it takes four arguments the query already holds, and
+    /// three call sites were spelling them out; the trail it starts is empty
+    /// because a verdict is a question about one schema rather than about a
+    /// goal.
+    fn verdict_of(&self, cx: SubtypeCx<'_>) -> Verdict {
+        self.verdict_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget)
     }
 
     /// Whether the subject holds a region the supertype's kind cannot.
@@ -1919,6 +1940,13 @@ fn refinement_verdict(
     {
         return Verdict::Empty;
     }
+    // The integers are their own case: they are unbounded both ways and
+    // discrete, so an order bound over them is met by an integer the oracle can
+    // be asked to name. Read before the length bounds below, which are a
+    // different question about a different base.
+    if matches!(base, Schema::Int) {
+        return bounded_integer_verdict(constraints, oracle);
+    }
     let lengths_only = constraints
         .iter()
         .all(|c| matches!(c, Constraint::MinLen(_) | Constraint::MaxLen(_)));
@@ -1938,6 +1966,65 @@ fn refinement_verdict(
             Some(element) => element.verdict_rec(oracle, defs, visiting, budget),
             None => Verdict::Unknown,
         },
+    }
+}
+
+/// Whether an order bound over `int` is met by an integer, asked of the oracle.
+///
+/// The question is the one the oracle already answers for emptiness -- whether
+/// an integer lies between two bounds -- read for its other answer. A
+/// `Some(false)` there *is* the witness: an integer in the interval is a value
+/// of the refinement.
+///
+/// One bound is the degenerate interval on the bound itself, because the
+/// integers are unbounded the other way: an integer at `c` means one at or past
+/// `c` exists, and one below it too. A bound the oracle cannot place on the
+/// integer line -- `Ge(inf)`, where the question raises -- declines, and so
+/// does one that lies strictly between two integers: `Ge(0.5)` has values and
+/// this question cannot name one, which is the miss it is worth having.
+///
+/// Every comparison has to be answered. Two bounds on one side that the oracle
+/// cannot order leave it unknown which is the tighter, and naming a value under
+/// the looser one would name a value the tighter excludes -- sound for proving
+/// the refinement *empty*, which is what the fold above does with the same
+/// pair, and unsound for proving it has a value.
+fn bounded_integer_verdict(constraints: &Constraints, oracle: &dyn LeafRelations) -> Verdict {
+    use core::cmp::Ordering;
+    let mut lower: Option<(OperandIx, bool)> = None;
+    let mut upper: Option<(OperandIx, bool)> = None;
+    for constraint in constraints.iter() {
+        let (value, strict, is_lower) = match constraint {
+            Constraint::Ge(i) => (*i, false, true),
+            Constraint::Gt(i) => (*i, true, true),
+            Constraint::Le(i) => (*i, false, false),
+            Constraint::Lt(i) => (*i, true, false),
+            // A constraint that is not an order bound narrows the set by
+            // something this cannot read, so it names no value.
+            _ => return Verdict::Unknown,
+        };
+        let slot = if is_lower { &mut lower } else { &mut upper };
+        match slot {
+            None => *slot = Some((value, strict)),
+            Some((held, held_strict)) => match oracle.compare(value, *held) {
+                Some(Ordering::Equal) => *held_strict = *held_strict || strict,
+                Some(Ordering::Greater) if is_lower => *slot = Some((value, strict)),
+                Some(Ordering::Less) if !is_lower => *slot = Some((value, strict)),
+                Some(_) => {}
+                None => return Verdict::Unknown,
+            },
+        }
+    }
+    let named = match (lower, upper) {
+        // Every integer, and there is one.
+        (None, None) => return Verdict::Inhabited,
+        (Some((lo, lo_strict)), Some((hi, hi_strict))) => {
+            oracle.no_int_between(lo, lo_strict, hi, hi_strict)
+        }
+        (Some((c, _)), None) | (None, Some((c, _))) => oracle.no_int_between(c, false, c, false),
+    };
+    match named {
+        Some(false) => Verdict::Inhabited,
+        _ => Verdict::Unknown,
     }
 }
 
@@ -2788,21 +2875,39 @@ fn keyed_map_subtype(
         }));
         // Each field `a` declares that `b` does not is read by `b` through its
         // catch-all, so a `str`/`anything`-keyed clause of `b` must cover it.
+        //
+        // A clause whose key the rules cannot read might admit the name, so
+        // where `b` carries one the reading is a proof or nothing. Where every
+        // clause's key is one of the two spellings that plainly admit a string
+        // name -- and where `b` carries no clause at all, which is the closed
+        // record -- the covering clauses are all of them, and a field whose
+        // values none of them accepts is a refutation: fields are independent,
+        // so a value of `a` carrying that key with that value is a value `b`
+        // rejects. It stands on the field having a value, read the way the
+        // query reads the subject's, so a field the rules cannot tell either
+        // way declines and an empty *optional* field proves nothing against.
+        let readable_keys = db
+            .iter()
+            .all(|clause| matches!(clause.key, Schema::Str | Schema::Anything(_)));
         let extra_covered = Relation::all(
             fa.iter()
                 .filter(|a_field| !b_by_name.contains_key(&*a_field.name))
                 .map(|a_field| {
-                    // The clause has to be one that admits the *name*, and this
-                    // reads only the two spellings that plainly do, so a clause
-                    // it cannot read leaves the field unproven rather than
-                    // uncovered.
-                    Relation::proven(db.iter().any(|clause| {
-                        matches!(clause.key, Schema::Str | Schema::Anything(_))
-                            && a_field
-                                .schema
-                                .is_subtype_rec(&clause.value, cx, assumptions)
-                                .holds()
-                    }))
+                    let covering = db
+                        .iter()
+                        .filter(|clause| matches!(clause.key, Schema::Str | Schema::Anything(_)));
+                    let answer = Relation::any(covering.map(|clause| {
+                        a_field
+                            .schema
+                            .is_subtype_rec(&clause.value, cx, assumptions)
+                    }));
+                    match answer {
+                        Relation::Holds => Relation::Holds,
+                        Relation::Fails if readable_keys => {
+                            Relation::of_mismatch(a_field.schema.verdict_of(cx))
+                        }
+                        _ => Relation::Unknown,
+                    }
                 }),
         );
         // Every catch-all clause of `a` (governing its non-field keys) is subsumed

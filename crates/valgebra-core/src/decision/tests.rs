@@ -2891,3 +2891,185 @@ fn a_reference_under_a_union_carries_its_refutation() {
         Relation::Holds
     );
 }
+
+/// An oracle over a fixed pool of numbers, so the integer-bound reading can be
+/// driven without an interpreter.
+///
+/// Index 0 is `0`, index 1 is `10`, index 2 is `0.5`, index 3 is infinity. The
+/// third is the bound that lies strictly between two integers and the fourth is
+/// the one no arithmetic places on the line, which is where the binding's own
+/// answer raises and becomes a decline.
+struct Numbers;
+impl Constants for Numbers {}
+
+impl Numbers {
+    const POOL: [f64; 4] = [0.0, 10.0, 0.5, f64::INFINITY];
+
+    fn value(at: OperandIx) -> Option<f64> {
+        Numbers::POOL
+            .get(at.get())
+            .copied()
+            .filter(|n| n.is_finite())
+    }
+}
+
+impl LeafRelations for Numbers {
+    fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+        None
+    }
+
+    fn compare(&self, a: OperandIx, b: OperandIx) -> Option<core::cmp::Ordering> {
+        Numbers::value(a)?.partial_cmp(&Numbers::value(b)?)
+    }
+
+    fn no_int_between(
+        &self,
+        lo: OperandIx,
+        lo_strict: bool,
+        hi: OperandIx,
+        hi_strict: bool,
+    ) -> Option<bool> {
+        let (lo, hi) = (Numbers::value(lo)?, Numbers::value(hi)?);
+        let least = if lo_strict {
+            (lo + 1.0).floor()
+        } else {
+            lo.ceil()
+        };
+        let greatest = if hi_strict {
+            (hi - 1.0).ceil()
+        } else {
+            hi.floor()
+        };
+        Some(least > greatest)
+    }
+}
+
+/// A bound over the integers is met by an integer the oracle names.
+///
+/// The question is the one the oracle already answers for emptiness -- whether
+/// an integer lies between two bounds -- read for its other answer: a `false`
+/// there is a value of the refinement. One bound is the degenerate interval on
+/// the bound itself, because the integers are unbounded the other way.
+///
+/// The refusals are the point of the row. A bound the oracle cannot place on
+/// the integer line declines rather than guessing, and so does a constraint
+/// that is not an order bound at all.
+#[test]
+fn a_bound_over_the_integers_has_a_value_where_the_oracle_names_one() {
+    let bounded = |constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: constraints.into(),
+    };
+    let at = OperandIx::new;
+    let verdict = |schema: &Schema| schema.verdict_under(&Numbers);
+
+    assert_eq!(verdict(&bounded(Vec::new())), Verdict::Inhabited);
+    assert_eq!(
+        verdict(&bounded(vec![Constraint::Ge(at(0))])),
+        Verdict::Inhabited
+    );
+    assert_eq!(
+        verdict(&bounded(vec![Constraint::Gt(at(0))])),
+        Verdict::Inhabited
+    );
+    assert_eq!(
+        verdict(&bounded(vec![Constraint::Le(at(0))])),
+        Verdict::Inhabited
+    );
+    assert_eq!(
+        verdict(&bounded(vec![Constraint::Ge(at(0)), Constraint::Le(at(1))])),
+        Verdict::Inhabited
+    );
+
+    // A bound strictly between two integers has values and this cannot name
+    // one, which is the miss the question is worth having.
+    assert_eq!(
+        verdict(&bounded(vec![Constraint::Ge(at(2))])),
+        Verdict::Unknown
+    );
+    // A constraint that is not an order bound narrows by something unreadable.
+    assert_eq!(
+        verdict(&bounded(vec![Constraint::MultipleOf(at(0))])),
+        Verdict::Unknown
+    );
+}
+
+/// A field no clause of the supertype can admit refutes the map.
+///
+/// A field the subtype declares and the supertype does not is read by the
+/// supertype through a catch-all. Where every clause whose key plainly admits
+/// a string name rejects the field's values -- and where the supertype carries
+/// no clause whose key the rules cannot read, which might have admitted it --
+/// a value of the subtype carrying that key is one the supertype rejects.
+/// Fields are independent, so such a value exists wherever the field does.
+///
+/// A closed supertype is the same reading with no clause at all: every value
+/// carrying an undeclared key is rejected.
+#[test]
+fn a_field_no_clause_admits_refutes_the_map() {
+    let listed = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let with_extra = closed(vec![field("extra", Schema::Int, true)]);
+
+    // A closed supertype admits no key it does not declare.
+    assert_eq!(relation(&with_extra, &closed(Vec::new())), Relation::Fails);
+    // A catch-all that rejects the field's values is the same answer.
+    let str_to_list = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: listed.clone(),
+        }]
+        .into(),
+    };
+    assert_eq!(relation(&with_extra, &str_to_list), Relation::Fails);
+    // And one that accepts them proves it.
+    let str_to_int = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause {
+            key: Schema::Str,
+            value: Schema::Int,
+        }]
+        .into(),
+    };
+    assert_eq!(relation(&with_extra, &str_to_int), Relation::Holds);
+
+    // A field with no value carries no key, so an *optional* one refutes
+    // nothing: every value of the subtype leaves the key out.
+    let empty_optional = closed(vec![field("extra", Schema::Nothing, false)]);
+    assert_ne!(
+        relation(&empty_optional, &closed(Vec::new())),
+        Relation::Fails
+    );
+}
+
+/// A subject proved inside a schema is outside that schema's complement.
+///
+/// `A ⊆ ¬B` is disjointness, which the rules prove or fail to prove. The
+/// opposite proof refutes it: `A ⊆ B` holding means every value of `A` is in
+/// `B`, so a value of `A` is one outside `¬B` -- and `A` having a value is
+/// what the reading around the rule settles.
+#[test]
+fn a_subject_inside_a_schema_is_outside_its_complement() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    assert_eq!(
+        relation(&Schema::Bool, &Schema::complement(Schema::Int)),
+        Relation::Fails
+    );
+    // Disjoint stays proven, which is the rule this reading is added beside.
+    assert_eq!(
+        relation(&Schema::Str, &Schema::complement(Schema::Int)),
+        Relation::Holds
+    );
+    // An empty subject is below everything, the complement included.
+    assert_eq!(
+        relation(&Schema::Nothing, &Schema::complement(Schema::Int)),
+        Relation::Holds
+    );
+}
