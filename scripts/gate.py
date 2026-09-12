@@ -145,6 +145,38 @@ STANDINS = {
     ),
 }
 
+#: A step that reaches the network, and the offline form this gate runs instead.
+#:
+#: The gate's three exit codes say what happened, and the middle one -- "could
+#: not run" -- exists because a gate that could not run has proven nothing. A
+#: step that fetches an advisory database proves nothing about this tree when
+#: the fetch fails, and mapping that to the same red as a failing test is the
+#: one confusion the exit codes were split to prevent. Two of four gate runs in
+#: one afternoon went red on a fetch.
+#:
+#: Each row is the workflow's step name, the fetch that has to succeed first,
+#: and the command to run once it has. The fetch is retried, and a fetch that
+#: will not land ends the gate at `EXIT_CANNOT_RUN` rather than failing the
+#: step. The runner keeps the online form: catching a newly published advisory
+#: is exactly its job, and a runner that cannot reach the database should go
+#: red.
+#:
+#: Held to the plan by `tests/test_local_gate.py`: a row for a step the gate
+#: does not run is a row that stands for nothing.
+NETWORK = {
+    "Audit the workspace dependency tree": (
+        "cargo deny fetch all",
+        "cargo deny --offline check",
+    ),
+    "Audit the fuzz workspace dependency tree": (
+        "cargo deny --manifest-path fuzz/Cargo.toml fetch all",
+        "cargo deny --manifest-path fuzz/Cargo.toml --offline check",
+    ),
+}
+
+#: How many times a fetch is tried before the gate gives up on it.
+FETCH_TRIES = 3
+
 #: How a job says it runs on a schedule and not on a push, read from the job's
 #: own condition. The merge gate waits on the nightly jobs so that one reaching
 #: its timeout takes the scheduled run red -- a job nothing waits on is
@@ -303,6 +335,8 @@ def build_plan(spec: dict, jobs: list[str]) -> tuple[list[Step], list[str]]:
             if filled is None:
                 unresolved.append(f"{job}: {name}")
                 continue
+            if name in NETWORK:
+                filled = NETWORK[name][1]
             plan.append((job, name, filled, job_env))
     plan += [
         (job, f"{name} (the part that runs here)", command, {})
@@ -312,6 +346,32 @@ def build_plan(spec: dict, jobs: list[str]) -> tuple[list[Step], list[str]]:
         for command, _ in [STANDINS[name]]
     ]
     return plan, unresolved
+
+
+def fetched(plan: list[Step], cwd: Path) -> bool:
+    """Run each planned network step's fetch, so the step itself can be offline.
+
+    A fetch that will not land is not a verdict about this tree, so the caller
+    turns a `False` here into `EXIT_CANNOT_RUN`. Retried, because the failure
+    this guards against is a moment of the network rather than a state of it.
+    """
+    wanted = {name for _, name, _, _ in plan if name in NETWORK}
+    for name in sorted(wanted):
+        fetch = NETWORK[name][0]
+        for attempt in range(1, FETCH_TRIES + 1):
+            print(f"\n=== fetch for {name} (try {attempt} of {FETCH_TRIES})")
+            result = subprocess.run(
+                ["bash", "-euo", "pipefail", "-c", fetch],
+                cwd=cwd,
+                check=False,
+                env={**os.environ, "CI": "1"},
+            )
+            if result.returncode == 0:
+                break
+        else:
+            print(f"gate: cannot fetch what {name!r} reads: {fetch}")
+            return False
+    return True
 
 
 def run_step(name: str, command: str, cwd: Path, environment: dict[str, str]) -> bool:
@@ -393,6 +453,10 @@ def main() -> int:
         print(f"gate: shallow clone of HEAD, no tags, at {tree}")
 
     try:
+        if not fetched(plan, tree):
+            print()
+            print("gate: a step's fetch did not land, so the gate could not run.")
+            return EXIT_CANNOT_RUN
         failures = [
             f"{job}: {name}"
             for job, name, command, environment in plan

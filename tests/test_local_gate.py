@@ -157,6 +157,47 @@ def test_every_stand_in_is_for_a_step_the_gate_excuses() -> None:
     assert not stale, f"stand-ins for steps the workflow no longer has: {stale}"
 
 
+def test_every_network_row_stands_for_a_step_the_gate_runs() -> None:
+    """An offline substitute for a step the gate does not run stands for nothing.
+
+    Held in both directions. A row whose step the workflow dropped is an
+    offline command nothing runs, and a row for a step the gate excuses instead
+    of running would fetch for a step that never happens.
+    """
+    spec = gate.workflow()
+    named = {name for _, name in _merge_gate_steps()}
+    stale = sorted(set(gate.NETWORK) - named)
+    assert not stale, f"offline substitutes for steps the workflow lacks: {stale}"
+
+    excused = sorted(set(gate.NETWORK) & set(gate.NEEDS_A_RUNNER))
+    assert not excused, (
+        f"offline substitutes for steps the gate does not run: {excused}. A step "
+        "the gate excuses needs no fetch."
+    )
+
+    planned = {
+        name for _, name, _, _ in gate.build_plan(spec, gate.required_jobs(spec))[0]
+    }
+    missing = sorted(set(gate.NETWORK) - planned)
+    assert not missing, f"offline substitutes for steps outside the plan: {missing}"
+
+
+def test_a_network_step_runs_its_offline_form() -> None:
+    """The plan carries the offline command, not the workflow's online one.
+
+    The substitution is the whole of the fix: the runner keeps the online form,
+    because catching a newly published advisory is its job, and this gate reads
+    the database the fetch already landed.
+    """
+    spec = gate.workflow()
+    plan, _ = gate.build_plan(spec, gate.required_jobs(spec))
+    for name, (_, offline) in gate.NETWORK.items():
+        commands = [command for _, step, command, _ in plan if step == name]
+        assert commands == [offline], (
+            f"{name!r} is planned as {commands}, not as its offline form {offline!r}"
+        )
+
+
 def test_the_interpreter_backed_binding_tests_are_in_the_plan() -> None:
     """The hole the stand-ins exist for, asked of the plan the gate builds.
 

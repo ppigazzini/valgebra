@@ -500,6 +500,38 @@ def absent_at(checkout: Path, mode: str) -> bool:
     )
 
 
+def measure_base(
+    modes: list[str], checkout: Path, target: Path
+) -> tuple[dict[str, Measurement], dict[str, BaseException]]:
+    """Measure each mode at the base, and name the ones the base could not give.
+
+    A base that cannot build or run a workload says nothing about the change
+    being measured: the rig failed, not the tree. [`absent_at`](absent_at) reads
+    the shape a base does not *carry*; this reads the shape it carries and
+    cannot produce -- a toolchain its lockfile will not build, an example whose
+    own dependency moved. Both are "no comparison to make", and both leave the
+    recorded budget to gate the shape in the same job.
+    """
+    readings = {mode: measured_or_blamed(mode, checkout, target) for mode in modes}
+    measured = {
+        mode: read for mode, read in readings.items() if isinstance(read, Measurement)
+    }
+    broken = {
+        mode: read for mode, read in readings.items() if isinstance(read, BaseException)
+    }
+    return measured, broken
+
+
+def measured_or_blamed(
+    mode: str, checkout: Path, target: Path
+) -> Measurement | BaseException:
+    """One mode's reading at the base, or what stopped the base from giving it."""
+    try:
+        return measure_mode(mode, checkout, target)
+    except (subprocess.CalledProcessError, SystemExit) as err:
+        return err
+
+
 def run_relative(modes: list[str], rev: str) -> int:
     """Measure this checkout and `rev` side by side, and hold each difference.
 
@@ -527,11 +559,11 @@ def run_relative(modes: list[str], rev: str) -> int:
             check=True,
         )
         fresh = [mode for mode in modes if absent_at(checkout, mode)]
-        base = {
-            mode: measure_mode(mode, checkout, worktree / "target")
-            for mode in modes
-            if mode not in fresh
-        }
+        base, broken = measure_base(
+            [mode for mode in modes if mode not in fresh],
+            checkout,
+            worktree / "target",
+        )
     finally:
         subprocess.run(
             ["git", "worktree", "remove", "--force", str(checkout)],
@@ -551,6 +583,13 @@ def run_relative(modes: list[str], rev: str) -> int:
             print(f"head:     {head[mode].irefs:,} instructions")
             print("NEW SHAPE: the base does not carry this workload, so there is")
             print("no comparison to make. Its recorded budget gates it instead.")
+            continue
+        if mode in broken:
+            print(f"head:     {head[mode].irefs:,} instructions")
+            print("NOT COMPARABLE: the base carries this workload and could not")
+            print(f"produce it ({broken[mode]}). That is the rig rather than this")
+            print("change; the recorded budget gates the shape instead.")
+            outcomes.append(EXIT_CANNOT_RUN)
             continue
         outcomes.append(judge_relative(head[mode], base[mode], subject, mode))
     outcome = EXIT_OK
