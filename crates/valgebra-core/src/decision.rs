@@ -1546,9 +1546,7 @@ impl Schema {
         // direct instance either has that kind or does not, and the oracle
         // reads `type(v) is C` rather than the subtree beneath `C`, which is
         // what makes the answer a value rather than an open-world guess.
-        if let Some(kind) = other.type_tag_with(cx.oracle)
-            && cx.oracle.direct_instance_of_kind(class, kind) == Some(false)
-        {
+        if outside_every_kind(other, class, cx.oracle) {
             return Relation::Fails;
         }
         placed
@@ -3027,6 +3025,32 @@ fn linear_subtype(
 /// one, decided through the ordering oracle). A bound the oracle cannot compare
 /// and a non-order constraint stay on the verbatim path, so a constraint
 /// neither written nor entailed leaves the pair unproven rather than refuted.
+/// Whether a direct instance of `class` has none of the kinds `other` admits.
+///
+/// The kind half of the reading a meet of a class and its attributes gets,
+/// asked of a union by distributing over its branches: a union is a value's
+/// choice among them, so a value in no branch is outside the union. The
+/// witness is one value -- a direct instance of the class carrying the
+/// attributes -- and it is the same value in every branch, which is what lets
+/// the branches be read one at a time.
+///
+/// A branch with no kind of its own ends it, since the witness may be in that
+/// branch for all this reads, and an empty union is refuted by the rule that
+/// reads it as nothing rather than here.
+fn outside_every_kind(other: &Schema, class: ClassIx, oracle: &dyn LeafRelations) -> bool {
+    match other {
+        Schema::Union(branches) => {
+            !branches.is_empty()
+                && branches
+                    .iter()
+                    .all(|branch| outside_every_kind(branch, class, oracle))
+        }
+        _ => other
+            .type_tag_with(oracle)
+            .is_some_and(|kind| oracle.direct_instance_of_kind(class, kind) == Some(false)),
+    }
+}
+
 fn refinement_subtype(
     narrow_base: &Schema,
     narrow_cons: &[Constraint],

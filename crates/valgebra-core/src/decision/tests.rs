@@ -3271,13 +3271,34 @@ fn a_class_met_with_its_attributes_is_outside_what_its_class_is() {
         Relation::Fails
     );
 
-    // What the class's own refutation does *not* carry. The oracle refutes the
-    // class against a union of scalars, and the meet is a smaller set: the
-    // value that stands against the class may be one the attributes exclude.
-    // Only a supertype that is a class, or one whose values all have a kind,
-    // is read here.
-    assert_ne!(
+    // A union is read branch by branch, because the witness is one value and
+    // it is the same value in every branch: a direct instance of a class
+    // laying down no layout has neither kind, so it is in neither branch and
+    // so outside the union.
+    assert_eq!(
         relation(&plain, &Schema::union([Schema::Int, Schema::Str])),
+        Relation::Fails
+    );
+    // A branch with no kind of its own ends it: the witness may be in that
+    // branch for all this reads, so the union says nothing.
+    assert_ne!(
+        relation(
+            &plain,
+            &Schema::union([Schema::Int, Schema::Instance(Classes::STRINGY)])
+        ),
+        Relation::Fails
+    );
+
+    // What the class's own refutation does *not* carry. The oracle refutes the
+    // class against a union of scalars through `leaf_subtype`, and the meet is
+    // a smaller set: the value that reading stands on may be one the
+    // attributes exclude. That arm is asked only of a supertype that is a
+    // class, which is why the union above is decided by the kinds instead.
+    assert_ne!(
+        relation(
+            &dataclass(Classes::STRINGY),
+            &Schema::union([Schema::Int, Schema::Str])
+        ),
         Relation::Fails
     );
 }

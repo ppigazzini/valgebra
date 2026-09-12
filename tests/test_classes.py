@@ -5,6 +5,7 @@ import sys
 import typing
 from typing import (
     Annotated,
+    Literal,
     NamedTuple,
     NewType,
     Protocol,
@@ -538,3 +539,35 @@ def test_a_class_whose_metaclass_answers_isinstance_denotes_no_set() -> None:
         x: int
 
     assert Validator(int).relation_to(Validator(HasX)) == "undecided"
+
+
+def test_a_dataclass_outside_every_branch_of_a_union_is_outside_the_union() -> None:
+    """The witness is one value, and it is the same value in every branch.
+
+    A dataclass lowers to a class met with the attributes its instances carry,
+    and that meet holds a *direct* instance of the class. A class laying down
+    no builtin layout has a direct instance that is a plain object, carrying
+    none of the kinds the partition names -- so it is in no branch that names a
+    kind, and a value in no branch is outside the union.
+
+    Reading the branches one at a time is what that single witness licenses. A
+    branch naming no kind of its own ends it, since the witness may be in that
+    branch for all the reading sees.
+    """
+
+    @dataclasses.dataclass
+    class Point:
+        x: int
+
+    schema = Validator(Point)
+    assert schema.relation_to(Validator(int | str)) == "not_subset"
+    assert schema.relation_to(Validator(int | None)) == "not_subset"
+    assert schema.relation_to(Validator(Literal[1, 2, 3])) == "not_subset"
+
+    # A predicate is what the descriptor will not read through, so a union
+    # carrying one is answered by the kinds or not at all.
+    guarded = int | Annotated[list[int], at.Predicate(bool)]
+    assert schema.relation_to(Validator(guarded)) == "not_subset"
+
+    # Its own branch proves it instead, and the union is not refuted.
+    assert schema.is_subtype_of(Point | int)
