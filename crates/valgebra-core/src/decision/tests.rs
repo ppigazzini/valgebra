@@ -3786,3 +3786,85 @@ fn a_meet_is_read_against_what_a_reference_names() {
     // A reference to no definition is not an answer either.
     assert_ne!(relation(&Schema::Ref(DefIx::new(9))), Relation::Fails);
 }
+
+/// Every kind's values are instances of the class, except booleans'.
+///
+/// The shape that separates the kind a complement may name from the one it may
+/// not: `bool` is the only kind whose values are all of another kind too.
+struct AllButBool;
+impl Constants for AllButBool {}
+
+impl LeafRelations for AllButBool {
+    fn leaf_subtype(&self, _sub: &Schema, _sup: &Schema) -> Option<bool> {
+        None
+    }
+
+    fn kind_derives_from(&self, kind: Kind, _class: ClassIx) -> Option<bool> {
+        Some(kind != Kind::Bool)
+    }
+}
+
+/// A complement holds a value of every kind its inner schema's is not.
+///
+/// The reading against a class asked one question, of the subject's own kind,
+/// and a complement has none -- so `~int` against a class walked two
+/// descriptors. It has better than a kind: it has every kind but one, and any
+/// of them the class's order refutes names the witness. A value built as that
+/// kind's builtin is outside the class, and outside the inner schema because
+/// its kind is not that one.
+///
+/// `bool` is the kind that may not be named that way. Every boolean is an
+/// integer, so `~int` holds no booleans and a boolean is no witness for it --
+/// the one pair in the partition that shares values, and the reason the search
+/// skips more than the excluded kind itself.
+#[test]
+fn a_complement_names_a_witness_from_the_kinds_its_inner_schema_is_not() {
+    let class = Schema::Instance(ClassIx::new(0));
+    // Beneath the witness guard, which is a question about the subject rather
+    // than about this rule: proving a complement inhabited needs an oracle
+    // that reads the classes, and the oracle here answers one question so that
+    // the row can say which kind the search may name. The guard has its own
+    // rows, and the query applies it to this answer as it does to every other.
+    let relation = |sub: &Schema, oracle: &dyn LeafRelations| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_by_rules(
+            &class,
+            SubtypeCx {
+                oracle,
+                defs: &[],
+                budget: &budget,
+            },
+            &mut Vec::new(),
+        )
+    };
+    let not = |schema| Schema::Complement(Arc::new(schema));
+
+    // Booleans are the only kind this class does not hold, and `~int` holds no
+    // booleans, so it names no witness and the pair is undecided.
+    assert_eq!(relation(&not(Schema::Int), &AllButBool), Relation::Unknown);
+    // `~bool` is the same pair the other way: an integer that is not a boolean
+    // is a value of kind `Int`, and this class holds every one of those.
+    assert_eq!(relation(&not(Schema::Bool), &AllButBool), Relation::Unknown);
+
+    // Against any other kind the boolean is a witness, because a boolean is
+    // not a string and the class does not hold it.
+    assert_eq!(relation(&not(Schema::Str), &AllButBool), Relation::Fails);
+    assert_eq!(
+        relation(
+            &not(Schema::list(SeqShape::homogeneous(Schema::Int))),
+            &AllButBool
+        ),
+        Relation::Fails
+    );
+
+    // A complement of a schema with no kind names no kinds to search, and an
+    // oracle that declines the question answers nothing either.
+    assert_eq!(
+        relation(&not(Schema::Instance(ClassIx::new(1))), &AllButBool),
+        Relation::Unknown
+    );
+    assert_eq!(
+        relation(&not(Schema::Str), &NoLeafRelations),
+        Relation::Unknown
+    );
+}

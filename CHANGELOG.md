@@ -127,6 +127,7 @@ answer of its own, or a repair to a change not yet released.
 - perf: a sequence with no bound holds the empty one a bound leaves out -- internal
 - perf: a meet outside every branch of a union is outside the union -- internal
 - perf: a reference carries the kind of the set it names -- internal
+- perf: a complement names its witness from the kinds it still holds -- internal
 
 -->
 

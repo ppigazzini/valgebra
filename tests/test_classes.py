@@ -608,3 +608,44 @@ def test_a_dataclass_is_read_against_the_kind_a_reference_names() -> None:
 
     nested = recursive(lambda t: {"value": list[list[list[list[int]]]], "left?": t})
     assert Validator(Point).relation_to(Validator(nested)) == "not_subset"
+
+
+def test_a_complement_names_its_witness_from_the_kinds_it_still_holds() -> None:
+    """A complement of a kind holds a value of every other kind.
+
+    The class reading asked one question, of the subject's own kind, and a
+    complement has none of its own -- so the complement of a builtin against a
+    class was left to the descriptor. It has better than a kind: it has every
+    kind but one, and any of them the class's order refutes names the witness.
+    A value built as `str` is not an instance of a class `str` does not derive
+    from, and it is not an integer either.
+
+    `bool` is the kind that cannot be named that way. Every boolean is an
+    integer, so the complement of the integers holds no booleans -- the one
+    pair in the partition that shares values.
+    """
+
+    @dataclasses.dataclass
+    class Point:
+        x: int
+
+    @dataclasses.dataclass
+    class Guarded:
+        x: Annotated[int, at.Predicate(bool)]
+
+    class Plain:
+        pass
+
+    assert Validator(complement(int)).relation_to(Validator(Point)) == "not_subset"
+    assert Validator(complement(int)).relation_to(Validator(Plain)) == "not_subset"
+
+    # A predicate is what the descriptor will not read through; the kinds
+    # settle the pair without reading it.
+    assert Validator(complement(int)).relation_to(Validator(Guarded)) == "not_subset"
+
+    # A class every kind derives from is not refuted, which is what keeps the
+    # search a reading rather than a guess.
+    assert Validator(complement(int)).is_subtype_of(object)
+
+    # And a complement of a schema carrying no kind names no kinds to search.
+    assert Validator(complement(object)).is_subtype_of(Point)
