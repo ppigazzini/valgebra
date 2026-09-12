@@ -2809,3 +2809,85 @@ fn a_record_decides_the_same_whichever_field_sorts_first() {
     assert_eq!(refutes_first, Relation::Fails);
     assert_eq!(declines_first, Relation::Fails);
 }
+
+/// A subject whose regions are exact is refuted by a bound on the other side.
+///
+/// The scalar rule decides a pair only where both region sets are known, and a
+/// container's is not: `list[int]` is a proper part of the lists, so it earns
+/// no region. A container has a *kind*, though, and a kind bounds the regions
+/// its values occupy -- so a subject whose regions are exact and reach outside
+/// that bound holds a value the supertype rejects. `¬int` is every region but
+/// two, and a list is one of them.
+///
+/// The bound is the regions a kind *admits* rather than its own, which is what
+/// keeps `bool` inside a bounded `int`: `bool` subclasses `int`, so the pair
+/// has every value it needs and refuting it would be wrong.
+#[test]
+fn a_region_outside_a_kind_bound_refutes() {
+    let not_int = Schema::complement(Schema::Int);
+    let listed = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+
+    // Every region but two, against a kind that is one of them.
+    assert_eq!(relation(&not_int, &listed), Relation::Fails);
+    assert_eq!(relation(&not_int, &closed(vec![])), Relation::Fails);
+    // A scalar supertype is the rule the region pair already decided, and it
+    // answers the same: this adds a reading, it does not replace one.
+    assert_eq!(relation(&not_int, &Schema::Str), Relation::Fails);
+
+    // `bool` is an `int`, so a refinement over `int` holds every boolean. The
+    // kind's own region would refuse this pair; the regions it admits do not.
+    let bounded = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: Vec::new().into(),
+    };
+    assert_ne!(relation(&Schema::Bool, &bounded), Relation::Fails);
+
+    // And a subject with no exact region set has nothing to spill: a list
+    // against a class the oracle cannot read still declines, where the
+    // disjointness reading beside this one also has no answer.
+    let opaque = Schema::Instance(ClassIx::new(0));
+    assert_eq!(relation(&listed, &opaque), Relation::Unknown);
+}
+
+/// A reference under a union carries its definition's refutation.
+///
+/// A reference denotes exactly its definition, so a definition holding a value
+/// the union rejects names a value of the reference outside it. The arm for a
+/// non-union supertype reads the reduction that way already; the union arm
+/// read it for its proof alone and dropped the refutation, which cost every
+/// recursive schema against a scalar union a trip to the set representation.
+///
+/// The refutation cannot come from the coinductive hypothesis: a goal on the
+/// trail answers `Holds`, never `Fails`.
+#[test]
+fn a_reference_under_a_union_carries_its_refutation() {
+    // A recursive record: `{value: int, next?: <self>}`.
+    let defs = vec![closed(vec![
+        field("value", Schema::Int, true),
+        field("next", Schema::Ref(DefIx::new(0)), false),
+    ])];
+    let node = Schema::Ref(DefIx::new(0));
+    let relation = |sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        node.subtype_relation(sup, &NoLeafRelations, &defs, &budget)
+    };
+
+    // A record is no scalar, so every branch of the union rejects it.
+    assert_eq!(
+        relation(&Schema::union([Schema::Int, Schema::Str])),
+        Relation::Fails
+    );
+    assert_eq!(
+        relation(&Schema::union([Schema::Int, Schema::NoneType])),
+        Relation::Fails
+    );
+    // And the proof is unchanged where the definition lands in a branch.
+    assert_eq!(
+        relation(&Schema::union([Schema::Int, defs[0].clone()])),
+        Relation::Holds
+    );
+}

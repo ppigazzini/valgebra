@@ -1357,9 +1357,13 @@ impl Schema {
     /// single-branch rule sees, or be one a left-side rule reduces to something
     /// the union contains.
     ///
-    /// Every rule here proves inclusion when it fires and says nothing when it
-    /// does not, so a union none of them places the subject in is a pair this
-    /// procedure declines rather than one it refutes.
+    /// Every rule here proves inclusion when it fires, so a union none of them
+    /// places the subject in is a pair this procedure declines -- with one
+    /// exception, which is the reduction below. A reference denotes exactly its
+    /// definition, so a definition that holds a value outside the union names a
+    /// value of the reference outside it, and that is a refutation rather than
+    /// a decline. The arm for a non-union supertype already reads it that way;
+    /// this reads it the same, which is the only difference a union makes.
     fn below_a_union(
         &self,
         other: &Schema,
@@ -1367,27 +1371,38 @@ impl Schema {
         cx: SubtypeCx<'_>,
         assumptions: &mut Vec<(Schema, Schema)>,
     ) -> Relation {
-        Relation::proven(
-            members.contains(self)
-                || Relation::any(
-                    members
-                        .iter()
-                        .map(|m| self.is_subtype_rec(m, cx, assumptions)),
-                )
-                .holds()
-                || seq_splits_across_union(self, members, cx, assumptions)
-                || self.left_reduces_below(other, cx, assumptions).holds()
-                // Last, and only for the one subject the oracle can answer about
-                // here: an `Instance` whose *values* the bindings can enumerate
-                // is below a union when each of them is, which is what makes an
-                // enumeration and the union of its members one set. Asked here
-                // because a union on the right never reaches the leaf arm, and
-                // asked for nothing else because every other subject would pay a
-                // call that always declines -- ten percent of the decision
-                // workload, measured.
-                || (matches!(self, Schema::Instance(_))
-                    && cx.oracle.leaf_subtype(self, other).unwrap_or(false)),
-        )
+        if members.contains(self)
+            || Relation::any(
+                members
+                    .iter()
+                    .map(|m| self.is_subtype_rec(m, cx, assumptions)),
+            )
+            .holds()
+            || seq_splits_across_union(self, members, cx, assumptions)
+        {
+            return Relation::Holds;
+        }
+        // Asked once, and read twice: for the proof it may carry, and -- where
+        // it carries none -- for the refutation, which only a reference's
+        // reduction can give. A refinement's reduction drops its refutation
+        // before this sees it, since the constraints may exclude the very value
+        // that stood against the inclusion.
+        let reduced = self.left_reduces_below(other, cx, assumptions);
+        if reduced.holds()
+            // Last, and only for the one subject the oracle can answer about
+            // here: an `Instance` whose *values* the bindings can enumerate
+            // is below a union when each of them is, which is what makes an
+            // enumeration and the union of its members one set. Asked here
+            // because a union on the right never reaches the leaf arm, and
+            // asked for nothing else because every other subject would pay a
+            // call that always declines -- ten percent of the decision
+            // workload, measured.
+            || (matches!(self, Schema::Instance(_))
+                && cx.oracle.leaf_subtype(self, other).unwrap_or(false))
+        {
+            return Relation::Holds;
+        }
+        reduced.refutation_only()
     }
 
     /// `(A ∩ B) ⊆ C`: a meet is below whatever one of its conjuncts is below.
@@ -1587,6 +1602,9 @@ impl Schema {
         if self.disjoint_with(other, cx.oracle) {
             return Relation::Fails;
         }
+        if self.spills_past(other, cx.oracle) {
+            return Relation::Fails;
+        }
         match cx.oracle.leaf_subtype(self, other) {
             Some(true) => Relation::Holds,
             Some(false) => Relation::Fails,
@@ -1597,6 +1615,33 @@ impl Schema {
                 _ => Relation::Unknown,
             },
         }
+    }
+
+    /// Whether the subject holds a region the supertype's kind cannot.
+    ///
+    /// The scalar rule decides a pair only where *both* region sets are known,
+    /// and a container's is not: `list[int]` is a proper part of the lists, so
+    /// it earns no region. But a container has a *kind*, and a kind bounds the
+    /// regions its values can be in -- so a subject whose regions are exact and
+    /// reach outside that bound holds a value the supertype rejects.
+    ///
+    /// Exactness on the subject's side is what makes it a refutation rather
+    /// than a guess, and every region is inhabited -- `None`, `False`, `0`,
+    /// `0.0`, `""`, `b""`, `[]` -- so a region outside the bound names a value.
+    /// The bound is [`Kind::admitted_regions`] rather than the kind's own
+    /// region, which is what keeps `bool` inside a bounded `int`.
+    /// The complement of a scalar is the shape this reads: `¬int` is every
+    /// region but two, and a list is one of them.
+    ///
+    /// Asked where no rule decided, so a pair the scalar rule already answered
+    /// never reaches it, and a subject with no exact region set pays one match.
+    fn spills_past(&self, other: &Schema, oracle: &dyn LeafRelations) -> bool {
+        let Regions::Known(mine) = self.region_set() else {
+            return false;
+        };
+        other
+            .type_tag_with(oracle)
+            .is_some_and(|kind| !mine.subset_of(kind.admitted_regions()))
     }
 
     /// Whether `self` and `other` denote the same set — mutual inclusion.
@@ -2963,6 +3008,21 @@ impl Kind {
     /// kinds share the non-scalar region, because no schema names one exactly --
     /// `list[int]` is a proper part of the lists, so the fold keeps a container
     /// opaque rather than claiming a region for it (see [`Regions`]).
+    /// The regions a value of a schema *tagged* this kind may be in.
+    ///
+    /// A kind's own region, with one exception, and it is the exception
+    /// [`Schema::atom_region`] already names from the other side: `bool`
+    /// subclasses `int`, so a schema whose values are integers admits both
+    /// regions and a refinement over `int` holds `False`. Reading `Int` as its
+    /// own region alone would refute `bool` against a bounded `int`, which is
+    /// a value the pair has.
+    pub(crate) const fn admitted_regions(self) -> Region {
+        match self {
+            Kind::Int => Kind::Bool.region().union(Kind::Int.region()),
+            _ => self.region(),
+        }
+    }
+
     pub(crate) const fn region(self) -> Region {
         match self {
             Kind::NoneType => Region(1 << 0),
