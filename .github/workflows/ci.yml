@@ -906,6 +906,52 @@ jobs:
           tests/test_json_semantics.py
           tests/test_surrogate_strings.py
 
+  nightly-rust-laws:
+    name: nightly deep rust laws
+    # The core's property suites at a depth no merge gate can afford. The push
+    # lanes draw a thousand cases on three platforms, which is what a
+    # thirty-minute budget buys; the shapes that hide a defect are rarer than
+    # that. A sort of guards over an intransitive order took one draw in more
+    # than forty to reach, and the draw that reached it was a sweep's baseline
+    # rather than a lane built to look.
+    #
+    # Scheduled and manual only, and never a merge gate: it is an early-warning
+    # lane, and its first red is a seed pinned as a row rather than a revert.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # Eight times the push lanes' depth reads two minutes per thousand cases on
+    # a developer's machine, so eight minutes here and twice that on a shared
+    # runner. Twice the slowest reading, as the sweep's ceiling is.
+    timeout-minutes: 60
+    env:
+      # Eight times what the merge gate draws. The number is what the budget
+      # buys rather than a target: the automaton suites take a quarter of it,
+      # which is what keeps the product-heavy ones inside the hour.
+      PROPTEST_CASES: "8192"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # The two SWEEP-SKIP cases are skipped for the reason the sweep skips
+      # them: each proves the decision budget's bound by running until the
+      # budget stops it, and a deeper draw makes that proof slower without
+      # making it stronger. tests/test_sweep_skips.py holds the list.
+      - name: The core laws, deep
+        run: >
+          cargo test --locked -p valgebra-core --
+          --skip deep_subtype_into_bottom_terminates
+          --skip subtyping_terminates_on_a_distributed_tower
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: proptest-regressions-deep
+          path: crates/*/proptest-regressions/**
+          if-no-files-found: ignore
+
   nightly-libfuzzer:
     name: nightly libfuzzer
     # Coverage-guided fuzzing of the core algebra and decision procedures with
@@ -1412,6 +1458,7 @@ jobs:
         pip-audit,
         zizmor,
         nightly-fuzz,
+        nightly-rust-laws,
         nightly-libfuzzer,
         nightly-mutants,
         nightly-mutants-ratchet,
@@ -1455,6 +1502,8 @@ jobs:
           needs.zizmor.result != 'success' ||
           (needs['nightly-fuzz'].result != 'success' &&
            needs['nightly-fuzz'].result != 'skipped') ||
+          (needs['nightly-rust-laws'].result != 'success' &&
+           needs['nightly-rust-laws'].result != 'skipped') ||
           (needs['nightly-libfuzzer'].result != 'success' &&
            needs['nightly-libfuzzer'].result != 'skipped') ||
           (needs['nightly-mutants'].result != 'success' &&
