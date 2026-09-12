@@ -1,6 +1,6 @@
 {
   "_comment": "Instruction-count budget for the core schema-operation workload, measured with cachegrind. Deterministic for a given build; re-record with scripts/perf_gate.py --update after an intentional change to the workload or a large compiler codegen shift. The tolerance absorbs compiler-codegen drift across toolchain versions while still catching algorithmic regressions, which are far larger; the count is CPU-independent, so this is codegen headroom, not runner noise. The band is two-sided: a count below the floor means the workload stopped doing the work, or an optimization landed that must be re-recorded rather than absorbed. This budget rose once deliberately: a node's children and lists became shared handles, so a rebuild copies a list where it used to move one -- which this workload does on every node of every pass -- while carrying a subtree became a reference count, which the decision procedures and the membership walk do far more often, and both of those budgets fell.",
-  "core_workload_irefs": 137908415,
+  "core_workload_irefs": 136891408,
   "tolerance": 0.1,
   "_checksum_comment": "The value the core workload folds through every result and prints. It depends only on the fixed corpus and iteration count, so it is a constant of the workload, not of the machine or the build. The gate compares it before it compares any instruction count: a workload whose body collapsed measures low, and a budget cannot tell that from an optimization.",
   "core_workload_checksum": 134000,
@@ -24,11 +24,11 @@
       "why": "the walk carries where it is, what it has found and what it may read as one value rather than three arguments, which materialises the context into the frame instead of leaving it in registers. A walk over a single value is nothing but that setup, so this shape pays 5.2% for it and every deeper shape is repaid: the fifty-field record walk falls 7.97% and its explaining walk 2.44%, and on the wall clock the same record takes 533 ns against 622 and a ten-thousand element array 17.0 us against 20.7. The call boundary a caller actually crosses is flat -- one integer through the comparison gate reads 45.5 ns against 46.0 -- because a Python call dwarfs the setup this shape isolates"
     }
   ],
-  "decision_refute_workload_irefs": 1425374,
+  "decision_refute_workload_irefs": 1223975,
   "decision_refute_workload_checksum": 200,
   "_decision_refute_comment": "The refuting half of the decision surface, budgeted apart from the proving half. A rule that refutes by comparing shapes runs where the sibling workload never goes: an arity that cannot align, a key one record requires and the other does not declare, two kinds that share no value. Each of those refutations is read against the subject's own emptiness -- a subject with no value refutes nothing -- so this is also the workload that pays for the reading, at every level of a refuting query rather than once at its top. The shapes whose form names a value are read without a descent, which is what keeps that near the cost of reading once. A relation no rule decides is asked of the descriptor instead, and lowering a schema costs what the decision page records it costing, so a rule that stops declining moves this count by orders of magnitude rather than by percents: re-record with --update and say which rule.",
   "_decision_repeat_comment": "The decision surface over goals that repeat, budgeted apart from the two beside it. Neither of those has a repeated goal at all -- a wide record's fields are distinct literals, a nesting's levels are distinct -- so the saving a memo over goals would make is invisible to them, and the budget that stands in for such a memo was argued over shapes that would not use one. This asks one goal once per field, in both directions, so a memo reads here and the cost of keeping one reads there.",
-  "decision_repeat_workload_irefs": 33254797,
+  "decision_repeat_workload_irefs": 27458707,
   "decision_repeat_workload_checksum": 4000,
   "binding_open_workload_irefs": 172665052
 }
