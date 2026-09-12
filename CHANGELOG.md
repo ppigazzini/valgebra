@@ -114,6 +114,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a plain class names no value of a builtin kind -- internal
 - perf: a parsed object's keys are strings, so a clause reads its values alone
 - perf: a field lookup asks one ordering question, and asks about order only on a miss -- internal
+- perf: a shared handle is probed and stored under one borrow -- internal
 - perf: a conjunct that refutes refutes the meet -- internal
 - perf: a reference under a union carries its definition's refutation -- internal
 - perf: a region outside a kind's bound refutes the pair -- internal
