@@ -368,6 +368,15 @@ workload whose goals repeat and two whose goals do not, in four designs, and
 every one of them charged the queries with nothing to remember more than it
 saved the queries with something.
 
+**A memo is not what is missing.** Counted over the three decision workloads and
+over a DAG of thirty-two fields sharing one interned inner record, the number of
+subtyping goals a query *repeats* is zero: the trail absorbs recursion, and the
+field and position caches absorb the shape where one goal is asked many times.
+A table over goals would have nothing to hit, so the sentence this page used to
+carry -- that memoisation would make budget exhaustion rarer -- is not a promise
+being kept later. What would reopen it is a shape where one goal is reached by
+two rules with no cache between them, and none is in hand.
+
 Part of the argument the counter stands in for is already in the code: the trail
 holds each `(subject, supertype)` pair it is deciding, and a pair that comes back
 returns against the hypothesis rather than unfolding again, which is what makes a
