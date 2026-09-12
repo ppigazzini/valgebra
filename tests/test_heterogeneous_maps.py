@@ -221,3 +221,36 @@ def test_a_parsed_object_is_covered_by_whichever_clause_can_read_its_keys() -> N
     assert closed.is_valid_json('{"n": "s"}')
     assert not closed.is_valid_json('{"n": "s", "extra": 1}')
     assert not closed.is_valid_json('{"extra": 1, "n": "s"}')
+
+
+def test_a_wide_object_and_a_narrow_one_read_their_repeats_the_same_way() -> None:
+    """The table and the look forward answer one question, and must answer it alike.
+
+    A narrow object is covered where it lies: an entry is the one the document
+    means exactly when no entry after it repeats the key. A wide one collapses
+    to a table of last values first, because the look forward is quadratic. The
+    two are the same reading, so the boundary between them may not be visible
+    in an answer -- only in what it costs.
+
+    A repeated key is where they could differ, so it is asked on both sides of
+    the boundary: the last value is what `json.loads` keeps, and the last value
+    is what decides.
+    """
+    free = Validator({str: int})
+
+    for width in (2, 8, 9, 20):
+        good = ", ".join(f'"k{i}": {i}' for i in range(width))
+        assert free.is_valid_json("{" + good + "}")
+        # One key repeated, the last occurrence deciding, on either side.
+        assert free.is_valid_json("{" + good + ', "k0": 1}')
+        assert not free.is_valid_json("{" + good + ', "k0": "x"}')
+        # And a first occurrence that would fail is not what decides.
+        assert free.is_valid_json('{"k0": "x", ' + good + "}")
+
+    # The same across the boundary with a declared field beside the clause, so
+    # the key that is skipped as declared is skipped by both readings.
+    mixed = Validator({"n": str, str: int})
+    for width in (2, 9):
+        rest = ", ".join(f'"k{i}": {i}' for i in range(width))
+        assert mixed.is_valid_json('{"n": "s", ' + rest + "}")
+        assert not mixed.is_valid_json('{"n": 1, ' + rest + "}")

@@ -91,6 +91,16 @@ exclude_re = [
     # refute every class the oracle cannot read.
     "replace LeafRelations::direct_instance_of_kind -> Option<bool> with Some\\(true\\)",
     "replace LeafRelations::kind_derives_from -> Option<bool> with Some\\(true\\)",
+    # `SMALL_OBJECT` chooses between two readings of a parsed object's
+    # undeclared keys -- covered where they lie, or collapsed to a table of last
+    # values first -- that answer the same question and must answer it alike.
+    # `a_parsed_object_reads_its_repeats_alike_at_every_width` asserts exactly
+    # that, either side of the bound and across it, so flipping the comparison
+    # sends every width down the other reading and changes no answer. Only the
+    # cost moves, which is `scripts/compare_gate.py`'s business and not a
+    # test's. The two readings themselves stay in the sweep and both of their
+    # mutants die: the repeat test and the refusal are killable, and are killed.
+    "replace <= with > in undeclared_covered",
     # The collection arm of `empty_and_region` returns exactly what the match's
     # default returns. It is written out because the two answer the same thing
     # for OPPOSITE reasons -- a collection is known non-empty, the default is
