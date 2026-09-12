@@ -3027,6 +3027,22 @@ fn a_bound_over_the_integers_has_a_value_where_the_oracle_names_one() {
         Verdict::Unknown
     );
 
+    // Two bounds on one side the oracle *can* order leave a value named: the
+    // tighter of the two is an integer, so the refinement has one.
+    assert_eq!(
+        verdict(&bounded(vec![Constraint::Ge(at(0)), Constraint::Ge(at(1))])),
+        Verdict::Inhabited,
+        "two comparable lower bounds still name the tighter one's value"
+    );
+    // And one pair the oracle cannot order takes the answer away, even though
+    // the bound that is kept is an integer: which of the two is tighter was
+    // never settled, so naming a value under either would be a guess.
+    assert_eq!(
+        verdict(&bounded(vec![Constraint::Ge(at(0)), Constraint::Ge(at(3))])),
+        Verdict::Unknown,
+        "a comparison the oracle declines takes the value away"
+    );
+
     // Two bounds of equal value, one strict: the strict one holds, and the
     // interval it leaves has no integer in it -- which the emptiness half of
     // the same fold reads as empty rather than as a value.
