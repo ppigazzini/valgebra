@@ -728,11 +728,12 @@ mod tests {
     }
 
     proptest! {
-        // Fewer cases than the default, for the reason the descriptor module
+        // A quarter of the default, for the reason the descriptor module
         // gives: every operation here is an automaton product, and shrinking a
         // failure over thousands of draws outruns a mutation sweep's patience.
+        // A fraction rather than a count, so a deeper run reaches here too.
         #![proptest_config(ProptestConfig {
-            cases: 64,
+            cases: ProptestConfig::default().cases / 4,
             // A bounded shrink, so a broken invariant cannot turn a caught
             // mutation into a run that outlasts a sweep.
             max_shrink_time: 2_000,

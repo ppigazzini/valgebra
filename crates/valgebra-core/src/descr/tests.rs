@@ -336,7 +336,7 @@ fn a_kind_whose_values_are_not_sequences_refuses() {
 proptest! {
     // The same bounds, for the same reasons.
     #![proptest_config(ProptestConfig {
-        cases: 64,
+        cases: ProptestConfig::default().cases / 4,
         max_shrink_time: 2_000,
         ..ProptestConfig::default()
     })]
@@ -1009,15 +1009,18 @@ fn descr_with_sets() -> impl Strategy<Value = Descr> {
 }
 
 proptest! {
-    // Fewer cases than the default, and a bounded shrink, because a word or
-    // sequence component's operations are automaton products. The case count
-    // is what keeps a pass cheap: the default spends most of the suite's
-    // time here. The shrink bound is what keeps a *failure* cheap, and it is
-    // the one that matters to the mutation sweep -- a broken invariant makes
-    // every draw larger, so shrinking one counterexample takes longer than
-    // the sweep waits, and a caught mutation reads as a run that hangs.
+    // A quarter of the default, and a bounded shrink, because a word or
+    // sequence component's operations are automaton products. The fraction is
+    // what keeps a pass cheap -- at the library's default this suite would
+    // spend most of the run's time -- and it is a *fraction* so a deeper run
+    // reaches here too: a count fixed at sixty-four is the same sixty-four
+    // under `PROPTEST_CASES`, which is a suite the deep lane cannot deepen.
+    // The shrink bound is what keeps a *failure* cheap, and it is the one that
+    // matters to the mutation sweep -- a broken invariant makes every draw
+    // larger, so shrinking one counterexample takes longer than the sweep
+    // waits, and a caught mutation reads as a run that hangs.
     #![proptest_config(ProptestConfig {
-        cases: 64,
+        cases: ProptestConfig::default().cases / 4,
         max_shrink_time: 2_000,
         ..ProptestConfig::default()
     })]

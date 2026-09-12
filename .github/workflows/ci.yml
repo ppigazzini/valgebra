@@ -86,6 +86,16 @@ jobs:
       # embedded interpreter, so this lane stays Python-free across every OS. The
       # interpreter-backed binding tests run under the binding-coverage lane.
       - run: cargo test --locked --workspace
+      # The three lanes draw independently and at depth, which is what finds a
+      # rare shape; the seed a draw found is only useful if it leaves the
+      # runner. proptest writes it beside the test module, so a red lane hands
+      # back the file rather than a hash in a log.
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: proptest-regressions-${{ matrix.os }}
+          path: crates/*/proptest-regressions/**
+          if-no-files-found: ignore
 
   rust-msrv:
     name: rust msrv
@@ -660,6 +670,14 @@ jobs:
     # and the ratchet is already written for a partial sweep.
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # One seed for the baseline and every mutant of this shard. A mutation is
+    # caught when the tests answer differently with it than without it, so the
+    # two runs have to be given the same inputs; proptest otherwise draws from
+    # the OS per run, and a law that fails on a rare shape marks mutants caught
+    # on its own. The run id makes the draw differ between runs, so the sweep
+    # still explores, and a baseline failure carries the seed that found it.
+    env:
+      PROPTEST_RNG_SEED: ${{ github.run_id }}
     strategy:
       fail-fast: false
       matrix:
@@ -752,6 +770,14 @@ jobs:
     # than tens of them.
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # One seed for the baseline and every mutant of this shard. A mutation is
+    # caught when the tests answer differently with it than without it, so the
+    # two runs have to be given the same inputs; proptest otherwise draws from
+    # the OS per run, and a law that fails on a rare shape marks mutants caught
+    # on its own. The run id makes the draw differ between runs, so the sweep
+    # still explores, and a baseline failure carries the seed that found it.
+    env:
+      PROPTEST_RNG_SEED: ${{ github.run_id }}
     strategy:
       fail-fast: false
       matrix:
@@ -1018,6 +1044,14 @@ jobs:
     # and the others twenty-five to forty, so a ceiling at forty-five cancels
     # a healthy sweep and a cancelled job is red. Twice the slowest reading.
     timeout-minutes: 90
+    # One seed for the baseline and every mutant of this shard. A mutation is
+    # caught when the tests answer differently with it than without it, so the
+    # two runs have to be given the same inputs; proptest otherwise draws from
+    # the OS per run, and a law that fails on a rare shape marks mutants caught
+    # on its own. The run id makes the draw differ between runs, so the sweep
+    # still explores, and a baseline failure carries the seed that found it.
+    env:
+      PROPTEST_RNG_SEED: ${{ github.run_id }}
     strategy:
       fail-fast: false
       matrix:
@@ -1164,6 +1198,10 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # One seed for the baseline and every mutant of this sweep; see
+    # `mutants-diff-core` for why the two runs have to share one.
+    env:
+      PROPTEST_RNG_SEED: ${{ github.run_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

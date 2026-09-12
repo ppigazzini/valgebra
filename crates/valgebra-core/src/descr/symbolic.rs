@@ -797,11 +797,12 @@ mod tests {
     }
 
     proptest! {
-        // Fewer cases than the default: every operation is an automaton product
+        // A quarter of the default: every operation is an automaton product
         // over guards that are themselves sets, and shrinking a failure over the
-        // default count outruns what a mutation sweep waits for.
+        // default count outruns what a mutation sweep waits for. A fraction
+        // rather than a count, so a deeper run reaches here too.
         #![proptest_config(ProptestConfig {
-            cases: 64,
+            cases: ProptestConfig::default().cases / 4,
             // A bounded shrink, so a broken invariant cannot turn a caught
             // mutation into a run that outlasts a sweep.
             max_shrink_time: 2_000,
