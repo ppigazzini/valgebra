@@ -340,6 +340,16 @@ impl<G: Guard> SymbolicDfa<G> {
     /// pairwise meets of the two sides' guards: each side's edges are disjoint
     /// and covering, so the meets are too, and the product needs no minterm
     /// search -- which is what a set of guards with no such invariant would.
+    ///
+    /// That disjointness is a *precondition*, not something asserted here, and
+    /// the reason is in this module's own tests: the two that drive the size
+    /// bounds build tables by hand whose guards deliberately overlap, so every
+    /// pair meets and a row is the two rows multiplied. A `debug_assert` on the
+    /// row was written and removed -- it cannot tell a fixture reaching for a
+    /// bound from a machine that lost the invariant, and no placement avoids
+    /// them, since they call the public operations. What holds it instead is
+    /// `the_complement_laws_hold_of_the_sequences`: a complement flips accepting
+    /// states, so two guards sharing a value flip it twice and the law fails.
     fn product(
         &self,
         other: &SymbolicDfa<G>,
