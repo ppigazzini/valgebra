@@ -190,6 +190,34 @@ value that moved reports the move. The **instruction** count moves the other way
 element walk executes 47% more of them -- which is why `scripts/perf_budget.json`
 carries that reading as a recorded step against the base it steps from.
 
+## A narrow object is covered where it lies
+
+A parsed JSON object's keys that no field declares are covered by the default
+clauses, and `json.loads` semantics say a repeated key means its **last** value.
+Answering that for a whole object by collapsing it to a table of last values is
+linear with a hash per key, and it allocates: the free-form section of a record
+is written `dict[str, V]` and usually carries a handful of keys, so the table was
+being built for objects of one and two entries.
+
+Up to `SMALL_OBJECT` entries the same question is asked in place. An entry is the
+one the document means exactly when no entry *after* it repeats the key, which is
+a look forward over entries already in hand. The two readings answer alike by
+construction, so the boundary between them may show in what a walk costs and
+never in what it answers -- which is why the rows that hold it run either side of
+the bound and across it, and why flipping the comparison is an equivalent mutant
+the sweep excuses with that argument.
+
+The key half of the question is settled before it is asked where a *lone* clause
+is keyed by `str` or by anything: a parsed object's keys are strings by
+construction, so such a clause admits every one of them and only its value schema
+is walked. That is a smaller saving than the table -- one key-schema walk per
+undeclared key rather than one allocation per object -- and the two compose.
+Both are on the comparison gate's JSON document, which reads 0.78 of
+pydantic-core with them and 0.87 with only the first.
+
+The Python-dict path is untouched by both: a dict key is any object, and the
+reason this reading holds is that a parsed key is not.
+
 ## Recursion is guarded by value identity
 
 `check_ref` records `(object id, definition index)` on the path. A value that

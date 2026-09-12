@@ -344,7 +344,17 @@ the shape. What is left below is what the descriptor cannot hold.
   measures it beside it.
 
 - **A predicate.** Its satisfiability is undecidable (below), so neither
-  representation reasons about one.
+  representation reasons about one -- and that is a statement about the
+  *predicate*, not about every pair carrying one. A refinement is a subset of
+  its base, so what surrounds the predicate still decides: a bounded integer
+  against a predicate-refined list is refuted by the kinds, a list against its
+  own bounded-and-predicated refinement by the empty list the bound leaves out,
+  and a dataclass against a union with a predicate-refined branch by the kind
+  that branch names. What the predicate costs is the other direction. A
+  refutation stands on a value of the *subject*, and a subject carrying a
+  predicate is never proven to have one, so the same pair reversed is undecided:
+  `Annotated[int, Ge(0)] <= Annotated[list[int], Predicate(f)]` is refuted and
+  its converse is not.
 
 `tests/test_completeness_ledger.py` is where a relation that leaves this list
 lands: it enumerates what the procedure must *decide* and fails in both
