@@ -117,6 +117,8 @@ answer of its own, or a repair to a change not yet released.
 - perf: a region outside a kind's bound refutes the pair -- internal
 - perf: a field no clause of the supertype admits refutes the map -- internal
 - perf: a bound over the integers has a value the oracle names -- internal
+- perf: a class met with its attributes has a value when its fields do -- internal
+- feat: the oracle answers what a direct instance of a class is -- internal
 
 -->
 

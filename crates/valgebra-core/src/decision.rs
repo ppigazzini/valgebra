@@ -1423,7 +1423,11 @@ impl Schema {
         cx: SubtypeCx<'_>,
         assumptions: &mut Vec<(Schema, Schema)>,
     ) -> Relation {
-        Relation::proven(
+        // Every rule here proves and none refutes: a member that is *not* below
+        // the supertype says nothing about the meet, which is a smaller set
+        // than that member. So a pair none of them places is handed to the
+        // reading every pair with no rule gets, rather than ending the match.
+        let placed = Relation::proven(
             Relation::any(
                 members
                     .iter()
@@ -1437,7 +1441,41 @@ impl Schema {
                             .map(|b| self.is_subtype_rec(b, cx, assumptions)),
                     )
                     .holds()),
-        )
+        );
+        if placed.holds() {
+            return placed;
+        }
+        // One shape does refute, and it is the meet a dataclass lowers to. A
+        // class together with the attributes its instances carry is below
+        // another class exactly as its class is: the value the meet holds is a
+        // *direct* instance of `C` carrying those attributes, so `type(v) is C`
+        // settles `isinstance(v, D)` through the order alone, and a class
+        // deriving from both changes nothing about that value. The guard around
+        // this rule reads whether the meet has it.
+        if !class_with_attributes(members) {
+            return placed;
+        }
+        let Some(class) = members.iter().find_map(|m| match m {
+            Schema::Instance(ix) => Some(*ix),
+            _ => None,
+        }) else {
+            return placed;
+        };
+        if matches!(other, Schema::Instance(_))
+            && cx.oracle.leaf_subtype(&Schema::Instance(class), other) == Some(false)
+        {
+            return Relation::Fails;
+        }
+        // And against a supertype every value of which has one kind: the same
+        // direct instance either has that kind or does not, and the oracle
+        // reads `type(v) is C` rather than the subtree beneath `C`, which is
+        // what makes the answer a value rather than an open-world guess.
+        if let Some(kind) = other.type_tag_with(cx.oracle)
+            && cx.oracle.direct_instance_of_kind(class, kind) == Some(false)
+        {
+            return Relation::Fails;
+        }
+        placed
     }
 
     fn subtype_decide(
@@ -1476,7 +1514,9 @@ impl Schema {
                     .iter()
                     .map(|m| self.is_subtype_rec(m, cx, assumptions)),
             ),
-            (Schema::Intersection(members), _) => self.meet_below(other, members, cx, assumptions),
+            (Schema::Intersection(members), _) => self
+                .meet_below(other, members, cx, assumptions)
+                .or_else(|| self.unstructured(other, cx, assumptions)),
             (_, Schema::Union(members)) => self
                 .below_a_union(other, members, cx, assumptions)
                 .or_else(|| self.unstructured(other, cx, assumptions)),
@@ -1616,6 +1656,9 @@ impl Schema {
         if self.spills_past(other, cx.oracle) {
             return Relation::Fails;
         }
+        if self.outside_the_class(other, cx.oracle) {
+            return Relation::Fails;
+        }
         match cx.oracle.leaf_subtype(self, other) {
             Some(true) => Relation::Holds,
             Some(false) => Relation::Fails,
@@ -1636,6 +1679,22 @@ impl Schema {
     /// goal.
     fn verdict_of(&self, cx: SubtypeCx<'_>) -> Verdict {
         self.verdict_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget)
+    }
+
+    /// Whether this schema's kind holds a value the supertype's class does not.
+    ///
+    /// A subject every value of which has one kind is refuted against a class
+    /// that kind's own builtin does not derive from: a value of the kind built
+    /// as that builtin has `type(v)` equal to it, so the order settles
+    /// `isinstance`, and no class deriving from both changes that particular
+    /// value. The dual of the reading a meet of a class and its attributes
+    /// gets, with the kind and the class swapping sides.
+    fn outside_the_class(&self, other: &Schema, oracle: &dyn LeafRelations) -> bool {
+        let Schema::Instance(class) = other else {
+            return false;
+        };
+        self.type_tag_with(oracle)
+            .is_some_and(|kind| oracle.kind_derives_from(kind, *class) == Some(false))
     }
 
     /// Whether the subject holds a region the supertype's kind cannot.
@@ -1813,6 +1872,38 @@ pub trait LeafRelations: Constants {
         None
     }
 
+    /// Whether a value whose *type is* the pooled class has `kind`.
+    ///
+    /// The narrower question beside [`class_admits_kind`](Self::class_admits_kind),
+    /// and the one a refutation can stand on. That one reads the whole subtree
+    /// -- a subclass may derive from a builtin, so a plain class *admits* every
+    /// kind -- and declines for a plain class because a claim there would be
+    /// unsound. This one asks about `type(v) is C` alone, where no subclass can
+    /// interfere: a direct instance of a class laying down no builtin layout is
+    /// a plain object and has none of the kinds the partition names.
+    ///
+    /// Both answers are used, so an implementor must not widen either. It must
+    /// decline for a class whose `isinstance` runs user code, and for a class
+    /// it cannot read.
+    fn direct_instance_of_kind(&self, _class: ClassIx, _kind: Kind) -> Option<bool> {
+        None
+    }
+
+    /// Whether every value of `kind` is an instance of the pooled class.
+    ///
+    /// The dual of [`direct_instance_of_kind`](Self::direct_instance_of_kind),
+    /// asked of the kind's own builtin: a value of `kind` built as that builtin
+    /// has `type(v)` equal to it, so the order between the builtin and the
+    /// class settles `isinstance`. `Some(false)` refutes -- the kind holds a
+    /// value the class does not -- and it is the only answer that does.
+    ///
+    /// It must decline for a class whose `isinstance` runs user code. The
+    /// default declines, so a core with no oracle keeps every class
+    /// conservative.
+    fn kind_derives_from(&self, _kind: Kind, _class: ClassIx) -> Option<bool> {
+        None
+    }
+
     /// Whether the two pooled constants behind a pair of [`Schema::Literal`]s
     /// denote disjoint singletons, or `None` when it cannot be settled soundly.
     ///
@@ -1880,9 +1971,13 @@ fn intersection_verdict(
 ) -> (Verdict, Regions) {
     let mut any_empty = false;
     let mut region = Regions::MEET_UNIT;
+    // What the members say together, which only the shape below can read as the
+    // meet's own: in general two inhabited members meet in nothing.
+    let mut members_hold = Verdict::Inhabited;
     for m in members {
         let (verdict, member_region) = m.empty_and_region(oracle, defs, visiting, budget);
         any_empty |= verdict.is_empty();
+        members_hold = Verdict::every([members_hold, verdict].into_iter());
         region = region.intersect(member_region);
         // Both accumulators absorb: an empty member empties the meet whatever the
         // rest are, and an opaque region stays opaque. No later member can change
@@ -1900,10 +1995,36 @@ fn intersection_verdict(
         || keyed_map_meet_empty(members, oracle, defs, budget);
     let verdict = if empty {
         Verdict::Empty
+    } else if class_with_attributes(members) {
+        members_hold
     } else {
         region.verdict()
     };
     (verdict, region)
+}
+
+/// Whether this meet is one class together with the attributes its instances
+/// carry, which is the shape a dataclass lowers to.
+///
+/// The descriptor's atom rule already reads that pair -- a class with fields,
+/// inhabited when its fields are -- and the meet above says it in the
+/// vocabulary the structural procedure uses. Neither member's region says
+/// anything, so without this the meet of two opaque halves is opaque, and every
+/// refutation about a dataclass was dropped by the guard that believes one.
+///
+/// **The witness is a *direct* instance of the class**, carrying whatever the
+/// fields admit: `type(v) is C`, so nothing is asked about which classes derive
+/// from which. That is why exactly one class is read. Two would need a class
+/// deriving from both, which is the open world the atom rule declines, and two
+/// attribute records would need their fields not to contradict each other --
+/// `{x: int}` and `{x: str}` are each inhabited and meet in nothing. Anything
+/// else in the meet leaves the answer to the regions.
+fn class_with_attributes(members: &[Schema]) -> bool {
+    matches!(
+        members,
+        [Schema::Instance(_), Schema::AttrRecord { .. }]
+            | [Schema::AttrRecord { .. }, Schema::Instance(_)]
+    )
 }
 
 /// Whether a refinement's bound and length constraints cannot hold together: a

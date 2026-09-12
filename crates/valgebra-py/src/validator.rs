@@ -312,6 +312,28 @@ impl PoolRelations<'_, '_> {
     }
 }
 
+/// The builtin type whose direct values have `kind`.
+///
+/// The inverse of the table [`layout_of`] scans, and the two are the same fact
+/// read in the two directions a class question needs. `NoneType` has no builtin
+/// to name here -- its one value is a singleton rather than a constructor's --
+/// so it declines.
+fn builtin_of(py: Python<'_>, kind: Kind) -> Option<Bound<'_, PyType>> {
+    Some(match kind {
+        Kind::Bool => PyBool::type_object(py),
+        Kind::Int => PyInt::type_object(py),
+        Kind::Str => PyString::type_object(py),
+        Kind::Bytes => PyBytes::type_object(py),
+        Kind::Float => PyFloat::type_object(py),
+        Kind::Tuple => PyTuple::type_object(py),
+        Kind::FrozenSet => PyFrozenSet::type_object(py),
+        Kind::List => PyList::type_object(py),
+        Kind::Set => PySet::type_object(py),
+        Kind::Dict => PyDict::type_object(py),
+        Kind::NoneType => return None,
+    })
+}
+
 /// The builtin base a class is built on: the layout tag [`Class`] reads, and the
 /// kind that layout confines an instance to.
 ///
@@ -503,6 +525,50 @@ impl LeafRelations for PoolRelations<'_, '_> {
         // `bool` itself and hold booleans. Sound and coarse: the pair is never
         // refuted here.
         own.map(|own| own == kind || matches!((own, kind), (Kind::Int, Kind::Bool)))
+    }
+    /// Whether a value whose *type is* the pooled class has `kind`.
+    ///
+    /// The narrower question beside `class_admits_kind`, and the one that can
+    /// refute. That one reads the whole subtree and so declines a class laying
+    /// down no layout, because a subclass of it may derive from a builtin. This
+    /// one asks about `type(v) is C`, where no subclass interferes: a direct
+    /// instance of such a class is a plain object and has none of the kinds the
+    /// partition names, which is `Some(false)` for every kind rather than a
+    /// decline.
+    ///
+    /// A class laid out as a builtin answers by comparing the two, with `bool`
+    /// under `int` for the reason the layout tag gives: a class laid out as an
+    /// int may be `bool` itself.
+    fn direct_instance_of_kind(&self, class: ClassIx, kind: Kind) -> Option<bool> {
+        let value = self.literals.get(class.get())?.bind(self.py);
+        let class = value.cast::<PyType>().ok()?;
+        if !self.denotes_a_set(class)? {
+            return None;
+        }
+        let (_, own) = layout_of(class);
+        Some(match own {
+            Some(own) => own == kind || matches!((own, kind), (Kind::Int, Kind::Bool)),
+            // A direct instance of a class that lays down no builtin layout is
+            // a plain object: no kind the partition names, and no subclass in
+            // the question to widen it.
+            None => false,
+        })
+    }
+
+    /// Whether every value of `kind` is an instance of the pooled class.
+    ///
+    /// Asked of the kind's own builtin, so the answer is one `issubclass` over
+    /// the order. A value of the kind built as that builtin has `type(v)` equal
+    /// to it, which is what makes a `false` here a value rather than a guess
+    /// about which classes exist.
+    fn kind_derives_from(&self, kind: Kind, class: ClassIx) -> Option<bool> {
+        let value = self.literals.get(class.get())?.bind(self.py);
+        let class = value.cast::<PyType>().ok()?;
+        if !self.denotes_a_set(class)? {
+            return None;
+        }
+        let builtin = builtin_of(self.py, kind)?;
+        builtin.is_subclass(class).ok()
     }
 
     /// Whether the class behind an `Instance` atom denotes a set, on the test

@@ -448,3 +448,93 @@ def test_a_refutation_about_a_class_needs_a_value_of_the_kind_it_is_read_on() ->
 
     assert Validator(Plain).relation_to(Plain) == "subset"
     assert Validator(Plain).relation_to(Other) == "not_subset"
+
+
+def test_a_kind_is_below_exactly_the_classes_its_builtin_derives_from() -> None:
+    """A kind's own builtin builds its values, so one `issubclass` settles it.
+
+    Every value of a kind that is not an instance of some subclass has
+    `type(v)` equal to the kind's builtin, and a subclass of that builtin is
+    below the kind already. So asking whether a kind is below a class is one
+    question over the class order, and a `False` names a value -- an ordinary
+    `5` -- rather than guessing which classes exist. That is what a refutation
+    has to stand on.
+    """
+
+    class Plain:
+        pass
+
+    class MyInt(int):
+        pass
+
+    # Every kind names the builtin its values are built as, so every one of
+    # them stands off a class that builtin does not derive from. `None` is the
+    # exception the table itself states: its one value is a singleton rather
+    # than a constructor's, so the reading declines and the refutation comes
+    # from the value instead.
+    for kind in (bool, int, str, bytes, float, tuple, frozenset, list, set, dict):
+        assert Validator(kind).relation_to(Validator(Plain)) == "not_subset"
+    assert Validator(None).relation_to(Validator(Plain)) == "not_subset"
+
+    # The same reading proves, where the order runs the other way.
+    assert Validator(bool).relation_to(Validator(int)) == "subset"
+    assert Validator(int).relation_to(Validator(object)) == "subset"
+
+    # And a subclass is below the kind rather than the kind below it: `5` is
+    # not a `MyInt`.
+    assert Validator(MyInt).relation_to(Validator(int)) == "subset"
+    assert Validator(int).relation_to(Validator(MyInt)) == "not_subset"
+
+
+def test_a_class_met_with_its_attributes_is_read_as_a_direct_instance() -> None:
+    """A dataclass lowers to a class met with the attributes its instances carry.
+
+    That meet holds a *direct* instance of the class, so `type(v) is C` settles
+    `isinstance(v, D)` through the order alone and a class deriving from both
+    changes nothing about that value. It is the one shape of meet that can
+    refute: every other rule over a meet proves, since a member that is not
+    below the supertype says nothing about the smaller set the meet denotes.
+
+    A class laying down no builtin layout has a direct instance that is a plain
+    object, carrying none of the kinds the partition names. A class laid out as
+    a builtin keeps that kind, and the meet with its attributes keeps it too.
+    """
+
+    @dataclasses.dataclass
+    class Point:
+        x: int
+
+    @dataclasses.dataclass
+    class Counted(int):
+        n: int = 0
+
+    assert Validator(Point).relation_to(Validator(int)) == "not_subset"
+    assert Validator(Point).relation_to(Validator(list)) == "not_subset"
+    assert Validator(Point).relation_to(Validator(object)) == "subset"
+
+    assert Validator(Counted).relation_to(Validator(int)) == "subset"
+    assert Validator(Counted).relation_to(Validator(str)) == "not_subset"
+
+
+def test_a_class_whose_metaclass_answers_isinstance_denotes_no_set() -> None:
+    """`isinstance` a metaclass computes is not the class order, so nothing reads it.
+
+    Both class readings ask the order -- one `issubclass` over a kind's own
+    builtin, or the layout a class lays down -- and both are only about the
+    order. A metaclass that overrides `__instancecheck__` or
+    `__subclasscheck__` answers membership by running code instead, and no
+    snapshot of the order predicts what that code says. So the reading declines
+    rather than guessing, and the pair is undecided.
+
+    Every abstract base class is such a class, `ABCMeta` defining both hooks,
+    and so is a runtime-checkable `Protocol`.
+    """
+    for abstract in (collections.abc.Sequence, collections.abc.Iterable):
+        assert Validator(int).relation_to(Validator(abstract)) == "undecided"
+        assert Validator(list).relation_to(Validator(abstract)) == "undecided"
+
+    @runtime_checkable
+    class HasX(Protocol):
+        x: int
+
+    assert Validator(int).relation_to(Validator(HasX)) == "undecided"

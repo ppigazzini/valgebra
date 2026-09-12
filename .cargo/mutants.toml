@@ -84,6 +84,13 @@ exclude_re = [
     # class no oracle reads.
     "replace LeafRelations::no_int_between -> Option<bool> with Some\\(false\\)",
     "replace LeafRelations::class_admits_kind -> Option<bool> with Some\\(true\\)",
+    # The two questions about a class asked of a *direct* instance read their
+    # `Some(false)` as the refutation, so `Some(true)` collapses into the
+    # decline at their one call site each and is the unkillable one. Their
+    # `Some(false)` stays in the sweep and is the unsound direction: it would
+    # refute every class the oracle cannot read.
+    "replace LeafRelations::direct_instance_of_kind -> Option<bool> with Some\\(true\\)",
+    "replace LeafRelations::kind_derives_from -> Option<bool> with Some\\(true\\)",
     # The collection arm of `empty_and_region` returns exactly what the match's
     # default returns. It is written out because the two answer the same thing
     # for OPPOSITE reasons -- a collection is known non-empty, the default is

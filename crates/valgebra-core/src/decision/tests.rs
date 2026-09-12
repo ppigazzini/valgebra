@@ -3073,3 +3073,162 @@ fn a_subject_inside_a_schema_is_outside_its_complement() {
         Relation::Holds
     );
 }
+
+/// An oracle over two classes, so the readings about a *direct* instance can
+/// be driven without an interpreter.
+///
+/// Class 0 lays down no builtin layout, which is what a dataclass is: its
+/// direct instances are plain objects, so they have none of the kinds the
+/// partition names and no builtin derives from it. Class 1 is laid out as a
+/// string. Neither derives from the other.
+struct Classes;
+impl Constants for Classes {}
+
+impl Classes {
+    const PLAIN: ClassIx = ClassIx::new(0);
+    const STRINGY: ClassIx = ClassIx::new(1);
+}
+
+impl LeafRelations for Classes {
+    fn leaf_subtype(&self, sub: &Schema, sup: &Schema) -> Option<bool> {
+        match (sub, sup) {
+            (Schema::Instance(a), Schema::Instance(b)) => Some(a == b),
+            // A class is not below a union of scalars, which is true of the
+            // class and says nothing about a *meet* holding it: the value that
+            // stands against the class may be one the attributes exclude.
+            (Schema::Instance(_), Schema::Union(_)) => Some(false),
+            _ => None,
+        }
+    }
+
+    fn atom_denotes_a_set(&self, atom: &Schema) -> Option<bool> {
+        matches!(atom, Schema::Instance(_)).then_some(true)
+    }
+
+    fn direct_instance_of_kind(&self, class: ClassIx, kind: Kind) -> Option<bool> {
+        Some(class == Classes::STRINGY && kind == Kind::Str)
+    }
+
+    fn kind_derives_from(&self, _kind: Kind, _class: ClassIx) -> Option<bool> {
+        Some(false)
+    }
+}
+
+/// A class met with its attributes has a value when its fields do, and that
+/// value is what every refutation about a dataclass stands on.
+///
+/// A dataclass lowers to exactly this meet, and neither half has a region, so
+/// without a reading of its own the meet is opaque and the guard drops every
+/// refutation the rules compute about it. The value is a *direct* instance of
+/// the class carrying whatever the fields admit, which is why one class is
+/// read and a second leaves the answer to the regions.
+#[test]
+fn a_class_met_with_its_attributes_has_a_value_when_its_fields_do() {
+    let attributes = |fields: Vec<Field>| Schema::AttrRecord {
+        fields: fields.into(),
+    };
+    let dataclass = |class: ClassIx, fields: Vec<Field>| {
+        Schema::meet([Schema::Instance(class), attributes(fields)])
+    };
+
+    let plain = dataclass(Classes::PLAIN, vec![field("x", Schema::Int, true)]);
+    assert_eq!(plain.verdict_under(&Classes), Verdict::Inhabited);
+
+    // A required field with no value empties it, as it does for the record.
+    let barren = dataclass(Classes::PLAIN, vec![field("x", Schema::Nothing, true)]);
+    assert_eq!(barren.verdict_under(&Classes), Verdict::Empty);
+
+    // Two classes need one deriving from both, which is the open world the
+    // atom rule declines; the meet stays opaque.
+    let two = Schema::meet([
+        Schema::Instance(Classes::PLAIN),
+        Schema::Instance(Classes::STRINGY),
+        attributes(vec![field("x", Schema::Int, true)]),
+    ]);
+    assert_eq!(two.verdict_under(&Classes), Verdict::Unknown);
+}
+
+/// A class met with its attributes is outside what its class is outside.
+///
+/// The witness is a direct instance of the class, so `type(v) is C` settles
+/// `isinstance(v, D)` through the order and a value of one kind through the
+/// layout. Both readings refute; neither claims.
+#[test]
+fn a_class_met_with_its_attributes_is_outside_what_its_class_is() {
+    let dataclass = |class: ClassIx| {
+        Schema::meet([
+            Schema::Instance(class),
+            Schema::AttrRecord {
+                fields: vec![field("x", Schema::Int, true)].into(),
+            },
+        ])
+    };
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &Classes, &[], &budget)
+    };
+    let plain = dataclass(Classes::PLAIN);
+
+    // Against a class it does not derive from.
+    assert_eq!(
+        relation(&plain, &Schema::Instance(Classes::STRINGY)),
+        Relation::Fails
+    );
+    // Against a supertype every value of which has one kind.
+    assert_eq!(
+        relation(&plain, &Schema::list(SeqShape::homogeneous(Schema::Int))),
+        Relation::Fails
+    );
+    assert_eq!(relation(&plain, &Schema::Str), Relation::Fails);
+    // And its own class is the one it is below.
+    assert_eq!(
+        relation(&plain, &Schema::Instance(Classes::PLAIN)),
+        Relation::Holds
+    );
+    // A class laid out as the kind is not refuted against it.
+    assert_ne!(
+        relation(&dataclass(Classes::STRINGY), &Schema::Str),
+        Relation::Fails
+    );
+
+    // The dual: a kind whose builtin derives from no such class.
+    assert_eq!(
+        relation(&Schema::Str, &Schema::Instance(Classes::PLAIN)),
+        Relation::Fails
+    );
+
+    // What the class's own refutation does *not* carry. The oracle refutes the
+    // class against a union of scalars, and the meet is a smaller set: the
+    // value that stands against the class may be one the attributes exclude.
+    // Only a supertype that is a class, or one whose values all have a kind,
+    // is read here.
+    assert_ne!(
+        relation(&plain, &Schema::union([Schema::Int, Schema::Str])),
+        Relation::Fails
+    );
+}
+
+/// An oracle that declines the class questions leaves the meet undecided.
+///
+/// The two readings above rest on answers about a *direct* instance, and the
+/// defaults decline so a core with no oracle keeps every class conservative. A
+/// default that answered would refute every class the bindings cannot read,
+/// which is the direction that would be unsound.
+#[test]
+fn a_meet_whose_class_the_oracle_declines_is_not_refuted() {
+    let plain = Schema::meet([
+        Schema::Instance(ClassIx::new(0)),
+        Schema::AttrRecord {
+            fields: vec![field("x", Schema::Int, true)].into(),
+        },
+    ]);
+    // `Pure` answers that the class denotes a set -- so the meet has a value
+    // and the guard believes what the rules report -- and declines every
+    // question about which kinds that value has.
+    let budget = Cell::new(DECISION_BUDGET);
+    assert_eq!(plain.verdict_under(&Pure), Verdict::Inhabited);
+    assert_eq!(
+        plain.subtype_relation(&Schema::Str, &Pure, &[], &budget),
+        Relation::Unknown
+    );
+}
