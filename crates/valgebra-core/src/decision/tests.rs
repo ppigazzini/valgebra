@@ -3296,6 +3296,89 @@ fn a_meet_whose_class_the_oracle_declines_is_not_refuted() {
     );
 }
 
+/// Every spelling of one record decides as every other, whatever the order.
+///
+/// The cursor over a field list moves forward only, and it reads whether the
+/// two lists are in name order *lazily* -- on the first lookup that finds
+/// nothing, because that is the only answer the order can change. A lookup
+/// that finds a field is right whatever the order: names are unique and the
+/// walk stops on an equal name, so it cannot stop on the wrong one.
+///
+/// That argument is worth more than a row of examples, so this draws every
+/// permutation of a small record's fields against every permutation of
+/// another's and asks that all of them answer alike. A list the constructor
+/// built is in order; `KeyedMap` is a public variant and one built by hand is
+/// not, which is the case the lazy reading has to survive.
+#[test]
+fn every_order_of_one_record_decides_as_every_other() {
+    fn permutations(fields: &[Field]) -> Vec<Vec<Field>> {
+        if fields.len() <= 1 {
+            return vec![fields.to_vec()];
+        }
+        let mut out = Vec::new();
+        for (at, field) in fields.iter().enumerate() {
+            let mut rest = fields.to_vec();
+            rest.remove(at);
+            for mut tail in permutations(&rest) {
+                tail.insert(0, field.clone());
+                out.push(tail);
+            }
+        }
+        out
+    }
+
+    let listed = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let left = vec![
+        field("a", Schema::Int, true),
+        field("b", listed.clone(), false),
+        field("c", Schema::Str, true),
+        field("d", Schema::Int, false),
+    ];
+    let right = vec![
+        field("a", Schema::Int, false),
+        field("b", Schema::Int, true),
+        field("d", listed, true),
+    ];
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let record = |fields: Vec<Field>, open: bool| Schema::KeyedMap {
+        fields: fields.into(),
+        defaults: if open {
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }]
+        } else {
+            Vec::new()
+        }
+        .into(),
+    };
+
+    for open in [false, true] {
+        // The spelling the constructor would build, which is the answer the
+        // permutations below are held to.
+        let mut ordered_left = left.clone();
+        ordered_left.sort_by(|one, two| one.name.cmp(&two.name));
+        let mut ordered_right = right.clone();
+        ordered_right.sort_by(|one, two| one.name.cmp(&two.name));
+        let forward = relation(
+            &record(ordered_left.clone(), open),
+            &record(ordered_right.clone(), open),
+        );
+        let backward = relation(&record(ordered_right, open), &record(ordered_left, open));
+
+        for one in permutations(&left) {
+            for two in permutations(&right) {
+                let (a, b) = (record(one.clone(), open), record(two, open));
+                assert_eq!(relation(&a, &b), forward, "{a:?} <= {b:?}");
+                assert_eq!(relation(&b, &a), backward, "{b:?} <= {a:?}");
+            }
+        }
+    }
+}
+
 /// A field list a caller built out of order is read by a scan, not a cursor.
 ///
 /// The cursor over one field list moves forward only, so it answers correctly
