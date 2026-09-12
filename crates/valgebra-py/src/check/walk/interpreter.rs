@@ -12,7 +12,7 @@ use std::ops::ControlFlow;
 use jiter::JsonValue;
 use pyo3::types::{PyFrozenSet, PySet};
 use valgebra_core::SeqShape;
-use valgebra_core::{Constraint, Field, MapClause, Openness};
+use valgebra_core::{Constraint, Field, MapClause, Openness, PathSegment};
 
 /// Decide membership of a Python value against a schema, through the real
 /// walk, in the mode a validator's `is_valid` uses.
@@ -2637,5 +2637,313 @@ fn a_parsed_object_reads_its_repeats_alike_at_every_width() {
                 "width {width}"
             );
         }
+    });
+}
+
+/// The key a violation points at, so a row reads as the field it means.
+fn at(violation: &Violation) -> String {
+    match violation.path.first() {
+        Some(PathSegment::Key(name)) => name.to_string(),
+        other => format!("{other:?}"),
+    }
+}
+
+/// The explaining walk resumes where the deciding walk stopped, and reports the
+/// same thing as one that starts over.
+///
+/// A record that fails is walked twice, and the second walk skips the fields the
+/// first one passed -- they matched, so they have no violation to report, and a
+/// probe through the interpreter is the dear half of reading one. What must not
+/// change is the report, so every row here is asserted against the whole
+/// violation list rather than against its length: a resumption that lost a
+/// field would drop a violation, and one that lost the *count* it carries would
+/// send a complete record to a scan that finds nothing.
+///
+/// The positions matter and the names do not resemble them: `Schema::keyed_map`
+/// sorts fields by name, so a record of `f0..f9` is walked
+/// `f0 f1 f2 ... f9` while one of `f0..f11` is walked `f0 f1 f10 f11 f2 ...`.
+/// Every row below states the position it means.
+#[test]
+fn an_explaining_walk_resumes_where_the_deciding_one_stopped() {
+    Python::attach(|py| {
+        let named = |count: usize, required: bool| -> Vec<Field> {
+            (0..count)
+                .map(|i| field(&format!("f{i}"), Schema::Int, required))
+                .collect()
+        };
+        // Ten fields, so the name order and the position order agree.
+        let fields = named(10, true);
+        let schema = Schema::keyed_map(fields.clone(), Vec::new());
+        let state = WalkState::new();
+        let index = build_index(py, &schema, &[], &[]);
+        let explain = || Ctx {
+            pool: &[],
+            defs: &[],
+            records: &index.records,
+            attrs: &index.attrs,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
+            mode: WalkMode::Explain,
+        };
+        let report = |value: &Bound<'_, PyDict>| {
+            let mut out = Vec::new();
+            let held = member(
+                &schema,
+                &Value::Py(value.as_any()),
+                &mut Frame::new(&mut Vec::new(), &mut out, explain()),
+            );
+            (held, out)
+        };
+        let whole = |wrong: Option<(&str, &str)>, drop: Option<&str>| {
+            let value = PyDict::new(py);
+            for i in 0..10 {
+                value
+                    .set_item(format!("f{i}"), i)
+                    .expect("a fresh dict of small ints always builds");
+            }
+            if let Some((key, text)) = wrong {
+                value.set_item(key, text).expect("replacing a key succeeds");
+            }
+            if let Some(key) = drop {
+                value
+                    .del_item(key)
+                    .expect("deleting a present key succeeds");
+            }
+            value
+        };
+
+        // A refusal at the last position: nine fields are skipped and the tenth
+        // is the whole report.
+        let (held, late) = report(&whole(Some(("f9", "not an int")), None));
+        assert!(!held);
+        assert_eq!(late.len(), 1, "{late:?}");
+        assert_eq!(at(&late[0]), "f9");
+
+        // A refusal at the first position: nothing is skipped, and the nine
+        // fields after it are read by the explaining walk itself.
+        let (held, early) = report(&whole(Some(("f0", "not an int")), None));
+        assert!(!held);
+        assert_eq!(early.len(), 1, "{early:?}");
+        assert_eq!(at(&early[0]), "f0");
+
+        // Two wrong fields either side of the resumption: the report carries
+        // both, in declared order, which is what a walk that resumed at the
+        // first would lose.
+        let two = whole(Some(("f2", "not an int")), None);
+        two.set_item("f7", "not an int")
+            .expect("replacing succeeds");
+        let (held, both) = report(&two);
+        assert!(!held);
+        assert_eq!(both.len(), 2, "{both:?}");
+        assert_eq!(at(&both[0]), "f2");
+        assert_eq!(at(&both[1]), "f7");
+
+        // A required key missing: the deciding walk refuses at its position and
+        // the explaining walk reports it as missing rather than as a mismatch.
+        let (held, absent) = report(&whole(None, Some("f4")));
+        assert!(!held);
+        assert_eq!(absent.len(), 1, "{absent:?}");
+        assert_eq!(at(&absent[0]), "f4");
+
+        // An undeclared key, so the deciding walk reads every field, finds each
+        // one matching, and refuses on the count alone. The explaining walk then
+        // resumes past *all* of them, and the count it resumes with is what lets
+        // it reach the scan that names the extra key rather than reporting
+        // nothing and calling the value mutated.
+        let extra = whole(None, None);
+        extra.set_item("surplus", 1).expect("adding a key succeeds");
+        let (held, spare) = report(&extra);
+        assert!(!held);
+        assert_eq!(spare.len(), 1, "{spare:?}");
+        assert_eq!(at(&spare[0]), "surplus");
+
+        // A wrong field *and* undeclared keys: the count the resumption carries
+        // must be the count the deciding walk had, exactly. Too high by any
+        // amount and the explaining walk can read the record as holding exactly
+        // its own keys, skip the scan, and never name the extra ones.
+        //
+        // One extra key catches a count too high by one and two catches one too
+        // high by two, because what the early return compares is a *sum*: a
+        // count wrong by `n` fires it on a record carrying `n` undeclared keys
+        // and misses on every other. So the row asks both rather than one.
+        for extras in 1..=2 {
+            let crowded = whole(Some(("f5", "not an int")), None);
+            for spare in 0..extras {
+                crowded
+                    .set_item(format!("surplus{spare}"), 1)
+                    .expect("adding a key succeeds");
+            }
+            let (held, reported) = report(&crowded);
+            assert!(!held);
+            let named: Vec<String> = reported.iter().map(at).collect();
+            assert_eq!(named.len(), 1 + extras, "{extras} extra: {named:?}");
+            assert_eq!(named[0], "f5", "{named:?}");
+            for spare in 0..extras {
+                assert!(
+                    named.contains(&format!("surplus{spare}")),
+                    "{extras} extra: {named:?}"
+                );
+            }
+        }
+    });
+}
+
+/// The count a resumption carries is the count the deciding walk had, and an
+/// absent optional field is not in it.
+///
+/// The resumption hands over two numbers, and the second is the one that is easy
+/// to lose: how many declared keys had been *found*. That count is what lets a
+/// record holding exactly its own keys skip the scan for undeclared ones, so a
+/// resumption that over-counted would send a complete record to a scan, and one
+/// that under-counted would let an extra key through unreported. An optional
+/// field the value does not carry is the case that separates them: the deciding
+/// walk passes it without counting it.
+#[test]
+fn a_resumption_carries_the_count_the_deciding_walk_had() {
+    Python::attach(|py| {
+        let state = WalkState::new();
+        let mixed = vec![
+            field("a", Schema::Int, false),
+            field("b", Schema::Int, true),
+            field("c", Schema::Int, true),
+        ];
+        let small = Schema::keyed_map(mixed, Vec::new());
+        let small_index = build_index(py, &small, &[], &[]);
+        let value = PyDict::new(py);
+        value.set_item("b", 1).expect("a fresh dict builds");
+        value
+            .set_item("c", "not an int")
+            .expect("a fresh dict builds");
+        let mut out = Vec::new();
+        let held = member(
+            &small,
+            &Value::Py(value.as_any()),
+            &mut Frame::new(
+                &mut Vec::new(),
+                &mut out,
+                Ctx {
+                    pool: &[],
+                    defs: &[],
+                    records: &small_index.records,
+                    attrs: &small_index.attrs,
+                    unions: &small_index.unions,
+                    regexes: &small_index.regexes,
+                    guard: &state.guard,
+                    depth: &state.depth,
+                    fatal: &state.fatal,
+                    fatal_seen: &state.fatal_seen,
+                    mode: WalkMode::Explain,
+                },
+            ),
+        );
+        assert!(!held);
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert_eq!(at(&out[0]), "c");
+    });
+}
+
+/// A resumption is refused where the value changed size between the two walks.
+///
+/// The deciding walk runs the schema against each field, and a field's schema
+/// can run Python -- a predicate here, an `__eq__` or an `__instancecheck__` in
+/// general -- which can change the dict it is being read out of. The resumption
+/// then names a position in a value that no longer exists, so it is guarded by
+/// the entry count, which is the same guard the deciding walk applies to itself
+/// before answering.
+///
+/// Without the guard the explaining walk skips fields of a value it never read,
+/// and reports about a dict that has moved on. With it, the two walks disagree,
+/// nothing is found, and the walk says the value changed -- which is the true
+/// report and the one a caller can act on.
+#[test]
+fn a_value_that_changes_size_between_the_walks_is_not_resumed() {
+    Python::attach(|py| {
+        // A predicate that deletes a key the first time it is asked, so the
+        // dict shrinks while the deciding walk is part way through it.
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new(
+                "seen = []\n\
+                 def drops(x):\n\
+                 \x20   if not seen:\n\
+                 \x20       seen.append(x)\n\
+                 \x20       target.pop('d', None)\n\
+                 \x20       target['a'] = 'not an int'\n\
+                 \x20   return True\n",
+            )
+            .expect("no interior nul")
+            .as_c_str(),
+            std::ffi::CString::new("drops.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("drops")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+
+        let value = PyDict::new(py);
+        for key in ["a", "b", "c", "d"] {
+            value.set_item(key, 1).expect("a fresh dict builds");
+        }
+        module
+            .setattr("target", &value)
+            .expect("the module takes the dict to change");
+        let drops = module.getattr("drops").expect("drops");
+        let pool = vec![drops.unbind()];
+
+        let guarded = Schema::Refine {
+            base: Arc::new(Schema::Int),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        };
+        // Fields are walked in name order. `b` runs the predicate, which drops
+        // `d` -- changing the size -- and spoils `a`, which the deciding walk
+        // has already passed. `c` is fine, `d` is now missing, so the deciding
+        // walk refuses at `d` and would hand over a resumption naming a value
+        // that no longer exists.
+        let schema = Schema::keyed_map(
+            vec![
+                field("a", Schema::Int, true),
+                field("b", guarded, true),
+                field("c", Schema::Int, true),
+                field("d", Schema::Int, true),
+            ],
+            Vec::new(),
+        );
+        let state = WalkState::new();
+        let index = build_index(py, &schema, &[], &[]);
+        let mut out = Vec::new();
+        let held = member(
+            &schema,
+            &Value::Py(value.as_any()),
+            &mut Frame::new(
+                &mut Vec::new(),
+                &mut out,
+                Ctx {
+                    pool: &pool,
+                    defs: &[],
+                    records: &index.records,
+                    attrs: &index.attrs,
+                    unions: &index.unions,
+                    regexes: &index.regexes,
+                    guard: &state.guard,
+                    depth: &state.depth,
+                    fatal: &state.fatal,
+                    fatal_seen: &state.fatal_seen,
+                    mode: WalkMode::Explain,
+                },
+            ),
+        );
+        assert!(!held, "a value that lost a required key is not a member");
+        // Read for itself, the value now fails at `a` as well as at `d`. A walk
+        // that trusted the resumption would skip `a` -- passed against a value
+        // that has since changed -- and report only what came after it.
+        let named: Vec<String> = out.iter().map(at).collect();
+        assert!(named.contains(&"a".to_owned()), "{named:?}");
+        assert!(named.contains(&"d".to_owned()), "{named:?}");
     });
 }

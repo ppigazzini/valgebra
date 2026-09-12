@@ -24,7 +24,9 @@ fn main() {
     // budget recorded for it keep their meaning.
     let name = std::env::args().nth(2).unwrap_or_else(|| "walk".to_owned());
     let Some(shape) = BindingShape::named(&name) else {
-        eprintln!("unknown shape {name:?}: walk, boundary, record, build, explain, open");
+        eprintln!(
+            "unknown shape {name:?}: walk, boundary, record, build, explain, explain-accept, open"
+        );
         std::process::exit(2);
     };
     let checksum = Python::attach(|py| _valgebra::binding_perf_workload_shape(py, shape, iters));

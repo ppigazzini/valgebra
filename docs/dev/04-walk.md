@@ -190,6 +190,42 @@ value that moved reports the move. The **instruction** count moves the other way
 element walk executes 47% more of them -- which is why `scripts/perf_budget.json`
 carries that reading as a recorded step against the base it steps from.
 
+## The explaining walk resumes where the deciding one stopped
+
+A keyed map that fails is walked twice: once to decide, once to say which field.
+Both walks resolve the declared keys in the same order, and a probe is the dear
+half — through the interpreter it is about 143 instructions, against a handful
+for the check that follows. A fifty-field record refused at the thirty-second
+position repeated thirty-one probes and thirty-one checks for nothing, because a
+field the deciding walk **passed** has no violation to report.
+
+So the deciding walk hands over where it stopped, and the explaining walk starts
+there. What it hands over is two integers and no allocation: the position, and
+how many declared keys had been found by then. The count travels because the
+count is load-bearing — a record holding exactly the keys it declares skips the
+scan for undeclared ones, and a walk that resumed without it would fall into a
+scan that finds nothing.
+
+Three things bound it.
+
+The **entry count** guards the resumption. A field's schema can run Python — a
+predicate, an `__eq__`, an `__instancecheck__` — and that can change the dict it
+is being read out of, so a value whose size moved between the two walks is read
+from the start. A value that changed without changing size is what the mutation
+report is for: the explaining walk then finds nothing and says the value moved,
+which is a truer answer than a violation about a value that has.
+
+The **count must be exact**, not merely different. What the early return compares
+is a sum, so a count too high by `n` skips the scan on a record carrying exactly
+`n` undeclared keys and behaves on every other. The rows ask one extra key and
+two for that reason.
+
+And the resumption is **only ever a saving**. Starting over answers the same
+thing more slowly, which is why a mutant that always starts over is excused in
+`.cargo/mutants.toml` with the instruction count beside it rather than chased
+with a test. The direction that can be wrong — resuming where the walk did not
+stop, or with a count it did not have — is killable and is killed.
+
 ## A narrow object is covered where it lies
 
 A parsed JSON object's keys that no field declares are covered by the default

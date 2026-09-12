@@ -288,6 +288,7 @@ MODES = {
     "binding-record": ("binding_workload", "binding record walk"),
     "binding-build": ("binding_workload", "binding record build"),
     "binding-explain": ("binding_workload", "binding record explain"),
+    "binding-explain-accept": ("binding_workload", "binding record explain accept"),
     "binding-open": ("binding_workload", "binding open record walk"),
 }
 
@@ -302,6 +303,7 @@ BINDING_ITERATIONS = {
     "binding-record": (20_000, 5_000),
     "binding-build": (4_000, 1_000),
     "binding-explain": (8_000, 2_000),
+    "binding-explain-accept": (20_000, 5_000),
     "binding-open": (20_000, 5_000),
 }
 
@@ -311,6 +313,7 @@ BINDING_SHAPES = {
     "binding-record": "record",
     "binding-build": "build",
     "binding-explain": "explain",
+    "binding-explain-accept": "explain-accept",
     "binding-open": "open",
 }
 
