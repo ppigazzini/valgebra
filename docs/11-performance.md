@@ -209,13 +209,19 @@ The error report is the one shape where valgebra is sometimes *slower*, and the
 one whose measurement is not trustworthy: a third of its own value in spread,
 against 0.001 to 0.057 for every other shape. It is the only shape timing a path
 that raises and formats a Python exception, so a Python exception's cost is
-inside the number. Two things follow. It is excluded from the gate's drift
-ratchet, which says so in `scripts/perf_compare.json` rather than by having no
-entry. And a failing validation walks the value **twice** here -- once to decide,
-once to say which field -- where pydantic-core walks it once and collects as it
-goes. That is a deliberate trade for the passing path, which is the common one
-and which walks once; it is not a margin anybody has shown how to recover, and
-one attempt made it twenty times worse.
+inside the number. It is excluded from the gate's drift ratchet for that reason,
+which `scripts/perf_compare.json` says rather than leaving an absent entry to
+mean it.
+
+A failing validation walks the value **twice** here -- once to decide, once to
+say which field -- where pydantic-core walks it once and collects as it goes.
+That is a deliberate trade for the passing path, which is the common one and
+which walks once. The second walk no longer repeats the first: it resumes where
+the deciding walk stopped, since a field that matched has no violation to report
+([dev/04-walk.md](dev/04-walk.md)), which took 36.8% off it on the instruction
+gate -- a fifty-field record refused at the thirty-second position costs 14,861
+instructions where it cost 23,516. What is left of the gap is one extra walk of
+the fields *after* the failure, and the exception.
 
 The scalar shape is absent from the table because it sits near timer resolution:
 the competitive gate measures it at a 32.1 ns median with a spread reaching a

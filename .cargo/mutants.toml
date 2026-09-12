@@ -91,6 +91,24 @@ exclude_re = [
     # refute every class the oracle cannot read.
     "replace LeafRelations::direct_instance_of_kind -> Option<bool> with Some\\(true\\)",
     "replace LeafRelations::kind_derives_from -> Option<bool> with Some\\(true\\)",
+    # `Decided::resume_at` chooses where the explaining walk starts: at the
+    # point the deciding walk stopped, or at the beginning. Both answer the same
+    # thing -- every field before that point matched, so re-reading it reports
+    # nothing -- so a mutant that always answers `(0, 0)`, or that reads the
+    # entry-count guard as always false, makes the walk start over and changes
+    # no report. What it changes is 36.8% of the explaining walk's instructions
+    # (`scripts/perf_gate.py --binding-explain`), which is the instruction
+    # gate's business and not a test's.
+    #
+    # The direction that IS killable stays in the sweep and is killed: resuming
+    # where the walk did *not* stop. Reading the guard as always true resumes
+    # into a value that has changed size, and
+    # `a_value_that_changes_size_between_the_walks_is_not_resumed` fails;
+    # resuming one field further skips the field that refused, and six rows
+    # fail; carrying the wrong count skips the scan for undeclared keys, and the
+    # row that asks one extra key and two fails.
+    "replace Decided::resume_at -> \\(usize, usize\\) with \\(0, 0\\)",
+    "replace match guard self.entries == entries with false in Decided::resume_at",
     # `SMALL_OBJECT` chooses between two readings of a parsed object's
     # undeclared keys -- covered where they lie, or collapsed to a table of last
     # values first -- that answer the same question and must answer it alike.

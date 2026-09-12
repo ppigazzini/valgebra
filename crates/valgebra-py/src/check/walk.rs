@@ -44,7 +44,7 @@ mod record;
 mod scalar;
 mod sequence;
 
-use record::{check_attr_record, keyed_map_explain, keyed_map_matches};
+use record::{Decided, check_attr_record, keyed_map_explain, keyed_map_matches};
 use scalar::{admit, check_literal, check_refine, homogeneous_scalar, scalar_admits, scalar_of};
 use sequence::{check_frozenset, check_seq, check_set};
 
@@ -236,11 +236,15 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
         },
         Schema::KeyedMap { fields, defaults } => {
             // Membership is the single-pass fast check; on failure the explain
-            // pass re-walks in declared order to aggregate ordered violations.
-            let ok = keyed_map_matches(fields, defaults, value, ctx);
+            // pass re-walks in declared order to aggregate ordered violations,
+            // resuming where the first pass stopped rather than re-reading the
+            // fields it already found to match.
+            let mut decided = Decided::default();
+            let keep = ctx.mode.explains().then_some(&mut decided);
+            let ok = keyed_map_matches(fields, defaults, value, ctx, keep);
             if !ok && ctx.mode.explains() {
                 let before = frame.out.len();
-                keyed_map_explain(fields, defaults, value, frame);
+                keyed_map_explain(fields, defaults, value, frame, &decided);
                 if frame.out.len() == before {
                     // Two passes read the same dict and disagreed, so the dict
                     // did not stay still between them: report that rather than a

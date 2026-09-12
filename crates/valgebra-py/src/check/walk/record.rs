@@ -63,6 +63,63 @@ pub(super) fn scan_dict<'py>(
     })
 }
 
+/// Where the deciding walk stopped, so the explaining walk need not redo what it
+/// already read.
+///
+/// A keyed map that fails is walked twice: once to decide, once to say which
+/// field. Both walks resolve the declared keys in the same order, and a probe is
+/// the dear half -- about 143 instructions each through the interpreter, against
+/// a handful for the check that follows. For a fifty-field record refused at the
+/// thirty-second position, thirty-one probes and thirty-one checks are repeated
+/// for nothing: a field the deciding walk *passed* has no violation to report,
+/// so the explaining walk has nothing to learn by asking again.
+///
+/// What that costs to know is three integers and no allocation, which is why it
+/// is carried rather than recomputed. An earlier draft kept the probed values
+/// themselves; it saved the probes and not the checks, and charged every
+/// *accepting* validation a clone per field -- 13.5% on the explaining accept
+/// path and 2.35% even in the fast mode that records nothing, against 15.7%
+/// saved on the path that fails. The shape that measures the accepting side is
+/// `BindingShape::ExplainAccept`, and it was added before either draft.
+///
+/// The guard is the one the deciding walk already applies to itself: the entry
+/// count. A value that changed size between the passes resumes from the start,
+/// and one that changed a *value* without changing its size is what
+/// [`mutated`](super::mutated) is for -- the explaining walk then finds nothing
+/// and says so, which is a truer report than a violation about a value that has
+/// moved on.
+#[derive(Default)]
+pub(super) struct Decided {
+    /// The dict's entry count when the deciding walk read it.
+    entries: usize,
+    /// Where the explaining walk may resume, and what the deciding walk had
+    /// counted by then. `None` when no by-keys reading ran.
+    resume: Option<Resume>,
+}
+
+/// The point the deciding walk reached.
+#[derive(Clone, Copy)]
+struct Resume {
+    /// The first field position the explaining walk must read for itself. Every
+    /// earlier field was read and did not refuse.
+    position: usize,
+    /// Declared keys found before that position, so the count that lets a
+    /// complete record skip the trailing scan survives the resumption. Losing it
+    /// is what sends a record to a scan that reports what the count would have.
+    present: usize,
+}
+
+impl Decided {
+    /// Where to start, and with what count, in a value still holding `entries`
+    /// keys.
+    fn resume_at(&self, entries: usize) -> (usize, usize) {
+        match self.resume {
+            Some(at) if self.entries == entries => (at.position, at.present),
+            _ => (0, 0),
+        }
+    }
+}
+
 /// Membership for a keyed map: named fields, then a default clause for every
 /// other key. The walk is inverted — it visits each entry once — and a JSON
 /// object's keys are strings, a duplicate keeping its last value as
@@ -72,9 +129,10 @@ pub(super) fn keyed_map_matches(
     defaults: &[MapClause],
     value: &Value<'_, '_>,
     ctx: Ctx<'_>,
+    decided: Option<&mut Decided>,
 ) -> bool {
     match value {
-        Value::Py(v) => keyed_map_matches_py(fields, defaults, v, ctx),
+        Value::Py(v) => keyed_map_matches_py(fields, defaults, v, ctx, decided),
         Value::Json(py, JsonValue::Object(entries)) => {
             keyed_map_matches_json(fields, defaults, *py, entries, ctx)
         }
@@ -155,6 +213,7 @@ fn keyed_map_asks_for_its_keys(
     dict: &Bound<'_, PyDict>,
     ctx: Ctx<'_>,
     plan: &RecordPlan,
+    decided: Option<&mut Decided>,
 ) -> Option<bool> {
     // By its keys where the keys settle it. A record whose clause reads an
     // undeclared key together with its value has to be scanned, and the scan
@@ -170,6 +229,14 @@ fn keyed_map_asks_for_its_keys(
     let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
     with_critical_section(dict.as_any(), || {
         let entries = dict.len();
+        // Where the explaining walk would resume if this one refuses, kept as it
+        // goes so that refusing costs nothing extra to record.
+        let stopped = |position: usize, present: usize| {
+            if let Some(keep) = decided {
+                keep.entries = entries;
+                keep.resume = Some(Resume { position, present });
+            }
+        };
         let mut present = 0usize;
         for (position, field) in fields.iter().enumerate() {
             let key = plan.keys.get(position)?.bind(dict.py());
@@ -177,18 +244,23 @@ fn keyed_map_asks_for_its_keys(
                 Ok(Some(value)) => {
                     present += 1;
                     if !member(&field.schema, &Value::Py(&value), &mut sub) {
+                        stopped(position, present - 1);
                         return Some(false);
                     }
                 }
                 // A key the value does not carry: the record still matches when
                 // the field is optional.
                 Ok(None) if !field.required => {}
-                Ok(None) => return Some(false),
+                Ok(None) => {
+                    stopped(position, present);
+                    return Some(false);
+                }
                 // A failed probe is not an answer -- an unhashable key cannot be
                 // in a dict, but a `__eq__` that raises can stop the lookup.
                 Err(_) => return None,
             }
         }
+        stopped(fields.len(), present);
         if dict.len() != entries {
             // The value changed while it was being read, so there is no reading
             // to answer from: not a member, exactly as the scan answers it, and
@@ -238,12 +310,15 @@ fn keyed_map_matches_py(
     defaults: &[MapClause],
     dict: &Bound<'_, PyAny>,
     ctx: Ctx<'_>,
+    decided: Option<&mut Decided>,
 ) -> bool {
     let Ok(dict) = dict.cast::<PyDict>() else {
         return false;
     };
     if let Some(plan) = ctx.records.get(&(fields.as_ptr() as usize)) {
-        if let Some(answered) = keyed_map_asks_for_its_keys(fields, defaults, dict, ctx, plan) {
+        if let Some(answered) =
+            keyed_map_asks_for_its_keys(fields, defaults, dict, ctx, plan, decided)
+        {
             return answered;
         }
         keyed_map_scan(fields, defaults, dict, ctx, plan.required, |name| {
@@ -505,6 +580,7 @@ pub(super) fn keyed_map_explain(
     defaults: &[MapClause],
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
+    decided: &Decided,
 ) {
     let ctx = frame.ctx;
     let Value::Py(v) = value else {
@@ -528,8 +604,12 @@ pub(super) fn keyed_map_explain(
     // complete -- the two spellings name the same key.
     let interned = ctx.records.get(&(fields.as_ptr() as usize));
     let entries = dict.len();
-    let mut present = 0usize;
-    for (position, field) in fields.iter().enumerate() {
+    // Every field the deciding walk read before it refused matched, so it has no
+    // violation to report and nothing is learned by probing it again. Resuming
+    // takes its count with it: the count is what lets a record holding exactly
+    // its own keys skip the scan below, and a walk that lost it falls into one.
+    let (from, mut present) = decided.resume_at(entries);
+    for (position, field) in fields.iter().enumerate().skip(from) {
         let key = interned.and_then(|plan| plan.keys.get(position));
         let found = match key {
             Some(interned) => dict.get_item(interned.bind(dict.py())),

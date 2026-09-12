@@ -79,6 +79,11 @@ SCHEMAS: list[tuple[str, Validator]] = [
     ("float", _v(float)),
     ("none", _v(None)),
     ("object", _v(object)),
+    # `Any` is the top, spelled: `typing.Any` and `anything` build one node and
+    # every relation reads it alike, so this row is the `anything` row under the
+    # name a caller writes. It is kept for that -- the probe's universe is what a
+    # reader checks a claim about `Any` against -- and not because the two can
+    # answer differently.
     ("Any", _v(Any)),
     ("int|str", _v(int | str)),
     ("~int", complement(int)),
