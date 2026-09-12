@@ -576,6 +576,26 @@ impl Schema {
         }
     }
 
+    /// Whether the subject holds a sequence the supertype's length bound leaves
+    /// out.
+    ///
+    /// A sequence type carrying no bound of its own holds the empty sequence,
+    /// and a bound of one or more is exactly what excludes that value. So the
+    /// empty sequence is a value of the subject outside the supertype, which is
+    /// a refutation -- and one read off two nodes, where the descriptor decides
+    /// the same pair by building both sets.
+    ///
+    /// The subject is read as a bare shape rather than through a refinement,
+    /// because a constraint this does not read -- a predicate above all -- may
+    /// exclude the empty sequence as well, and then there is no value left to
+    /// stand on. The supertype's bound is asked first: only a refinement
+    /// carries one, so every other node answers with one discriminant test.
+    fn shorter_than(&self, other: &Schema) -> bool {
+        other.holds_an_element()
+            && matches!(self, Schema::Seq { .. } | Schema::Coll { .. })
+            && self.star_element().is_some()
+    }
+
     /// Whether this schema is a class the oracle says holds no value of `kind`.
     ///
     /// A class is the one atom the core cannot read at all, and the answer is
@@ -1762,6 +1782,9 @@ impl Schema {
             return Relation::Fails;
         }
         if self.outside_the_class(other, cx.oracle) {
+            return Relation::Fails;
+        }
+        if self.shorter_than(other) {
             return Relation::Fails;
         }
         match cx.oracle.leaf_subtype(self, other) {

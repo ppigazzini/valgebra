@@ -335,3 +335,44 @@ def test_a_bounded_sequence_is_refuted_by_its_element_past_the_descriptor() -> N
 
     # And elements that do share a value are not separated by any bound.
     assert not intersection(Annotated[list[int], at.MinLen(2)], list[int]).is_empty()
+
+
+def test_a_sequence_with_no_bound_holds_the_empty_one_a_bound_leaves_out() -> None:
+    """A sequence type carrying no length bound holds the empty sequence.
+
+    That is a value of the subject the supertype's bound excludes, so the pair
+    is refuted -- read off the two schemas rather than by building both sets,
+    which is what the descriptor does with the same pair. The bound is asked of
+    the supertype first: only a refinement carries one.
+
+    A predicate is the constraint the descriptor will not read through, so the
+    pairs below carrying one are the ones this answers rather than only answers
+    sooner. The subject is read as a bare shape for the same reason in reverse:
+    a constraint on the *subject* could exclude the empty sequence too, and
+    then there is no value left to stand on.
+    """
+    lists = Validator(list[int])
+    assert (
+        lists.relation_to(Validator(Annotated[list[int], at.MinLen(2)])) == "not_subset"
+    )
+    assert (
+        lists.relation_to(
+            Validator(Annotated[list[int], at.MinLen(2), at.Predicate(bool)])
+        )
+        == "not_subset"
+    )
+    assert (
+        Validator(set[int]).relation_to(
+            Validator(Annotated[set[int], at.MinLen(1), at.Predicate(bool)])
+        )
+        == "not_subset"
+    )
+
+    # A shape whose prefix fixes an element holds no empty sequence, so there
+    # is no such value and the bound it already meets proves the pair instead.
+    assert Validator(tuple[int, int]).is_subtype_of(
+        Annotated[tuple[int, ...], at.MinLen(2)]
+    )
+
+    # A bound of zero leaves the empty sequence in, so it refutes nothing.
+    assert Validator(list[int]).is_subtype_of(Annotated[list[int], at.MinLen(0)])
