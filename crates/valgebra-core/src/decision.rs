@@ -1546,7 +1546,7 @@ impl Schema {
         // direct instance either has that kind or does not, and the oracle
         // reads `type(v) is C` rather than the subtree beneath `C`, which is
         // what makes the answer a value rather than an open-world guess.
-        if outside_every_kind(other, class, cx.oracle) {
+        if outside_every_kind(other, class, cx) {
             return Relation::Fails;
         }
         placed
@@ -3037,17 +3037,33 @@ fn linear_subtype(
 /// A branch with no kind of its own ends it, since the witness may be in that
 /// branch for all this reads, and an empty union is refuted by the rule that
 /// reads it as nothing rather than here.
-fn outside_every_kind(other: &Schema, class: ClassIx, oracle: &dyn LeafRelations) -> bool {
+///
+/// A reference is unfolded once, to the kind of what it names: it denotes that
+/// set, so it has that set's kind, and without the unfolding a recursive record
+/// reaches this reading as a node carrying no kind at all.
+///
+/// Once, and not through what it finds. The walk then descends only into union
+/// branches, which is the schema's own finite tree, so it ends without a trail
+/// to keep or a budget to spend. Unfolding onwards would buy a reference naming
+/// a union, and would owe termination an argument about cycles -- and the only
+/// way to build a cycle here is a chain of references and unions with no
+/// constructor between them, which is the shape a repeated *goal* is assumed
+/// through long before this reading is reached.
+fn outside_every_kind(other: &Schema, class: ClassIx, cx: SubtypeCx<'_>) -> bool {
+    let outside = |kind| cx.oracle.direct_instance_of_kind(class, kind) == Some(false);
     match other {
         Schema::Union(branches) => {
             !branches.is_empty()
                 && branches
                     .iter()
-                    .all(|branch| outside_every_kind(branch, class, oracle))
+                    .all(|branch| outside_every_kind(branch, class, cx))
         }
-        _ => other
-            .type_tag_with(oracle)
-            .is_some_and(|kind| oracle.direct_instance_of_kind(class, kind) == Some(false)),
+        Schema::Ref(at) => cx
+            .defs
+            .get(at.get())
+            .and_then(|body| body.type_tag_with(cx.oracle))
+            .is_some_and(outside),
+        _ => other.type_tag_with(cx.oracle).is_some_and(outside),
     }
 }
 
