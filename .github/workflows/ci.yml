@@ -1316,12 +1316,18 @@ jobs:
           libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           export LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}"
           set +e
+          # The same seven files the push lane sweeps, because this is where
+          # their baseline comes from: a file the ratchet judges and the
+          # baseline never saw has every survivor in it read as new, on
+          # whichever unrelated change next touches the area.
           cargo mutants --package valgebra-py \
             --file crates/valgebra-py/src/check/walk.rs \
             --file crates/valgebra-py/src/check/walk/record.rs \
             --file crates/valgebra-py/src/check/walk/scalar.rs \
             --file crates/valgebra-py/src/check/walk/sequence.rs \
             --file crates/valgebra-py/src/check/ctx.rs \
+            --file crates/valgebra-py/src/build.rs \
+            --file crates/valgebra-py/src/equality.rs \
             --features interpreter-tests -j 4 --timeout-multiplier 20 \
             --output walk-mutants \
             -- -- --skip recursion_deeper_than_the_bound_is_refused

@@ -162,3 +162,34 @@ def test_the_merge_counts_the_shards_the_sweep_is_cut_into() -> None:
         f"the merge counts {counted} shards and the sweep is cut into {cut}. "
         "A merge that counts fewer accepts a sweep with a shard missing."
     )
+
+
+def test_both_binding_sweeps_read_the_same_files() -> None:
+    """The nightly binding sweep covers what the push lane's ratchet judges.
+
+    The push lane ratchets its sweep against a baseline, and that baseline is
+    recorded by the nightly. A file the push lane sweeps and the nightly does
+    not has every survivor in it read as *new* the first time a change touches
+    the area -- which is a red lane about code nobody edited, arriving on
+    whichever commit happened to reach the sweep.
+    """
+    jobs = _workflow()["jobs"]
+    swept = {
+        name: {
+            line.strip().removeprefix("--file ").removesuffix("\\").strip()
+            for step in job["steps"]
+            for line in str(step.get("run", "")).splitlines()
+            if line.strip().startswith("--file crates/valgebra-py/")
+        }
+        for name, job in jobs.items()
+        if name in {"mutants-diff-walk", "nightly-mutants-walk"}
+    }
+    assert len(swept) == 2, f"expected both binding sweeps, found {sorted(swept)}"
+    push, nightly = swept["mutants-diff-walk"], swept["nightly-mutants-walk"]
+    assert push, "the push sweep names no files"
+    assert push == nightly, (
+        "the two binding sweeps read different files: "
+        f"only the push lane sweeps {sorted(push - nightly)}, "
+        f"only the nightly sweeps {sorted(nightly - push)}. The nightly records "
+        "the baseline the push lane is judged against, so the two are one list."
+    )
