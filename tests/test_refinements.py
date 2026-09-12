@@ -6,7 +6,7 @@ from typing import Annotated
 import annotated_types as at
 import pytest
 
-from valgebra import ValidationError, Validator
+from valgebra import ValidationError, Validator, intersection
 
 
 def test_comparison_bounds() -> None:
@@ -301,3 +301,37 @@ def test_two_refinements_of_different_kinds_are_refuted_without_the_sets() -> No
     assert Validator(Annotated[list[int], at.MinLen(3)]).is_subtype_of(
         Annotated[list[int], at.MinLen(2)]
     )
+
+
+def test_a_bounded_sequence_is_refuted_by_its_element_past_the_descriptor() -> None:
+    """Sequences of disjoint elements share only the empty one, which a bound rules out.
+
+    A homogeneous sequence is its element repeated, so two of them meet in the
+    sequences of their elements' meet: `a* & b* = (a & b)*`. Elements that
+    share no value leave `{}*`, which is not empty -- the empty sequence is in
+    it, and in both sides -- so disjointness needs a length bound to rule that
+    one value out. Then nothing is left.
+
+    The descriptor decides the shallow pairs by building both sets, and gives
+    up past a nesting depth; the rules answer from the elements alone whatever
+    the depth, so the deep pairs move from undecided to refuted.
+    """
+    deep: object = int
+    for _ in range(4):
+        deep = list[deep]
+
+    nested = Validator(Annotated[list[deep], at.MinLen(1)])
+    assert nested.relation_to(Validator(list[str])) == "not_subset"
+
+    frozen = Validator(Annotated[set[frozenset[int]], at.MinLen(1)])
+    assert frozen.relation_to(Validator(set[str])) == "not_subset"
+
+    # The bound is what makes the pair *disjoint*: without it the empty list
+    # belongs to both, so their meet holds a value. (Either one is still not a
+    # subtype of the other, on a value with an element in it -- a refutation
+    # the element rule reaches without any of this.)
+    assert intersection(Annotated[list[int], at.MinLen(1)], list[str]).is_empty()
+    assert not intersection(list[int], list[str]).is_empty()
+
+    # And elements that do share a value are not separated by any bound.
+    assert not intersection(Annotated[list[int], at.MinLen(2)], list[int]).is_empty()

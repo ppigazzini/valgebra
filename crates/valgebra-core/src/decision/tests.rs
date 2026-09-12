@@ -3625,3 +3625,85 @@ fn a_refinement_pair_with_disjoint_bases_is_refuted_by_the_rules() {
     let longer = refined(ints, Constraint::MinLen(3));
     assert_eq!(relation(&longer, &long), Relation::Holds);
 }
+
+/// Two sequences of one container meet in the sequences of their elements' meet.
+///
+/// `a* ∩ b* = (a ∩ b)*`, reading a homogeneous sequence as a regular
+/// expression over its element (Hosoya, Vouillon & Pierce). Where the elements
+/// share no value that is `∅*`, which is not empty -- it holds the empty
+/// sequence, and so do both sides. So disjointness needs one more thing than
+/// disjoint elements: something that rules the empty sequence out.
+///
+/// A length bound is that thing, and a prefix is too, since the prefix is what
+/// every value of the shape begins with. A shape carrying a prefix is also the
+/// one this reading does not apply to element-wise, which is why the star is
+/// read off the tail of a prefix-free shape alone.
+#[test]
+fn sequences_whose_elements_are_disjoint_meet_only_in_the_empty_one() {
+    let list = |element| Schema::list(SeqShape::homogeneous(element));
+    let set = |element| Schema::Coll {
+        container: CollKind::Set,
+        element: Arc::new(element),
+    };
+    let at_least = |base: Schema, least: usize| Schema::Refine {
+        base: Arc::new(base),
+        constraints: vec![Constraint::MinLen(least)].into(),
+    };
+    let meet = |a: Schema, b: Schema| Schema::Intersection(vec![a, b].into());
+
+    // The empty list belongs to both, so the pair is not disjoint.
+    assert!(!empty_by_the_rules(&meet(
+        list(Schema::Int),
+        list(Schema::Str)
+    )));
+    assert!(!empty_by_the_rules(&meet(
+        set(Schema::Int),
+        set(Schema::Str)
+    )));
+
+    // A bound that rules it out leaves nothing, on either side of the meet.
+    assert!(empty_by_the_rules(&meet(
+        at_least(list(Schema::Int), 1),
+        list(Schema::Str)
+    )));
+    assert!(empty_by_the_rules(&meet(
+        list(Schema::Str),
+        at_least(list(Schema::Int), 1)
+    )));
+    assert!(empty_by_the_rules(&meet(
+        at_least(set(Schema::Int), 1),
+        set(Schema::Str)
+    )));
+
+    // A bound of zero rules nothing out, and elements that share a value are
+    // not separated however long the sequences are.
+    assert!(!empty_by_the_rules(&meet(
+        at_least(list(Schema::Int), 0),
+        list(Schema::Str)
+    )));
+    assert!(!empty_by_the_rules(&meet(
+        at_least(list(Schema::Int), 2),
+        list(Schema::Int)
+    )));
+
+    // Two containers of different kinds are already disjoint by their kinds;
+    // this reading is asked only where the kinds agree.
+    assert!(empty_by_the_rules(&meet(
+        at_least(list(Schema::Int), 1),
+        set(Schema::Int)
+    )));
+
+    // A shape with a prefix is not a star, and reading its tail as though it
+    // were would claim a disjointness the prefix denies: every value of this
+    // one begins with an integer, so `[5]` is in it and in `list[int]` both,
+    // however far its tail is from the other's element.
+    let prefixed = Schema::list(SeqShape::prefix_tail([Schema::Int], Schema::Str));
+    assert!(!empty_by_the_rules(&meet(
+        at_least(prefixed.clone(), 1),
+        list(Schema::Int)
+    )));
+    assert!(!empty_by_the_rules(&meet(
+        list(Schema::Int),
+        at_least(prefixed, 1)
+    )));
+}
