@@ -531,9 +531,7 @@ impl Schema {
         }
         match (tag, other_tag) {
             // Distinct concrete types are disjoint, except bool ⊆ int.
-            (Some(a), Some(b)) => {
-                a != b && !matches!((a, b), (Kind::Bool, Kind::Int) | (Kind::Int, Kind::Bool))
-            }
+            (Some(a), Some(b)) => !a.shares_values_with(b),
             // One side has no tag of its own, which a class never has: only the
             // bindings read a class, so the kind goes to them as a question.
             (None, Some(kind)) => self.class_excludes(kind, oracle),
@@ -1819,6 +1817,22 @@ impl Schema {
         let Schema::Instance(class) = other else {
             return false;
         };
+        // A complement holds a value of every kind its inner schema's own kind
+        // is not, so the reading is asked of those instead of of one. Any of
+        // them that the class's order refutes names the witness: a value built
+        // as that kind's builtin is outside the class, and outside the inner
+        // schema because its kind is not that one.
+        //
+        // The search stops at the first, and it is only reached by a complement
+        // against a class -- everything else asks the one question it did.
+        if let Schema::Complement(inner) = self {
+            return inner.type_tag_with(oracle).is_some_and(|excluded| {
+                Kind::ALL.iter().any(|kind| {
+                    !kind.shares_values_with(excluded)
+                        && oracle.kind_derives_from(*kind, *class) == Some(false)
+                })
+            });
+        }
         self.type_tag_with(oracle)
             .is_some_and(|kind| oracle.kind_derives_from(kind, *class) == Some(false))
     }
@@ -3490,6 +3504,20 @@ pub enum Kind {
 }
 
 impl Kind {
+    /// Whether a value can have both this kind and `other`.
+    ///
+    /// The partition is a partition but for one pair: `bool` subclasses `int`,
+    /// so every boolean is an integer and the two kinds share values. Two kinds
+    /// that share none are disjoint sets, which is the reading a kind is for.
+    #[must_use]
+    pub fn shares_values_with(self, other: Kind) -> bool {
+        self == other
+            || matches!(
+                (self, other),
+                (Kind::Bool, Kind::Int) | (Kind::Int, Kind::Bool)
+            )
+    }
+
     /// Every kind, in one place, so a walk over the partition cannot miss one.
     ///
     /// A `match` is exhaustive and a list is not, so this array carries a test
