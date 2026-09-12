@@ -253,16 +253,16 @@ impl Relation {
 /// directions of an equivalence share it — so the bound cannot be escaped through
 /// a side door or spent twice.
 ///
-/// **This bound is debt, and half of what it names is paid.** Regularity bounds
-/// the number of distinct subtyping goals a query can reach, so a memo over
-/// goals terminates by a theorem rather than by a ceiling -- but a memo needs a
-/// cheap key, and a key is cheap only when structurally equal subtrees are one
-/// node. Construction shares them: two subtrees built alike are one handle
-/// (`ir/intern.rs`), and a handle is a cheap key. What is left is the memo
-/// itself, whose entries are goals rather than nodes and whose soundness is the
-/// coinductive hypothesis the trail carries -- a cached answer that was reached
-/// under a hypothesis is not an answer without it. The ceiling stands in for
-/// that argument, and for nothing else.
+/// **This bound is debt, and a memo is not what would pay it.** Regularity
+/// bounds the number of distinct subtyping goals a query can reach, so a table
+/// over goals would terminate by a theorem rather than by a ceiling -- but
+/// counted over the three decision workloads and over a record of thirty-two
+/// fields sharing one interned inner schema, the goals a query *repeats* number
+/// zero. The trail absorbs recursion, and the field and position caches absorb
+/// the shape where one goal is asked once per field. So the ceiling stands in
+/// for a termination argument and for nothing else, and there is no speed-up
+/// behind it waiting to be collected. What would reopen the question is a shape
+/// where one goal is reached by two rules with no cache between them.
 ///
 /// The ceiling is far above any schema a real
 /// annotation produces, so a legitimate relation is always decided; only an
@@ -294,8 +294,8 @@ fn spend(budget: &Cell<u32>) -> bool {
 ///
 /// The public relations still answer `bool`, because that is what soundness
 /// promises: `Unknown` and `Inhabited` both mean "not proven empty". What the
-/// three values buy is that the difference is now *visible* -- to a test, to a
-/// gate, and to the memoisation that will make it rarer.
+/// three values buy is that the difference is now *visible* -- to a test and to
+/// a gate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
     /// Proven to admit no value.
