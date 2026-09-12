@@ -3296,6 +3296,42 @@ fn a_meet_whose_class_the_oracle_declines_is_not_refuted() {
     );
 }
 
+/// A lookup after the cursor has given up still finds its own field.
+///
+/// Once a lookup has missed and the order has been read as "not sorted", every
+/// later lookup on either cursor takes a scan. That scan is a second way to
+/// answer the same question, and a permutation law does not always reach it:
+/// it needs a miss with lookups still to come after it, which is a query list
+/// out of order and long enough.
+///
+/// The supertype's names run `z`, `a`, `b`. The cursor finds `z`, walks off the
+/// end looking for `a` and misses, and the two lookups after that are the ones
+/// the scan answers.
+#[test]
+fn a_lookup_after_the_cursor_gives_up_finds_its_own_field() {
+    let unordered = |fields: Vec<Field>| Schema::KeyedMap {
+        fields: fields.into(),
+        defaults: Vec::new().into(),
+    };
+    // The fields differ in type, so a scan that returned the wrong one would
+    // compare `a`'s integer against `b`'s string and refute the pair.
+    let subject = unordered(vec![
+        field("a", Schema::Int, true),
+        field("b", Schema::Str, true),
+        field("z", Schema::Int, true),
+    ]);
+    let supertype = unordered(vec![
+        field("z", Schema::Int, true),
+        field("a", Schema::Int, true),
+        field("b", Schema::Str, true),
+    ]);
+    let budget = Cell::new(DECISION_BUDGET);
+    assert_eq!(
+        subject.subtype_relation(&supertype, &NoLeafRelations, &[], &budget),
+        Relation::Holds
+    );
+}
+
 /// Every spelling of one record decides as every other, whatever the order.
 ///
 /// The cursor over a field list moves forward only, and it reads whether the
