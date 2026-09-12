@@ -14,16 +14,48 @@
 //! the integers, so nothing is lost, and every operation becomes the interval
 //! operation applied residue by residue.
 //!
-//! Two sets with different moduli are compared by lifting both to the least
-//! common multiple, which is where the periods meet. Lifting is exact -- it
-//! splits each class into `t` classes and re-indexes -- so equality after
-//! lifting is equality of the sets, and the form stays canonical without any
-//! search for the smallest period.
+//! An operation between two periods reads both tables at the least common
+//! multiple, which is where the classes line up. Lifting is exact -- it splits
+//! each class into `t` classes and re-indexes -- so two sets compared there are
+//! equal exactly when they hold the same integers, and an answer built there
+//! holds the integers it should whichever periods it came from.
+//!
+//! The form is **not canonical**: a set can be written at every multiple of the
+//! period it needs, and no reduction picks one of those spellings out. Reducing
+//! the multiples of two met with `0..=8000` to a period of one is exact and
+//! turns one interval into four thousand, and the interval count has no bound
+//! the period has. That is why equality lifts, and why the *order* beside it
+//! cannot: see [`IntSet`] for the split and what it costs.
+
+use std::borrow::Cow;
 
 use super::interval::IntervalSet;
 
 /// A set of integers, held as an interval set per residue class.
-#[derive(Debug, Clone, Eq)]
+///
+/// **Equality is on the integers and the order is on the table.** The split is
+/// deliberate, and neither half can be moved to the other.
+///
+/// Equality lifts both tables to the period the pair shares, so the multiples
+/// of two and the same set written with a period of four are one set. A
+/// descriptor's components are compared as sets, which is what lets a law about
+/// the algebra be checked on the forms themselves rather than over whatever
+/// values a corpus can list, so equality has to answer for the integers.
+///
+/// An order read the same way is not an order. Each pair would be read at its
+/// own period, and three sets then come out in a cycle: the integers sort
+/// before `{-2}` at the period those two share, `{-2}` sorts before the
+/// multiples of three at the period *those* two share, and the integers sort
+/// after the multiples of three at the period they share. Antisymmetry holds of
+/// that triple and so does agreement with equality; a sort finds the cycle and
+/// panics on it.
+///
+/// What would settle both at once is a canonical spelling, and the module
+/// header says why there is none to have. So the two disagree, on exactly one
+/// thing: two spellings of one set are one set to equality and two positions to
+/// the order. The cost is a `dedup` that follows a sort keeping a pair that a
+/// scan for equality folds -- a row in a table of guards, never an answer.
+#[derive(Debug, Clone)]
 pub struct IntSet {
     /// The period. At least one; a modulus of one is a set with no step, whose
     /// single class is the integers themselves.
@@ -152,43 +184,42 @@ impl IntSet {
             .is_some_and(|class| class.holds(value.div_euclid(self.modulus)))
     }
 
-    /// This set with its period multiplied to `modulus`, which it must divide.
+    /// This set's table read at `modulus`, which its period must divide, or
+    /// `None` for a period past [`MAX_PERIOD`].
     ///
     /// A class `r` mod `m` splits into `t = modulus / m` classes `r + m*j`, and
     /// each keeps the integers of the original that land in it: `r + m*k` is in
     /// the new class `r + m*j` exactly when `k = j + t*k'`, so the new class's
     /// interval set is the preimage of the old one under that map.
-    fn lifted(&self, modulus: i64) -> Option<IntSet> {
+    ///
+    /// A table and not an [`IntSet`], because a table at a period this set does
+    /// not carry is a *second spelling* of it, and a second spelling is a set
+    /// the order puts somewhere else: a caller that wants one says so. Borrowed
+    /// where the period is the one this set already has, which is every
+    /// comparison and every operation between two sets of one period.
+    fn table_at(&self, modulus: i64) -> Option<Cow<'_, [IntervalSet]>> {
         if modulus == self.modulus {
-            return Some(self.clone());
+            return Some(Cow::Borrowed(&self.classes));
         }
         let stride = modulus / self.modulus;
-        IntSet::try_build(modulus, |residue| {
-            let old = residue.rem_euclid(self.modulus);
-            let step = (residue - old) / self.modulus;
-            self.classes
-                .get(usize::try_from(old).unwrap_or(0))
-                .map_or_else(IntervalSet::empty, |class| class.preimage(step, stride))
+        (1..=MAX_PERIOD).contains(&modulus).then(|| {
+            Cow::Owned(
+                (0..modulus)
+                    .map(|residue| {
+                        let old = residue.rem_euclid(self.modulus);
+                        let step = (residue - old) / self.modulus;
+                        self.classes
+                            .get(usize::try_from(old).unwrap_or(0))
+                            .map_or_else(IntervalSet::empty, |class| class.preimage(step, stride))
+                    })
+                    .collect(),
+            )
         })
     }
 
     /// The period two sets share, where their classes line up.
     fn common(&self, other: &IntSet) -> i64 {
         lcm(self.modulus, other.modulus)
-    }
-
-    /// Both tables read in the period the two sets share, or `None` where that
-    /// period is past [`MAX_PERIOD`].
-    ///
-    /// What equality and ordering both need, and the one place the bound is a
-    /// limit on *comparing* rather than on building. Lifting is exact, so two
-    /// sets aligned here are equal exactly when they hold the same integers.
-    fn aligned(&self, other: &IntSet) -> Option<(Vec<IntervalSet>, Vec<IntervalSet>)> {
-        let modulus = self.common(other);
-        Some((
-            self.lifted(modulus)?.classes,
-            other.lifted(modulus)?.classes,
-        ))
     }
 
     /// Combine two sets residue by residue, after lifting both to one period,
@@ -199,10 +230,10 @@ impl IntSet {
         op: fn(&IntervalSet, &IntervalSet) -> IntervalSet,
     ) -> Option<IntSet> {
         let modulus = self.common(other);
-        let (mine, theirs) = (self.lifted(modulus)?, other.lifted(modulus)?);
+        let (mine, theirs) = (self.table_at(modulus)?, other.table_at(modulus)?);
         let combined = IntSet::try_build(modulus, |residue| {
             let index = usize::try_from(residue).unwrap_or(0);
-            match (mine.classes.get(index), theirs.classes.get(index)) {
+            match (mine.get(index), theirs.get(index)) {
                 (Some(a), Some(b)) => op(a, b),
                 _ => IntervalSet::empty(),
             }
@@ -212,14 +243,14 @@ impl IntSet {
 
     /// This set written with no step where its classes do not need one.
     ///
-    /// A step that cancels leaves a table saying the same thing in every
-    /// residue, and carrying the period anyway would make two spellings of one
-    /// set -- `multiple_of(64) | !multiple_of(64)` and [`all`](Self::all) --
-    /// differ in the only place the period is visible. Reading the two back as
-    /// one then needs their common period, and for two steps that cancel
-    /// independently that period can be past the bound, which is the one shape
-    /// where comparison has no answer to give. Dropping a step nothing uses
-    /// keeps such a set at a period of one, where every other set meets it.
+    /// The one reduction that is worth making, and the module header says why
+    /// no general one is: a step that cancels leaves a table saying the same
+    /// thing in every residue, and dropping it costs nothing, because the two
+    /// tables a period of one can say that with -- every integer, or none --
+    /// are the two a period does not shorten. Carrying the period instead would
+    /// put `multiple_of(64) | !multiple_of(64)` and [`all`](Self::all) in two
+    /// places in a sorted table, and a third for every other step a caller
+    /// joins with its own complement.
     fn without_a_step(self) -> IntSet {
         let Some(first) = self.classes.first() else {
             return self;
@@ -268,55 +299,47 @@ impl IntSet {
     }
 }
 
-impl Ord for IntSet {
-    /// Order two sets by their tables at the period where their classes line
-    /// up.
+impl PartialEq for IntSet {
+    /// Two sets are equal when they hold the same integers, which is not the
+    /// same as carrying the same period.
     ///
-    /// Lifted for the same reason equality is: the multiples of two and the same
-    /// set written with a period of four are one set, so comparing the tables as
-    /// they stand would order two equal sets apart. Consistency with `eq` is the
-    /// whole requirement on an ordering, and lifting is what gives it -- the
-    /// order itself is arbitrary, and its only use is fixing a canonical
-    /// position for a set in a list.
-    fn cmp(&self, other: &IntSet) -> core::cmp::Ordering {
-        match self.aligned(other) {
-            Some((mine, theirs)) => mine.cmp(&theirs),
-            // Past the bound there is no shared period to read the two tables
-            // in, so they are ordered by the tables they carry. Consistent with
-            // `eq`, which refuses the same pair for the same reason, and total
-            // because the period is compared before the classes.
-            None => (self.modulus, &self.classes).cmp(&(other.modulus, &other.classes)),
+    /// Lifting both to the period where their classes line up settles it, and
+    /// lifting is exact, so this is equality of the sets rather than of two
+    /// spellings.
+    fn eq(&self, other: &IntSet) -> bool {
+        let modulus = self.common(other);
+        // Past the bound neither table can be read in the other's coordinates.
+        // Two sets that reach here carry two periods -- one period meets itself
+        // under the bound every set is built to -- so they are two spellings,
+        // read as two sets. Conservative rather than wrong: it can answer
+        // `false` for two sets that hold the same integers, and only for a pair
+        // whose periods are near-coprime and large. What it cannot do is answer
+        // `true` for two sets that differ, which is the direction a decision
+        // rests on.
+        match (self.table_at(modulus), other.table_at(modulus)) {
+            (Some(mine), Some(theirs)) => mine == theirs,
+            _ => false,
         }
+    }
+}
+
+impl Eq for IntSet {}
+
+impl Ord for IntSet {
+    /// Order two sets by the tables they carry.
+    ///
+    /// A total order, which is the whole of what a sort of guards needs and the
+    /// one thing an order read off a *pair* cannot be. It is on the table and
+    /// not on the integers, so it puts two spellings of one set in two places:
+    /// [`IntSet`] says why that is the half that gives way.
+    fn cmp(&self, other: &IntSet) -> core::cmp::Ordering {
+        (self.modulus, &self.classes).cmp(&(other.modulus, &other.classes))
     }
 }
 
 impl PartialOrd for IntSet {
     fn partial_cmp(&self, other: &IntSet) -> Option<core::cmp::Ordering> {
         Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for IntSet {
-    /// Two sets are equal when they hold the same integers, which is not the
-    /// same as carrying the same period: the multiples of two and the multiples
-    /// of two written with a period of four are one set. Lifting both to the
-    /// period where their classes line up settles it, and lifting is exact, so
-    /// this is semantic equality rather than a comparison of two spellings.
-    fn eq(&self, other: &IntSet) -> bool {
-        match self.aligned(other) {
-            Some((mine, theirs)) => mine == theirs,
-            // The two periods meet past the bound, so neither table can be
-            // read in the other's coordinates. Two sets that reach here have
-            // two periods -- one period meets itself under the bound every
-            // set is built to -- so they are two spellings, and two spellings
-            // are read as two sets. Conservative rather than wrong: it can
-            // answer `false` for two sets that hold the same integers, and it
-            // reaches that only for a pair whose periods are near-coprime and
-            // large, which `without_a_step` keeps a cancelled step from
-            // producing. What it cannot do is answer `true` for two sets that
-            // differ, which is the direction a decision rests on.
-            None => false,
-        }
     }
 }
 
@@ -487,25 +510,51 @@ mod tests {
             prop_assert_eq!(a.is_empty(), window(&a, &a).all(|n| !a.holds(n)));
         }
 
-        /// The order is total and agrees with equality, which is all a sort of
-        /// guards asks of it: two sets holding the same integers compare equal
-        /// whatever periods they are written with, and no pair is incomparable.
+        /// The order is total, and one position holds one set.
+        ///
+        /// Transitivity is the property no *pair* can see: an order read off a
+        /// pair is antisymmetric while putting three sets in a cycle, because
+        /// each pair is read at its own period. Three draws are what lets the
+        /// law fail, and [`no_three_sets_are_ordered_in_a_cycle`] pins the
+        /// witness so the seed does not decide.
+        ///
+        /// Only one direction of agreement with equality is a law here, and it
+        /// is the one the order owes: two sets in one position are one set,
+        /// because one table read at one period is one set. The converse is
+        /// what the order gives up to be total, and
+        /// [`two_spellings_of_one_set_are_one_set_in_two_places`] is where that
+        /// is said.
         #[test]
-        fn the_order_is_total_and_agrees_with_equality(a in int_set(), b in int_set()) {
+        fn the_order_is_total(a in int_set(), b in int_set(), c in int_set()) {
             prop_assert_eq!(a.partial_cmp(&b), Some(a.cmp(&b)));
-            prop_assert_eq!(a.cmp(&b) == core::cmp::Ordering::Equal, a == b);
             prop_assert_eq!(a.cmp(&b), b.cmp(&a).reverse());
+            if a.cmp(&b) == core::cmp::Ordering::Equal {
+                prop_assert_eq!(&a, &b, "one position holds one set");
+            }
+            if a < b && b < c {
+                prop_assert!(a < c, "the order takes a step it cannot take twice");
+            }
         }
 
-        /// Lifting a set to a multiple of its period changes no integer.
+        /// Reading a set's table at a multiple of its period changes no
+        /// integer.
+        ///
+        /// What every operation between two periods rests on: the two tables
+        /// are combined residue by residue, so a lift that moved an integer
+        /// would move it in the answer, and what equality rests on, which is
+        /// why the set built back from the table is equal to the one it came
+        /// from.
         #[test]
-        fn lifting_a_period_holds_the_same_integers(a in int_set(), factor in 1i64..=6) {
+        fn a_table_at_a_multiple_period_holds_the_same_integers(
+            a in int_set(),
+            factor in 1i64..=6,
+        ) {
+            let modulus = a.modulus.saturating_mul(factor);
             // A period of at most sixty times six is inside the bound, so the
-            // lift is available for every draw; a refusal here would be the
+            // table is available for every draw; a refusal here would be the
             // generator, not the lift.
-            let lifted = a
-                .lifted(a.modulus.saturating_mul(factor))
-                .expect("a period inside the bound");
+            let classes = a.table_at(modulus).expect("a period inside the bound");
+            let lifted = IntSet { modulus, classes: classes.into_owned() };
             prop_assert!(same(&a, &lifted));
             prop_assert_eq!(&a, &lifted);
         }
@@ -660,11 +709,11 @@ mod tests {
     /// A step that cancels leaves no step behind.
     ///
     /// `a | !a` is the integers however `a` was written, and carrying `a`'s
-    /// period into the answer would leave two spellings of one set. That costs
-    /// more than tidiness: two such sets built from *different* steps could
-    /// then only be compared at a period the representation may not hold, which
-    /// is the one place equality has no answer to give. Dropping a step nothing
-    /// uses keeps them at a period of one, where they meet.
+    /// period into the answer would leave two spellings of one set. Since two
+    /// spellings are two values, every step that cancels would put another
+    /// copy of the integers in a table of guards, and two such sets built from
+    /// *different* steps would never meet. Dropping a step nothing uses keeps
+    /// them at a period of one, which is one value.
     #[test]
     fn a_step_that_cancels_is_not_carried() {
         for n in [2, 64, 81, MAX_PERIOD] {
@@ -698,24 +747,73 @@ mod tests {
         assert_eq!(lcm(3, 5), 15);
     }
 
-    /// Two periods that meet past the bound are two sets, whatever they hold.
+    /// Two spellings of one set are one set in two places.
     ///
-    /// Equality lifts both tables to the period they share; past the bound
-    /// there is no such table, and the conservative answer is that the two
-    /// spellings differ. Each is still itself: one period meets itself under
-    /// the bound every set is built to.
+    /// Where equality and the order part, said once so a reader who expects
+    /// them to agree finds the reason rather than a surprise: the multiples of
+    /// two and the same set written with a period of four are equal and take
+    /// two positions. The order pays for being total, and it pays in the one
+    /// place nothing is charged -- a table of guards holds a second row, and no
+    /// question about the integers is answered differently.
+    ///
+    /// A pair whose periods meet past the bound is the other side of the same
+    /// split: the order still answers, because it reads no period, while
+    /// equality declines to call them one set.
     #[test]
-    fn periods_that_meet_past_the_bound_are_two_sets() {
+    fn two_spellings_of_one_set_are_one_set_in_two_places() {
+        let evens = IntSet::multiple_of(2).expect("a small step");
+        let at_four = IntSet {
+            modulus: 4,
+            classes: evens
+                .table_at(4)
+                .expect("a period inside the bound")
+                .into_owned(),
+        };
+        assert!(same(&evens, &at_four), "the two hold the same integers");
+        assert_eq!(evens, at_four);
+        assert_ne!(evens.cmp(&at_four), core::cmp::Ordering::Equal);
+
         let coarse = IntSet::multiple_of(MAX_PERIOD - 3).expect("a step within the bound");
         let fine = IntSet::multiple_of(MAX_PERIOD - 5).expect("a step within the bound");
         assert!(
-            coarse.aligned(&fine).is_none(),
-            "the periods meet under the bound"
+            coarse.union(&fine).is_none(),
+            "the periods meet past the bound"
         );
-
         assert_ne!(coarse, fine);
         assert_ne!(coarse.cmp(&fine), core::cmp::Ordering::Equal);
         assert_eq!(coarse, coarse.clone());
         assert_eq!(fine, fine.clone());
+    }
+
+    /// No three sets are ordered in a cycle.
+    ///
+    /// The witness a sort of record atoms found, pinned so no seed is asked to
+    /// find it twice: read at the period each pair shares, the integers come
+    /// before `{-2}`, `{-2}` comes before the multiples of three, and the
+    /// integers come *after* them. Nothing is wrong with any one of the three
+    /// readings; what is wrong is reading a pair, and an order on the tables
+    /// has no pair to read.
+    #[test]
+    fn no_three_sets_are_ordered_in_a_cycle() {
+        let corpus = [
+            IntSet::all(),
+            IntSet::empty(),
+            IntSet::just(-2),
+            IntSet::between(Some(0), None),
+            step(2),
+            step(3),
+            step(4),
+            step(3).complement(),
+        ];
+        for x in &corpus {
+            for y in &corpus {
+                for z in &corpus {
+                    assert!(
+                        !(x < y && y < z) || x < z,
+                        "the order puts {x:?}, {y:?} and {z:?} in a cycle"
+                    );
+                }
+            }
+        }
     }
 }

@@ -110,6 +110,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a tail the rules cannot read is not a repeat
 - fix: a refutation is read against the subject it is about
 - feat: the oracle answers what kinds a class can hold -- internal
+- fix: an integer set is ordered by the table it carries -- internal
 
 -->
 

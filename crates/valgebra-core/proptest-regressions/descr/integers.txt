@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 3b81816ff94a51883add5869caacb69043b0275c8e3e32b592801152b2fc0262 # shrinks to a = IntSet { modulus: 2, classes: [IntervalSet { spans: [Span { lo: None, hi: None }] }, IntervalSet { spans: [] }] }, b = IntSet { modulus: 1, classes: [IntervalSet { spans: [Span { lo: None, hi: None }] }] }, c = IntSet { modulus: 1, classes: [IntervalSet { spans: [Span { lo: Some(-1), hi: Some(-1) }] }] }

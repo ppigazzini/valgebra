@@ -86,6 +86,13 @@ pub const MAX_EDGES: usize = 1 << 16;
 /// form *canonical*. Edges leaving a state are held in guard order, so two
 /// states with the same transition function have the same edge list, and the
 /// minimal automaton has one table rather than one per edge permutation.
+///
+/// Being *total* is what the machine needs of it, and agreeing with `Eq` is not
+/// required: a letter whose representation is not canonical -- the integer set
+/// is one, where a period a set does not need is a second spelling -- has to
+/// choose, because an order read off a pair of spellings is not an order at
+/// all. A letter that orders two equal sets apart keeps an edge a merge would
+/// have folded, which is a larger table and never a different language.
 pub trait Guard: Clone + Eq + Ord + core::fmt::Debug {
     /// A value a guard is asked about.
     type Value;
