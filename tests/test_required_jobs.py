@@ -138,3 +138,27 @@ def test_the_gate_names_no_job_the_workflow_lacks() -> None:
         f"the gate names jobs this workflow does not define: {unknown}. A need "
         "on a job that does not exist is a gate on nothing."
     )
+
+
+def test_the_merge_counts_the_shards_the_sweep_is_cut_into() -> None:
+    """The merged sweep's shard count is the sweep's own matrix.
+
+    The ratchet the merge feeds runs the expiry direction, which reads a
+    mutant's absence as proof the tests killed it. A shard that dies before it
+    uploads makes every mutant it held absent, so the merge counts before the
+    ratchet reads -- and it can only count against a number. Two numbers that
+    drift apart make the guard pass over a sweep with a shard missing, which is
+    the state it exists to refuse.
+    """
+    jobs = _workflow()["jobs"]
+    cut = len(jobs["nightly-mutants"]["strategy"]["matrix"]["shard"])
+    merge = next(
+        step
+        for step in jobs["nightly-mutants-ratchet"]["steps"]
+        if step.get("name", "").startswith("Merge the shards")
+    )
+    counted = int(merge["env"]["SHARDS"])
+    assert counted == cut, (
+        f"the merge counts {counted} shards and the sweep is cut into {cut}. "
+        "A merge that counts fewer accepts a sweep with a shard missing."
+    )

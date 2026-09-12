@@ -743,6 +743,7 @@ jobs:
           # shellcheck disable=SC2086  # $args is a built flag list, not input
           cargo mutants --package valgebra-core $args -j 2 \
             --timeout-multiplier 20 --shard "${{ matrix.shard }}/12" \
+            --sharding round-robin \
             --output core-diff-mutants \
             -- -- --skip deep_subtype_into_bottom_terminates \
             --skip subtyping_terminates_on_a_distributed_tower
@@ -1082,8 +1083,13 @@ jobs:
           # exists to prove the decision budget's bound, so a mutation removing
           # that bound makes it run without end and the whole run returns no
           # verdict. tests/test_sweep_skips.py holds this list to the sources.
+          # Round-robin rather than the default consecutive slices: a slice
+          # puts one expensive file in one shard, and the last sweep's shards
+          # ran twenty-one to forty-eight minutes for a critical path near
+          # twice its mean. Mutant `i` on shard `i % 12` spreads every file
+          # across every shard.
           cargo mutants --package valgebra-core -j 4 --timeout-multiplier 20 \
-            --shard "${{ matrix.shard }}/12" \
+            --shard "${{ matrix.shard }}/12" --sharding round-robin \
             -- -- --skip deep_subtype_into_bottom_terminates \
             --skip subtyping_terminates_on_a_distributed_tower
           status=$?
@@ -1179,7 +1185,23 @@ jobs:
           pattern: core-mutants-*
           path: shards
       - name: Merge the shards into one sweep
+        env:
+          # The sweep's shard matrix, held to it by tests/test_required_jobs.py.
+          SHARDS: "12"
         run: |
+          # A whole sweep, or none. The ratchet below runs the *expiry*
+          # direction -- it fails a baseline entry whose survivor is gone -- and
+          # that direction reads the absence of a mutant as proof it was
+          # killed. A shard that died before uploading makes every mutant it
+          # held absent, so a merge that accepted eleven of twelve would report
+          # a clean sweep over a twelfth it never saw. Counting is the whole
+          # guard, and a count that is short is "could not run", not a failure
+          # of the tests.
+          found=$(find shards -mindepth 1 -maxdepth 1 -type d -name 'core-mutants-*' | wc -l)
+          if [ "$found" -ne "$SHARDS" ]; then
+            echo "::error::the sweep has $found of $SHARDS shards; the ratchet needs all of them"
+            exit 2
+          fi
           mkdir -p mutants.out
           for name in caught missed timeout unviable; do
             # `find -exec cat` rather than a glob: a shard that produced no
