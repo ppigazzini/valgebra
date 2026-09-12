@@ -341,6 +341,8 @@ assert Validator(Point).relation_to(tuple[int, int]) == "subset"
 Which relations answer `"undecided"` is the conservative boundary
 [the decidability page](15-decidability.md) describes. A `"not_subset"` is a
 statement about a value: some member of the subject is outside the other schema.
+Where the subject is a class, that rests on the class holding an instance, which
+is the one assumption that page records.
 
 `is_equivalent` is **semantic**: it compares the value sets, however the two
 schemas are spelled. Keep it distinct from `==` on validators, which compares the

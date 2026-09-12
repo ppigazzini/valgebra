@@ -2772,7 +2772,8 @@ fn finite_set(schema: &Schema) -> Option<&[Schema]> {
 /// whether it is disjoint from the whole supertype set, in the one call that
 /// question has, and declines to the rules below where the oracle does. A
 /// refutation from here is a mismatch like any other: the subject's own
-/// emptiness is read against it once, at the top of the query.
+/// emptiness is read against it by `witnessed`, at the level this pair is
+/// decided.
 fn finite_set_below(
     subject: &[Schema],
     supertype: &[Schema],

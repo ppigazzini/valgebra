@@ -103,20 +103,10 @@ asserts nothing beyond the procedure's reach.
 That asymmetry is deliberate and it is what makes the procedure safe to extend.
 Adding a rule can only move answers from false to true, so no extension can make
 an accept wrong. The published boundary is `docs/15-decidability.md`; the enumerated
-
-A **refutation** is a claim too, and it stands on a value: the subject has one
-that the other schema rejects. The query reads the subject's emptiness once,
-at the top (`witnessed`), and believes a refutation only where the subject is
-proven inhabited. A rule that refutes on a *part* of the subject reads the
-part's own verdict the same way, in three values: a sequence whose repeated
-element the rules cannot read is not refuted against a fixed length, because
-the element may admit no value and the sequence is then its prefix alone
-(`linear_subtype`). A bool would make *unknown* count as *inhabited*; the
-verdict is what keeps the claim a claim.
 relations the procedure is required to *decide* are
-`tests/test_completeness_ledger.py`, which fails in both directions —
-a relation that regresses to conservatism fails, and a closed hole whose ledger
-entry survives fails too.
+`tests/test_completeness_ledger.py`, which holds the decided list in both
+directions — a relation that regresses to conservatism fails, and a closed hole
+whose ledger entry survives fails too.
 
 The ledger only holds relations someone thought to write down, so it is one half.
 `tests/test_completeness_probe.py` is the other: it searches for pairs answered
@@ -398,8 +388,10 @@ it has a comment. Prefer one rule that asks the question.
 ## The limit
 
 Read `docs/15-decidability.md` for the published fragment and
-`tests/test_completeness_ledger.py` for the relations it declines, each a strict
-expected failure. None of them is a soundness question. Six shapes account for
+`tests/test_completeness_ledger.py` for the relations it decides. Its strict
+expected-failure mark is for a relation that regresses, and it names none. What
+the procedure still declines is the list below, and none of it is a soundness
+question. Six shapes account for
 almost all of them, and naming the shapes is more useful than naming the cases:
 
 - **emptiness never asks an inclusion.** `is_empty` decides the regions, the

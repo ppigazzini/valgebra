@@ -414,10 +414,12 @@ assert respelled.is_subtype_of(record)
 ```
 
 Two instruments hold this list to the tree. `tests/test_completeness_ledger.py`
-carries each relation above as a strict expected failure, written the way a
-caller writes it rather than built from the other operand — a distinction that
-matters, because the shortcuts the procedure takes are keyed on two schemas
-sharing their constants. `tests/test_completeness_probe.py` searches a fixed
+carries each relation above as a decided one, written the way a caller writes it
+rather than built from the other operand — a distinction that matters, because
+the shortcuts the procedure takes are keyed on two schemas sharing their
+constants. Its strict expected-failure mark is for a relation that *regresses*
+to conservatism, and it names none: the list above is what the procedure
+decides, so an entry that stops holding is a defect rather than a known gap. `tests/test_completeness_probe.py` searches a fixed
 universe for relations answered `False` that no value refutes and fails when one
 appears without a written reason, so a gap nobody thought of cannot arrive
 unnoticed. It reaches a gap only where some atom in its universe reaches it,

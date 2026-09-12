@@ -177,6 +177,16 @@ The soundness is relative to a small, explicit trust base:
   "exactly `int`" from "an `int` or a subclass"; that distinction is not
   expressible yet. The case is pinned as a known-unsound test rather than left
   unwritten.
+- **A class whose metaclass leaves `isinstance` alone holds an object.** A
+  refutation about a class stands on a value of it, and nothing here can build
+  one: reporting `A` not below `B` for two unrelated classes reads the
+  difference as holding a value, and a class no value can instantiate is empty
+  and below everything. The assumption licenses *one* object, on the line of
+  objects with no builtin kind — a plain class against the complement of `int`
+  stays undecided, because an integer that is an instance of it would need a
+  class deriving from both. It moves no `True`: a proof is a proof, and the
+  assumption is only ever read to believe a refutation.
+  [The decidability page](15-decidability.md) states it with the rows it moves.
 - The JSON parser (jiter) yields the value `json.loads` would, so the JSON path's
   denotation matches the object path's.
 - The crates contain no `unsafe`, so there is no memory-safety obligation beyond

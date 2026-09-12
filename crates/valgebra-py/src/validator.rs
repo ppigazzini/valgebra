@@ -1278,10 +1278,12 @@ impl Validator {
     ///
     /// `"subset"` is the proof `is_subtype_of` returns `True` for.
     /// `"not_subset"` is a refutation: some value of this schema is outside
-    /// `other`. `"undecided"` is neither, and the schemas it happens for are the
-    /// conservative boundary the decidability page describes -- an alternation
-    /// of sequence shapes, a leaf relation the oracle declines, a query that
-    /// spends its work budget.
+    /// `other`. Where a class is the subject, that rests on the class holding an
+    /// instance, which is the one assumption the decidability page records.
+    /// `"undecided"` is neither, and the schemas it happens for are the
+    /// conservative boundary that page describes -- an alternation of sequence
+    /// shapes, a leaf relation the oracle declines, a query that spends its
+    /// work budget.
     ///
     /// Runs the same work `is_subtype_of` runs and calls back into Python
     /// wherever it does.
