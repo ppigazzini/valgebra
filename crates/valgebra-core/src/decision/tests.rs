@@ -2999,6 +2999,46 @@ fn a_bound_over_the_integers_has_a_value_where_the_oracle_names_one() {
         verdict(&bounded(vec![Constraint::MultipleOf(at(0))])),
         Verdict::Unknown
     );
+    assert_eq!(
+        verdict(&bounded(vec![Constraint::Lt(at(1))])),
+        Verdict::Inhabited
+    );
+
+    // Two bounds on one side: the *tighter* is the one that decides, and
+    // keeping the looser would name a value the tighter excludes. Index 2 is
+    // the bound off the integer line, so which one is kept is visible, and the
+    // two orders are both drawn because the fold reads them one at a time.
+    assert_eq!(
+        verdict(&bounded(vec![Constraint::Ge(at(0)), Constraint::Ge(at(2))])),
+        Verdict::Unknown,
+        "the tighter lower bound is the one off the line"
+    );
+    assert_eq!(
+        verdict(&bounded(vec![Constraint::Ge(at(2)), Constraint::Ge(at(0))])),
+        Verdict::Unknown
+    );
+    assert_eq!(
+        verdict(&bounded(vec![Constraint::Le(at(1)), Constraint::Le(at(2))])),
+        Verdict::Unknown,
+        "the tighter upper bound is the one off the line"
+    );
+    assert_eq!(
+        verdict(&bounded(vec![Constraint::Le(at(2)), Constraint::Le(at(1))])),
+        Verdict::Unknown
+    );
+
+    // Two bounds of equal value, one strict: the strict one holds, and the
+    // interval it leaves has no integer in it -- which the emptiness half of
+    // the same fold reads as empty rather than as a value.
+    assert_eq!(
+        verdict(&bounded(vec![
+            Constraint::Ge(at(0)),
+            Constraint::Gt(at(0)),
+            Constraint::Le(at(0)),
+        ])),
+        Verdict::Empty,
+        "a strict bound beside an equal loose one is the one that holds"
+    );
 }
 
 /// A field no clause of the supertype can admit refutes the map.
@@ -3237,5 +3277,172 @@ fn a_meet_whose_class_the_oracle_declines_is_not_refuted() {
     assert_eq!(
         plain.subtype_relation(&Schema::Str, &Pure, &[], &budget),
         Relation::Unknown
+    );
+}
+
+/// A field list a caller built out of order is read by a scan, not a cursor.
+///
+/// The cursor over one field list moves forward only, so it answers correctly
+/// exactly when both lists are in name order: the list it indexes, and the list
+/// whose names it is asked for. A query out of order would look past a field
+/// sitting behind the cursor and report the list does not carry it. `KeyedMap`
+/// is a public variant, so a list built by hand may be in any order at all.
+#[test]
+fn a_record_built_out_of_order_decides_as_one_in_order() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let unordered = |fields: Vec<Field>| Schema::KeyedMap {
+        fields: fields.into(),
+        defaults: Vec::new().into(),
+    };
+
+    // The subject is in order; the supertype's names descend, so a cursor over
+    // the subject would be asked for `b` after `z` and answer that it has none.
+    let subject = unordered(vec![
+        field("a", Schema::Int, true),
+        field("b", Schema::Int, true),
+        field("z", Schema::Int, true),
+    ]);
+    let descending = unordered(vec![
+        field("z", Schema::Int, true),
+        field("b", Schema::Int, true),
+        field("a", Schema::Int, true),
+    ]);
+    assert_eq!(relation(&subject, &descending), Relation::Holds);
+    assert_eq!(relation(&descending, &subject), Relation::Holds);
+
+    // And the same pair where one field does not narrow: still refuted, in
+    // either order, because the answer is about the fields and not the walk.
+    let wider = unordered(vec![
+        field("z", Schema::Int, true),
+        field("b", Schema::list(SeqShape::homogeneous(Schema::Int)), true),
+        field("a", Schema::Int, true),
+    ]);
+    assert_ne!(relation(&subject, &wider), Relation::Holds);
+}
+
+/// A clause whose key the rules cannot read might admit the name.
+///
+/// A field the subtype declares and the supertype does not is refuted when
+/// every clause that plainly admits a string name rejects it. "Plainly" is the
+/// whole of it: a clause keyed by something else -- a literal, a union, a
+/// refinement -- may admit the name too, and the rules do not ask. Such a
+/// supertype gets a proof or nothing, never a refutation.
+#[test]
+fn a_clause_key_the_rules_cannot_read_leaves_the_field_unproven() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let mapping = |key: Schema, value: Schema| Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![MapClause { key, value }].into(),
+    };
+    let with_extra = closed(vec![field("extra", Schema::Int, true)]);
+    let listed = Schema::list(SeqShape::homogeneous(Schema::Int));
+
+    // A readable key that rejects the field refutes.
+    assert_eq!(
+        relation(&with_extra, &mapping(Schema::Str, listed.clone())),
+        Relation::Fails
+    );
+    // The same clause under a key the rules do not read declines instead: the
+    // clause may govern no key of the subject at all.
+    assert_eq!(
+        relation(
+            &with_extra,
+            &mapping(Schema::union([Schema::Str, Schema::Int]), listed)
+        ),
+        Relation::Unknown
+    );
+}
+
+/// A meet with an empty member is empty, whatever the meet is made of.
+///
+/// The class-and-attributes reading answers from its members' verdicts, and
+/// that is one shape; every other meet reads its regions, which say nothing
+/// for two opaque halves. An empty member has to empty the meet on its own,
+/// or a meet of a record with an unfillable field and anything at all would
+/// be reported to hold a value.
+#[test]
+fn a_meet_with_an_empty_member_is_empty() {
+    let barren = closed(vec![field("x", Schema::Nothing, true)]);
+    assert!(barren.verdict_under(&Pure) == Verdict::Empty, "the member");
+
+    let met = Schema::meet([Schema::Instance(ClassIx::new(0)), barren]);
+    assert_eq!(met.verdict_under(&Pure), Verdict::Empty);
+}
+
+/// An oracle over constants that each denote one value, distinct from the
+/// others -- the shape a pool of small integers has.
+struct Distinct;
+impl Constants for Distinct {}
+
+impl LeafRelations for Distinct {
+    fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+        None
+    }
+
+    fn literal_sets_disjoint(&self, left: &[ConstIx], right: &[ConstIx]) -> Option<bool> {
+        Some(!left.iter().any(|one| right.contains(one)))
+    }
+
+    // Every constant here denotes one value, so a constant shares one with
+    // itself and with no other. The refutation needs it: a literal has a value
+    // only where the bindings say the constant does.
+    fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+        Some(left != right)
+    }
+}
+
+/// A single literal is a set of one constant.
+///
+/// The literal-table rule reads both sides as sets of constants, and a bare
+/// `Literal` is the one-element case -- which is what decides it against a
+/// table, in one comparison rather than through the general member walk.
+#[test]
+fn a_single_literal_is_a_table_of_one() {
+    let table = Schema::union([
+        Schema::Literal(ConstIx::new(0)),
+        Schema::Literal(ConstIx::new(1)),
+        Schema::Literal(ConstIx::new(2)),
+    ]);
+    let one = Schema::Literal(ConstIx::new(1));
+    let outside = Schema::Literal(ConstIx::new(9));
+
+    assert!(structural(&one, &table));
+    assert!(!structural(&outside, &table));
+
+    // And the rule *refutes* the constant the table does not carry, which is
+    // what reading a bare literal as a one-element table is for: the member
+    // walk beside it only ever proves.
+    let budget = Cell::new(DECISION_BUDGET);
+    assert_eq!(
+        outside.subtype_relation(&table, &Distinct, &[], &budget),
+        Relation::Fails
+    );
+}
+
+/// Two fixed lengths that differ share no value.
+///
+/// A sequence with no repeated tail admits exactly one length, so two such
+/// shapes of different lengths are disjoint and the pair is refuted by the
+/// arity alone -- before any element is compared.
+#[test]
+fn two_fixed_lengths_that_differ_are_refuted() {
+    let fixed = |elements: Vec<Schema>| Schema::tuple(SeqShape::fixed(elements));
+    let pair = fixed(vec![Schema::Int, Schema::Int]);
+    let single = fixed(vec![Schema::Int]);
+    let budget = Cell::new(DECISION_BUDGET);
+    assert_eq!(
+        pair.subtype_relation(&single, &NoLeafRelations, &[], &budget),
+        Relation::Fails
+    );
+    let budget = Cell::new(DECISION_BUDGET);
+    assert_eq!(
+        single.subtype_relation(&pair, &NoLeafRelations, &[], &budget),
+        Relation::Fails
     );
 }

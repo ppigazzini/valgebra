@@ -2153,30 +2153,19 @@ fn refinement_verdict(
 /// the refinement *empty*, which is what the fold above does with the same
 /// pair, and unsound for proving it has a value.
 fn bounded_integer_verdict(constraints: &Constraints, oracle: &dyn LeafRelations) -> Verdict {
-    use core::cmp::Ordering;
-    let mut lower: Option<(OperandIx, bool)> = None;
-    let mut upper: Option<(OperandIx, bool)> = None;
-    for constraint in constraints.iter() {
-        let (value, strict, is_lower) = match constraint {
-            Constraint::Ge(i) => (*i, false, true),
-            Constraint::Gt(i) => (*i, true, true),
-            Constraint::Le(i) => (*i, false, false),
-            Constraint::Lt(i) => (*i, true, false),
-            // A constraint that is not an order bound narrows the set by
-            // something this cannot read, so it names no value.
-            _ => return Verdict::Unknown,
-        };
-        let slot = if is_lower { &mut lower } else { &mut upper };
-        match slot {
-            None => *slot = Some((value, strict)),
-            Some((held, held_strict)) => match oracle.compare(value, *held) {
-                Some(Ordering::Equal) => *held_strict = *held_strict || strict,
-                Some(Ordering::Greater) if is_lower => *slot = Some((value, strict)),
-                Some(Ordering::Less) if !is_lower => *slot = Some((value, strict)),
-                Some(_) => {}
-                None => return Verdict::Unknown,
-            },
-        }
+    // A constraint that is not an order bound narrows the set by something this
+    // cannot read, so it names no value.
+    if !constraints.iter().all(|c| {
+        matches!(
+            c,
+            Constraint::Ge(_) | Constraint::Gt(_) | Constraint::Le(_) | Constraint::Lt(_)
+        )
+    }) {
+        return Verdict::Unknown;
+    }
+    let (lower, upper, ordered) = tightest_bounds(constraints.iter(), oracle);
+    if !ordered {
+        return Verdict::Unknown;
     }
     let named = match (lower, upper) {
         // Every integer, and there is one.
@@ -2217,6 +2206,39 @@ fn shortest<'a>(constraints: impl Iterator<Item = &'a Constraint>) -> usize {
         .unwrap_or(0)
 }
 
+/// One end of an order bound: the constant, and whether the end is strict.
+type Bound = Option<(OperandIx, bool)>;
+
+/// The tightest lower and upper bound a conjunction names, and whether every
+/// comparison it took was answered.
+///
+/// One fold, read by two questions. Emptiness ignores the flag: where the
+/// oracle cannot order two bounds on one side, keeping either is sound, because
+/// an interval it proves empty under the looser one is empty under the tighter.
+/// Inhabitance cannot -- naming a value under the looser bound would name one
+/// the tighter excludes -- so it reads the flag and declines.
+fn tightest_bounds<'a>(
+    constraints: impl Iterator<Item = &'a Constraint>,
+    oracle: &dyn LeafRelations,
+) -> (Bound, Bound, bool) {
+    let mut lower: Bound = None;
+    let mut upper: Bound = None;
+    let mut ordered = true;
+    for constraint in constraints {
+        let (bound, is_lower) = match constraint {
+            Constraint::Ge(i) => ((*i, false), true),
+            Constraint::Gt(i) => ((*i, true), true),
+            Constraint::Le(i) => ((*i, false), false),
+            Constraint::Lt(i) => ((*i, true), false),
+            _ => continue,
+        };
+        let slot = if is_lower { &mut lower } else { &mut upper };
+        ordered &= slot.is_none() || oracle.compare(bound.0, slot.unwrap_or(bound).0).is_some();
+        *slot = Some(tighter_bound(*slot, bound, oracle, is_lower));
+    }
+    (lower, upper, ordered)
+}
+
 fn bounds_unsatisfiable<'a>(
     constraints: impl Iterator<Item = &'a Constraint> + Clone,
     oracle: &dyn LeafRelations,
@@ -2242,17 +2264,7 @@ fn bounds_unsatisfiable<'a>(
     {
         return true;
     }
-    let mut lower: Option<(OperandIx, bool)> = None;
-    let mut upper: Option<(OperandIx, bool)> = None;
-    for constraint in constraints {
-        match constraint {
-            Constraint::Ge(i) => lower = Some(tighter_bound(lower, (*i, false), oracle, true)),
-            Constraint::Gt(i) => lower = Some(tighter_bound(lower, (*i, true), oracle, true)),
-            Constraint::Le(i) => upper = Some(tighter_bound(upper, (*i, false), oracle, false)),
-            Constraint::Lt(i) => upper = Some(tighter_bound(upper, (*i, true), oracle, false)),
-            _ => {}
-        }
-    }
+    let (lower, upper, _) = tightest_bounds(constraints, oracle);
     if let (Some((lo, lo_strict)), Some((hi, hi_strict))) = (lower, upper) {
         match oracle.compare(lo, hi) {
             Some(Ordering::Greater) => return true,
