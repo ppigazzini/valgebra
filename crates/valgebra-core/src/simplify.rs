@@ -146,7 +146,7 @@ fn simplify_union(members: &[Schema]) -> Schema {
 /// re-running `simplify` on each would repeat the whole subtree's work once per
 /// level it is nested under — the exponential `simplify` blowup. Pushing the
 /// complement inward over already-normal members keeps the pass linear.
-fn union_of_simplified(members: Vec<Schema>) -> Schema {
+fn union_of_simplified(members: impl IntoIterator<Item = Schema>) -> Schema {
     with_member_buffer(|flat| {
         for member in members {
             match member {
@@ -214,7 +214,7 @@ fn simplify_intersection(members: &[Schema]) -> Schema {
 /// Collapse an intersection of already-normal members without re-normalising
 /// them — the De Morgan dual of [`union_of_simplified`], used along the complement
 /// path so a nested complement is not re-simplified once per level.
-fn intersection_of_simplified(members: Vec<Schema>) -> Schema {
+fn intersection_of_simplified(members: impl IntoIterator<Item = Schema>) -> Schema {
     with_member_buffer(|flat| {
         for member in members {
             match member {
@@ -285,10 +285,6 @@ fn complement_of_simplified(inner: Schema) -> Schema {
 /// Complement each already-normal member, keeping the result normal: a member that
 /// is itself a complement cancels, a union or intersection pushes the complement
 /// further inward by De Morgan, and an atom gains one complement.
-fn complement_each(members: &[Schema]) -> Vec<Schema> {
-    members
-        .iter()
-        .cloned()
-        .map(complement_of_simplified)
-        .collect()
+fn complement_each(members: &[Schema]) -> impl Iterator<Item = Schema> + '_ {
+    members.iter().cloned().map(complement_of_simplified)
 }

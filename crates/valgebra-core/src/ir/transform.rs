@@ -48,6 +48,11 @@ fn remapped_constraints(constraints: &Constraints, remap: Remap<'_>) -> Option<C
 /// to say about costs one call per member and no memory at all, which is the
 /// whole point of asking whether it changed.
 fn mapped_members(members: &Members, f: &impl Fn(&Schema) -> Option<Schema>) -> Option<Members> {
+    // An empty list has nothing to map and needs no buffer: a homogeneous
+    // sequence's prefix is one, and every pass over one reaches here.
+    if members.is_empty() {
+        return None;
+    }
     with_member_buffer(|buffer| {
         // Shared rather than allocated: a list this walk has assembled before
         // -- which a repeated transform over a repeated subtree assembles again
@@ -101,6 +106,9 @@ fn fill_mapped(
 /// [`mapped_members`] is the positional half, for a sequence's prefix, where
 /// order *is* the shape and may not be touched.
 fn mapped_member_set(members: &Members, f: &impl Fn(&Schema) -> Option<Schema>) -> Option<Members> {
+    if members.is_empty() {
+        return None;
+    }
     with_member_buffer(|buffer| {
         if !fill_mapped(buffer, members, f) {
             return None;
