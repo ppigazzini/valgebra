@@ -282,6 +282,7 @@ MODES = {
     "decision": ("decision_workload", "decision workload"),
     "decision-refute": ("decision_refute_workload", "refuting decision workload"),
     "decision-repeat": ("decision_repeat_workload", "repeating decision workload"),
+    "decision-matrix": ("decision_matrix_workload", "matrix decision workload"),
     "binding": ("binding_workload", "binding walk"),
     "binding-boundary": ("binding_workload", "binding call boundary"),
     "binding-record": ("binding_workload", "binding record walk"),

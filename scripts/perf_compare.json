@@ -12,5 +12,22 @@
   "_free_threaded_comment": "Ceilings the free-threaded build is held to instead, for the shapes where it is a different performance environment rather than the same one on a slower clock. A shape absent from here is held to the shared ceiling above. Reading an element out of a list takes the list's lock there, and a shape whose cost is per-element pays it: a schema nested twenty-five deep is twenty-five single-element lists, and it measures 0.309 to 0.338 of pydantic's time across four runs where the interpreters with a global lock read 0.142 to 0.162. The claim this project makes of that build is the true one, and the way to lower it is to stop owning an element the walk only reads.",
   "free_threaded_ceilings": {
     "deep_nesting": 0.45
+  },
+  "_recorded_comment": "Beside each ceiling -- what the project claims -- the ratio the shape last measured, and the spread it was measured across. A ceiling a shape passes by a wide margin stops measuring it: the JSON document sat at 0.87 under a ceiling of 1.00 while a commit message published 0.78 for it, and no gate was red for as long as it took somebody to re-run this one for an unrelated reason. The mutation ratchet and the instruction gate both compare against a recorded baseline; this is that, for ratios. A shape measuring worse than `ratios + tolerance` is red even while it is under its ceiling, and re-recording is an edit with an argument in its commit message, exactly as changing a ceiling is. The tolerance is the shape's own spread across runs of one build, measured per shape rather than assumed: one run cannot see it, so `--update` leaves it alone. A recorded ratio belongs to an environment as much as to the two libraries -- the interpreter, its global lock, and the pydantic-core it was compared against, since a faster pydantic-core raises every ratio with nothing here changing -- so the block names the environment it was taken in and the gate refuses to judge anywhere else, which is the failure the ceilings comment above already warns about once.",
+  "recorded": {
+    "environment": null,
+    "ratios": {},
+    "tolerance": {
+      "scalar": 0.015,
+      "large_array": 0.01,
+      "wide_record": 0.03,
+      "deep_nesting": 0.02,
+      "json_document": 0.06,
+      "build": 0.005
+    },
+    "unratcheted": {
+      "error_report": "Not measurable on this instrument. Five runs of one PGO CPython 3.12 build read 0.861, 0.882, 0.889, 1.056 and 1.193 -- a spread of 0.33, a third of the shape's own value, where every other shape spreads between 0.001 and 0.048. A tolerance wide enough not to fire on that noise would be wider than any regression worth catching, and a tighter one would fire constantly. The shape keeps its ceiling of 1.60, which it is nowhere near crossing, and the reason it is noisy is worth its own reading: it is the only shape timing a path that raises and formats an exception, so a Python exception's cost is inside the measurement."
+    },
+    "_how_to_arm": "Unrecorded on purpose. The fingerprint is the interpreter, its lock and the pydantic-core version, and a recording made elsewhere would match the bench lane's fingerprint while carrying another machine's noise -- which would arm the ratchet on numbers that were never taken there. So the first `--update` belongs on the lane, as a commit whose message carries the run it recorded. The tolerances below are not waiting for that: they are the shapes' own spread, measured over twelve runs of one PGO CPython 3.12 build -- scalar 0.008, large_array 0.004, deep_nesting 0.014, wide_record 0.029, json_document 0.057, build 0.001 -- each rounded up, and a spread is a property of the shape rather than of the box it was read on."
   }
 }

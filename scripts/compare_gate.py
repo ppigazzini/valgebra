@@ -27,15 +27,31 @@ on any machine, with no re-recording. The fine-grained work is
 ``scripts/perf_gate.py --against``, which compares a change to its own merge
 base under cachegrind at 2%.
 
+**A ceiling a shape passes by a wide margin stops measuring it.** The JSON
+document sat at 0.87 under a ceiling of 1.00 while a commit message claimed 0.78
+for it, and nothing was red for as long as it took somebody to re-run the gate
+for an unrelated reason. So beside each ceiling -- the claim -- the file carries
+a *recorded* ratio and a per-shape tolerance, which is the ratchet the mutation
+sweep and the instruction gate already have: a shape drifting past what it last
+measured is red even while it is under what the project promises.
+
+A recorded ratio belongs to an environment as much as to the two libraries, so
+the block names the one it was taken in -- interpreter, global lock, and the
+pydantic-core it was measured against, because a faster pydantic-core raises
+every ratio without anything here changing. Run somewhere else, the ratchet says
+so and judges the ceilings alone rather than reporting a drift it cannot read.
+
 Usage:
-    python scripts/compare_gate.py            # check ratios against the ceilings
+    python scripts/compare_gate.py            # ceilings, and the ratchet where it arms
+    python scripts/compare_gate.py --update   # re-record the ratios here
 
 Requires the ``bench`` dependency group (pydantic) and the built extension.
 
-Three outcomes, three exit codes: **0** every shape is under its ceiling, **1** a
-shape is over one or the shape sets disagree, **2** the gate **could not run** --
-a missing dependency, an unreadable ceiling file. A gate that could not run has
-proven nothing and must not read as one that passed.
+Three outcomes, three exit codes: **0** every shape is under its ceiling and has
+not drifted, **1** a shape is over one, has drifted past its tolerance, or the
+shape sets disagree, **2** the gate **could not run** -- a missing dependency, an
+unreadable ceiling file. A gate that could not run has proven nothing and must
+not read as one that passed.
 """
 
 from __future__ import annotations
@@ -44,7 +60,7 @@ import json
 import sys
 import timeit
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, NamedTuple, TypedDict
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -355,20 +371,67 @@ def main() -> int:
         rows.append((name, vg, pyd, vg / pyd))
 
     over, disagree = judge(measured, ceilings)
-    width = max(len(name) for name in shapes)
+    stored = _recorded_block()
+    moved, unarmed = drifted(measured, stored)
+    _report(rows, ceilings, stored, over, moved)
+    if "--update" in sys.argv[1:]:
+        _record(measured)
+        return EXIT_OK
+    if unarmed is not None:
+        print(f"\nratchet not armed: {unarmed}")
+    return _verdict(measured, ceilings, stored, Findings(over, disagree, moved))
+
+
+def _report(
+    rows: list[tuple[str, float, float, float]],
+    ceilings: dict[str, float],
+    stored: dict[str, object],
+    over: list[str],
+    moved: list[str],
+) -> None:
+    """Print one line per shape: what it measured, what it promises, what it was."""
+    ratios = stored.get("ratios", {})
+    ratios = ratios if isinstance(ratios, dict) else {}
+    width = max(len(name) for name, *_ in rows)
     print(
         f"{'shape':<{width}}  {'valgebra':>12}  {'pydantic':>12}  "
-        f"{'ratio':>7}  {'ceiling':>8}"
+        f"{'ratio':>7}  {'ceiling':>8}  {'recorded':>9}"
     )
     for name, vg, pyd, ratio in rows:
         ceiling = ceilings.get(name)
         shown = f"{ceiling:.2f}" if ceiling is not None else "-"
-        status = "  OVER CEILING" if name in over else ""
+        was = ratios.get(name)
+        last = f"{float(was):.3f}" if was is not None else "-"
+        status = ""
+        if name in over:
+            status = "  OVER CEILING"
+        elif name in moved:
+            status = "  DRIFTED"
         print(
             f"{name:<{width}}  {vg:>10.1f}ns  {pyd:>10.1f}ns  "
-            f"{ratio:>7.3f}  {shown:>8}{status}"
+            f"{ratio:>7.3f}  {shown:>8}  {last:>9}{status}"
         )
 
+
+class Findings(NamedTuple):
+    """What the three readings of one run found, before any of them is ranked."""
+
+    over: list[str]
+    """Shapes past the ceiling the project claims."""
+    disagree: bool
+    """Whether a shape has no ceiling, or a ceiling no shape."""
+    moved: list[str]
+    """Shapes past what they last measured, by more than their own spread."""
+
+
+def _verdict(
+    measured: dict[str, float],
+    ceilings: dict[str, float],
+    stored: dict[str, object],
+    found: Findings,
+) -> int:
+    """Turn the three readings into one exit code, loudest failure first."""
+    over, disagree, moved = found
     # Every measured shape must carry a ceiling and vice versa: a shape added
     # without one would pass unchecked, and a ceiling for a shape that is gone
     # is a claim about nothing.
@@ -385,8 +448,107 @@ def main() -> int:
         print("valgebra ceded ground to pydantic-core here, or the ceiling was")
         print("always wrong. Both are edits somebody argues for.")
         return EXIT_FAIL
+    if moved:
+        ratios = stored["ratios"]
+        tolerance = stored["tolerance"]
+        print(f"\nDRIFTED past its recorded ratio: {', '.join(moved)}")
+        for name in moved:
+            print(
+                f"  {name}: {measured[name]:.3f} against "
+                f"{float(ratios[name]):.3f} + {float(tolerance[name]):.3f}"
+            )
+        print("Still under the ceiling, which is why this is read separately: a")
+        print("shape may lose ground for a long time without reaching a claim.")
+        print("Re-record with --update and an argument, or find what moved.")
+        return EXIT_FAIL
     print(f"\nOK: all {len(measured)} shapes under their ceilings.")
     return EXIT_OK
+
+
+def _recorded_block() -> dict[str, object]:
+    try:
+        stored = json.loads(CEILING_FILE.read_text(encoding="utf-8")).get(
+            "recorded", {}
+        )
+    except (OSError, ValueError):  # pragma: no cover - _prepare refuses first
+        return {}
+    return stored if isinstance(stored, dict) else {}
+
+
+def _record(measured: dict[str, float]) -> None:
+    """Write this run's ratios as the floor the next run is held to.
+
+    The tolerance is left alone: it is the shape's measured spread across runs
+    of one build, which one run cannot see, and lowering it silently would make
+    the ratchet fire on noise. Widening or narrowing it is an edit with its own
+    argument, like a ceiling.
+    """
+    document = json.loads(CEILING_FILE.read_text(encoding="utf-8"))
+    block = document.setdefault("recorded", {})
+    block["environment"] = environment()
+    block["ratios"] = {
+        name: round(ratio, 3) for name, ratio in sorted(measured.items())
+    }
+    block.setdefault("tolerance", {})
+    block.setdefault("unratcheted", {})
+    CEILING_FILE.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    print(f"\nrecorded {len(measured)} ratios for {block['environment']}")
+
+
+def environment() -> str:
+    """Name the environment a recorded ratio belongs to.
+
+    Three things move every ratio without anything in this repository changing:
+    the interpreter's minor version, whether it has a global lock, and the
+    version of the library on the other side of the comparison. Naming them is
+    what lets a recorded number be compared at all -- and what stops it being
+    compared where it means nothing.
+
+    The build is not in here because :func:`provenance` already refuses a
+    non-release extension outright, and because whether the wheel was
+    PGO-trained is not a question the loaded module answers; the recording is
+    made on the lane that builds it the same way every time.
+    """
+    from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
+
+    try:
+        core = version("pydantic-core")
+    except PackageNotFoundError:  # pragma: no cover - the prepare step refuses first
+        core = "absent"
+    lock = "gil" if _gil_enabled() else "freethreaded"
+    release = f"cpython{sys.version_info.major}.{sys.version_info.minor}"
+    return f"{release}-{lock}-pydantic_core-{core}"
+
+
+def drifted(
+    measured: dict[str, float], recorded: dict[str, object]
+) -> tuple[list[str], str | None]:
+    """Shapes that measure worse than they last did, by more than their spread.
+
+    Returns the drifted shapes and, where the ratchet does not arm, the reason
+    -- which is not a failure: a recorded ratio read in the wrong environment is
+    a number about somewhere else, and judging against it would be the error
+    this file exists to avoid twice over.
+
+    Split from ``main`` so the verdict can be driven, and shown to fail, without
+    running a timer or pydantic.
+    """
+    if not recorded:
+        return [], "no ratios are recorded yet; run --update on the bench lane"
+    was = recorded.get("environment")
+    now = environment()
+    if was != now:
+        return [], f"recorded on {was}, running on {now}"
+    ratios = recorded.get("ratios", {})
+    tolerance = recorded.get("tolerance", {})
+    if not isinstance(ratios, dict) or not isinstance(tolerance, dict):
+        return [], "the recorded block is malformed"
+    return sorted(
+        name
+        for name, ratio in measured.items()
+        if name in ratios
+        and ratio > float(ratios[name]) + float(tolerance.get(name, 0.0))
+    ), None
 
 
 def judge(

@@ -519,7 +519,8 @@ jobs:
       - name: Decision-path instruction-count regression gate
         run: >
           uv run --no-sync python scripts/perf_gate.py
-          --decision --decision-refute --decision-repeat --against "$BASE"
+          --decision --decision-refute --decision-repeat --decision-matrix
+          --against "$BASE"
         env:
           BASE: ${{ steps.base.outputs.sha }}
       # The same gate for the binding hot paths, in the five shapes the
@@ -554,6 +555,7 @@ jobs:
           uv run --no-sync python scripts/perf_gate.py --decision
           uv run --no-sync python scripts/perf_gate.py --decision-refute
           uv run --no-sync python scripts/perf_gate.py --decision-repeat
+          uv run --no-sync python scripts/perf_gate.py --decision-matrix
           py="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
           libdir="$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           PYO3_PYTHON="$py" LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}" \
