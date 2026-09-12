@@ -93,6 +93,16 @@ pub enum BindingShape {
     /// record was scanned key by key where a closed one was read by its keys,
     /// and nothing counted the difference.
     Open,
+    /// The *accepting* walk over a fifty-field record in explain mode: the path
+    /// `validate()` takes when the value is a member.
+    ///
+    /// The twin of `Explain` on the other answer, and the shape that was
+    /// missing. Every other accepting shape runs in fast mode, so the cost of
+    /// explain mode on a value that passes -- the mode a caller asking for a
+    /// report is in, most of the time -- was measured by nothing. A change to
+    /// the failing path that pays for itself there and charges the accepting
+    /// one would have read as a pure win.
+    ExplainAccept,
 }
 
 impl BindingShape {
@@ -106,6 +116,7 @@ impl BindingShape {
             "build" => BindingShape::Build,
             "explain" => BindingShape::Explain,
             "open" => BindingShape::Open,
+            "explain-accept" => BindingShape::ExplainAccept,
             _ => return None,
         })
     }
@@ -117,16 +128,29 @@ impl BindingShape {
 /// measurements are of the same size of problem.
 ///
 /// The *failing position* is not identical, and deliberately stays that way.
-/// The explain shape below breaks the thirty-eighth field where the comparison
-/// gate breaks the eighth, which is not nothing: the fast pass stops at the
-/// first field that fails and the explain pass walks them all, so this one
-/// measures thirty more field probes. Aligning them was tried and reverted --
-/// the count moves 15% and `perf_gate.py --against` rebuilds the *base* to
-/// compare, so a workload whose shape changed is measured against a different
-/// workload and reads as a regression it is not. A shape is part of a
-/// workload's identity, and re-recording its budget does not make two shapes
-/// one. What the two instruments share is the size of the problem; that is
-/// what the sentence above claims and all it claims.
+/// The explain shape below writes the wrong value at `f37` where the comparison
+/// gate writes it at `f7` -- and the **name is not the position**, which is the
+/// thing to read twice. [`Schema::keyed_map`] sorts fields by name, and `f0`
+/// through `f49` sort as strings, so the walk visits
+///
+/// ```text
+/// f0 f1 f10 f11 ... f19 f2 f20 ... f29 f3 f30 ... f39 f4 f40 ... f49 f5 f6 f7 f8 f9
+/// ```
+///
+/// which puts `f37` at position **31** and `f7` at position **47**. The fast
+/// pass stops at the first field that fails and the explain pass walks them
+/// all, so this shape probes *sixteen fewer* fields than the gate's, not thirty
+/// more. An earlier draft of this comment had it the other way round and read
+/// the 15% below as "failing earlier costs more"; it is failing **later** that
+/// costs more, and the profile agrees.
+///
+/// Aligning them was tried and reverted: the count moves 15% and
+/// `perf_gate.py --against` rebuilds the *base* to compare, so a workload whose
+/// shape changed is measured against a different workload and reads as a
+/// regression it is not. A shape is part of a workload's identity, and
+/// re-recording its budget does not make two shapes one. What the two
+/// instruments share is the size of the problem; that is what the sentence
+/// above claims and all it claims.
 fn wide_record(py: Python<'_>) -> (Schema, Py<PyAny>) {
     let (fields, value) = wide_fields(py);
     (Schema::keyed_map(fields, Vec::new()), value)
@@ -233,34 +257,53 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             }
             checksum
         }
-        BindingShape::Explain => {
-            let (schema, value) = wide_record(py);
-            let validator = Validator::new(schema, Vec::new(), Vec::new());
-            let obj = value.bind(py).clone();
-            obj.cast::<PyDict>()
-                .expect("the record value is a dict")
-                .set_item("f37", "not an int")
-                .expect("replacing one key always succeeds");
-            let mut checksum: u64 = 0;
-            for _ in 0..iters {
-                let state = WalkState::new();
-                let mut out = Vec::new();
-                let ok = member(
-                    std::hint::black_box(&validator.schema),
-                    &Value::Py(std::hint::black_box(&obj)),
-                    &mut Frame::new(
-                        &mut Vec::new(),
-                        &mut out,
-                        validator.context(py, &state, WalkMode::Explain),
-                    ),
-                );
-                checksum = checksum
-                    .wrapping_add(u64::from(ok))
-                    .wrapping_add(out.len() as u64);
-            }
-            checksum
-        }
+        BindingShape::ExplainAccept => explaining_record(py, iters, Wrong::No),
+        BindingShape::Explain => explaining_record(py, iters, Wrong::Yes),
     }
+}
+
+/// Whether the explaining record shape's value carries the wrong type.
+///
+/// The two shapes differ in one value and in nothing else, which is the point:
+/// what separates them is the *answer*, so the pair measures what explain mode
+/// costs on each.
+#[derive(Clone, Copy)]
+enum Wrong {
+    /// `f37` holds a string, so the record is refused and the report is built.
+    Yes,
+    /// Every field holds an integer, so the walk accepts and reports nothing.
+    No,
+}
+
+/// The fifty-field record walked in explain mode, accepting or refusing.
+fn explaining_record(py: Python<'_>, iters: usize, wrong: Wrong) -> u64 {
+    let (schema, value) = wide_record(py);
+    let validator = Validator::new(schema, Vec::new(), Vec::new());
+    let obj = value.bind(py).clone();
+    if matches!(wrong, Wrong::Yes) {
+        obj.cast::<PyDict>()
+            .expect("the record value is a dict")
+            .set_item("f37", "not an int")
+            .expect("replacing one key always succeeds");
+    }
+    let mut checksum: u64 = 0;
+    for _ in 0..iters {
+        let state = WalkState::new();
+        let mut out = Vec::new();
+        let ok = member(
+            std::hint::black_box(&validator.schema),
+            &Value::Py(std::hint::black_box(&obj)),
+            &mut Frame::new(
+                &mut Vec::new(),
+                &mut out,
+                validator.context(py, &state, WalkMode::Explain),
+            ),
+        );
+        checksum = checksum
+            .wrapping_add(u64::from(ok))
+            .wrapping_add(out.len() as u64);
+    }
+    checksum
 }
 
 #[doc(hidden)]
