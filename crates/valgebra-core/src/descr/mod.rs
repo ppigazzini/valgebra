@@ -375,26 +375,33 @@ enum Op {
 
 /// A set of values, held as one component per [`Kind`] plus everything else.
 ///
-/// **Canonical by construction, with one exception.** Each component is
-/// canonical for its representation, and there is exactly one component per
-/// kind, so two descriptors that differ in a canonical component admit
-/// different values. Nothing needs normalising afterwards, which is what makes
-/// the operations' laws structural rather than up-to-equivalence.
+/// **Equality is equality of the values, with exceptions.** There is exactly
+/// one component per kind, so two descriptors that differ in a component that
+/// compares as a set admit different values. Nothing needs normalising
+/// afterwards, which is what makes the operations' laws structural rather than
+/// up-to-equivalence.
 ///
-/// The exceptions are three. [`sets`] and [`records`] are held as a *union*, and
-/// a union can hold the same values two ways -- `P(A ∪ B)` is also the union of
-/// `P(A)`, `P(B)` and the line subtracting both -- which costs a search for
-/// coverings neither runs. [`symbolic`] is the third once its letters are
-/// descriptors: minimisation asks the guards to join and to say what they leave,
-/// and a descriptor cannot always answer, because answering rebuilds the very
-/// automata being minimised. Each such refusal leaves a coarser table for the
-/// same language.
+/// The exceptions are four, and they are of two shapes. [`sets`] and
+/// [`records`] are held as a *union*, and a union can hold the same values two
+/// ways -- `P(A ∪ B)` is also the union of `P(A)`, `P(B)` and the line
+/// subtracting both -- which costs a search for coverings neither runs.
+/// [`symbolic`] is the third once its letters are descriptors: minimisation
+/// asks the guards to join and to say what they leave, and a descriptor cannot
+/// always answer, because answering rebuilds the very automata being minimised.
+/// Each such refusal leaves a coarser table for the same language.
 ///
-/// So equality is *finer* than agreeing on values once any of the three is
+/// [`integers`] is the fourth, and it differs from the other three: its
+/// *equality* lifts two tables to the period they share and so answers for the
+/// integers, but its form is not canonical and its **order** reads the form.
+/// So two spellings of one integer set are one set to equality and two
+/// positions in a sorted table, which is a line of a union rather than an
+/// answer. `descr::integers` says why no canonical spelling is available.
+///
+/// So equality is *finer* than agreeing on values once one of these is
 /// involved: equal descriptors still admit the same values, but two that admit
 /// the same values may compare unequal. Every law over a descriptor that can
 /// hold one is therefore checked against the values, and the laws checked by
-/// equality are the ones over the components that are canonical.
+/// equality are the ones over the components that compare as sets.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Descr {
     /// One union of lines per kind, indexed by that kind's position in

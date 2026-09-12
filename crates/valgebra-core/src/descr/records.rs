@@ -350,7 +350,7 @@ impl<G: Guard> RecordLattice<G> {
     /// and it is not a value: an object of kind `k` that is an instance of a
     /// class confining nothing exists only if some class derives from both, and
     /// which classes exist is not something a snapshot of the order can say.
-    /// That is the same open world [`Atom::emptiness`] already declines two
+    /// That is the same open world the atom's own emptiness already declines two
     /// unrelated classes for, with the kind standing as the second class.
     ///
     /// `None` is the line of objects that have no builtin kind, where the class

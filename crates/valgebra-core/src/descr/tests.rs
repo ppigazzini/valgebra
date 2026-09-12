@@ -903,7 +903,7 @@ static WORD_SETS: LazyLock<Vec<Descr>> = LazyLock::new(|| {
         .collect()
 });
 
-/// Descriptors whose every component is canonical.
+/// Descriptors whose every component compares as a set.
 ///
 /// No sequence, set or object: those three are held as a union or as a
 /// table a guard's own bound can leave coarse, so two of them can admit the
@@ -913,6 +913,10 @@ static WORD_SETS: LazyLock<Vec<Descr>> = LazyLock::new(|| {
 /// shorter than the product of their state counts, and no list of values
 /// says that. [`descr_with_sets`] puts them back and checks the same laws
 /// against the values.
+///
+/// The integer sets stay: their spelling is not canonical, but their equality
+/// lifts to the period a pair shares and so answers for the integers, which is
+/// what a law checked by equality asks of a component.
 fn descr() -> impl Strategy<Value = Descr> {
     let leaf = prop_oneof![
         Just(Descr::nothing()),

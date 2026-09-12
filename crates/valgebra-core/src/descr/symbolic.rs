@@ -408,7 +408,9 @@ impl<G: Guard> SymbolicDfa<G> {
             if rest_is_empty {
                 // Every value is taken by a guarded edge, so the largest of them
                 // is exactly what the others leave: naming it the else edge
-                // spells the row the one canonical way.
+                // spells the row one way. One way up to the guards' own order,
+                // which reads a spelling where a guard has more than one -- see
+                // the `Guard` doc above.
                 row.sort_by(|a, b| a.guard.cmp(&b.guard).then(a.target.cmp(&b.target)));
                 if let Some(last) = row.last_mut() {
                     last.guard = None;

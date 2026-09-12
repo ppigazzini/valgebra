@@ -221,10 +221,12 @@ type says which is which, so what the descriptor can and cannot see is read off
 it. Two properties hold of it that the structural IR does not have. Emptiness
 over the fragment it covers is a decision rather than a conservative answer,
 with a third verdict, `Unknown`, where an atom is not a set. And equality is
-semantic: the scalar components and the word automata are canonical, so
-admitting the same values *is* being equal there; the set, record and sequence
-components are not canonical, and equality on them is emptiness of both
-differences — which is the same question, asked twice.
+semantic: the scalar components and the word automata compare as sets, so
+admitting the same values *is* being equal there — the integer set by lifting
+two tables to the period they share, since its spelling is not canonical and
+its *order* reads the spelling (`descr/integers.rs`). The set, record and
+sequence components are not canonical either way, and equality on them is
+emptiness of both differences — which is the same question, asked twice.
 
 ## Property-based testing
 

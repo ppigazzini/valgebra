@@ -627,10 +627,12 @@ nanoseconds is not worth a set representation. So the rules answer first, and th
 descriptor answers where they decline.
 
 What that ordering is *not* is a second opinion. Both are asked of the same
-question and the descriptor can only turn "not proved" into "proved", so the pair
-gives the descriptor's answers wherever the descriptor can build -- the rules
-never overturn one. The rules are an optimisation of a relation the descriptor
-defines, and the page that describes the decision says so in that order.
+question, and both answer in the same three values: the descriptor is asked
+only where the rules answer neither, so the pair gives the descriptor's answer
+wherever the descriptor can build. Neither overturns the other, because neither
+is asked once the other has decided. The rules are an optimisation of a relation
+the descriptor defines, and the page that describes the decision says so in that
+order.
 
 **A rule earns its place by answering a shape the descriptor refuses, or by
 answering a common one far more cheaply.** A rule that only repeats what the
@@ -695,10 +697,12 @@ everything under it: passing a schema into a union, holding it on a trail,
 returning it from a transform, and reading it from two validators at once are
 all cheap.
 
-What sharing does not give is identity. Two structurally equal subtrees built
-separately are two allocations, nothing interns them, and equality is therefore
-structural, so the rules carry a work budget instead of a memo table
-([02-decision.md](02-decision.md)).
+What sharing gives beyond the copy is identity where a node is built twice:
+`ir/intern.rs` hands back one handle, which is the key a memo over goals would
+need. What is missing is the memo itself, and the reason is the trail a
+coinductive decision carries rather than a missing key — a result reached under
+an open hypothesis may not be kept once the hypothesis is discharged. The rules
+carry a work budget instead ([02-decision.md](02-decision.md)).
 
 A transform over the tree answers with the handle it was given when it changed
 nothing: opening a schema with no record in it, closing one already closed, or
