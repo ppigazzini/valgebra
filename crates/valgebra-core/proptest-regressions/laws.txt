@@ -14,3 +14,4 @@ cc 560fc54c4db4ee245c59805bd707c62ce9de9e4609bcb9b64371cba6cc9ad04c # shrinks to
 cc e175de09b6fc0aabcb5e87eb3f30fc64fde95a4fa1ab19051cb3a7bfb68a02a3 # shrinks to a = Union([Nothing])
 cc 2e5e77a6e5ab57be64b7f46638a362d167a4cb5832d2bc1f1fbc00a225bd5a53 # shrinks to a = Union([Bool, Intersection([Literal(ConstIx(0)), Bool])]), b = Union([Float])
 cc f2817eb6ad099b849e5ec08cf15e7496fbcd5b40d5eef390ddf83f29a9d09b4e # shrinks to a = Seq { container: List, shape: SeqShape { prefix: [], tail: None } }, b = Refine { base: Seq { container: List, shape: SeqShape { prefix: [], tail: Some(Anything(Top)) } }, constraints: [MinLen(1)] }
+cc 08edf64349f23d2eaed51e7866183bf421ad54ae9814fca9c61817925e58363e # shrinks to a = Union([Seq { container: List, shape: SeqShape { prefix: [], tail: Some(Literal(ConstIx(0))) } }]), b = Seq { container: List, shape: SeqShape { prefix: [], tail: Some(Literal(ConstIx(3))) } }

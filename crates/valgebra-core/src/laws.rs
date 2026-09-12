@@ -1980,18 +1980,74 @@ proptest! {
         prop_assert_eq!(not(not(a.clone())).simplify(), a.simplify());
     }
 
+    /// De Morgan, asserted over the values rather than over the two forms.
+    ///
+    /// The simplifier puts a schema in negation normal form and no further,
+    /// and NNF is not canonical -- so `simplify(a) == simplify(b)` is not an
+    /// equivalence test, and a law that spells it as one is asserting
+    /// *confluence*: that two rewrite sequences reach one form. The two sides
+    /// here do take different sequences. The left simplifies a union and then
+    /// pushes the complement through it; the right complements each member
+    /// first and may then collapse the meet through a rule the left never
+    /// reaches. Any sound improvement to the simplifier that fires on one side
+    /// only fails such a law, which is what happened to a disjointness rule
+    /// that was measured, found sound, and dropped for it.
+    ///
+    /// What de Morgan actually claims is about the values, and that is what
+    /// this asserts: both forms and the unsimplified one admit the same values
+    /// over the corpus. The deciders are asked too, in the one direction that
+    /// is a defect rather than a decline -- neither may *refute* a pair the law
+    /// says is one set.
     #[test]
-    fn de_morgan(a in schema(), b in schema()) {
+    fn de_morgan(a in decidable_schema(), b in decidable_schema()) {
+        let pool = const_pool();
         // Both forms: the complement of a join is the meet of the complements,
         // and the complement of a meet is the join of the complements.
-        prop_assert_eq!(
-            not(union(a.clone(), b.clone())).simplify(),
-            intersection(not(a.clone()), not(b.clone())).simplify()
-        );
-        prop_assert_eq!(
-            not(intersection(a.clone(), b.clone())).simplify(),
-            union(not(a), not(b)).simplify()
-        );
+        let pairs = [
+            (
+                not(union(a.clone(), b.clone())),
+                intersection(not(a.clone()), not(b.clone())),
+            ),
+            (
+                not(intersection(a.clone(), b.clone())),
+                union(not(a.clone()), not(b.clone())),
+            ),
+        ];
+        for (left, right) in pairs {
+            for value in &sample_values() {
+                let held = member_full(&left, value, &pool);
+                prop_assert_eq!(
+                    held,
+                    member_full(&right, value, &pool),
+                    "{:?} tells {:?} and {:?} apart",
+                    value, left, right
+                );
+                // And simplifying moves no value of either, which is the
+                // property the structural form was standing in for.
+                prop_assert_eq!(held, member_full(&left.clone().simplify(), value, &pool));
+                prop_assert_eq!(held, member_full(&right.clone().simplify(), value, &pool));
+            }
+            prop_assert_ne!(
+                left.subtype_relation(
+                    &right,
+                    &NoLeafRelations,
+                    &[],
+                    &std::cell::Cell::new(DECISION_BUDGET),
+                ),
+                Relation::Fails,
+                "the rules refuted one side of de Morgan against the other"
+            );
+            prop_assert_ne!(
+                right.subtype_relation(
+                    &left,
+                    &NoLeafRelations,
+                    &[],
+                    &std::cell::Cell::new(DECISION_BUDGET),
+                ),
+                Relation::Fails,
+                "the rules refuted one side of de Morgan against the other"
+            );
+        }
     }
 
     /// The strongest law check: simplification preserves membership, not just
@@ -3049,6 +3105,48 @@ proptest! {
             prop_assert!(
                 a.descriptor_contained_in(&b, &NoLeafRelations, &[]) != Relation::Holds,
                 "the rules refuted {a:?} <= {b:?} and the sets decide it holds"
+            );
+        }
+    }
+
+    /// Inclusion is transitive wherever the rules decide it.
+    ///
+    /// Inclusion is a preorder in the model -- it is set containment -- so two
+    /// proofs must never meet a refutation. That is a property of *three*
+    /// schemas, and a law drawing two cannot state it: the folds that carry a
+    /// refutation up are exactly where a wrong one would enter, and each of
+    /// them is antisymmetric and agrees with equality while still admitting a
+    /// cycle. The order over the integer sets was one such fold, and a sort of
+    /// guards found the cycle a pair could not.
+    ///
+    /// Only the decided corners are asserted. A decline says nothing, so a
+    /// pair the rules leave unknown constrains nothing here.
+    #[test]
+    fn inclusion_is_transitive_where_the_rules_decide_it(
+        a in shaped_schema(),
+        b in shaped_schema(),
+        c in shaped_schema(),
+    ) {
+        let oracle = CorpusOracle;
+        let relation = |x: &Schema, y: &Schema| {
+            let budget = std::cell::Cell::new(DECISION_BUDGET);
+            x.subtype_relation(y, &oracle, &[], &budget)
+        };
+        if relation(&a, &b) == Relation::Holds && relation(&b, &c) == Relation::Holds {
+            prop_assert_ne!(
+                relation(&a, &c),
+                Relation::Fails,
+                "{:?} <= {:?} <= {:?} and the pair at the ends is refuted",
+                a, b, c
+            );
+        }
+        // And the same of the two proofs an equivalence is made of.
+        if a.is_equivalent_under(&b, &oracle, &[]) && b.is_equivalent_under(&c, &oracle, &[]) {
+            prop_assert_ne!(
+                relation(&a, &c),
+                Relation::Fails,
+                "{:?} and {:?} are each equivalent to {:?} and the pair is refuted",
+                a, c, b
             );
         }
     }

@@ -785,6 +785,54 @@ mod tests {
         assert_eq!(fine, fine.clone());
     }
 
+    /// Equality is not transitive past the bound, and this is the triple.
+    ///
+    /// Two sets are equal when their tables agree at the period they share, and
+    /// a pair whose periods meet past [`MAX_PERIOD`] has no such period and is
+    /// read as two sets. Chain two such readings and the relation is not an
+    /// equivalence: the evens spelled at 64 and at 162 both equal the evens
+    /// spelled at 2, and meet each other at 5,184.
+    ///
+    /// Nothing here decides on it. Every use of equality between guards is a
+    /// fold -- a merge, a scan for a duplicate, a state signature -- so a pair
+    /// it misses costs a row or a coarser partition, never a different answer.
+    /// What it costs is the `Eq` contract, and a limit nothing states is a
+    /// limit the next reader has to rediscover.
+    ///
+    /// Settling it needs a canonical spelling, and the module header says why
+    /// there is none to have in this representation. One exists for the
+    /// arithmetic sets in general -- the minimal automaton over digits -- and
+    /// adopting it is a decision about what the representation is, not a
+    /// repair to equality.
+    #[test]
+    fn equality_is_not_transitive_where_two_periods_cannot_meet() {
+        let evens_at = |period: i64| {
+            let evens = step(2);
+            IntSet {
+                modulus: period,
+                classes: evens
+                    .table_at(period)
+                    .expect("a period inside the bound")
+                    .into_owned(),
+            }
+        };
+        // 64 and 162 are each a multiple of two, and meet at 5,184.
+        let (coarse, plain, fine) = (evens_at(64), step(2), evens_at(162));
+        assert!(lcm(64, 162) > MAX_PERIOD, "the pair has no shared period");
+
+        assert_eq!(coarse, plain);
+        assert_eq!(plain, fine);
+        assert_ne!(coarse, fine);
+
+        // All three hold the same integers, which is what makes the gap a
+        // limit of the reading rather than a disagreement about the sets.
+        for n in -20i64..=20 {
+            let held = coarse.holds(n);
+            assert_eq!(held, plain.holds(n), "{n} in the coarse spelling");
+            assert_eq!(held, fine.holds(n), "{n} in the fine spelling");
+        }
+    }
+
     /// No three sets are ordered in a cycle.
     ///
     /// The witness a sort of record atoms found, pinned so no seed is asked to

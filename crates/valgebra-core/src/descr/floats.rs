@@ -55,11 +55,39 @@ impl PartialOrd for Span {
 
 impl Span {
     /// The interval between two normalised endpoints.
+    ///
+    /// Normalisation is the invariant every other method here rests on: the
+    /// order compares endpoints with `total_cmp` and equality compares them
+    /// with `==`, and the two disagree on exactly one pair of values. `-0.0`
+    /// reaching an endpoint would make `[0.0, -0.0]` a span that `is_empty`
+    /// reads as crossed and `holds` reads as holding zero, which is not a
+    /// canonicity cost but a wrong answer.
     fn new(lo: f64, lo_closed: bool, hi: f64, hi_closed: bool) -> Span {
+        let (lo, hi) = (normalise(lo), normalise(hi));
+        debug_assert!(
+            !lo.is_nan() && !hi.is_nan(),
+            "an endpoint is never `nan`: the one value outside the order is held \
+             in the bit beside the spans"
+        );
+        // The order and equality must agree on the endpoints, because one
+        // decides whether a span is empty and the other whether two spans are
+        // one. `-0.0` is the only pair they part on, and normalisation is what
+        // keeps it out; the comparison is the point of the assertion, so the
+        // lint against comparing floats is allowed here by name.
+        #[expect(
+            clippy::float_cmp,
+            reason = "the disagreement between `==` and `total_cmp` is what this reads"
+        )]
+        {
+            debug_assert!(
+                (lo.total_cmp(&hi) == core::cmp::Ordering::Equal) == (lo == hi),
+                "normalisation leaves the order and equality agreeing on {lo} and {hi}"
+            );
+        }
         Span {
-            lo: normalise(lo),
+            lo,
             lo_closed,
-            hi: normalise(hi),
+            hi,
             hi_closed,
         }
     }
@@ -567,6 +595,20 @@ mod tests {
         assert!(!FloatSet::above(0.0).holds(-0.0));
         assert_eq!(FloatSet::above(-0.0), FloatSet::above(0.0));
         assert_eq!(FloatSet::at_least(-0.0), FloatSet::at_least(0.0));
+
+        // The assertions above pass whatever the endpoints carry, because
+        // `==` on a pair of `f64` already equates the two zeros. What the
+        // representation needs is that the *order* equates them too: it is
+        // `total_cmp` that decides whether a span is empty, and IEEE 754 puts
+        // `-0` below `+0` there. A negative zero reaching an endpoint would
+        // make this span crossed and empty while it holds zero.
+        assert_eq!(
+            FloatSet::just(-0.0).cmp(&FloatSet::just(0.0)),
+            core::cmp::Ordering::Equal
+        );
+        let straddling = FloatSet::at_most(-0.0).union(&FloatSet::above(0.0));
+        assert_eq!(straddling.spans.len(), 1, "the two zeros are one point");
+        assert!(straddling.holds(0.0) && straddling.holds(-0.0));
     }
 
     /// An open and a closed end differ by one value, which is the reason the

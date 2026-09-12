@@ -2838,12 +2838,19 @@ fn a_region_outside_a_kind_bound_refutes() {
     // answers the same: this adds a reading, it does not replace one.
     assert_eq!(relation(&not_int, &Schema::Str), Relation::Fails);
 
-    // `bool` is an `int`, so a refinement over `int` holds every boolean. The
-    // kind's own region would refuse this pair; the regions it admits do not.
+    // `bool` is an `int`, so a schema whose values are integers holds every
+    // boolean. The kind's own region would refuse this pair; the regions it
+    // admits do not. A refinement is the shape that reaches the reading: it
+    // carries its base's kind and earns no region of its own.
     let bounded = Schema::Refine {
         base: Arc::new(Schema::Int),
-        constraints: Vec::new().into(),
+        constraints: vec![Constraint::MultipleOf(OperandIx::new(0))].into(),
     };
+    assert_eq!(
+        bounded.region_set(),
+        Regions::Unknown,
+        "the rule is reached"
+    );
     assert_ne!(relation(&Schema::Bool, &bounded), Relation::Fails);
 
     // And a subject with no exact region set has nothing to spill: a list
