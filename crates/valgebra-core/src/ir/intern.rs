@@ -330,6 +330,17 @@ impl<T: ?Sized> Table<T> {
     }
 }
 
+// The four tables, one per shape of shared payload.
+//
+// **Nothing called while a table is borrowed may reach back into one.** Each of
+// the four functions below probes and stores under a single borrow -- the probe
+// and the store are one question, and splitting them paid two thread-local
+// lookups and two borrow pairs on the miss path, which is every call in a pass
+// that builds new nodes. What that costs is the rule above: the rejected
+// payload is built and dropped inside the borrow, so a `Drop` on `Schema`,
+// `Field` or `MapClause` that interned anything would panic on a borrow already
+// held. None does today; each drops handles and nothing else, and any that
+// stops being true has to split its table's access again.
 thread_local! {
     static NODES: RefCell<Table<Schema>> = RefCell::new(Table::new());
     static MEMBERS: RefCell<Table<[Schema]>> = RefCell::new(Table::new());
@@ -342,13 +353,14 @@ pub(super) fn node(schema: Schema) -> Arc<Schema> {
     let mut state = FxHasher::default();
     hash_node(&schema, &mut state);
     let hash = state.finish();
-    if let Some(held) = NODES.with_borrow(|table| table.hit(hash, |held| same_node(held, &schema)))
-    {
-        return held;
-    }
-    let made = Arc::new(schema);
-    NODES.with_borrow_mut(|table| table.put(hash, &made));
-    made
+    NODES.with_borrow_mut(move |table| {
+        if let Some(held) = table.hit(hash, |held| same_node(held, &schema)) {
+            return held;
+        }
+        let made = Arc::new(schema);
+        table.put(hash, &made);
+        made
+    })
 }
 
 /// The shared handle for a member list.
@@ -359,15 +371,18 @@ pub(super) fn members(items: &[Schema]) -> Members {
         hash_node(item, &mut state);
     }
     let hash = state.finish();
-    let same = |held: &[Schema]| {
-        held.len() == items.len() && held.iter().zip(items).all(|(one, two)| same_node(one, two))
-    };
-    if let Some(held) = MEMBERS.with_borrow(|table| table.hit(hash, same)) {
-        return held;
-    }
-    let made = Members::from(items);
-    MEMBERS.with_borrow_mut(|table| table.put(hash, &made));
-    made
+    MEMBERS.with_borrow_mut(|table| {
+        let held = table.hit(hash, |held: &[Schema]| {
+            held.len() == items.len()
+                && held.iter().zip(items).all(|(one, two)| same_node(one, two))
+        });
+        if let Some(held) = held {
+            return held;
+        }
+        let made = Members::from(items);
+        table.put(hash, &made);
+        made
+    })
 }
 
 /// The shared handle for a field list.
@@ -382,19 +397,21 @@ pub(super) fn fields(items: &mut Vec<Field>) -> Fields {
         hash_field(item, &mut state);
     }
     let hash = state.finish();
-    let same = |held: &[Field]| {
-        held.len() == items.len()
-            && held
-                .iter()
-                .zip(items.iter())
-                .all(|(one, two)| same_field(one, two))
-    };
-    if let Some(held) = FIELDS.with_borrow(|table| table.hit(hash, same)) {
-        return held;
-    }
-    let made = Fields::from_iter(items.drain(..));
-    FIELDS.with_borrow_mut(|table| table.put(hash, &made));
-    made
+    FIELDS.with_borrow_mut(|table| {
+        let held = table.hit(hash, |held: &[Field]| {
+            held.len() == items.len()
+                && held
+                    .iter()
+                    .zip(items.iter())
+                    .all(|(one, two)| same_field(one, two))
+        });
+        if let Some(held) = held {
+            return held;
+        }
+        let made = Fields::from_iter(items.drain(..));
+        table.put(hash, &made);
+        made
+    })
 }
 
 /// The shared handle for a clause list, by the same rule as [`fields`].
@@ -405,19 +422,21 @@ pub(super) fn clauses(items: &mut Vec<MapClause>) -> Clauses {
         hash_clause(item, &mut state);
     }
     let hash = state.finish();
-    let same = |held: &[MapClause]| {
-        held.len() == items.len()
-            && held
-                .iter()
-                .zip(items.iter())
-                .all(|(one, two)| same_clause(one, two))
-    };
-    if let Some(held) = CLAUSES.with_borrow(|table| table.hit(hash, same)) {
-        return held;
-    }
-    let made = Clauses::from_iter(items.drain(..));
-    CLAUSES.with_borrow_mut(|table| table.put(hash, &made));
-    made
+    CLAUSES.with_borrow_mut(|table| {
+        let held = table.hit(hash, |held: &[MapClause]| {
+            held.len() == items.len()
+                && held
+                    .iter()
+                    .zip(items.iter())
+                    .all(|(one, two)| same_clause(one, two))
+        });
+        if let Some(held) = held {
+            return held;
+        }
+        let made = Clauses::from_iter(items.drain(..));
+        table.put(hash, &made);
+        made
+    })
 }
 
 #[cfg(test)]
