@@ -2127,10 +2127,21 @@ fn a_refinement_as_the_supertype_carries_its_base_s_refutation() {
         Relation::Fails
     );
     assert_eq!(relation(&Schema::Int, &bounded_list), Relation::Fails);
-    // Inside the base and nothing said about the bound: unproven, not proven.
+    // Inside the base, and the bound refutes on a value of its own: a list
+    // type carrying no bound holds the empty list, which a bound of two does
+    // not. Not proven, and not merely unproven.
     assert_eq!(
         relation(
             &Schema::list(SeqShape::homogeneous(Schema::Int)),
+            &bounded_list
+        ),
+        Relation::Fails
+    );
+    // A shape that holds no empty list has no such value, so the same pair
+    // with a prefix is unproven rather than refuted.
+    assert_eq!(
+        relation(
+            &Schema::list(SeqShape::prefix_tail([Schema::Int], Schema::Int)),
             &bounded_list
         ),
         Relation::Unknown
