@@ -125,6 +125,7 @@ answer of its own, or a repair to a change not yet released.
 - perf: a refinement pair the constraints leave unproven is read on -- internal
 - perf: two sequences meet in the sequences of their elements' meet -- internal
 - perf: a sequence with no bound holds the empty one a bound leaves out -- internal
+- perf: a meet outside every branch of a union is outside the union -- internal
 
 -->
 
