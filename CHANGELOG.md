@@ -195,168 +195,6 @@ answer of its own, or a repair to a change not yet released.
   renumbered is put back in canonical order rather than left as the other
   validator happened to number it.
 
-### Changed
-
-- A length bound over a container that repeats one element decides whether the
-  schema has a value, where it was left unknown. A value of any length is as
-  many copies of one element, so the element decides it: a bound of zero is met
-  by the empty container, a longer one by repeating an element. Three things
-  follow. A recursive schema every unfolding of which needs one more element is
-  reported empty, which the completeness ledger carried as a relation it could
-  not decide. A refutation about such a schema is believed, so `list[int]` with
-  a length bound is decided not below a tuple -- **0.7 us against 458**. And the
-  refuting half of the decision workload, whose hardest case was a fixed
-  sequence with an unfillable position, reads a two-hundred-and-seventieth of
-  the instructions it did.
-
-- A relation between two classes is decided by a rule. A class whose metaclass
-  leaves `isinstance` alone is read as holding an object -- the open world the
-  set representation already works in, and the assumption every refutation this
-  library makes about a class already rested on -- so the rules stop deferring
-  to the sets for an answer the library had committed to: two unrelated classes
-  read **1.2 us against 100**, a `dict` subclass against a list 1.4 against 37,
-  and a plain class against a dataclass 2.2 against 472. The answers are
-  unchanged. A class whose metaclass answers with code of its own is read as
-  before, which is not at all, and the decidability page states the assumption
-  and where it is wrong.
-
-- A length bound over a string or a bytes decides whether the schema has a
-  value, where it was left unknown. A string takes any length, so a bound its
-  own lengths admit is met -- `Annotated[str, MinLen(1)]` is the non-empty
-  string and it has one. Every refutation about such a schema is believed
-  rather than left to the set representation: a non-empty string against
-  another kind reads **0.9 us against 195**, and against a mapping 0.9 against
-  243. A bound over a base whose values have no length still says nothing, and
-  the reading declines.
-
-- A rule that answers for a shape and then declines hands the pair on, where
-  it used to end the question. A refinement takes its base's supertypes and
-  nothing else; a union supertype takes a subject that lands in one branch. A
-  pair either leaves unproven now reaches the readings that decide what a pair
-  with no rule is worth -- two sets that share no value, then the oracle, then
-  the supertype's own shape. A bounded list against a mapping or a union of
-  scalars reads **1.2 us against 395**.
-
-- A subject outside a base is outside every refinement of that base. The value
-  that refutes the one refutes the other, and it is the same value, so the
-  refutation carries where the proof cannot: being inside the base says nothing
-  about the constraints. A tuple against a length-bounded list reads **0.8 us
-  against 460**.
-
-- A class laid out as a builtin decides a relation by a rule. A class deriving
-  from `dict` holds mappings and nothing else -- a subclass inherits the layout
-  and cannot lay down a second -- so a list is not below it and the pair is
-  refuted where it was left to the set representation: `list[int]` against such
-  a class reads **1.2 us against 35**. A class deriving from no builtin is not
-  read this way and stays undecided, because a subclass of it may derive from
-  one: an instance of a class built on that one and on `str` is a string and an
-  instance of the first.
-
-- A pair whose kinds cannot overlap decides by a rule. Two distinct container
-  kinds share no value, so every value of the subject is outside the supertype
-  and the inclusion is refuted -- where the relation was left unproven and
-  settled by lowering both sides into the set representation. `list[int]`
-  against `tuple[int, int]` reads **0.6 us against 75 us**, a mapping against a
-  list 0.7 against 37, with the same answers.
-
-- A key one record requires and the other does not declare decides the pair by
-  a rule. A clause governs the keys a value carries and requires none, so a
-  record open to undeclared keys still holds a value without that key, and that
-  value is one the supertype rejects. The relation was left to the set
-  representation, which lowers both records to answer it -- and since a
-  `TypedDict` is open by the typing spec, that was every relation between two of
-  them: **1.0 us against 268 us** for two eight-field `TypedDict`s, on the
-  machine the performance page names.
-
-- A `TypedDict` value is read by its declared keys, as a closed record's is.
-  A `TypedDict` is open -- the typing spec admits keys it does not declare --
-  and an open record was scanned key by key where a closed one was read by its
-  keys, for a clause that admits any string. The keys settle it either way:
-  every declared field is probed, and a key to spare is admitted when it is a
-  string and refuses the record when it is not, which no key need be resolved
-  to say. The same fifty-field value reads about a quarter faster as a
-  `TypedDict` and its error report about a sixth, and neither answer moves.
-
-- Two schemas built alike share their nodes, so a question that reaches both is
-  answered by identity rather than by walking two trees. A relation between a
-  record schema and an equal one built separately reads **1.07M instructions
-  against 4.97M** under the core decision workload; the whole of that workload
-  reads 21% down and the schema-transformation workload 4.5% down
-  (`scripts/perf_gate.py --decision --core`). Building a validator pays 0.6% for
-  the sharing, and the membership walk is unmoved. Nothing about what a schema
-  denotes changes: the test that decides sharing is stricter than equality --
-  two spellings of the top stay two nodes, and `repr` gives back the one that
-  was written.
-
-### Fixed
-
-- A relation is refuted only where the subject of *that* comparison has a
-  value, at every level of it. A container's rule carries its element's
-  refutation up, and the reading that says whether a refutation is a claim was
-  taken once, about the whole subject -- so a list of an element with no value,
-  which is the empty list and below a list of anything, was reported outside
-  it. The reading is taken where the refutation is made:
-
-  ```python
-  from typing import Annotated, Never
-
-  import annotated_types as at
-
-  from valgebra import Validator
-
-  no_value = Annotated[list[Never], at.MinLen(1)]
-  small = Validator({"f": no_value})
-  large = Validator({"f": no_value, "g": int})
-  assert Validator(list[small]).is_subtype_of(Validator(list[large]))
-  ```
-
-  The same held for a set, a repeated tuple, a record whose field is optional,
-  and any nesting of those. Shapes whose own form names a value -- a scalar, a
-  container that admits an empty one, a union with such a member -- are read
-  without a descent, which is what keeps the reading's cost where it was.
-
-- A sequence whose repeated element the rules cannot read is not refuted
-  against a fixed length. `tuple[X, ...] <= tuple[()]` was refuted on the
-  ground that a repeating tail cannot fit a fixed length, which stands only
-  where `X` has a value: an `X` the rules cannot decide may admit none, and
-  `tuple[X, ...]` is then the empty tuple, which fits. The refutation is
-  believed where the element is proven inhabited and declined where it is not,
-  and the descriptor -- which reads the element -- decides the pair:
-
-  ```python
-  from typing import Annotated, Never
-
-  import annotated_types as at
-
-  from valgebra import Validator
-
-  no_value = Annotated[list[Never], at.MinLen(1)]
-  assert Validator(tuple[no_value, ...]).is_equivalent(Validator(tuple[()]))
-  ```
-
-  Found by the law that holds the two deciders to one answer: the rules
-  refuted an inclusion the sets prove.
-
-- A schema disjoint from a meet is below that meet's complement. `A <= ~B` asks
-  whether `A` and `B` share a value, and the meet it built for that question
-  held `B` as a nested intersection where the rule that decides a meet empty
-  compares the members of *one* intersection pairwise. Built through the meet
-  constructor the members flatten, the pair meets, and the relation decides:
-
-  ```python
-  from valgebra import Validator, complement, intersection
-
-  small = Validator(int)
-  meet = intersection(Validator(str), Validator(bytes))
-  assert small.is_subtype_of(complement(meet))
-  ```
-
-  The two deciders answered one question differently, which is what a
-  disagreement between them looks like from outside: a relation that holds,
-  reported as not proven.
-
-
-### Added
 
 - Relations over a bound on a **float** are decided. A bound was lowered into
   the descriptor only over whole numbers, so anything needing the descriptor and
@@ -365,9 +203,8 @@ answer of its own, or a repair to a change not yet released.
   float bound is now a set of floats, with the side chosen by the *base* rather
   than by the operand's type — `Gt(0)` carries the integer zero and orders the
   floats all the same — and `nan` sits outside every interval, as Python's own
-  comparisons put it. Over the 6,000-pair random sweep the undecided
-  corpus-true subtypes fall from 18 to 7 and the undecided emptinesses from 5
-  to 1, with no relation refuted by a value.
+  comparisons put it. The completeness probe's random sweep reports fewer
+  undecided relations in both directions, with none refuted by a value.
 
 
 - **Schemas compare as sets.** Each kind of value carries a representation
@@ -616,6 +453,98 @@ answer of its own, or a repair to a change not yet released.
 
 ### Changed
 
+- A length bound over a container that repeats one element decides whether the
+  schema has a value, where it was left unknown. A value of any length is as
+  many copies of one element, so the element decides it: a bound of zero is met
+  by the empty container, a longer one by repeating an element. Three things
+  follow. A recursive schema every unfolding of which needs one more element is
+  reported empty, which the completeness ledger carried as a relation it could
+  not decide. A refutation about such a schema is believed, so `list[int]` with
+  a length bound is decided not below a tuple, by a rule rather than by the set
+  representation. And the refuting half of the decision workload, whose hardest
+  case was a fixed sequence with an unfillable position, falls by two orders of
+  magnitude; the instruction gate holds the figure.
+
+- A relation between two classes is decided by a rule. A class whose metaclass
+  leaves `isinstance` alone is read as holding an object -- the open world the
+  set representation already works in, and the assumption every refutation this
+  library makes about a class already rested on -- so the rules stop deferring
+  to the sets for an answer the library had committed to: two unrelated classes
+  read **1.2 us against 100**, a `dict` subclass against a list 1.4 against 37,
+  and a plain class against a dataclass 2.2 against 472. The answers are
+  unchanged. A class whose metaclass answers with code of its own is read as
+  before, which is not at all, and the decidability page states the assumption
+  and where it is wrong.
+
+- A length bound over a string or a bytes decides whether the schema has a
+  value, where it was left unknown. A string takes any length, so a bound its
+  own lengths admit is met -- `Annotated[str, MinLen(1)]` is the non-empty
+  string and it has one. Every refutation about such a schema is believed
+  rather than left to the set representation: a non-empty string against
+  another kind reads **0.9 us against 195**, and against a mapping 0.9 against
+  243. A bound over a base whose values have no length still says nothing, and
+  the reading declines.
+
+- A rule that answers for a shape and then declines hands the pair on, where
+  it used to end the question. A refinement takes its base's supertypes and
+  nothing else; a union supertype takes a subject that lands in one branch. A
+  pair either leaves unproven now reaches the readings that decide what a pair
+  with no rule is worth -- two sets that share no value, then the oracle, then
+  the supertype's own shape. A bounded list against a mapping or a union of
+  scalars reads **1.2 us against 395**.
+
+- A subject outside a base is outside every refinement of that base. The value
+  that refutes the one refutes the other, and it is the same value, so the
+  refutation carries where the proof cannot: being inside the base says nothing
+  about the constraints. A tuple against a length-bounded list reads **0.8 us
+  against 460**.
+
+- A class laid out as a builtin decides a relation by a rule. A class deriving
+  from `dict` holds mappings and nothing else -- a subclass inherits the layout
+  and cannot lay down a second -- so a list is not below it and the pair is
+  refuted where it was left to the set representation: `list[int]` against such
+  a class reads **1.2 us against 35**. A class deriving from no builtin is not
+  read this way and stays undecided, because a subclass of it may derive from
+  one: an instance of a class built on that one and on `str` is a string and an
+  instance of the first.
+
+- A pair whose kinds cannot overlap decides by a rule. Two distinct container
+  kinds share no value, so every value of the subject is outside the supertype
+  and the inclusion is refuted -- where the relation was left unproven and
+  settled by lowering both sides into the set representation. `list[int]`
+  against `tuple[int, int]` reads **0.6 us against 75 us**, a mapping against a
+  list 0.7 against 37, with the same answers.
+
+- A key one record requires and the other does not declare decides the pair by
+  a rule. A clause governs the keys a value carries and requires none, so a
+  record open to undeclared keys still holds a value without that key, and that
+  value is one the supertype rejects. The relation was left to the set
+  representation, which lowers both records to answer it -- and since a
+  `TypedDict` is open by the typing spec, that was every relation between two of
+  them: **1.0 us against 268 us** for two eight-field `TypedDict`s, on the
+  machine the performance page names.
+
+- A `TypedDict` value is read by its declared keys, as a closed record's is.
+  A `TypedDict` is open -- the typing spec admits keys it does not declare --
+  and an open record was scanned key by key where a closed one was read by its
+  keys, for a clause that admits any string. The keys settle it either way:
+  every declared field is probed, and a key to spare is admitted when it is a
+  string and refuses the record when it is not, which no key need be resolved
+  to say. The same fifty-field value reads about a quarter faster as a
+  `TypedDict` and its error report about a sixth, and neither answer moves.
+
+- Two schemas built alike share their nodes, so a question that reaches both is
+  answered by identity rather than by walking two trees. A relation between a
+  record schema and an equal one built separately reads **1.07M instructions
+  against 4.97M** under the core decision workload; the whole of that workload
+  reads 21% down and the schema-transformation workload 4.5% down
+  (`scripts/perf_gate.py --decision --core`). Building a validator pays 0.6% for
+  the sharing, and the membership walk is unmoved. Nothing about what a schema
+  denotes changes: the test that decides sharing is stricter than equality --
+  two spellings of the top stay two nodes, and `repr` gives back the one that
+  was written.
+
+
 - **Explaining a failure over a record costs a third less.** The accepting walk
   scans a dict once and resolves each key it finds through a map built with the
   validator; the explaining walk asked the dict for each declared key by name,
@@ -812,10 +741,77 @@ answer of its own, or a repair to a change not yet released.
 
 ### Fixed
 
+- A relation is refuted only where the subject of *that* comparison has a
+  value, at every level of it. A container's rule carries its element's
+  refutation up, and the reading that says whether a refutation is a claim was
+  taken once, about the whole subject -- so a list of an element with no value,
+  which is the empty list and below a list of anything, was reported outside
+  it. The reading is taken where the refutation is made:
+
+  ```python
+  from typing import Annotated, Never
+
+  import annotated_types as at
+
+  from valgebra import Validator
+
+  no_value = Annotated[list[Never], at.MinLen(1)]
+  small = Validator({"f": no_value})
+  large = Validator({"f": no_value, "g": int})
+  assert Validator(list[small]).is_subtype_of(Validator(list[large]))
+  ```
+
+  The same held for a set, a repeated tuple, a record whose field is optional,
+  and any nesting of those. Shapes whose own form names a value -- a scalar, a
+  container that admits an empty one, a union with such a member -- are read
+  without a descent, which is what keeps the reading's cost where it was.
+
+- A sequence whose repeated element the rules cannot read is not refuted
+  against a fixed length. `tuple[X, ...] <= tuple[()]` was refuted on the
+  ground that a repeating tail cannot fit a fixed length, which stands only
+  where `X` has a value: an `X` the rules cannot decide may admit none, and
+  `tuple[X, ...]` is then the empty tuple, which fits. The refutation is
+  believed where the element is proven inhabited and declined where it is not,
+  and the descriptor -- which reads the element -- decides the pair:
+
+  ```python
+  from typing import Annotated, Never
+
+  import annotated_types as at
+
+  from valgebra import Validator
+
+  no_value = Annotated[list[Never], at.MinLen(1)]
+  assert Validator(tuple[no_value, ...]).is_equivalent(Validator(tuple[()]))
+  ```
+
+  Found by the law that holds the two deciders to one answer: the rules
+  refuted an inclusion the sets prove.
+
+- A schema disjoint from a meet is below that meet's complement. `A <= ~B` asks
+  whether `A` and `B` share a value, and the meet it built for that question
+  held `B` as a nested intersection where the rule that decides a meet empty
+  compares the members of *one* intersection pairwise. Built through the meet
+  constructor the members flatten, the pair meets, and the relation decides:
+
+  ```python
+  from valgebra import Validator, complement, intersection
+
+  small = Validator(int)
+  meet = intersection(Validator(str), Validator(bytes))
+  assert small.is_subtype_of(complement(meet))
+  ```
+
+  The two deciders answered one question differently, which is what a
+  disagreement between them looks like from outside: a relation that holds,
+  reported as not proven.
+
+
+
 - Two wide literal unions are decided as sets. The core compares a union with a
   union member by member, so `intersection(Literal[*range(20_000)],
-  Literal[*range(20_000, 40_000)]).is_empty()` was 400 million calls into the
-  bindings and **six seconds**; it is now 10 ms. The bindings answer the whole
+  Literal[*range(20_000, 40_000)]).is_empty()` made one call into the bindings
+  per pair of members. The bindings answer the whole
   disjointness question in one pass where they can hash the constants, and
   decline — leaving the member walk — where they cannot.
 

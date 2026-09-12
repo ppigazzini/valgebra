@@ -274,9 +274,9 @@ and they have a cost of their own with two clear levels. A pair a **rule**
 decides costs about a microsecond: the rules recurse over the two schemas and
 answer from their shapes. A pair the rules decline goes to the **set
 representation**, which lowers both sides into automata and takes tens to
-hundreds of microseconds -- two orders of magnitude, the figure
-[02-decision.md](dev/02-decision.md) records and the reason a rule that stops
-declining is worth writing.
+hundreds of microseconds. Two orders of magnitude is the gap, and it is the
+reason a rule that stops declining is worth writing; `cargo bench --bench core`
+measures both sides, the `subtype_*` rows against the `lower_*` rows.
 
 Which pairs land on which side is the interesting part, and it moves. Most do
 not reach the sets: a mismatch of kinds, a record missing a required key, a

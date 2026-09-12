@@ -63,7 +63,7 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **witness** | a value that settles a relation by example: one inside the subtype and outside the supertype disproves inclusion. A `False` with no witness is the probe's subject |
 | **detached surface** | a `Cargo.toml` outside the root workspace, which no workspace-wide command reaches ([07-tooling-ci.md](07-tooling-ci.md)) |
 
-## Four collisions, and both senses are live
+## Five collisions, and both senses are live
 
 Say which one you mean.
 
@@ -73,6 +73,7 @@ Say which one you mean.
 | **oracle** | an independent judge in a test | `LeafRelations`, the trait the decision procedure asks about a class or a value |
 | **budget** | the committed instruction count a workload is held to | `DECISION_BUDGET`, the work ceiling one decision query may spend. Not `Bounds`, which holds a *build* rather than a query |
 | **ledger** | a list held to the tree in both directions | the completeness ledger, which is that shape but about *relations* rather than about files |
+| **witness** | the value a probe looks for: one inside the subtype and outside the supertype, which disproves inclusion | the value a *refutation* stands on, which the `witnessed` guard reads against the subject's own emptiness before believing a mismatch |
 
 ## Words this set avoids
 

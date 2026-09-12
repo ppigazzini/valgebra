@@ -339,8 +339,9 @@ the shape. What is left below is what the descriptor cannot hold.
   spend. Past any of them it refuses, and the caller keeps the rules' answer.
   None of these is a statement about the schema -- the same schema decides under
   a larger bound -- and each exists because building a descriptor beside a
-  verdict the rules already reached is work whose result is discarded. Reading
-  `dev/01-schema-ir.md` gives the measurements the bounds are set from.
+  verdict the rules already reached is work whose result is discarded. Every
+  bound is a row of the architecture table in the repository, with the gate that
+  measures it beside it.
 
 - **A predicate.** Its satisfiability is undecidable (below), so neither
   representation reasons about one.

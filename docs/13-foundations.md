@@ -90,6 +90,33 @@ What is left of the distinction is the spelling, and the schema keeps it:
 The spelling is not part of the set — two schemas differing only in it are equal
 — so nothing decides anything by it.
 
+## Two deciders, and the guard between them
+
+A relation between two schemas is answered twice over, and the vocabulary the
+rest of these pages use is the two names.
+
+The **rules** read the two schemas' shapes and apply inclusion rules to them: a
+list against a list compares elements, a record against a record compares
+fields. They are fast, they answer the shapes a caller writes, and where no rule
+matches a pair they say so rather than guessing.
+
+The **sets** are the other reading. Each kind of value has a representation
+closed under union, intersection and complement — the integers as interval sets,
+the strings as automata, the containers as automata over letters that are
+themselves sets — so inclusion becomes one question about emptiness: `a` is
+below `b` exactly when `a` and the complement of `b` share no value. That
+decides pairs no rule about shapes reaches, and it costs about two orders of
+magnitude more than a rule, which is why it is asked second and only where the
+rules decline.
+
+Both answer in three values: proved, refuted, or neither. A **refutation** is a
+claim about a value — some member of the subject that the other schema rejects —
+so it is believed only where the subject is known to hold one. That is the
+**witness guard**, and it is why a schema denoting nothing is reported below
+everything rather than refuted against it: a mismatch of shapes names no value
+when there is no value to name. `relation_to` reports the three answers apart;
+`is_subtype_of` folds the last two into `False`.
+
 ## What the algebra decides, and the conservative frontier
 
 Deciding whether two arbitrary set-theoretic types are equal — equivalently,

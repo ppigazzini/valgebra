@@ -320,13 +320,6 @@ shape no rule was written for. Normalising at construction makes `==` equality o
 a canonical form -- which is what the API reference already calls it -- and makes
 the shape every rule downstream may assume the shape it gets.
 
-The first holds of anything. A complement is evaluated by negating what is under
-it, so negating twice asks the same question once — even of an atom that answers
-by running code. The other two do not: `A | ~A` and `A & ~A` ask `A` *twice*, and
-a predicate or a class with an `isinstance` hook may answer differently each
-time. Those two folds are therefore asked of the atom first, and decline for one
-that is not a set.
-
 **Both sides or neither.** A law folded in `union` and left standing in
 `intersection` is two answers to one question, and the simplifier already folded
 the meet — so the constructors disagreed with each other and with it. Stating a

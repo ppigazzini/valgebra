@@ -449,7 +449,9 @@ share no value, and recursion. Where a rule declines, the relation is asked agai
 of the *sets* the two schemas denote, which decides what no rule about shapes
 reaches — a container meet, a double complement, one regular language inside
 another, a kind against its own literals, one step dividing another — under a
-bound on what building those sets may cost. What is past that bound, and what no
+bound on what building those sets may cost. The two readings, and the guard that
+decides when a negative answer is a refutation rather than a decline, are named
+in [the foundations](13-foundations.md). What is past that bound, and what no
 finite set representation holds, is where they stay conservative. The
 [decidability boundary](15-decidability.md) lists exactly what is decided, what is
 conservative, and what is undecidable at runtime; see the
