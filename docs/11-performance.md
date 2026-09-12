@@ -95,10 +95,8 @@ comparison.
 debug build as either. How much PGO adds over a plain `--release` build is not a
 constant this page can state. It is whatever the profile can still arrange that
 fat LTO did not, so it shrinks as the hot paths themselves get shorter: measured
-on one machine across this project's history it has ranged from 1.75x down to
-1.01x, and the shapes where it once bought the most are the ones where it now
-buys the least — because the release build caught up, not because the profile
-stopped working. If the number matters to you, measure it on your own build:
+on one machine it has ranged from 1.75x down to 1.01x, and the shapes where the
+release build is already tightest are the ones it buys least on. If the number matters to you, measure it on your own build:
 `scripts/compare_gate.py` against each wheel is the way.
 
 The figures are measured on the wheel carrying valgebra's full feature set — the
@@ -236,9 +234,8 @@ dict a second time for undeclared keys. The key's UTF-8 is borrowed without
 allocating, and the field-name index is computed once when the validator is
 first used — with a fast non-cryptographic hasher, since the keys are the
 schema's own declared names rather than attacker input — then reused across
-calls, so a wide record no longer rebuilds and reallocates its name map on every
-validation. On the 50-field record above this measures ~1.0 us per call (PGO
-release build); the earlier per-field-lookup form was several times slower. Profiling
+calls, so a wide record does not rebuild or reallocate its name map on every
+validation. The `wide_record` row of the table above is what it costs. Profiling
 with cachegrind attributed the removed cost to temporary-string creation,
 hashing, and allocation churn from the per-field lookups, and that attribution
 is an instruction count, so it holds across machine classes. The bool fast path

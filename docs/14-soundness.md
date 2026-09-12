@@ -160,7 +160,7 @@ The soundness is relative to a small, explicit trust base:
   answers differently on two calls with the same argument is not describing a
   set, and the walk is built on the assumption that none does.
 
-  **`A & ~A` no longer rests on it.** That law is a law about sets, so it is
+  **`A & ~A` does not rest on it.** That law is a law about sets, so it is
   applied only where both sides are one: an atom running a predicate, or a class
   whose metaclass overrides `__instancecheck__` or `__subclasscheck__`, is
   declined rather than folded. An `abc.ABC` is declined by the same test, because

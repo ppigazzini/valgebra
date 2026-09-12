@@ -28,9 +28,9 @@ real Python object of the wrong kind. The failure is a plausible wrong verdict,
 never a panic.
 
 **A fifth space that is not the pool.** `Schema::Ref` addresses the definitions
-table. Before the split it was the same `usize` as the four above.
+table, where the four above are each their own.
 
-**Each of these is now a compile error**, and each was broken on purpose to
+**Each of these is a compile error**, and each was broken on purpose to
 confirm the compiler rejects it:
 
 | the swap | what it did instead of failing |
@@ -66,7 +66,7 @@ mints through the mirror-image four (`intern_const`, `intern_class`,
 line that decides what the object is being pooled *as*
 ([03-frontend.md](03-frontend.md)).
 
-`ClassIx` addresses `Schema::Instance`, which is now the only node holding a
+`ClassIx` addresses `Schema::Instance`, the only node holding a
 class: an attribute record carries fields and no carrier, and a class with
 declared attributes is the meet of the two.
 
@@ -77,8 +77,8 @@ declared attributes is the meet of the two.
   DefShift  -- shifted --> DefIx
 ```
 
-`Schema::shifted` takes one of each. Transposing them no longer compiles, and the
-constraint arms that must not take a pool shift cannot: a length is a `usize` and
+`Schema::shifted` takes one of each, so transposing them does not compile, and
+the constraint arms that must not take a pool shift cannot: a length is a `usize` and
 has no `shifted(PoolShift)`.
 
 ### The region set
@@ -96,7 +96,7 @@ methods put each somewhere a five-line test reaches.
 
 `WalkMode` is `Explain`, `ExplainFailFast`, `Fast` — three states where a pair of
 booleans admitted four. `Guarded` and `Openness` name what a positional `bool`
-used to carry at the guardedness check and the record constructor. `SeqArity` is
+would carry at the guardedness check and the record constructor. `SeqArity` is
 `Exactly(n)` or `AtLeast(n)`, so the schema's arity is one argument rather than a
 length and a flag beside the value's own length.
 

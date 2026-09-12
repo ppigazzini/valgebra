@@ -350,8 +350,8 @@ reports `no_match`. That is recorded in
 value **holds**. Every other kind answers `__len__`.
 
 The rule exists because a value must have *one* length. A sequence schema walks
-the storage a `list` or `tuple` holds, so `[int, int]` counts elements; a length
-marker used to call `__len__`, which a subclass may override to say anything. A
+the storage a `list` or `tuple` holds, so `[int, int]` counts elements, while a
+length marker calls `__len__`, which a subclass may override to say anything. A
 value with two lengths belongs to `Annotated[list[int], MinLen(5)]` and not to
 the five-element shape, though both were written to mean the same narrowing —
 and a set whose membership depends on which half of a schema asks is not a set.
@@ -397,8 +397,8 @@ the reader sees it in `repr`, which is where they looked for it.
 ## What a `TypedDict` denotes
 
 A `TypedDict` class denotes the set its typing spec assigns to it: an **open**
-record, unless the class says `closed=True` or gives `extra_items` (PEP 728,
-now in the spec). The dict-literal form `{"a": int}` stays **closed**.
+record, unless the class says `closed=True` or gives `extra_items` (PEP 728, in
+the spec). The dict-literal form `{"a": int}` stays **closed**.
 
 The reason is who wrote the spelling. `Validator(TD)` reads an annotation whose
 meaning is fixed elsewhere, and reading it as a different set — closed, when the
@@ -444,10 +444,9 @@ the representation, which decides nothing a caller can reach and is checked
 against membership over generated values like every other part of the
 descriptor.
 
-The half that waited on the object pool -- lowering an `Instance`, which needs
-the bindings to say which classes a class derives from -- no longer does. The
-pool answers three questions now: what an operand is, what a literal names, and
-what order a class carries. See "How a class reaches the core" below.
+Lowering an `Instance` needs the bindings to say which classes a class derives
+from, and the object pool answers it: three questions in all -- what an operand
+is, what a literal names, and what order a class carries. See "How a class reaches the core" below.
 
 ## What a class with attributes is, on the surface
 
@@ -514,15 +513,11 @@ in a set it is not in.
 decision procedure declines. Whether it may be *asked* is a cost question, and
 the cost was measured on the shapes the two disagree about.
 
-The wins are cheap. Each of the differences the descriptor decides and the rules
-do not -- a container meet, a double complement, one regular language inside
-another -- builds in 130 to 330 microseconds.
-
-Building is exponential in nesting depth. A record nested behind a list, at
-depths 0, 2, 4, 6 and 8: 7 microseconds, 280 microseconds, 1.8 milliseconds, 8
-milliseconds, 37 milliseconds. Bounding the depth does not bound the cost,
-because breadth multiplies too: a union of four records at depth three builds in
-2.7 milliseconds, and that union minus a union of its siblings spends **345
+The wins are cheap and the costs are exponential in nesting depth, both measured
+by `cargo bench --bench core`; [02-decision.md](02-decision.md) names the rows
+and what they say. Bounding the depth does not bound the cost, because breadth
+multiplies too: a union of four records at depth three, minus a union of its
+siblings, spends **345
 milliseconds** and then *refuses*, because the result exceeded the line bound.
 
 That last number is the shape of the problem. `MAX_LINES`, `MAX_ATOMS` and
@@ -562,18 +557,18 @@ hundred times its instruction budget, which is not a budget to re-record but a
 workload no lane can run.
 
 So a build that will not pay for itself is refused *before* it is walked, and
-**nesting** is what says which. Depth is the exponential -- 7 microseconds, 280
-microseconds, 1.8 milliseconds, 8 milliseconds, 37 milliseconds at depths 0, 2,
-4, 6 and 8 -- while breadth is not, a record of sixteen fields building in 13
-microseconds. Every relation the descriptor decides and the rules do not nests
-five deep or less; the shapes that blow up nest ten and deeper. Bounded at five,
-the whole widening costs the decision path **eleven percent**, and the
-validation path, which no relation is on, is unchanged.
+**nesting** is what says which. Depth is the exponential and breadth is not,
+which the `lower_nested_records_depth*` rows of `cargo bench --bench core` show
+against a wide record beside them. Every relation the descriptor decides and the
+rules do not nests five deep or less; the shapes that blow up nest ten and
+deeper. Bounded at five, the whole widening costs the decision path a fraction
+the instruction-count gate holds, and the validation path, which no relation is
+on, is unchanged.
 
 What it does cost is the fuzzer. The decision target runs at 139 executions a
 second against 10,544, over five times the covered features and twice the
-resident memory: every input the fuzzer generates that the rules decline now
-builds two descriptors. That is a testing-capability cost rather than a
+resident memory: every input the fuzzer generates that the rules decline builds
+two descriptors. That is a testing-capability cost rather than a
 user-facing one, and the route out of it is a target that asks the rules
 directly for the high-volume properties, with the descriptor on a target of its
 own. Until there is one, the nightly run buys the reach back with time: the
@@ -636,8 +631,8 @@ order.
 
 **A rule earns its place by answering a shape the descriptor refuses, or by
 answering a common one far more cheaply.** A rule that only repeats what the
-descriptor decides is dead weight that the mutation sweep can no longer see
-through the public relations, and it goes. Each rule that stays is named on
+descriptor decides is dead weight the mutation sweep cannot see through the
+public relations, and it goes. Each rule that stays is named on
 [02-decision.md](02-decision.md) with which of the two reasons it has.
 
 **Every bound is measured.** A numeric bound in the decision -- the nodes a
@@ -712,14 +707,14 @@ tree, the two together cost half what they did.
 
 The trade the shared representation makes is visible in the gates. Carrying a
 subtree got cheaper and the node got smaller, which the membership walk and the
-decision procedures both read; *building* one got dearer, because a list is
-copied into the node's slice where an owned vector used to be moved into it, and
-a pass that rebuilds every node in a tree pays that on each. Both directions are
+decision procedures both read; *building* one is dearer, because a list is
+copied into the node's slice rather than moved into it, and a pass that rebuilds
+every node in a tree pays that on each. Both directions are
 budgeted, so neither is a claim: the instruction gate holds seven shapes across
 the three workloads.
 
-What that costs is smaller than it was. Those rules are the fast path now, not
-the whole answer: a shape they run out of budget on is asked again of the sets it
+What that costs is bounded by what the rules are for. They are the fast path
+rather than the whole answer: a shape they run out of budget on is asked again of the sets it
 denotes, and the descriptor interns the guard behind each object line, so sharing
 exists where a set is built even though it does not exist in the tree.
 

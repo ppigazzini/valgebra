@@ -40,16 +40,16 @@ and lending the caller's virtual environment to the clone was tried so they
 could run. It is **reverted and recorded**: `uv run` inside the clone *writes*
 the environment it is pointed at, and doing so uninstalled the built extension
 and the bench group from the tree being worked in. A gate that damages the
-environment it checks is worse than one that names three steps, so each now
-carries that cost as its reason rather than "the caller has already run it".
+environment it checks is worse than one that names three steps, so each carries
+that cost as its reason rather than "the caller has already run it".
 
 A step is **accounted for** when it is in the plan the gate builds or named in
 `NEEDS_A_RUNNER`, and the ledger asks it of the plan. Asking it of "is this name
 excused" instead was a contradiction that no workflow could fail, and underneath
 it `resolved` searched for `${{ env.X }}` alone -- so a step carrying
 `${{ github.sha }}` came back resolved with its braces intact and would have
-reached bash that way. Every expression the gate cannot fill in now makes the
-step unresolved, which is a skip with a reason rather than a command.
+reached bash that way. Every expression the gate cannot fill in makes the step
+unresolved, which is a skip with a reason rather than a command.
 
 The reason it exists is a measurement rather than a principle: a ledger reading
 `git describe` passed locally for a week and turned eight jobs red on one push,
@@ -222,8 +222,8 @@ path and measuring nothing.
 
 Two sweeps, each with its own committed baseline: the core crate, and the
 membership walk with the context it carries. `scripts/mutation_gate.py` fails in
-**both** directions — a survivor the baseline does not accept, and an entry that
-is no longer a survivor. The second keeps the accepted set honest: an accepted
+**both** directions — a survivor the baseline does not accept, and an accepted
+entry that no mutant answers to. The second keeps the accepted set honest: an accepted
 hole the tree does not have silently re-accepts a future survivor with the same
 identity.
 

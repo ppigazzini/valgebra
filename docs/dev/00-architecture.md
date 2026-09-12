@@ -89,7 +89,7 @@ refuses past a size rather than returning a set it cannot hold. They accumulated
 one at a time, in eight files, and the list was nowhere -- so a reader could not
 tell a measured number from a guessed one, and a new bound cost nothing to add.
 
-The rule now is: **no bound without a gate that measures it.** Adding one means
+The rule is: **no bound without a gate that measures it.** Adding one means
 adding a row here and a test that reaches it. The table is held to the tree in
 both directions by `scripts/docs_lint.py`, values included, so a number that
 moves in the source and not here fails, and a row naming a constant that is gone

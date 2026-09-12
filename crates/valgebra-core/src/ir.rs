@@ -21,8 +21,8 @@
 //! [`DefIx`], addresses the definitions table instead.
 //!
 //! The two *shifts* applied when two validators are composed are typed for the
-//! same reason: [`Schema::shifted`] takes one per space, and they used to be two
-//! adjacent `usize` arguments a caller could transpose in silence.
+//! same reason: [`Schema::shifted`] takes one per space, where two adjacent
+//! `usize` arguments would let a caller transpose them in silence.
 //!
 //! The types stop a shift reaching the wrong space. They say nothing about
 //! whether a payload was shifted at all, which is why one walk serves both ways

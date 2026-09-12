@@ -65,7 +65,7 @@ budget holds. `Validator.relation_to` is the boundary's reading of the same
 three values, and `tests/test_completeness_probe.py` holds a reported refutation
 to naming a value its universe contains.
 
-`crates/valgebra-core/src/simplify.rs` is the pass that used to normalise a
+`crates/valgebra-core/src/simplify.rs` is the pass that would normalise a
 term afterwards. It is **deprecated** and goes in the next minor version: a
 schema is built in the lattice normal form, so the reduction it promises is the
 schema a caller already holds, and the folds it adds beyond the laws are
@@ -85,9 +85,10 @@ region partition takes out two lattice laws and a membership law. Deleting the
 contravariance arm -- `~A <= ~B` is `B <= A` -- takes out *reflexivity*, because
 a complemented recursive schema has no other route. Deleting the sequence arm of
 the emptiness fold takes out the rule that a sequence is empty when a prefix
-element is. And a full mutation sweep of the file leaves **one** survivor and one
-timeout, both accepted in `scripts/mutation_baseline.json` with the argument for
-each: 281 mutants of 311 are caught, and no arm is dead weight.
+element is. And every survivor a full sweep of the file leaves is accepted in
+`scripts/mutation_baseline.json` with the argument for it; the nightly ratchet
+holds that set in both directions, so no arm is dead weight and no accepted
+survivor outlives the rule it was written about.
 
 A rule the descriptor also decides is invisible through the public relation, so a
 test about a rule's *scope* has to ask the rule. `decision.rs`'s own test module
@@ -240,19 +241,15 @@ from -- a bound whose figure lives only in a comment
 cannot be re-derived on another machine, and cannot fail when the shape it guards
 against changes.
 
-What the numbers say. The four relations the descriptor decides and the rules do
-not build in 49 to 188 microseconds, which is the room the bounds must leave. A
-record nested behind a list grows 1.7 microseconds, 198 microseconds, 1.5
-milliseconds, 7.2 milliseconds at depths 0, 2, 4 and 6 -- nesting is the
-exponential, and the nesting bound is what catches it. A union of four such
-records minus a union of its siblings costs 9.0 milliseconds unheld and 1.35
-microseconds held, from the nesting bound alone. On the shapes reachable today
-that bound refuses first, so the work allowance is the one that remains for a
-schema that is shallow and wide.
-
-Held this way, the whole widening costs the decision path eleven percent. Asked
-*first* instead, it cost seventeen hundred times the workload's budget, which is
-why the rules answer first.
+What the numbers say, and where to read them. `cargo bench --bench core` is the
+harness: the `lower_nested_records_depth*` rows grow by orders of magnitude per
+two levels of nesting, which is the exponential the nesting bound catches, and
+`lower_sibling_union_difference_unheld` against its `_held` sibling is what the
+bound saves on one shape. Building a set costs about two orders of magnitude
+more than a rule that already answers, which is the whole reason the rules are
+asked first and the descriptor second. On the shapes reachable today the nesting
+bound refuses before the work allowance does, so the allowance is what remains
+for a schema that is shallow and wide.
 
 ## The budget, and what exhausting it means
 
@@ -300,14 +297,15 @@ carried as debt rather than as a limit ([00-architecture.md](00-architecture.md)
 groups the kinds).
 
 The honest thing to say about the ceiling meanwhile is what it is measured to
-reach. The ceiling is a million steps. Records nested six deep with
-union-of-literal fields decide in 1,834; a union of two hundred literals against
-one of three hundred, in 403; a fixed tuple of unions against the union of all
-its expansions, at the width where the right-hand side is a thousand nodes, in
-7,377. The step count grows with the size of the query rather than exponentially
-in its depth on every shape that has been probed, and the build limits cap that
-size, so nothing yet constructed comes within two orders of magnitude of the
-ceiling.
+reach. `DECISION_BUDGET` is the ceiling and is a row of the bounds table
+([00-architecture.md](00-architecture.md)). What the shapes cost is pinned as
+properties rather than as prose: `decision/tests.rs` reads a query's steps with
+`subtype_steps` and holds the shapes that have been probed -- deep records with
+union-of-literal fields, two wide literal tables against each other, a fixed
+tuple of unions against the union of its expansions. The step count grows with
+the size of the query rather than exponentially in its depth on every one of
+them, and the build limits cap that size, so nothing yet constructed comes near
+the ceiling.
 
 Exhaustion returns the conservative answer. That is sound by the contract above,
 and the numbers say it is a ceiling no real annotation reaches — only an

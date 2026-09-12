@@ -152,7 +152,7 @@ recursion variable under a guard is productive. **[LOAD-BEARING]** for the
 *discipline* — `occurs_unguarded` is that condition, and it is what makes the
 induction above well founded. The paper proves soundness of a modal type system
 by a step-indexed realizability argument; it states no theorem about contractive
-maps, and citing one to it is the error this page previously made.
+maps, and citing one to it is an error this page is written to avoid.
 
 [01-schema-ir.md](01-schema-ir.md) records why the check's structural arms
 compute nothing.

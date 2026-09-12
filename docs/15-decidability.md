@@ -303,9 +303,9 @@ representation reaches it. The three relations answer with all three values
 inside the core and map both negatives to `False` at the boundary, because
 `False` is what the contract promises and a third value at the surface would
 make every caller handle a case the guarantee does not need. What the split buys
-is that "not proven" is countable: a rule that starts refuting a relation it
-used to decline is a change the tests see rather than one that hides behind an
-unchanged `False`.
+is that "not proven" is countable: a rule that begins refuting a relation the
+procedure declines is a change the tests see rather than one that hides behind
+an unchanged `False`.
 
 The list is short, and it is short for one reason. Two representations answer
 these questions. The **rules** recurse over the schema tree, and where they
@@ -325,7 +325,7 @@ the shape. What is left below is what the descriptor cannot hold.
   whole of the answer.
 
 - **A length bound over a set or a dict, in the sets.** A length is not a word's alone, and
-  two of the kinds that have one now state it: a word's length is a pattern over
+  two of the kinds that have one state it: a word's length is a pattern over
   its alphabet, and a *sequence's* is "any element, that many times", which the
   automaton holds like any other shape. So `Annotated[tuple[int, int],
   MinLen(3)]` is decided empty and `Annotated[list[int], MaxLen(0)]` is the
@@ -485,8 +485,8 @@ for undecidable in (Sequence[int], T):
 A positive answer (`is_subtype_of`/`is_equivalent`/`is_empty` returning `True`) is a
 proof. A negative answer is "no, or not yet proven". valgebra never reports a
 relation it cannot justify, so widening the decided fragment can only turn a
-conservative `False` into a `True` — it can never change a previously-correct
-answer.
+conservative `False` into a `True` — it can never change an answer that was
+already correct.
 
 Every decision also runs under a fixed work budget, and exhausting it returns the
 conservative answer (`False`, "not proven") rather than running unbounded. This
