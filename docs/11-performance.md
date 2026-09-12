@@ -187,6 +187,36 @@ inside the interpreter and none in the walk, and it carries across all three.
 That is why the ceiling file holds a second set for the free-threaded build:
 what the project claims of that build is what that build can hold.
 
+### The two shapes this page did not show
+
+The table above is the four shapes valgebra wins by a wide margin, and the
+competitive gate measures seven. The two it leaves out are the two closest, and
+leaving them out made the page a selection rather than a record. As the fraction
+of pydantic-core's time each takes, on a PGO CPython 3.12 build:
+
+| Shape | ratio | spread across runs | ceiling |
+| --- | --- | --- | --- |
+| JSON document, 200 records parsed and checked | 0.70 | 0.057 over twelve runs | 1.00 |
+| Error report, 50-field record with one wrong field | 0.86 to 1.19 | 0.33 over five runs | 1.60 |
+
+The JSON document is a single pass over bytes for both libraries, which is why
+the margin is a third rather than a factor: neither is spending its time in the
+check. A document's free-form sections are `dict[str, V]`, and covering their
+keys is read two ways -- in place for a narrow object, through a table of last
+values for a wide one ([dev/04-walk.md](dev/04-walk.md)).
+
+The error report is the one shape where valgebra is sometimes *slower*, and the
+one whose measurement is not trustworthy: a third of its own value in spread,
+against 0.001 to 0.057 for every other shape. It is the only shape timing a path
+that raises and formats a Python exception, so a Python exception's cost is
+inside the number. Two things follow. It is excluded from the gate's drift
+ratchet, which says so in `scripts/perf_compare.json` rather than by having no
+entry. And a failing validation walks the value **twice** here -- once to decide,
+once to say which field -- where pydantic-core walks it once and collects as it
+goes. That is a deliberate trade for the passing path, which is the common one
+and which walks once; it is not a margin anybody has shown how to recover, and
+one attempt made it twenty times worse.
+
 The scalar shape is absent from the table because it sits near timer resolution:
 the competitive gate measures it at a 32.1 ns median with a spread reaching a
 fifteenth of that, and the ratio it reports — around 5.8x — carries noise the
