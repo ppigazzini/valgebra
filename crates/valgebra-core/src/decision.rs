@@ -2992,8 +2992,9 @@ fn keyed_map_subtype(
 ) -> Relation {
     // Index both field lists by name once, so the cross-list lookups below are O(1)
     // each rather than a fresh linear scan per field (O(fields²) per comparison).
-    let mut a_by_name = FieldCursor::over(fa, fb);
-    let mut b_by_name = FieldCursor::over(fb, fa);
+    let order = Cell::new(None);
+    let mut a_by_name = FieldCursor::over(fa, fb, &order);
+    let mut b_by_name = FieldCursor::over(fb, fa, &order);
     {
         // One rule for every shape a keyed map takes. The closed record and the
         // pure mapping are not special cases needing a branch of their own: each
@@ -3142,7 +3143,8 @@ fn attr_record_subtype(
     cx: SubtypeCx<'_>,
     assumptions: &mut Vec<(Schema, Schema)>,
 ) -> Relation {
-    let mut a_by_name = FieldCursor::over(fa, fb);
+    let order = Cell::new(None);
+    let mut a_by_name = FieldCursor::over(fa, fb, &order);
     Relation::all(fb.iter().map(|b| {
         match a_by_name.named(&b.name) {
             // An attribute the supertype names and the subtype does not: the
@@ -3168,24 +3170,44 @@ fn attr_record_subtype(
 /// the querying list finds each partner by moving forward -- no allocation, and
 /// one string compare per field passed, against a hash table built and freed per
 /// side per comparison. That table was a fifth of the repeating workload.
-struct FieldCursor<'a> {
-    fields: &'a [Field],
-    rest: &'a [Field],
-    /// Whether both lists are in name order, which is what lets the cursor
-    /// move forward only. A list built by hand may not be.
-    ordered: bool,
+/// Whether a field list is in name order, which is what lets a cursor over it
+/// move forward only.
+fn sorted_by_name(list: &[Field]) -> bool {
+    list.is_sorted_by(|one, two| one.name <= two.name)
 }
 
-impl<'a> FieldCursor<'a> {
+struct FieldCursor<'a, 'o> {
+    fields: &'a [Field],
+    rest: &'a [Field],
+    /// The list this cursor is asked the names of, kept so the order can be
+    /// read later rather than now.
+    queries: &'a [Field],
+    /// Whether both lists are in name order, once that has been asked --
+    /// shared with the sibling cursor over the same pair, which asks the
+    /// identical question. `None` until a lookup misses, because until then
+    /// nothing depends on the answer.
+    order: &'o Cell<Option<bool>>,
+}
+
+impl<'a, 'o> FieldCursor<'a, 'o> {
     /// A cursor over `fields`, to be asked for the names of `queries` in turn.
     ///
-    /// Both lists are read for order, not just the one being indexed: the
-    /// cursor never moves back, so a query out of order would look past a
-    /// field that is behind it and answer that the list does not carry it.
-    fn over(fields: &'a [Field], queries: &[Field]) -> FieldCursor<'a> {
-        let sorted = |list: &[Field]| list.is_sorted_by(|one, two| one.name <= two.name);
+    /// Neither list is read for order here. The cursor never moves back, so a
+    /// list out of order can make it look past a field that is behind it --
+    /// but only into answering that the list does not carry the name, never
+    /// into answering with the wrong field: names are unique, and the cursor
+    /// stops on an *equal* name. So a lookup that finds something is right
+    /// whatever the order is, and the order matters to a lookup that finds
+    /// nothing. That is where it is read ([`missed`](Self::missed)), once, and
+    /// through a cell the sibling cursor over the same pair shares -- each of
+    /// the two needs *both* lists sorted, which is one question.
+    fn over(
+        fields: &'a [Field],
+        queries: &'a [Field],
+        order: &'o Cell<Option<bool>>,
+    ) -> FieldCursor<'a, 'o> {
         debug_assert!(
-            !sorted(fields)
+            !sorted_by_name(fields)
                 || fields
                     .windows(2)
                     .filter_map(|pair| Some((pair.first()?, pair.get(1)?)))
@@ -3195,22 +3217,49 @@ impl<'a> FieldCursor<'a> {
         FieldCursor {
             fields,
             rest: fields,
-            ordered: sorted(fields) && sorted(queries),
+            queries,
+            order,
         }
     }
 
     /// The field called `name`.
+    ///
+    /// One *ordering* comparison per field the cursor passes, and one for the
+    /// field it stops on: the walk forward and the test that the field it
+    /// stopped on is the one wanted are the same question asked once, where a
+    /// `take_while` on `<` followed by a `filter` on `==` asks the stopping
+    /// field twice. Each of those is a string compare, which is a call.
     fn named(&mut self, name: &str) -> Option<&'a Field> {
-        if !self.ordered {
+        if self.order.get() == Some(false) {
             return self.fields.iter().find(|field| &*field.name == name);
         }
-        let skipped = self
-            .rest
-            .iter()
-            .take_while(|field| &*field.name < name)
-            .count();
-        self.rest = self.rest.get(skipped..).unwrap_or(&[]);
-        self.rest.first().filter(|field| &*field.name == name)
+        while let Some((first, rest)) = self.rest.split_first() {
+            match (*first.name).cmp(name) {
+                core::cmp::Ordering::Less => self.rest = rest,
+                core::cmp::Ordering::Equal => return Some(first),
+                core::cmp::Ordering::Greater => break,
+            }
+        }
+        self.missed(name)
+    }
+
+    /// The field called `name`, for a walk that reached no such name.
+    ///
+    /// The one answer the cursor cannot give without knowing the order, so the
+    /// order is read here and nowhere else. Read once: both lists in order
+    /// makes every later miss a real one, and either out of order puts this
+    /// cursor and its sibling on the scan for the rest of the comparison.
+    fn missed(&mut self, name: &str) -> Option<&'a Field> {
+        if self.order.get().is_some() {
+            return None;
+        }
+        let ordered = sorted_by_name(self.fields) && sorted_by_name(self.queries);
+        self.order.set(Some(ordered));
+        if ordered {
+            return None;
+        }
+        self.rest = self.fields;
+        self.fields.iter().find(|field| &*field.name == name)
     }
 }
 
