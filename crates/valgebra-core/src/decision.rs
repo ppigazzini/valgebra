@@ -2736,10 +2736,29 @@ fn finite_set_below(
     other: &Schema,
     oracle: &dyn LeafRelations,
 ) -> Relation {
-    let Some(missing) = subject
-        .iter()
-        .find(|member| supertype.binary_search(member).is_err())
-    else {
+    // Searched by the constant's index rather than by the node. Both slices
+    // come from `finite_set`, which admits nothing but literals in strictly
+    // increasing index order -- so the two orderings agree, and the derived one
+    // runs a comparison over the whole variant table where an index is a single
+    // integer compare. It was thirty-eight percent of the proving workload.
+    //
+    // A member that is not a literal cannot occur and is read as missing, which
+    // is the conservative direction: the pair loses a proof rather than gaining
+    // one.
+    let index_of = |schema: &Schema| match schema {
+        Schema::Literal(index) => Some(*index),
+        _ => None,
+    };
+    let Some(missing) = subject.iter().find(|member| {
+        index_of(member).is_none_or(|wanted| {
+            supertype
+                .binary_search_by(|held| match index_of(held) {
+                    Some(index) => index.cmp(&wanted),
+                    None => core::cmp::Ordering::Less,
+                })
+                .is_err()
+        })
+    }) else {
         return Relation::Holds;
     };
     // Both sides are literals by construction, so both readings are `Some`; a
@@ -2917,8 +2936,8 @@ fn keyed_map_subtype(
 ) -> Relation {
     // Index both field lists by name once, so the cross-list lookups below are O(1)
     // each rather than a fresh linear scan per field (O(fields²) per comparison).
-    let a_by_name = field_index(fa);
-    let b_by_name = field_index(fb);
+    let mut a_by_name = FieldCursor::over(fa, fb);
+    let mut b_by_name = FieldCursor::over(fb, fa);
     {
         // One rule for every shape a keyed map takes. The closed record and the
         // pure mapping are not special cases needing a branch of their own: each
@@ -2953,7 +2972,7 @@ fn keyed_map_subtype(
         // has to refuse every goal decided under a hypothesis at all.
         let mut last: Option<(&Schema, &Schema, Relation)> = None;
         let fields_ok = Relation::all(fb.iter().map(|b_field| {
-            match a_by_name.get(&*b_field.name) {
+            match a_by_name.named(&b_field.name) {
                 // Shared field: it must narrow in depth, and a field `b` requires
                 // must be required in `a` too. A key the supertype requires and
                 // the subtype does not is a value of the subtype -- the one
@@ -3012,7 +3031,7 @@ fn keyed_map_subtype(
             .all(|clause| matches!(clause.key, Schema::Str | Schema::Anything(_)));
         let extra_covered = Relation::all(
             fa.iter()
-                .filter(|a_field| !b_by_name.contains_key(&*a_field.name))
+                .filter(|a_field| b_by_name.named(&a_field.name).is_none())
                 .map(|a_field| {
                     let covering = db
                         .iter()
@@ -3067,9 +3086,9 @@ fn attr_record_subtype(
     cx: SubtypeCx<'_>,
     assumptions: &mut Vec<(Schema, Schema)>,
 ) -> Relation {
-    let a_by_name = field_index(fa);
+    let mut a_by_name = FieldCursor::over(fa, fb);
     Relation::all(fb.iter().map(|b| {
-        match a_by_name.get(&*b.name) {
+        match a_by_name.named(&b.name) {
             // An attribute the supertype names and the subtype does not: the
             // subtype holds values without it, and those are outside the
             // supertype. So is a supertype attribute the subtype only *may*
@@ -3085,17 +3104,58 @@ fn attr_record_subtype(
 ///
 /// Unique field names are a hard caller invariant: `collect` into a map keeps the
 /// last entry per key, so a duplicate name would silently shadow an earlier field
-/// and could make the `required`/width checks that consume this index unsound. The
+/// and could make the `required`/width checks that consume it unsound. The
 /// frontend rejects duplicates; the `debug_assert` makes that dependency explicit
 /// and catches a malformed IR in debug rather than deciding on a shadowed field.
-fn field_index(fields: &[Field]) -> FxHashMap<&str, &Field> {
-    let index: FxHashMap<&str, &Field> = fields.iter().map(|f| (&*f.name, f)).collect();
-    debug_assert_eq!(
-        index.len(),
-        fields.len(),
-        "record has duplicate field names; the frontend must reject them"
-    );
-    index
+///
+/// A cursor rather than a table. Both lists are in name order, so one walk over
+/// the querying list finds each partner by moving forward -- no allocation, and
+/// one string compare per field passed, against a hash table built and freed per
+/// side per comparison. That table was a fifth of the repeating workload.
+struct FieldCursor<'a> {
+    fields: &'a [Field],
+    rest: &'a [Field],
+    /// Whether both lists are in name order, which is what lets the cursor
+    /// move forward only. A list built by hand may not be.
+    ordered: bool,
+}
+
+impl<'a> FieldCursor<'a> {
+    /// A cursor over `fields`, to be asked for the names of `queries` in turn.
+    ///
+    /// Both lists are read for order, not just the one being indexed: the
+    /// cursor never moves back, so a query out of order would look past a
+    /// field that is behind it and answer that the list does not carry it.
+    fn over(fields: &'a [Field], queries: &[Field]) -> FieldCursor<'a> {
+        let sorted = |list: &[Field]| list.is_sorted_by(|one, two| one.name <= two.name);
+        debug_assert!(
+            !sorted(fields)
+                || fields
+                    .windows(2)
+                    .filter_map(|pair| Some((pair.first()?, pair.get(1)?)))
+                    .all(|(one, two)| one.name != two.name),
+            "record has duplicate field names; the frontend must reject them"
+        );
+        FieldCursor {
+            fields,
+            rest: fields,
+            ordered: sorted(fields) && sorted(queries),
+        }
+    }
+
+    /// The field called `name`.
+    fn named(&mut self, name: &str) -> Option<&'a Field> {
+        if !self.ordered {
+            return self.fields.iter().find(|field| &*field.name == name);
+        }
+        let skipped = self
+            .rest
+            .iter()
+            .take_while(|field| &*field.name < name)
+            .count();
+        self.rest = self.rest.get(skipped..).unwrap_or(&[]);
+        self.rest.first().filter(|field| &*field.name == name)
+    }
 }
 
 /// A set of value-universe regions: which of the mutually-disjoint parts the
