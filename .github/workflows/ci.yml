@@ -218,8 +218,10 @@ jobs:
           # Scope the floor to the binding crate: the instrumented build also
           # covers valgebra-core (the .so links it), but the core has its own
           # coverage lane, so including it here would dilute the binding number.
-          # 96.7% of lines measured, so this floor is already inside the five
-          # points the core's now sits at.
+          # The floor is close to what the tree measures rather than far below
+          # it, so a change that adds a branch nothing exercises is refused
+          # here rather than absorbed. That is the point of it, and it is why a
+          # new reading arrives with the rows that reach both of its arms.
           cargo llvm-cov report --summary-only \
             --ignore-filename-regex 'valgebra-core' --fail-under-lines 95
 

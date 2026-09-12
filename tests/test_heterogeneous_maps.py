@@ -7,7 +7,7 @@ key give a record with a typed catch-all. Named fields take precedence.
 """
 
 from types import GenericAlias
-from typing import Annotated, TypedDict
+from typing import Annotated, Literal, TypedDict
 
 import annotated_types as at
 import pytest
@@ -175,3 +175,49 @@ def test_that_key_is_the_one_form_repr_does_not_rebuild() -> None:
     for spelling in ({"page?": int}, {"page??": int}, {"a": int, "b?": str}):
         made = Validator(spelling)
         assert Validator(eval(repr(made), environment)) == made  # noqa: S307
+
+
+def test_a_parsed_object_is_covered_by_whichever_clause_can_read_its_keys() -> None:
+    """A JSON object's undeclared keys are governed by the clauses that admit them.
+
+    A parsed key is a string, so a clause keyed by `str` admits every one of
+    them and the reading asks only what its *values* must be. A clause keyed by
+    anything else -- a literal, or a union of them -- is not read that way: it
+    governs some keys and not others, so each key is asked of the clause as a
+    whole, and a key no clause admits is one the object may not carry.
+
+    Both readings, over the JSON path, since that is where the parsed key's
+    being a string is what licenses the first.
+    """
+    # Keyed by every string: the values decide.
+    free = Validator({str: int})
+    assert free.is_valid_json('{"a": 1, "b": 2}')
+    assert not free.is_valid_json('{"a": 1, "b": "x"}')
+    # A repeated key is the last one the document means, on either reading.
+    assert free.is_valid_json('{"a": "x", "a": 1}')
+    assert not free.is_valid_json('{"a": 1, "a": "x"}')
+
+    # Keyed by a literal: the key is asked too, so a key outside it is refused
+    # whatever its value.
+    listed = Validator({Literal["a", "b"]: int})
+    assert listed.is_valid_json('{"a": 1, "b": 2}')
+    assert not listed.is_valid_json('{"a": 1, "c": 2}')
+    assert not listed.is_valid_json('{"a": "x"}')
+    assert listed.is_valid_json('{"c": 1, "c": 2}') is False
+
+    # And a declared field beside such a clause keeps its own type, while the
+    # clause governs the rest.
+    mixed = Validator({"n": str, Literal["a"]: int})
+    assert mixed.is_valid_json('{"n": "s", "a": 1}')
+    assert not mixed.is_valid_json('{"n": "s", "a": "x"}')
+    assert not mixed.is_valid_json('{"n": "s", "zz": 1}')
+    # The field is read as a field, not through the clause: its own type
+    # decides it, and the clause that governs `"a"` has nothing to say here.
+    assert not mixed.is_valid_json('{"n": 1, "a": 1}')
+
+    # A closed record is the same reading with no clause at all: there is
+    # nothing to cover an undeclared key with, so the first one decides.
+    closed = Validator({"n": str})
+    assert closed.is_valid_json('{"n": "s"}')
+    assert not closed.is_valid_json('{"n": "s", "extra": 1}')
+    assert not closed.is_valid_json('{"extra": 1, "n": "s"}')
