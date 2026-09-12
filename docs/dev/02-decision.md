@@ -360,8 +360,18 @@ suite examined only the consequences of a `true`, and the region check upstream
 decides a scalar right-hand side correctly, so the difference was invisible
 unless the other side was a container, a record or an instance.
 
-Both laws are now stated over the property, in the fuzz targets and in the core
+Both laws are stated over the property, in the fuzz targets and in the core
 property suite, and the enumerated cases are in the completeness ledger.
+
+**The two bounds are asked at different points**, because they cost different
+amounts. `A ⊆ U` is a comparison against the supertype's region set, which the
+query already holds for the scalar rule, so it is asked before the rules: a
+universe on the right answers every pair. `∅ ⊆ B` is a walk of the *subject*,
+and it is asked where the rules declined. A proof stands without it, and a
+refutation is read against that same emptiness by the witness guard on the way
+out, so asking first walked the subject on every pair the rules were about to
+decide anyway. The answer is the same either way -- both readings are sound,
+and an empty subject is below everything whichever of them says so.
 
 ## Two more places a shape stood in for the question
 

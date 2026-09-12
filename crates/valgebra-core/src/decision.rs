@@ -1268,7 +1268,9 @@ impl Schema {
         // `other` covers the universe exactly when its region set is the whole
         // partition. The set is the caller's -- `is_subtype_rec` reads it for the
         // exact scalar rule and nothing between there and here changes `other` --
-        // so it arrives as an argument rather than being derived twice.
+        // so it arrives as an argument rather than being derived twice. The
+        // caller reads it again before the rules, because it is a comparison;
+        // this half is the walk, and the caller asks it last.
         if supertype_regions == Regions::Known(Region::ALL) {
             return true;
         }
@@ -1496,13 +1498,31 @@ impl Schema {
                 return answer;
             }
         }
+        // `A ⊆ U`, read off the supertype's regions alone: the caller already
+        // holds them for the scalar rule, so this is a comparison rather than a
+        // walk, and it belongs ahead of the rules because a universe on the
+        // right answers every pair. The other lattice bound is a walk and is
+        // asked in `or_bounded`, after the rules have had the pair.
+        if supertype_regions == Regions::Known(Region::ALL) {
+            return Relation::Holds;
+        }
+        let answer = self.subtype_by_shape(other, cx, assumptions);
+        self.or_bounded(answer, supertype_regions, cx)
+    }
+
+    /// The arms that match a pair by the shapes on its two sides.
+    ///
+    /// Split from its caller because the two lattice bounds around it are asked
+    /// at different points and the whole read past what one function may be.
+    /// No `#[inline]`: one was tried and moved no workload, and the compiler is
+    /// already free to within the crate.
+    fn subtype_by_shape(
+        &self,
+        other: &Schema,
+        cx: SubtypeCx<'_>,
+        assumptions: &mut Vec<(Schema, Schema)>,
+    ) -> Relation {
         match (self, other) {
-            // Every lattice bound, in one arm: `∅ ⊆ B`, `A ⊆ U`, and `A ⊆ ∅`
-            // when A is empty. All three are the same question asked of
-            // emptiness, so one guard answers them and a per-atom arm beside it
-            // would be dead code -- the mutation sweep says so, by surviving its
-            // deletion.
-            _ if self.bounds_the_pair(supertype_regions, cx) => Relation::Holds,
             // (X ∪ Y) ⊆ Z iff X ⊆ Z and Y ⊆ Z; A ⊆ (Y ∩ Z) iff A ⊆ Y and A ⊆ Z.
             (Schema::Union(members), _) => Relation::all(
                 members
@@ -1618,6 +1638,29 @@ impl Schema {
                 .left_reduces_below(other, cx, assumptions)
                 .or_else(|| self.unstructured(other, cx, assumptions)),
             _ => self.unstructured(other, cx, assumptions),
+        }
+    }
+
+    /// `∅ ⊆ B`, asked where the rules declined.
+    ///
+    /// The remaining lattice bound, and the one that costs a walk: whether the
+    /// *subject* is empty. It is asked last rather than first because a proof
+    /// stands without it and a refutation is read against that same emptiness
+    /// by [`witnessed`](Self::witnessed) on the way out -- so asking first
+    /// walked the subject on every pair the rules were about to decide anyway,
+    /// which is a sixth of the repeating workload.
+    ///
+    /// The answer is identical either way. Both readings are sound, and an
+    /// empty subject is below everything whichever of them says so.
+    fn or_bounded(
+        &self,
+        answer: Relation,
+        supertype_regions: Regions,
+        cx: SubtypeCx<'_>,
+    ) -> Relation {
+        match answer {
+            Relation::Unknown if self.bounds_the_pair(supertype_regions, cx) => Relation::Holds,
+            answer => answer,
         }
     }
 
