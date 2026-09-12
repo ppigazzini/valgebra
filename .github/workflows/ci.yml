@@ -46,6 +46,12 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo fmt --all --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      # And again with the features a `cargo test` takes by default. The two
+      # builds compile different files, so a warning in one is invisible to the
+      # other: an item gated on `test` whose only reader is gated on a feature
+      # compiles unread on every default build, and the all-features pass never
+      # sees it.
+      - run: cargo clippy --locked --all-targets -- -D warnings
       # Two restriction lints over the library targets only. The clippy book warns
       # against enabling the restriction *group*, whose members conflict with each
       # other and with idiomatic Rust; two named members chosen against a stated

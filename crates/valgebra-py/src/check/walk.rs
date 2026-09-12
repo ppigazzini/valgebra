@@ -655,7 +655,12 @@ fn fast(ctx: Ctx<'_>) -> Ctx<'_> {
 // builds decides equality the way the walk does. Declared here, below every
 // item of the walk itself, because a `cfg(test)` gate above them hides them
 // from the tools that read this file for what it defines.
-#[cfg(test)]
+//
+// Gated on the feature its one reader is gated on, not on `test` alone: the
+// reader needs a live interpreter, so a default-feature test build compiles
+// this re-export and nothing that uses it, and warns on every such build. The
+// lint lane passes `--all-features` and sees a file that has one.
+#[cfg(all(test, feature = "interpreter-tests"))]
 pub(crate) use scalar::literal_matches;
 
 // Needs a live interpreter; compiled and run only under the `interpreter-tests`

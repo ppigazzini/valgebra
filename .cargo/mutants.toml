@@ -64,14 +64,17 @@ exclude_re = [
     # the machine: the mutant reads as caught on one runner and as surviving on
     # another, which is a target no baseline can hold steady.
     "replace && with \\|\\| in member",
-    # The three `LeafRelations` defaults are read through call sites that
-    # collapse `None` and `Some(false)` to the same answer: `leaf_subtype(..)
-    # .unwrap_or(false)`, `no_int_between(..) == Some(true)`, and
-    # `literals_disjoint(..).unwrap_or(false)`. Cannot-decide and decided-against
-    # are the same conservative verdict there, which is the point of the
-    # defaults, so no test can tell the two apart. The `Some(true)` mutant of each
-    # IS killable and stays in the sweep: it turns a declined question into a
-    # claim, which is the direction that would be unsound.
+    # An oracle default is unkillable only where *every* call site collapses
+    # cannot-decide into the answer the mutant returns, and that is a claim
+    # about the call sites rather than about the default. Two rows here
+    # outlived theirs: `leaf_subtype` grew a site that reads `Some(false)` as a
+    # refutation, and `literals_disjoint` grew one that reads all three answers
+    # apart. Both mutants die in about a minute, and both are back in the sweep.
+    #
+    # `no_int_between` has one site, `== Some(true)`, so cannot-decide and
+    # decided-against are one conservative verdict there and no test can tell
+    # them apart. Its `Some(true)` mutant IS killable and stays in the sweep: it
+    # turns a declined question into a claim, which is the unsound direction.
     #
     # `class_admits_kind` is the same argument with the polarity reversed. Its
     # one call site reads `== Some(false)`, because a class that cannot hold a
@@ -79,9 +82,7 @@ exclude_re = [
     # there and `Some(true)` is the unkillable one. `Some(false)` stays in the
     # sweep, and is the unsound direction: it would refute every pair holding a
     # class no oracle reads.
-    "replace <impl LeafRelations for NoLeafRelations>::leaf_subtype -> Option<bool> with Some\\(false\\)",
     "replace LeafRelations::no_int_between -> Option<bool> with Some\\(false\\)",
-    "replace LeafRelations::literals_disjoint -> Option<bool> with Some\\(false\\)",
     "replace LeafRelations::class_admits_kind -> Option<bool> with Some\\(true\\)",
     # The collection arm of `empty_and_region` returns exactly what the match's
     # default returns. It is written out because the two answer the same thing
