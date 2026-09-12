@@ -3581,3 +3581,47 @@ fn two_fixed_lengths_that_differ_are_refuted() {
         Relation::Fails
     );
 }
+
+/// A refinement pair the constraint rule cannot prove is read on, not dropped.
+///
+/// [`refinement_subtype`] only ever proves: it reduces to `Relation::proven`,
+/// which is `Holds` or `Unknown` and never `Fails`. The arm returned it
+/// directly, so a refinement on *both* sides was the one pair kept from the
+/// reading every other pair reaches -- a refinement against a non-refinement
+/// already gets it, and that reading has a branch written for a refinement
+/// supertype.
+///
+/// What it finds here is disjointness, which is the one refutation that
+/// survives narrowing on both sides: a subset of the lists shares no value
+/// with a subset of the strings, whatever either constraint says. The
+/// refutation still stands on a value of the subject, so a subject carrying a
+/// predicate -- which nothing can prove inhabited -- keeps its `Unknown`.
+#[test]
+fn a_refinement_pair_with_disjoint_bases_is_refuted_by_the_rules() {
+    let refined = |base: Schema, constraint: Constraint| Schema::Refine {
+        base: Arc::new(base),
+        constraints: vec![constraint].into(),
+    };
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let long = refined(ints.clone(), Constraint::MinLen(2));
+    let text = refined(Schema::Str, Constraint::MinLen(1));
+
+    assert_eq!(relation(&long, &text), Relation::Fails);
+    assert_eq!(relation(&text, &long), Relation::Fails);
+
+    // A predicate is the constraint no reading can see through, so the
+    // subject is never proven to hold a value and the guard drops the
+    // refutation -- while the same pair the other way round keeps it.
+    let opaque = refined(ints.clone(), Constraint::Predicate(PredIx::new(0)));
+    assert_eq!(relation(&opaque, &text), Relation::Unknown);
+    assert_eq!(relation(&text, &opaque), Relation::Fails);
+
+    // The constraint rule still decides the pairs it can: it is asked first,
+    // and only a pair it leaves unproven reaches the reading above.
+    let longer = refined(ints, Constraint::MinLen(3));
+    assert_eq!(relation(&longer, &long), Relation::Holds);
+}

@@ -269,3 +269,35 @@ def test_a_passing_check_builds_no_violation_message() -> None:
     for _ in range(100):
         assert schema.is_valid("z")
     assert _CountedBound.reprs == 0
+
+
+def test_two_refinements_of_different_kinds_are_refuted_without_the_sets() -> None:
+    """A refined list and a refined integer are disjoint whatever their bounds say.
+
+    The constraint rule only ever *proves* -- one refinement is below another
+    when its base is and it carries every constraint the wider one asks for --
+    so it left a pair it could not prove to the descriptor, which answered by
+    building both sets. Disjointness is the one refutation that survives
+    narrowing on both sides: a subset of the lists shares no value with a
+    subset of the integers, so the kinds settle it and neither constraint
+    matters.
+
+    A predicate is the constraint nothing can see through, and it is the case
+    that separates the two directions. A refutation stands on a value of the
+    *subject*: the integer bound has one, so the pair refutes; the predicate
+    may admit nothing at all, so the same pair the other way round stays
+    undecided rather than claiming a value it cannot name.
+    """
+    counted = Validator(Annotated[list[int], at.MinLen(2)])
+    positive = Validator(Annotated[int, at.Ge(0)])
+    assert counted.relation_to(positive) == "not_subset"
+    assert positive.relation_to(counted) == "not_subset"
+
+    opaque = Validator(Annotated[list[int], at.Predicate(bool)])
+    assert positive.relation_to(opaque) == "not_subset"
+    assert opaque.relation_to(positive) == "undecided"
+
+    # The constraint rule is still asked first, and still decides what it can.
+    assert Validator(Annotated[list[int], at.MinLen(3)]).is_subtype_of(
+        Annotated[list[int], at.MinLen(2)]
+    )
