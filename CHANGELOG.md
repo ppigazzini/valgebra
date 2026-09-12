@@ -152,6 +152,16 @@ answer of its own, or a repair to a change not yet released.
   this schema is outside the other, which the completeness probe holds by asking
   its universe for that value.
 
+  Which pairs earn one has grown since this entry was written, and keeps
+  growing: a refinement against another of a different kind, two sequences whose
+  elements share no value where a length bound rules the empty one out, a
+  sequence against a bound it cannot meet, a class met with its attributes
+  against a union or a recursive record, and a complement against a class. Each
+  moves a pair from `"undecided"` to `"not_subset"`, which is the direction the
+  procedure may move in. `docs/15-decidability.md` is
+  where that list lives rather than here; this entry is the answer, not its
+  reach.
+
 - A `NamedTuple` denotes the tuple its fields lay out, so a relation between one
   and that tuple is decided rather than declined:
 

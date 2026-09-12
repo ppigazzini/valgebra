@@ -905,7 +905,7 @@ jobs:
         run: >
           uv run pytest
           tests/test_completeness_ledger.py
-          tests/test_metamorphic.py
+          tests/test_necessary_properties.py
           tests/test_decision_adversarial.py
           tests/test_denotation.py
           tests/test_laws.py

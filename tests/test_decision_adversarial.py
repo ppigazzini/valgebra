@@ -117,7 +117,7 @@ def test_decision_is_sound_against_membership(
     sa: object, sb: object, v: object
 ) -> None:
     # Reflexivity and the other necessary properties are asserted in
-    # test_metamorphic.py; recursion reflexivity holes are tracked in
+    # test_necessary_properties.py; recursion reflexivity holes are tracked in
     # test_completeness_ledger.py. This fuzzer holds the decision to membership.
     try:
         a, b = _build(sa), _build(sb)

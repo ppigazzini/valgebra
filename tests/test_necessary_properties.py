@@ -1,20 +1,27 @@
 """Necessary properties of the decision procedure, two of them metamorphic.
 
+The file is named for what all six are, because the four that are not
+metamorphic outnumber the two that are and a name is a claim. Chen et al. 2018,
+Concept 1: a metamorphic relation relates *multiple* inputs and their outputs,
+so a necessary property of one input -- the review's own example is
+`-1 <= sin(x) <= 1` -- is not one. Under the old name this file said six MRs and
+held two; the tests never changed and do not change here.
+
+The name also collided with something real. The two metamorphic checks
+`docs/dev/10-theory.md` cites as load-bearing are *not* in this file -- they are
+the JSON path against the object path, and fast mode against explain mode -- and
+a reader looking for those found these.
+
 Each property is a theorem any sound relation satisfies, so a violation is a
 proof of a defect rather than a conservatism. They hold for valgebra because the
 procedure is sound, which makes every one a hard gate -- the cheap tripwire that
 catches the reflexivity and pool-merge class of bug.
 
-Only two are **metamorphic relations** in the sense the 2018 review defines:
+The two that *are* metamorphic relations:
 `test_double_complement_preserves_membership` and
-`test_de_morgan_preserves_membership` each derive a follow-up schema from a
-source one and relate the two runs. The other four judge a single schema or a
-fixed example, which is what the review's Concept 1 excludes -- a necessary
-property of one input is not an MR. They are worth having and none needs to
-change; the distinction is here so the name over the file does not claim more
-than the file does. The two metamorphic checks `docs/dev/10-theory.md` cites as
-load-bearing are different ones, and live elsewhere: the JSON path against the
-object path, and fast mode against explain mode.
+`test_de_morgan_preserves_membership`, each deriving a follow-up schema from a
+source one and relating the two runs. The other four judge a single schema or a
+fixed example.
 """
 
 from typing import Annotated

@@ -183,15 +183,41 @@ A ratio cancels the runner's absolute speed, which is what lets a wall-clock
 measurement gate at all.
 
 Each shape's ceiling is a **claim, not a recorded measurement**: the ratio the
-project says it stays under, with headroom. A recorded ratio would be another
-number that travels badly, because the two libraries respond differently to a
-PGO build and to an interpreter. The interpreter is the one that moves a shape
-far: on a single box a schema nested twenty-five deep reads 0.14 to 0.16 under
-CPython 3.12 and 3.14 and 0.33 under the free-threaded build, where every read
-of an element out of a mutable container takes that container's lock. This gate
-is the coarse tripwire for ceding ground, with `perf_gate.py --against` doing
-the fine-grained work at 2%. Changing a ceiling is an edit with an argument in
-its commit message.
+project says it stays under, with headroom. A recorded ratio travels badly,
+because the two libraries respond differently to a PGO build and to an
+interpreter. The interpreter is the one that moves a shape far: on a single box
+a schema nested twenty-five deep reads 0.14 to 0.16 under CPython 3.12 and 3.14
+and 0.33 under the free-threaded build, where every read of an element out of a
+mutable container takes that container's lock. This gate is the coarse tripwire
+for ceding ground, with `perf_gate.py --against` doing the fine-grained work at
+2%. Changing a ceiling is an edit with an argument in its commit message.
+
+**A ceiling a shape passes by a wide margin stops measuring it**, which is why a
+claim is not the whole of the file. The JSON document sat at 0.87 under a
+ceiling of 1.00 while a commit message published 0.78 for it, and no gate was
+red for as long as it took somebody to re-run this one for an unrelated reason.
+So beside each ceiling the file carries the ratio the shape last measured and
+the spread it was measured across -- the ratchet the mutation sweep and the
+instruction gate already have, in the one place that had only a claim. A shape
+measuring worse than `recorded + tolerance` is red while still under its
+ceiling.
+
+The travel problem is answered rather than avoided. The recorded block names the
+environment it was taken in -- the interpreter, whether it has a global lock,
+and the pydantic-core version it was compared against, since a faster
+pydantic-core raises every ratio with nothing here changing -- and the gate
+reports rather than judges anywhere else. `--update` re-records, and belongs on
+the lane that builds the wheel the same way every time: a recording made
+elsewhere would match the lane's fingerprint while carrying another machine's
+noise.
+
+A tolerance is the shape's own spread across runs of one build, measured per
+shape rather than assumed, so `--update` leaves it alone -- one run cannot see a
+spread, and a recording that narrowed it silently would fire on noise. A shape
+whose spread is too wide to ratchet at all carries a written reason instead of
+an absent number: `error_report` spreads a third of its own value, being the one
+shape timing a path that raises and formats a Python exception, and a row holds
+every shape to a tolerance or an argument in both directions.
 
 **The lane names the interpreter these are read on**, which is CPython 3.12,
 and it is written in `ci.yml` rather than left to the runner image: a ratio
