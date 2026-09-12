@@ -1630,7 +1630,15 @@ impl Schema {
                 wide_cons,
                 cx,
                 assumptions,
-            ),
+            )
+            // The constraint rule only proves, so a pair it leaves unproven is
+            // handed to the reading every pair with no rule gets, rather than
+            // ending the match here. A refinement against a *non*-refinement
+            // already reaches that reading, and it is written for a refinement
+            // supertype -- so a refinement on both sides was the one pair kept
+            // from it, and a list refinement against an integer one walked the
+            // sets to learn that a list is not an integer.
+            .or_else(|| self.unstructured(other, cx, assumptions)),
             // Against a non-refinement, a refinement inherits its base's
             // supertypes -- and inherits nothing else, so a pair this leaves
             // unproven is a pair with no rule of its own.
