@@ -403,6 +403,22 @@ pub(super) fn keyed_map_matches_json(
     if defaults.is_empty() {
         return entries.iter().all(|(key, _)| declares(key.as_ref()));
     }
+    undeclared_covered(defaults, py, entries, ctx, declares)
+}
+
+/// Whether every key of a parsed object that no field declares is covered by a
+/// default clause, testing each key's last value (`json.loads` semantics).
+///
+/// Split from [`keyed_map_matches_json`] because it is the half with two
+/// readings of its own -- which clause question to ask, and where to answer the
+/// duplicate-key question -- and the caller is the field walk.
+fn undeclared_covered(
+    defaults: &[MapClause],
+    py: Python<'_>,
+    entries: &[(Cow<'_, str>, JsonValue<'_>)],
+    ctx: Ctx<'_>,
+    declares: impl Fn(&str) -> bool,
+) -> bool {
     // A parsed object's keys are strings by construction, so a lone clause whose
     // key schema admits every string governs every undeclared key by its value
     // alone: the key half of the coverage question is already answered, and
@@ -413,6 +429,43 @@ pub(super) fn keyed_map_matches_json(
         [clause] if matches!(clause.key, Schema::Str | Schema::Anything(_)) => Some(&clause.value),
         _ => None,
     };
+    let (mut path, mut out) = (Vec::new(), Vec::new());
+    let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
+    let mut covers = |key: &str, val: &JsonValue<'_>| {
+        if let Some(schema) = value_only {
+            return member(schema, &Value::Json(py, val), &mut sub);
+        }
+        let key_value = JsonValue::Str(Cow::Borrowed(key));
+        covered(
+            defaults,
+            &Value::Json(py, &key_value),
+            &Value::Json(py, val),
+            ctx,
+        )
+    };
+    // A narrow object is covered where it lies. The entry a document means by a
+    // key is its last, and an entry is that one exactly when no entry after it
+    // repeats the key -- which is a look forward, not a map of the whole
+    // object. The map below answers the same question by allocating a table and
+    // hashing every key into it, and a mapping of one or two keys pays that in
+    // full: the free-form section of a record is written `dict[str, V]` and
+    // usually carries a handful.
+    if entries.len() <= SMALL_OBJECT {
+        for (position, (key, val)) in entries.iter().enumerate() {
+            if declares(key.as_ref())
+                || entries
+                    .iter()
+                    .skip(position + 1)
+                    .any(|(later, _)| later.as_ref() == key.as_ref())
+            {
+                continue;
+            }
+            if !covers(key.as_ref(), val) {
+                return false;
+            }
+        }
+        return true;
+    }
     // Collapse the entries to each non-field key's last value in one pass, so a
     // document with many keys (or many duplicates) is covered linearly rather
     // than by rescanning the tail per key.
@@ -423,26 +476,24 @@ pub(super) fn keyed_map_matches_json(
         }
         last_value.insert(key.as_ref(), val);
     }
-    let (mut path, mut out) = (Vec::new(), Vec::new());
-    let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
     for (key, val) in last_value {
-        let held = if let Some(schema) = value_only {
-            member(schema, &Value::Json(py, val), &mut sub)
-        } else {
-            let key_value = JsonValue::Str(Cow::Borrowed(key));
-            covered(
-                defaults,
-                &Value::Json(py, &key_value),
-                &Value::Json(py, val),
-                ctx,
-            )
-        };
-        if !held {
+        if !covers(key, val) {
             return false;
         }
     }
     true
 }
+
+/// How many entries an object may carry and still be covered where it lies.
+///
+/// The look forward is quadratic in the entries and the map is linear with a
+/// table and a hash per key, so the two cross somewhere -- but the constant on
+/// the map is an allocation, and the comparisons the look forward makes are
+/// mostly a length test that fails. The bound is set low enough that the
+/// crossover is not the question: an object wider than this is a document's
+/// payload rather than a record's free-form section, and pays for the table it
+/// then uses.
+const SMALL_OBJECT: usize = 8;
 
 /// The explain pass over a keyed map, run only after [`keyed_map_matches`] has
 /// reported the value is not a member. It walks in declared order — present

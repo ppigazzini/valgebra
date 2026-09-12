@@ -128,6 +128,7 @@ answer of its own, or a repair to a change not yet released.
 - perf: a meet outside every branch of a union is outside the union -- internal
 - perf: a reference carries the kind of the set it names -- internal
 - perf: a complement names its witness from the kinds it still holds -- internal
+- perf: a narrow object is covered where it lies -- internal
 
 -->
 

@@ -2573,3 +2573,69 @@ fn a_record_whose_clause_reads_a_key_is_scanned_for_every_rule() {
         );
     });
 }
+
+/// Both readings of a parsed object's undeclared keys answer alike.
+///
+/// A narrow object is covered where it lies -- an entry is the one the document
+/// means exactly when no entry after it repeats its key -- and a wide one
+/// collapses to a table of last values first, because the look forward is
+/// quadratic. They are one question asked two ways, so the boundary between
+/// them may show in what a walk costs and never in what it answers.
+///
+/// The rows run either side of `SMALL_OBJECT` and cross it, because that is the
+/// only way a bound can be held: a suite that asks one width cannot tell the
+/// bound from a constant, and one that never repeats a key cannot tell the look
+/// forward from a walk that ignores repeats.
+#[test]
+fn a_parsed_object_reads_its_repeats_alike_at_every_width() {
+    Python::attach(|py| {
+        let mapping = Schema::KeyedMap {
+            fields: Vec::new().into(),
+            defaults: vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }]
+            .into(),
+        };
+        let names: Vec<String> = (0..24).map(|i| format!("k{i}")).collect();
+        let filler = |width: usize| -> Vec<(&str, JsonValue<'_>)> {
+            names
+                .iter()
+                .take(width)
+                .map(|name| (name.as_str(), JsonValue::Int(1)))
+                .collect()
+        };
+
+        // Every width either side of the bound, and across it.
+        for width in [0, 1, 2, 7, 8, 9, 10, 24] {
+            let good = json_object(filler(width));
+            assert!(holds_json(py, &mapping, &good), "width {width}");
+
+            // One entry of the wrong type refuses at every width.
+            let mut wrong = filler(width);
+            wrong.push(("bad", JsonValue::Str("a".into())));
+            assert!(
+                !holds_json(py, &mapping, &json_object(wrong)),
+                "width {width}"
+            );
+
+            // A repeated key is the last one the document means, both ways
+            // round, at every width: the earlier entry decides nothing.
+            let mut last_wins = filler(width);
+            last_wins.push(("r", JsonValue::Str("a".into())));
+            last_wins.push(("r", JsonValue::Int(1)));
+            assert!(
+                holds_json(py, &mapping, &json_object(last_wins)),
+                "width {width}"
+            );
+
+            let mut last_loses = filler(width);
+            last_loses.push(("r", JsonValue::Int(1)));
+            last_loses.push(("r", JsonValue::Str("a".into())));
+            assert!(
+                !holds_json(py, &mapping, &json_object(last_loses)),
+                "width {width}"
+            );
+        }
+    });
+}
