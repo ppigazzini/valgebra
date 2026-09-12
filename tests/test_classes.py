@@ -407,3 +407,44 @@ def test_a_class_built_on_no_builtin_narrows_nothing() -> None:
     assert not intersection(Plain, str).is_empty()
     assert not Validator(Plain).is_subtype_of(str)
     assert not Validator(str).is_subtype_of(Plain)
+
+
+def test_a_refutation_about_a_class_needs_a_value_of_the_kind_it_is_read_on() -> None:
+    """A plain class meets a builtin kind in a set nothing here can name a value of.
+
+    The descriptor carries a class that lays down no layout on every kind's
+    line, which is right for inclusion -- a subclass may lay down any layout,
+    so `Plain` is not below the complement of `int`. It is not a value. An
+    integer that is an instance of `Plain` exists only if some class derives
+    from both, and which classes exist is not something a snapshot of the order
+    can say; the atom rule already declines exactly that for two unrelated
+    classes, and a builtin kind is one more class.
+
+    So the relation is undecided rather than refuted. A `"not_subset"` is a
+    statement about a value, and this one had no value to stand on.
+    """
+
+    class Plain:
+        pass
+
+    class Laid(str):
+        __slots__ = ()
+
+    assert Validator(Plain).relation_to(complement(int)) == "undecided"
+    assert Validator(int).relation_to(complement(Plain)) == "undecided"
+    assert Validator(Plain).relation_to(complement(str)) == "undecided"
+
+    # A class laid out as the kind is the case the reading is not conservative
+    # about: every instance of it is a string, so it has a value on that line
+    # and the refutation stands.
+    assert Validator(Laid).relation_to(complement(str)) == "not_subset"
+    assert Validator(str).relation_to(complement(Laid)) == "not_subset"
+    # And it holds no value of another kind at all, which is a proof.
+    assert Validator(Laid).relation_to(complement(int)) == "subset"
+
+    # Two classes are unchanged: the question there is the order, not a kind.
+    class Other:
+        pass
+
+    assert Validator(Plain).relation_to(Plain) == "subset"
+    assert Validator(Plain).relation_to(Other) == "not_subset"

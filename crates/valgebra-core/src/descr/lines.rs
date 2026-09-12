@@ -27,6 +27,7 @@ use std::sync::Arc;
 use super::budget;
 use super::records::RecordLattice;
 use super::{Component, Descr, Op};
+use crate::Kind;
 use crate::decision::Verdict;
 
 /// The most lines one kind may carry.
@@ -60,13 +61,34 @@ impl Line {
         }
     }
 
-    /// What is known about this line admitting a value.
+    /// What is known about this line admitting a value of `kind`.
     ///
     /// A meet of the two halves: empty as soon as either is, inhabited only when
     /// both are proved so. A class the core cannot enumerate the subclasses of
     /// leaves the object half unknown, and the line with it.
-    fn emptiness(&self) -> Verdict {
-        Verdict::every([self.structure.emptiness(), self.objects.emptiness()].into_iter())
+    ///
+    /// The kind is passed down rather than read off the structure, because the
+    /// object half is asked *within* it: a constraint on objects sits on every
+    /// kind's line, and a class that confines its instances to no kind gives no
+    /// value of this one. `None` is the line of objects with no builtin kind.
+    fn emptiness(&self, kind: Option<Kind>) -> Verdict {
+        Verdict::every(
+            [
+                self.structure.emptiness(),
+                self.objects.emptiness_of_kind(kind),
+            ]
+            .into_iter(),
+        )
+    }
+
+    /// Whether this line is proved to hold nothing.
+    ///
+    /// Asked without a kind, and that is not a shortcut: the kind can only turn
+    /// a *proof of a value* into an unknown, never a line into an empty one, so
+    /// a line empty on one kind's terms is empty on every kind's. Dropping a
+    /// line is the one decision that reads emptiness rather than inhabitance.
+    fn is_empty(&self) -> bool {
+        self.emptiness(None) == Verdict::Empty
     }
 
     /// The two operations, on two lines of the same kind.
@@ -145,7 +167,7 @@ impl Lines {
     /// a form that breaks them.
     fn of(line: Line) -> Lines {
         Lines {
-            lines: if line.emptiness() == Verdict::Empty {
+            lines: if line.is_empty() {
                 Vec::new()
             } else {
                 vec![line]
@@ -172,9 +194,9 @@ impl Lines {
     /// proved empty, inhabited as soon as one is. A negated form has to be
     /// expanded first, and a refusal there is *unknown* rather than inhabited --
     /// past the bound there is no union to read, so nothing is proved either way.
-    pub(crate) fn emptiness(&self, whole: &Component) -> Verdict {
+    pub(crate) fn emptiness(&self, whole: &Component, kind: Option<Kind>) -> Verdict {
         match self.positive(whole) {
-            Some(lines) => Verdict::any(lines.iter().map(Line::emptiness)),
+            Some(lines) => Verdict::any(lines.iter().map(|line| line.emptiness(kind))),
             None => Verdict::Unknown,
         }
     }
@@ -291,7 +313,7 @@ fn product(left: &[Line], right: &[Line]) -> Option<Vec<Line>> {
 fn tidy(lines: Vec<Line>) -> Option<Vec<Line>> {
     let mut kept: Vec<Line> = Vec::with_capacity(lines.len());
     for line in lines {
-        if line.emptiness() == Verdict::Empty {
+        if line.is_empty() {
             continue;
         }
         if let Some(at) = kept.iter().position(|held| held.objects == line.objects)

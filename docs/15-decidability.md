@@ -240,7 +240,9 @@ assert json_value.is_valid({"a": [1, "x", {"b": None}]})
 ## The one assumption: a class the bindings can read has an instance
 
 Every other answer here rests on the value model alone. This one rests on an
-assumption, and it is the only place a `True` can be wrong.
+assumption, and it is the only place a `"not_subset"` can be wrong. No `True`
+can: a proof is a proof, and the assumption is only ever read to believe a
+*refutation*.
 
 A class is opaque: what it holds is `isinstance`, and the library reads the
 class hierarchy rather than running it. A class whose metaclass leaves
@@ -251,7 +253,37 @@ A class no value can instantiate (a `__new__` that always raises, an abstract
 class with no concrete subclass) is empty, and is below everything; the library
 reports it not below, because the assumption says otherwise.
 
-The assumption is the set representation's open world, which both readings now
+**It licenses one object, not one per kind.** A class that lays down no builtin
+layout confines its instances to no kind, so it constrains values of every
+kind: a subclass of it may derive from `str` as easily as from nothing. That
+placement is right for inclusion -- `Plain` is not below the complement of
+`int` -- and it is not a value. An *integer* that is an instance of `Plain`
+exists only if some class derives from both, and which classes exist is not
+something a snapshot of the order can say. So `Plain` against the complement of
+a kind is **undecided**, and the same in reverse:
+
+```python
+from valgebra import Validator, complement
+
+
+class Plain:
+    pass
+
+
+class Laid(str):
+    __slots__ = ()
+
+
+assert Validator(Plain).relation_to(complement(int)) == "undecided"
+assert Validator(int).relation_to(complement(Plain)) == "undecided"
+
+# A class laid out as the kind is the case this is not conservative about:
+# every instance of it is a string, so it has a value on that line.
+assert Validator(Laid).relation_to(complement(str)) == "not_subset"
+assert Validator(Laid).relation_to(complement(int)) == "subset"
+```
+
+The assumption is the set representation's open world, which both readings
 share. Neither decides it; the bindings could not answer it without running a
 constructor at decision time, which is the same code the pure-metaclass test
 exists to refuse. What it buys is every relation between two classes decided by

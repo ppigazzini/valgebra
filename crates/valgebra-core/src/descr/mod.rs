@@ -850,8 +850,8 @@ impl Descr {
             self.kinds
                 .iter()
                 .zip(Kind::ALL)
-                .map(|(lines, kind)| lines.emptiness(&Component::top(kind)))
-                .chain([self.other.emptiness(&KINDLESS)]),
+                .map(|(lines, kind)| lines.emptiness(&Component::top(kind), Some(kind)))
+                .chain([self.other.emptiness(&KINDLESS, None)]),
         )
     }
 

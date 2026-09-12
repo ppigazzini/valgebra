@@ -33,6 +33,7 @@ use super::budget;
 use super::classes::Class;
 use super::symbolic::Guard;
 use super::values::{Field, Values};
+use crate::Kind;
 use crate::decision::Verdict;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -132,6 +133,32 @@ impl<G: Guard> Atom<G> {
             return Verdict::Unknown;
         }
         fields
+    }
+
+    /// The same, asked of the objects of one *kind*.
+    ///
+    /// A class this atom requires that confines its instances to no kind says
+    /// nothing about whether an object of this kind satisfies it: that needs a
+    /// class deriving from both it and the kind's builtin, which is the open
+    /// world the rule above already declines two unrelated classes for. So the
+    /// kind is read as one more class the value must be an instance of, and a
+    /// class that is not exactly this kind's leaves the answer unknown -- never
+    /// empty, since a class deriving from both may exist, and never inhabited,
+    /// since it may not.
+    ///
+    /// `None` is the line of objects that have no builtin kind, where the class
+    /// is the whole of what is asked.
+    fn emptiness_of_kind(&self, kind: Option<Kind>) -> Verdict {
+        let known = self.emptiness();
+        match kind {
+            Some(kind)
+                if known != Verdict::Empty
+                    && self.is_a.iter().any(|class| class.kind() != Some(kind)) =>
+            {
+                Verdict::Unknown
+            }
+            _ => known,
+        }
     }
 
     /// The objects failing this atom, one atom per label.
@@ -312,8 +339,27 @@ impl<G: Guard> RecordLattice<G> {
     /// read, so nothing has been proved either way.
     #[must_use]
     pub fn emptiness(&self) -> Verdict {
+        self.emptiness_of_kind(None)
+    }
+
+    /// The same, asked of the objects of one kind.
+    ///
+    /// A constraint on objects is carried on every kind's line, because a class
+    /// that lays down no layout of its own confines nothing and a subclass of
+    /// it may be laid out as anything. That placement is right for *inclusion*
+    /// and it is not a value: an object of kind `k` that is an instance of a
+    /// class confining nothing exists only if some class derives from both, and
+    /// which classes exist is not something a snapshot of the order can say.
+    /// That is the same open world [`Atom::emptiness`] already declines two
+    /// unrelated classes for, with the kind standing as the second class.
+    ///
+    /// `None` is the line of objects that have no builtin kind, where the class
+    /// is the whole of what is asked and the documented assumption -- a class
+    /// the bindings can read has an instance -- is the answer.
+    #[must_use]
+    pub fn emptiness_of_kind(&self, kind: Option<Kind>) -> Verdict {
         match self.positive() {
-            Some(atoms) => Verdict::any(atoms.iter().map(Atom::emptiness)),
+            Some(atoms) => Verdict::any(atoms.iter().map(|atom| atom.emptiness_of_kind(kind))),
             None => Verdict::Unknown,
         }
     }

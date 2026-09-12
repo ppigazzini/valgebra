@@ -633,7 +633,21 @@ fn a_class_meets_a_builtin_kind() {
     // is asked of.
     let both = dog.intersect(&ints).expect("an int that is a Dog");
     assert!(both.admits(dog_int));
-    assert_eq!(both.emptiness(), Verdict::Inhabited);
+
+    // And whether that set holds a value is not something this can say. `Dog`
+    // lays down no builtin layout, so an integer that is a Dog needs a class
+    // deriving from both -- the open world the atom rule already declines two
+    // unrelated classes for. Membership is a different question and keeps its
+    // answer: handed a value that is both, the set admits it.
+    assert_eq!(both.emptiness(), Verdict::Unknown);
+
+    // A class that *does* lay down the kind's layout is the case the reading
+    // is not conservative about: every instance of it is a string, so the
+    // meet with `str` holds whatever the class holds.
+    let substr = Descr::instance_of(SUBSTR.clone())
+        .intersect(&Descr::of_kind(Kind::Str))
+        .expect("a string that is a SubStr");
+    assert_eq!(substr.emptiness(), Verdict::Inhabited);
 
     // And it is *both*, not either: an integer nobody gave a class to is
     // outside it, and so is a Dog of no listed kind.
@@ -1448,8 +1462,16 @@ fn a_kind_is_bottom_or_top_of_its_own_lines() {
         let whole = Component::top(kind);
         let bottom = Lines::bottom();
         let top = Lines::everything(whole.clone());
-        assert_eq!(bottom.emptiness(&whole), Verdict::Empty, "{kind:?} bottom");
-        assert_eq!(top.emptiness(&whole), Verdict::Inhabited, "{kind:?} top");
+        assert_eq!(
+            bottom.emptiness(&whole, Some(kind)),
+            Verdict::Empty,
+            "{kind:?} bottom"
+        );
+        assert_eq!(
+            top.emptiness(&whole, Some(kind)),
+            Verdict::Inhabited,
+            "{kind:?} top"
+        );
         assert_eq!(bottom.complement(&whole), top, "{kind:?} bottom");
         assert_eq!(top.complement(&whole), bottom, "{kind:?} top");
     }
