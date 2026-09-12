@@ -81,10 +81,16 @@ impl Relation {
         }
     }
 
-    /// Both must hold. The first answer that is not a proof is the answer:
-    /// once the conjunction cannot hold, what is left to learn is whether it is
-    /// refuted or merely unproven, and paying for that would cost the descent
-    /// its early exit. Reporting the weaker of the two is the safe direction.
+    /// Both must hold, where the second is reached only if the first does.
+    ///
+    /// The first answer that is not a proof is the answer, which is not what
+    /// [`Relation::all`] does with a list of conjuncts. The two differ because
+    /// the operands do: `all` folds conjuncts of one claim about one pair, so
+    /// any one of them refutes it; this chains *steps*, and the second is often
+    /// a question the first has to have answered before it means anything --
+    /// a repeated element against a tail, once the prefix is known to align.
+    /// A refutation from a step whose premise is unproven is not a value.
+    /// Reporting the weaker of the two is the safe direction.
     #[must_use]
     #[inline]
     fn and(self, other: impl FnOnce() -> Relation) -> Relation {
@@ -178,15 +184,36 @@ impl Relation {
         }
     }
 
-    /// Every item, with [`Relation::and`]'s short circuit.
+    /// Every item, with [`Relation::any`]'s propagation of a decline.
+    ///
+    /// The dual of `any`, and dual for the same reason. The items are conjuncts
+    /// of one claim about one pair -- every member of a union below the same
+    /// supertype, every field of a record against its counterpart -- so a
+    /// refutation from any one of them is a value of the subject the supertype
+    /// rejects, whatever the others answer. Reading the *first* answer that is
+    /// not a proof made that depend on the order the conjuncts happened to be
+    /// in: two records differing only in the order of their fields decided
+    /// differently, one in a microsecond and one in two hundred. A decline is
+    /// not an answer, so it cannot end the fold.
+    ///
+    /// A `Fails` still ends it, and no conjunct can produce one from a
+    /// coinductive assumption -- an assumption yields `Holds` -- so the answer
+    /// rests on a value rather than on the hypothesis being discharged.
     #[inline]
     fn all(items: impl IntoIterator<Item = Relation>) -> Relation {
+        let mut declined = false;
         for answer in items {
-            if answer != Relation::Holds {
-                return answer;
+            match answer {
+                Relation::Holds => {}
+                Relation::Unknown => declined = true,
+                Relation::Fails => return Relation::Fails,
             }
         }
-        Relation::Holds
+        if declined {
+            Relation::Unknown
+        } else {
+            Relation::Holds
+        }
     }
 
     /// Any item, with [`Relation::or`]'s propagation of a decline.
@@ -2746,7 +2773,9 @@ fn keyed_map_subtype(
                     .holds()
             }))
         }));
-        fields_ok.and(|| extra_covered).and(|| defaults)
+        // Three conjuncts of one claim about one pair, so any one of them
+        // refutes it and the order they are read in decides nothing.
+        Relation::all([fields_ok, extra_covered, defaults])
     }
 }
 

@@ -2764,3 +2764,48 @@ fn the_position_cache_reads_both_halves_of_the_goal() {
         &by_tail
     ));
 }
+
+/// Two records differing only in the order of their fields decide alike.
+///
+/// The conjunction over a record's fields is a fold, and reading the first
+/// answer that is not a proof made the pair's answer depend on which field the
+/// canonical order happened to put first: a field the rules decline, sorted
+/// ahead of the refutation, ended the fold at *unknown* and sent the pair to
+/// the set representation. The refutation was the same one either way -- a
+/// required key the subject does not declare -- so the two orders differed in
+/// cost by two orders of magnitude and, at the boundary, in nothing else.
+///
+/// The subject here declares no required field, so it holds a value shallowly
+/// and the guard believes what the fold reports. With the fold reading the
+/// first non-proof again, the declining order answers `Unknown` and the row
+/// fails.
+#[test]
+fn a_record_decides_the_same_whichever_field_sorts_first() {
+    // A class the oracle cannot read, so a field carrying it declines.
+    let opaque = Schema::Instance(ClassIx::new(0));
+    let listed = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+
+    // `left` sorts first and declines; `zz` is the required key that refutes.
+    let declines_first = relation(
+        &closed(vec![field("left", opaque.clone(), false)]),
+        &closed(vec![
+            field("left", listed.clone(), false),
+            field("zz", Schema::Int, true),
+        ]),
+    );
+    // The same pair with the two names swapped, so the refutation sorts first.
+    let refutes_first = relation(
+        &closed(vec![field("zz", opaque, false)]),
+        &closed(vec![
+            field("aa", Schema::Int, true),
+            field("zz", listed, false),
+        ]),
+    );
+
+    assert_eq!(refutes_first, Relation::Fails);
+    assert_eq!(declines_first, Relation::Fails);
+}

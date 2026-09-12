@@ -112,6 +112,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: the oracle answers what kinds a class can hold -- internal
 - fix: an integer set is ordered by the table it carries -- internal
 - fix: a plain class names no value of a builtin kind -- internal
+- perf: a conjunct that refutes refutes the meet -- internal
 
 -->
 
