@@ -115,6 +115,18 @@ impl BindingShape {
 ///
 /// Fifty fields is the comparison gate's width, kept identical so the two
 /// measurements are of the same size of problem.
+///
+/// The *failing position* is not identical, and deliberately stays that way.
+/// The explain shape below breaks the thirty-eighth field where the comparison
+/// gate breaks the eighth, which is not nothing: the fast pass stops at the
+/// first field that fails and the explain pass walks them all, so this one
+/// measures thirty more field probes. Aligning them was tried and reverted --
+/// the count moves 15% and `perf_gate.py --against` rebuilds the *base* to
+/// compare, so a workload whose shape changed is measured against a different
+/// workload and reads as a regression it is not. A shape is part of a
+/// workload's identity, and re-recording its budget does not make two shapes
+/// one. What the two instruments share is the size of the problem; that is
+/// what the sentence above claims and all it claims.
 fn wide_record(py: Python<'_>) -> (Schema, Py<PyAny>) {
     let (fields, value) = wide_fields(py);
     (Schema::keyed_map(fields, Vec::new()), value)
