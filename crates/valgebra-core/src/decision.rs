@@ -509,7 +509,27 @@ impl Schema {
             }
             _ => {}
         }
-        match (self.type_tag_with(oracle), other.type_tag_with(oracle)) {
+        // Two sequences of one container meet in the sequences of their
+        // elements' meet -- `a* ∩ b* = (a ∩ b)*`, reading a homogeneous
+        // sequence as a regular expression over its element. Elements that
+        // share no value leave `∅*`, which is not empty: it holds the empty
+        // sequence, so the two are *not* disjoint on this reading alone. A
+        // length bound that rules the empty sequence out leaves nothing at all,
+        // and that pair is disjoint.
+        //
+        // The bound is read first: only a refinement carries one, so every
+        // other node answers it with one discriminant test, and this is asked
+        // of every pair the walk reaches. The two tags are the ones the rule
+        // below reads, taken once for both.
+        let (tag, other_tag) = (self.type_tag_with(oracle), other.type_tag_with(oracle));
+        if (self.holds_an_element() || other.holds_an_element())
+            && tag == other_tag
+            && let (Some(mine), Some(theirs)) = (self.star_element(), other.star_element())
+            && mine.disjoint_with(theirs, oracle)
+        {
+            return true;
+        }
+        match (tag, other_tag) {
             // Distinct concrete types are disjoint, except bool ⊆ int.
             (Some(a), Some(b)) => {
                 a != b && !matches!((a, b), (Kind::Bool, Kind::Int) | (Kind::Int, Kind::Bool))
@@ -519,6 +539,40 @@ impl Schema {
             (None, Some(kind)) => self.class_excludes(kind, oracle),
             (Some(kind), None) => other.class_excludes(kind, oracle),
             (None, None) => false,
+        }
+    }
+
+    /// The element of a schema whose values are that element repeated: a
+    /// homogeneous sequence, or a set.
+    ///
+    /// `None` for a shape that is not a plain star. A sequence with a prefix
+    /// denotes more than one element type repeated, so the `(a ∩ b)*` reading
+    /// above is not the whole of its meet with another.
+    fn star_element(&self) -> Option<&Schema> {
+        match self {
+            Schema::Refine { base, .. } => base.star_element(),
+            Schema::Seq { shape, .. } if shape.prefix.is_empty() => shape.tail.as_deref(),
+            Schema::Coll { element, .. } => Some(element),
+            _ => None,
+        }
+    }
+
+    /// Whether a length bound puts at least one element in every value of this
+    /// schema.
+    ///
+    /// What rules the empty sequence out of the meet above. Only a refinement
+    /// can say it: a *shape* that guarantees an element is one with a prefix,
+    /// and a shape with a prefix is not a star, so it has no element for that
+    /// reading to compare and could never reach this question anyway.
+    fn holds_an_element(&self) -> bool {
+        match self {
+            Schema::Refine { base, constraints } => {
+                constraints
+                    .iter()
+                    .any(|constraint| matches!(constraint, Constraint::MinLen(least) if *least > 0))
+                    || base.holds_an_element()
+            }
+            _ => false,
         }
     }
 
