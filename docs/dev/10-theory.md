@@ -199,12 +199,23 @@ is opaque.
 ## Decision procedures, for widening the decided fragment
 
 **Gesbert, Genevès & Layaïda, "A Logical Approach to Deciding Semantic
-Subtyping".** **[IN PROGRESS]** — the interning and automata engine that would
-decide the cases [02-decision.md](02-decision.md) records as conservative. Its
-interning half is in the tree: `crates/valgebra-core/src/ir/intern.rs` shares
-the nodes of two schemas built alike, which is the identity a memo over goals
-needs for its key. The memo itself, and the automata engine the paper builds
-around it, are not written; the tag says the half rather than the whole.
+Subtyping".** **[IN PROGRESS]** — the automata engine that would decide the cases
+[02-decision.md](02-decision.md) records as conservative is not written, and the
+tag is about that engine.
+
+**A goal memo is not the missing piece, and this page used to say it was.**
+Interning is in the tree — `crates/valgebra-core/src/ir/intern.rs` shares the
+nodes of two schemas built alike — and it is the identity a table over goals
+would need for its key, which is why it read as half of one. Counted over the
+three decision workloads and over a record of thirty-two fields sharing one
+interned inner schema, the goals a query *repeats* are **zero**: the trail
+absorbs recursion and the per-rule caches absorb the shape where one goal is
+asked once per field ([02-decision.md](02-decision.md#the-budget-and-what-exhausting-it-means)).
+So there is no speed-up behind the work budget waiting to be collected, and the
+interning earns its place for what it already does — a cheap key for the
+mutation sweep's diff, and a pointer-identity short-circuit on the trail's
+comparisons. What would reopen the question is a shape where one goal is reached
+by two rules with no cache between them, and none is in hand.
 
 **The descriptor**, the representation the two Castagna papers above give and
 Elixir's `Module.Types.Descr` implements, is **[IN PROGRESS]** in
