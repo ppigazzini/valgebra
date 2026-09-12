@@ -403,6 +403,16 @@ pub(super) fn keyed_map_matches_json(
     if defaults.is_empty() {
         return entries.iter().all(|(key, _)| declares(key.as_ref()));
     }
+    // A parsed object's keys are strings by construction, so a lone clause whose
+    // key schema admits every string governs every undeclared key by its value
+    // alone: the key half of the coverage question is already answered, and
+    // asking it builds a `JsonValue` and walks a schema per key for a fixed yes.
+    // `dict[str, V]` -- the shape a document's free-form section is written as
+    // -- is exactly this clause.
+    let value_only = match defaults {
+        [clause] if matches!(clause.key, Schema::Str | Schema::Anything(_)) => Some(&clause.value),
+        _ => None,
+    };
     // Collapse the entries to each non-field key's last value in one pass, so a
     // document with many keys (or many duplicates) is covered linearly rather
     // than by rescanning the tail per key.
@@ -413,14 +423,21 @@ pub(super) fn keyed_map_matches_json(
         }
         last_value.insert(key.as_ref(), val);
     }
+    let (mut path, mut out) = (Vec::new(), Vec::new());
+    let mut sub = Frame::new(&mut path, &mut out, fast(ctx));
     for (key, val) in last_value {
-        let key_value = JsonValue::Str(Cow::Borrowed(key));
-        if !covered(
-            defaults,
-            &Value::Json(py, &key_value),
-            &Value::Json(py, val),
-            ctx,
-        ) {
+        let held = if let Some(schema) = value_only {
+            member(schema, &Value::Json(py, val), &mut sub)
+        } else {
+            let key_value = JsonValue::Str(Cow::Borrowed(key));
+            covered(
+                defaults,
+                &Value::Json(py, &key_value),
+                &Value::Json(py, val),
+                ctx,
+            )
+        };
+        if !held {
             return false;
         }
     }
