@@ -34,6 +34,16 @@ A step that needs a runner (a PGO wheel, valgrind, a mutation sweep, a second
 interpreter) is named with the reason instead, and `tests/test_local_gate.py`
 holds that list to the workflow in both directions.
 
+**What the clone models, the environment does not.** A step gets the caller's
+environment plus the job's and the step's own `env:`, and the runner's own
+absences are not modelled by that -- so a variable a developer's terminal sets
+reaches a step that a lane runs with it unset. One of them gave a false red:
+`FORCE_COLOR` overrides a tool's terminal check, `uv export` wrote escape codes
+into the requirements file it generates, and `pip-audit` refused the file
+against a dependency tree with no advisory in it. The two variables whose only
+purpose is that override are dropped (`runner_environment`), and the rest of
+that list -- every way a lane differs from a local run -- is unwritten.
+
 Three of the excused steps need only what a developer's machine already has --
 the dependency sync, the extension build, and the stub check that needs both --
 and lending the caller's virtual environment to the clone was tried so they
