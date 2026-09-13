@@ -32,6 +32,9 @@ TRAIT = ROOT / "crates" / "valgebra-core" / "src" / "decision" / "oracle.rs"
 #: The structural rules, where a pair no rule decides is handed to the
 #: readings that refute.
 RULES = ROOT / "crates" / "valgebra-core" / "src" / "decision.rs"
+#: The readings a pair with no rule of its own is given, which is where every
+#: refutation the page lists is defined.
+READINGS = ROOT / "crates" / "valgebra-core" / "src" / "decision" / "readings.rs"
 SWEEP = ROOT / ".cargo" / "mutants.toml"
 
 # This file reads the tree rather than the library: it holds a shipped page to
@@ -177,12 +180,12 @@ def test_every_reading_the_page_names_exists() -> None:
     it is still true. Six readings reached `decision.rs` in one day without the
     page; this is what keeps the page from drifting the other way afterwards.
     """
-    source = RULES.read_text(encoding="utf-8")
+    source = READINGS.read_text(encoding="utf-8")
     named = _readings()
     assert len(named) >= 5, f"the refutation section lists only {named}"
     missing = [name for name in named if f"fn {name}(" not in source]
     assert not missing, (
-        f"{PAGE.name} names {missing}, which `{RULES.name}` does not define"
+        f"{PAGE.name} names {missing}, which `{READINGS.name}` does not define"
     )
 
 

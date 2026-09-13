@@ -5,7 +5,8 @@ use super::*;
 use crate::descr::classes::Class;
 use crate::descr::lower::Operand;
 use crate::ir::Openness;
-use crate::ir::{Field, MapClause, OperandIx};
+use crate::ir::{CollKind, Field, MapClause, OperandIx, SeqKind};
+use crate::kind::Kind;
 
 /// The structural inclusion procedure alone, with no descriptor beside it.
 ///
