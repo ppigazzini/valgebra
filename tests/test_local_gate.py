@@ -28,6 +28,7 @@ LEDGER: every merge-gate step is run by the local gate or excused by name
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -244,6 +245,29 @@ def test_the_gate_runs_in_a_shallow_clone_with_no_tags(tmp_path: Path) -> None:
         check=True,
     )
     assert tags.stdout.strip() == "", "the clone carries tags a checkout would not"
+
+
+def test_a_forced_colour_variable_does_not_reach_a_step(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A step sees the environment a runner has, not the caller's terminal.
+
+    The plant: `FORCE_COLOR` set in the caller's shell reached `uv export`,
+    which wrote ANSI escapes into the requirements file it generates, and
+    `pip-audit` refused the file. The gate reported a failed step for a
+    property of the terminal it was run from.
+    """
+    monkeypatch.setenv("FORCE_COLOR", "3")
+    monkeypatch.setenv("CLICOLOR_FORCE", "1")
+    monkeypatch.setenv("VALGEBRA_GATE_MARKER", "kept")
+    environment = gate.runner_environment()
+    assert "FORCE_COLOR" not in environment
+    assert "CLICOLOR_FORCE" not in environment
+    # Everything else is carried: the gate runs the lane's steps in the
+    # caller's toolchain, and dropping more than the terminal's own would make
+    # it a different environment rather than a runner's.
+    assert environment["VALGEBRA_GATE_MARKER"] == "kept"
+    assert environment.get("PATH") == os.environ.get("PATH")
 
 
 def test_the_three_exit_codes_are_distinct() -> None:

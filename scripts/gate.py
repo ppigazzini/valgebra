@@ -407,7 +407,7 @@ def fetched(plan: list[Step], cwd: Path) -> bool:
                 ["bash", "-euo", "pipefail", "-c", fetch],
                 cwd=cwd,
                 check=False,
-                env={**os.environ, "CI": "1"},
+                env={**runner_environment(), "CI": "1"},
             )
             if result.returncode == 0:
                 break
@@ -415,6 +415,29 @@ def fetched(plan: list[Step], cwd: Path) -> bool:
             print(f"gate: cannot fetch what {name!r} reads: {fetch}")
             return False
     return True
+
+
+#: Variables whose only purpose is to override a tool's "am I a terminal?"
+#: check. A runner sets none of them.
+FORCED_COLOUR = ("FORCE_COLOR", "CLICOLOR_FORCE")
+
+
+def runner_environment() -> dict[str, str]:
+    """Read the caller's environment, less what only a terminal would put in it.
+
+    A step runs on the runner with no TTY and nothing forcing colour, so a tool
+    there writes plain text -- including into any file it generates. A
+    developer's terminal sets `FORCE_COLOR`, some harnesses set it for every
+    child process, and a tool that honours it writes escape codes into that
+    file too. `pip-audit` then refused the requirements file `uv export` had
+    just written, and the gate reported a failed step: a verdict about the
+    caller's terminal rather than about the tree, which is the one thing this
+    gate must never give.
+
+    Dropped rather than overridden with `NO_COLOR`, because the runner carries
+    neither: what a step should see is the absence.
+    """
+    return {key: value for key, value in os.environ.items() if key not in FORCED_COLOUR}
 
 
 def run_step(name: str, command: str, cwd: Path, environment: dict[str, str]) -> bool:
@@ -428,7 +451,7 @@ def run_step(name: str, command: str, cwd: Path, environment: dict[str, str]) ->
             # what this reproduces; a cold Rust build is not, and paying for one
             # per job would make the gate something nobody runs.
             env={
-                **os.environ,
+                **runner_environment(),
                 **interpreter_env(),
                 **environment,
                 "CI": "1",
