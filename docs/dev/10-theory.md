@@ -225,8 +225,10 @@ representation closed under union, intersection and complement, so a relation is
 decided by emptiness of one combination rather than by whether a rule matched the
 shape a caller wrote.
 
-It is built beside the structural procedure and decides nothing a caller can
-reach. Each kind's component starts *coarse* — every value of the kind, or none —
+It is built beside the structural procedure and is the second decider a caller
+reaches: the rules answer first and this answers where they decline
+([02-decision.md](02-decision.md)). What the tag is about is *coverage* rather
+than reach — each kind's component starts *coarse* — every value of the kind, or none —
 and each step replaces one with a representation that separates its values; the
 type says which is which, so what the descriptor can and cannot see is read off
 it. Two properties hold of it that the structural IR does not have. Emptiness

@@ -433,7 +433,7 @@ What is *not* a precondition, and once read as one, is the descriptor replacing
 the decision procedure. That caution is about **consulting** a DNF descriptor
 beside a procedure that already answers — paying twice for one verdict — and it
 is the rule that withdrew the shadowing widening. It says nothing about building
-the representation, which decides nothing a caller can reach and is checked
+the representation, which is asked where the rules decline and is checked
 against membership over generated values like every other part of the
 descriptor.
 

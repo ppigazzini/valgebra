@@ -14,12 +14,14 @@
 //! componentwise, which is the whole reason to partition first: no rule relates
 //! a list to an int, because they live in components that never meet.
 //!
-//! **This is built beside the structural procedure, not in place of it.** It
-//! decides nothing a caller can reach yet. Each component starts *coarse* --
-//! every value of the kind, or none -- and each later commit replaces one kind's
-//! component with a representation that distinguishes its values. The type says
-//! which is which, so what the descriptor can and cannot see is read off it
-//! rather than inferred.
+//! **This is built beside the structural procedure, not in place of it**, and
+//! it is the second decider a caller reaches: `subtype_relation_under` asks the
+//! rules and then asks here where they decline, and `is_empty_with` does the
+//! same for emptiness. What no caller reaches is a schema this cannot *hold* --
+//! each component starts *coarse*, every value of the kind or none, and each
+//! later commit replaces one kind's component with a representation that
+//! distinguishes its values. The type says which is which, so what the
+//! descriptor can and cannot see is read off it rather than inferred.
 
 pub mod budget;
 pub mod classes;
