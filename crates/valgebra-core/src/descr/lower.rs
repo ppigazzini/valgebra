@@ -127,6 +127,49 @@ pub fn lower(schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
     lower_within(Bounds::DEFAULT, schema, pool)
 }
 
+/// How many times a reference is unfolded before the descriptor is built.
+///
+/// One. A single unfolding puts the fixpoint's own body in front of the
+/// representation, which settles every relation that turns on *what kinds* a
+/// recursive schema admits -- a meet with a disjoint kind, an inclusion in a
+/// wider union -- and that is the whole of what the structural rules cannot
+/// read. Each further unfolding multiplies the schema this must build against
+/// [`BUDGET`]'s 64 nodes, for relations nobody has asked for.
+///
+/// A bound like the three in [`Bounds`], and unlike them in one way worth
+/// stating: those three say what a build may spend, and this says what it is
+/// given to build *from*. A `Ref` has no component to land in, so without the
+/// unfolding a recursive schema does not lower at all.
+pub const UNFOLDS: u32 = 1;
+
+/// [`lower`], resolving a recursive schema's references through `definitions`.
+///
+/// `positive` is the side the schema is read on, and it is the caller's to
+/// know: unfolding grows the set on one side and shrinks it on the other, so a
+/// difference stays sound only when the two sides are unfolded in opposite
+/// directions.
+///
+/// # Errors
+///
+/// Refuses what [`lower`] refuses. A reference `definitions` does not resolve
+/// is one of those: the unfolding leaves it in place and no component holds it.
+pub fn lower_unfolded(
+    schema: &Schema,
+    definitions: &[Schema],
+    positive: bool,
+    pool: &dyn Constants,
+) -> Option<Descr> {
+    // The empty check first: it is one comparison, and it is true for every
+    // schema that carries no fixpoint at all -- which is almost all of them, and
+    // all of the ones on the workload the decision budget is measured over. The
+    // walk that follows costs a pass over the tree, and paying it per relation
+    // for a schema with no definitions was ten percent of that workload.
+    if definitions.is_empty() || !schema.has_reference() {
+        return lower(schema, pool);
+    }
+    lower(&schema.unfolded(definitions, UNFOLDS, positive), pool)
+}
+
 /// What a lowering may spend, in the three quantities it can run out of.
 ///
 /// They are three because a build can be too big in three ways, and no one of

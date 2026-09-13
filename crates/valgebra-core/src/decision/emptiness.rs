@@ -16,7 +16,7 @@
 
 use std::cell::Cell;
 
-use crate::descr::lower::{Constants, lower};
+use crate::descr::lower::{Constants, lower_unfolded};
 use crate::ir::{Constraint, Constraints, DefIx, Schema};
 use crate::kind::{Kind, Region, Regions};
 use crate::verdict::Verdict;
@@ -25,7 +25,7 @@ use super::constraints::{bounds_unsatisfiable, shortest, tightest_bounds};
 use super::records::keyed_map_meet_empty;
 use super::{
     DECISION_BUDGET, LeafRelations, NoLeafRelations, has_complementary_pair, has_disjoint_pair,
-    spend, unfolded_for,
+    spend,
 };
 
 impl Schema {
@@ -100,8 +100,7 @@ impl Schema {
     /// cannot hold -- a recursive one -- refuses the same way. Either way the
     /// caller keeps the verdict the rules reached.
     fn denotes_no_value(&self, pool: &dyn Constants, defs: &[Schema]) -> bool {
-        lower(&unfolded_for(self, defs, true), pool)
-            .is_some_and(|set| set.emptiness() == Verdict::Empty)
+        lower_unfolded(self, defs, true, pool).is_some_and(|set| set.emptiness() == Verdict::Empty)
     }
 
     /// The decision steps [`is_empty`](Self::is_empty) spends on this schema.

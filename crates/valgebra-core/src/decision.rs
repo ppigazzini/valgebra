@@ -1,5 +1,12 @@
-//! The decision procedures over the IR: emptiness, subtyping, equivalence, and
-//! disjointness, with the leaf-relation oracle and the scalar region partition.
+//! The structural rules: subtyping, equivalence and disjointness, decided by
+//! matching constructors against each other.
+//!
+//! One module per surface beside this one -- the emptiness every relation
+//! reduces to, the readings a pair no rule decides is given, the oracle, and
+//! the four constructor surfaces the shelf keeps a paper for each of. What
+//! stays here is the coinductive procedure that ties them together: the trail,
+//! the hypothesis a recursive pair is proved under, the shape match, and the
+//! hand-off to the set representation where the rules decline.
 
 mod constraints;
 mod emptiness;
@@ -9,10 +16,9 @@ mod products;
 mod readings;
 mod records;
 
-use std::borrow::Cow;
 use std::cell::Cell;
 
-use crate::descr::lower::{Constants, lower};
+use crate::descr::lower::{Constants, lower_unfolded};
 use crate::ir::{Constraint, DefIx, Schema, SeqShape};
 use crate::kind::{Region, Regions};
 use crate::verdict::{Relation, Verdict};
@@ -126,13 +132,13 @@ impl Schema {
         // A side this reading cannot lower, and a difference it cannot build,
         // are declines rather than refutations: nothing about the inclusion is
         // known from a set that was never constructed.
-        let Some(mine) = lower(&unfolded_for(self, defs, true), pool) else {
+        let Some(mine) = lower_unfolded(self, defs, true, pool) else {
             return Relation::Unknown;
         };
         if mine.emptiness() == Verdict::Empty {
             return Relation::Holds;
         }
-        let Some(theirs) = lower(&unfolded_for(other, defs, false), pool) else {
+        let Some(theirs) = lower_unfolded(other, defs, false, pool) else {
             return Relation::Unknown;
         };
         mine.intersect(&theirs.complement())
@@ -979,33 +985,6 @@ pub(crate) fn has_complementary_pair_within(
         }
         _ => false,
     })
-}
-
-/// How many times a reference is unfolded before the descriptor is asked.
-///
-/// One. A single unfolding puts the fixpoint's own body in front of the
-/// representation, which settles every relation that turns on *what kinds* a
-/// recursive schema admits -- a meet with a disjoint kind, an inclusion in a
-/// wider union -- and that is the whole of what the structural rules cannot
-/// read. Each further unfolding multiplies the schema the descriptor must build
-/// against a bound of 64 nodes, for relations nobody has asked for.
-const UNFOLDS: u32 = 1;
-
-/// A schema the descriptor can hold, standing in for one that may recurse.
-///
-/// Borrowed where there is no reference, which is the common case and the one
-/// that must cost nothing.
-fn unfolded_for<'a>(schema: &'a Schema, defs: &[Schema], positive: bool) -> Cow<'a, Schema> {
-    // The empty check first: it is one comparison, and it is true for every
-    // schema that carries no fixpoint at all -- which is almost all of them, and
-    // all of the ones on the workload the decision budget is measured over. The
-    // walk that follows costs a pass over the tree, and paying it per relation
-    // for a schema with no definitions was ten percent of that workload.
-    if !defs.is_empty() && schema.has_reference() {
-        Cow::Owned(schema.unfolded(defs, UNFOLDS, positive))
-    } else {
-        Cow::Borrowed(schema)
-    }
 }
 
 /// Whether a schema denotes a *set*: the same values however often it is asked.
