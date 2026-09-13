@@ -55,7 +55,9 @@ release waits for whatever reviewers those environments require.
    which version is released and measures the roll against that version's tag.
    Between this step and step 6 the section names a version no tag resolves yet,
    so the ledger skips: there is nothing left to account for, and the roll is
-   empty because it was just emptied. It resumes the moment the tag lands.
+   empty because it was just emptied. It resumes the moment the tag lands — and
+   nothing holds a `feat`/`fix` landed in the window to a roll line until it
+   does, so the tag is the step to take promptly rather than last.
 
    ```bash
    cargo metadata --format-version 1 --offline >/dev/null    # refresh Cargo.lock

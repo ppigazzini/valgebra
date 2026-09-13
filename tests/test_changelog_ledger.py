@@ -37,7 +37,11 @@ roll nobody reads. With one exception, and it is the gate's own reflection: the
 commit being made is not in `git log` yet, so its line has nothing to match.
 The roll is oldest first, so a pending line sits after every line that matches;
 one *before* the last match names a commit that went away, and that is the stale
-line this catches.
+line this catches. The invariant, in one sentence: **every `feat`/`fix` line
+before the last one that matches names a commit in the range.** A line of any
+other type -- a `perf` someone chose to account for -- is outside the universe
+and is never stale, wherever it sits; it was once read as a settled line, and a
+`fix` appended after a run of them turned every one of them red.
 
 LEDGER: every feat/fix commit since the last release is on the changelog roll
 """
@@ -154,12 +158,34 @@ def test_every_visible_commit_is_on_the_roll() -> None:
     )
 
 
-@SHALLOW
-def test_no_roll_entry_is_stale() -> None:
-    roll, commits = _roll(), _visible_commits()
+def _stale(roll: list[str], commits: set[str]) -> list[str]:
+    """Name the `feat`/`fix` lines before the last match that match no commit.
+
+    Everything after the last match is the pending tail -- the commit being
+    made, whose line has nothing to match yet -- and a line the universe does
+    not contain is never stale: the ledger cannot match it, so it cannot have
+    stopped matching either.
+    """
     matched = [at for at, entry in enumerate(roll) if entry in commits]
     settled = roll[: max(matched) + 1] if matched else []
-    extra = sorted(set(settled) - commits)
+    return sorted({entry for entry in settled if VISIBLE.match(entry)} - commits)
+
+
+def test_a_line_outside_the_universe_is_never_stale() -> None:
+    # The plant for the day a `fix` appended after a run of `perf` lines read
+    # every one of them as stale. Both rows are what the range check below
+    # computes, on a roll and a range it does not have to read from git.
+    commits = {"feat: a", "fix: b"}
+    assert _stale(["feat: a", "perf: p", "perf: q", "fix: b"], commits) == []
+    assert _stale(["feat: a", "perf: p", "fix: pending"], commits) == []
+    assert _stale(["feat: gone", "feat: a"], commits) == ["feat: gone"]
+    assert _stale(["fix: gone", "perf: p", "feat: a"], commits) == ["fix: gone"]
+    assert _stale(["fix: pending"], commits) == []
+
+
+@SHALLOW
+def test_no_roll_entry_is_stale() -> None:
+    extra = _stale(_roll(), _visible_commits())
     assert not extra, (
         "roll entries naming no commit in this release: "
         + "; ".join(extra)
