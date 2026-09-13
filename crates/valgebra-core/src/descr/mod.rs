@@ -433,7 +433,7 @@ impl Descr {
     #[must_use]
     pub fn nothing() -> Descr {
         Descr {
-            kinds: core::array::from_fn(|_| Lines::bottom()),
+            kinds: Descr::no_lines(),
             other: Lines::bottom(),
         }
     }
@@ -811,14 +811,24 @@ impl Descr {
     /// name the rest here, and would name the wrong set the day a kind is added.
     #[must_use]
     pub fn complement(&self) -> Descr {
-        let mut kinds = self.kinds.clone();
-        for (slot, kind) in kinds.iter_mut().zip(Kind::ALL) {
-            *slot = slot.complement(&Component::top(kind));
+        let mut kinds = Descr::no_lines();
+        for ((slot, mine), kind) in kinds.iter_mut().zip(&self.kinds).zip(Kind::ALL) {
+            *slot = mine.complement(&Component::top(kind));
         }
         Descr {
             kinds,
             other: self.other.complement(&KINDLESS),
         }
+    }
+
+    /// Eleven empty components, for a result to be written into slot by slot.
+    ///
+    /// An empty union allocates nothing, so this is the cheap starting point
+    /// for the two operations that produce every component: each was cloning
+    /// the eleven line lists of one operand to overwrite every one of them,
+    /// and the clones were the largest leaf of the lowering.
+    fn no_lines() -> [Lines; Kind::ALL.len()] {
+        core::array::from_fn(|_| Lines::bottom())
     }
 
     /// Charges the build's allowance: a meet of two descriptors multiplies each
@@ -827,9 +837,10 @@ impl Descr {
         if !budget::spend() {
             return None;
         }
-        let mut kinds = self.kinds.clone();
-        for ((slot, theirs), kind) in kinds.iter_mut().zip(&other.kinds).zip(Kind::ALL) {
-            *slot = slot.combine(theirs, op, &Component::top(kind))?;
+        let mut kinds = Descr::no_lines();
+        let pairs = self.kinds.iter().zip(&other.kinds);
+        for ((slot, (mine, theirs)), kind) in kinds.iter_mut().zip(pairs).zip(Kind::ALL) {
+            *slot = mine.combine(theirs, op, &Component::top(kind))?;
         }
         Some(Descr {
             kinds,

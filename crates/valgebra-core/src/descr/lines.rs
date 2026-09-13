@@ -251,16 +251,24 @@ impl Lines {
     /// are rebuilt where the product fits, so the common forms stay comparable,
     /// and the polarity carries the rest.
     pub(crate) fn complement(&self, whole: &Component) -> Lines {
-        let flipped = Lines {
-            lines: self.lines.clone(),
-            negated: !self.negated,
-        };
-        match flipped.positive(whole) {
+        // A negated union's complement is its own lines held positively; a
+        // positive one's is De Morgan over them, where that fits, and the
+        // same lines under the flipped flag where it does not.
+        if self.negated {
+            return Lines {
+                lines: self.lines.clone(),
+                negated: false,
+            };
+        }
+        match complement_lines(&self.lines, whole) {
             Some(lines) => Lines {
-                lines: lines.into_owned(),
+                lines,
                 negated: false,
             },
-            None => flipped,
+            None => Lines {
+                lines: self.lines.clone(),
+                negated: true,
+            },
         }
     }
 }
