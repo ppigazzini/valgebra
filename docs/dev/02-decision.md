@@ -10,7 +10,8 @@ it decides.
 
 `crates/valgebra-core/src/decision.rs` is the **fast path**. It recurses over the
 schema tree, matching shapes and applying rules, with one module per surface
-beside it: `decision/constraints.rs` for a refinement's bounds,
+beside it: `decision/emptiness.rs` for the three-valued verdict every relation
+reduces to, `decision/constraints.rs` for a refinement's bounds,
 `decision/products.rs` for sequences split across a union,
 `decision/records.rs` for keyed maps and attribute records, and
 `decision/literals.rs` for tables of constants. It answers first, and the
@@ -121,8 +122,8 @@ it was built from; a search can report a rule nobody wrote.
 
 ## The scalar fragment is exact, through a region partition
 
-Two partitions of the value universe live in `decision.rs`, and they are not
-rivals: `Kind` is the eleven-part one the descriptor's components are indexed
+Two partitions of the value universe live in `kind.rs`, below both deciders,
+and they are not rivals: `Kind` is the eleven-part one the descriptor's components are indexed
 by, and `Region` is a seven-bit *summary* derived from it (`Kind::region`) --
 six scalar bits and one for everything else. The rules reason in the summary
 because that is all a bitset needs to decide a scalar; the descriptor reasons in

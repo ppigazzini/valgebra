@@ -9,7 +9,7 @@ direction their dependencies run, and the two invariants the compiler holds.
 |---|---|---|
 | `crates/valgebra-core/src/ir.rs` | the schema IR: the node set, what each node denotes, the sharing of nodes built alike (`ir/intern.rs`), and the rewrites from one node to another (`ir/transform.rs`) | [01-schema-ir.md](01-schema-ir.md) |
 | `crates/valgebra-core/src/kind.rs`, `verdict.rs` | the value-universe partition, its region summary, and the two three-valued answers — the frame both deciders read | [02-decision.md](02-decision.md) |
-| `crates/valgebra-core/src/decision.rs` | emptiness, subtyping, equivalence, disjointness | [02-decision.md](02-decision.md) |
+| `crates/valgebra-core/src/decision.rs`, `decision/` | the structural rules: subtyping, equivalence and disjointness in the file, emptiness and the constructor rules one module each beside it | [02-decision.md](02-decision.md) |
 | `crates/valgebra-core/src/descr/` | the set representation: one component per kind, each closed under the three operations | [02-decision.md](02-decision.md) |
 | `crates/valgebra-py/src/build.rs` | typing annotations and native forms into the IR | [03-frontend.md](03-frontend.md) |
 | `crates/valgebra-py/src/check/` | the membership walk: the dispatcher in `walk.rs`, the leaves in `walk/scalar.rs`, the containers in `walk/record.rs` and `walk/sequence.rs` | [04-walk.md](04-walk.md) |
