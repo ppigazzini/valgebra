@@ -1012,7 +1012,6 @@ impl Schema {
     #[must_use]
     // A `Vec` rather than a slice because canonicalising the fields deduplicates
     // them, which a slice cannot do.
-    #[allow(clippy::ptr_arg)]
     fn keyed_map_from(fields: &mut Vec<Field>, defaults: Clauses) -> Schema {
         canonical_fields(fields);
         Schema::KeyedMap {

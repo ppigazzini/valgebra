@@ -959,12 +959,15 @@ impl Validator {
     }
 }
 
-// These doc comments are the Python API reference (rendered by mkdocstrings),
-// written in Google docstring style: the `Args:`/`Returns:`/`Raises:` sections
-// must name parameters and exceptions as bare identifiers for the reference to
-// parse them, which is exactly what clippy's doc_markdown wants backticked.
-// Python documentation conventions win here over the Rust-doc lint.
-#[allow(clippy::doc_markdown)]
+#[expect(
+    clippy::doc_markdown,
+    reason = "these doc comments are the Python API reference (rendered by \
+              mkdocstrings), written in Google docstring style: the \
+              `Args:`/`Returns:`/`Raises:` sections must name parameters and \
+              exceptions as bare identifiers for the reference to parse them, \
+              which is exactly what this lint wants backticked. Python \
+              documentation conventions win here over the Rust-doc lint"
+)]
 #[pymethods]
 impl Validator {
     /// Show the cycle collector every Python object this validator owns.
@@ -991,9 +994,11 @@ impl Validator {
     /// `&mut self` to offer a `__clear__` of its own, which is the point of
     /// being frozen: a validator that could be emptied would answer differently
     /// after the collector touched it.
-    // `PyVisit` is taken by value because that is the signature CPython's
-    // `tp_traverse` maps to; it is a handle, not a payload.
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "`PyVisit` is taken by value because that is the signature \
+                  CPython's `tp_traverse` maps to; it is a handle, not a payload"
+    )]
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
         for constant in &self.literals {
             visit.call(constant)?;

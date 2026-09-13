@@ -159,12 +159,6 @@ impl Span {
 /// The two zeros are one value under `==`, so only one of them may reach the
 /// representation: otherwise a set holding `0.0` would answer differently about
 /// `-0.0`, which no float can tell apart from it.
-#[allow(
-    clippy::float_cmp,
-    reason = "the comparison is the point: the two zeros are equal under `==` \
-              and differ under `total_cmp`, and it is the first that decides \
-              which values a set can tell apart"
-)]
 fn normalise(value: f64) -> f64 {
     if value == 0.0 { 0.0 } else { value }
 }
