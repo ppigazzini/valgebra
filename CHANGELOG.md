@@ -17,6 +17,16 @@ answer of its own, or a repair to a change not yet released.
 
 -->
 
+### Changed
+
+- **PyPy 3.11 is a stated target.** The `Implementation :: PyPy` classifier and
+  `docs/00-installation.md` name the four wheels published for it from 0.0.10
+  onward -- manylinux and musllinux, x86_64 and aarch64 -- so a consumer there
+  can tell a supported platform from an accident of the build matrix. Every
+  push builds the extension against PyPy and imports it: the C API PyPy offers
+  is not CPython's, and the difference shows at import rather than in any
+  answer a validator gives.
+
 ## [0.0.10] - 2026-09-13
 
 A second representation decides the three relations. Where the structural rules

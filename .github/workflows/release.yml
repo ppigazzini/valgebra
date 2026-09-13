@@ -80,10 +80,12 @@ jobs:
         with:
           command: build
           target: ${{ matrix.platform.target }}
-          # --find-interpreter builds for every CPython the image exposes that
-          # satisfies requires-python, including the free-threaded build where
-          # present. --pgo (native targets only) runs the training workload
-          # configured in pyproject.toml against the instrumented build.
+          # --find-interpreter builds for every interpreter the image exposes
+          # that satisfies requires-python: each CPython, the free-threaded
+          # build where present, and PyPy on the Linux images (see
+          # docs/00-installation.md, which names what ships). --pgo (native
+          # targets only) runs the training workload configured in
+          # pyproject.toml against the instrumented build.
           args: --release --out dist --find-interpreter ${{ matrix.platform.pgo && '--pgo' || '' }}
           manylinux: ${{ matrix.platform.manylinux || 'auto' }}
           # llvm-tools inside the manylinux container for the PGO profile merge.

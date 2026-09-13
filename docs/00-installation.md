@@ -34,6 +34,14 @@ macOS (Intel and Apple silicon), Windows, and free-threaded CPython 3.14 where
 the release image exposes a `cp314t` interpreter. Free-threaded support starts at
 3.14t; the earlier 3.13 free-threaded build is not a target.
 
+**PyPy 3.11 is a target, on Linux.** Four wheels are published for it —
+manylinux and musllinux, x86_64 and aarch64 — and every push builds the
+extension against PyPy and imports it, because the C API it offers is not
+CPython's: an extension there runs through `cpyext`, which carries the limited
+API and not every static type object CPython exports, and naming one of those
+links fine and fails at `import`. There is no PyPy wheel for macOS or Windows,
+where the source distribution is the install.
+
 On a free-threaded interpreter a validator is immutable and shares no mutable
 walk state, so object validation runs in parallel with the interpreter lock
 disabled. The JSON path is the one exception: its string parser draws on a

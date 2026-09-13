@@ -313,6 +313,17 @@ legs on every push bought minutes rather than information.
 `tests/test_required_jobs.py` holds the split, because a matrix grows by one
 line and nobody re-measures.
 
+**PyPy is a build lane, not a suite.** The release matrix publishes four PyPy
+3.11 wheels and nothing on a push linked against PyPy until 0.0.10 broke there:
+`cpyext` carries the limited API and not every static type object CPython
+exports, so an extension naming one links on CPython and fails at `import` on
+PyPy — after the release, since the smoke jobs run on CPython. The `pypy import`
+job builds the extension against PyPy and runs
+`scripts/pypy_import_check.py`, which imports it and builds the annotation forms
+whose compilation reaches a type object. What each form *means* is held by the
+suites, on CPython, against every interpreter the matrix carries; this lane
+holds the *link*, which is the only property that differs there.
+
 **The full sweeps are scheduled, and a diff-scoped one is not.** A full sweep is
 minutes of rebuilds and does not belong on a push, so a regression it catches is
 visible the night after. The core's full sweep runs sharded, as the diff sweep
