@@ -513,6 +513,14 @@ multiplies too: a union of four records at depth three, minus a union of its
 siblings, spends **345
 milliseconds** and then *refuses*, because the result exceeded the line bound.
 
+A question about a base is **read** rather than built. Lowering a refinement
+asks whether the base lies within a handful of kinds, and the components answer
+that one at a time and in place; constructing the complement of a union of those
+kinds and meeting the base with it gives a descriptor whose only use is to be
+tested for emptiness, and it costs two thirds of the relation matrix. Measured
+both ways on the instruction gate, the read is **51% of the whole workload**
+cheaper, with every checksum unchanged.
+
 That last number is the shape of the problem. `MAX_LINES`, `MAX_ATOMS` and
 `MAX_STATES` -- rows in the table of every bound in the tree
 ([00-architecture.md](00-architecture.md)) -- bound the descriptor a build may

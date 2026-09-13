@@ -223,6 +223,17 @@ gate -- a fifty-field record refused at the thirty-second position costs 14,861
 instructions where it cost 23,516. What is left of the gap is one extra walk of
 the fields *after* the failure, and the exception.
 
+**What a closed record costs is the interpreter's own dict lookup.** Profiled
+under callgrind on CPython 3.12, fifty probes of a fifty-field record are about
+143 instructions each and 64% of the accepting call; on the failing call the
+deciding and explaining walks together make fifty-one probes for fifty fields,
+the one repeat being the field that failed. The obvious alternative — iterate
+the dict once and resolve each key by name, rather than probe each declared key
+— was measured and is **47.9% dearer**: an iterator step increments two
+refcounts, casts and decodes the key, and hashes it, where a probe on an
+interned key carries its hash already. So the probe is the floor for this shape
+and the walk is at it; the experiment is recorded here rather than re-run.
+
 The scalar shape is absent from the table because it sits near timer resolution:
 the competitive gate measures it at a 32.1 ns median with a spread reaching a
 fifteenth of that, and the ratio it reports — around 5.8x — carries noise the
