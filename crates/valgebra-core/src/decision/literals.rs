@@ -11,6 +11,9 @@
 //! compare two Python objects, which is why every question here ends at
 //! [`LeafRelations`](super::LeafRelations).
 
+use std::borrow::Cow;
+use std::slice;
+
 use crate::ir::{ConstIx, Schema};
 use crate::verdict::Relation;
 
@@ -26,16 +29,24 @@ use super::LeafRelations;
 /// What makes the set question askable: a union carrying one non-literal member
 /// has no set of constants standing for it, and the member walk is then the
 /// only reading.
-pub(super) fn literal_constants(schema: &Schema) -> Option<Vec<ConstIx>> {
+///
+/// Borrowed from the node where the schema is one literal, which is the shape
+/// this is asked about most: the reading that calls it runs on every declined
+/// pair, and a list of one built on the heap to be read once and dropped was
+/// most of what the allocator saw on the relation matrix. A union keeps its
+/// constants inside its member nodes, so there is no slice of indices to
+/// borrow and that one is collected.
+pub(super) fn literal_constants(schema: &Schema) -> Option<Cow<'_, [ConstIx]>> {
     match schema {
-        Schema::Literal(index) => Some(vec![*index]),
+        Schema::Literal(index) => Some(Cow::Borrowed(slice::from_ref(index))),
         Schema::Union(members) if !members.is_empty() => members
             .iter()
             .map(|member| match member {
                 Schema::Literal(index) => Some(*index),
                 _ => None,
             })
-            .collect(),
+            .collect::<Option<Vec<ConstIx>>>()
+            .map(Cow::Owned),
         _ => None,
     }
 }

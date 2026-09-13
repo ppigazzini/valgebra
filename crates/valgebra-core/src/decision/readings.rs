@@ -44,7 +44,11 @@ impl Schema {
         // hundred million calls into the bindings, and six seconds. The oracle
         // can answer the whole question at once where it holds the constants,
         // and declines -- leaving the walk to run -- where it cannot.
-        if let (Some(left), Some(right)) = (literal_constants(self), literal_constants(other))
+        // Each table is read only where the one before it answered: a tuple of
+        // the two builds both, and the second is wasted whenever the first says
+        // this pair is not two tables of constants.
+        if let Some(left) = literal_constants(self)
+            && let Some(right) = literal_constants(other)
             && let Some(answer) = oracle.literal_sets_disjoint(&left, &right)
         {
             return answer;

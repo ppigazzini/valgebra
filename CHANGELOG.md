@@ -14,6 +14,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - perf: a meet builds its components rather than cloning them to overwrite -- internal
+- perf: a second table of constants is read only where the first answers -- internal
 
 -->
 
