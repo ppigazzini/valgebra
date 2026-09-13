@@ -28,7 +28,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "docs" / "dev" / "02-decision.md"
-TRAIT = ROOT / "crates" / "valgebra-core" / "src" / "decision.rs"
+TRAIT = ROOT / "crates" / "valgebra-core" / "src" / "decision" / "oracle.rs"
+#: The structural rules, where a pair no rule decides is handed to the
+#: readings that refute.
+RULES = ROOT / "crates" / "valgebra-core" / "src" / "decision.rs"
 SWEEP = ROOT / ".cargo" / "mutants.toml"
 
 # This file reads the tree rather than the library: it holds a shipped page to
@@ -174,12 +177,12 @@ def test_every_reading_the_page_names_exists() -> None:
     it is still true. Six readings reached `decision.rs` in one day without the
     page; this is what keeps the page from drifting the other way afterwards.
     """
-    source = TRAIT.read_text(encoding="utf-8")
+    source = RULES.read_text(encoding="utf-8")
     named = _readings()
     assert len(named) >= 5, f"the refutation section lists only {named}"
     missing = [name for name in named if f"fn {name}(" not in source]
     assert not missing, (
-        f"{PAGE.name} names {missing}, which `decision.rs` does not define"
+        f"{PAGE.name} names {missing}, which `{RULES.name}` does not define"
     )
 
 
@@ -190,7 +193,7 @@ def test_every_rule_that_refutes_is_on_the_page() -> None:
     handed to the readings that refute -- so its body is the list, and the page
     is held to it rather than to a count someone maintains.
     """
-    source = TRAIT.read_text(encoding="utf-8")
+    source = RULES.read_text(encoding="utf-8")
     body = source[source.index("    fn unstructured(") :]
     body = body[: body.index("\n    }\n")]
     asked = set(re.findall(r"self\.([a-z_]+)\([^)]*\)\s*\{", body))

@@ -11,7 +11,8 @@ it decides.
 `crates/valgebra-core/src/decision.rs` is the **fast path**. It recurses over the
 schema tree, matching shapes and applying rules, with one module per surface
 beside it: `decision/emptiness.rs` for the three-valued verdict every relation
-reduces to, `decision/constraints.rs` for a refinement's bounds,
+reduces to, `decision/oracle.rs` for the questions only the bindings can
+answer, `decision/constraints.rs` for a refinement's bounds,
 `decision/products.rs` for sequences split across a union,
 `decision/records.rs` for keyed maps and attribute records, and
 `decision/literals.rs` for tables of constants. It answers first, and the
