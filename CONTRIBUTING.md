@@ -91,6 +91,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | Rust lint policy | `Cargo.toml` `[workspace.lints]` | `cargo clippy --all-targets --all-features -- -D warnings` |
 | Rust behaviour | `crates/` | `cargo test` |
 | Rust documentation links | the doc comments in `crates/` | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` |
+| the extension links on PyPy | `crates/valgebra-py/src/` | `uv run --python pypy-3.11 python scripts/pypy_import_check.py` |
 | the walk's own corpus | `crates/valgebra-py/src/check/walk.rs` | `cargo test -p valgebra-py --features interpreter-tests` |
 | the detached fuzz surface | `fuzz/Cargo.toml` | `cargo check --manifest-path fuzz/Cargo.toml --all-targets` |
 | fuzz harness laws | `fuzz/src/lib.rs` | `cargo +nightly test --manifest-path fuzz/Cargo.toml --lib` |

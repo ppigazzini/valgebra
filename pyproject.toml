@@ -148,6 +148,11 @@ ignore = [
 # Maintenance scripts run subprocesses (tools resolved from PATH) and print
 # progress.
 "scripts/**" = ["INP001", "S603", "S607", "T201"]
+# The PyPy link check builds the *legacy* typing spellings on purpose: telling
+# `typing.List` from `list[...]` is what reached for the type object it exists
+# to guard, so the rules that modernise those spellings would rewrite the check
+# into one that compares a form against itself. Which they did, once.
+"scripts/pypy_import_check.py" = ["INP001", "T201", "UP006", "UP007", "UP035", "UP045"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["valgebra"]

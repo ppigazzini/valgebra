@@ -412,6 +412,41 @@ jobs:
       # a stale snippet.
       - run: uv run python scripts/run_doc_examples.py
 
+  pypy-abi:
+    name: pypy import
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The extension is built for PyPy and published for it, and nothing on a
+    # push built one: the wheel matrix lives in the release workflow, which runs
+    # on a dispatch. So a type object PyPy's `cpyext` does not export could
+    # land, pass every lane here, and surface as an `undefined symbol` at
+    # *import* inside a release build -- which is what `Py_GenericAliasType`
+    # did, on the wheel job of a release that had already been prepared.
+    #
+    # This is that build, minus the matrix and the profiling: one wheel, and an
+    # import that exercises the schema forms most likely to reach a type object
+    # the limited API does not carry. A *link* check rather than a suite; what
+    # the suites cover is covered on CPython.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "pypy-3.11"
+      - name: Build the extension for PyPy and import it
+        run: |
+          uv venv --python pypy-3.11 .pypy
+          VIRTUAL_ENV=.pypy uv pip install maturin
+          VIRTUAL_ENV=.pypy .pypy/bin/maturin build --release --out dist-pypy \
+            -i "$(uv python find pypy-3.11)"
+          VIRTUAL_ENV=.pypy uv pip install --no-index dist-pypy/*.whl
+          .pypy/bin/python scripts/pypy_import_check.py
+
   docs:
     name: docs
     runs-on: ubuntu-latest
@@ -1468,6 +1503,7 @@ jobs:
         bench-free-threaded,
         wheel,
         fuzz-build,
+        pypy-abi,
         mutants-diff-core,
         mutants-diff-walk,
         cargo-deny,
@@ -1500,6 +1536,7 @@ jobs:
           needs.rust-test.result != 'success' ||
           needs.rust-msrv.result != 'success' ||
           needs.rust-doc.result != 'success' ||
+          needs.pypy-abi.result != 'success' ||
           needs.rust-coverage.result != 'success' ||
           needs.binding-coverage.result != 'success' ||
           needs.python.result != 'success' ||

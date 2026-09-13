@@ -166,6 +166,17 @@ struct Forms {
     union: Py<PyAny>,
     optional: Py<PyAny>,
     union_type: Py<PyAny>,
+    /// `types.GenericAlias`, the runtime class of `list[int]` and of every
+    /// other PEP 585 parametrization.
+    ///
+    /// Looked up here rather than through `pyo3::types::PyGenericAlias`, whose
+    /// type object is the `CPython` C-API static `Py_GenericAliasType`. That
+    /// symbol is not part of the limited API and `PyPy`'s `cpyext` does not
+    /// export it, so naming it makes the extension fail to *load* there --
+    /// `undefined symbol`, at import, before any schema is built. Every other
+    /// form this cache holds is read the same way, from the module that
+    /// defines it, and those load everywhere.
+    generic_alias: Py<PyAny>,
     literal: Py<PyAny>,
     object: Py<PyAny>,
     enum_class: Py<PyAny>,
@@ -193,6 +204,7 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             union: typing.getattr("Union")?.unbind(),
             optional: typing.getattr("Optional")?.unbind(),
             union_type: py.import("types")?.getattr("UnionType")?.unbind(),
+            generic_alias: py.import("types")?.getattr("GenericAlias")?.unbind(),
             literal: typing.getattr("Literal")?.unbind(),
             object: builtins.getattr("object")?.unbind(),
             enum_class: py.import("enum")?.getattr("Enum")?.unbind(),
@@ -269,8 +281,9 @@ pub(crate) fn build_schema(
         // parametrization with no arguments. Both have no type arguments, which
         // is why `typing.Tuple` came out as `tuple[()]`, the empty tuple, and
         // `typing.List` was refused for wanting exactly one.
+        let parametrized = obj.is_instance(forms.generic_alias.bind(py))?;
         if args.is_empty()
-            && !obj.is_instance_of::<pyo3::types::PyGenericAlias>()
+            && !parametrized
             && let Ok(class) = origin.cast::<PyType>()
         {
             return build_type_object(class, lits, defs);

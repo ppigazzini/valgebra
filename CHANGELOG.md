@@ -659,6 +659,20 @@ each is written out below.
 
 ### Fixed
 
+- **The extension imports on PyPy again.** Telling a bare legacy alias
+  (`typing.List`) from a parametrization with no arguments reached for
+  `types.GenericAlias` through a binding whose type object is a CPython C-API
+  static. That symbol is not part of the limited API and PyPy's `cpyext` does
+  not export it, so the wheel built for PyPy failed to *load* — an
+  `undefined symbol` at import, before any schema was built. The class is read
+  from the `types` module instead, which is where every other special form this
+  frontend recognises is already read from, and which PyPy carries.
+
+  Only the PyPy wheels were affected; every CPython wheel imported and behaved
+  the same throughout. A CI job now builds the extension for PyPy and imports
+  it on every push, so the next such symbol fails there rather than in a
+  release build.
+
 - A relation is refuted only where the subject of *that* comparison has a
   value, at every level of it. A container's rule carries its element's
   refutation up, and the reading that says whether a refutation is a claim was
