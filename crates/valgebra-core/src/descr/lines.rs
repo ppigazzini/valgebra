@@ -29,8 +29,8 @@ use super::records::RecordLattice;
 use super::{Component, Descr, Op};
 use std::borrow::Cow;
 
-use crate::Kind;
-use crate::decision::Verdict;
+use crate::kind::Kind;
+use crate::verdict::Verdict;
 
 /// The most lines one kind may carry.
 ///

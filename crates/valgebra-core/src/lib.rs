@@ -16,15 +16,19 @@ use std::sync::atomic::{AtomicU64, Ordering};
 mod decision;
 pub mod descr;
 mod ir;
+mod kind;
 mod simplify;
+mod verdict;
 mod violation;
 
-pub use decision::{Kind, LeafRelations, NoLeafRelations, Relation, Verdict};
+pub use decision::{LeafRelations, NoLeafRelations};
 pub use ir::{
     ClassIx, Clauses, CollKind, ConstIx, Constraint, Constraints, DefIx, DefShift, Field, Fields,
     Guarded, MapClause, Members, Openness, OperandIx, PathSegment, PoolShift, PredIx, Schema,
     SeqKind, SeqShape, Spelling, pruned,
 };
+pub use kind::Kind;
+pub use verdict::{Relation, Verdict};
 pub use violation::Violation;
 
 /// Fresh tokens for the transient [`Schema::SelfRef`] marker, so no two

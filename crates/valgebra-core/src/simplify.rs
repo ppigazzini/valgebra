@@ -4,9 +4,10 @@
 use std::sync::Arc;
 
 use crate::decision::{
-    NoLeafRelations, Region, Regions, has_complementary_pair, has_disjoint_pair, unordered_pairs,
+    NoLeafRelations, has_complementary_pair, has_disjoint_pair, unordered_pairs,
 };
 use crate::ir::{Constraint, Schema, share_members, share_node, with_member_buffer};
+use crate::kind::{Region, Regions};
 
 #[cfg(test)]
 thread_local! {

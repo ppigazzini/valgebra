@@ -15,7 +15,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::decision::Kind;
+use crate::kind::Kind;
 
 /// One class, with the order it stands in.
 ///

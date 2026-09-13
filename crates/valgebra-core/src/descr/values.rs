@@ -8,7 +8,7 @@
 //! automaton does with its else edge.
 
 use super::symbolic::Guard;
-use crate::decision::Verdict;
+use crate::verdict::Verdict;
 
 /// A set of values: every one, or the ones a guard holds.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

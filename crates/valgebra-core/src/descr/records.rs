@@ -34,7 +34,7 @@ use super::classes::Class;
 use super::symbolic::Guard;
 use super::values::{Field, Values};
 use crate::Kind;
-use crate::decision::Verdict;
+use crate::verdict::Verdict;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The most atoms a union may hold.
@@ -459,10 +459,10 @@ fn tidy<G: Guard>(atoms: Vec<Atom<G>>) -> Option<Vec<Atom<G>>> {
 #[cfg(test)]
 mod tests {
     use super::{MAX_ATOMS, RecordLattice};
-    use crate::decision::Verdict;
     use crate::descr::budget;
     use crate::descr::classes::Class;
     use crate::descr::integers::IntSet;
+    use crate::verdict::Verdict;
     use proptest::prelude::*;
 
     /// A meet past the build's allowance refuses, and the same meet succeeds

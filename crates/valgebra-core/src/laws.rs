@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::decision::{DECISION_BUDGET, Kind, LeafRelations, NoLeafRelations, Relation};
+use crate::decision::{DECISION_BUDGET, LeafRelations, NoLeafRelations};
 use crate::descr::classes::Class;
 use crate::descr::lower::{Constants, Operand};
+use crate::kind::Kind;
+use crate::verdict::Relation;
 use proptest::prelude::*;
 
 /// A small schema generator: atoms combined by union, intersection, and

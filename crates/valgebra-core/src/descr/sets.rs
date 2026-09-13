@@ -24,7 +24,7 @@
 
 use super::symbolic::Guard;
 use super::values::Values;
-use crate::decision::Verdict;
+use crate::verdict::Verdict;
 
 /// The most lines a union may hold.
 ///

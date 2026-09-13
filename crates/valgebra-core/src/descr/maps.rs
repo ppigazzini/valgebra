@@ -43,7 +43,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::budget;
 use super::symbolic::Guard;
 use super::values::{Field, Values};
-use crate::decision::{Kind, Verdict};
+use crate::kind::Kind;
+use crate::verdict::Verdict;
 
 /// The most atoms a union may carry.
 ///
@@ -710,9 +711,10 @@ fn tidy<G: Guard>(atoms: Vec<MapAtom<G>>) -> Option<Vec<MapAtom<G>>> {
 #[cfg(test)]
 mod tests {
     use super::{Entry, KEY_KINDS, Label, MAX_ATOMS, MapLattice, key_slot};
-    use crate::decision::{Kind, Verdict};
     use crate::descr::budget;
     use crate::descr::integers::IntSet;
+    use crate::kind::Kind;
+    use crate::verdict::Verdict;
 
     /// One dict entry: a `str` key with this text, mapping to this integer.
     fn at(label: &str, value: i64) -> Entry<i64> {

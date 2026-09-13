@@ -39,7 +39,8 @@ pub mod values;
 
 use std::sync::{Arc, OnceLock};
 
-use crate::decision::{Kind, Verdict};
+use crate::kind::Kind;
+use crate::verdict::Verdict;
 use classes::Class;
 use floats::FloatSet;
 use integers::IntSet;

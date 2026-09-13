@@ -25,7 +25,7 @@
 //! why the three spellings need one constructor rather than three nodes.
 
 use super::budget;
-use crate::decision::Verdict;
+use crate::verdict::Verdict;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 

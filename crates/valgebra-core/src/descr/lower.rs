@@ -19,10 +19,10 @@ use super::classes::Class;
 use super::floats::FloatSet;
 use super::maps::{KEY_KINDS, Label};
 use super::{BoolSet, Descr, integers::IntSet};
-use crate::decision::Kind;
 use crate::ir::{
     ClassIx, CollKind, ConstIx, Constraint, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
 };
+use crate::kind::Kind;
 use std::cell::Cell;
 
 /// A pooled value, as far as a descriptor can read one.
@@ -634,13 +634,14 @@ mod tests {
     use std::sync::Arc;
 
     use super::{BUDGET, Bounds, Constants, DEPTH, Operand, lower, lower_within};
-    use crate::decision::{Kind, Verdict};
     use crate::descr::classes::Class;
     use crate::descr::{Descr, Value};
     use crate::ir::{
         ClassIx, ConstIx, Constraint, Field, MapClause, Openness, OperandIx, Schema, SeqKind,
         SeqShape,
     };
+    use crate::kind::Kind;
+    use crate::verdict::Verdict;
 
     /// A pool that answers from a list, which is what the bindings do from the
     /// validator's object table.

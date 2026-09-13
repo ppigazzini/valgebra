@@ -8,7 +8,9 @@ direction their dependencies run, and the two invariants the compiler holds.
 | Zone | Owns | Page |
 |---|---|---|
 | `crates/valgebra-core/src/ir.rs` | the schema IR: the node set, what each node denotes, the sharing of nodes built alike (`ir/intern.rs`), and the rewrites from one node to another (`ir/transform.rs`) | [01-schema-ir.md](01-schema-ir.md) |
+| `crates/valgebra-core/src/kind.rs`, `verdict.rs` | the value-universe partition, its region summary, and the two three-valued answers — the frame both deciders read | [02-decision.md](02-decision.md) |
 | `crates/valgebra-core/src/decision.rs` | emptiness, subtyping, equivalence, disjointness | [02-decision.md](02-decision.md) |
+| `crates/valgebra-core/src/descr/` | the set representation: one component per kind, each closed under the three operations | [02-decision.md](02-decision.md) |
 | `crates/valgebra-py/src/build.rs` | typing annotations and native forms into the IR | [03-frontend.md](03-frontend.md) |
 | `crates/valgebra-py/src/check/` | the membership walk: the dispatcher in `walk.rs`, the leaves in `walk/scalar.rs`, the containers in `walk/record.rs` and `walk/sequence.rs` | [04-walk.md](04-walk.md) |
 | `crates/valgebra-py/src/errors.rs`, `render.rs` | the Python exception and the annotation render | [05-errors.md](05-errors.md) |
@@ -21,6 +23,14 @@ direction their dependencies run, and the two invariants the compiler holds.
 
 `valgebra-py` depends on `valgebra-core`. Nothing depends on `valgebra-py`, which
 is a `cdylib` and has no downstream Rust consumer.
+
+**Inside the core, the definition does not import the optimisation.** The
+descriptor is what a schema's set *is* and the structural rules are an
+optimisation of the relation it defines, so the frame both read — the `Kind`
+partition, its `Region` summary, and the `Verdict`/`Relation` answers — sits in
+`kind.rs` and `verdict.rs` below the pair rather than inside either. The reverse
+edge is allowed and used: `decision.rs` asks `descr::lower` where its own rules
+decline. `tests/test_module_direction.py` holds both halves.
 
 Within the binding, `crates/valgebra-py/src/validator.rs` and
 `crates/valgebra-py/src/build.rs` depend on each other, and that pair is the only

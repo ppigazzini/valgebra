@@ -1,9 +1,9 @@
 use super::{BoolSet, Class, Component, Descr, Label, Lines, Op, Value, Verdict};
-use crate::decision::Kind;
 use crate::descr::budget;
 use crate::descr::lines;
 use crate::descr::records::RecordLattice;
 use crate::descr::symbolic::{Edge, Guard};
+use crate::kind::Kind;
 use core::mem::size_of;
 use proptest::prelude::*;
 use std::sync::{Arc, LazyLock};
