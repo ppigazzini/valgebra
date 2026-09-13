@@ -181,7 +181,8 @@ impl Regions {
 ///
 /// Public because the core cannot see a Python object: a `Literal`'s kind is a
 /// fact about a pooled constant, which only the bindings can read, and they
-/// answer in this vocabulary through [`LeafRelations::literal_kind`].
+/// answer in this vocabulary through
+/// [`LeafRelations::literal_kind`](crate::LeafRelations::literal_kind).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Kind {
     /// `None`.
