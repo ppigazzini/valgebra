@@ -113,6 +113,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an integer set is ordered by the table it carries -- internal
 - fix: a plain class names no value of a builtin kind -- internal
 - fix: a union covers the universe behind a member the partition cannot read -- internal
+- fix: a doc link that crossed the split names the item where it lives -- internal
 - perf: a parsed object's keys are strings, so a clause reads its values alone
 - perf: a field lookup asks one ordering question, and asks about order only on a miss -- internal
 - perf: a shared handle is probed and stored under one borrow -- internal

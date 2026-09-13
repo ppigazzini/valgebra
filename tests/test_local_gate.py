@@ -63,7 +63,7 @@ def _merge_gate_steps() -> list[tuple[str, str]]:
     return [
         (job, name)
         for job in gate.required_jobs(spec)
-        for name, _ in gate.steps(spec, job)
+        for name, _, _ in gate.steps(spec, job)
     ]
 
 

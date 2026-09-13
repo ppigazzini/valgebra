@@ -219,13 +219,32 @@ def required_jobs(spec: dict) -> list[str]:
     ]
 
 
-def steps(spec: dict, job: str) -> Iterator[tuple[str, str]]:
-    """Yield the `(name, command)` of every `run:` step of `job`, in order."""
+def steps(spec: dict, job: str) -> Iterator[tuple[str, str, dict[str, str]]]:
+    """Yield the `(name, command, env)` of every `run:` step of `job`, in order.
+
+    The step's own environment comes with it, and dropping it is not a detail.
+    A step that denies warnings does so through `RUSTDOCFLAGS`, so a gate that
+    ran the command without it ran a command that *cannot fail*: `cargo doc`
+    reports a broken intra-doc link as a warning and exits zero. That is a step
+    modelled here and green here while red on the runner, which is the one
+    outcome this script exists to prevent.
+
+    A value only a runner can answer is dropped, as the job's own environment
+    already drops one. Those are the tokens and event fields a step reads when
+    it has them -- the workflow audit takes a `GH_TOKEN` for its online checks
+    and runs without one -- rather than the flags that decide whether a command
+    can fail at all, which are written in the workflow as literals.
+    """
     for step in spec["jobs"][job].get("steps", []):
         command = step.get("run")
         if command is None:
             continue  # a `uses:` step: an action, not a command
-        yield step.get("name", command.strip().splitlines()[0]), command
+        env = {
+            key: str(value)
+            for key, value in (step.get("env") or {}).items()
+            if "${{" not in str(value)
+        }
+        yield step.get("name", command.strip().splitlines()[0]), command, env
 
 
 def runnable(name: str) -> bool:
@@ -352,7 +371,7 @@ def build_plan(spec: dict, jobs: list[str]) -> tuple[list[Step], list[str]]:
             for key, value in (spec["jobs"][job].get("env") or {}).items()
             if "${{" not in str(value)
         }
-        for name, command in steps(spec, job):
+        for name, command, step_env in steps(spec, job):
             if not runnable(name):
                 continue
             filled = resolved(command, workflow_env)
@@ -361,11 +380,11 @@ def build_plan(spec: dict, jobs: list[str]) -> tuple[list[Step], list[str]]:
                 continue
             if name in NETWORK:
                 filled = NETWORK[name][1]
-            plan.append((job, name, filled, job_env))
+            plan.append((job, name, filled, {**job_env, **step_env}))
     plan += [
         (job, f"{name} (the part that runs here)", command, {})
         for job in jobs
-        for name, _ in steps(spec, job)
+        for name, _, _ in steps(spec, job)
         if name in STANDINS
         for command, _ in [STANDINS[name]]
     ]
@@ -437,7 +456,7 @@ def show_plan(
     for step in unresolved:
         print(f"skip  {step} -- carries an expression only a runner answers")
     for job in jobs:
-        for name, _ in steps(spec, job):
+        for name, _, _ in steps(spec, job):
             if not runnable(name):
                 print(f"skip  {job}: {name} -- {NEEDS_A_RUNNER[name]}")
                 if name in STANDINS:
