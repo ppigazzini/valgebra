@@ -257,6 +257,30 @@ def shallow_clone(into: Path) -> Path:
     return tree
 
 
+#: The one job in the python matrix that checks out the whole history, and the
+#: steps of it a shallow clone cannot run.
+#:
+#: `ci.yml` gives `fetch-depth: 0` to exactly one matrix entry -- ubuntu on the
+#: floor interpreter -- so seven of the eight run against a checkout with no tags
+#: and one runs against a checkout with all of them. The clone below models the
+#: seven. The tests that read the history *skip* where there is no tag to measure
+#: from, which is the right behaviour and also means the gate could not see them
+#: fail: a commit message naming the internal working area passed here and failed
+#: there, twice, before this was added.
+#:
+#: So these run in the caller's own tree, which has the tags a full checkout has.
+#: They read git and touch nothing, which is what makes that safe.
+DEEP_HISTORY_STEPS = (
+    (
+        "python (fetch-depth: 0)",
+        "Checks that read the history, in a tree that has one",
+        (
+            "uv run --no-sync pytest -q tests/test_commit_messages.py "
+            "tests/test_changelog_ledger.py"
+        ),
+    ),
+)
+
 #: `${{ env.NAME }}`, the one expression a step's command may carry that this
 #: can resolve: the workflow's own `env:` block is in the file being read.
 ENV_EXPRESSION = re.compile(r"\$\{\{\s*env\.(\w+)\s*\}\}")
@@ -462,6 +486,14 @@ def main() -> int:
             for job, name, command, environment in plan
             if not run_step(f"{job}: {name}", command, tree, environment)
         ]
+        # And the steps the clone is the wrong shape for, in the tree that is
+        # the right one. Skipped under `--here`, where the clone is that tree.
+        if not args.here:
+            failures += [
+                f"{job}: {name}"
+                for job, name, command in DEEP_HISTORY_STEPS
+                if not run_step(f"{job}: {name}", command, ROOT, {})
+            ]
     finally:
         if holder is not None:
             shutil.rmtree(holder, ignore_errors=True)
@@ -470,7 +502,11 @@ def main() -> int:
     if failures:
         print(f"gate: {len(failures)} step(s) failed: {', '.join(failures)}")
         return EXIT_FAIL
-    print(f"gate: {len(plan)} step(s) passed in a clone shaped like the runner's.")
+    deep = 0 if args.here else len(DEEP_HISTORY_STEPS)
+    print(
+        f"gate: {len(plan) + deep} step(s) passed in a clone shaped like the "
+        "runner's, and in this tree where the runner keeps its history."
+    )
     return EXIT_OK
 
 
