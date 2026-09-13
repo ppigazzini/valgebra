@@ -946,10 +946,16 @@ mod tests {
 
     /// Sharing is by construction, so a child built through the table is the
     /// same child in both parents and the parents are one node in turn.
+    ///
+    /// Over a leaf chosen clear of its own nesting, for the reason
+    /// [`nesting_built_twice`] carries: a node is hashed by the address of the
+    /// handles it holds, so a fixed leaf collides with the nesting around it in
+    /// some processes and not others, and where it does the inner build evicts
+    /// the outer. That is the table's own bound doing what it says, and this
+    /// row is about sharing.
     #[test]
     fn sharing_a_child_shares_the_parent_over_it() {
-        let one = node(Schema::Complement(node(Schema::Float)));
-        let two = node(Schema::Complement(node(Schema::Float)));
+        let (one, two) = nesting_built_twice(&|inner| Schema::Complement(inner));
         assert!(Arc::ptr_eq(&one, &two));
     }
 }
