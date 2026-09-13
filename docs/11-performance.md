@@ -359,13 +359,17 @@ goals repeat, since a proof, a refutation and a repeated goal walk three
 different paths and a workload that asks only one of them measures only that
 one. The binding's shapes are the membership walk over a live value, the call
 boundary alone, a wide record closed and the same record open the way a
-`TypedDict` is, building a validator, and explaining a failure
-(`crates/valgebra-py/examples/binding_workload.rs`): the walk is the shipped hot
-path neither pure-Rust workload reaches, schema construction grew twelve percent
-over a release cycle while only the walk was counted, and an open record was
-read a third dearer than a closed one while only the closed one was. Each binding shape
-embeds CPython, whose startup is not a fixed count, so the gate measures the
-difference between two iteration counts.
+`TypedDict` is, building a validator from its Python spelling, and explaining
+a failure (`crates/valgebra-py/examples/binding_workload.rs`): the walk is the
+shipped hot path neither pure-Rust workload reaches, schema construction grew
+twelve percent over a release cycle while only the walk was counted, and an open
+record was read a third dearer than a closed one while only the closed one was.
+Each binding shape embeds CPython, whose startup is not a fixed count, so the
+gate measures the difference between two iteration counts. What a shape's loop
+holds is part of what its count means: the build shape once assembled its fifty
+fields in Rust inside the loop, so three quarters of its count was the harness
+naming them and none of it was the annotation walk, and a shape is read for that
+before its number is read for anything.
 
 One thing an embedded interpreter brings with it is its **string hash seed**,
 drawn per process; a shape that probes a dict of string keys executes a

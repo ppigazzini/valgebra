@@ -24,7 +24,7 @@ mod validator;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyTuple};
+use pyo3::types::{PyDict, PyInt, PyList, PyTuple};
 use valgebra_core::{
     DefIx, Field, Guarded, MapClause, Schema, SeqKind, SeqShape, fresh_self_token,
 };
@@ -73,14 +73,17 @@ pub enum BindingShape {
     /// and the path that resolves each key through the plan built with the
     /// validator rather than through the walk.
     Record,
-    /// Building a fifty-field record schema and its validator: the twin of
-    /// `build`.
+    /// Building a fifty-field record validator from its Python spelling: the
+    /// twin of `build`.
     ///
-    /// The core's construction, not the frontend's: it assembles the fields
-    /// directly rather than reading a Python annotation, so it counts the
-    /// canonical form being imposed -- fields ordered, clauses deduplicated --
-    /// and the validator's own index, without the annotation walk in front of
-    /// them. That is the half of `build` this crate can change.
+    /// The whole of what `Validator({"f0": int, ...})` does after the call
+    /// lands: the annotation walk over the dict, the canonical form it imposes
+    /// -- fields ordered, clauses deduplicated -- and the validator's own
+    /// index. The spelling is built once, outside the loop, so the count is
+    /// of reading it and of nothing the harness does to write it. An earlier
+    /// form assembled the fields in Rust inside the loop, and three quarters
+    /// of what it counted was the harness formatting fifty names and filling
+    /// a dict per iteration, with the annotation walk in none of it.
     Build,
     /// The explaining walk over a fifty-field record with one bad field, read
     /// to the end: the twin of `error_report`, and the only shape here that
@@ -166,6 +169,19 @@ fn open_record(py: Python<'_>) -> (Schema, Py<PyAny>) {
     (Schema::keyed_map(fields, vec![any_str_key]), value)
 }
 
+/// The fifty-field record as the comparison gate spells it to `Validator`:
+/// `{"f0": int, ..., "f49": int}`.
+fn wide_spelling(py: Python<'_>) -> Bound<'_, PyDict> {
+    let int = py.get_type::<PyInt>();
+    let spelling = PyDict::new(py);
+    for i in 0..50 {
+        spelling
+            .set_item(format!("f{i}"), &int)
+            .expect("a fresh dict of fifty type objects always builds");
+    }
+    spelling
+}
+
 fn wide_fields(py: Python<'_>) -> (Vec<Field>, Py<PyAny>) {
     let fields: Vec<Field> = (0..50)
         .map(|i| Field {
@@ -248,11 +264,19 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             checksum
         }
         BindingShape::Build => {
+            let spelling = wide_spelling(py);
             let mut checksum: u64 = 0;
             for _ in 0..iters {
-                let (schema, _) = wide_record(py);
-                let validator =
-                    Validator::new(std::hint::black_box(schema), Vec::new(), Vec::new());
+                let mut literals = Pool::default();
+                let mut definitions = Vec::new();
+                let schema = build_schema(
+                    std::hint::black_box(&spelling).as_any(),
+                    &mut literals,
+                    &mut definitions,
+                )
+                .expect("fifty fields typed `int` always build");
+                let validator = Validator::checked(schema, literals.into_items(), definitions)
+                    .expect("a fifty-field record is within every limit");
                 checksum = checksum.wrapping_add(validator.schema.node_count() as u64);
             }
             checksum

@@ -105,11 +105,13 @@ gate only catches what it exercises:
   `--binding-record`, `--binding-open`, `--binding-build`,
   `--binding-explain`) — membership over a live Python value, the call
   boundary alone, a wide record closed and the same record open the way a
-  `TypedDict` is, building a validator, explaining a failure. The walk is the
-  shipped hot path neither pure-Rust workload reaches; schema construction
-  grew twelve percent over a release cycle while only the walk was counted,
-  and an open record was read a third dearer than a closed one while only the
-  closed one was.
+  `TypedDict` is, building a validator from its Python spelling, explaining a
+  failure. The walk is the shipped hot path neither pure-Rust workload reaches;
+  schema construction grew twelve percent over a release cycle while only the
+  walk was counted, and an open record was read a third dearer than a closed
+  one while only the closed one was. Each shape builds what it reads outside
+  its loop: the build shape once formatted fifty names and filled a dict per
+  iteration, and three quarters of its count was that.
 
 The binding workload embeds CPython, whose startup is not a fixed instruction
 count, so the gate measures the **difference** between two iteration counts:
