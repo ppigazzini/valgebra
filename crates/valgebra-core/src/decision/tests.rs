@@ -65,6 +65,62 @@ fn every_set_is_below_the_universe_however_it_is_spelled() {
     }
 }
 
+/// A union covers the universe whatever sits beside the pair that covers it,
+/// and in whatever order the members are written.
+///
+/// The sibling of the row above, and the same fuzz target found it: `~bool |
+/// bool` is the universe, and the region fold read the same three members as
+/// the universe or as unknown according to where the opaque one fell, because
+/// it stopped at the first member the partition cannot read and nothing behind
+/// that member could reopen the answer. A set of bytes is such a member.
+///
+/// The subject is the one the fuzzer drew, and it matters: it carries a length
+/// bound over an `int` base, which is a refinement the descriptor refuses to
+/// lower, so the second decider cannot answer the pair either and the rules are
+/// the whole of the answer.
+#[test]
+fn a_union_covers_the_universe_behind_a_member_the_partition_cannot_read() {
+    let opaque = Schema::Coll {
+        container: CollKind::Set,
+        element: Arc::new(Schema::Bytes),
+    };
+    let subject = Schema::Complement(Arc::new(Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape {
+            prefix: vec![Schema::Float].into(),
+            tail: Some(Arc::new(Schema::Refine {
+                base: Arc::new(Schema::Int),
+                constraints: vec![Constraint::MinLen(2)].into(),
+            })),
+        },
+    }));
+    let not_bool = Schema::Complement(Arc::new(Schema::Bool));
+
+    for members in [
+        vec![not_bool.clone(), Schema::Bool, opaque.clone()],
+        vec![opaque.clone(), not_bool.clone(), Schema::Bool],
+        vec![not_bool.clone(), opaque.clone(), Schema::Bool],
+    ] {
+        let universe = Schema::Union(members.clone().into());
+        // The premise, read through the other fold: this really is the
+        // universe. A row whose premise fails asserts nothing.
+        assert!(
+            Schema::Complement(Arc::new(universe.clone())).is_empty(),
+            "{members:?} does not cover the universe"
+        );
+        assert!(
+            subject.is_subtype_of(&universe),
+            "{subject:?} is below the universe {members:?}"
+        );
+    }
+
+    // The reading is the *supertype*'s alone, so a union that does not cover
+    // the universe is not swept along with it.
+    let partial = Schema::Union(vec![Schema::Bool, opaque].into());
+    assert!(!Schema::Complement(Arc::new(partial.clone())).is_empty());
+    assert!(!subject.is_subtype_of(&partial));
+}
+
 /// The structural inclusion rules, held to their own work.
 ///
 /// The descriptor is asked after these rules and decides much of what they

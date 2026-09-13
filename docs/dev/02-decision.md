@@ -143,9 +143,26 @@ is the non-empty non-scalar region, not the empty set. A test asserts the six ar
 non-empty and pairwise disjoint, because either half alone is satisfied by a
 region that collapsed to nothing.
 
-Off that fragment a schema's region is `None` — opaque — and every combination
-containing one is opaque too. Literals, instances, refinements,
-content-bearing containers and references are all opaque.
+Off that fragment a schema's region is `None` — opaque. Literals, instances,
+refinements, content-bearing containers and references are all opaque.
+
+A combination holding one is read two ways, and which way depends on what the
+answer is for. The **fast** reading stops at the first opaque member, because it
+is taken of every pair and a union of a thousand literals is a thousand opaque
+members to walk rather than one to stop at. That reading is incomplete in one
+direction: a union carrying a schema beside its own complement covers the
+universe whatever else is in it, and stopping on the "whatever else" misses it —
+so the same three members read as the universe in one order and as unknown in
+another. The **complete** reading walks every member and carries what they name
+between them, which no pairwise step can, and it is asked once, for a pair every
+rule has already declined. A query that decides never pays for it.
+
+The complete reading is also the one the *constructors* take: a union is folded
+to `anything` when its readable members cover every region, ignoring the opaque
+ones for this reason. So a caller cannot spell the shape that separates the two
+— the fold catches it where the schema is built — and what the second reading
+buys is that the decision agrees with the construction for a schema assembled
+any other way, which is what the fuzz target builds.
 
 ## What the core cannot decide alone
 

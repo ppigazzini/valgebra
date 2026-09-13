@@ -112,6 +112,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: the oracle answers what kinds a class can hold -- internal
 - fix: an integer set is ordered by the table it carries -- internal
 - fix: a plain class names no value of a builtin kind -- internal
+- fix: a union covers the universe behind a member the partition cannot read -- internal
 - perf: a parsed object's keys are strings, so a clause reads its values alone
 - perf: a field lookup asks one ordering question, and asks about order only on a miss -- internal
 - perf: a shared handle is probed and stored under one borrow -- internal
@@ -121,7 +122,6 @@ answer of its own, or a repair to a change not yet released.
 - perf: a field no clause of the supertype admits refutes the map -- internal
 - perf: a bound over the integers has a value the oracle names -- internal
 - perf: a class met with its attributes has a value when its fields do -- internal
-- feat: the oracle answers what a direct instance of a class is -- internal
 - perf: a refinement pair the constraints leave unproven is read on -- internal
 - perf: two sequences meet in the sequences of their elements' meet -- internal
 - perf: a sequence with no bound holds the empty one a bound leaves out -- internal

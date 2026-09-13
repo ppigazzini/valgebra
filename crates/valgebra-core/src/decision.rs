@@ -432,6 +432,74 @@ impl Regions {
     }
 }
 
+/// A union or a meet of region sets, folded so that an opaque member cannot
+/// hide one behind it.
+///
+/// [`Regions::union`] takes `Unknown` as absorbing, which is the right reading
+/// of a *pair* and an incomplete one of a list: `~bool | bool` covers the
+/// universe, and a fold that stops at the first member this partition cannot
+/// read misses it whenever that member is written first. So the fold carries
+/// the two things a pairwise step cannot -- the regions the members it *could*
+/// read name between them, and whether any member it could not read went by.
+///
+/// The bound is a **lower** bound under union and an **upper** one under meet,
+/// so an opaque member moves it the way the operation's unit does, which is not
+/// at all; where it reaches the operation's absorbing region no member can move
+/// it either. That is what makes both the early stop and the answer independent
+/// of the order the members are written in.
+struct RegionFold {
+    bound: Region,
+    opaque: bool,
+}
+
+impl RegionFold {
+    /// A union, starting from the regions no member names.
+    const fn union() -> RegionFold {
+        RegionFold {
+            bound: Region::EMPTY,
+            opaque: false,
+        }
+    }
+
+    /// A meet, starting from every region.
+    const fn meet() -> RegionFold {
+        RegionFold {
+            bound: Region::ALL,
+            opaque: false,
+        }
+    }
+
+    /// Read one more member into a union, answering whether the result is
+    /// settled: the bound covers the universe and nothing can add to it.
+    fn joined(&mut self, member: Regions) -> bool {
+        match member {
+            Regions::Known(regions) => self.bound = self.bound.union(regions),
+            Regions::Unknown => self.opaque = true,
+        }
+        self.bound == Region::ALL
+    }
+
+    /// Read one more member into a meet, answering whether the result is
+    /// settled: the bound holds no region and nothing can take one away.
+    fn met(&mut self, member: Regions) -> bool {
+        match member {
+            Regions::Known(regions) => self.bound = self.bound.intersect(regions),
+            Regions::Unknown => self.opaque = true,
+        }
+        self.bound.is_empty()
+    }
+
+    /// What the fold settles on: the bound where it absorbs or where every
+    /// member was read, and opaque where a member could not be.
+    const fn regions(&self, settled: bool) -> Regions {
+        if settled || !self.opaque {
+            Regions::Known(self.bound)
+        } else {
+            Regions::Unknown
+        }
+    }
+}
+
 impl SeqShape {
     /// Whether every sequence this shape admits is also admitted by `other`.
     ///
@@ -713,6 +781,54 @@ impl Schema {
             }
             _ => return Regions::Unknown,
         })
+    }
+
+    /// This schema's regions, read without the early stop
+    /// [`region_set`](Self::region_set) takes at the first opaque member.
+    ///
+    /// The same partition and the same arms; what differs is that a union is
+    /// folded through [`RegionFold`], so a complementary pair behind a member
+    /// this partition cannot read is still seen. That costs a walk of every
+    /// member where the fast reading stops at the first opaque one, and on a
+    /// union of a thousand literals -- every one of them opaque -- the
+    /// difference is the whole of the walk against one step. Which is why the
+    /// fast reading keeps the stop and this one is asked once, by
+    /// [`bounds_the_pair`](Self::bounds_the_pair), for a pair every rule has
+    /// already declined.
+    ///
+    /// It is the reading `simplify::finish_union` already takes -- it folds the
+    /// regions of the members it can read and ignores the rest, "keeping the
+    /// decision independent of grouping" -- so this is the decision agreeing
+    /// with the construction rather than a new claim about a union.
+    fn regions_reading_on(&self) -> Regions {
+        match self {
+            Schema::Union(members) => {
+                let mut fold = RegionFold::union();
+                for member in members.iter() {
+                    if fold.joined(member.regions_reading_on()) {
+                        return fold.regions(true);
+                    }
+                }
+                fold.regions(false)
+            }
+            Schema::Intersection(members) => {
+                let mut fold = RegionFold::meet();
+                for member in members.iter() {
+                    if fold.met(member.regions_reading_on()) {
+                        return fold.regions(true);
+                    }
+                }
+                fold.regions(false)
+            }
+            Schema::Complement(inner) => match inner.regions_reading_on() {
+                Regions::Known(regions) => Regions::Known(regions.complement()),
+                Regions::Unknown => Regions::Unknown,
+            },
+            // Every other shape reads the same either way: the stop is a
+            // property of the two folds over a member list, and nothing else
+            // has one.
+            _ => self.region_set(),
+        }
     }
 
     /// Whether this schema is provably empty — denotes no value. Complete on the
@@ -1336,7 +1452,12 @@ impl Schema {
     ///
     /// The universe side asks whether the complement is empty, which is the same
     /// question one De Morgan step away and needs no separate procedure.
-    fn bounds_the_pair(&self, supertype_regions: Regions, cx: SubtypeCx<'_>) -> bool {
+    fn bounds_the_pair(
+        &self,
+        other: &Schema,
+        supertype_regions: Regions,
+        cx: SubtypeCx<'_>,
+    ) -> bool {
         // `other` covers the universe exactly when its region set is the whole
         // partition. The set is the caller's -- `is_subtype_rec` reads it for the
         // exact scalar rule and nothing between there and here changes `other` --
@@ -1346,7 +1467,22 @@ impl Schema {
         if supertype_regions == Regions::Known(Region::ALL) {
             return true;
         }
-        self.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget)
+        if self.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget) {
+            return true;
+        }
+        // The regions again, read without the stop the fast fold takes at the
+        // first opaque member. `~bool | bool` covers the universe and so does
+        // the same union with a set beside it, which the fast reading declines
+        // because it stops on the set and a member behind it cannot reopen the
+        // answer -- so the same three members read as the universe in one order
+        // and as unknown in another. A fuzz run found the pair that shows it.
+        //
+        // Reading on is what the fast fold cannot afford: it is asked of every
+        // pair, and a union of a thousand literals is a thousand opaque members
+        // to walk rather than one to stop at. Here the pair has had every rule
+        // and none of them answered, so the walk is spent on a query that was
+        // going to be declined, and a query that decides never reaches it.
+        other.regions_reading_on() == Regions::Known(Region::ALL)
     }
 
     /// Whether `self` and `other` share no value, which is what decides `self ⊆
@@ -1577,7 +1713,7 @@ impl Schema {
             return Relation::Holds;
         }
         let answer = self.subtype_by_shape(other, cx, assumptions);
-        self.or_bounded(answer, supertype_regions, cx)
+        self.or_bounded(answer, other, supertype_regions, cx)
     }
 
     /// The arms that match a pair by the shapes on its two sides.
@@ -1733,11 +1869,14 @@ impl Schema {
     fn or_bounded(
         &self,
         answer: Relation,
+        other: &Schema,
         supertype_regions: Regions,
         cx: SubtypeCx<'_>,
     ) -> Relation {
         match answer {
-            Relation::Unknown if self.bounds_the_pair(supertype_regions, cx) => Relation::Holds,
+            Relation::Unknown if self.bounds_the_pair(other, supertype_regions, cx) => {
+                Relation::Holds
+            }
             answer => answer,
         }
     }
