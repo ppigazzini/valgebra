@@ -366,6 +366,19 @@ asked first and the descriptor second. On the shapes reachable today the nesting
 bound refuses before the work allowance does, so the allowance is what remains
 for a schema that is shallow and wide.
 
+**The two orders of magnitude are per relation, and a query is not one
+relation.** On the workload whose shapes reach the descriptor at all
+(`scripts/perf_gate.py --decision-matrix`, 107 million instructions) the
+instructions divide the other way: about two thirds inside the rules and under a
+third inside the lowering. No reading there is dear -- a disjointness is around
+forty instructions and a region set around seventeen -- and they are asked
+hundreds of thousands of times per run, because the meet rule and the union rule
+each distribute the pair and every leaf of that tree reads both sides' regions
+and, where it declines, the readings beside them. The descriptor is the dear
+answer and the rare one; the rules are the cheap answer asked constantly, and a
+change to either is measured on that workload rather than argued from this
+ratio.
+
 ## The budget, and what exhausting it means
 
 Subtyping distributes over unions and intersections; emptiness recurses the

@@ -94,12 +94,20 @@ VIRTUAL_ENV=/tmp/vg uv pip install --index-url https://test.pypi.org/simple/ "va
 Then run the suite against the installed wheel rather than a local build. Nothing
 puts `python/` on the path, so the tests import whichever `valgebra` the
 environment holds — install the dev group's test dependencies into the same
-environment first (`pyproject.toml` owns that list), then, from the repository
-root:
+environment first, **from PyPI and in their own install**:
 
 ```bash
+VIRTUAL_ENV=/tmp/vg uv pip install --group dev   # from the repository root
 /tmp/vg/bin/python -m pytest -q
 ```
+
+The separate install is the point, and the reason is what the first attempt at
+it did: the test dependencies are not the package under test, and resolving them
+against TestPyPI serves whatever was last uploaded there by anyone — a 2023
+`syrupy` and a `pytest` 7.4.4, which refused to start. Only valgebra comes from
+the index being checked; everything else comes from PyPI, where it comes from in
+every other environment. The group is read from `pyproject.toml` rather than
+listed here, so it cannot drift from the one the lanes install.
 
 A test that needs a dependency the environment lacks skips rather than fails, so
 read the skip list: a suite whose oracles are absent has checked less than the
@@ -127,6 +135,14 @@ The per-version JSON endpoint (`/pypi/valgebra/X.Y.Z/json`) also answers with th
 file list before the aggregate `/pypi/valgebra/json` stops naming the previous
 release as the latest, so disagreement between those two is propagation and not a
 failure.
+
+**The simple index lags the JSON API, and the simple index is what a resolver
+reads.** 0.0.10 was answered in full by `/pypi/valgebra/0.0.10/json` — fifty
+files — while `uv pip install` still reported no such version, because the
+simple listing had not caught up. That is the same message a failed upload
+gives, so read the simple index itself (the `curl` above) before believing
+either, and if it is the one that is behind, wait and retry rather than
+re-dispatching the publish.
 
 The interpreter is part of what is being checked, not a detail of the check. The
 extension module is built per interpreter version rather than against the stable
