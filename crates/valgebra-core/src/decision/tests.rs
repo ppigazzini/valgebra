@@ -4,6 +4,7 @@ use super::*;
 use crate::descr::classes::Class;
 use crate::descr::lower::Operand;
 use crate::ir::Openness;
+use crate::ir::{Field, MapClause};
 
 /// The structural inclusion procedure alone, with no descriptor beside it.
 ///

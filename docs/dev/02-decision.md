@@ -9,7 +9,11 @@ complement; and `a <= b` is `a & ~b` admitting no value. Everything it can hold,
 it decides.
 
 `crates/valgebra-core/src/decision.rs` is the **fast path**. It recurses over the
-schema tree, matching shapes and applying rules. It answers first, and the
+schema tree, matching shapes and applying rules, with one module per surface
+beside it: `decision/constraints.rs` for a refinement's bounds,
+`decision/products.rs` for sequences split across a union,
+`decision/records.rs` for keyed maps and attribute records, and
+`decision/literals.rs` for tables of constants. It answers first, and the
 descriptor answers where it declines -- where it *declines*, not where it says
 no: a schema the rules prove inhabited is not lowered, because a sound second
 reading cannot overturn a proof and lowering one determinises automata and takes
