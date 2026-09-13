@@ -455,8 +455,7 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
     // smaller set has a larger complement, which is a subtype proof no value
     // supports.
     let integers = |set: IntSet| {
-        let numbers = Descr::of_kind(Kind::Int).union(&Descr::of_kind(Kind::Bool))?;
-        if !base.intersect(&numbers.complement())?.is_empty() {
+        if !base.within(&[Kind::Int, Kind::Bool]) {
             return None;
         }
         let mut descr = Descr::nothing();
@@ -482,10 +481,7 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
     // complement. `nan` is outside every interval, which is what `FloatSet`'s
     // constructors already say and what Python's own comparisons do.
     let floats = |set: FloatSet| {
-        if !base
-            .intersect(&Descr::of_kind(Kind::Float).complement())?
-            .is_empty()
-        {
+        if !base.within(&[Kind::Float]) {
             return None;
         }
         let mut descr = Descr::nothing();
@@ -506,9 +502,7 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
         Some(Operand::Integer(value)) => Some(value as f64),
         _ => None,
     };
-    let base_is_floats = base
-        .intersect(&Descr::of_kind(Kind::Float).complement())
-        .is_some_and(|rest| rest.is_empty());
+    let base_is_floats = base.within(&[Kind::Float]);
     match constraint {
         Constraint::Ge(index) | Constraint::Gt(index) if base_is_floats => {
             let bound = as_float(index)?;
@@ -589,21 +583,17 @@ fn lengths(
     const WORDS: [Kind; 2] = [Kind::Str, Kind::Bytes];
     const SEQUENCES: [Kind; 2] = [Kind::List, Kind::Tuple];
 
-    let mut counted = Descr::nothing();
-    for kind in WORDS.into_iter().chain(SEQUENCES) {
-        counted = counted.union(&Descr::of_kind(kind))?;
-    }
-    if !base.intersect(&counted.complement())?.is_empty() {
+    if !base.within(&[Kind::Str, Kind::Bytes, Kind::List, Kind::Tuple]) {
         return None;
     }
     let mut whole = Descr::nothing();
     for kind in WORDS {
-        if !Descr::of_kind(kind).intersect(base)?.is_empty() {
+        if base.reaches(kind) {
             whole = whole.union(&Descr::pattern(pattern, kind)?)?;
         }
     }
     for kind in SEQUENCES {
-        if !Descr::of_kind(kind).intersect(base)?.is_empty() {
+        if base.reaches(kind) {
             whole = whole.union(&sequences(kind)?)?;
         }
     }
@@ -626,16 +616,12 @@ fn lengths(
 /// denotes -- and a smaller set has a larger complement, which is a subtype
 /// proof that no value supports.
 fn words(pattern: &str, base: &Descr) -> Option<Descr> {
-    let mut alphabets = Descr::nothing();
-    for kind in [Kind::Str, Kind::Bytes] {
-        alphabets = alphabets.union(&Descr::of_kind(kind))?;
-    }
-    if !base.intersect(&alphabets.complement())?.is_empty() {
+    if !base.within(&[Kind::Str, Kind::Bytes]) {
         return None;
     }
     let mut whole = Descr::nothing();
     for kind in [Kind::Str, Kind::Bytes] {
-        if Descr::of_kind(kind).intersect(base)?.is_empty() {
+        if !base.reaches(kind) {
             continue;
         }
         whole = whole.union(&Descr::pattern(pattern, kind)?)?;

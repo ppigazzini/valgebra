@@ -846,6 +846,45 @@ impl Descr {
         self.emptiness() == Verdict::Empty
     }
 
+    /// Whether every value this set holds is of one of `kinds`.
+    ///
+    /// The question a constraint asks of the base it narrows, and it is a
+    /// **read** of the components rather than a set built to ask it: every
+    /// component outside `kinds`, and the kindless slot beside them, proved to
+    /// hold nothing.
+    ///
+    /// Asked the other way -- meet the base with the complement of a union of
+    /// those kinds and test the result for emptiness -- it was two thirds of
+    /// the relation matrix's cost. A complement walks all eleven components and
+    /// turns each empty one into a full one; a meet clones eleven line lists
+    /// and multiplies each against the other side's. Both build a descriptor
+    /// whose only use is to be asked whether it is empty, and the components
+    /// already answer that one at a time.
+    ///
+    /// It never refuses where the built form could, which is the one difference
+    /// worth stating: a build past its allowance returned `None` and the
+    /// constraint declined with it, and a read spends nothing and has nothing
+    /// to run out of. So a base at the edge of the allowance is narrowed where
+    /// it used to be declined -- more decided, not decided differently.
+    pub(crate) fn within(&self, kinds: &[Kind]) -> bool {
+        self.kinds.iter().zip(Kind::ALL).all(|(lines, kind)| {
+            kinds.contains(&kind)
+                || lines.emptiness(&Component::top(kind), Some(kind)) == Verdict::Empty
+        }) && self.other.emptiness(&KINDLESS, None) == Verdict::Empty
+    }
+
+    /// Whether this set is not proved to hold every value of `kind` away.
+    ///
+    /// The companion of [`within`](Descr::within), and the reason both are
+    /// reads: a constraint that has established its base lies within a handful
+    /// of kinds then asks which of them it actually reaches, once per kind,
+    /// where it used to meet the base with each kind in turn.
+    pub(crate) fn reaches(&self, kind: Kind) -> bool {
+        self.component(kind)
+            .emptiness(&Component::top(kind), Some(kind))
+            != Verdict::Empty
+    }
+
     /// What is known about this set admitting a value.
     ///
     /// The kinds partition the universe, so a value the descriptor admits is a

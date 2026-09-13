@@ -27,6 +27,8 @@ use std::sync::Arc;
 use super::budget;
 use super::records::RecordLattice;
 use super::{Component, Descr, Op};
+use std::borrow::Cow;
+
 use crate::Kind;
 use crate::decision::Verdict;
 
@@ -180,11 +182,15 @@ impl Lines {
     ///
     /// `whole` is the kind these lines are a part of: complementing *no* lines
     /// is the whole kind, and an empty union carries no line to read one off.
-    fn positive(&self, whole: &Component) -> Option<Vec<Line>> {
+    /// Borrowed where the list is already positive, which is the common case
+    /// and the one asked most often: a component is asked whether it is empty
+    /// once per kind per constraint, and copying a list to read whether it
+    /// holds a line was the whole cost of asking.
+    fn positive(&self, whole: &Component) -> Option<Cow<'_, [Line]>> {
         if self.negated {
-            complement_lines(&self.lines, whole)
+            complement_lines(&self.lines, whole).map(Cow::Owned)
         } else {
-            Some(self.lines.clone())
+            Some(Cow::Borrowed(&self.lines))
         }
     }
 
@@ -227,8 +233,8 @@ impl Lines {
         let theirs = other.positive(whole)?;
         let lines = match op {
             Op::Union => {
-                let mut lines = mine;
-                lines.extend(theirs);
+                let mut lines = mine.into_owned();
+                lines.extend(theirs.into_owned());
                 tidy(lines)?
             }
             Op::Intersect => product(&mine, &theirs)?,
@@ -251,7 +257,7 @@ impl Lines {
         };
         match flipped.positive(whole) {
             Some(lines) => Lines {
-                lines,
+                lines: lines.into_owned(),
                 negated: false,
             },
             None => flipped,

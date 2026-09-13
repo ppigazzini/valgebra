@@ -1508,3 +1508,86 @@ fn a_length_bound_over_a_sequence_kind_counts_its_elements() {
     assert!(Descr::sequences_at_least_within(4, 3, Kind::List).is_none());
     assert!(Descr::sequences_at_least_within(0, 0, Kind::List).is_some());
 }
+
+/// The kinds a set lies within, read off the components rather than built.
+///
+/// [`Descr::within`] answers what a constraint asks of the base it narrows:
+/// is every value of this base one of these kinds? It used to be asked by
+/// meeting the base with the complement of a union of those kinds and testing
+/// the result, which builds a whole descriptor to ask one question of it; two
+/// thirds of the relation matrix was that build.
+///
+/// A read is only equal to the build where it reads the same components, so
+/// both halves of the representation are exercised here: the **kindless** slot,
+/// which a value of no listed kind lands in and which a caller cannot name, and
+/// a **negated** line list, which the complement of a kind leaves behind.
+#[test]
+fn a_set_lies_within_the_kinds_its_components_hold() {
+    let int = Descr::of_kind(Kind::Int);
+    let word = Descr::of_kind(Kind::Str);
+
+    // A kind lies within itself and within any list naming it.
+    assert!(int.within(&[Kind::Int]));
+    assert!(int.within(&[Kind::Int, Kind::Bool]));
+    assert!(int.within(&Kind::ALL));
+    // ...and not within a list that leaves it out, however long.
+    assert!(!int.within(&[Kind::Bool]));
+    assert!(!int.within(&[]));
+
+    // A union lies within the two kinds it is made of and neither alone.
+    let numbers = int.union(&word).expect("a union of two kinds");
+    assert!(numbers.within(&[Kind::Int, Kind::Str]));
+    assert!(!numbers.within(&[Kind::Int]));
+    assert!(!numbers.within(&[Kind::Str]));
+
+    // The empty set lies within every list, including the empty one: it has no
+    // value to be of the wrong kind.
+    assert!(Descr::nothing().within(&[]));
+
+    // The **kindless** slot is the half a caller cannot name. Everything is not
+    // within the eleven kinds, because a value of no kind the partition lists
+    // is still a value; the complement of an int is the same.
+    assert!(!Descr::anything().within(&Kind::ALL));
+    assert!(!int.complement().within(&Kind::ALL));
+
+    // A **negated** line list, which is what a complement leaves behind: the
+    // complement of an int holds every other kind, so it lies within none of
+    // the lists an int does.
+    assert!(!int.complement().within(&[Kind::Int]));
+    assert!(!int.complement().within(&[Kind::Str]));
+    // And complementing twice returns a set that reads as the kind again.
+    assert!(int.complement().complement().within(&[Kind::Int]));
+}
+
+/// The kinds a set reaches, asked one at a time.
+///
+/// The companion of [`Descr::within`]: having established that a base lies
+/// within a handful of kinds, a length bound asks which of them it actually
+/// holds values of, so it builds a language for those and not for the rest.
+#[test]
+fn a_set_reaches_the_kinds_it_holds_a_value_of() {
+    let int = Descr::of_kind(Kind::Int);
+    let word = Descr::of_kind(Kind::Str);
+
+    assert!(int.reaches(Kind::Int));
+    assert!(!int.reaches(Kind::Str));
+    assert!(!int.reaches(Kind::List));
+
+    let either = int.union(&word).expect("a union of two kinds");
+    assert!(either.reaches(Kind::Int));
+    assert!(either.reaches(Kind::Str));
+    assert!(!either.reaches(Kind::Bytes));
+
+    // The empty set reaches nothing, and the universe reaches every kind.
+    for kind in Kind::ALL {
+        assert!(!Descr::nothing().reaches(kind), "{kind:?}");
+        assert!(Descr::anything().reaches(kind), "{kind:?}");
+    }
+
+    // A negated list again: the complement of an int reaches every kind but
+    // the two that share the integers' values.
+    let not_int = int.complement();
+    assert!(!not_int.reaches(Kind::Int));
+    assert!(not_int.reaches(Kind::Str));
+    assert!(not_int.reaches(Kind::Dict));
+}
