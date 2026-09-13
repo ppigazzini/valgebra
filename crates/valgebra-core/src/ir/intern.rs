@@ -619,6 +619,42 @@ mod tests {
         panic!("a hundred thousand nodes of one family share one slot");
     }
 
+    /// Build one nesting twice, over a leaf whose own handle does not share the
+    /// nesting's slot.
+    ///
+    /// A node is hashed by the **address** of the handles it carries
+    /// ([`hash_node`]), so which slot a nesting lands in is a fact about this
+    /// process's allocator rather than about the schema. Where a leaf and the
+    /// nesting around it collide, interning the leaf evicts the nesting and the
+    /// second build shares nothing -- which is the direct-mapped table doing
+    /// exactly what [`SLOTS`] says it does, and not the sharing the rows below
+    /// are about. Written with one fixed leaf, those rows failed about one run
+    /// in a thousand, which is a red lane nobody can reproduce.
+    ///
+    /// So the leaf is chosen rather than fixed: the first that lands clear of
+    /// its own nesting, searched the way [`parted_pair`] searches.
+    fn nesting_built_twice(wrap: &dyn Fn(Arc<Schema>) -> Schema) -> (Arc<Schema>, Arc<Schema>) {
+        for leaf in [
+            Schema::Bytes,
+            Schema::Float,
+            Schema::Str,
+            Schema::Int,
+            Schema::Bool,
+            Schema::NoneType,
+        ] {
+            // Held for the length of the check, so the address the slot is
+            // read from is the address the two builds below will hash.
+            let inner = node(leaf.clone());
+            if slot(&wrap(Arc::clone(&inner))) != slot(&leaf) {
+                return (
+                    node(wrap(node(leaf.clone()))),
+                    node(wrap(node(leaf.clone()))),
+                );
+            }
+        }
+        panic!("every leaf shares a slot with its own nesting");
+    }
+
     /// The substitution the table makes is invisible, so what a caller reads
     /// back is what it asked for -- and what a second caller asking for the
     /// same thing reads is the same allocation.
@@ -648,21 +684,17 @@ mod tests {
         let clauses_two = clauses(&mut vec![clause(Schema::Str, Schema::Int)]);
         assert!(Arc::ptr_eq(&clauses_one, &clauses_two));
 
-        let node_one = node(Schema::Complement(node(Schema::Bytes)));
-        let node_two = node(Schema::Complement(node(Schema::Bytes)));
+        let (node_one, node_two) = nesting_built_twice(&|inner| Schema::Complement(inner));
         assert!(Arc::ptr_eq(&node_one, &node_two));
 
-        let shape = |element| Schema::Seq {
+        let (seq_one, seq_two) = nesting_built_twice(&|inner| Schema::Seq {
             container: SeqKind::Tuple,
             shape: SeqShape {
                 prefix: members(&[]),
-                tail: Some(node(element)),
+                tail: Some(inner),
             },
-        };
-        assert!(Arc::ptr_eq(
-            &node(shape(Schema::Float)),
-            &node(shape(Schema::Float))
-        ));
+        });
+        assert!(Arc::ptr_eq(&seq_one, &seq_two));
     }
 
     /// A handle is found again after another is built, which is the whole of
