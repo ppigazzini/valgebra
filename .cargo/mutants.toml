@@ -91,6 +91,21 @@ exclude_re = [
     # refute every class the oracle cannot read.
     "replace LeafRelations::direct_instance_of_kind -> Option<bool> with Some\\(true\\)",
     "replace LeafRelations::kind_derives_from -> Option<bool> with Some\\(true\\)",
+    # The guard that lets a lone clause govern a parsed object's keys by its
+    # value alone, read as always FALSE. Every object then takes the general
+    # reading, which asks the clause about the key as well -- and for a clause
+    # keyed by `str` or by anything that question is answered before it is asked,
+    # because a parsed key is a string by construction. Same answers, one
+    # `JsonValue` built and one schema walked per undeclared key, which is the
+    # comparison gate's business (`json_document`) and not a test's.
+    #
+    # The other direction is a real defect and is killed rather than excused:
+    # read as always true, a clause keyed by `int` -- which no parsed key can
+    # satisfy -- would govern every key by its value alone and admit an object
+    # nothing covers. The row is interpreter-backed deliberately, because the
+    # rows that held this reading first were in pytest, which this sweep cannot
+    # observe, so the nightly read both mutants as new.
+    "replace match guard matches!\\(clause.key, Schema::Str \\| Schema::Anything\\(_\\)\\) with false in undeclared_covered",
     # `Decided::resume_at` chooses where the explaining walk starts: at the
     # point the deciding walk stopped, or at the beginning. Both answer the same
     # thing -- every field before that point matched, so re-reading it reports

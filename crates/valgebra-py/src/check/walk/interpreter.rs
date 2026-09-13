@@ -2947,3 +2947,59 @@ fn a_value_that_changes_size_between_the_walks_is_not_resumed() {
         assert!(named.contains(&"d".to_owned()), "{named:?}");
     });
 }
+
+/// A lone clause governs a parsed object's keys by its value alone only where
+/// its key schema admits every key there could be.
+///
+/// A parsed JSON object's keys are strings by construction, so a single clause
+/// keyed by `str` -- or by anything -- answers the key half of the coverage
+/// question before it is asked, and the walk reads only the values. The whole
+/// reading rests on that guard: a clause keyed by anything *else* governs some
+/// keys and not others, so each key must be asked of the clause as a whole.
+///
+/// Read as always true, the value half alone would admit a key no clause covers.
+/// A clause keyed by `int` is the sharpest case, since a parsed key is never an
+/// integer: it covers nothing, so an object carrying any key at all is refused,
+/// and a walk that skipped the key would accept every one of them.
+///
+/// This is an interpreter-backed row on purpose. The rows that first held this
+/// reading are in the Python suite, which the mutation sweep cannot observe, so
+/// a nightly full-file sweep read both of the guard's mutants as new survivors.
+#[test]
+fn a_clause_reads_a_parsed_object_by_value_alone_only_where_its_key_admits_every_key() {
+    Python::attach(|py| {
+        let mapping = |key: Schema| Schema::KeyedMap {
+            fields: Vec::new().into(),
+            defaults: vec![MapClause {
+                key,
+                value: Schema::Int,
+            }]
+            .into(),
+        };
+        let one = json_object(vec![("a", JsonValue::Int(1))]);
+        let empty = json_object(Vec::new());
+
+        // A clause keyed by `str` admits every key a parsed object can carry, so
+        // the values decide and this one holds.
+        assert!(holds_json(py, &mapping(Schema::Str), &one));
+        assert!(!holds_json(
+            py,
+            &mapping(Schema::Str),
+            &json_object(vec![("a", JsonValue::Str("x".into()))])
+        ));
+
+        // A clause keyed by `int` admits none of them: a parsed key is a string,
+        // so nothing covers `"a"` and the object is refused. An object with no
+        // keys has nothing to cover and holds.
+        assert!(
+            !holds_json(py, &mapping(Schema::Int), &one),
+            "a clause that covers no key of this object cannot admit it"
+        );
+        assert!(holds_json(py, &mapping(Schema::Int), &empty));
+
+        // The same for another kind sharing no value with a string, so the
+        // guard is held by more than one witness.
+        assert!(!holds_json(py, &mapping(Schema::Bool), &one));
+        assert!(holds_json(py, &mapping(Schema::Bool), &empty));
+    });
+}
