@@ -116,9 +116,56 @@ fn a_union_covers_the_universe_behind_a_member_the_partition_cannot_read() {
 
     // The reading is the *supertype*'s alone, so a union that does not cover
     // the universe is not swept along with it.
-    let partial = Schema::Union(vec![Schema::Bool, opaque].into());
+    let partial = Schema::Union(vec![Schema::Bool, opaque.clone()].into());
     assert!(!Schema::Complement(Arc::new(partial.clone())).is_empty());
     assert!(!subject.is_subtype_of(&partial));
+
+    // The same universe under the other two combinators, which is decided
+    // without this reading and is why it has no arm for either.
+    //
+    // A **meet** covers the universe only when every member does, and the rule
+    // for a meet on the right asks each member on its own, so each reaches the
+    // union reading above by itself. A **complement** covers it only when the
+    // schema under it holds no value, which is the question the complement
+    // rule already asks. Arms for the two were written and deleted: nothing
+    // could tell either from its own deletion, and these two rows are what
+    // says why.
+    let cannot_hold = Schema::Intersection(vec![opaque.clone(), Schema::Bool, Schema::Str].into());
+    // And a union that covers the universe *inside* another union, which the
+    // outer one's own members do not cover between them: the member that
+    // settles it is one the partition cannot read as a whole, so the outer
+    // reading has to ask it the same question rather than pass it over.
+    let nested = Schema::Union(
+        vec![
+            opaque.clone(),
+            Schema::Union(members_of_the_universe(&opaque)),
+        ]
+        .into(),
+    );
+    for universe in [
+        nested,
+        Schema::Intersection(vec![Schema::Union(members_of_the_universe(&opaque))].into()),
+        Schema::Complement(Arc::new(cannot_hold)),
+    ] {
+        assert!(
+            Schema::Complement(Arc::new(universe.clone())).is_empty(),
+            "{universe:?} does not cover the universe"
+        );
+        assert!(
+            subject.is_subtype_of(&universe),
+            "{subject:?} is below the universe {universe:?}"
+        );
+    }
+}
+
+/// `~bool | bool | opaque`, the union the row above is written around.
+fn members_of_the_universe(opaque: &Schema) -> crate::Members {
+    vec![
+        Schema::Complement(Arc::new(Schema::Bool)),
+        Schema::Bool,
+        opaque.clone(),
+    ]
+    .into()
 }
 
 /// The structural inclusion rules, held to their own work.

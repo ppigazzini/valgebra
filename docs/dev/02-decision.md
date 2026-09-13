@@ -157,6 +157,14 @@ another. The **complete** reading walks every member and carries what they name
 between them, which no pairwise step can, and it is asked once, for a pair every
 rule has already declined. A query that decides never pays for it.
 
+It is asked of a **union** and of nothing else, because a union is the only
+shape that folds a member list and so the only one with a stop to read past. A
+meet covers the universe only when every member does, and the rule for a meet on
+the right asks each member on its own; a complement covers it only when the
+schema under it holds no value, which the complement rule already asks. Arms for
+those two were written, and the mutation sweep found that nothing could tell
+either from its own deletion.
+
 The complete reading is also the one the *constructors* take: a union is folded
 to `anything` when its readable members cover every region, ignoring the opaque
 ones for this reason. So a caller cannot spell the shape that separates the two
