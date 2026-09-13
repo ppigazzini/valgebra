@@ -13,126 +13,22 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: let a validation failure cross a process boundary
-- fix: name a union's branches by what they accept
-- feat: decide a literal against another kind
-- feat: decide a fixed-length sequence that splits across union branches
-- feat: decide an empty meet of two record schemas
-- feat: cancel a double complement where the schema is built
-- fix: bound the levels the membership walk holds open
-- fix: report a container that changes under the walk
-- fix: resolve a recursive marker wherever the build puts it
-- fix: divide by the modulo operator, not the value's dunder
-- fix: narrow a product component without writing at an index
-- feat: read an unpacked variadic tuple as the shape it names
-- fix: refuse a forward reference where a type argument belongs
-- fix: check a class for the attributes it declares
-- fix: compare a pooled constant by its type as well as its value
-- fix: refuse a refinement marker that would otherwise be dropped
-- fix: report a set's failures in an order the value fixes
-- feat: ask both rules where both of them apply
-- feat: the descriptor, and the three operations it is closed under -- internal
-- feat: integer intervals, as the layer an integer set is built from -- internal
-- feat: integers as an interval set per residue class -- internal
-- feat: floats as intervals over the ordered line, and a bit for nan -- internal
-- feat: strings and bytes as regular languages -- internal
-- feat: sequences as an automaton guarded by value sets -- internal
-- feat: lists and tuples as automata over descriptors -- internal
-- feat: sets as a powerset over a descriptor -- internal
-- feat: objects as open records over their attributes -- internal
-- feat: classes as an order the core carries rather than asks for -- internal
-- feat: one emptiness verdict, with a third answer for the open world -- internal
-- feat: lower the schema fragment the descriptor can hold -- internal
-- feat: decide by emptiness of the difference where the descriptor can -- internal
-- feat: refuse the complement law over an atom that is not a set
-- fix: withdraw the descriptor from the public relations -- internal
-- feat: a sequence's length is what it holds
-- feat: a meet cancelling to nothing is nothing
-- feat: Any is the top, spelled
-- feat: a class and an attribute record are a line of the kind -- internal
-- feat: dicts as map atoms with a default per key kind -- internal
-- feat: a field and a literal key are one label -- internal
-- feat: refuse a map key schema narrowed by a constraint
-- feat: read a TypedDict as the typing spec defines it
-- fix: open and close read the labels on the semantic dom
-- feat: the descriptor reads a class through the object pool -- internal
-- feat: a constant is a value, not an object
-- feat: a descriptor build spends a work budget -- internal
-- feat: say what the compiled surface is
-- feat: publish the construction limits where a caller can read them
-- fix: a negated wanted key leaves the keys it excludes alone
-- fix: render a schema as an expression that rebuilds it
-- feat: a bare container class is its kind
-- feat: a schema is built in the lattice normal form
-- feat: retire the term rewrites the algebra does not need
-- feat: a type alias that names itself is the fixpoint it writes
-- feat: a schema compares equal in every order it can be written
-- fix: a recursive schema is one schema wherever it is combined
-- feat: decide a recursive schema against the kinds its body admits
-- feat: a sequence's length is a property its automaton can state
-- feat: an enumeration is the union of the members it can be
-- feat: refuse to pickle a validator with a message that says what to send
-- fix: an integer key stays an integer in an error path
-- fix: the changelog ledger survives the window a release passes through -- internal
-- fix: an unanchored ignore rule hid the frontend's test module -- internal
-- fix: report a list that resizes under the walk, as a dict already is
-- fix: a test that names a script as a subject is not a lane that runs it -- internal
-- fix: an enumeration is the union of its members only when it is one
-- fix: refuse a pattern before its automaton is built, not after
-- fix: a validator takes part in the cycle collector
-- fix: an integer key of any size stays an integer in an error path
-- fix: a literal's hash is the constant's, not its slot's
-- fix: one schema prints one way
-- fix: a required-ness qualifier survives a string annotation
-- fix: a bare legacy typing alias is the class it aliases
-- fix: refuse a Literal argument the typing spec refuses
-- fix: refuse a bound against nan, which orders nothing
-- fix: the merge base is never the commit being measured -- internal
-- fix: take the version from the crate, not from the metadata reader
-- fix: decide two sets of literals as sets, not pair by pair
-- fix: a ledger plant that judges nothing is not a miss -- internal
-- feat: a bound over floats is a set the descriptor can hold
-- fix: build the error model when it is asked for
-- fix: a timing harness names the build it measured, and refuses a debug one -- internal
-- fix: an instruction count says how much history it is comparing -- internal
-- feat: subtyping answers in three values, and the boundary keeps two -- internal
-- fix: a subject disjoint from a meet is below that meet's complement
-- fix: a code fence closed with a sentence took a section into the block -- internal
-- fix: a refinement carries its base's proof and not its refutation -- internal
-- fix: a mismatch refutes an inclusion only where the subject has a value -- internal
-- fix: a closed record is refuted by a key it does not declare -- internal
-- feat: a named tuple denotes the tuple its fields lay out
-- feat: a relation says whether it was refuted or undecided
-- fix: the binding shapes are measured with the interpreter's hash seed fixed -- internal
-- feat: a table of literals is decided as the set it denotes
-- fix: the bounds scan stops at the test module, not at the first attribute -- internal
-- fix: a renumbered member set is canonical again
-- fix: a tail the rules cannot read is not a repeat
-- fix: a refutation is read against the subject it is about
-- feat: the oracle answers what kinds a class can hold -- internal
-- fix: an integer set is ordered by the table it carries -- internal
-- fix: a plain class names no value of a builtin kind -- internal
-- fix: a union covers the universe behind a member the partition cannot read -- internal
-- fix: a doc link that crossed the split names the item where it lives -- internal
-- perf: a parsed object's keys are strings, so a clause reads its values alone
-- perf: a field lookup asks one ordering question, and asks about order only on a miss -- internal
-- perf: a shared handle is probed and stored under one borrow -- internal
-- perf: a conjunct that refutes refutes the meet -- internal
-- perf: a reference under a union carries its definition's refutation -- internal
-- perf: a region outside a kind's bound refutes the pair -- internal
-- perf: a field no clause of the supertype admits refutes the map -- internal
-- perf: a bound over the integers has a value the oracle names -- internal
-- perf: a class met with its attributes has a value when its fields do -- internal
-- perf: a refinement pair the constraints leave unproven is read on -- internal
-- perf: two sequences meet in the sequences of their elements' meet -- internal
-- perf: a sequence with no bound holds the empty one a bound leaves out -- internal
-- perf: a meet outside every branch of a union is outside the union -- internal
-- perf: a reference carries the kind of the set it names -- internal
-- perf: a complement names its witness from the kinds it still holds -- internal
-- perf: a narrow object is covered where it lies -- internal
-- perf: a bound asks the base which kinds it holds, not the complement of the rest
-
 -->
+
+## [0.0.10] - 2026-09-13
+
+A second representation decides the three relations. Where the structural rules
+declined a pair, a **set** built per kind is asked instead, so `is_subtype_of`,
+`is_equivalent` and `is_empty` answer over a wider fragment without any of them
+answering differently: every relation this release adds moves a pair from *not
+proven* to decided, and a `True` still means what it meant. `relation_to` is the
+surface that tells those two apart, in three answers where the boolean has two.
+
+`typing.Any` is the lattice top, a schema is built in the lattice normal form,
+and `Validator.simplify` is deprecated because the reduction it promised is the
+schema a caller already holds. Every compiled entry point takes its arguments
+positionally. This is a `0.0.x` pre-release and those are breaking changes;
+each is written out below.
 
 ### Added
 
@@ -1415,7 +1311,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.9...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.10...HEAD
+[0.0.10]: https://github.com/ppigazzini/valgebra/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/ppigazzini/valgebra/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/ppigazzini/valgebra/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/ppigazzini/valgebra/compare/v0.0.6...v0.0.7

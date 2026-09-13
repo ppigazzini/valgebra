@@ -175,14 +175,22 @@ PLANTS = (
             tree, "scripts/planted_gate.py", '"""A gate with no contract row."""\n'
         ),
     ),
+    # Not a roll entry, though the roll is what this ledger is *about*. Its
+    # roll checks measure from the tag of the released version the page names,
+    # and stand down where that tag is not in the clone -- a shallow checkout,
+    # and the window between the release bump and the tag it is pushed with,
+    # during which the roll is empty and there is no entry to take away. What
+    # runs in every state is the claim that keeps the rest from running
+    # nowhere: one lane checks out the whole history. Planting that is planting
+    # a defect this ledger catches whenever it is asked.
     Plant(
         "tests/test_changelog_ledger.py",
-        ("CHANGELOG.md",),
+        (".github/workflows/ci.yml",),
         lambda tree: _edit(
             tree,
-            "CHANGELOG.md",
-            "- fix: report a list that resizes under the walk, as a dict already is\n",
-            "",
+            ".github/workflows/ci.yml",
+            "fetch-depth: ${{ (matrix.os == 'ubuntu-latest'",
+            "fetch-depth: ${{ (matrix.os == 'macos-latest'",
         ),
     ),
     Plant(
