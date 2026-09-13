@@ -234,7 +234,13 @@ impl Lines {
         let lines = match op {
             Op::Union => {
                 let mut lines = mine.into_owned();
-                lines.extend(theirs.into_owned());
+                // The right-hand list is appended where it lies: owning it
+                // first buys a second allocation and a move, and the lines
+                // are cloned into the result either way.
+                match theirs {
+                    Cow::Borrowed(rest) => lines.extend_from_slice(rest),
+                    Cow::Owned(rest) => lines.extend(rest),
+                }
                 tidy(lines)?
             }
             Op::Intersect => product(&mine, &theirs)?,

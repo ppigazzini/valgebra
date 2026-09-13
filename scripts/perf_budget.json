@@ -40,7 +40,7 @@
   "decision_repeat_workload_checksum": 4000,
   "_decision_matrix_comment": "The relation shapes the structural readings decide, which the four workloads above do not carry: a refinement on either side, two sequences meeting as stars, a complement against a class, a meet of a class and its attributes against a union, and a reference on the supertype's side. A week of readings that cut the relation matrix's slow set from 4.14 ms to 0.68 moved every one of those four by 0.00%, which is a gate that cannot see the change it is meant to hold. RECORDED AFTER those readings landed: this number is the floor the NEXT change is held to and is not evidence for the ones already in, because a workload chosen after the fact to make a delta match a win is not a measurement. It carries an oracle that answers the class questions as the bindings do for a plain class -- with the core's declining default the class readings cannot fire at all, and the workload measured their cost and none of their saving.",
   "binding_open_workload_irefs": 172665052,
-  "decision_matrix_workload_irefs": 102756509,
+  "decision_matrix_workload_irefs": 101582509,
   "decision_matrix_workload_checksum": 68000,
   "binding_explain_accept_workload_irefs": 170774995
 }

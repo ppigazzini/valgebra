@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - perf: a meet builds its components rather than cloning them to overwrite -- internal
 - perf: a second table of constants is read only where the first answers -- internal
+- perf: a union of lines appends the second list where it lies -- internal
 
 -->
 
