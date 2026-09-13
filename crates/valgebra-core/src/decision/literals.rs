@@ -19,10 +19,6 @@ use crate::verdict::Relation;
 
 use super::LeafRelations;
 
-/// Whether two members are provably disjoint (distinct concrete kinds, `bool ⊆
-/// int` aside), so the intersection is empty. This decides the structural-kind
-/// disjointness (a list is never a set) the scalar region bitset cannot see.
-/// Shared with the simplifier so both read the same lattice law.
 /// The constants of a schema that is a literal, or a union of nothing but
 /// literals; `None` for anything else.
 ///
@@ -30,12 +26,11 @@ use super::LeafRelations;
 /// has no set of constants standing for it, and the member walk is then the
 /// only reading.
 ///
-/// Borrowed from the node where the schema is one literal, which is the shape
-/// this is asked about most: the reading that calls it runs on every declined
-/// pair, and a list of one built on the heap to be read once and dropped was
-/// most of what the allocator saw on the relation matrix. A union keeps its
-/// constants inside its member nodes, so there is no slice of indices to
-/// borrow and that one is collected.
+/// Borrowed from the node where the schema is one literal: a list of one built
+/// on the heap to be read once and dropped is an allocation for nothing, and
+/// the reading that calls this runs on every declined pair. A union keeps its
+/// constants inside its member nodes, so there is no slice of indices to borrow
+/// and that one is collected.
 pub(super) fn literal_constants(schema: &Schema) -> Option<Cow<'_, [ConstIx]>> {
     match schema {
         Schema::Literal(index) => Some(Cow::Borrowed(slice::from_ref(index))),

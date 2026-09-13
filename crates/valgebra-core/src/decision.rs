@@ -1074,6 +1074,11 @@ pub(crate) fn denotes_a_set_within(
     true
 }
 
+/// Whether some two members are provably disjoint (distinct concrete kinds,
+/// `bool ⊆ int` aside), so their intersection is empty. This decides the
+/// structural-kind disjointness (a list is never a set) the scalar region
+/// bitset cannot see, and the simplifier reads it too so both consume one
+/// statement of the lattice law.
 pub(crate) fn has_disjoint_pair(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
     unordered_pairs(members).any(|(a, b)| a.disjoint_with(b, oracle))
 }
