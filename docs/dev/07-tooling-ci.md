@@ -41,8 +41,26 @@ reaches a step that a lane runs with it unset. One of them gave a false red:
 `FORCE_COLOR` overrides a tool's terminal check, `uv export` wrote escape codes
 into the requirements file it generates, and `pip-audit` refused the file
 against a dependency tree with no advisory in it. The two variables whose only
-purpose is that override are dropped (`runner_environment`), and the rest of
-that list -- every way a lane differs from a local run -- is unwritten.
+purpose is that override are dropped (`runner_environment`).
+
+**The whole list, since two of these cost a day each.** A lane differs from a
+local run in eight ways, and the gate models the first three:
+
+| difference | modelled | what it cost when it was not |
+| --- | --- | --- |
+| the clone: one commit, no tags | yes, `shallow_clone` | a ledger read `git describe` and reddened eight jobs at once |
+| the step's declared `env:` | yes, since the plan carries it | `RUSTDOCFLAGS=-D warnings` was dropped, so `cargo doc` could not fail locally |
+| the terminal's own variables | yes, `runner_environment` | `FORCE_COLOR` turned `pip-audit` red against a clean dependency tree |
+| the interpreter the lane names | partly: `PYO3_PYTHON` follows the caller's | the mutation and cachegrind lanes name CPython 3.12 in `ci.yml`; a local run uses whatever `uv` resolves |
+| the operating system and architecture | no | a macOS or Windows leg fails where Linux does not, and nothing local sees it |
+| the pinned tool versions | no | `uvx pip-audit==2.10.1` and `uvx zizmor==1.30.1` are the lane's; a local `uvx` takes the latest |
+| the machine's own speed | not modelled, and not a gate: every merge-blocking number is an instruction count | an absolute count reads 5--8% apart between two machines on one `rustc` line, which is what the recorded budgets carry a band for |
+| secrets, tokens and the event payload | no, and the steps that need one are excused by name | the merge base comes from the event, so `--against` runs only in the lane |
+
+The first three are closed. The fourth is a row rather than a fix because the
+gate runs the caller's toolchain by design; the rest are differences a local
+gate cannot remove, and naming them is what keeps a green local run from being
+read as a promise it never made.
 
 Three of the excused steps need only what a developer's machine already has --
 the dependency sync, the extension build, and the stub check that needs both --

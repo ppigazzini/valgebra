@@ -434,6 +434,16 @@ def recorded_step(mode: str, base: Measurement) -> dict | None:
     at or past the step, the base measures the new count, this record no longer
     matches it, and the ordinary ceiling applies again. A record can therefore
     excuse the one comparison it was written for and no later one.
+
+    The match carries the *relative* tolerance, not the shape's own band, and
+    that is deliberate. A binding shape reads 6.9% apart on two machines and its
+    budget carries a 30% band for exactly that, so a step recorded from a lane's
+    numbers does not match a local ``--against`` and one recorded here would not
+    match the lane's. Widening the match to the band would make a record
+    portable and would also let it excuse a base that has drifted a quarter of
+    the way to anywhere -- and ``--against`` runs in one place, the bench lane,
+    which is where the number that has to match is taken. Precision of expiry is
+    what this record is for; portability is not.
     """
     budget = json.loads(BUDGET_FILE.read_text(encoding="utf-8"))
     for step in budget.get("steps", []):
