@@ -1,13 +1,13 @@
 """Every ledger ships with the defect that trips it.
 
 A ledger is an enumerated list held to the tree in both directions, and the
-project has fourteen. Their worth rests entirely on failing when the tree stops
-matching the list -- and one of them could not. `tests/test_local_gate.py`
-filtered its steps with ``not runnable(name) and name not in NEEDS_A_RUNNER``,
-which is ``X and not X``: the list it built was empty for every possible
-workflow, so the assertion passed on a tree that had already broken the claim.
-The comment above it said the clause was true by construction, and the `assert`
-stayed.
+count is kept on the testing page rather than here. Their worth rests entirely
+on failing when the tree stops matching the list -- and one of them could
+not. `tests/test_local_gate.py` filtered its steps with ``not runnable(name)
+and name not in NEEDS_A_RUNNER``, which is ``X and not X``: the list it built
+was empty for every possible workflow, so the assertion passed on a tree that
+had already broken the claim. The comment above it said the clause was true by
+construction, and the `assert` stayed.
 
 Reading a ledger cannot tell you whether it can fail. Running it against a tree
 that breaks its claim can, so that is what this does: for each ledger, plant the
@@ -23,6 +23,7 @@ LEDGER: every ledger fails on the defect it exists to catch
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -85,6 +86,43 @@ def _name_the_working_area(tree: Path) -> None:
             "GIT_COMMITTER_EMAIL": "plant@example.invalid",
         },
     )
+
+
+def _cite_an_orphan(tree: Path) -> None:
+    """Point the reference corpus at a commit no branch reaches.
+
+    The commit is written here rather than looked for: an orphan is what a
+    rewrite leaves behind, and a tree that already carries one is a tree whose
+    ledger has something to report without this row's help.
+    """
+    written = _plant_git(tree, "write-tree").strip()
+    orphan = _plant_git(tree, "commit-tree", written, "-m", "an orphan, planted")
+    record = tree / "scripts" / "metamorphic_reference.json"
+    payload = json.loads(record.read_text(encoding="utf-8"))
+    payload["commit"] = orphan.strip()
+    record.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _plant_git(tree: Path, *args: str) -> str:
+    """Run git in the copy under an identity of the plant's own.
+
+    A clone inherits no committer, so writing an object cannot depend on
+    whether the machine running the suite has one configured.
+    """
+    done = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        ["git", "-C", str(tree), *args],  # noqa: S607
+        check=True,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "GIT_AUTHOR_NAME": "plant",
+            "GIT_AUTHOR_EMAIL": "plant@example.invalid",
+            "GIT_COMMITTER_NAME": "plant",
+            "GIT_COMMITTER_EMAIL": "plant@example.invalid",
+        },
+    )
+    return done.stdout
 
 
 def _edit(tree: Path, relative: str, old: str, new: str) -> None:
@@ -333,6 +371,11 @@ PLANTS = (
             "    Planted: reports none.\n"
             '    """\n    return []\n    _unreachable = """',
         ),
+    ),
+    Plant(
+        "tests/test_cited_commits.py",
+        ("scripts/metamorphic_reference.json",),
+        _cite_an_orphan,
     ),
 )
 
