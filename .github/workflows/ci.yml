@@ -713,6 +713,28 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The action pulls its manylinux image itself, once, with no retry, so a
+      # registry hiccup takes a green tree red on a job no local gate reaches:
+      # quay.io answered `504 Gateway Time-out` on 2026-09-14 and the push that
+      # carried four documentation commits read red. Pulling here first means a
+      # transient answer costs a pause instead of the lane. A pull that succeeds
+      # leaves the image in the daemon, so the action's own pull is then a
+      # no-op; one that does not still lets the action try, because this step
+      # exists to make the lane sturdier and not to become a new way for it to
+      # fail. The image is written out rather than derived from `manylinux:
+      # auto` -- if the action ever resolves that differently, this step pulls
+      # something unused and the build is unaffected.
+      - name: Pull the manylinux image, with retries
+        run: |
+          image=quay.io/pypa/manylinux2014_x86_64:latest
+          for attempt in 1 2 3; do
+            if docker pull "$image"; then
+              exit 0
+            fi
+            echo "pull attempt $attempt failed"
+            sleep 15
+          done
+          echo "::warning::could not pre-pull $image; the build step will try"
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           command: build
