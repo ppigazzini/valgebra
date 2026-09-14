@@ -25,7 +25,10 @@ claims:
 * **A gate's number quoted in prose.** The instruction budgets live in
   ``scripts/perf_budget.json`` and move when the budget is re-recorded. A figure
   copied into a page is stale the next time it moves, and a stale number is worse
-  than an absent one -- it tells a reader to hold the wrong invariant.
+  than an absent one -- it tells a reader to hold the wrong invariant. Every
+  recorded count is read, not a chosen few: the check held two of sixteen
+  ``*_irefs`` keys, so the rule was written against the whole file and asked of
+  an eighth of it. The changelog is exempt, as it is below.
 
 * **A comparison multiplier that names no interpreter.** A ratio against another
   checker cancels the machine and not the interpreter: one gated shape takes
@@ -192,14 +195,23 @@ def check_internal_reference(text: str) -> list[str]:
 
 
 def gate_numbers() -> list[str]:
-    """Collect the figures a gate owns, in the forms prose would write them."""
+    """Collect the figures a gate owns, in the forms prose would write them.
+
+    Every recorded instruction count, not a chosen two. The check read the core
+    and binding walk budgets alone while the file held sixteen `*_irefs` keys,
+    so a page quoting any of the other fourteen -- the record walk, the JSON
+    document, a decision workload -- passed a rule written against exactly it.
+    The rule is about what moves when a budget is re-recorded, and all of them
+    do.
+    """
     budget = json.loads(
         (ROOT / "scripts" / "perf_budget.json").read_text(encoding="utf-8")
     )
     numbers = []
-    for key in ("core_workload_irefs", "binding_workload_irefs"):
-        value = int(budget[key])
-        numbers += [f"{value:,}", str(value)]
+    for key, value in budget.items():
+        if not key.endswith("_irefs"):
+            continue
+        numbers += [f"{int(value):,}", str(int(value))]
     return numbers
 
 
@@ -290,6 +302,12 @@ def check_comparison_claims(text: str) -> list[str]:
 
 
 def check_pinned_numbers(text: str, numbers: list[str]) -> list[str]:
+    """Refuse a recorded instruction budget copied into a page.
+
+    The changelog is exempt on the same argument the comparison check exempts it
+    for: an entry records what a change measured, under a heading that dates it,
+    and is not re-measured when the budget is. A page describes this tree and is.
+    """
     return [
         f"quotes a number the perf budget owns ({n}); name the file instead"
         for n in numbers
@@ -616,9 +634,12 @@ def main() -> int:
             for problem in check_links(path, text)
             + check_named_paths(text, ignored)
             + check_internal_reference(text)
-            + check_pinned_numbers(text, numbers)
             + check_fences(text)
-            + ([] if path.name == "CHANGELOG.md" else check_comparison_claims(text))
+            + (
+                []
+                if path.name == "CHANGELOG.md"
+                else check_pinned_numbers(text, numbers) + check_comparison_claims(text)
+            )
         ]
     for path in referencing:
         if path.suffix == ".md":
