@@ -99,6 +99,12 @@ reference. What the dispatcher descends into, and what it stops at, have a
 module each, because what each shares with the rest is the dispatcher and
 little else.
 
+Two files beside them are read by every arm. `crates/valgebra-py/src/input.rs`
+is the `Value` above — the two input paths and the decoders that produce them.
+`crates/valgebra-py/src/check/index.rs` is the precompute the next section is
+about: the record-field lookups, the literal-union tables and the compiled
+patterns, built once with the validator and read by the walk that uses them.
+
 `walk/scalar.rs` answers what a value is **without descending into it**: a
 scalar kind, a literal, and the constraints that narrow one. A container's
 length is answered there too, for the same reason -- `MinLen` counts what a

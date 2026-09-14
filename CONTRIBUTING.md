@@ -76,8 +76,8 @@ lane red. `tests/test_build_surfaces.py` holds every manifest in the tree to
 being a workspace member or a detached surface named here with the command that
 builds it.
 
-`pre-commit run --all-files` runs the file-hygiene, ruff, and cargo gates in
-one step.
+`pre-commit run --all-files` runs the file-hygiene, ruff, `ty`, cargo and
+docs-lint gates in one step.
 
 ## Contract inventory
 
