@@ -397,6 +397,16 @@ every interpreter: fifty `Annotated[int, Ge(0)]` fields compile in 48 us on
 once per schema, so this is a startup figure rather than a per-call one -- it
 matters to a program that builds validators per request, and to nothing else.
 
+**A `NamedTuple` validates at about what a tuple does.** The walk cannot trust
+the C length accessor for a `tuple` subclass — PyPy's `cpyext` answers it
+through the object's own `__len__`, so a subclass that overrides it can send the
+walk past the end of its storage — but it can trust the accessor for a subclass
+that *inherits* the base's slot, which is every `NamedTuple`. Telling the two
+apart costs one type lookup per validation: on CPython 3.14 a three-field
+`NamedTuple` reads **69 ns against the 57 a plain tuple takes**, and with a
+length bound 77 against 58. Reading every subclass as a liar instead cost 100
+and 117, which is what a release of this shipped with for a day.
+
 **Interned keys are the fast path, and Python interns most of them for you.** A
 validator holds an interned `str` for every declared field, and a dict probe
 compares the key it is given with the key it holds by *pointer* before it
