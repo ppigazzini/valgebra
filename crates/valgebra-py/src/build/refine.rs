@@ -36,6 +36,7 @@ pub(super) fn refuse_unordered_bound(attr: &str, bound: &Bound<'_, PyAny>) -> Py
     }
     Ok(())
 }
+
 /// Build a Refine node from an `Annotated` base and its metadata markers.
 ///
 /// Markers are read structurally (annotated-types style): an object exposing
@@ -59,6 +60,7 @@ pub(super) fn build_refine(
     }
     Ok(Schema::refine(base_schema, constraints))
 }
+
 /// Whether the values a base admits can answer a constraint.
 ///
 /// Three answers, because a refusal needs certainty. A constraint is refused only
@@ -75,6 +77,7 @@ pub(super) enum Carries {
     /// The base does not say.
     Maybe,
 }
+
 impl Carries {
     /// The answer for a base that is a union of the two.
     ///
@@ -89,6 +92,7 @@ impl Carries {
         }
     }
 }
+
 /// Fold `answer` over the members of a union, and stand aside anywhere else that
 /// is not a plain base: an intersection or a complement narrows a set this check
 /// does not compute, and a refinement's answer is its own base's.
@@ -105,6 +109,7 @@ pub(super) fn carries_through(
         _ => None,
     }
 }
+
 /// Whether the base's values have a length.
 pub(super) fn carries_length(base: &Schema) -> Carries {
     if let Some(answer) = carries_through(base, &carries_length) {
@@ -120,6 +125,7 @@ pub(super) fn carries_length(base: &Schema) -> Carries {
         _ => Carries::Maybe,
     }
 }
+
 /// Whether the base's values are text a pattern can be matched against.
 pub(super) fn carries_pattern(base: &Schema) -> Carries {
     if let Some(answer) = carries_through(base, &carries_pattern) {
@@ -138,6 +144,7 @@ pub(super) fn carries_pattern(base: &Schema) -> Carries {
         _ => Carries::Maybe,
     }
 }
+
 /// Whether the base's values are numbers, which is what a divisor needs.
 pub(super) fn carries_division(base: &Schema) -> Carries {
     if let Some(answer) = carries_through(base, &carries_division) {
@@ -154,6 +161,7 @@ pub(super) fn carries_division(base: &Schema) -> Carries {
         _ => Carries::Maybe,
     }
 }
+
 /// Whether the base's values are ordered against `operand`.
 ///
 /// Python orders numbers with numbers, text with text and bytes with bytes, and
@@ -177,6 +185,7 @@ pub(super) fn carries_order(base: &Schema, operand: &Bound<'_, PyAny>) -> Carrie
     };
     if matches { Carries::Yes } else { Carries::No }
 }
+
 /// Refuse a constraint no value of the base can answer.
 ///
 /// A constraint that cannot be asked of a value is not a narrowing: reading a
@@ -218,6 +227,7 @@ pub(super) fn check_constraint_fits(
     }
     Ok(())
 }
+
 /// The compilation flags a `re.Pattern` carries, folded into the pattern itself.
 ///
 /// A compiled pattern keeps its flags beside its source, and the source alone is
@@ -291,6 +301,7 @@ pub(super) fn with_inline_flags(
         Ok(format!("(?{inline}){pattern}"))
     }
 }
+
 /// Whether `marker` comes from `annotated_types`, whose vocabulary a reader
 /// expects this frontend to know.
 ///
@@ -314,6 +325,7 @@ pub(super) fn is_unhandled_constraint(marker: &Bound<'_, PyAny>) -> bool {
         .is_some_and(|name| name == "DocInfo");
     from_vocabulary && !documentation
 }
+
 /// An optional attribute a refinement marker is read through.
 ///
 /// A marker carries one or two of these and not the other eight: `Ge(0)` has a
@@ -341,6 +353,7 @@ pub(super) enum Probe {
     MultipleOf,
     Func,
 }
+
 impl Probe {
     /// Every probe, which is what a type is read for when it is first seen.
     const ALL: [Self; 10] = [
@@ -379,9 +392,18 @@ impl Probe {
         1 << (self as u16)
     }
 }
+
 /// The mask each marker type reads under, one bit per [`Probe`] plus the two
 /// above. Keyed by the type, which is what the answer is a property of.
+///
+/// A shared, *mutable* Python object, which the other caches on this crate's
+/// path are not, so the free-threading argument is worth writing down: a
+/// `dict`'s reads and writes are atomic under a free-threaded interpreter's
+/// per-object lock, and two threads that miss on one type both compute the same
+/// mask and write it, since the mask is a property of the type and not of
+/// either thread. The `PyOnceLock` around it makes the dict itself arrive once.
 static CARRIED: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
+
 /// How many marker types the mask cache keeps.
 ///
 /// A cache entry holds a type, so it keeps one alive. The markers a program
@@ -395,6 +417,7 @@ static CARRIED: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
 /// The far side is exercised by `tests/test_adversarial_bounds.py`, which
 /// builds marker types well past this and reads the same answers from them.
 const MAX_MARKER_TYPES: usize = 256;
+
 /// How a marker's optional attributes are read, decided once per marker.
 ///
 /// Two questions settle it. Which names the *type* carries is asked of the type
@@ -481,6 +504,7 @@ impl<'py> Probes<'py> {
         }
     }
 }
+
 pub(super) fn parse_constraint(
     marker: &Bound<'_, PyAny>,
     out: &mut Vec<Constraint>,

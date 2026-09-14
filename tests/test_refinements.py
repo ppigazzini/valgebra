@@ -376,3 +376,51 @@ def test_a_sequence_with_no_bound_holds_the_empty_one_a_bound_leaves_out() -> No
 
     # A bound of zero leaves the empty sequence in, so it refutes nothing.
     assert Validator(list[int]).is_subtype_of(Annotated[list[int], at.MinLen(0)])
+
+
+def test_a_marker_is_read_however_its_type_keeps_its_names() -> None:
+    """Which names a marker carries is its type's business, and asked once.
+
+    The frontend reads a marker's names from its *type* and remembers the
+    answer, so the four shapes below are the ones that reading can get wrong: a
+    type whose names are slot descriptors, a slot that exists and is unset, a
+    marker that keeps its value in a dictionary of its own, and a type that
+    answers through `__getattr__` for names no dictionary holds. Two markers of
+    one type carrying *different* names is the sharp one -- a remembered answer
+    taken from the first would read the second as carrying nothing.
+    """
+
+    class Hook:
+        """Answers for `ge` and holds nothing."""
+
+        def __getattr__(self, name: str) -> int:
+            if name == "ge":
+                return 3
+            raise AttributeError(name)
+
+    hooked = Validator(Annotated[int, Hook()])
+    assert hooked.is_valid(3)
+    assert not hooked.is_valid(2)
+
+    class Slotted:
+        __slots__ = ("ge",)
+
+    # The class carries the descriptor and the instance never filled it, so
+    # there is no bound to read and the annotation is its base.
+    assert Validator(Annotated[int, Slotted()]) == Validator(int)
+
+    class Loose:
+        """A marker whose value lives in its own dictionary, not its class."""
+
+    lower = Loose()
+    lower.ge = 5  # ty: ignore[unresolved-attribute]
+    upper = Loose()
+    upper.le = 9  # ty: ignore[unresolved-attribute]
+
+    at_least = Validator(Annotated[int, lower])
+    assert at_least.is_valid(5)
+    assert not at_least.is_valid(4)
+    # The same type, a different name: the second is not read through the first.
+    at_most = Validator(Annotated[int, upper])
+    assert at_most.is_valid(9)
+    assert not at_most.is_valid(10)
