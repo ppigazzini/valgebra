@@ -30,11 +30,12 @@ Three workloads, and seven shapes across them:
   the core one never calls.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
-  twelve shapes: the membership walk (`--binding`), the call boundary alone
+  thirteen shapes: the membership walk (`--binding`), the call boundary alone
   (`--binding-boundary`), the walk over a wide record (`--binding-record`), the
   same walk over a value whose keys are interned (`--binding-keys`), the same
   fields declared by an open record (`--binding-open`), walking a `tuple`
-  subclass (`--binding-subclass`), parsing and walking a JSON document
+  subclass (`--binding-subclass`), matching a string against a compiled pattern
+  (`--binding-pattern`), parsing and walking a JSON document
   (`--binding-json`), building a validator from its Python spelling
   (`--binding-build`), compiling one written as a `TypedDict` of refined
   integers (`--binding-annotated`), compiling a fifty-field dataclass

@@ -224,6 +224,44 @@ def test_every_mode_names_an_example_the_tree_builds() -> None:
         assert subject
 
 
+def test_the_usage_names_every_binding_shape_and_counts_them() -> None:
+    """The module docstring is the gate's `--help`, and it drifts.
+
+    It described "five shapes" while listing nine, and then "twelve" while
+    thirteen were registered -- the second time within an hour of fixing the
+    first, because a shape was added after the sentence was written. A count
+    written by hand beside a registry is a claim about the registry, so it is
+    read from the registry.
+    """
+    usage = gate.__doc__ or ""
+    # The backticked form, not the bare flag: `--binding` is a prefix of every
+    # other shape's flag, so a bare substring test passes for it whatever the
+    # text says, and `--binding-pattern` would be satisfied by a typo one
+    # character longer. The usage writes each flag as `` `--flag` ``.
+    named = {f"`--{shape}`" for shape in gate.BINDING_SHAPES}
+    missing = sorted(flag for flag in named if flag not in usage)
+    assert not missing, (
+        f"binding shapes the usage does not name: {missing}. Every registered "
+        "shape is a thing a caller can pass, so the help text names it."
+    )
+    words = {
+        11: "eleven",
+        12: "twelve",
+        13: "thirteen",
+        14: "fourteen",
+        15: "fifteen",
+        16: "sixteen",
+        17: "seventeen",
+        18: "eighteen",
+    }
+    want = words.get(len(named))
+    assert want, f"no spelling for {len(named)} shapes; add one above"
+    assert f"{want} shapes" in usage, (
+        f"the usage counts the binding shapes wrongly: there are {len(named)} "
+        f"({want}). The sentence and the registry are one claim."
+    )
+
+
 def test_a_shape_the_base_does_not_name_is_absent_there(tmp_path: Path) -> None:
     """A base that carries the example but not the shape has no count to give.
 
