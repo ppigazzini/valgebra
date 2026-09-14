@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sys
 import threading
+from typing import Annotated
 
 import pytest
 
@@ -100,3 +101,70 @@ def test_validators_run_truly_parallel_without_the_gil() -> None:
     # by an earlier test.
     assert not _gil_enabled()
     assert not _run_hammer_threads(*_fresh_validators())
+
+
+def _compile_markers(failures: list[str], seed: int) -> None:
+    """Compile refinements whose marker *type* is new every time.
+
+    A fresh type per compile is what makes this the concurrency test for the
+    frontend's mask cache: every compile misses it and writes to it, so the
+    threads contend on the one shared mutable Python object the compile path
+    has. The answers are checked because a mask read from the wrong entry would
+    drop the bound rather than raise, and a dropped bound is a validator that
+    admits what it was written to refuse.
+    """
+    try:
+        for n in range(MARKER_TYPES):
+            marker = type(
+                f"Ge{seed}_{n}",
+                (),
+                {"__slots__": ("ge",), "__init__": lambda s, v: setattr(s, "ge", v)},
+            )(n)
+            bounded = Validator(Annotated[int, marker])
+            assert bounded.is_valid(n) is True
+            assert bounded.is_valid(n - 1) is False
+    except BaseException as err:  # noqa: BLE001 - any failure is the report
+        failures.append(f"thread {seed}: {type(err).__name__}: {err}")
+
+
+#: Fresh marker types per thread. Enough to run past the cache's own bound
+#: (256 types) across eight threads, so the branch that stops remembering is
+#: contended too and not only the branch that writes.
+MARKER_TYPES = 100
+
+
+def _run_marker_threads() -> list[str]:
+    failures: list[str] = []
+    threads = [
+        threading.Thread(target=_compile_markers, args=(failures, seed))
+        for seed in range(THREADS)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    return failures
+
+
+def test_markers_compile_from_many_threads() -> None:
+    """The frontend's mask cache is shared and mutable, and this contends it.
+
+    Which attribute names a refinement marker can carry is read from its type
+    and remembered in one `dict` for the process. That is the only shared
+    *mutable* Python object on the compile path, and its safety argument is
+    that a dict's reads and writes are atomic under the free-threaded
+    interpreter's per-object lock, with two threads that miss on one type
+    computing the same mask because the mask is the type's and not the thread's.
+
+    The argument was written and not run. Every other row here validates with
+    schemas built before the threads start; none compiles, so none reached the
+    cache at all.
+    """
+    assert not _run_marker_threads()
+
+
+@pytest.mark.skipif(_gil_enabled(), reason="threads do not run in parallel under a GIL")
+def test_markers_compile_in_parallel_without_the_gil() -> None:
+    """The same, where the contention is real rather than interleaved."""
+    assert not _gil_enabled()
+    assert not _run_marker_threads()
