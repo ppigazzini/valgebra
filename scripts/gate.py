@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -296,13 +297,48 @@ def shallow_clone(into: Path) -> Path:
 DEEP_HISTORY_STEPS = (
     (
         "python (fetch-depth: 0)",
-        "Checks that read the history, in a tree that has one",
+        "Checks that read the history, in a clone that has one and no identity",
         (
-            "uv run --no-sync pytest -q tests/test_commit_messages.py "
-            "tests/test_changelog_ledger.py"
+            f"{shlex.quote(sys.executable)} -m pytest -q -p no:cacheprovider "
+            "tests/test_commit_messages.py tests/test_changelog_ledger.py "
+            "tests/test_cited_commits.py"
         ),
     ),
 )
+
+
+def deep_clone(into: Path) -> Path:
+    """Clone `HEAD` with its whole history and its tags, and with no committer.
+
+    The other half of what `shallow_clone` models. One matrix leg takes
+    `fetch-depth: 0` and the checks that read the history run there; the clone
+    below is that leg, and what it adds beyond the history is an **absence**:
+    a checkout configures no `user.name`, and a clone inherits none.
+
+    That absence is the whole point. A ledger that *writes* a commit -- the
+    planted orphan of `tests/test_cited_commits.py` -- refuses without a
+    committer, and this repository has one in its own `.git/config`, so the
+    check passed here and failed on the runner. Running it in the caller's tree
+    could not have caught that at any price: the identity is in the tree. The
+    global and system files are dropped with it, since a runner has neither.
+    """
+    tree = into / "deep"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--no-hardlinks", f"file://{ROOT}", str(tree)],
+        check=True,
+    )
+    return tree
+
+
+#: What a checkout does not have and a developer's machine does.
+#:
+#: `actions/checkout` writes no `user.*`, so `git commit-tree` refuses on a
+#: runner and answers here. Pointing both config files at an empty one is how
+#: git is told there is no identity to find; the clone brings no local one.
+NO_IDENTITY: dict[str, str] = {
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_SYSTEM": os.devnull,
+}
 
 #: `${{ env.NAME }}`, the one expression a step's command may carry that this
 #: can resolve: the workflow's own `env:` block is in the file being read.
@@ -532,13 +568,17 @@ def main() -> int:
             for job, name, command, environment in plan
             if not run_step(f"{job}: {name}", command, tree, environment)
         ]
-        # And the steps the clone is the wrong shape for, in the tree that is
-        # the right one. Skipped under `--here`, where the clone is that tree.
-        if not args.here:
+        # And the steps the shallow clone is the wrong shape for, in a clone
+        # that is the right one. `holder` is the temporary directory both
+        # clones live in, and it is `None` exactly when `--here` gave the
+        # caller's tree instead -- so asking for it is the same condition as
+        # asking for `--here`, and it is the one that also says where to clone.
+        if holder is not None:
+            deep = deep_clone(holder)
             failures += [
                 f"{job}: {name}"
                 for job, name, command in DEEP_HISTORY_STEPS
-                if not run_step(f"{job}: {name}", command, ROOT, {})
+                if not run_step(f"{job}: {name}", command, deep, NO_IDENTITY)
             ]
     finally:
         if holder is not None:
@@ -548,12 +588,50 @@ def main() -> int:
     if failures:
         print(f"gate: {len(failures)} step(s) failed: {', '.join(failures)}")
         return EXIT_FAIL
-    deep = 0 if args.here else len(DEEP_HISTORY_STEPS)
+    deep_steps = 0 if args.here else len(DEEP_HISTORY_STEPS)
     print(
-        f"gate: {len(plan) + deep} step(s) passed in a clone shaped like the "
-        "runner's, and in this tree where the runner keeps its history."
+        f"gate: {len(plan) + deep_steps} step(s) passed in a clone shaped like the "
+        "runner's, and in a clone that keeps the history and has no committer."
     )
+    report_what_was_not_run(here=args.here)
     return EXIT_OK
+
+
+#: What no arrangement of this gate reaches, named so a green run is read for
+#: what it is. Each is a whole lane rather than a step, so `NEEDS_A_RUNNER`
+#: -- which is per step and held to the workflow -- does not carry them.
+UNREACHED = (
+    (
+        "the interpreter matrix beyond the caller's own, and the macOS and "
+        "Windows legs: an answer differs by interpreter and by platform, and "
+        "this box is one of each"
+    ),
+    (
+        "the mutation sweeps, which are tens of minutes and whose verdict is "
+        "the interpreter's -- run them with PYO3_PYTHON at the 3.12 the lane "
+        "names, or a mutant the lane kills reads as a survivor"
+    ),
+    (
+        "every cachegrind count and every wall-clock ratio, which need the "
+        "optimized wheel and a base built beside it"
+    ),
+)
+
+
+def report_what_was_not_run(*, here: bool) -> None:
+    """Say what a green gate did not check, because a green gate is read as more.
+
+    The audit's standing rule is that a slice names the lanes this gate cannot
+    run and what was done about each. The gate itself never said, so the reader
+    doing the naming had to remember the list -- and three lanes went red in one
+    week on things it does not reach. Printed on success only: a failure is
+    already telling the reader to look somewhere.
+    """
+    print(f"gate: {len(NEEDS_A_RUNNER)} step(s) excused by name, and not run here:")
+    for gap in UNREACHED:
+        print(f"  - {gap}")
+    if here:
+        print("  - the checks that read the history: --here skips them")
 
 
 if __name__ == "__main__":

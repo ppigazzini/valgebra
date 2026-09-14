@@ -607,6 +607,9 @@
     "re": {
       "since": "3.10"
     },
+    "shlex": {
+      "since": "3.10"
+    },
     "shutil": {
       "since": "3.10"
     },

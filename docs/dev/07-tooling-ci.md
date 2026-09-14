@@ -44,24 +44,34 @@ against a dependency tree with no advisory in it. The two variables whose only
 purpose is that override are dropped (`runner_environment`).
 
 **The whole list, since two of these cost a day each.** A lane differs from a
-local run in nine ways, and the gate models the first three:
+local run in ten ways, and the gate models the first four:
 
 | difference | modelled | what it cost when it was not |
 | --- | --- | --- |
 | the clone: one commit, no tags | yes, `shallow_clone` | a ledger read `git describe` and reddened eight jobs at once |
 | the step's declared `env:` | yes, since the plan carries it | `RUSTDOCFLAGS=-D warnings` was dropped, so `cargo doc` could not fail locally |
 | the terminal's own variables | yes, `runner_environment` | `FORCE_COLOR` turned `pip-audit` red against a clean dependency tree |
-| the interpreter the lane names | partly: `PYO3_PYTHON` follows the caller's | the mutation and cachegrind lanes name CPython 3.12 in `ci.yml`; a local run uses whatever `uv` resolves |
+| the machine's git identity | yes, `deep_clone` and `NO_IDENTITY` | a checkout configures no `user.name`, this repository has one in its own `.git/config`, and a ledger that plants a commit with `git commit-tree` passed here and failed there |
+| the interpreter the lane names | partly: `PYO3_PYTHON` follows the caller's, and the gate's closing line says so | the mutation and cachegrind lanes name CPython 3.12 in `ci.yml`; a local sweep on 3.14 read two mutants as survivors that the lane kills, which is half an hour spent on a difference that was the interpreter |
 | the operating system and architecture | no | a macOS or Windows leg fails where Linux does not, and nothing local sees it |
 | the pinned tool versions | no | `uvx pip-audit==2.10.1` and `uvx zizmor==1.30.1` are the lane's; a local `uvx` takes the latest |
+| the build of the interpreter, not only its version | no: a rule answers it instead | `sys.stdlib_module_names` is the build's, not the release's -- this box's 3.12 lists the Windows-only `_wmi` and a runner's does not, so a table of every name reported a difference between two builds as a moved row. The floor table records the modules this tree imports, which are portable by construction |
 | the machine's own speed | not modelled, and not a gate: every merge-blocking number is an instruction count | an absolute count reads 5--8% apart between two machines on one `rustc` line, which is what the recorded budgets carry a band for |
 | secrets, tokens and the event payload | no, and the steps that need one are excused by name | the merge base comes from the event, so `--against` runs only in the lane |
 | what a gate **counts**, against what it claims to | no: a scope is a claim in prose, and no check reads it | the binding coverage floor counted the instruction gate's own workloads, which no suite runs, and the lane went red at 94.50% over a change that added none of its own uncovered lines; the build shape counted the harness formatting fifty names, and three quarters of what it reported was that |
 
-The first three are closed. The fourth is a row rather than a fix because the
-gate runs the caller's toolchain by design; the next four are differences a
-local gate cannot remove, and naming them is what keeps a green local run from
-being read as a promise it never made.
+The first four are closed. The fifth is a row rather than a fix because the
+gate runs the caller's toolchain by design, and the gate's own closing line now
+names it; the sixth is answered by a rule rather than by the gate; the rest are
+differences a local gate cannot remove, and naming them is what keeps a green
+local run from being read as a promise it never made.
+
+**The fourth row is the newest and it is the one to read twice.** It is not a
+setting a developer chose: it is an *absence* on the runner that is a presence
+here. A check that writes anything -- a commit, a file, a config -- asks the
+machine for something the runner does not have, and passes locally for that
+reason alone. The gate models it by cloning: a clone inherits no `user.*`, and
+pointing git's global and system config at an empty file removes the rest.
 
 The last is a different kind and is the newest: it is not a difference between
 a lane and a local run at all, but between what a gate measures and what its
