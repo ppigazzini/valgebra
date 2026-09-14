@@ -18,10 +18,25 @@ answer of its own, or a repair to a change not yet released.
 - perf: a union of lines appends the second list where it lies -- internal
 - perf: a component's whole is named, and built where it is wanted -- internal
 - perf: a kind's lines are tidied where they lie -- internal
+- perf: a validator's field keys are interned, as their comment said
+- perf: the frontend holds the typing forms it reads per node
 
 -->
 
 ### Changed
+
+- **Building a validator is about four times cheaper.** The frontend asked the
+  interpreter to import `typing` and resolve `get_origin`, `get_args` and the
+  qualifier forms once per *node* of the annotation it was reading, for a
+  module `sys.modules` has held since the first one. It holds them, as the
+  cache beside them always said it did: a fifty-field record compiles in
+  222,939,220 instructions where it took 939,032,142.
+
+- **Validating a record is cheaper when the dict's keys are interned**, which
+  is every dict written as a literal, every `**kwargs` and every `__dict__`.
+  A validator's declared keys are interned too, so the probe compares pointers
+  rather than bytes: a fifty-field record walk reads 29% cheaper with both
+  sides interned, and about a percent cheaper with only ours.
 
 - **PyPy 3.11 is a stated target.** The `Implementation :: PyPy` classifier and
   `docs/00-installation.md` name the four wheels published for it from 0.0.10

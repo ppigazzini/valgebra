@@ -178,6 +178,29 @@ struct Forms {
     /// defines it, and those load everywhere.
     generic_alias: Py<PyAny>,
     literal: Py<PyAny>,
+    /// `typing.get_origin` and `typing.get_args`, the spec's own introspection,
+    /// held as the callables they are.
+    ///
+    /// Every node asks both, and asking them through the module means importing
+    /// `typing` and resolving the name per node: the import machinery alone was
+    /// 7.7% of building a fifty-field validator, for a module `sys.modules` has
+    /// held since the first one.
+    get_origin: Py<PyAny>,
+    get_args: Py<PyAny>,
+    /// `typing.ForwardRef`, and the four classes a type variable or special
+    /// form is an instance of, in the order they are asked.
+    forward_ref: Option<Py<PyAny>>,
+    type_variables: Vec<Py<PyAny>>,
+    /// The `TypedDict` field qualifiers: `Required`, `NotRequired`,
+    /// `ReadOnly`. Absent where the runtime is older than the one that spells
+    /// them.
+    required: Option<Py<PyAny>>,
+    not_required: Option<Py<PyAny>>,
+    read_only: Option<Py<PyAny>>,
+    /// `typing.Unpack`, the origin of an unpacked tuple.
+    unpack: Option<Py<PyAny>>,
+    /// `typing.get_type_hints`, which resolves a class's annotations.
+    get_type_hints: Py<PyAny>,
     object: Py<PyAny>,
     enum_class: Py<PyAny>,
     callable: Py<PyAny>,
@@ -206,6 +229,18 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             union_type: py.import("types")?.getattr("UnionType")?.unbind(),
             generic_alias: py.import("types")?.getattr("GenericAlias")?.unbind(),
             literal: typing.getattr("Literal")?.unbind(),
+            get_origin: typing.getattr("get_origin")?.unbind(),
+            get_args: typing.getattr("get_args")?.unbind(),
+            forward_ref: optional_form(&typing, "ForwardRef"),
+            type_variables: ["TypeVar", "ParamSpec", "TypeVarTuple", "_SpecialForm"]
+                .iter()
+                .filter_map(|name| optional_form(&typing, name))
+                .collect(),
+            required: optional_form(&typing, "Required"),
+            not_required: optional_form(&typing, "NotRequired"),
+            read_only: optional_form(&typing, "ReadOnly"),
+            unpack: optional_form(&typing, "Unpack"),
+            get_type_hints: typing.getattr("get_type_hints")?.unbind(),
             object: builtins.getattr("object")?.unbind(),
             enum_class: py.import("enum")?.getattr("Enum")?.unbind(),
             callable: py.import("collections.abc")?.getattr("Callable")?.unbind(),
@@ -235,7 +270,6 @@ pub(crate) fn build_schema(
     }
 
     let forms = forms(py)?;
-    let typing = py.import("typing")?;
 
     // `typing.Any` is a singleton special form: the gradual dynamic type. It is
     // checked before the type-object dispatch below because on 3.11+ `Any` is
@@ -272,9 +306,9 @@ pub(crate) fn build_schema(
     // ...) are read through the typing spec's own introspection, so the builtin
     // and legacy aliases share one path. A non-typing object has origin None and
     // falls through to the native handling below.
-    let origin = typing.call_method1("get_origin", (obj,))?;
+    let origin = forms.get_origin.bind(py).call1((obj,))?;
     if !origin.is_none() {
-        let args = typing.call_method1("get_args", (obj,))?;
+        let args = forms.get_args.bind(py).call1((obj,))?;
         let args = args.cast::<PyTuple>()?;
         // A *bare* legacy alias -- `typing.List`, `typing.Tuple` -- is the class
         // it aliases, so it is compiled as that class rather than as a
@@ -376,18 +410,17 @@ pub(crate) fn build_schema(
 /// construct carrying no runtime value, so it cannot denote a set of values.
 /// True if `obj` is a `typing.ForwardRef`, on a runtime that has one.
 fn is_forward_reference(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
-    match obj.py().import("typing")?.getattr("ForwardRef") {
-        Ok(class) => obj.is_instance(&class),
-        Err(_) => Ok(false),
+    let py = obj.py();
+    match &forms(py)?.forward_ref {
+        Some(class) => obj.is_instance(class.bind(py)),
+        None => Ok(false),
     }
 }
 
 fn is_typing_construct(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let typing = obj.py().import("typing")?;
-    for name in ["TypeVar", "ParamSpec", "TypeVarTuple", "_SpecialForm"] {
-        if let Ok(class) = typing.getattr(name)
-            && obj.is_instance(&class)?
-        {
+    let py = obj.py();
+    for class in &forms(py)?.type_variables {
+        if obj.is_instance(class.bind(py))? {
             return Ok(true);
         }
     }
@@ -563,8 +596,10 @@ fn resolve_type_hints<'py>(ty: &Bound<'py, PyType>) -> PyResult<Bound<'py, PyAny
     let py = ty.py();
     let kwargs = PyDict::new(py);
     kwargs.set_item("include_extras", true)?;
-    py.import("typing")?
-        .call_method("get_type_hints", (ty,), Some(&kwargs))
+    forms(py)?
+        .get_type_hints
+        .bind(py)
+        .call((ty,), Some(&kwargs))
 }
 
 /// Read a record field name as Rust text, refusing a key that is not valid
@@ -635,15 +670,15 @@ fn build_typed_dict(
 /// through the ones that carry no answer rather than stopping at the first.
 fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<bool>> {
     let py = hint.py();
-    let typing = py.import("typing")?;
+    let forms = forms(py)?;
     let mut current = hint.clone();
     for _ in 0..MAX_BUILD_DEPTH {
         let Ok(origin) = current.getattr("__origin__") else {
             return Ok(None);
         };
-        for (name, answer) in [("Required", true), ("NotRequired", false)] {
-            if let Ok(marker) = typing.getattr(name)
-                && origin.is(&marker)
+        for (marker, answer) in [(&forms.required, true), (&forms.not_required, false)] {
+            if let Some(marker) = marker
+                && origin.is(marker.bind(py))
             {
                 return Ok(Some(answer));
             }
@@ -996,10 +1031,11 @@ fn is_literal_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// values belong. None of the three narrows the field's *set*, so each is
 /// unwrapped to the type it qualifies.
 fn is_field_qualifier(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let typing = origin.py().import("typing")?;
-    for name in ["Required", "NotRequired", "ReadOnly"] {
-        if let Ok(marker) = typing.getattr(name)
-            && origin.is(&marker)
+    let py = origin.py();
+    let forms = forms(py)?;
+    for marker in [&forms.required, &forms.not_required, &forms.read_only] {
+        if let Some(marker) = marker
+            && origin.is(marker.bind(py))
         {
             return Ok(true);
         }
@@ -1056,30 +1092,28 @@ enum Unpacked<'py> {
 /// empty splice.
 fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Unpacked<'py>>> {
     let py = arg.py();
-    let typing = py.import("typing")?;
+    let forms = forms(py)?;
+    let origin_of = |of: &Bound<'py, PyAny>| forms.get_origin.bind(py).call1((of,));
     let inner = if is_truthy_attr(arg, "__unpacked__") {
         arg.clone()
     } else {
-        let Ok(unpack) = typing.getattr("Unpack") else {
+        let Some(unpack) = &forms.unpack else {
             return Ok(None);
         };
-        if !typing.call_method1("get_origin", (arg,))?.is(&unpack) {
+        if !origin_of(arg)?.is(unpack.bind(py)) {
             return Ok(None);
         }
-        let wrapped = typing.call_method1("get_args", (arg,))?;
+        let wrapped = forms.get_args.bind(py).call1((arg,))?;
         single_arg(wrapped.cast::<PyTuple>()?)?
     };
-    if !typing
-        .call_method1("get_origin", (&inner,))?
-        .is(py.get_type::<PyTuple>())
-    {
+    if !origin_of(&inner)?.is(py.get_type::<PyTuple>()) {
         return Err(not_implemented(&format!(
             "only a tuple can be unpacked into a tuple schema; {} binds no \
              element types at runtime",
             summarize(&inner)
         )));
     }
-    let args = typing.call_method1("get_args", (&inner,))?;
+    let args = forms.get_args.bind(py).call1((&inner,))?;
     let args = args.cast::<PyTuple>()?;
     let len = args.len();
     if len == 2 && is_ellipsis(&args.get_item(1)?) {
