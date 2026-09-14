@@ -31,9 +31,11 @@ Three workloads, and seven shapes across them:
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in five
   shapes: the membership walk (`--binding`), the call boundary alone
-  (`--binding-boundary`), the walk over a wide record (`--binding-record`),
-  building one from its Python spelling (`--binding-build`), and explaining a
-  failure in one (`--binding-explain`). Each is the deterministic twin of a
+  (`--binding-boundary`), the walk over a wide record (`--binding-record`) and
+  the same walk over a value whose keys are interned (`--binding-keys`),
+  building one from its Python spelling (`--binding-build`), compiling one
+  written as a `TypedDict` of refined integers (`--binding-annotated`), and
+  explaining a failure in one (`--binding-explain`). Each is the deterministic twin of a
   shape the comparison gate times, so a wall-clock movement there can be
   confirmed or refuted here. They embed CPython, whose startup is not a fixed
   instruction count, so each is measured as the *difference* between two
@@ -290,6 +292,8 @@ MODES = {
     "binding-explain": ("binding_workload", "binding record explain"),
     "binding-explain-accept": ("binding_workload", "binding record explain accept"),
     "binding-open": ("binding_workload", "binding open record walk"),
+    "binding-annotated": ("binding_workload", "binding annotated build"),
+    "binding-keys": ("binding_workload", "binding record walk by interned keys"),
 }
 
 #: The workload argument each binding mode passes, and the budget key it reads.
@@ -305,6 +309,8 @@ BINDING_ITERATIONS = {
     "binding-explain": (8_000, 2_000),
     "binding-explain-accept": (20_000, 5_000),
     "binding-open": (20_000, 5_000),
+    "binding-annotated": (300, 100),
+    "binding-keys": (20_000, 5_000),
 }
 
 BINDING_SHAPES = {
@@ -315,6 +321,8 @@ BINDING_SHAPES = {
     "binding-explain": "explain",
     "binding-explain-accept": "explain-accept",
     "binding-open": "open",
+    "binding-annotated": "annotated",
+    "binding-keys": "keys",
 }
 
 

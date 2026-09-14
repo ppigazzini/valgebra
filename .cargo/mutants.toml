@@ -32,6 +32,11 @@ exclude_globs = [
     "crates/valgebra-py/src/errors.rs",
     "crates/valgebra-py/src/input.rs",
     "crates/valgebra-py/src/lib.rs",
+    # The instruction gate's own workloads: a measuring instrument no caller
+    # reaches and no suite runs, so a mutant of one is a mutant nothing can
+    # observe. It sat inside `lib.rs` until the coverage lane said what
+    # counting it costs.
+    "crates/valgebra-py/src/workload.rs",
     "crates/valgebra-py/src/render.rs",
 ]
 

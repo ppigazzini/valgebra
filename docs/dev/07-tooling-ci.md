@@ -130,16 +130,30 @@ gate only catches what it exercises:
   refutation and a repeated goal walk different paths, and a workload that
   asks only for proofs holds a refuting rule to nothing;
 - the **binding** shapes (`--binding`, `--binding-boundary`,
-  `--binding-record`, `--binding-open`, `--binding-build`,
-  `--binding-explain`) — membership over a live Python value, the call
-  boundary alone, a wide record closed and the same record open the way a
-  `TypedDict` is, building a validator from its Python spelling, explaining a
-  failure. The walk is the shipped hot path neither pure-Rust workload reaches;
-  schema construction grew twelve percent over a release cycle while only the
-  walk was counted, and an open record was read a third dearer than a closed
-  one while only the closed one was. Each shape builds what it reads outside
-  its loop: the build shape once formatted fifty names and filled a dict per
-  iteration, and three quarters of its count was that.
+  `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-build`,
+  `--binding-annotated`, `--binding-explain`) — membership over a live Python
+  value, the call boundary alone, a wide record closed, the same record walked
+  over a value whose keys are interned, the record open the way a `TypedDict`
+  is, building a validator from its Python spelling, compiling one written as a
+  `TypedDict` of refined integers, explaining a failure. The walk is the shipped
+  hot path neither pure-Rust workload reaches; schema construction grew twelve
+  percent over a release cycle while only the walk was counted, and an open
+  record was read a third dearer than a closed one while only the closed one
+  was. Each shape builds what it reads outside its loop: the build shape once
+  formatted fifty names and filled a dict per iteration, and three quarters of
+  its count was that.
+
+  The last two are there because the first six could not see two repairs worth
+  a third and three quarters of what they touched. **A dict of bare type
+  objects is not what the frontend costs**: an annotation with any depth is
+  read through `get_type_hints`, asked per field whether a qualifier states its
+  required-ness, and asked per marker for four bound names it probably does not
+  carry -- and none of that had a count. **A record walk over a dict the
+  caller wrote as a literal is not the walk over one built with f-strings**
+  either: the probe compares by pointer where both sides are interned, which is
+  28% of the call, and the shape that walks non-interned keys moves by a
+  percent when the validator's own side stops interning -- inside the relative
+  gate's ceiling, and therefore invisible.
 
 The binding workload embeds CPython, whose startup is not a fixed instruction
 count, so the gate measures the **difference** between two iteration counts:

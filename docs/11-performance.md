@@ -359,8 +359,10 @@ goals repeat, since a proof, a refutation and a repeated goal walk three
 different paths and a workload that asks only one of them measures only that
 one. The binding's shapes are the membership walk over a live value, the call
 boundary alone, a wide record closed and the same record open the way a
-`TypedDict` is, building a validator from its Python spelling, and explaining
-a failure (`crates/valgebra-py/examples/binding_workload.rs`): the walk is the
+`TypedDict` is, the same record walked over interned keys, building a validator
+from its Python spelling, compiling one written as a `TypedDict` of refined
+integers, and explaining a failure
+(`crates/valgebra-py/examples/binding_workload.rs`): the walk is the
 shipped hot path neither pure-Rust workload reaches, schema construction grew
 twelve percent over a release cycle while only the walk was counted, and an open
 record was read a third dearer than a closed one while only the closed one was.
