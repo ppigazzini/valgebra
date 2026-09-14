@@ -20,10 +20,18 @@ answer of its own, or a repair to a change not yet released.
 - perf: a kind's lines are tidied where they lie -- internal
 - perf: a validator's field keys are interned, as their comment said
 - perf: the frontend holds the typing forms it reads per node
+- perf: the frontend asks for an attribute rather than trying for it
 
 -->
 
 ### Changed
+
+- **Compiling a refinement is a third cheaper, and a `TypedDict` a fifth.** The
+  frontend read an annotation's optional attributes by *trying* them: a marker
+  carries one of `ge`, `gt`, `le`, `lt` and not the other three, and each
+  absence answered by raising an exception that was built, caught and dropped.
+  It asks instead. Fifty `Annotated[int, Ge(0)]` fields compile in 226 us where
+  they took 341, and as a `TypedDict` in 315 where they took 421.
 
 - **Building a validator is about four times cheaper.** The frontend asked the
   interpreter to import `typing` and resolve `get_origin`, `get_args` and the

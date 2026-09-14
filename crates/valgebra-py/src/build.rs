@@ -5,6 +5,7 @@ use std::cell::{Cell, RefCell};
 
 use pyo3::PyTypeInfo;
 use pyo3::exceptions::{PyNotImplementedError, PyValueError};
+use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
@@ -673,7 +674,11 @@ fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<bool>> {
     let forms = forms(py)?;
     let mut current = hint.clone();
     for _ in 0..MAX_BUILD_DEPTH {
-        let Ok(origin) = current.getattr("__origin__") else {
+        // Asked rather than tried: a field that carries no qualifier is the
+        // common one, and an attribute that is absent answers by *raising* --
+        // an exception built, thrown and dropped per field. `getattr_opt`
+        // reads the same absence without one.
+        let Some(origin) = current.getattr_opt(intern!(py, "__origin__"))? else {
             return Ok(None);
         };
         for (marker, answer) in [(&forms.required, true), (&forms.not_required, false)] {
@@ -686,7 +691,7 @@ fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<bool>> {
         if !is_field_qualifier(&origin)? {
             return Ok(None);
         }
-        let Ok(args) = current.getattr("__args__") else {
+        let Some(args) = current.getattr_opt(intern!(py, "__args__"))? else {
             return Ok(None);
         };
         let Ok(inner) = args.get_item(0) else {
@@ -723,12 +728,13 @@ fn unnamed_keys(
     lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Vec<MapClause>> {
-    if let Ok(flag) = ty.getattr("__closed__")
+    let py = ty.py();
+    if let Some(flag) = ty.getattr_opt(intern!(py, "__closed__"))?
         && flag.is_truthy()?
     {
         return Ok(Vec::new());
     }
-    if let Ok(extra) = ty.getattr("__extra_items__")
+    if let Some(extra) = ty.getattr_opt(intern!(py, "__extra_items__"))?
         && !extra.is_none()
         && !gave_no_extra_items(&extra)?
     {
@@ -1481,7 +1487,7 @@ fn with_inline_flags(marker: &Bound<'_, PyAny>, pattern: String) -> PyResult<Str
     const VERBOSE: u32 = 64;
     const ASCII: u32 = 256;
 
-    let Ok(flags) = marker.getattr("flags") else {
+    let Some(flags) = marker.getattr_opt(intern!(marker.py(), "flags"))? else {
         return Ok(pattern);
     };
     let Ok(flags) = flags.extract::<u32>() else {
@@ -1576,7 +1582,7 @@ fn parse_constraint(
     // `re.Pattern`, both carrying the source pattern as `.pattern`. The pattern
     // is validated (anchored) here so an invalid expression fails at compile
     // time, not at first validation; the compiled regex is cached per validator.
-    if let Ok(attr) = marker.getattr("pattern") {
+    if let Some(attr) = marker.getattr_opt(intern!(marker.py(), "pattern"))? {
         let Ok(pattern) = attr.extract::<String>() else {
             // A `bytes` pattern: `re` compiles one against `bytes` values, and a
             // pattern constraint here matches the text of a `str`. Reading the
@@ -1602,7 +1608,10 @@ fn parse_constraint(
         ("le", Constraint::Le),
         ("lt", Constraint::Lt),
     ] {
-        if let Ok(bound) = marker.getattr(attr)
+        // A marker carries one of these four and not the other three, so the
+        // three absences are the common answer: asked, they cost a lookup;
+        // tried, they cost an exception built and dropped apiece.
+        if let Some(bound) = marker.getattr_opt(attr)?
             && !bound.is_none()
         {
             refuse_unordered_bound(attr, &bound)?;
@@ -1617,7 +1626,7 @@ fn parse_constraint(
         ("min_length", Constraint::MinLen as fn(usize) -> Constraint),
         ("max_length", Constraint::MaxLen),
     ] {
-        if let Ok(bound) = marker.getattr(attr)
+        if let Some(bound) = marker.getattr_opt(attr)?
             && !bound.is_none()
         {
             // A `bool` is read as the length it equals: `MinLen(True)` is
@@ -1639,7 +1648,7 @@ fn parse_constraint(
     // Numeric multiple-of bound. A zero divisor is rejected here: no value is a
     // multiple of zero, and checking one would divide by zero at validation time,
     // so the schema is unsatisfiable and the error belongs at construction.
-    if let Ok(multiple) = marker.getattr("multiple_of")
+    if let Some(multiple) = marker.getattr_opt(intern!(marker.py(), "multiple_of"))?
         && !multiple.is_none()
     {
         if multiple.extract::<f64>().is_ok_and(f64::is_nan) {
