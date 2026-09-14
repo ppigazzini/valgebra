@@ -466,10 +466,13 @@ impl PoolRelations<'_, '_> {
     fn denotes_a_set(&self, class: &Bound<'_, PyAny>) -> Option<bool> {
         let metaclass = class.get_type();
         let plain = self.py.get_type::<PyType>();
-        let untouched = |hook: &str| -> Option<bool> {
+        let untouched = |hook: &Bound<'_, PyString>| -> Option<bool> {
             Some(metaclass.getattr(hook).ok()?.is(&plain.getattr(hook).ok()?))
         };
-        Some(untouched("__instancecheck__")? && untouched("__subclasscheck__")?)
+        Some(
+            untouched(intern!(self.py, "__instancecheck__"))?
+                && untouched(intern!(self.py, "__subclasscheck__"))?,
+        )
     }
 }
 
