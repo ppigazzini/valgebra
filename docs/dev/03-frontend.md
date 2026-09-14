@@ -38,6 +38,19 @@ The rest are read in this order:
 Metadata matching neither is ignored, which the typing spec requires of any
 consumer for metadata it does not recognise.
 
+**A name is a handle, and an absence is not an exception.** Every attribute the
+protocol asks for is asked by an interned `PyString` the interpreter already
+holds, because text would be decoded into a fresh string and hashed before the
+lookup could begin, once per name per marker. And a marker carries one or two
+of the ten names and not the rest, so absence is the common answer: it used to
+be given by *raising*, which is an exception built, thrown and dropped — four
+hundred of them to compile fifty fields. Which names a marker can carry is a
+property of its type (`Ge` is a `slots` dataclass, so `Ge.ge` is the descriptor
+that reads the slot and `Ge.gt` does not exist), so the type is read once and
+its answer kept, and a marker that keeps its values in a dictionary of its own
+is read from that dictionary. A type with a `__getattr__` hook answers for
+names neither holds, and is asked for everything.
+
 **Callability is how `annotated_types` tells its two marker shapes apart**, so
 the order is its rule rather than a heuristic. `Not` defines `__call__` because
 calling is what applies the negation; `Predicate` deliberately does not, and
@@ -141,20 +154,31 @@ resolved once at import — `typing` is imported once, not once per node — and
 form this frontend does not know is a refusal rather than a guess.
 
 `Union` and `X | Y` are the same origin in two spellings and build the same
-node. `Literal` interns each argument as a constant, and refuses an unhashable
-one: `Literal` requires hashable arguments, and a list would be compared by
-value against every candidate rather than named.
+node. `Literal` interns each argument as a constant, and refuses a list, a dict
+or a set: the typing spec allows `None`, an enum member, or an `int`, `bool`,
+`str` or `bytes` value, and a container there would be read as a schema of its
+own rather than as a constant. The refusal names the spelling that was meant.
 
 A `tuple` reads its arguments as a *shape*: `tuple[int, str]` is a fixed
 sequence of two, `tuple[int, ...]` is a homogeneous one, and `tuple[()]` is the
 empty tuple. `Unpack[Ts]` and `*tuple[int, ...]` are the same unpacking in two
-spellings, and a variadic member in a fixed position is what separates a shape
-the walk can decide from one it cannot.
+spellings. A shape is a fixed prefix and then a repeating tail, so nothing may
+follow the tail and a tuple cannot begin with `...`; both are refused by naming
+the spelling that was meant.
 
 Every other parametrized container — `list`, `set`, `frozenset`, `dict`, the
-`collections.abc` equivalents — reads its arguments as element and key types,
-and a key narrowed by a constraint is refused where "Three rejections that
-belong at compile time" says why.
+`collections.abc` equivalents — reads its arguments as element and key types.
+`dict[K, V]`'s two are read by name rather than by position, because the two
+transposed is `dict[V, K]`, which typechecks and validates real values.
+
+The two **native literals** are read here too, because they answer the same
+question: `[A, B]` is the fixed-length list, which `typing` cannot spell, and a
+`dict` literal is a record — string keys are named fields, with `"key?"` for an
+optional one, and any other key is a schema governing the rest. A tuple literal
+and a set literal are refused rather than accepted, since `tuple[A, B]` and
+`set[T]` already spell them and two spellings for one set is a fork. A key
+narrowed by a constraint is refused where "Three rejections that belong at
+compile time" says why.
 
 ## Where an index acquires its meaning
 

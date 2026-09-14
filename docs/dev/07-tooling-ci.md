@@ -44,7 +44,7 @@ against a dependency tree with no advisory in it. The two variables whose only
 purpose is that override are dropped (`runner_environment`).
 
 **The whole list, since two of these cost a day each.** A lane differs from a
-local run in eight ways, and the gate models the first three:
+local run in nine ways, and the gate models the first three:
 
 | difference | modelled | what it cost when it was not |
 | --- | --- | --- |
@@ -56,11 +56,20 @@ local run in eight ways, and the gate models the first three:
 | the pinned tool versions | no | `uvx pip-audit==2.10.1` and `uvx zizmor==1.30.1` are the lane's; a local `uvx` takes the latest |
 | the machine's own speed | not modelled, and not a gate: every merge-blocking number is an instruction count | an absolute count reads 5--8% apart between two machines on one `rustc` line, which is what the recorded budgets carry a band for |
 | secrets, tokens and the event payload | no, and the steps that need one are excused by name | the merge base comes from the event, so `--against` runs only in the lane |
+| what a gate **counts**, against what it claims to | no: a scope is a claim in prose, and no check reads it | the binding coverage floor counted the instruction gate's own workloads, which no suite runs, and the lane went red at 94.50% over a change that added none of its own uncovered lines; the build shape counted the harness formatting fifty names, and three quarters of what it reported was that |
 
 The first three are closed. The fourth is a row rather than a fix because the
-gate runs the caller's toolchain by design; the rest are differences a local
-gate cannot remove, and naming them is what keeps a green local run from being
-read as a promise it never made.
+gate runs the caller's toolchain by design; the next four are differences a
+local gate cannot remove, and naming them is what keeps a green local run from
+being read as a promise it never made.
+
+The last is a different kind and is the newest: it is not a difference between
+a lane and a local run at all, but between what a gate measures and what its
+own text says it measures. Both halves of a gate are a claim -- the number and
+the scope -- and only the number is held to anything. Three red lanes in one
+week were that same finding, so it is a row here rather than a rule nobody
+wrote: when a gate moves, read what it now counts against the sentence that
+says what it counts.
 
 Three of the excused steps need only what a developer's machine already has --
 the dependency sync, the extension build, and the stub check that needs both --
@@ -131,11 +140,12 @@ gate only catches what it exercises:
   asks only for proofs holds a refuting rule to nothing;
 - the **binding** shapes (`--binding`, `--binding-boundary`,
   `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-build`,
-  `--binding-annotated`, `--binding-explain`) — membership over a live Python
-  value, the call boundary alone, a wide record closed, the same record walked
-  over a value whose keys are interned, the record open the way a `TypedDict`
-  is, building a validator from its Python spelling, compiling one written as a
-  `TypedDict` of refined integers, explaining a failure. The walk is the shipped
+  `--binding-annotated`, `--binding-object`, `--binding-explain`) — membership
+  over a live Python value, the call boundary alone, a wide record closed, the
+  same record walked over a value whose keys are interned, the record open the
+  way a `TypedDict` is, building a validator from its Python spelling,
+  compiling one written as a `TypedDict` of refined integers, compiling a
+  fifty-field dataclass, explaining a failure. The walk is the shipped
   hot path neither pure-Rust workload reaches; schema construction grew twelve
   percent over a release cycle while only the walk was counted, and an open
   record was read a third dearer than a closed one while only the closed one
@@ -143,8 +153,8 @@ gate only catches what it exercises:
   formatted fifty names and filled a dict per iteration, and three quarters of
   its count was that.
 
-  The last two are there because the first six could not see two repairs worth
-  a third and three quarters of what they touched. **A dict of bare type
+  The last three are there because the first six could not see three repairs
+  worth a third, three quarters, and six percent of what they touched. **A dict of bare type
   objects is not what the frontend costs**: an annotation with any depth is
   read through `get_type_hints`, asked per field whether a qualifier states its
   required-ness, and asked per marker for four bound names it probably does not
@@ -153,7 +163,11 @@ gate only catches what it exercises:
   either: the probe compares by pointer where both sides are interned, which is
   28% of the call, and the shape that walks non-interned keys moves by a
   percent when the validator's own side stops interning -- inside the relative
-  gate's ceiling, and therefore invisible.
+  gate's ceiling, and therefore invisible. **And a class is not a dict**: a
+  dataclass is the one class form whose compile asks the standard library a
+  question, and putting the `dataclasses` import back at the top of the
+  frontend cost a build that compiles none of them 6.45% -- found with a
+  profiler, because no shape here would move.
 
 The binding workload embeds CPython, whose startup is not a fixed instruction
 count, so the gate measures the **difference** between two iteration counts:

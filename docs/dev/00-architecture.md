@@ -14,6 +14,8 @@ direction their dependencies run, and the two invariants the compiler holds.
 | `crates/valgebra-py/src/build.rs`, `build/` | typing annotations and native forms into the IR: the dispatch, the pool and the guard in the file, the marker protocol in `build/refine.rs`, what a class declares in `build/classes.rs`, and the typing introspection in `build/generics.rs` | [03-frontend.md](03-frontend.md) |
 | `crates/valgebra-py/src/check/` | the membership walk: the dispatcher in `walk.rs`, the leaves in `walk/scalar.rs`, the containers in `walk/record.rs` and `walk/sequence.rs` | [04-walk.md](04-walk.md) |
 | `crates/valgebra-py/src/errors.rs`, `render.rs` | the Python exception and the annotation render | [05-errors.md](05-errors.md) |
+| `crates/valgebra-py/src/lib.rs` | the module: what the extension exports, the four set constructors, the recursive fixpoint, and the two lattice bounds | [03-frontend.md](03-frontend.md) |
+| `crates/valgebra-py/src/workload.rs` | the instruction gate's instrument: the shapes `scripts/perf_gate.py --binding-*` measures, which no caller reaches and no suite runs, so coverage and the mutation sweep skip it by name | [07-tooling-ci.md](07-tooling-ci.md) |
 | `python/valgebra/` | the re-export package a user imports | — |
 
 `crates/valgebra-core` is pure Rust. `crates/valgebra-py` is the PyO3 binding.

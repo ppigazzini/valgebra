@@ -33,6 +33,7 @@ use crate::errors::summarize;
 /// after the import, in the generational walks a build's own allocations
 /// trigger.
 static IS_DATACLASS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
 /// `dataclasses.is_dataclass`, imported on first use.
 pub(super) fn is_dataclass(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let py = ty.py();
@@ -44,6 +45,7 @@ pub(super) fn is_dataclass(ty: &Bound<'_, PyType>) -> PyResult<bool> {
         .call1((ty,))?
         .is_truthy()
 }
+
 /// Build the schema for a Python type object (a builtin, `TypedDict`, `Enum`,
 /// dataclass, `NamedTuple`, runtime-checkable `Protocol`, or `object`).
 pub(super) fn build_type_object(
@@ -138,6 +140,7 @@ pub(super) fn build_type_object(
     // classes uniformly.
     Ok(Schema::Instance(lits.intern_class(ty.as_any())))
 }
+
 /// True if `obj.<name>` exists and is truthy; false on absence or error.
 pub(super) fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &str) -> bool {
     obj.getattr(name)
@@ -145,6 +148,7 @@ pub(super) fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &str) -> bool {
         .and_then(|value| value.is_truthy().ok())
         .unwrap_or(false)
 }
+
 /// Resolve a class's type hints with `Annotated` metadata preserved.
 ///
 /// `include_extras=True` keeps `Annotated[...]` field types intact so a field's
@@ -159,6 +163,7 @@ pub(super) fn resolve_type_hints<'py>(ty: &Bound<'py, PyType>) -> PyResult<Bound
         .bind(py)
         .call((ty,), Some(&kwargs))
 }
+
 /// Read a record field name as Rust text, refusing a key that is not valid
 /// Unicode (one carrying a lone surrogate). A field name is stored as UTF-8 and
 /// matched against dict keys as UTF-8, so a surrogate key cannot round-trip;
@@ -176,6 +181,7 @@ pub(super) fn field_name<'a>(name: &'a Bound<'_, PyString>) -> PyResult<&'a str>
         )
     })
 }
+
 /// Build the record a `TypedDict` denotes: its keys, and what it says about the
 /// ones it does not name.
 ///
@@ -217,6 +223,7 @@ pub(super) fn build_typed_dict(
     }
     Ok(Schema::keyed_map(fields, unnamed_keys(ty, lits, defs)?))
 }
+
 /// Whether a resolved hint states its own required-ness, and which.
 ///
 /// `Required[T]` and `NotRequired[T]` say it; every other form, `ReadOnly[T]`
@@ -255,6 +262,7 @@ pub(super) fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<boo
     }
     Ok(None)
 }
+
 /// Whether `extra_items` carries the sentinel for "the author gave none".
 ///
 /// A runtime with PEP 728 fills `__extra_items__` in either way: with the type
@@ -268,6 +276,7 @@ pub(super) fn gave_no_extra_items(extra: &Bound<'_, PyAny>) -> PyResult<bool> {
     };
     Ok(extra.is(sentinel.bind(extra.py())))
 }
+
 /// What a `TypedDict` says about the keys it does not name.
 ///
 /// `closed=True` shuts them and `extra_items=T` gives them a type -- PEP 728,
@@ -305,6 +314,7 @@ pub(super) fn unnamed_keys(
         value: Schema::ANYTHING,
     }])
 }
+
 /// The attribute names a class declares, in declaration order.
 ///
 /// Not every annotation on a dataclass names an attribute of its instances:
@@ -330,6 +340,7 @@ pub(super) fn declared_fields<'py>(ty: &Bound<'py, PyType>) -> PyResult<Vec<Boun
     }
     ty.getattr("_fields")?.try_iter()?.collect()
 }
+
 /// Build the schema of a class with declared attributes: the meet of its
 /// `isinstance` atom and a record of its fields, whose types come from the
 /// resolved hints. Every attribute an instance declares is required, because an
@@ -378,6 +389,7 @@ pub(super) fn build_object(
     }
     Ok(Schema::meet(parts))
 }
+
 /// The tuple shape a named tuple's fields lay out, or `None` for a class that
 /// lays out none.
 ///

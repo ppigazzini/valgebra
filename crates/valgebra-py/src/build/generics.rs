@@ -1,10 +1,12 @@
-//! What a parametrized form says: dispatch step 6, and the typing spec's
-//! introspection.
+//! What a parametrized form says: dispatch step 6, the typing spec's
+//! introspection, and the two native literals that spell what it cannot.
 //!
 //! The origin is read before the arguments and compared by identity against the
 //! forms resolved once at import, so a form this frontend does not know is a
-//! refusal rather than a guess. The section "What a parametrized form says" in
-//! `docs/dev/03-frontend.md` is this module.
+//! refusal rather than a guess. A list literal and a dict literal answer the
+//! same question from the other side -- `[A, B]` is the fixed-length list
+//! `typing` has no spelling for -- so they are read here. The section "What a
+//! parametrized form says" in `docs/dev/03-frontend.md` is this module.
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
@@ -97,6 +99,7 @@ pub(super) fn build_parametrized(
         summarize(origin)
     )))
 }
+
 /// Refuse a `Literal` argument the typing spec does not allow, where reading it
 /// on would mean something else entirely.
 ///
@@ -135,6 +138,7 @@ pub(super) fn refuse_unhashable_literal(arg: &Bound<'_, PyAny>) -> PyResult<()> 
          as a schema of its own rather than as a constant. Write {instead}"
     )))
 }
+
 /// True if `origin` is `typing.Union` (from Union/Optional) or
 /// `types.UnionType` (from `X | Y`).
 pub(super) fn is_union_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
@@ -142,11 +146,13 @@ pub(super) fn is_union_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
     let forms = forms(py)?;
     Ok(origin.is(forms.union.bind(py)) || origin.is(forms.union_type.bind(py)))
 }
+
 /// True if `origin` is `typing.Literal`.
 pub(super) fn is_literal_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = origin.py();
     Ok(origin.is(forms(py)?.literal.bind(py)))
 }
+
 /// True if `origin` is one of the `TypedDict` field qualifiers, which
 /// `include_extras` keeps in the resolved hints.
 ///
@@ -167,6 +173,7 @@ pub(super) fn is_field_qualifier(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
     }
     Ok(false)
 }
+
 /// Compile a *type argument* of a typing form.
 ///
 /// A string here is a forward reference, which the typing spec asks a consumer to
@@ -194,6 +201,7 @@ pub(super) fn build_type_argument(
     }
     build_schema(arg, lits, defs)
 }
+
 /// What an unpacked tuple argument contributes to the tuple that carries it.
 pub(super) enum Unpacked<'py> {
     /// `*tuple[A, B]`: its elements splice in where it stands.
@@ -201,6 +209,7 @@ pub(super) enum Unpacked<'py> {
     /// `*tuple[B, ...]`: the tuple repeats `B` from here on.
     Tail(Bound<'py, PyAny>),
 }
+
 /// Read `arg` as an unpacked tuple, or `None` when it is an ordinary element.
 ///
 /// Two spellings say the same thing: `*tuple[B, ...]` is the tuple alias itself
@@ -243,6 +252,7 @@ pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Un
     }
     Ok(Some(Unpacked::Fixed(args.iter().collect())))
 }
+
 /// `tuple[...]`, in every shape typing spells it.
 ///
 /// A trailing `...` repeats the element before it after a fixed prefix, and an
@@ -301,6 +311,7 @@ pub(super) fn build_tuple(
     };
     Ok(Schema::tuple(regex))
 }
+
 pub(super) fn single_arg<'py>(args: &Bound<'py, PyTuple>) -> PyResult<Bound<'py, PyAny>> {
     if args.len() == 1 {
         args.get_item(0)
@@ -308,6 +319,7 @@ pub(super) fn single_arg<'py>(args: &Bound<'py, PyTuple>) -> PyResult<Bound<'py,
         Err(not_implemented("expected exactly one type argument"))
     }
 }
+
 pub(super) fn build_sequence(
     list: &Bound<'_, PyList>,
     lits: &mut Pool,
@@ -356,6 +368,7 @@ pub(super) fn build_sequence(
     }
     Ok(Schema::list(SeqShape::fixed(elements)))
 }
+
 pub(super) fn build_dict(
     dict: &Bound<'_, PyDict>,
     lits: &mut Pool,
@@ -391,6 +404,7 @@ pub(super) fn build_dict(
     }
     Ok(Schema::keyed_map(fields, defaults))
 }
+
 pub(super) fn is_ellipsis(obj: &Bound<'_, PyAny>) -> bool {
     let py = obj.py();
     forms(py).is_ok_and(|forms| obj.is(forms.ellipsis.bind(py)))

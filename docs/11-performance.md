@@ -373,7 +373,7 @@ one. The binding's shapes are the membership walk over a live value, the call
 boundary alone, a wide record closed and the same record open the way a
 `TypedDict` is, the same record walked over interned keys, building a validator
 from its Python spelling, compiling one written as a `TypedDict` of refined
-integers, and explaining a failure
+integers, compiling a fifty-field dataclass, and explaining a failure
 (`crates/valgebra-py/examples/binding_workload.rs`): the walk is the
 shipped hot path neither pure-Rust workload reaches, schema construction grew
 twelve percent over a release cycle while only the walk was counted, and an open
@@ -384,6 +384,17 @@ holds is part of what its count means: the build shape once assembled its fifty
 fields in Rust inside the loop, so three quarters of its count was the harness
 naming them and none of it was the annotation walk, and a shape is read for that
 before its number is read for anything.
+
+**Compiling a schema costs less on 3.13 and later, and the difference is
+exceptions.** A refinement marker carries one or two of ten optional attributes
+and not the rest, and asking for one a marker does not have is answered by
+raising below 3.13 -- `PyObject_GetOptionalAttr` is the first spelling that
+does not, and there is none before it. The frontend asks the marker's *type*
+instead, once, and remembers what it carries, which removes the exceptions on
+every interpreter: fifty `Annotated[int, Ge(0)]` fields compile in 48 us on
+3.14 and 45 on 3.12, where they took 153 and 144 in 0.0.10. Compilation happens
+once per schema, so this is a startup figure rather than a per-call one -- it
+matters to a program that builds validators per request, and to nothing else.
 
 **Interned keys are the fast path, and Python interns most of them for you.** A
 validator holds an interned `str` for every declared field, and a dict probe
