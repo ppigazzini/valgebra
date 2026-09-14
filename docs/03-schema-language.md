@@ -460,7 +460,29 @@ assert Validator({"ab": int}).is_valid({"ab": 1})
 A narrowed key names *part* of a type, and two such clauses can overlap without
 either containing the other — which is a question this map model does not answer
 the same way twice. To constrain the keys themselves, check them beside the
-mapping rather than inside it.
+mapping rather than inside it:
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import Validator
+
+key_shape = Validator(Annotated[str, at.MinLen(2)])
+short_codes = Validator(
+    Annotated[dict[str, int], at.Predicate(lambda d: all(map(key_shape.is_valid, d)))]
+)
+
+assert short_codes.is_valid({"ab": 1})
+assert not short_codes.is_valid({"a": 1})
+```
+
+The mapping is still a `dict[str, int]` to every relation — the predicate is
+opaque, as every predicate is ([refinements](05-refinements.md)), so the keys
+are checked on membership and say nothing about inclusion. That is the whole
+trade, and it is why the narrowed key is refused rather than compiled into
+something that looks decided and is not.
 
 ### Constraining some keys and freeing the rest
 
