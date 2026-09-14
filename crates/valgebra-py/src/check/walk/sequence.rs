@@ -15,7 +15,7 @@ use pyo3::types::{PyFrozenSet, PyList, PySet, PyTuple};
 use valgebra_core::{PathSegment, Schema, SeqKind, SeqShape, Violation};
 
 use super::{
-    Frame, Scan, held_len, homogeneous_scalar, is_fatal, member, mutated, reads_its_storage,
+    Base, Frame, Scan, held_len, homogeneous_scalar, is_fatal, member, mutated, reads_its_storage,
     record_fatal, scalar_admits, scalar_of, stop,
 };
 use crate::check::ctx::Ctx;
@@ -269,7 +269,8 @@ fn tuple_matches(
     // it -- which is every `NamedTuple`. Only a subclass that answers the
     // accessor for itself is copied; see `storage_of` and `reads_its_storage`.
     let copied;
-    let tuple = if tuple.is_exact_instance_of::<PyTuple>() || reads_its_storage(tuple, true) {
+    let tuple = if tuple.is_exact_instance_of::<PyTuple>() || reads_its_storage(tuple, Base::Tuple)
+    {
         tuple
     } else {
         let Some(storage) = storage_of(tuple) else {
@@ -328,7 +329,7 @@ fn tuple_matches(
 /// `None` where the copy cannot be made, which the caller reports as a value it
 /// could not read rather than as a membership answer.
 fn storage_of<'py>(tuple: &Bound<'py, PyTuple>) -> Option<Bound<'py, PyTuple>> {
-    let held = held_len(tuple, true).ok()?;
+    let held = held_len(tuple, Base::Tuple).ok()?;
     let mut items = Vec::with_capacity(held);
     for at in 0..held {
         items.push(tuple.get_borrowed_item(at).ok()?);

@@ -84,6 +84,20 @@ impl<'a, 'ctx> Frame<'a, 'ctx> {
 /// `list.__len__` and `tuple.__len__`, the base types' own slots.
 static BASE_LENGTHS: PyOnceLock<(Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
 
+/// Which builtin sequence a length question is about.
+///
+/// The three helpers below each ask the same question of one of two containers,
+/// and a `bool` cannot name which: `held_len(value, true)` reads as a length
+/// that *is* held, which is what the function does either way. The domain has
+/// two members and both have names, so it is an enum and the call sites say the
+/// name -- the rule this library applies to a Python value it is handed, turned
+/// on its own arguments.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Base {
+    List,
+    Tuple,
+}
+
 /// How many items a `list` or `tuple` *subclass* holds.
 ///
 /// The walk counts what the value holds, and for these two containers that is
@@ -107,14 +121,14 @@ static BASE_LENGTHS: PyOnceLock<(Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
 ///
 /// Only a subclass that **overrides** `__len__` pays for it. One that inherits
 /// the base's slot is read where it lies: see [`reads_its_storage`].
-fn held_len(value: &Bound<'_, PyAny>, of_tuple: bool) -> PyResult<usize> {
+fn held_len(value: &Bound<'_, PyAny>, base: Base) -> PyResult<usize> {
     let py = value.py();
-    let slot = base_length(py, of_tuple)?;
+    let slot = base_length(py, base)?;
     slot.bind(py).call1((value,))?.extract()
 }
 
 /// The base type's own `__len__`, resolved once per process.
-fn base_length(py: Python<'_>, of_tuple: bool) -> PyResult<&'static Py<PyAny>> {
+fn base_length(py: Python<'_>, base: Base) -> PyResult<&'static Py<PyAny>> {
     let (list_len, tuple_len) = BASE_LENGTHS.get_or_try_init(py, || {
         let slot = |ty: &Bound<'_, PyType>| ty.getattr(intern!(py, "__len__")).map(Bound::unbind);
         Ok::<_, PyErr>((
@@ -122,7 +136,10 @@ fn base_length(py: Python<'_>, of_tuple: bool) -> PyResult<&'static Py<PyAny>> {
             slot(&py.get_type::<PyTuple>())?,
         ))
     })?;
-    Ok(if of_tuple { tuple_len } else { list_len })
+    Ok(match base {
+        Base::Tuple => tuple_len,
+        Base::List => list_len,
+    })
 }
 
 /// Whether this value's type reports the length of its own storage.
@@ -147,9 +164,9 @@ fn base_length(py: Python<'_>, of_tuple: bool) -> PyResult<&'static Py<PyAny>> {
 ///
 /// A wrong answer here is safe in one direction only, and this errs that way: a
 /// type that cannot be read at all is treated as a liar and copied.
-fn reads_its_storage(value: &Bound<'_, PyAny>, of_tuple: bool) -> bool {
+fn reads_its_storage(value: &Bound<'_, PyAny>, base: Base) -> bool {
     let py = value.py();
-    let Ok(base) = base_length(py, of_tuple) else {
+    let Ok(slot_of_base) = base_length(py, base) else {
         return false;
     };
     value
@@ -157,7 +174,7 @@ fn reads_its_storage(value: &Bound<'_, PyAny>, of_tuple: bool) -> bool {
         .getattr_opt(intern!(py, "__len__"))
         .ok()
         .flatten()
-        .is_some_and(|slot| slot.is(base.bind(py)))
+        .is_some_and(|slot| slot.is(slot_of_base.bind(py)))
 }
 
 fn stop(ctx: Ctx<'_>) -> bool {
