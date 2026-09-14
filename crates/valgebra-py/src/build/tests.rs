@@ -1,4 +1,5 @@
 use super::*;
+use valgebra_core::SeqShape;
 
 #[test]
 fn intern_deduplicates_by_identity() {

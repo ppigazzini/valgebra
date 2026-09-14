@@ -6,12 +6,14 @@
 # The walk is where membership is decided, the frontend is where an annotation
 # becomes the set it denotes, and equality is where two schemas are judged one,
 # so those are the binding's files whose arms are worth a mutation number rather
-# than a line count. All three are
-# reachable from `cargo test` because the `interpreter-tests` feature links an
-# embedded Python and each carries its own corpus: `check/walk.rs` drives real
-# values through `member`, and `build.rs` drives real annotations through
-# `build_schema` and compares the render. The sweep is run with that feature
-# (see the workflow) or every mutant reads as unviable.
+# than a line count. The frontend is four files -- the dispatch and the three
+# surfaces beside it, `build/refine.rs`, `build/classes.rs` and
+# `build/generics.rs` -- and all of them are reachable from `cargo test` because
+# the `interpreter-tests` feature links an embedded Python and each carries its
+# own corpus: `check/walk.rs` drives real values through `member`, and the
+# frontend drives real annotations through `build_schema` and compares the
+# render. The sweep is run with that feature (see the workflow) or every
+# mutant reads as unviable.
 #
 # Every other binding file is exercised by pytest, which this harness cannot
 # observe, so its mutants would all "survive" and say nothing about the tests.

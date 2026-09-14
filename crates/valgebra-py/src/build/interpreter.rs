@@ -1,10 +1,13 @@
 use std::sync::Arc;
 
+use super::classes::*;
+use super::refine::*;
 use super::*;
 use crate::render::render;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::ffi::CString;
+use valgebra_core::{Constraint, MapClause, SeqShape};
 
 /// The namespace a row's expression is evaluated in.
 ///

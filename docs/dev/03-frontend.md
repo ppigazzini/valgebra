@@ -4,6 +4,15 @@
 It is the only place a Python object becomes a pooled index, and the only place
 that decides what an annotation means.
 
+The file is the dispatch, the pool and the guard; each section below that names
+a *surface* is a module beside it:
+
+| module | the section it follows |
+|---|---|
+| `build/refine.rs` | How `Annotated` metadata is read |
+| `build/classes.rs` | What a class declares |
+| `build/generics.rs` | What a parametrized form says |
+
 ## How `Annotated` metadata is read
 
 `parse_constraint` reads a marker by **attribute protocol**, never by name: the
@@ -84,6 +93,68 @@ symmetry:
 
 Moving a branch earlier is a behaviour change, not a refactor. `Any` above the
 type branch is the sharp one.
+
+## What a class declares
+
+Dispatch step 4 takes any plain type, and what it builds depends on what the
+class *says about itself* rather than on what it is called. The order is the
+order of the questions, and each is asked of an attribute the runtime fills in:
+
+1. **A builtin scalar** — `bool`, `int`, `float`, `str`, `bytes`, `NoneType` —
+   is its own node.
+2. **A bare container class** is its kind: `list` admits every list, which is
+   the set `list[object]` names and the set the typing spec assigns an
+   unparameterised generic. Read as an `isinstance` atom it would be a
+   different sort of thing from the sequence node beside it, and neither
+   spelling would be decided below the other.
+3. **`object`** is the lattice top, and a bare `Union`/`Optional` — a class on
+   some Pythons — is refused, because it is a form rather than a value.
+4. **A `TypedDict`** declares itself by carrying `__required_keys__`, and
+   becomes a keyed map. Its fields come from `get_type_hints`, not from the raw
+   `__annotations__`: under `from __future__ import annotations` those are
+   strings, so a `NotRequired[...]` is invisible to the class's own key sets and
+   every optional key compiled required. A qualifier on the resolved hint wins
+   over the key sets, and a qualifier may wrap another.
+5. **An enum** is an instance check against the enumeration class.
+6. **A dataclass or a `NamedTuple`** is an instance check *plus* a deep check
+   of each declared field, so a value of the right class with a field of the
+   wrong type is not a member. A field the hints do not carry is unannotated —
+   a `collections` namedtuple's are — and the class's own instance check is the
+   whole of it.
+7. **A `Protocol`** validates by `isinstance` and must be `@runtime_checkable`
+   to be a schema at all; one that is not is refused rather than silently
+   admitting everything.
+8. **Any other class** names its instances: the remaining builtins, the
+   `collections.abc` ABCs, and every user class, uniformly.
+
+`dataclasses.is_dataclass` is the one question that costs an import, so it is
+asked of a handle held after the first class that asks and *only* after one
+asks: importing `dataclasses` pulls `inspect`, `copy` and `functools` in with
+it, and the tracked objects they leave behind are walked by every later garbage
+collection.
+
+## What a parametrized form says
+
+Dispatch step 6 takes anything with a typing origin, and reads the origin
+before the arguments. The origins are compared by identity against the forms
+resolved once at import — `typing` is imported once, not once per node — and a
+form this frontend does not know is a refusal rather than a guess.
+
+`Union` and `X | Y` are the same origin in two spellings and build the same
+node. `Literal` interns each argument as a constant, and refuses an unhashable
+one: `Literal` requires hashable arguments, and a list would be compared by
+value against every candidate rather than named.
+
+A `tuple` reads its arguments as a *shape*: `tuple[int, str]` is a fixed
+sequence of two, `tuple[int, ...]` is a homogeneous one, and `tuple[()]` is the
+empty tuple. `Unpack[Ts]` and `*tuple[int, ...]` are the same unpacking in two
+spellings, and a variadic member in a fixed position is what separates a shape
+the walk can decide from one it cannot.
+
+Every other parametrized container — `list`, `set`, `frozenset`, `dict`, the
+`collections.abc` equivalents — reads its arguments as element and key types,
+and a key narrowed by a constraint is refused where "Three rejections that
+belong at compile time" says why.
 
 ## Where an index acquires its meaning
 
