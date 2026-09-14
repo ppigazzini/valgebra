@@ -210,6 +210,32 @@ struct Forms {
 
 static FORMS: PyOnceLock<Forms> = PyOnceLock::new();
 
+/// `dataclasses.is_dataclass`, held apart from [`Forms`] and resolved on the
+/// first class node that reaches the question.
+///
+/// Not in the cache beside the other forms, because that cache is built the
+/// first time anything is compiled and `dataclasses` is a module most programs
+/// never import: it pulls `inspect`, `copy`, `functools` and their own imports
+/// in with it, and the objects they leave behind are *tracked* -- so every
+/// later collection walks them. Measured on the shape that compiles a
+/// fifty-field record of plain types, which reaches no dataclass and never asks
+/// this question: importing it with the rest reads **6.45% dearer**, all of it
+/// after the import, in the generational walks a build's own allocations
+/// trigger.
+static IS_DATACLASS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
+/// `dataclasses.is_dataclass`, imported on first use.
+fn is_dataclass(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+    let py = ty.py();
+    IS_DATACLASS
+        .get_or_try_init(py, || {
+            Ok::<_, PyErr>(py.import("dataclasses")?.getattr("is_dataclass")?.unbind())
+        })?
+        .bind(py)
+        .call1((ty,))?
+        .is_truthy()
+}
+
 /// The special-form cache for this interpreter, built once. `PyOnceLock` makes
 /// the one-time initialization safe under free-threading.
 fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
@@ -557,11 +583,7 @@ fn build_type_object(
         return Ok(Schema::Instance(lits.intern_class(ty.as_any())));
     }
     // dataclass / NamedTuple: isinstance plus a deep check of each field.
-    let is_dataclass = py
-        .import("dataclasses")?
-        .call_method1("is_dataclass", (ty,))?
-        .is_truthy()?;
-    if is_dataclass || (ty.is_subclass_of::<PyTuple>()? && ty.hasattr("_fields")?) {
+    if is_dataclass(ty)? || (ty.is_subclass_of::<PyTuple>()? && ty.hasattr("_fields")?) {
         return build_object(ty, lits, defs);
     }
     // Protocol: a runtime-checkable protocol validates by isinstance.

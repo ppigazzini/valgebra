@@ -22,10 +22,20 @@ answer of its own, or a repair to a change not yet released.
 - perf: the frontend holds the typing forms it reads per node
 - perf: the frontend asks for an attribute rather than trying for it
 - perf: a marker is asked by a name the interpreter already holds
+- perf: the dataclass question is asked of a handle, and only where it is asked
 
 -->
 
 ### Changed
+
+- **A validator no longer imports `dataclasses` to ask whether a class is
+  one.** Every class node imported the module and called through it; the
+  function is held after the first class that asks, and *only* after one asks
+  -- importing `dataclasses` pulls `inspect`, `copy` and `functools` in with
+  it, and the tracked objects they leave behind are walked by every later
+  garbage collection, which costs a program that never compiles a dataclass
+  6.45% of its compile. A fifty-field dataclass compiles about 5% faster; a
+  program that compiles none imports nothing.
 
 - **Compiling a refinement is a third cheaper, and a `TypedDict` a fifth.** The
   frontend read an annotation's optional attributes by *trying* them: a marker
