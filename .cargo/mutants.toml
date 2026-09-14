@@ -29,6 +29,14 @@ exclude_globs = [
     "crates/valgebra-py/src/check.rs",
     "crates/valgebra-py/src/exception.rs",
     "crates/valgebra-py/src/validator.rs",
+    # The binding's half of `LeafRelations`, and the one file on this list
+    # whose exclusion was measured rather than assumed. It was brought into
+    # the sweep when it became its own module, on the argument that its own
+    # corpus drives it; the sweep answered 62 survivors of 109, because what
+    # drives the oracle is the decision suite in pytest and the Rust corpus
+    # reaches five of the ten questions. Swept means observable here, so this
+    # is excluded until the corpus is what the argument claimed.
+    "crates/valgebra-py/src/oracle.rs",
     "crates/valgebra-py/src/check/index.rs",
     "crates/valgebra-py/src/check/violation.rs",
     "crates/valgebra-py/src/errors.rs",

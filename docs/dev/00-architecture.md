@@ -14,6 +14,7 @@ direction their dependencies run, and the two invariants the compiler holds.
 | `crates/valgebra-py/src/build.rs`, `build/` | typing annotations and native forms into the IR: the dispatch, the pool and the guard in the file, the marker protocol in `build/refine.rs`, what a class declares in `build/classes.rs`, and the typing introspection in `build/generics.rs` | [03-frontend.md](03-frontend.md) |
 | `crates/valgebra-py/src/check/` | the membership walk: the dispatcher in `walk.rs`, the leaves in `walk/scalar.rs`, the containers in `walk/record.rs` and `walk/sequence.rs` | [04-walk.md](04-walk.md) |
 | `crates/valgebra-py/src/errors.rs`, `render.rs` | the Python exception and the annotation render | [05-errors.md](05-errors.md) |
+| `crates/valgebra-py/src/oracle.rs` | the binding's half of `LeafRelations`: the questions the core cannot decide alone — whether a literal belongs to a set, whether two sets of constants share a value, how two bounds order, what an enumeration lists | [02-decision.md](02-decision.md) |
 | `crates/valgebra-py/src/lib.rs` | the module: what the extension exports, the four set constructors, the recursive fixpoint, and the two lattice bounds | [03-frontend.md](03-frontend.md) |
 | `crates/valgebra-py/src/workload.rs` | the instruction gate's instrument: the shapes `scripts/perf_gate.py --binding-*` measures, which no caller reaches and no suite runs, so coverage and the mutation sweep skip it by name | [07-tooling-ci.md](07-tooling-ci.md) |
 | `python/valgebra/` | the re-export package a user imports | — |
@@ -139,7 +140,7 @@ comment. A `limit` or a `shape` carries the reason it is where it is.
 | `crates/valgebra-py/src/render.rs` | `MAX_RENDER_DEPTH` | `200` | shape | `repr` overflowing the stack on a chain of definitions | `tests/test_adversarial_bounds.py` |
 | `crates/valgebra-py/src/check/ctx.rs` | `MAX_WALK_DEPTH` | `512` | shape | a walk overflowing the smallest thread stack a platform gives | its own tests, and `tests/test_adversarial_bounds.py` |
 | `crates/valgebra-py/src/check/walk.rs` | `MAX_RECURSION_DEPTH` | `128` | shape | a pathologically deep *value* overflowing the stack | its own tests, and `tests/test_adversarial_bounds.py` |
-| `crates/valgebra-py/src/validator.rs` | `MAX_ENUM_MEMBERS` | `512` | shape | one relation turning into a membership question per member of an enumeration | its own tests, and `tests/test_algebra_closure.py` |
+| `crates/valgebra-py/src/oracle.rs` | `MAX_ENUM_MEMBERS` | `512` | shape | one relation turning into a membership question per member of an enumeration | its own tests, and `tests/test_algebra_closure.py` |
 | `crates/valgebra-py/src/check/walk/sequence.rs` | `SNAPSHOT_MIN_ELEMENTS` | `16` | shape | a list too narrow for a snapshot of it to pay for its own allocation | its own tests, and `scripts/perf_gate.py --binding` |
 | `crates/valgebra-py/src/check/walk/sequence.rs` | `SNAPSHOT_MAX_ELEMENTS` | `262_144` | shape | a snapshot large enough that walking the copy costs more cache than the reference counts it avoids, and two mebibytes of transient with it | its own tests, and `scripts/perf_gate.py --binding` |
 | `crates/valgebra-py/src/check/walk/record.rs` | `SMALL_OBJECT` | `8` | shape | an object narrow enough that a table of its keys costs more than looking forward for a repeat of each | its own tests, and `scripts/compare_gate.py` |

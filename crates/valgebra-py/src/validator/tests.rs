@@ -1,4 +1,8 @@
 use super::*;
+use crate::oracle::PoolRelations;
+use pyo3::types::PyDict;
+use valgebra_core::descr::lower::{Constants, Operand};
+use valgebra_core::{ClassIx, ConstIx, Kind};
 use valgebra_core::{DefIx, Field, MapClause};
 
 /// A validator whose root is a bare back edge, so every schema it declares
@@ -40,12 +44,7 @@ fn the_pool_reads_a_scalar_by_its_exact_type() {
             PyBytes::new(py, b"ab").into_any().unbind(),
         ];
         let held = pooled_over(literals.into_iter().collect());
-        let oracle = PoolRelations {
-            py,
-            literals: &held.literals,
-            definitions: &held.definitions,
-            classes: RefCell::default(),
-        };
+        let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
         let read: Vec<_> = (0..6)
             .map(|slot| oracle.constant(ConstIx::new(slot)))
             .collect();
@@ -72,12 +71,7 @@ fn the_pool_declines_a_value_it_cannot_kind() {
         py.run(c"class Odd(int): pass\nodd = Odd(1)", None, Some(&scope))
             .expect("an int subclass");
         let held = pooled_over(vec![scope.get_item("odd").unwrap().unwrap().unbind()]);
-        let oracle = PoolRelations {
-            py,
-            literals: &held.literals,
-            definitions: &held.definitions,
-            classes: RefCell::default(),
-        };
+        let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
         // An `int` subclass carries its own `__eq__`, so its equality is not
         // the one the descriptor's integer sets are built on.
         assert_eq!(oracle.constant(ConstIx::new(0)), None);
@@ -96,12 +90,7 @@ fn a_class_carries_the_bases_its_mro_lists() {
         .expect("three plain classes");
         let named = |name: &str| scope.get_item(name).unwrap().unwrap().unbind();
         let held = pooled_over(vec![named("A"), named("B"), named("C")]);
-        let oracle = PoolRelations {
-            py,
-            literals: &held.literals,
-            definitions: &held.definitions,
-            classes: RefCell::default(),
-        };
+        let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
         let a = oracle.class(ClassIx::new(0)).expect("A denotes a set");
         let b = oracle.class(ClassIx::new(1)).expect("B denotes a set");
         let c = oracle.class(ClassIx::new(2)).expect("C denotes a set");
@@ -125,12 +114,7 @@ fn a_class_built_on_a_builtin_is_disjoint_from_one_built_on_another() {
         .expect("two classes on conflicting layouts");
         let named = |name: &str| scope.get_item(name).unwrap().unwrap().unbind();
         let held = pooled_over(vec![named("S"), named("L")]);
-        let oracle = PoolRelations {
-            py,
-            literals: &held.literals,
-            definitions: &held.definitions,
-            classes: RefCell::default(),
-        };
+        let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
         let s = oracle.class(ClassIx::new(0)).expect("S denotes a set");
         let l = oracle.class(ClassIx::new(1)).expect("L denotes a set");
         // Python refuses `class Both(S, L)`, so no value is an instance of
@@ -150,12 +134,7 @@ fn a_class_that_answers_isinstance_itself_refuses_the_lowering() {
         )
         .expect("an abstract base class");
         let held = pooled_over(vec![scope.get_item("Hooked").unwrap().unwrap().unbind()]);
-        let oracle = PoolRelations {
-            py,
-            literals: &held.literals,
-            definitions: &held.definitions,
-            classes: RefCell::default(),
-        };
+        let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
         // `ABCMeta.register` can add a subclass after the schema is built, so
         // the class names no fixed set and the lowering declines it.
         assert_eq!(oracle.class(ClassIx::new(0)), None);

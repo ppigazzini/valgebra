@@ -19,6 +19,7 @@ mod equality;
 mod errors;
 mod exception;
 mod input;
+mod oracle;
 mod render;
 mod validator;
 pub mod workload;

@@ -184,7 +184,9 @@ any other way, which is what the fuzz target builds.
 
 A class hierarchy and a concrete value are Python facts, and `valgebra-core`
 cannot see Python ([00-architecture.md](00-architecture.md)). The `LeafRelations`
-trait is how it asks:
+trait is how it asks, `decision/oracle.rs` is where the core asks it, and
+`crates/valgebra-py/src/oracle.rs` is the answer the bindings give — the two
+sides of one seam, each in a module named for it. The questions:
 
 - `leaf_subtype` — is this literal a member of that set, is this class a subclass
   of that one;
