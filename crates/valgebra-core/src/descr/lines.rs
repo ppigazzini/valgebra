@@ -330,22 +330,38 @@ fn product(left: &[Line], right: &[Line]) -> Option<Vec<Line>> {
 ///
 /// The order is what makes two equal unions compare equal, as far as equality
 /// here goes.
-fn tidy(lines: Vec<Line>) -> Option<Vec<Line>> {
-    let mut kept: Vec<Line> = Vec::with_capacity(lines.len());
-    for line in lines {
-        if line.is_empty() {
-            continue;
-        }
-        if let Some(at) = kept.iter().position(|held| held.objects == line.objects)
-            && let Some(held) = kept.get_mut(at)
-            && let Some(joined) = held.structure.combine(&line.structure, Op::Union)
+fn tidy(mut lines: Vec<Line>) -> Option<Vec<Line>> {
+    // In place: the caller has just built this list and the result is the same
+    // list shorter, so a second one of the same width is an allocation per
+    // meet and per union. `kept` is how many of the front are keepers, and a
+    // line that survives is swapped up to join them.
+    let mut kept = 0;
+    for at in 0..lines.len() {
         {
-            held.structure = joined;
-            continue;
+            // The keepers are `lines[..kept]`, which the split puts in `front`;
+            // the line being read is the first of `back`. Continuing drops it,
+            // falling through keeps it.
+            let (front, back) = lines.split_at_mut(at);
+            let Some(line) = back.first() else { break };
+            if line.is_empty() {
+                continue;
+            }
+            if let Some(keeper) = front
+                .iter()
+                .take(kept)
+                .position(|held| held.objects == line.objects)
+                && let Some(held) = front.get_mut(keeper)
+                && let Some(joined) = held.structure.combine(&line.structure, Op::Union)
+            {
+                held.structure = joined;
+                continue;
+            }
         }
-        kept.push(line);
+        lines.swap(kept, at);
+        kept += 1;
     }
-    kept.sort();
-    kept.dedup();
-    (kept.len() <= MAX_LINES).then_some(kept)
+    lines.truncate(kept);
+    lines.sort();
+    lines.dedup();
+    (lines.len() <= MAX_LINES).then_some(lines)
 }

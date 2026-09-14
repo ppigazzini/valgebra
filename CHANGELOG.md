@@ -17,6 +17,7 @@ answer of its own, or a repair to a change not yet released.
 - perf: a second table of constants is read only where the first answers -- internal
 - perf: a union of lines appends the second list where it lies -- internal
 - perf: a component's whole is named, and built where it is wanted -- internal
+- perf: a kind's lines are tidied where they lie -- internal
 
 -->
 
