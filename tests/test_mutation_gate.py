@@ -250,3 +250,53 @@ def test_re_recording_keeps_the_reasons_beside_the_set(tmp_path: Path) -> None:
     recorded = json.loads(baseline.read_text())
     assert recorded["_why"] == "the argument"
     assert recorded["survivors"] == ["a.rs: replace f -> bool with true"]
+
+
+def _tracked_tree(work: Path, files: list[str]) -> None:
+    """Make `work` a checkout whose index lists exactly `files`.
+
+    Staged rather than committed: `git ls-files` reads the index, and staging
+    needs no committer -- which is the point, since a runner has none.
+    """
+    subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
+        ["git", "-C", str(work), "init", "--quiet"],  # noqa: S607
+        check=True,
+    )
+    for name in files:
+        path = work / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("// a file the baseline names\n")
+    subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
+        ["git", "-C", str(work), "add", *files],  # noqa: S607
+        check=True,
+    )
+
+
+def test_an_accepted_survivor_for_a_moved_file_fails(tmp_path: Path) -> None:
+    """A baseline keyed by path goes stale when the path moves, and says so here.
+
+    Eight entries moved with the frontend's surfaces and nothing said so until
+    the sweep read every one of that file's survivors as new -- nine minutes
+    into a shard, with the mutants listed and no hint that what changed was the
+    path. A path is cheaper to check than a sweep and is checked before one.
+    """
+    _tracked_tree(tmp_path, ["crates/x/src/b.rs"])
+    result = _run(
+        tmp_path,
+        missed=[],
+        baseline=["crates/x/src/a.rs: replace + with - in f"],
+    )
+    assert result.returncode == 1
+    assert "ACCEPTED FOR A FILE THAT IS NOT HERE" in result.stdout
+    assert "crates/x/src/a.rs" in result.stdout
+
+
+def test_an_accepted_survivor_for_a_tracked_file_passes(tmp_path: Path) -> None:
+    """The other direction: the same entry, re-keyed to where the code went."""
+    _tracked_tree(tmp_path, ["crates/x/src/b.rs"])
+    result = _run(
+        tmp_path,
+        missed=["crates/x/src/b.rs:10:5: replace + with - in f"],
+        baseline=["crates/x/src/b.rs: replace + with - in f"],
+    )
+    assert result.returncode == 0, result.stdout

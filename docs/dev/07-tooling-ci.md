@@ -337,10 +337,29 @@ path and measuring nothing.
 
 Two sweeps, each with its own committed baseline: the core crate, and the
 membership walk with the context it carries. `scripts/mutation_gate.py` fails in
-**both** directions — a survivor the baseline does not accept, and an accepted
-entry that no mutant answers to. The second keeps the accepted set honest: an accepted
-hole the tree does not have silently re-accepts a future survivor with the same
-identity.
+**three** directions — a survivor the baseline does not accept, an accepted
+entry that no mutant answers to, and an accepted entry naming a file the tree
+does not track. The second keeps the accepted set honest: an accepted hole the
+tree does not have silently re-accepts a future survivor with the same identity.
+The third is about the key rather than the entry: a baseline keyed by path goes
+stale when the path moves, and eight entries did when the frontend's surfaces
+became their own modules. The sweep reads each of that file's survivors as new,
+nine minutes into a shard, with the mutants listed and no hint that what changed
+was the path. Checking the path costs nothing and runs before the sweep.
+
+**Run it on the interpreter the lane names.** The verdict is the embedded
+interpreter's: a mutant this box's 3.14 reports as a survivor is one CPython
+3.12 kills, and half an hour went into a difference that was the interpreter
+rather than the tree. The lane pins 3.12, so a local sweep does too:
+
+```bash
+export PYO3_PYTHON="$(uv python find 3.12)"
+export LD_LIBRARY_PATH="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"
+cargo mutants --package valgebra-py --file <the files the change touches> \
+  --features interpreter-tests -j 4 --timeout-multiplier 20 \
+  --output sweep -- -- --skip recursion_deeper_than_the_bound_is_refused
+python scripts/mutation_gate.py --baseline walk --new-only --out sweep/mutants.out
+```
 
 The target is never zero. Equivalent mutants exist and are undecidable in
 general, so an accepted survivor carries the argument for why no test can kill

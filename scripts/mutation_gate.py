@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -103,6 +104,59 @@ def _option(args: list[str], name: str, default: str) -> str:
             return args[index + 1]
         sys.exit(f"mutation_gate: {name} needs a value")
     return default
+
+
+def _stale_entries(recorded: dict, baseline: set[str]) -> bool:
+    """Report both ways an entry can outlive what it records.
+
+    Not short-circuited: a move that also orphans a note should say both, since
+    a reader fixing one would otherwise be told about the other on the next run.
+    """
+    absent = _keys_for_absent_files(baseline)
+    orphans = _orphan_notes(recorded, baseline)
+    return absent or orphans
+
+
+def _keys_for_absent_files(baseline: set[str]) -> bool:
+    """Report accepted survivors whose file is not in the tree, and refuse them.
+
+    This baseline is keyed by path, so a file that moves takes every entry
+    naming it out of the set. The sweep then reads each of that file's
+    survivors as *new* and the lane fails -- with the mutants listed and no hint
+    that what changed was the path. Eight entries moved with the frontend's
+    surfaces and the lane is where that was found, nine minutes into a shard.
+
+    A path is cheaper to check than a sweep: an entry naming a file that does
+    not exist is stale by construction, whatever any sweep would say, and this
+    runs before one. Read from `git ls-files` rather than the filesystem so a
+    build directory or a stray copy cannot answer for a tracked file.
+
+    Keying by something other than the path was considered and is not done: two
+    functions of one name in two files would share a key, and an argument for
+    one would silently excuse the other.
+    """
+    listed = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files", "-z"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    tracked = {name for name in listed.stdout.split("\0") if name}
+    if not tracked:
+        return False  # not a checkout: the sweep's own reading still stands
+    absent = sorted(
+        {key.split(":", 1)[0] for key in baseline} - tracked,
+    )
+    for path in absent:
+        print(f"ACCEPTED FOR A FILE THAT IS NOT HERE: {path}")
+    if absent:
+        print(
+            f"\nmutation_gate: {len(absent)} accepted survivor(s) name a file "
+            "this tree does not track. A file that moved takes its entries with "
+            "it: re-key each to the path the code has now, keeping the argument "
+            "it was accepted under."
+        )
+    return bool(absent)
 
 
 def _orphan_notes(recorded: dict, baseline: set[str]) -> bool:
@@ -183,7 +237,7 @@ def main() -> int:
     recorded = json.loads(baseline_file.read_text())
     baseline = set(recorded["survivors"])
 
-    if _orphan_notes(recorded, baseline):
+    if _stale_entries(recorded, baseline):
         return EXIT_FAIL
 
     new = sorted(measured - baseline)

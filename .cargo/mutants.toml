@@ -15,6 +15,12 @@
 # render. The sweep is run with that feature (see the workflow) or every
 # mutant reads as unviable.
 #
+# The sweep's verdict is the *embedded interpreter's*, and `ci.yml` pins CPython
+# 3.12 for it: a mutant 3.14 reports as a survivor is one 3.12 kills, because the
+# two answer a C accessor differently. Point `PYO3_PYTHON` at a 3.12 before
+# running this by hand, or read a verdict that is about the interpreter --
+# `docs/dev/07-tooling-ci.md` carries the whole invocation.
+#
 # Every other binding file is exercised by pytest, which this harness cannot
 # observe, so its mutants would all "survive" and say nothing about the tests.
 # Each is excluded by name rather than by a crate-wide glob, so a new file joins
