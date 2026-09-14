@@ -258,6 +258,35 @@ def test_a_sequence_length_is_what_the_value_holds() -> None:
     )
 
 
+def test_a_tuple_shape_walks_the_storage_and_not_the_dunder() -> None:
+    """The shape reads the elements the value holds, on every interpreter.
+
+    The marker above is one half; the walk over ``tuple[int, ...]`` is the
+    other, and it read its element count from ``PyTuple_Size``. That is the
+    storage on CPython and the object's own ``__len__`` on PyPy's ``cpyext``,
+    so a subclass reporting ten over one element made the walk read nine slots
+    past the end of the allocation -- which is a segfault rather than an answer.
+
+    The rows below are membership, and they are also the crash: a process that
+    dies here fails them by not reaching them.
+    """
+    one_int = _LyingTuple((1,))
+    assert len(one_int) == 10, "it reports ten"
+    assert tuple.__len__(one_int) == 1, "and holds one"
+
+    assert Validator(tuple[int, ...]).is_valid(one_int)
+    assert not Validator(tuple[str, ...]).is_valid(one_int)
+    # A fixed shape counts the storage too, so one element is not two.
+    assert Validator(tuple[int]).is_valid(one_int)
+    assert not Validator(tuple[int, int]).is_valid(one_int)
+    assert Validator(tuple[int, str]).is_valid(_LyingTuple((1, "a")))
+    # The explaining walk answers over the same elements as the fast one.
+    with pytest.raises(ValidationError) as raised:
+        Validator(tuple[str, ...]).validate(one_int)
+    assert raised.value.path == (0,)
+    assert raised.value.code == "string_type"
+
+
 def test_every_other_kind_still_answers_with_its_dunder() -> None:
     """The rule is one length per value, not distrust of ``__len__``.
 

@@ -30,7 +30,10 @@
 //! interrupted check stops instead of being silently reported as a non-member.
 
 use pyo3::exceptions::{PyException, PyMemoryError, PyRecursionError};
+use pyo3::intern;
 use pyo3::prelude::*;
+use pyo3::sync::PyOnceLock;
+use pyo3::types::{PyList, PyTuple, PyType};
 use valgebra_core::{
     ClassIx, CollKind, ConstIx, DefIx, OperandIx, PathSegment, PredIx, Schema, Violation,
 };
@@ -76,6 +79,43 @@ impl<'a, 'ctx> Frame<'a, 'ctx> {
     ) -> Self {
         Frame { path, out, ctx }
     }
+}
+
+/// `list.__len__` and `tuple.__len__`, the base types' own slots.
+static BASE_LENGTHS: PyOnceLock<(Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
+
+/// How many items a `list` or `tuple` *subclass* holds.
+///
+/// The walk counts what the value holds, and for these two containers that is
+/// the storage rather than the answer `__len__` gives -- a subclass may
+/// override it and say anything, and [`scalar::stored_len`] has refused to
+/// believe it since a length marker and the shape beside it described two
+/// different sets.
+///
+/// The C accessor is not the way to read the storage either. `PyTuple_Size`
+/// reads it on `CPython`; `PyPy`'s `cpyext` implements it *through the object's
+/// own* `__len__`, so it is the overridden answer again under another name, and
+/// a walk that indexes against it runs off the end of the allocation -- a
+/// `tuple` subclass reporting ten over one element used to take the process
+/// down. Asking past the end does not report cleanly there either: the accessor
+/// answers with nothing and sets no exception.
+///
+/// So the length comes from the base type's own slot, called on the value. It
+/// is the definition the page already gives ("the items the value holds"), it
+/// is what a reader checks by hand with `tuple.__len__(value)`, and it means
+/// the same thing on every interpreter. Only a subclass pays for it; an exact
+/// list or tuple overrides nothing and is read where it lies.
+fn held_len(value: &Bound<'_, PyAny>, of_tuple: bool) -> PyResult<usize> {
+    let py = value.py();
+    let (list_len, tuple_len) = BASE_LENGTHS.get_or_try_init(py, || {
+        let slot = |ty: &Bound<'_, PyType>| ty.getattr(intern!(py, "__len__")).map(Bound::unbind);
+        Ok::<_, PyErr>((
+            slot(&py.get_type::<PyList>())?,
+            slot(&py.get_type::<PyTuple>())?,
+        ))
+    })?;
+    let slot = if of_tuple { tuple_len } else { list_len };
+    slot.bind(py).call1((value,))?.extract()
 }
 
 fn stop(ctx: Ctx<'_>) -> bool {

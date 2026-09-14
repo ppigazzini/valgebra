@@ -3003,3 +3003,62 @@ fn a_clause_reads_a_parsed_object_by_value_alone_only_where_its_key_admits_every
         assert!(holds_json(py, &mapping(Schema::Bool), &empty));
     });
 }
+
+#[test]
+fn a_tuple_subclass_is_walked_over_the_elements_it_holds() {
+    // `PyTuple_Size` reads the storage on CPython and goes through the object's
+    // own `__len__` on PyPy's `cpyext`, so a subclass that overrides it answers
+    // the C accessor with whatever it likes -- and a walk that indexed against
+    // that read past the end of the allocation and took the process down. The
+    // walk reads the base type's own slot instead, and the rows below are the
+    // answers that reading has to give: the elements the value holds, on every
+    // interpreter, and the same answers CPython gave before the repair.
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new(
+                "class Lying(tuple):\n\
+                 \x20   def __len__(self):\n\
+                 \x20       return 10\n",
+            )
+            .expect("no interior nul")
+            .as_c_str(),
+            std::ffi::CString::new("lying.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("lying")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+        let lying = |items: Vec<i64>| {
+            module
+                .getattr("Lying")
+                .expect("the class")
+                .call1((PyTuple::new(py, items).expect("a tuple builds"),))
+                .expect("the subclass builds")
+        };
+
+        let one_int = lying(vec![1]);
+        let ints = Schema::tuple(SeqShape::homogeneous(Schema::Int));
+        let strs = Schema::tuple(SeqShape::homogeneous(Schema::Str));
+        assert!(
+            holds(py, &ints, &one_int, &[], &[]),
+            "one int, and it is one"
+        );
+        assert!(!holds(py, &strs, &one_int, &[], &[]), "and it is not a str");
+
+        // The arity is the storage's too: one element is not two.
+        let exactly_one = Schema::tuple(SeqShape::fixed([Schema::Int]));
+        let exactly_two = Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Int]));
+        assert!(holds(py, &exactly_one, &one_int, &[], &[]));
+        assert!(!holds(py, &exactly_two, &one_int, &[], &[]));
+
+        // And a copy that cannot be made is a value the walk could not read,
+        // which is not the same as a value it decided against: the elements
+        // here are readable, so every row above is an answer rather than a
+        // refusal standing in for one.
+        let two = lying(vec![1, 2]);
+        assert!(holds(py, &exactly_two, &two, &[], &[]));
+    });
+}

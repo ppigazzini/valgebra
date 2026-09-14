@@ -15,8 +15,8 @@ use pyo3::types::{PyFrozenSet, PyList, PySet, PyTuple};
 use valgebra_core::{PathSegment, Schema, SeqKind, SeqShape, Violation};
 
 use super::{
-    Frame, Scan, homogeneous_scalar, is_fatal, member, mutated, record_fatal, scalar_admits,
-    scalar_of, stop,
+    Frame, Scan, held_len, homogeneous_scalar, is_fatal, member, mutated, record_fatal,
+    scalar_admits, scalar_of, stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::violation::{summarize_value, type_fail};
@@ -119,34 +119,7 @@ pub(super) fn check_seq(
                     type_code, kind_word, value, frame.path, frame.ctx, frame.out,
                 );
             };
-            if !SeqArity::of(prefix.len(), tail).admits(tuple.len()) {
-                return seq_length_fail(len_code, kind_word, prefix, tail, value, frame);
-            }
-            // The list arm's reasoning, for the immutable container: `tuple[int,
-            // ...]` tests one scalar at every position, so the walk's
-            // per-element bookkeeping is paid once for the tuple.
-            //
-            // Both arms borrow their elements rather than owning them. An owned
-            // handle is a reference-count increment when it is made and a
-            // decrement when it drops, and the walk keeps no element past the
-            // test it runs on it: it reads the value and answers. A tuple is
-            // frozen and is held for the whole walk by the caller's own handle,
-            // so an element cannot be removed or freed underneath the borrow --
-            // which is why `PyO3` offers this iterator for a tuple and for no
-            // mutable container.
-            if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
-                return tuple
-                    .iter_borrowed()
-                    .all(|item| scalar_admits(kind, &Value::Py(&item)));
-            }
-            let mut ok = true;
-            for (i, item) in tuple.iter_borrowed().enumerate() {
-                ok &= seq_element(prefix, tail, i, &Value::Py(&item), frame);
-                if !ok && stop(ctx) {
-                    return false;
-                }
-            }
-            ok
+            tuple_matches(prefix, tail, tuple, value, len_code, kind_word, frame)
         }
         // A tuple is never a JSON value; a list needs a JSON array.
         _ => type_fail(
@@ -280,6 +253,87 @@ fn seq_length_fail(
     false
 }
 
+/// Membership for a tuple, over the elements the value holds.
+fn tuple_matches(
+    prefix: &[Schema],
+    tail: Option<&Schema>,
+    tuple: &Bound<'_, PyTuple>,
+    value: &Value<'_, '_>,
+    len_code: &'static str,
+    kind_word: &'static str,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let ctx = frame.ctx;
+    // A subclass is read through its storage rather than through what it says
+    // about itself; see `storage_of`. An exact tuple is read where it lies.
+    let copied;
+    let tuple = if tuple.is_exact_instance_of::<PyTuple>() {
+        tuple
+    } else {
+        let Some(storage) = storage_of(tuple) else {
+            return mutated(value, frame);
+        };
+        copied = storage;
+        &copied
+    };
+    if !SeqArity::of(prefix.len(), tail).admits(tuple.len()) {
+        return seq_length_fail(len_code, kind_word, prefix, tail, value, frame);
+    }
+    // The list arm's reasoning, for the immutable container: `tuple[int, ...]`
+    // tests one scalar at every position, so the walk's per-element bookkeeping
+    // is paid once for the tuple.
+    //
+    // Both arms borrow their elements rather than owning them. An owned handle
+    // is a reference-count increment when it is made and a decrement when it
+    // drops, and the walk keeps no element past the test it runs on it: it
+    // reads the value and answers. A tuple is frozen and is held for the whole
+    // walk by the caller's own handle, so an element cannot be removed or freed
+    // underneath the borrow -- which is why `PyO3` offers this iterator for a
+    // tuple and for no mutable container.
+    if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
+        return tuple
+            .iter_borrowed()
+            .all(|item| scalar_admits(kind, &Value::Py(&item)));
+    }
+    let mut ok = true;
+    for (i, item) in tuple.iter_borrowed().enumerate() {
+        ok &= seq_element(prefix, tail, i, &Value::Py(&item), frame);
+        if !ok && stop(ctx) {
+            return false;
+        }
+    }
+    ok
+}
+
+/// What a tuple *subclass* holds, as a tuple of its own.
+///
+/// A tuple's length and its elements have to come from the same place, and for
+/// a subclass they can come from two. `PyTuple_Size` reads the storage on
+/// `CPython`; on an interpreter that implements it through the object's own
+/// `__len__` -- `PyPy`'s `cpyext` does -- a subclass that overrides `__len__`
+/// answers whatever it likes, and the borrowed iterator reads that many slots
+/// out of a storage holding fewer. That is a read past the end of an
+/// allocation, and it takes the process with it: a `tuple` subclass returning
+/// ten from `__len__` over one element segfaults `PyPy` 3.11 on
+/// `tuple[int, ...]`.
+///
+/// So a subclass is copied, over the count [`held_len`] reads from the base
+/// type's own slot, and the walk reads the copy. The elements are the ones the
+/// value holds, which is what the sequence walk promises and what `CPython`
+/// gave all along. An exact tuple overrides nothing and is read where it lies,
+/// as before: this path costs the common case nothing.
+///
+/// `None` where the copy cannot be made, which the caller reports as a value it
+/// could not read rather than as a membership answer.
+fn storage_of<'py>(tuple: &Bound<'py, PyTuple>) -> Option<Bound<'py, PyTuple>> {
+    let held = held_len(tuple, true).ok()?;
+    let mut items = Vec::with_capacity(held);
+    for at in 0..held {
+        items.push(tuple.get_borrowed_item(at).ok()?);
+    }
+    PyTuple::new(tuple.py(), items).ok()
+}
+
 /// Visit a list's items by position, refusing when the list resizes underneath.
 ///
 /// A sequence is walked by position against a length read once, so a list that
@@ -291,7 +345,8 @@ fn seq_length_fail(
 ///
 /// The count is read once and re-read before each item and after the last, which
 /// is [`scan_dict`]'s rule applied to positions instead of entries. A tuple needs
-/// none of this: it cannot be resized, so its arm walks the iterator directly.
+/// none of this: it cannot be resized, so its arm walks the iterator directly
+/// over the storage [`tuple_matches`] hands it.
 pub(super) fn scan_list<'py>(
     list: &Bound<'py, PyList>,
     mut visit: impl FnMut(usize, &Bound<'py, PyAny>) -> ControlFlow<()>,

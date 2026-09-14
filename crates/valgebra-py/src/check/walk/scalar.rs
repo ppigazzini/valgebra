@@ -16,7 +16,7 @@ use pyo3::types::{PyList, PyString, PyTuple};
 use valgebra_core::{ConstIx, Constraint, OperandIx, Schema, Violation};
 
 use super::{
-    Frame, const_at, fold, is_fatal, member, operand_at, predicate_at, record_fatal, stop,
+    Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at, record_fatal, stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::index::compile_pattern;
@@ -233,12 +233,26 @@ pub(super) fn check_refine(
 /// sets and a value could satisfy each in a different sense. A length that two
 /// parts of one schema disagree about is not a property of the value, and a set
 /// defined by one is not a set.
+///
+/// **And a length has one source.** The C accessor is not it: `PyTuple_Size`
+/// reads the storage on `CPython` and goes through the object's own `__len__`
+/// on `PyPy`'s `cpyext`, which is the overridden answer again under another
+/// name. An exact list or tuple overrides nothing and is asked directly; a
+/// subclass is asked of the base type's slot, through [`held_len`].
 fn stored_len(value: &Bound<'_, PyAny>) -> PyResult<usize> {
     if let Ok(list) = value.cast::<PyList>() {
-        return Ok(list.len());
+        return if list.is_exact_instance_of::<PyList>() {
+            Ok(list.len())
+        } else {
+            held_len(value, false)
+        };
     }
     if let Ok(tuple) = value.cast::<PyTuple>() {
-        return Ok(tuple.len());
+        return if tuple.is_exact_instance_of::<PyTuple>() {
+            Ok(tuple.len())
+        } else {
+            held_len(value, true)
+        };
     }
     value.len()
 }

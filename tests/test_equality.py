@@ -137,7 +137,16 @@ def test_a_validator_equals_itself_over_a_value_that_equals_nothing() -> None:
     assert Validator(Literal[quiet]) == nan  # ty: ignore[invalid-type-form]
     # Two *different* nan objects are two constants: a nan is equal to no value,
     # itself included, so nothing but identity can join them.
+    #
+    # Whether the interpreter hands out two objects is the interpreter's
+    # business: CPython boxes each `float("nan")` separately, PyPy answers both
+    # with one box, and the second has no two constants to keep apart. The
+    # premise is asserted rather than assumed, so the case reports "this
+    # interpreter has one nan" instead of failing over a pooling rule that holds
+    # in both.
     first, second = float("nan"), float("nan")
+    if first is second:
+        pytest.skip("this interpreter hands out one nan object, not two")
     assert Validator(Literal[first]) != Validator(  # ty: ignore[invalid-type-form]
         Literal[second]  # ty: ignore[invalid-type-form]
     )
