@@ -427,10 +427,10 @@ jobs:
       # a stale snippet.
       - run: uv run python scripts/run_doc_examples.py
 
-  pypy-abi:
-    name: pypy import
+  pypy:
+    name: pypy 3.11
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     # The extension is built for PyPy and published for it, and nothing on a
     # push built one: the wheel matrix lives in the release workflow, which runs
     # on a dispatch. So a type object PyPy's `cpyext` does not export could
@@ -438,10 +438,18 @@ jobs:
     # *import* inside a release build -- which is what `Py_GenericAliasType`
     # did, on the wheel job of a release that had already been prepared.
     #
-    # This is that build, minus the matrix and the profiling: one wheel, and an
-    # import that exercises the schema forms most likely to reach a type object
-    # the limited API does not carry. A *link* check rather than a suite; what
-    # the suites cover is covered on CPython.
+    # The link check is the first step and the suite is the second, because
+    # PyPy's C API differs from CPython's in what it *answers* too, not only in
+    # what it exports: `PyTuple_Size` goes through the object's own `__len__`
+    # there, so a tuple subclass that overrode it walked past the end of the
+    # allocation and took the process down. An import cannot see that; the
+    # suite saw it on the first run. An implementation this project states as a
+    # target has its suite run here -- `tests/test_lane_interpreters.py` holds
+    # that both ways.
+    #
+    # The wheel is a **release** build. A debug one carries frames large enough
+    # that the deep-nesting cases overflow PyPy's C stack, which is a property
+    # of the profile rather than of the code, and a release wheel is what ships.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -461,6 +469,19 @@ jobs:
             -i "$(uv python find pypy-3.11)"
           VIRTUAL_ENV=.pypy uv pip install --no-index dist-pypy/*.whl
           .pypy/bin/python scripts/pypy_import_check.py
+      # What the suite needs to run, and not what the dev group holds besides:
+      # the linters and the type checkers are static and run once on CPython,
+      # and coverage is gated on its own lane. A test dependency added without
+      # a line here reddens this lane rather than passing quietly.
+      - name: Install what the suite reads
+        run: |
+          VIRTUAL_ENV=.pypy uv pip install \
+            "annotated-types>=0.8" "hypothesis>=6.168.0" "pytest>=9.1.1" \
+            "pyyaml>=6.0.3" "syrupy>=6.0.0"
+      - name: pytest
+        env:
+          HYPOTHESIS_PROFILE: ci
+        run: .pypy/bin/python -m pytest -q
 
   docs:
     name: docs
@@ -1541,7 +1562,7 @@ jobs:
         bench-free-threaded,
         wheel,
         fuzz-build,
-        pypy-abi,
+        pypy,
         mutants-diff-core,
         mutants-diff-walk,
         cargo-deny,
@@ -1574,7 +1595,7 @@ jobs:
           needs.rust-test.result != 'success' ||
           needs.rust-msrv.result != 'success' ||
           needs.rust-doc.result != 'success' ||
-          needs.pypy-abi.result != 'success' ||
+          needs.pypy.result != 'success' ||
           needs.rust-coverage.result != 'success' ||
           needs.binding-coverage.result != 'success' ||
           needs.python.result != 'success' ||

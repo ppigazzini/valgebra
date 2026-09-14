@@ -36,11 +36,21 @@ the release image exposes a `cp314t` interpreter. Free-threaded support starts a
 
 **PyPy 3.11 is a target, on Linux.** Four wheels are published for it —
 manylinux and musllinux, x86_64 and aarch64 — and every push builds the
-extension against PyPy and imports it, because the C API it offers is not
-CPython's: an extension there runs through `cpyext`, which carries the limited
-API and not every static type object CPython exports, and naming one of those
-links fine and fails at `import`. There is no PyPy wheel for macOS or Windows,
-where the source distribution is the install.
+extension against PyPy, imports it, and runs the whole suite there. Both halves
+are needed, because the C API PyPy offers is not CPython's: an extension there
+runs through `cpyext`, which carries the limited API and not every static type
+object CPython exports, so naming one of those links fine and fails at `import`
+— and `cpyext` also *answers* differently, which no import can show. There is no
+PyPy wheel for macOS or Windows, where the source distribution is the install.
+
+One promise this page makes holds differently there. A validator releases the
+classes, enums and predicates its schema names when nothing else holds them, and
+on PyPy it cannot: `cpyext` builds a `PyTypeObject` proxy for every class an
+extension is shown and never frees it, so a class is kept alive from the first
+validator that reads it, whatever that validator does afterwards. A long-running
+process that compiles a schema over a *throwaway* class per request grows there
+and does not on CPython. Nothing in valgebra can change this, and the suite's
+three lifetime cases say so on PyPy rather than claiming to pass.
 
 On a free-threaded interpreter a validator is immutable and shares no mutable
 walk state, so object validation runs in parallel with the interpreter lock

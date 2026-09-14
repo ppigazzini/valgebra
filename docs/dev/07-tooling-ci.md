@@ -367,16 +367,36 @@ legs on every push bought minutes rather than information.
 `tests/test_required_jobs.py` holds the split, because a matrix grows by one
 line and nobody re-measures.
 
-**PyPy is a build lane, not a suite.** The release matrix publishes four PyPy
-3.11 wheels and nothing on a push linked against PyPy until 0.0.10 broke there:
-`cpyext` carries the limited API and not every static type object CPython
+**PyPy builds, links, and runs the suite.** The release matrix publishes four
+PyPy 3.11 wheels and nothing on a push linked against PyPy until 0.0.10 broke
+there: `cpyext` carries the limited API and not every static type object CPython
 exports, so an extension naming one links on CPython and fails at `import` on
-PyPy — after the release, since the smoke jobs run on CPython. The `pypy import`
-job builds the extension against PyPy and runs
-`scripts/pypy_import_check.py`, which imports it and builds the annotation forms
-whose compilation reaches a type object. What each form *means* is held by the
-suites, on CPython, against every interpreter the matrix carries; this lane
-holds the *link*, which is the only property that differs there.
+PyPy — after the release, since the smoke jobs run on CPython. The `pypy 3.11`
+job builds a release wheel against PyPy and runs `scripts/pypy_import_check.py`
+first, which imports it and builds the annotation forms whose compilation
+reaches a type object: that is the *link*, and it fails with one line naming the
+form rather than in a stack of test output.
+
+Then it runs the suite. The link is not the only property that differs there,
+which the lane learned the first time it ran one: `cpyext` implements
+`PyTuple_Size` through the object's own `__len__`, so a `tuple` subclass that
+overrode it walked past the end of its storage and killed the process — an
+answer, not a symbol, and an import cannot see it.
+`tests/test_lane_interpreters.py` holds the rule both ways: an implementation
+the packaging classifiers state has a lane running the suite, and a lane running
+the suite is on an implementation somebody stated. The wheel is a **release**
+build, because a debug one carries frames large enough that the deep-nesting
+cases overflow PyPy's C stack, which is a property of the profile and not of the
+code.
+
+Three cases the suite carries cannot be decided there and say so rather than
+failing. `cpyext` builds a `PyTypeObject` proxy for every class an extension is
+shown and never frees it, so a class that crosses the boundary is immortal
+whatever a validator holds; the collector traces every object rather than
+flagging some, so there is no per-object tracking to assert; and the interpreter
+hands out one `nan` object where CPython hands out two. Each is read by *trying*
+it rather than by naming an interpreter, so a release that changes one puts the
+case back in the run without anyone editing a list.
 
 **The full sweeps are scheduled, and a diff-scoped one is not.** A full sweep is
 minutes of rebuilds and does not belong on a push, so a regression it catches is
