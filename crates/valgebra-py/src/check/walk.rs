@@ -92,7 +92,7 @@ static BASE_LENGTHS: PyOnceLock<(Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
 /// two members and both have names, so it is an enum and the call sites say the
 /// name -- the rule this library applies to a Python value it is handed, turned
 /// on its own arguments.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 pub(super) enum Base {
     List,
     Tuple,

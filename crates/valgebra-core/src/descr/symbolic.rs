@@ -29,10 +29,11 @@ use crate::verdict::Verdict;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 
-/// The most states an automaton may hold, for the reason
-/// [`regular`](super::regular) gives: a product multiplies the state counts, so
-/// a bound is what keeps a pathological combination from exhausting memory
-/// rather than answering.
+/// The most states an automaton may hold.
+///
+/// For the reason [`regular`](super::regular) gives: a product multiplies the
+/// state counts, so a bound is what keeps a pathological combination from
+/// exhausting memory rather than answering.
 pub const MAX_STATES: usize = 4096;
 
 /// The most transitions one state may have.

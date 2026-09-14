@@ -37,7 +37,8 @@ mod transform;
 
 pub use transform::pruned;
 
-/// Remap a pool index through the reindexing map built when two validators merge.
+/// Remap a pool index through the map built when two validators merge.
+///
 /// Every index is in range by construction, so a miss is an internal invariant
 /// break; the map keeps the original index rather than panicking, so a malformed
 /// merge degrades to a (later bounds-checked) wrong lookup instead of aborting.
@@ -49,9 +50,10 @@ fn remap(lit_map: &[usize], index: usize) -> usize {
     lit_map.get(index).copied().unwrap_or(index)
 }
 
-/// How far every constants-pool index moves when a second validator's pool is
-/// appended to a first. Distinct from [`DefShift`] so the two cannot be
-/// transposed at [`Schema::shifted`], which takes one of each.
+/// How far every constants-pool index moves when two pools are appended.
+///
+/// Distinct from [`DefShift`] so the two cannot be transposed at
+/// [`Schema::shifted`], which takes one of each.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct PoolShift(usize);
