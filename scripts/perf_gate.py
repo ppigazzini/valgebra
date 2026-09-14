@@ -34,8 +34,9 @@ Three workloads, and seven shapes across them:
   (`--binding-boundary`), the walk over a wide record (`--binding-record`) and
   the same walk over a value whose keys are interned (`--binding-keys`),
   building one from its Python spelling (`--binding-build`), compiling one
-  written as a `TypedDict` of refined integers (`--binding-annotated`), and
-  explaining a failure in one (`--binding-explain`). Each is the deterministic twin of a
+  written as a `TypedDict` of refined integers (`--binding-annotated`),
+  compiling a fifty-field dataclass (`--binding-object`), and explaining a
+  failure in one (`--binding-explain`). Each is the deterministic twin of a
   shape the comparison gate times, so a wall-clock movement there can be
   confirmed or refuted here. They embed CPython, whose startup is not a fixed
   instruction count, so each is measured as the *difference* between two
@@ -293,6 +294,7 @@ MODES = {
     "binding-explain-accept": ("binding_workload", "binding record explain accept"),
     "binding-open": ("binding_workload", "binding open record walk"),
     "binding-annotated": ("binding_workload", "binding annotated build"),
+    "binding-object": ("binding_workload", "binding dataclass build"),
     "binding-keys": ("binding_workload", "binding record walk by interned keys"),
 }
 
@@ -310,6 +312,7 @@ BINDING_ITERATIONS = {
     "binding-explain-accept": (20_000, 5_000),
     "binding-open": (20_000, 5_000),
     "binding-annotated": (300, 100),
+    "binding-object": (2_000, 500),
     "binding-keys": (20_000, 5_000),
 }
 
@@ -322,6 +325,7 @@ BINDING_SHAPES = {
     "binding-explain-accept": "explain-accept",
     "binding-open": "open",
     "binding-annotated": "annotated",
+    "binding-object": "object",
     "binding-keys": "keys",
 }
 

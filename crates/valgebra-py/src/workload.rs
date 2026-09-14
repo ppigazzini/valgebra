@@ -117,6 +117,18 @@ pub enum BindingShape {
     /// *both* sides interned, so this shape is the one that can see the
     /// validator's own side stop being.
     Keys,
+    /// Compiling a fifty-field **dataclass**: the one class form whose build
+    /// asks a question of the standard library.
+    ///
+    /// The two build shapes beside it read a `dict` and a `TypedDict`, and
+    /// neither reaches a class at all. A dataclass does: the frontend asks
+    /// `dataclasses.is_dataclass` about it, reads its fields through
+    /// `get_type_hints`, and reads the class's own declared order. Nothing
+    /// counted any of that -- which is how putting the `dataclasses` import
+    /// back at the top of the frontend cost a build that compiles *no*
+    /// dataclass 6.45%, and had to be found with a profiler because no shape
+    /// here would move.
+    Object,
 }
 
 impl BindingShape {
@@ -133,6 +145,7 @@ impl BindingShape {
             "explain-accept" => BindingShape::ExplainAccept,
             "annotated" => BindingShape::Annotated,
             "keys" => BindingShape::Keys,
+            "object" => BindingShape::Object,
             _ => return None,
         })
     }
@@ -232,6 +245,30 @@ fn annotated_record(py: Python<'_>) -> Py<PyAny> {
         .expect("no interior nul"),
         &std::ffi::CString::new("annotated.py").expect("no interior nul"),
         &std::ffi::CString::new("annotated").expect("no interior nul"),
+    )
+    .expect("the spelling compiles");
+    module
+        .getattr("SPELLING")
+        .expect("the spelling is defined")
+        .unbind()
+}
+
+/// The fifty-field dataclass the object build shape compiles, built once.
+///
+/// Made with `make_dataclass` rather than written out: fifty `@dataclass`
+/// fields are fifty lines that say one thing, and the class the frontend reads
+/// is the same either way -- `__dataclass_fields__`, annotations, and the
+/// declared order.
+fn object_record(py: Python<'_>) -> Py<PyAny> {
+    let module = PyModule::from_code(
+        py,
+        &std::ffi::CString::new(
+            "from dataclasses import make_dataclass\n\
+             SPELLING = make_dataclass('Wide', [(f'f{i}', int) for i in range(50)])\n",
+        )
+        .expect("no interior nul"),
+        &std::ffi::CString::new("object_shape.py").expect("no interior nul"),
+        &std::ffi::CString::new("object_shape").expect("no interior nul"),
     )
     .expect("the spelling compiles");
     module
@@ -341,8 +378,12 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
         }
         BindingShape::ExplainAccept => explaining_record(py, iters, Wrong::No),
         BindingShape::Explain => explaining_record(py, iters, Wrong::Yes),
-        BindingShape::Annotated => {
-            let spelling = annotated_record(py);
+        BindingShape::Annotated | BindingShape::Object => {
+            let spelling = if matches!(shape, BindingShape::Annotated) {
+                annotated_record(py)
+            } else {
+                object_record(py)
+            };
             let mut checksum: u64 = 0;
             for _ in 0..iters {
                 let mut literals = Pool::default();
@@ -352,7 +393,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
                     &mut literals,
                     &mut definitions,
                 )
-                .expect("fifty refined fields always build");
+                .expect("fifty typed fields always build");
                 let validator = Validator::checked(schema, literals.into_items(), definitions)
                     .expect("a fifty-field record is within every limit");
                 checksum = checksum.wrapping_add(validator.schema.node_count() as u64);
