@@ -1,6 +1,6 @@
 use super::*;
 use crate::oracle::PoolRelations;
-use pyo3::types::PyDict;
+use pyo3::types::{PyBytes, PyDict};
 use valgebra_core::descr::lower::{Constants, Operand};
 use valgebra_core::{ClassIx, ConstIx, Kind};
 use valgebra_core::{DefIx, Field, MapClause};

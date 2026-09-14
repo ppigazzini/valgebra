@@ -30,7 +30,6 @@ use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, OperandIx, Schema};
 
 use crate::check::{Ctx, Frame, ValidatorIndex, WalkMode, WalkState, member};
 use crate::input::Value;
-use crate::validator::math_floor_ceil;
 
 /// A [`LeafRelations`] oracle backed by a validator's constant pool. It decides
 /// a `Literal` subtyping by running membership of the literal's value against
@@ -69,6 +68,29 @@ impl<'py, 'pool> PoolRelations<'py, 'pool> {
             classes: RefCell::default(),
         }
     }
+}
+
+/// The deepest structural nesting a constructed schema may reach. A real schema
+/// is nowhere near this deep and the annotation frontend caps its own nesting
+/// lower, so a validator this deep is one built in an unbounded loop. Every
+/// recursive walk over the tree — clone, drop, the decision procedure — descends
+/// one native stack frame per level, so building past this bound returns an
+/// error rather than overflowing the stack. Structural recursion in a schema is
+/// written with `recursive`, whose back edge is a `Ref` leaf and does not count
+/// toward this depth.
+/// The `math.floor` and `math.ceil` callables, imported once per interpreter for
+/// the integer-interval emptiness rule rather than re-imported on every decision.
+/// `PyOnceLock` keeps the one-time initialization sound under free-threading.
+static MATH_FLOOR_CEIL: PyOnceLock<(Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
+
+fn math_floor_ceil(py: Python<'_>) -> PyResult<&'static (Py<PyAny>, Py<PyAny>)> {
+    MATH_FLOOR_CEIL.get_or_try_init(py, || {
+        let math = py.import("math")?;
+        Ok((
+            math.getattr("floor")?.unbind(),
+            math.getattr("ceil")?.unbind(),
+        ))
+    })
 }
 
 /// `enum.EnumMeta`, imported once per interpreter rather than per question.

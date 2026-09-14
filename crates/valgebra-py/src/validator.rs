@@ -9,34 +9,20 @@
 use std::cell::RefCell;
 use std::sync::OnceLock;
 
-use jiter::{JsonValue, PythonParse};
+use jiter::JsonValue;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyBool, PyBytes, PyString};
+use pyo3::types::PyBool;
 use pyo3::{PyTraverseError, PyVisit};
 use rustc_hash::FxHashMap;
 use valgebra_core::{Openness, Relation, Schema};
 
 use crate::build::{Pool, build_schema};
 use crate::check::{Ctx, Frame, ValidatorIndex, WalkMode, WalkState, build_index, member};
-use crate::errors::{into_pyerr, json_invalid_error};
-use crate::input::Value;
+use crate::errors::into_pyerr;
+use crate::input::{JsonInput, Value, decode_json_input, parse_json};
 use crate::oracle::PoolRelations;
 use crate::render::render;
-/// The deepest structural nesting a constructed schema may reach. A real schema
-/// is nowhere near this deep and the annotation frontend caps its own nesting
-/// lower, so a validator this deep is one built in an unbounded loop. Every
-/// recursive walk over the tree — clone, drop, the decision procedure — descends
-/// one native stack frame per level, so building past this bound returns an
-/// error rather than overflowing the stack. Structural recursion in a schema is
-/// written with `recursive`, whose back edge is a `Ref` leaf and does not count
-/// toward this depth.
-/// The `math.floor` and `math.ceil` callables, imported once per interpreter for
-/// the integer-interval emptiness rule rather than re-imported on every decision.
-/// `PyOnceLock` keeps the one-time initialization sound under free-threading.
-static MATH_FLOOR_CEIL: PyOnceLock<(Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
-
 pub(crate) const MAX_SCHEMA_DEPTH: usize = 128;
 /// The most recursive definitions a constructed schema may hold. A recursive
 /// schema needs a mere handful; a validator with more is one whose definitions
@@ -89,78 +75,12 @@ fn definition_is_open(token: u64) -> bool {
     OPEN_DEFINITIONS.with_borrow(|open| open.contains(&token))
 }
 
-pub(crate) fn math_floor_ceil(py: Python<'_>) -> PyResult<&'static (Py<PyAny>, Py<PyAny>)> {
-    MATH_FLOOR_CEIL.get_or_try_init(py, || {
-        let math = py.import("math")?;
-        Ok((
-            math.getattr("floor")?.unbind(),
-            math.getattr("ceil")?.unbind(),
-        ))
-    })
-}
 /// Turn a membership walk's outcome into a Python result: re-raise a fatal
 /// interpreter signal the walk recorded, otherwise report the membership verdict.
 fn reraise_fatal(state: WalkState, ok: bool) -> PyResult<bool> {
     match state.into_fatal() {
         Some(err) => Err(err),
         None => Ok(ok),
-    }
-}
-
-/// The UTF-8 bytes a JSON `str`/`bytes` argument hands to the parser, or why they
-/// are unavailable. A `str` carrying a lone surrogate cannot be encoded to UTF-8;
-/// both JSON entry points must treat that the same malformed-input way rather than
-/// let the raw `UnicodeEncodeError` leak — which would disagree with the check
-/// path and break `validate_json`'s documented exception set.
-enum JsonInput<'a> {
-    /// Bytes ready for the parser.
-    Bytes(&'a [u8]),
-    /// A `str` the interpreter cannot encode to UTF-8 (a lone surrogate).
-    Undecodable,
-    /// Neither `str` nor `bytes`.
-    NotStrOrBytes,
-}
-
-/// Decode a JSON argument to the bytes the parser reads, classifying the two ways
-/// it can be unusable so both entry points agree on them.
-fn decode_json_input<'a>(data: &'a Bound<'_, PyAny>) -> JsonInput<'a> {
-    if let Ok(text) = data.cast::<PyString>() {
-        match text.to_str() {
-            Ok(text) => JsonInput::Bytes(text.as_bytes()),
-            Err(_) => JsonInput::Undecodable,
-        }
-    } else if let Ok(raw) = data.cast::<PyBytes>() {
-        JsonInput::Bytes(raw.as_bytes())
-    } else {
-        JsonInput::NotStrOrBytes
-    }
-}
-
-/// Parse a JSON `str` or `bytes` into a Python value with jiter.
-///
-/// jiter's defaults match the standard JSON model: standard `float`s, no
-/// `Infinity`/`NaN`, and complete (non-partial) input — so the parsed value is
-/// what the object path would receive from `json.loads`. A parse failure, or a
-/// `str` the interpreter cannot encode to UTF-8, is surfaced as a structured
-/// `json_invalid` `ValidationError`; a non-string, non-bytes argument is a
-/// `TypeError`.
-fn parse_json<'py>(data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let py = data.py();
-    let parse = PythonParse::default();
-    match decode_json_input(data) {
-        JsonInput::Bytes(bytes) => parse
-            .python_parse(py, bytes)
-            .map_err(|err| json_invalid_error(py, &err.description(bytes))),
-        // An undecodable string is malformed input, reported through the same
-        // structured `json_invalid` model as an unparseable document — never as a
-        // raw `UnicodeEncodeError`, which `validate_json` promises not to raise.
-        JsonInput::Undecodable => Err(json_invalid_error(
-            py,
-            "input string is not valid UTF-8 (contains a lone surrogate)",
-        )),
-        JsonInput::NotStrOrBytes => Err(PyTypeError::new_err(
-            "JSON input must be a str or bytes object",
-        )),
     }
 }
 

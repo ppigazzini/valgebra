@@ -13,7 +13,11 @@
 //! object path would have received from `json.loads`, so the decision matches.
 
 use jiter::JsonValue;
+use jiter::PythonParse;
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
+
+use crate::errors::json_invalid_error;
 use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString};
 
 /// A value to validate: a borrowed Python object, or a borrowed parsed JSON
@@ -134,4 +138,61 @@ fn json_to_python<'py>(py: Python<'py>, value: &JsonValue<'_>) -> PyResult<Bound
             dict.into_any()
         }
     })
+}
+
+/// The UTF-8 bytes a JSON `str`/`bytes` argument hands to the parser, or why they
+/// are unavailable. A `str` carrying a lone surrogate cannot be encoded to UTF-8;
+/// both JSON entry points must treat that the same malformed-input way rather than
+/// let the raw `UnicodeEncodeError` leak — which would disagree with the check
+/// path and break `validate_json`'s documented exception set.
+pub(crate) enum JsonInput<'a> {
+    /// Bytes ready for the parser.
+    Bytes(&'a [u8]),
+    /// A `str` the interpreter cannot encode to UTF-8 (a lone surrogate).
+    Undecodable,
+    /// Neither `str` nor `bytes`.
+    NotStrOrBytes,
+}
+
+/// Decode a JSON argument to the bytes the parser reads, classifying the two ways
+/// it can be unusable so both entry points agree on them.
+pub(crate) fn decode_json_input<'a>(data: &'a Bound<'_, PyAny>) -> JsonInput<'a> {
+    if let Ok(text) = data.cast::<PyString>() {
+        match text.to_str() {
+            Ok(text) => JsonInput::Bytes(text.as_bytes()),
+            Err(_) => JsonInput::Undecodable,
+        }
+    } else if let Ok(raw) = data.cast::<PyBytes>() {
+        JsonInput::Bytes(raw.as_bytes())
+    } else {
+        JsonInput::NotStrOrBytes
+    }
+}
+
+/// Parse a JSON `str` or `bytes` into a Python value with jiter.
+///
+/// jiter's defaults match the standard JSON model: standard `float`s, no
+/// `Infinity`/`NaN`, and complete (non-partial) input — so the parsed value is
+/// what the object path would receive from `json.loads`. A parse failure, or a
+/// `str` the interpreter cannot encode to UTF-8, is surfaced as a structured
+/// `json_invalid` `ValidationError`; a non-string, non-bytes argument is a
+/// `TypeError`.
+pub(crate) fn parse_json<'py>(data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py = data.py();
+    let parse = PythonParse::default();
+    match decode_json_input(data) {
+        JsonInput::Bytes(bytes) => parse
+            .python_parse(py, bytes)
+            .map_err(|err| json_invalid_error(py, &err.description(bytes))),
+        // An undecodable string is malformed input, reported through the same
+        // structured `json_invalid` model as an unparseable document — never as a
+        // raw `UnicodeEncodeError`, which `validate_json` promises not to raise.
+        JsonInput::Undecodable => Err(json_invalid_error(
+            py,
+            "input string is not valid UTF-8 (contains a lone surrogate)",
+        )),
+        JsonInput::NotStrOrBytes => Err(PyTypeError::new_err(
+            "JSON input must be a str or bytes object",
+        )),
+    }
 }
