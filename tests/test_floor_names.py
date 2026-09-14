@@ -39,7 +39,8 @@ this release exists here, and every name it dates above this one does not. The
 matrix runs five interpreters, so a wrong row fails on the lane that disproves
 it rather than waiting for a reader.
 
-LEDGER: every typing and enum name read at import time exists on the floor
+LEDGER: every typing and enum name read at import time, and every stdlib
+module imported, exists on the floor
 """
 
 from __future__ import annotations
@@ -94,6 +95,16 @@ class Use(NamedTuple):
     """The newest that does: the table's top, or a `< (3, N)` guard's."""
 
 
+class Imported(NamedTuple):
+    """A module a source imports, and the releases that reach the line."""
+
+    where: str
+    line: int
+    module: str
+    lowest: tuple[int, int]
+    highest: tuple[int, int]
+
+
 def _guard(test: ast.expr) -> tuple[str, tuple[int, int]] | None:
     """Read a `sys.version_info` comparison as the bound it puts on the body.
 
@@ -136,6 +147,7 @@ class Reader(ast.NodeVisitor):
         self.where = where
         self.deferred = deferred
         self.alias: dict[str, str] = {}
+        self.imports: list[Imported] = []
         self.lowest = FLOOR
         self.highest = KNOWN_THROUGH
         self.uses: list[Use] = []
@@ -197,12 +209,22 @@ class Reader(ast.NodeVisitor):
         if node.value is not None:
             self.visit(node.value)
 
+    def _imported(self, line: int, dotted: str) -> None:
+        """Record the top-level module of a dotted name, which is what ships."""
+        top = dotted.split(".", maxsplit=1)[0]
+        self.imports.append(Imported(self.where, line, top, self.lowest, self.highest))
+
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
+            self._imported(node.lineno, alias.name)
             if alias.name in WATCHED:
                 self.alias[alias.asname or alias.name] = alias.name
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        # A relative import names no top-level module, so there is nothing for
+        # the standard library to answer about.
+        if not node.level and node.module:
+            self._imported(node.lineno, node.module)
         if node.module not in WATCHED:
             return
         for alias in node.names:
@@ -236,7 +258,7 @@ def _sources() -> list[Path]:
     return sorted({path for pattern in SCANNED for path in ROOT.glob(pattern)})
 
 
-def _read(path: Path) -> list[Use]:
+def _read(path: Path) -> Reader:
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source)
     deferred = any(
@@ -247,7 +269,7 @@ def _read(path: Path) -> list[Use]:
     )
     reader = Reader(str(path.relative_to(ROOT)), deferred=deferred)
     reader.visit(tree)
-    return reader.uses
+    return reader
 
 
 def _dated(
@@ -276,7 +298,7 @@ def test_no_module_reads_a_name_outside_the_releases_that_have_it() -> None:
     """
     outside = []
     for path in _sources():
-        for use in _read(path):
+        for use in _read(path).uses:
             dated = _dated(use.module, use.name)
             if dated is None:
                 continue
@@ -303,12 +325,107 @@ def test_no_module_reads_a_name_outside_the_releases_that_have_it() -> None:
     )
 
 
+def reader_of(source: str) -> Reader:
+    """Read a planted source the way `_read` reads a file in the tree."""
+    reader = Reader("planted.py", deferred=False)
+    reader.visit(ast.parse(source))
+    return reader
+
+
+def _ships(module: str) -> tuple[tuple[int, int], tuple[int, int] | None] | None:
+    """Read the releases the table says a stdlib module ships in."""
+    span = TABLE["stdlib"].get(module)
+    if span is None:
+        return None  # not the standard library's: a third-party package, or ours
+    gone = span.get("gone")
+    return _version(span["since"]), (None if gone is None else _version(gone))
+
+
+def test_no_module_imports_a_stdlib_module_outside_the_releases_that_ship_it() -> None:
+    """The same mistake one level up, which the names half could not see.
+
+    `tomllib` arrives in 3.11 and this suite runs from 3.10, so importing it to
+    read a `.toml` file made the whole module fail to *collect* on the floor
+    leg -- and the ledger beside this one, which dates every `typing` and `enum`
+    name a source reaches, saw nothing, because a module is not a name in one.
+
+    Both edges again: a module is missing below the release that adds it and
+    missing again at or above one that removes it, and the standard library
+    removes plenty -- `distutils` in 3.12, `telnetlib` in 3.13, `sre_parse` in
+    3.15. A module above the floor sits behind `if sys.version_info >= (3, N):`
+    like any other name, and a third-party package is dated by no row and is
+    not this ledger's business.
+
+    The rows are the modules this tree imports. `sys.stdlib_module_names` is not
+    a property of the release alone -- two builds of one version disagree on the
+    modules a platform does not need -- so a table of every name would report a
+    difference between two builds as a moved row. The row above keeps the table
+    from going stale as imports are added.
+    """
+    outside = []
+    for path in _sources():
+        for found in _read(path).imports:
+            ships = _ships(found.module)
+            if ships is None:
+                continue
+            since, gone = ships
+            if since > found.lowest:
+                outside.append(
+                    f"{found.where}:{found.line}: {found.module} arrives in "
+                    f"{since[0]}.{since[1]}, and this line is reached on "
+                    f"{found.lowest[0]}.{found.lowest[1]}"
+                )
+            if gone is not None and gone <= found.highest:
+                outside.append(
+                    f"{found.where}:{found.line}: {found.module} is gone in "
+                    f"{gone[0]}.{gone[1]}, and this line is reached on "
+                    f"{found.highest[0]}.{found.highest[1]}"
+                )
+    assert not outside, (
+        "standard-library modules imported on a release that does not ship "
+        "them:\n" + "\n".join(outside) + "\nAn import above the floor sits "
+        "behind `if sys.version_info >= (3, N):`, or the file reads what it "
+        "needs another way -- `tests/test_mutation_scope.py` reads its TOML "
+        "with a regex for exactly this reason."
+    )
+
+
+def test_the_reader_sees_a_module_the_floor_does_not_ship() -> None:
+    """The plant for the half above: the import that reddened the floor leg.
+
+    Written out rather than reached for, because the tree no longer carries it:
+    a check whose only evidence is that the tree passes is a check nobody has
+    run against a tree that breaks it.
+    """
+    planted = "import sys\nimport tomllib\n\nDATA = tomllib.loads('')\n"
+    # Its span is written here rather than read from the table, because the
+    # table dates what this tree imports and this tree does not import it any
+    # more. What the row holds is the rule -- a module reached below the release
+    # that ships it -- and the rule is the part a plant has to exercise.
+    spans = {"tomllib": ((3, 11), None)}
+    early = {
+        found.module
+        for found in reader_of(planted).imports
+        if (ships := spans.get(found.module)) is not None and ships[0] > found.lowest
+    }
+    assert early == {"tomllib"}, "the floor's own leg caught this and no test did"
+
+    # The guarded form is the spelling that is allowed, and is not reported.
+    guarded = "import sys\n\nif sys.version_info >= (3, 11):\n    import tomllib\n"
+    behind_a_guard = [
+        found.module
+        for found in reader_of(guarded).imports
+        if (ships := spans.get(found.module)) is not None and ships[0] > found.lowest
+    ]
+    assert not behind_a_guard
+
+
 def test_every_name_read_is_one_the_table_dates() -> None:
     """A name in no row is a typo, or a release the table has not been told about."""
     undated = [
         f"{use.where}:{use.line}: {use.module}.{use.name}"
         for path in _sources()
-        for use in _read(path)
+        for use in _read(path).uses
         if _dated(use.module, use.name) is None
     ]
     assert not undated, (
@@ -351,6 +468,70 @@ def test_the_table_agrees_with_this_interpreter() -> None:
     assert not wrong, (
         f"floor_names.json disagrees with Python {running[0]}.{running[1]}:\n"
         + "\n".join(wrong)
+    )
+
+
+def test_every_stdlib_module_imported_is_one_the_table_dates() -> None:
+    """A table derived from the tree's imports goes stale when an import is added.
+
+    The rows are the modules this tree imports, so an import added without
+    re-running `scripts/floor_names.py --update` carries no row -- and a module
+    with no row is not judged, which is the silent half of the mistake this
+    ledger exists for. The running interpreter's own list says which imports are
+    the standard library's to answer for; a third-party package is in neither.
+    """
+    imported = {found.module for path in _sources() for found in _read(path).imports}
+    undated = sorted(imported & sys.stdlib_module_names - set(TABLE["stdlib"]))
+    assert not undated, (
+        f"standard-library modules this tree imports that no row dates: {undated}. "
+        "Run `python scripts/floor_names.py --update`, which asks every release "
+        "the table spans and needs all of them installed."
+    )
+
+
+def test_the_stdlib_rows_agree_with_this_interpreter() -> None:
+    """The module half of the row above, held the same way and by the same matrix.
+
+    `sys.stdlib_module_names` is the interpreter's own answer, so this compares
+    the table with what is running rather than with a memory of it.
+
+    **Over the modules this tree imports, and no others.** The list is not a
+    property of the release alone: two builds of one version disagree on the
+    modules a platform does not need, and two implementations disagree on more.
+    This box's 3.12 ships `_wmi`, which is Windows-only; the runner's 3.12 does
+    not, and PyPy answers without `_bisect` or `_ctypes` and with a `_colorize`
+    that CPython adds in 3.13. None of those is a wrong row, and holding the
+    whole table to one build reports a difference between two builds as one.
+
+    What the table is *used* for is narrower than what it records: the row
+    above asks whether an import this tree makes is safe on the floor. So that
+    is what is held to the interpreter here -- every module the sources import
+    and the table dates -- and the rows nobody imports are left to the six
+    interpreters that wrote them.
+    """
+    running = sys.version_info[:2]
+    shipped = sys.stdlib_module_names
+    imported = {found.module for path in _sources() for found in _read(path).imports}
+    asserted = sorted(imported & set(TABLE["stdlib"]))
+    assert asserted, "no imported module is dated, so this row reads nothing"
+    wrong = []
+    for module in asserted:
+        ships = _ships(module)
+        assert ships is not None
+        since, gone = ships
+        expected = since <= running and (gone is None or running < gone)
+        span = f"{since[0]}.{since[1]}" + (
+            "" if gone is None else f" until {gone[0]}.{gone[1]}"
+        )
+        if expected and module not in shipped:
+            wrong.append(f"{module} is dated {span} and is not shipped here")
+        # Above the release the table was derived through, a module may have
+        # arrived in one nobody has told it about.
+        if not expected and module in shipped and running <= KNOWN_THROUGH:
+            wrong.append(f"{module} is dated {span} and is shipped here")
+    assert not wrong, (
+        f"floor_names.json's stdlib rows disagree with Python "
+        f"{running[0]}.{running[1]}:\n" + "\n".join(wrong)
     )
 
 

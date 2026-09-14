@@ -104,7 +104,7 @@ for and misses the other. Twenty-one of them:
 | `tests/test_lane_interpreters.py` | no lane installs an interpreter without naming it |
 | `tests/test_cited_commits.py` | every commit a tracked file cites is one a clone can reach |
 | `tests/test_fuzz_lane.py` | the fuzz soak names its allocation ceiling and forks its batches |
-| `tests/test_floor_names.py` | every typing and enum name read at import time exists on the floor |
+| `tests/test_floor_names.py` | every typing and enum name read at import time, and every stdlib module imported, exists on the floor |
 | `tests/test_ledger_plants.py` | every ledger fails on the defect it exists to catch |
 
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
