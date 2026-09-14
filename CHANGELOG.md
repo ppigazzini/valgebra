@@ -13,21 +13,19 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- perf: a meet builds its components rather than cloning them to overwrite -- internal
-- perf: a second table of constants is read only where the first answers -- internal
-- perf: a union of lines appends the second list where it lies -- internal
-- perf: a component's whole is named, and built where it is wanted -- internal
-- perf: a kind's lines are tidied where they lie -- internal
-- perf: a validator's field keys are interned, as their comment said
-- perf: the frontend holds the typing forms it reads per node
-- perf: the frontend asks for an attribute rather than trying for it
-- perf: a marker is asked by a name the interpreter already holds
-- perf: the dataclass question is asked of a handle, and only where it is asked
-- fix: a sequence's length is read from the container that holds it
-- perf: a tuple subclass that overrides nothing is read where it lies
-- perf: a marker is read through the names its type carries
-
 -->
+
+## [0.0.11] - 2026-09-15
+
+A performance release. Nothing a caller writes changes: every entry below is
+the same answer arriving for less, or a platform the project states it supports
+and now proves. The frontend is the release's subject -- compiling an
+annotation got cheaper three separate ways, and the walk over a record got
+cheaper where a caller's dict already holds interned keys.
+
+The one fix is PyPy's: a `tuple` subclass that overrides `__len__` could send
+the walk past the end of its storage, which is a crash rather than a wrong
+answer, and it reached `MinLen`/`MaxLen` over such a subclass too.
 
 ### Changed
 
@@ -1417,7 +1415,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.10...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.11...HEAD
+[0.0.11]: https://github.com/ppigazzini/valgebra/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/ppigazzini/valgebra/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/ppigazzini/valgebra/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/ppigazzini/valgebra/compare/v0.0.7...v0.0.8
