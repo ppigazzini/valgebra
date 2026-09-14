@@ -405,7 +405,9 @@ that *inherits* the base's slot, which is every `NamedTuple`. Telling the two
 apart costs one type lookup per validation: on CPython 3.14 a three-field
 `NamedTuple` reads **69 ns against the 57 a plain tuple takes**, and with a
 length bound 77 against 58. Reading every subclass as a liar instead cost 100
-and 117, which is what a release of this shipped with for a day.
+and 117, which is what this repository carried between the repair that made a
+lying subclass safe and the one that made an honest subclass cheap again --
+about a day, and no release.
 
 **Interned keys are the fast path, and Python interns most of them for you.** A
 validator holds an interned `str` for every declared field, and a dict probe

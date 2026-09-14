@@ -320,6 +320,14 @@ shape no rule was written for. Normalising at construction makes `==` equality o
 a canonical form -- which is what the API reference already calls it -- and makes
 the shape every rule downstream may assume the shape it gets.
 
+The code that decides it is `crates/valgebra-py/src/equality.rs`, which reads
+two validators through their constant pools rather than slot for slot: a pool
+index means nothing outside the validator holding it, so two schemas spelled
+alike from different pools compare equal only if what the indices *name* is
+equal. It is one of the binding's swept surfaces, and it decides `==` and
+nothing else -- `is_equivalent` is the decision procedure, a different question
+with a different answer, and [04-algebra.md](../04-algebra.md) is about why.
+
 **Both sides or neither.** A law folded in `union` and left standing in
 `intersection` is two answers to one question, and the simplifier already folded
 the meet — so the constructors disagreed with each other and with it. Stating a

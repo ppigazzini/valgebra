@@ -66,6 +66,15 @@ names it; the sixth is answered by a rule rather than by the gate; the rest are
 differences a local gate cannot remove, and naming them is what keeps a green
 local run from being read as a promise it never made.
 
+Naming them carries an obligation the other way, and the wheel lane is what
+taught it: a job on that closing line went red within two minutes of a push, on
+a `docker pull` that answered `504`, and the only thing that could have noticed
+is a person reading the badge. A green gate followed by a red lane it named is
+the expected shape, not an anomaly — so a lane the gate does not reach is read
+after the push and its verdict reported, with a re-run, a fix, or a stated
+reason it is not the tree's. The list exists to say what a green run did not
+check; leaving the check undone afterwards spends the list on nothing.
+
 **The fourth row is the newest and it is the one to read twice.** It is not a
 setting a developer chose: it is an *absence* on the runner that is a presence
 here. A check that writes anything -- a commit, a file, a config -- asks the
@@ -391,8 +400,9 @@ path and measuring nothing.
 ### The mutation ratchets
 
 Two sweeps, each with its own committed baseline: the core crate, and the
-binding's soundness surfaces — the membership walk with the context it carries,
-the frontend's four files, equality, and the oracle. `scripts/mutation_gate.py` fails in
+binding's soundness surfaces — the membership walk with the context it carries
+and the precompute it reads, the `Value` both input paths run over, the
+frontend's four files, equality, and the oracle. `scripts/mutation_gate.py` fails in
 **three** directions — a survivor the baseline does not accept, an accepted
 entry that no mutant answers to, and an accepted entry naming a file the tree
 does not track. The second keeps the accepted set honest: an accepted hole the
