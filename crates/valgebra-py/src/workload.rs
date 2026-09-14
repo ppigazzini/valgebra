@@ -144,6 +144,25 @@ pub enum BindingShape {
     /// hold it either. A count is the only instrument that can, which is what
     /// this shape is: the cheapest thing that would have caught it.
     Subclass,
+    /// A JSON document of two hundred records, parsed and walked in one pass:
+    /// the twin of `json_document`, and the shape that had none.
+    ///
+    /// It is the comparison gate's closest race -- 0.70 of pydantic-core's
+    /// time against a ceiling of 1.00 -- and the tooling page records what a
+    /// wide margin costs: this ratio drifted from 0.78 to 0.87 with no gate
+    /// red, because a wall clock under a ceiling it clears by a third measures
+    /// nothing until somebody looks. A count has no ceiling to hide under.
+    ///
+    /// What it counts is not all this crate's. Profiled at `9700181`, one call
+    /// is about 1.41M instructions: 55% `jiter` building the value tree, 14%
+    /// dropping it, and 31% the walk. `pydantic-core` parses to the same
+    /// `jiter` tree before it validates, so the two-thirds is the floor both
+    /// libraries stand on and the third is what the ratio is actually about.
+    /// A regression in the walk is a sixth of what it would be in a shape
+    /// measuring the walk alone -- which is the reason to count this rather
+    /// than to infer it from [`Record`](BindingShape::Record), whose dict the
+    /// interpreter hands over already built.
+    Json,
 }
 
 impl BindingShape {
@@ -162,6 +181,7 @@ impl BindingShape {
             "keys" => BindingShape::Keys,
             "object" => BindingShape::Object,
             "subclass" => BindingShape::Subclass,
+            "json" => BindingShape::Json,
             _ => return None,
         })
     }
@@ -320,6 +340,51 @@ fn subclass_value(py: Python<'_>) -> Py<PyAny> {
         .unbind()
 }
 
+/// The comparison gate's JSON document and the annotation it is read against,
+/// built once: `list[JsonRecord]` over two hundred records.
+///
+/// Spelled in Python and compiled through the frontend rather than assembled as
+/// `Schema` nodes here, for the same reason the document is `json.dumps`ed
+/// rather than written out: the two gates have to measure one problem, and the
+/// only way to be sure of that is to build it from the same source. Five fields
+/// of four shapes -- an integer, two strings, a list of strings and a mapping
+/// of strings -- reach the scalar arms, the sequence arm and the clause arm in
+/// one record, which is what makes a document of them a walk rather than a
+/// parse with a type check on the end.
+///
+/// Returns the annotation and the document as bytes. `is_valid_json` takes
+/// `str` or `bytes` and decodes the first, so bytes is the form that measures
+/// the parse and not the decode.
+fn json_document(py: Python<'_>) -> (Py<PyAny>, Vec<u8>) {
+    let module = PyModule::from_code(
+        py,
+        &std::ffi::CString::new(
+            "import json\n\
+             from typing import TypedDict\n\
+             JsonRecord = TypedDict('JsonRecord', {'id': int, 'name': str, \
+             'email': str, 'tags': list[str], 'meta': dict[str, str]})\n\
+             SPELLING = list[JsonRecord]\n\
+             DOCUMENT = json.dumps([{'id': i, 'name': 'Ada', \
+             'email': 'a@b.c', 'tags': ['x', 'y'], 'meta': {'k': 'v'}} \
+             for i in range(200)]).encode()\n",
+        )
+        .expect("no interior nul"),
+        &std::ffi::CString::new("json_shape.py").expect("no interior nul"),
+        &std::ffi::CString::new("json_shape").expect("no interior nul"),
+    )
+    .expect("the spelling compiles");
+    let document = module
+        .getattr("DOCUMENT")
+        .expect("the document is defined")
+        .extract()
+        .expect("the document is bytes");
+    let spelling = module
+        .getattr("SPELLING")
+        .expect("the spelling is defined")
+        .unbind();
+    (spelling, document)
+}
+
 fn wide_fields(py: Python<'_>) -> (Vec<Field>, Py<PyAny>) {
     let fields: Vec<Field> = (0..50)
         .map(|i| Field {
@@ -423,6 +488,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             }
             checksum
         }
+        BindingShape::Json => json_walk(py, iters),
         BindingShape::ExplainAccept => explaining_record(py, iters, Wrong::No),
         BindingShape::Explain => explaining_record(py, iters, Wrong::Yes),
         BindingShape::Annotated | BindingShape::Object => {
@@ -448,6 +514,31 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             checksum
         }
     }
+}
+
+/// The JSON document parsed and walked once per iteration.
+///
+/// The document and the validator are built outside the loop, as every shape
+/// here builds what it reads: what is counted is one `matches_json`, which is
+/// the parse and the walk and the drop of the tree between them. That is the
+/// whole of what `is_valid_json` does after the argument is known to be bytes,
+/// and it is the entry the comparison gate times.
+fn json_walk(py: Python<'_>, iters: usize) -> u64 {
+    let (spelling, document) = json_document(py);
+    let mut literals = Pool::default();
+    let mut definitions = Vec::new();
+    let schema = build_schema(spelling.bind(py), &mut literals, &mut definitions)
+        .expect("a list of a five-field TypedDict always builds");
+    let validator = Validator::checked(schema, literals.into_items(), definitions)
+        .expect("a list of a five-field record is within every limit");
+    let mut checksum: u64 = 0;
+    for _ in 0..iters {
+        let ok = validator
+            .matches_json(py, std::hint::black_box(&document))
+            .expect("a well-formed document raises nothing");
+        checksum = checksum.wrapping_add(u64::from(ok));
+    }
+    checksum
 }
 
 /// Whether the explaining record shape's value carries the wrong type.

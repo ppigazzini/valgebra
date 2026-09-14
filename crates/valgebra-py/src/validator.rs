@@ -279,7 +279,7 @@ impl Validator {
     /// Whether the JSON in `bytes` parses and belongs to the schema's set,
     /// validated in place against the parsed JSON value with no intermediate
     /// Python objects. `bytes` outlives the parsed value and the walk.
-    fn matches_json(&self, py: Python<'_>, bytes: &[u8]) -> PyResult<bool> {
+    pub(crate) fn matches_json(&self, py: Python<'_>, bytes: &[u8]) -> PyResult<bool> {
         let Ok(json) = JsonValue::parse(bytes, false) else {
             return Ok(false);
         };

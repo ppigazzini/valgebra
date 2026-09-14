@@ -43,5 +43,6 @@
   "_binding_object_comment": "A fifty-field **dataclass**, compiled per iteration: the one class form whose build asks the standard library a question. The two build shapes beside it read a `dict` of bare type objects and a `TypedDict`, and neither reaches a class node that asks anything -- `int` is answered by the scalar arm three lines in. A dataclass is asked `dataclasses.is_dataclass`, read through `get_type_hints`, and read for its declared order, and none of that had a count: the repair that holds the `is_dataclass` handle instead of importing the module per class node had to be argued on a wall clock, because nothing deterministic reached it. Reverting that repair moves this shape +1.49% and the plain build +0.00% -- 707,912,917 against 697,514,542, and 222,748,665 either way -- which is the plant this shape exists for. The class is made with `make_dataclass` in the workload rather than written out, so the shape names no third-party package and runs wherever the lane does.",
   "binding_keys_workload_irefs": 121095030,
   "binding_object_workload_irefs": 697514542,
-  "binding_subclass_workload_irefs": 44800049
+  "binding_subclass_workload_irefs": 44800049,
+  "binding_json_workload_irefs": 564998175
 }

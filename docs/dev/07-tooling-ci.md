@@ -149,14 +149,16 @@ gate only catches what it exercises:
   refutation and a repeated goal walk different paths, and a workload that
   asks only for proofs holds a refuting rule to nothing;
 - the **binding** shapes (`--binding`, `--binding-boundary`,
-  `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-build`,
-  `--binding-annotated`, `--binding-object`, `--binding-subclass`,
-  `--binding-explain`) — membership over a live Python value, the call boundary
+  `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-subclass`,
+  `--binding-json`, `--binding-build`, `--binding-annotated`,
+  `--binding-object`, `--binding-explain`, `--binding-explain-accept`) —
+  membership over a live Python value, the call boundary
   alone, a wide record closed, the same record walked over a value whose keys
-  are interned, the record open the way a `TypedDict` is, building a validator
+  are interned, the record open the way a `TypedDict` is, walking a
+  `NamedTuple`, parsing and walking a JSON document, building a validator
   from its Python spelling, compiling one written as a `TypedDict` of refined
-  integers, compiling a fifty-field dataclass, walking a `NamedTuple`,
-  explaining a failure. The walk is the shipped
+  integers, compiling a fifty-field dataclass, and explaining a failure in a
+  record or accepting one in the same mode. The walk is the shipped
   hot path neither pure-Rust workload reaches; schema construction grew twelve
   percent over a release cycle while only the walk was counted, and an open
   record was read a third dearer than a closed one while only the closed one
@@ -164,7 +166,7 @@ gate only catches what it exercises:
   formatted fifty names and filled a dict per iteration, and three quarters of
   its count was that.
 
-  The last three are there because the first six could not see three repairs
+  The later shapes are there because the earlier ones could not see repairs
   worth a third, three quarters, and six percent of what they touched. **A dict of bare type
   objects is not what the frontend costs**: an annotation with any depth is
   read through `get_type_hints`, asked per field whether a qualifier states its
@@ -188,9 +190,50 @@ gate only catches what it exercises:
   copy holds the same elements, so it decides the same things -- so no test can
   hold it and this count is what does: reverting the line reads +171.65%.
 
+  **And a shape that wins by a wide margin measures nothing.** The JSON
+  document is the comparison gate's closest race and its ratio drifted from
+  0.78 to 0.87 with no gate red, because a wall clock under a ceiling it clears
+  by a third says nothing until somebody looks — which the section on the
+  competitive ratio, below, records as the reason the recorded block exists at
+  all. `--binding-json` is that shape's deterministic twin, over the same two
+  hundred records read against the same `list[JsonRecord]`. Most of what it
+  counts is not this crate's: profiled at `9700181`, about 55% of a call is
+  `jiter` building the value tree and 14% is dropping it, with the walk in the
+  remaining third — and `pydantic-core` parses to the same `jiter` tree before
+  it validates, so the two thirds is the floor both libraries stand on and the
+  third is what the ratio is about. A walk regression therefore shows here at
+  roughly a third of its size, which is the price of measuring the shape a
+  caller actually runs rather than a walk with the parse taken out.
+
 The binding workload embeds CPython, whose startup is not a fixed instruction
 count, so the gate measures the **difference** between two iteration counts:
 startup cancels and the per-iteration walk cost remains.
+
+**Profiling the shipped extension, rather than the workload binary.** A
+`--binding-*` count says a shape moved; attributing the movement to a symbol
+needs a build that has some. `[profile.profiling]` in the workspace manifest is
+that build — `release` plus debug info, minus the strip — and it is reached
+through cargo rather than through maturin, which builds the extension module
+the release lane ships:
+
+```bash
+export PYO3_PYTHON="$(uv python find 3.12)"          # the interpreter the lanes pin
+cargo build --profile profiling -p valgebra-py --features pyo3/extension-module
+cp target/profiling/lib_valgebra.so \
+  "$VIRTUAL_ENV/lib/python3.12/site-packages/valgebra/_valgebra.cpython-312-x86_64-linux-gnu.so"
+PYTHONHASHSEED=0 valgrind --tool=callgrind --callgrind-out-file=out.callgrind python probe.py
+callgrind_annotate --inclusive=yes out.callgrind
+```
+
+Two things make this work and are easy to get wrong. The interpreter must be
+3.12 or valgrind aborts on an instruction it does not model in 3.14. And
+`pyproject.toml` must not set `strip`. It did, overriding both profiles, so
+`maturin build --profile profiling` produced a binary with no symbols and a
+profile that could attribute nothing — two audits worked around it by
+profiling the workload binary instead, without noticing why they had to. Stripping is the profile's
+decision, and `[profile.release]` still makes it — the shipped wheel is
+stripped, and a wheel built from `profiling` is about twelve times its size
+because it is not.
 
 Three refusals, because a measurement that did not happen must not read as a
 verdict:

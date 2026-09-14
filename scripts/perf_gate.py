@@ -29,17 +29,20 @@ Three workloads, and seven shapes across them:
 * The **decision** workload (`--decision`) measures the three relations, which
   the core one never calls.
 * The **binding** workload measures live Python values through the shipped
-  entry points -- the hot path the pure-Rust workloads do not reach -- in five
-  shapes: the membership walk (`--binding`), the call boundary alone
-  (`--binding-boundary`), the walk over a wide record (`--binding-record`) and
-  the same walk over a value whose keys are interned (`--binding-keys`),
-  building one from its Python spelling (`--binding-build`), compiling one
-  written as a `TypedDict` of refined integers (`--binding-annotated`),
-  compiling a fifty-field dataclass (`--binding-object`), walking a `tuple`
-  subclass (`--binding-subclass`), and explaining a failure in one
-  (`--binding-explain`). Each is the deterministic twin of a
-  shape the comparison gate times, so a wall-clock movement there can be
-  confirmed or refuted here. They embed CPython, whose startup is not a fixed
+  entry points -- the hot path the pure-Rust workloads do not reach -- in
+  twelve shapes: the membership walk (`--binding`), the call boundary alone
+  (`--binding-boundary`), the walk over a wide record (`--binding-record`), the
+  same walk over a value whose keys are interned (`--binding-keys`), the same
+  fields declared by an open record (`--binding-open`), walking a `tuple`
+  subclass (`--binding-subclass`), parsing and walking a JSON document
+  (`--binding-json`), building a validator from its Python spelling
+  (`--binding-build`), compiling one written as a `TypedDict` of refined
+  integers (`--binding-annotated`), compiling a fifty-field dataclass
+  (`--binding-object`), and explaining a failure in a record
+  (`--binding-explain`) or accepting one in the same mode
+  (`--binding-explain-accept`). Each is the deterministic twin of a shape the
+  comparison gate times, so a wall-clock movement there can be confirmed or
+  refuted here. They embed CPython, whose startup is not a fixed
   instruction count, so each is measured as the *difference* between two
   iteration counts: startup cancels, leaving the deterministic per-iteration
   cost. Their budgets carry a wider tolerance to absorb cross-interpreter FFI
@@ -298,6 +301,7 @@ MODES = {
     "binding-object": ("binding_workload", "binding dataclass build"),
     "binding-subclass": ("binding_workload", "binding tuple subclass walk"),
     "binding-keys": ("binding_workload", "binding record walk by interned keys"),
+    "binding-json": ("binding_workload", "binding JSON document parse and walk"),
 }
 
 #: The workload argument each binding mode passes, and the budget key it reads.
@@ -317,6 +321,7 @@ BINDING_ITERATIONS = {
     "binding-object": (2_000, 500),
     "binding-subclass": (150_000, 50_000),
     "binding-keys": (20_000, 5_000),
+    "binding-json": (500, 150),
 }
 
 BINDING_SHAPES = {
@@ -331,6 +336,7 @@ BINDING_SHAPES = {
     "binding-object": "object",
     "binding-subclass": "subclass",
     "binding-keys": "keys",
+    "binding-json": "json",
 }
 
 
