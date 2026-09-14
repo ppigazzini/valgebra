@@ -129,6 +129,21 @@ pub enum BindingShape {
     /// dataclass 6.45%, and had to be found with a profiler because no shape
     /// here would move.
     Object,
+    /// Walking a `tuple` **subclass** that overrides nothing: a `NamedTuple`,
+    /// against `tuple[int, ...]`.
+    ///
+    /// The walk cannot trust the C length accessor for a subclass, because
+    /// `cpyext` answers it through the object's own `__len__`; it can trust the
+    /// accessor for a subclass that *inherits* the base's slot, which is every
+    /// `NamedTuple`. Telling the two apart by "is this exactly a tuple" instead
+    /// copied every `NamedTuple` and cost 100 ns against a tuple's 57.
+    ///
+    /// That regression was invisible here: no shape walked a subclass, and the
+    /// repair's own mutant is *answer*-equivalent -- reading every subclass as
+    /// a liar decides the same things and only costs more -- so no test can
+    /// hold it either. A count is the only instrument that can, which is what
+    /// this shape is: the cheapest thing that would have caught it.
+    Subclass,
 }
 
 impl BindingShape {
@@ -146,6 +161,7 @@ impl BindingShape {
             "annotated" => BindingShape::Annotated,
             "keys" => BindingShape::Keys,
             "object" => BindingShape::Object,
+            "subclass" => BindingShape::Subclass,
             _ => return None,
         })
     }
@@ -277,6 +293,33 @@ fn object_record(py: Python<'_>) -> Py<PyAny> {
         .unbind()
 }
 
+/// The three-field `NamedTuple` the subclass walk reads, built once.
+///
+/// A `NamedTuple` rather than a bare `tuple` subclass because it is the one a
+/// program is most likely to hold, and the two take the same path: both inherit
+/// `tuple.__len__`.
+fn subclass_value(py: Python<'_>) -> Py<PyAny> {
+    let module = PyModule::from_code(
+        py,
+        &std::ffi::CString::new(
+            "from typing import NamedTuple\n\
+             class Point(NamedTuple):\n\
+             \x20   x: int\n\
+             \x20   y: int\n\
+             \x20   z: int\n\
+             VALUE = Point(1, 2, 3)\n",
+        )
+        .expect("no interior nul"),
+        &std::ffi::CString::new("subclass.py").expect("no interior nul"),
+        &std::ffi::CString::new("subclass").expect("no interior nul"),
+    )
+    .expect("the spelling compiles");
+    module
+        .getattr("VALUE")
+        .expect("the value is defined")
+        .unbind()
+}
+
 fn wide_fields(py: Python<'_>) -> (Vec<Field>, Py<PyAny>) {
     let fields: Vec<Field> = (0..50)
         .map(|i| Field {
@@ -334,10 +377,14 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             }
             checksum
         }
-        BindingShape::Record | BindingShape::Open | BindingShape::Keys => {
+        BindingShape::Record | BindingShape::Open | BindingShape::Keys | BindingShape::Subclass => {
             let (schema, value) = match shape {
                 BindingShape::Record => wide_record(py),
                 BindingShape::Keys => (wide_record(py).0, wide_interned_value(py)),
+                BindingShape::Subclass => (
+                    Schema::tuple(SeqShape::homogeneous(Schema::Int)),
+                    subclass_value(py),
+                ),
                 _ => open_record(py),
             };
             let validator = Validator::new(schema, Vec::new(), Vec::new());

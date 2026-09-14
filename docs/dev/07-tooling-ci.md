@@ -140,12 +140,13 @@ gate only catches what it exercises:
   asks only for proofs holds a refuting rule to nothing;
 - the **binding** shapes (`--binding`, `--binding-boundary`,
   `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-build`,
-  `--binding-annotated`, `--binding-object`, `--binding-explain`) — membership
-  over a live Python value, the call boundary alone, a wide record closed, the
-  same record walked over a value whose keys are interned, the record open the
-  way a `TypedDict` is, building a validator from its Python spelling,
-  compiling one written as a `TypedDict` of refined integers, compiling a
-  fifty-field dataclass, explaining a failure. The walk is the shipped
+  `--binding-annotated`, `--binding-object`, `--binding-subclass`,
+  `--binding-explain`) — membership over a live Python value, the call boundary
+  alone, a wide record closed, the same record walked over a value whose keys
+  are interned, the record open the way a `TypedDict` is, building a validator
+  from its Python spelling, compiling one written as a `TypedDict` of refined
+  integers, compiling a fifty-field dataclass, walking a `NamedTuple`,
+  explaining a failure. The walk is the shipped
   hot path neither pure-Rust workload reaches; schema construction grew twelve
   percent over a release cycle while only the walk was counted, and an open
   record was read a third dearer than a closed one while only the closed one
@@ -167,7 +168,15 @@ gate only catches what it exercises:
   dataclass is the one class form whose compile asks the standard library a
   question, and putting the `dataclasses` import back at the top of the
   frontend cost a build that compiles none of them 6.45% -- found with a
-  profiler, because no shape here would move.
+  profiler, because no shape here would move. **And a subclass is not its
+  base**: the walk cannot trust the C length accessor for a `tuple` subclass,
+  because `cpyext` answers it through the object's own `__len__` -- but it can
+  trust it for one that *inherits* the base's slot, which is every
+  `NamedTuple`. Telling those apart by "is this exactly a tuple" copied every
+  `NamedTuple` and cost 100 ns against a plain tuple's 57 on CPython 3.14,
+  under every green lane. The repair's own mutant is answer-equivalent -- the
+  copy holds the same elements, so it decides the same things -- so no test can
+  hold it and this count is what does: reverting the line reads +171.65%.
 
 The binding workload embeds CPython, whose startup is not a fixed instruction
 count, so the gate measures the **difference** between two iteration counts:

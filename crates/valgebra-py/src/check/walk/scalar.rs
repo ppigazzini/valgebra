@@ -16,7 +16,8 @@ use pyo3::types::{PyList, PyString, PyTuple};
 use valgebra_core::{ConstIx, Constraint, OperandIx, Schema, Violation};
 
 use super::{
-    Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at, record_fatal, stop,
+    Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at, reads_its_storage,
+    record_fatal, stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::index::compile_pattern;
@@ -241,14 +242,14 @@ pub(super) fn check_refine(
 /// subclass is asked of the base type's slot, through [`held_len`].
 fn stored_len(value: &Bound<'_, PyAny>) -> PyResult<usize> {
     if let Ok(list) = value.cast::<PyList>() {
-        return if list.is_exact_instance_of::<PyList>() {
+        return if list.is_exact_instance_of::<PyList>() || reads_its_storage(value, false) {
             Ok(list.len())
         } else {
             held_len(value, false)
         };
     }
     if let Ok(tuple) = value.cast::<PyTuple>() {
-        return if tuple.is_exact_instance_of::<PyTuple>() {
+        return if tuple.is_exact_instance_of::<PyTuple>() || reads_its_storage(value, true) {
             Ok(tuple.len())
         } else {
             held_len(value, true)

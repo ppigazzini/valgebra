@@ -373,7 +373,8 @@ one. The binding's shapes are the membership walk over a live value, the call
 boundary alone, a wide record closed and the same record open the way a
 `TypedDict` is, the same record walked over interned keys, building a validator
 from its Python spelling, compiling one written as a `TypedDict` of refined
-integers, compiling a fifty-field dataclass, and explaining a failure
+integers, compiling a fifty-field dataclass, walking a `NamedTuple` against a
+tuple schema, and explaining a failure
 (`crates/valgebra-py/examples/binding_workload.rs`): the walk is the
 shipped hot path neither pure-Rust workload reaches, schema construction grew
 twelve percent over a release cycle while only the walk was counted, and an open

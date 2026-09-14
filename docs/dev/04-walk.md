@@ -152,8 +152,27 @@ argues for all of them. A list is walked *by position* against a length read
 once, so a list that grows hides its new items from the walk and one that
 shrinks leaves the walk answering about items that are gone — and in both
 directions `is_valid` returned `True` for a value that is not a member. A
-**tuple** cannot be resized, so its arm keeps the plain iterator and pays
-nothing; a JSON array is owned by the parser and cannot move at all.
+**tuple** cannot be resized, so its arm keeps the plain iterator; a JSON array
+is owned by the parser and cannot move at all.
+
+**A tuple's length comes from the storage, and which reading gives it depends
+on the type.** `PyTuple_Size` reads the storage on CPython and goes through the
+object's own `__len__` on PyPy's `cpyext`, so a subclass that *overrides*
+`__len__` answers the C accessor with whatever it likes — and a walk that
+indexed against that read past the end of the allocation and took the process
+down. Such a value is copied through the base type's own slot and the copy is
+walked.
+
+A subclass that **inherits** `tuple.__len__` is not copied, because there is
+nothing to distrust: the overridden answer and the base's answer are the same
+function, so the accessor reads the storage on every interpreter. That is every
+`NamedTuple`, which is the tuple subclass a program is most likely to hold. The
+walk tells the two apart by asking the type whether its `__len__` *is* the
+base's, which costs one type-attribute lookup per validation — about 10 ns on a
+three-field `NamedTuple`, where copying cost 45. Telling them apart by "is this
+exactly a tuple" instead copied every `NamedTuple`: on CPython 3.14 that was
+100 ns against the 57 a plain tuple takes, which is what the repair above cost
+before this one was found.
 
 The cost is one length read per element, which is a pointer dereference: the
 `large_array` shape of the comparative gate moved 0.881 to 0.886 against

@@ -103,10 +103,18 @@ static BASE_LENGTHS: PyOnceLock<(Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
 /// So the length comes from the base type's own slot, called on the value. It
 /// is the definition the page already gives ("the items the value holds"), it
 /// is what a reader checks by hand with `tuple.__len__(value)`, and it means
-/// the same thing on every interpreter. Only a subclass pays for it; an exact
-/// list or tuple overrides nothing and is read where it lies.
+/// the same thing on every interpreter.
+///
+/// Only a subclass that **overrides** `__len__` pays for it. One that inherits
+/// the base's slot is read where it lies: see [`reads_its_storage`].
 fn held_len(value: &Bound<'_, PyAny>, of_tuple: bool) -> PyResult<usize> {
     let py = value.py();
+    let slot = base_length(py, of_tuple)?;
+    slot.bind(py).call1((value,))?.extract()
+}
+
+/// The base type's own `__len__`, resolved once per process.
+fn base_length(py: Python<'_>, of_tuple: bool) -> PyResult<&'static Py<PyAny>> {
     let (list_len, tuple_len) = BASE_LENGTHS.get_or_try_init(py, || {
         let slot = |ty: &Bound<'_, PyType>| ty.getattr(intern!(py, "__len__")).map(Bound::unbind);
         Ok::<_, PyErr>((
@@ -114,8 +122,42 @@ fn held_len(value: &Bound<'_, PyAny>, of_tuple: bool) -> PyResult<usize> {
             slot(&py.get_type::<PyTuple>())?,
         ))
     })?;
-    let slot = if of_tuple { tuple_len } else { list_len };
-    slot.bind(py).call1((value,))?.extract()
+    Ok(if of_tuple { tuple_len } else { list_len })
+}
+
+/// Whether this value's type reports the length of its own storage.
+///
+/// The accessor is untrustworthy for exactly one reason: `cpyext` implements
+/// `PyTuple_Size` through the object's own `__len__`, so a subclass that
+/// **overrides** it answers the C level with whatever it likes. A subclass that
+/// *inherits* the slot does not -- the overridden answer and the base's answer
+/// are the same function -- and the accessor reads the storage on every
+/// interpreter, as it does for an exact tuple.
+///
+/// So the question is not "is this exactly a tuple" but "is this type's
+/// `__len__` the base's own", asked by identity. A `NamedTuple` answers yes,
+/// which is what makes the common tuple subclass cost what a tuple costs; the
+/// subclass that returns ten over one element answers no, and is copied.
+///
+/// Asked of the type on every walk that reaches a subclass, and **not
+/// remembered**: a map from type to answer was built and measured beside this,
+/// and a dict probe costs what the type lookup costs -- 67.6 ns against 67.6 on
+/// the fixed-arity `NamedTuple` row. A cache that buys nothing is a global
+/// mutable object, a bound, and a free-threading argument for nothing.
+///
+/// A wrong answer here is safe in one direction only, and this errs that way: a
+/// type that cannot be read at all is treated as a liar and copied.
+fn reads_its_storage(value: &Bound<'_, PyAny>, of_tuple: bool) -> bool {
+    let py = value.py();
+    let Ok(base) = base_length(py, of_tuple) else {
+        return false;
+    };
+    value
+        .get_type()
+        .getattr_opt(intern!(py, "__len__"))
+        .ok()
+        .flatten()
+        .is_some_and(|slot| slot.is(base.bind(py)))
 }
 
 fn stop(ctx: Ctx<'_>) -> bool {

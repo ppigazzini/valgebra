@@ -24,6 +24,7 @@ answer of its own, or a repair to a change not yet released.
 - perf: a marker is asked by a name the interpreter already holds
 - perf: the dataclass question is asked of a handle, and only where it is asked
 - fix: a sequence's length is read from the container that holds it
+- perf: a tuple subclass that overrides nothing is read where it lies
 - perf: a marker is read through the names its type carries
 
 -->
@@ -96,8 +97,11 @@ answer of its own, or a repair to a change not yet released.
   segfaulted PyPy 3.11 rather than answering. A subclass is read through the
   base type's own slot, which means the same thing on every interpreter, and is
   walked over the elements it holds -- the answer CPython gave all along. An
-  exact tuple overrides nothing and is read where it lies, so the ordinary case
-  costs nothing.
+  exact tuple is read where it lies, and so is a subclass that *inherits*
+  `tuple.__len__` rather than overriding it — every `NamedTuple` — which the
+  first form of this repair copied along with the liars. Telling them apart
+  costs one type lookup per validation: a three-field `NamedTuple` validates in
+  **69 ns against 57** at 0.0.10, where copying it cost 100.
 
   The same reading fixes `MinLen`/`MaxLen` over a `list` or `tuple` subclass on
   PyPy, which had believed the overridden `__len__` while the shape beside it

@@ -15,8 +15,8 @@ use pyo3::types::{PyFrozenSet, PyList, PySet, PyTuple};
 use valgebra_core::{PathSegment, Schema, SeqKind, SeqShape, Violation};
 
 use super::{
-    Frame, Scan, held_len, homogeneous_scalar, is_fatal, member, mutated, record_fatal,
-    scalar_admits, scalar_of, stop,
+    Frame, Scan, held_len, homogeneous_scalar, is_fatal, member, mutated, reads_its_storage,
+    record_fatal, scalar_admits, scalar_of, stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::violation::{summarize_value, type_fail};
@@ -264,10 +264,12 @@ fn tuple_matches(
     frame: &mut Frame<'_, '_>,
 ) -> bool {
     let ctx = frame.ctx;
-    // A subclass is read through its storage rather than through what it says
-    // about itself; see `storage_of`. An exact tuple is read where it lies.
+    // A tuple whose length is its storage's is read where it lies: an exact
+    // one, and a subclass that inherits `tuple.__len__` rather than overriding
+    // it -- which is every `NamedTuple`. Only a subclass that answers the
+    // accessor for itself is copied; see `storage_of` and `reads_its_storage`.
     let copied;
-    let tuple = if tuple.is_exact_instance_of::<PyTuple>() {
+    let tuple = if tuple.is_exact_instance_of::<PyTuple>() || reads_its_storage(tuple, true) {
         tuple
     } else {
         let Some(storage) = storage_of(tuple) else {

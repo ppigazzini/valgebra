@@ -3062,3 +3062,85 @@ fn a_tuple_subclass_is_walked_over_the_elements_it_holds() {
         assert!(holds(py, &exactly_two, &two, &[], &[]));
     });
 }
+
+#[test]
+fn a_tuple_subclass_that_overrides_nothing_is_read_where_it_lies() {
+    // The copy above exists for a subclass that answers the C accessor for
+    // itself. A `NamedTuple` does not: it inherits `tuple.__len__`, so the
+    // accessor reads its storage on every interpreter, as it does for an exact
+    // tuple. Telling the two apart by `is_exact_instance_of` read the common
+    // subclass as the rare one and copied every value; the walk asks whether
+    // the type's `__len__` is the base's instead.
+    //
+    // The rows are membership, and the reading they pin is the *absence* of a
+    // copy -- which no answer can show. What an answer shows is that the
+    // cheaper path decides the same things, which is what makes it takeable.
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new(
+                "from typing import NamedTuple\n\
+                 class Point(NamedTuple):\n\
+                 \x20   x: int\n\
+                 \x20   y: int\n\
+                 class Widened(tuple):\n\
+                 \x20   pass\n",
+            )
+            .expect("no interior nul")
+            .as_c_str(),
+            std::ffi::CString::new("inheriting.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("inheriting")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+
+        let point = module
+            .getattr("Point")
+            .expect("the class")
+            .call1((1i64, 2i64))
+            .expect("the namedtuple builds");
+        let two_ints = Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Int]));
+        assert!(
+            holds(py, &two_ints, &point, &[], &[]),
+            "two ints, and it is"
+        );
+        assert!(!holds(
+            py,
+            &Schema::tuple(SeqShape::fixed([Schema::Int])),
+            &point,
+            &[],
+            &[]
+        ));
+        assert!(holds(
+            py,
+            &Schema::tuple(SeqShape::homogeneous(Schema::Int)),
+            &point,
+            &[],
+            &[]
+        ));
+        assert!(!holds(
+            py,
+            &Schema::tuple(SeqShape::homogeneous(Schema::Str)),
+            &point,
+            &[],
+            &[]
+        ));
+
+        // A bare subclass inherits the slot too, and is read the same way.
+        let widened = module
+            .getattr("Widened")
+            .expect("the class")
+            .call1((PyTuple::new(py, [1i64, 2, 3]).expect("a tuple builds"),))
+            .expect("the subclass builds");
+        assert!(holds(
+            py,
+            &Schema::tuple(SeqShape::homogeneous(Schema::Int)),
+            &widened,
+            &[],
+            &[]
+        ));
+    });
+}
