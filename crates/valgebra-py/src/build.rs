@@ -1602,19 +1602,26 @@ fn parse_constraint(
         return Ok(());
     }
     // Comparison bounds. One marker may carry several (e.g. an interval).
+    //
+    // A marker carries one of these four and not the other three, so the three
+    // absences are the common answer -- and the name each is asked by is a
+    // *handle* rather than Rust text, because text is decoded into a fresh
+    // `PyString` and hashed before the lookup can begin, once per name per
+    // marker.
+    let py = marker.py();
     for (attr, make) in [
-        ("ge", Constraint::Ge as fn(OperandIx) -> Constraint),
-        ("gt", Constraint::Gt),
-        ("le", Constraint::Le),
-        ("lt", Constraint::Lt),
+        (
+            intern!(py, "ge"),
+            Constraint::Ge as fn(OperandIx) -> Constraint,
+        ),
+        (intern!(py, "gt"), Constraint::Gt),
+        (intern!(py, "le"), Constraint::Le),
+        (intern!(py, "lt"), Constraint::Lt),
     ] {
-        // A marker carries one of these four and not the other three, so the
-        // three absences are the common answer: asked, they cost a lookup;
-        // tried, they cost an exception built and dropped apiece.
         if let Some(bound) = marker.getattr_opt(attr)?
             && !bound.is_none()
         {
-            refuse_unordered_bound(attr, &bound)?;
+            refuse_unordered_bound(&attr.to_string_lossy(), &bound)?;
             out.push(make(lits.intern_operand(&bound)));
         }
     }
@@ -1623,8 +1630,11 @@ fn parse_constraint(
     // it leaves a schema that admits every value of its base, and the marker was
     // written to admit fewer.
     for (attr, make) in [
-        ("min_length", Constraint::MinLen as fn(usize) -> Constraint),
-        ("max_length", Constraint::MaxLen),
+        (
+            intern!(py, "min_length"),
+            Constraint::MinLen as fn(usize) -> Constraint,
+        ),
+        (intern!(py, "max_length"), Constraint::MaxLen),
     ] {
         if let Some(bound) = marker.getattr_opt(attr)?
             && !bound.is_none()

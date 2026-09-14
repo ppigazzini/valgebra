@@ -21,6 +21,7 @@ answer of its own, or a repair to a change not yet released.
 - perf: a validator's field keys are interned, as their comment said
 - perf: the frontend holds the typing forms it reads per node
 - perf: the frontend asks for an attribute rather than trying for it
+- perf: a marker is asked by a name the interpreter already holds
 
 -->
 
