@@ -597,25 +597,30 @@ def main() -> int:
     return EXIT_OK
 
 
-#: What no arrangement of this gate reaches, named so a green run is read for
-#: what it is. Each is a whole lane rather than a step, so `NEEDS_A_RUNNER`
-#: -- which is per step and held to the workflow -- does not carry them.
-UNREACHED = (
-    (
-        "the interpreter matrix beyond the caller's own, and the macOS and "
-        "Windows legs: an answer differs by interpreter and by platform, and "
-        "this box is one of each"
+#: What no arrangement of this gate reaches, **by the job name it is**, so a
+#: green run is read for what it is.
+#:
+#: `NEEDS_A_RUNNER` is per step and held to the workflow, and these are whole
+#: jobs, so nothing carried them: three sentences of prose that a job added
+#: tomorrow would not appear in, under a closing line that would still read
+#: complete. Keyed by job instead, and `tests/test_local_gate.py` holds every
+#: merge-gate job to being planned, excused step by step, or named here.
+UNREACHED = {
+    "python": (
+        "runs on the caller's interpreter alone; the matrix is 3.10 through "
+        "3.15 and free-threaded, and an answer differs by release"
     ),
-    (
-        "the mutation sweeps, which are tens of minutes and whose verdict is "
-        "the interpreter's -- run them with PYO3_PYTHON at the 3.12 the lane "
-        "names, or a mutant the lane kills reads as a survivor"
+    "bench": "cachegrind and a base built beside the head",
+    "bench-free-threaded": "the optimized wheel, and a second interpreter",
+    "wheel": "the release build matrix",
+    "binding-coverage": "an instrumented rebuild of the whole workspace",
+    "mutants-diff-core": "a mutation sweep, tens of minutes",
+    "mutants-diff-walk": (
+        "a mutation sweep, and its verdict is the embedded interpreter's -- "
+        "run it with PYO3_PYTHON at the 3.12 `ci.yml` names, or a mutant the "
+        "lane kills reads here as a survivor"
     ),
-    (
-        "every cachegrind count and every wall-clock ratio, which need the "
-        "optimized wheel and a base built beside it"
-    ),
-)
+}
 
 
 def report_what_was_not_run(*, here: bool) -> None:
@@ -627,11 +632,14 @@ def report_what_was_not_run(*, here: bool) -> None:
     week on things it does not reach. Printed on success only: a failure is
     already telling the reader to look somewhere.
     """
-    print(f"gate: {len(NEEDS_A_RUNNER)} step(s) excused by name, and not run here:")
-    for gap in UNREACHED:
-        print(f"  - {gap}")
+    print(
+        f"gate: {len(NEEDS_A_RUNNER)} step(s) excused by name, and "
+        f"{len(UNREACHED)} job(s) this gate does not reach at all:"
+    )
+    for job, why in UNREACHED.items():
+        print(f"  - {job}: {why}")
     if here:
-        print("  - the checks that read the history: --here skips them")
+        print("  - python (fetch-depth: 0): --here skips the history checks")
 
 
 if __name__ == "__main__":

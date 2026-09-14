@@ -272,3 +272,55 @@ def test_a_forced_colour_variable_does_not_reach_a_step(
 
 def test_the_three_exit_codes_are_distinct() -> None:
     assert (gate.EXIT_OK, gate.EXIT_FAIL, gate.EXIT_CANNOT_RUN) == (0, 1, 2)
+
+
+def test_every_merge_gate_job_is_planned_excused_or_named_unreached() -> None:
+    """The third direction: a whole job, not a step of one.
+
+    `NEEDS_A_RUNNER` is per step, so a job every one of whose steps is excused
+    reads as accounted for while the gate touches none of it -- and the closing
+    line, which is what a reader takes away, said "24 steps excused" and named
+    the missing lanes in three sentences of prose. A job added to `ci.yml`
+    tomorrow would appear in neither, and the line would still read complete.
+
+    So every merge-gate job is in exactly one of three places: the gate plans a
+    step of it, every step of it is excused by name, or the job itself is in
+    `UNREACHED` with the reason it cannot run here.
+    """
+    spec = gate.workflow()
+    jobs = gate.required_jobs(spec)
+    assert len(jobs) >= 10, f"the workflow scan found only {jobs}"
+
+    planned_jobs = {planned.split(":", 1)[0] for planned in _planned(spec)}
+    unaccounted = []
+    for job in jobs:
+        if job in planned_jobs or job in gate.UNREACHED:
+            continue
+        names = [name for name, _, _ in gate.steps(spec, job)]
+        if names and all(name in gate.NEEDS_A_RUNNER for name in names):
+            continue
+        unaccounted.append(job)
+    assert not unaccounted, (
+        f"merge-gate jobs the local gate neither reaches nor names: {unaccounted}. "
+        "Add the job to `UNREACHED` with what stops it running here, or the "
+        "gate's closing line reports a green run that did not touch it."
+    )
+
+
+def test_a_job_named_unreached_is_one_the_workflow_has() -> None:
+    """The other way: a name that outlives its job excuses nothing.
+
+    `UNREACHED` is read only to be printed, so a job renamed in `ci.yml` would
+    leave a line naming nothing and drop the real job out of the count without
+    failing anything.
+    """
+    spec = gate.workflow()
+    jobs = set(spec.get("jobs", {}))
+    absent = sorted(job for job in gate.UNREACHED if job not in jobs)
+    assert not absent, (
+        f"`UNREACHED` names jobs this workflow does not have: {absent}. "
+        "A job that was renamed takes its reason with it."
+    )
+    assert all(reason.strip() for reason in gate.UNREACHED.values()), (
+        "a job named with no reason is a job nobody can act on"
+    )

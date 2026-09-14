@@ -242,6 +242,19 @@ PLANTS = (
         ),
     ),
     Plant(
+        # The same ledger, the other direction it grew: a job the gate cannot
+        # reach carries its reason by *name*, and a rename leaves the reason
+        # naming nothing while the real job drops out of the count.
+        "tests/test_local_gate.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "\n  wheel:\n",
+            "\n  wheel-renamed:\n",
+        ),
+    ),
+    Plant(
         "tests/test_required_jobs.py",
         (".github/workflows/ci.yml",),
         # A job the merge gate does not wait on: it runs, it can go red, and it
