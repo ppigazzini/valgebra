@@ -58,6 +58,7 @@ SWEPT = {
     "crates/valgebra-py/src/build/generics.rs",
     "crates/valgebra-py/src/build/refine.rs",
     "crates/valgebra-py/src/equality.rs",
+    "crates/valgebra-py/src/oracle.rs",
 }
 
 

@@ -654,3 +654,12 @@ impl LeafRelations for PoolRelations<'_, '_> {
         ))
     }
 }
+
+/// The oracle's own corpus, under the embedded interpreter.
+///
+/// Every answer here is a Python fact, so a corpus that could run without an
+/// interpreter would be testing something else. The `interpreter-tests` feature
+/// links one, which is what `check/walk.rs` and `build.rs` do for the same
+/// reason.
+#[cfg(all(test, feature = "interpreter-tests"))]
+mod interpreter;

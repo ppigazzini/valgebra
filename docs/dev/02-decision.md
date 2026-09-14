@@ -186,7 +186,9 @@ A class hierarchy and a concrete value are Python facts, and `valgebra-core`
 cannot see Python ([00-architecture.md](00-architecture.md)). The `LeafRelations`
 trait is how it asks, `decision/oracle.rs` is where the core asks it, and
 `crates/valgebra-py/src/oracle.rs` is the answer the bindings give — the two
-sides of one seam, each in a module named for it. The questions:
+sides of one seam, each in a module named for it, the binding's side with a
+corpus of its own driving every question below
+(`oracle/interpreter.rs`, [08-testing.md](08-testing.md)). The questions:
 
 - `leaf_subtype` — is this literal a member of that set, is this class a subclass
   of that one;

@@ -336,7 +336,8 @@ path and measuring nothing.
 ### The mutation ratchets
 
 Two sweeps, each with its own committed baseline: the core crate, and the
-membership walk with the context it carries. `scripts/mutation_gate.py` fails in
+binding's soundness surfaces — the membership walk with the context it carries,
+the frontend's four files, equality, and the oracle. `scripts/mutation_gate.py` fails in
 **three** directions — a survivor the baseline does not accept, an accepted
 entry that no mutant answers to, and an accepted entry naming a file the tree
 does not track. The second keeps the accepted set honest: an accepted hole the

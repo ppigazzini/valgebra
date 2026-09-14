@@ -152,7 +152,7 @@ by a naming convention.
 
 ## The binding's own corpora
 
-`cargo test` cannot reach the binding without an interpreter, so the two files
+`cargo test` cannot reach the binding without an interpreter, so the files
 where a mistake changes what a schema means carry their own corpus under the
 `interpreter-tests` feature, which links an embedded Python.
 
@@ -171,6 +171,22 @@ the file sat outside the sweep by name. It reads a marker by *attribute* rather
 than importing `annotated_types`, because an embedded interpreter starts on the
 base prefix and sees no virtual environment -- which would make the corpus depend
 on how the harness was launched.
+
+The **oracle** carries a question corpus in
+`crates/valgebra-py/src/oracle/interpreter.rs`: one row per question
+`LeafRelations` asks, each handing the oracle two pool slots or a class and a
+kind and reading the `Option` it answers. It exists for the reason the
+frontend's does, and its number is the sharpest of the three: swept before it,
+`oracle.rs` gave **62 survivors of 109**, because the only Rust rows reaching
+the file built the pool and read it back.
+
+What it deliberately does not do is compile a schema and ask `is_subtype_of`.
+That is what the decision suite in `tests/` does, and a Rust row shaped the same
+way would prove the decision rather than the answer the decision was made from,
+leaving the same mutants alive. The distinction matters most for the third
+answer: `None` is "this oracle cannot read that", which the core folds
+conservatively, and `false` is a refutation it may act on — so every row that
+expects a decline says so rather than reading it as a negative.
 
 That feature enables an embedded interpreter for the test binary and nothing
 else: all its sites are inside test modules and the shipped wheel is built
