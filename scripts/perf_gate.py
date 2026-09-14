@@ -302,6 +302,7 @@ MODES = {
     "binding-subclass": ("binding_workload", "binding tuple subclass walk"),
     "binding-keys": ("binding_workload", "binding record walk by interned keys"),
     "binding-json": ("binding_workload", "binding JSON document parse and walk"),
+    "binding-pattern": ("binding_workload", "binding pattern refinement walk"),
 }
 
 #: The workload argument each binding mode passes, and the budget key it reads.
@@ -322,6 +323,7 @@ BINDING_ITERATIONS = {
     "binding-subclass": (150_000, 50_000),
     "binding-keys": (20_000, 5_000),
     "binding-json": (500, 150),
+    "binding-pattern": (150_000, 50_000),
 }
 
 BINDING_SHAPES = {
@@ -337,6 +339,7 @@ BINDING_SHAPES = {
     "binding-subclass": "subclass",
     "binding-keys": "keys",
     "binding-json": "json",
+    "binding-pattern": "pattern",
 }
 
 

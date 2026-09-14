@@ -20,7 +20,7 @@
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyInt, PyList, PyModule, PyString};
-use valgebra_core::{Field, MapClause, Schema, SeqKind, SeqShape};
+use valgebra_core::{Constraint, Field, MapClause, Schema, SeqKind, SeqShape};
 
 use crate::build::{Pool, build_schema};
 use crate::check::{Frame, WalkMode, WalkState, member};
@@ -163,6 +163,19 @@ pub enum BindingShape {
     /// than to infer it from [`Record`](BindingShape::Record), whose dict the
     /// interpreter hands over already built.
     Json,
+    /// A string checked against a **pattern** refinement: the one refinement
+    /// whose cost is a compiled object rather than a comparison.
+    ///
+    /// `check/index.rs` compiles the pattern once, when the validator's index
+    /// is built, and the walk finds it by the pattern's address. Losing that
+    /// precompute is not a wrong answer -- `check/walk/scalar.rs` compiles the
+    /// pattern on the spot and decides the same thing -- so no test can hold
+    /// it, and the index's mutation survivor for the arm that fills it is
+    /// accepted on exactly that argument. This count is what makes accepting
+    /// it honest: with the arm deleted, every validation compiles the regex
+    /// instead of matching against one, and nothing else in the tree would
+    /// say so.
+    Pattern,
 }
 
 impl BindingShape {
@@ -182,6 +195,7 @@ impl BindingShape {
             "object" => BindingShape::Object,
             "subclass" => BindingShape::Subclass,
             "json" => BindingShape::Json,
+            "pattern" => BindingShape::Pattern,
             _ => return None,
         })
     }
@@ -489,6 +503,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             checksum
         }
         BindingShape::Json => json_walk(py, iters),
+        BindingShape::Pattern => pattern_walk(py, iters),
         BindingShape::ExplainAccept => explaining_record(py, iters, Wrong::No),
         BindingShape::Explain => explaining_record(py, iters, Wrong::Yes),
         BindingShape::Annotated | BindingShape::Object => {
@@ -536,6 +551,39 @@ fn json_walk(py: Python<'_>, iters: usize) -> u64 {
         let ok = validator
             .matches_json(py, std::hint::black_box(&document))
             .expect("a well-formed document raises nothing");
+        checksum = checksum.wrapping_add(u64::from(ok));
+    }
+    checksum
+}
+
+/// The pattern refinement's own shape: one string, one compiled match.
+///
+/// An address-like pattern rather than a trivial one, because what is being
+/// counted is a *compiled* match against a lookup, and a pattern the engine
+/// answers in three instructions would leave the lookup indistinguishable from
+/// the compile. The value matches, so the match runs to the end rather than
+/// failing at the first character.
+fn pattern_walk(py: Python<'_>, iters: usize) -> u64 {
+    let schema = Schema::refine(
+        Schema::Str,
+        vec![Constraint::Regex(
+            r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}".to_owned(),
+        )],
+    );
+    let validator = Validator::new(schema, Vec::new(), Vec::new());
+    let obj = PyString::new(py, "ada.lovelace@example.com").into_any();
+    let mut checksum: u64 = 0;
+    for _ in 0..iters {
+        let state = WalkState::new();
+        let ok = member(
+            std::hint::black_box(&validator.schema),
+            &Value::Py(std::hint::black_box(&obj)),
+            &mut Frame::new(
+                &mut Vec::new(),
+                &mut Vec::new(),
+                validator.context(py, &state, WalkMode::Fast),
+            ),
+        );
         checksum = checksum.wrapping_add(u64::from(ok));
     }
     checksum

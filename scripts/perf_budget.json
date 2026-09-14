@@ -44,5 +44,6 @@
   "binding_keys_workload_irefs": 121095030,
   "binding_object_workload_irefs": 697514542,
   "binding_subclass_workload_irefs": 44800049,
-  "binding_json_workload_irefs": 564998175
+  "binding_json_workload_irefs": 564998175,
+  "binding_pattern_workload_irefs": 78300039
 }

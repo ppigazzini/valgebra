@@ -150,12 +150,14 @@ gate only catches what it exercises:
   asks only for proofs holds a refuting rule to nothing;
 - the **binding** shapes (`--binding`, `--binding-boundary`,
   `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-subclass`,
-  `--binding-json`, `--binding-build`, `--binding-annotated`,
-  `--binding-object`, `--binding-explain`, `--binding-explain-accept`) —
+  `--binding-json`, `--binding-pattern`, `--binding-build`,
+  `--binding-annotated`, `--binding-object`, `--binding-explain`,
+  `--binding-explain-accept`) —
   membership over a live Python value, the call boundary
   alone, a wide record closed, the same record walked over a value whose keys
   are interned, the record open the way a `TypedDict` is, walking a
-  `NamedTuple`, parsing and walking a JSON document, building a validator
+  `NamedTuple`, parsing and walking a JSON document, matching a string against
+  a compiled pattern, building a validator
   from its Python spelling, compiling one written as a `TypedDict` of refined
   integers, compiling a fifty-field dataclass, and explaining a failure in a
   record or accepting one in the same mode. The walk is the shipped
@@ -204,6 +206,16 @@ gate only catches what it exercises:
   third is what the ratio is about. A walk regression therefore shows here at
   roughly a third of its size, which is the price of measuring the shape a
   caller actually runs rather than a walk with the parse taken out.
+
+  **And a compiled pattern is not a comparison.** Every other refinement costs
+  an operator; a pattern costs a compiled object, built once when the
+  validator's index is built and found again by the pattern's address. Losing
+  that precompute is not a wrong answer — `check/walk/scalar.rs` compiles the
+  pattern on the spot and decides the same thing — so no test holds it, and the
+  mutation baseline accepts the index's survivor for that arm on exactly this
+  argument. What makes accepting it honest is `--binding-pattern`: delete the
+  arm and one validation costs 462,318 instructions against 783, which is the
+  whole suite passing while every pattern check compiles a regex.
 
 The binding workload embeds CPython, whose startup is not a fixed instruction
 count, so the gate measures the **difference** between two iteration counts:
