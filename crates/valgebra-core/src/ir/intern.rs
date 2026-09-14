@@ -84,6 +84,16 @@ use super::{Clauses, Field, Fields, MapClause, Members, Schema, SeqShape, Spelli
 /// of a schema being built -- a wide record's field list, the member lists of
 /// the joins under it -- and small enough that the tables are a rounding error
 /// beside the schemas they point at.
+///
+/// **What holds this number is `perf_gate.py --decision`** (measured
+/// 2026-09-14): with the table answering nothing that workload reads **65.31%
+/// higher**, because it asks two relations about a record built twice and the
+/// sharing is what makes the second one free. Eight times the slots moves it
+/// by nothing. The *core* workload is the other side of the trade and not
+/// evidence for this number: it builds trees and drops them, so every probe
+/// there finds a handle whose `Arc` is already gone -- 174,066 probes, no hit
+/// -- and disabling the table reads 1.97% **cheaper**. Two percent on a
+/// pipeline that cannot share, for sixty-five on one that can.
 const SLOTS: usize = 1024;
 
 /// Entries of a list the hash reads before it stops.
@@ -95,6 +105,14 @@ const SLOTS: usize = 1024;
 /// compare the fields anyway. A record whose first entries and length agree
 /// with another's is the collision this trades for, and a collision costs one
 /// comparison that fails.
+///
+/// **What holds this number is `perf_gate.py --core`** (measured 2026-09-14):
+/// hashing every entry instead of four reads that workload **4.47% higher**,
+/// and the decision workload 0.10%, because the core one is the one that
+/// builds wide lists. It was recorded against the validator-building shape
+/// when it landed, and that shape has since been rebuilt to read a Python
+/// spelling once per iteration: it interns one list per build and repeats
+/// none, so it no longer sees this number at all.
 const SUMMARY: usize = 4;
 
 /// The address a shared handle holds, as a number to hash.
