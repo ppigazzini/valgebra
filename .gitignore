@@ -19,11 +19,13 @@ __pycache__/
 *.dylib
 *.dll
 
-# Virtual environment
+# Virtual environments, including the one the PyPy lane builds beside it
 /.venv/
+/.pypy/
 
-# maturin / wheel intermediates
+# maturin / wheel intermediates, including the PyPy lane's own output
 /wheels/
+/dist-pypy/
 
 # Built documentation site
 /site/
