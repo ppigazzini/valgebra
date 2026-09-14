@@ -92,7 +92,11 @@ pydantic's PyPI wheels are likewise PGO-built, so this is a release-to-release
 comparison.
 
 **Build with PGO if you build your own wheel**, and read no figure taken from a
-debug build as either. How much PGO adds over a plain `--release` build is not a
+debug build as either -- `maturin develop` without `--release` installs one, it
+is indistinguishable from the release extension at the Python prompt, and a
+timing of it reads an order of magnitude slow. `scripts/compare_gate.py` refuses
+such a build outright, and so does `benches/` from its own `conftest.py`; a
+figure timed by hand has only the habit to protect it. How much PGO adds over a plain `--release` build is not a
 constant this page can state. It is whatever the profile can still arrange that
 fat LTO did not, so it shrinks as the hot paths themselves get shorter: measured
 on one machine it has ranged from 1.75x down to 1.01x, and the shapes where the
