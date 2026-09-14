@@ -37,7 +37,9 @@ pytestmark = pytest.mark.repository
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / ".cargo" / "mutants.toml"
+WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 BINDING = ROOT / "crates" / "valgebra-py"
+
 
 # The binding files inside the sweep: the membership walk, where soundness is
 # decided, the context it carries, and the frontend with the three surfaces
@@ -47,19 +49,25 @@ BINDING = ROOT / "crates" / "valgebra-py"
 # corpus -- the walk drives real values through `member`, the frontend drives
 # real annotations through `build_schema` -- and the context's two predicates are
 # asserted over every mode by its own tests.
-SWEPT = {
-    "crates/valgebra-py/src/check/walk.rs",
-    "crates/valgebra-py/src/check/walk/record.rs",
-    "crates/valgebra-py/src/check/walk/scalar.rs",
-    "crates/valgebra-py/src/check/walk/sequence.rs",
-    "crates/valgebra-py/src/check/ctx.rs",
-    "crates/valgebra-py/src/build.rs",
-    "crates/valgebra-py/src/build/classes.rs",
-    "crates/valgebra-py/src/build/generics.rs",
-    "crates/valgebra-py/src/build/refine.rs",
-    "crates/valgebra-py/src/equality.rs",
-    "crates/valgebra-py/src/oracle.rs",
-}
+def _swept() -> set[str]:
+    """Read the binding files the walk sweep covers, from the lane covering them.
+
+    This list was written out here, which made three copies of one list: the
+    two `--file` lists in `ci.yml` (which `tests/test_required_jobs.py` holds
+    equal to each other) and this one, which nothing held to either. A file
+    brought into the sweep therefore needed the same edit in three places, and
+    forgetting this one left the check below claiming the file was excluded
+    while the lane swept it. Read from the workflow, the claim is about what
+    runs.
+
+    Parsed with a regex rather than a YAML library, as `_excluded_globs` reads
+    the TOML: the wanted lines are the `--file` arguments inside one shell
+    block, and parsing the whole workflow to find them would be the larger tool.
+    """
+    text = WORKFLOW.read_text(encoding="utf-8")
+    swept = set(re.findall(r"--file (crates/valgebra-py/\S+\.rs)", text))
+    assert swept, "the workflow names no binding files for the sweep"
+    return swept
 
 
 def _excluded_globs() -> list[str]:
@@ -177,7 +185,7 @@ def test_every_binding_file_is_swept_or_excluded_by_name() -> None:
     unaccounted = sorted(
         path
         for path in sources
-        if path not in SWEPT and not any(_matches(g, path) for g in globs)
+        if path not in _swept() and not any(_matches(g, path) for g in globs)
     )
     assert not unaccounted, (
         f"binding files neither swept nor excluded: {unaccounted}. "
@@ -198,7 +206,7 @@ def test_the_walk_is_not_excluded() -> None:
     # inside the sweep. An exclusion that swallowed it would leave the coverage
     # number intact and the mutation number gone.
     globs = _excluded_globs()
-    for path in SWEPT:
+    for path in _swept():
         assert not any(_matches(g, path) for g in globs), f"{path} is excluded"
         assert (ROOT / path).exists(), f"{path} does not exist"
 

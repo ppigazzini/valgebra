@@ -975,6 +975,8 @@ jobs:
             --file crates/valgebra-py/src/check/walk/scalar.rs \
             --file crates/valgebra-py/src/check/walk/sequence.rs \
             --file crates/valgebra-py/src/check/ctx.rs \
+            --file crates/valgebra-py/src/check/index.rs \
+            --file crates/valgebra-py/src/input.rs \
             --file crates/valgebra-py/src/build.rs \
             --file crates/valgebra-py/src/build/classes.rs \
             --file crates/valgebra-py/src/build/generics.rs \
@@ -1449,6 +1451,8 @@ jobs:
             --file crates/valgebra-py/src/check/walk/scalar.rs \
             --file crates/valgebra-py/src/check/walk/sequence.rs \
             --file crates/valgebra-py/src/check/ctx.rs \
+            --file crates/valgebra-py/src/check/index.rs \
+            --file crates/valgebra-py/src/input.rs \
             --file crates/valgebra-py/src/build.rs \
             --file crates/valgebra-py/src/build/classes.rs \
             --file crates/valgebra-py/src/build/generics.rs \
