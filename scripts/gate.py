@@ -76,6 +76,10 @@ NEEDS_A_RUNNER = {
     "Recorded instruction-count budgets (nightly)": "cachegrind, and nightly only",
     "Smoke-run the benchmarks": "needs the optimized wheel above",
     "Competitive comparison gate": "needs the optimized wheel above",
+    "Record the competitive ratios": (
+        "needs the optimized wheel above, and records a ratio that belongs to "
+        "the lane it is measured in"
+    ),
     "List the Rust files the diff touches": "reads the event payload",
     "Sweep the core files the change touches": "a mutation sweep, tens of minutes",
     "Sweep the binding's swept files when the change touches one": (

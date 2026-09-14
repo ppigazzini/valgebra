@@ -8,6 +8,14 @@ on:
   schedule:
     - cron: "0 4 * * *"
   workflow_dispatch:
+    inputs:
+      record_compare:
+        description: >-
+          Record the competitive ratios this run measures and upload them.
+          The ratchet in scripts/perf_compare.json is armed by a recording made
+          where it is read, and this lane is where it is read.
+        type: boolean
+        default: false
 
 concurrency:
   # Keyed by event too, so a push to main does not share a group with the
@@ -610,6 +618,23 @@ jobs:
       # wall-clock budget could not.
       - name: Competitive comparison gate
         run: uv run --no-sync --group bench python scripts/compare_gate.py
+      # The ratchet beside that ceiling is armed by a recording, and a ratio
+      # belongs to the environment it was taken in: the interpreter's minor
+      # version, whether it has a global lock, and the pydantic-core on the
+      # other side. `scripts/compare_gate.py` refuses to judge across those, so
+      # a recording made anywhere but here is a number about somewhere else.
+      # This lane cannot commit, so the recording leaves as an artifact and a
+      # human puts it in the tree -- which is also what keeps the floor a thing
+      # somebody chose rather than a thing that drifted.
+      - name: Record the competitive ratios
+        if: ${{ inputs.record_compare }}
+        run: uv run --no-sync --group bench python scripts/compare_gate.py --update
+      - if: ${{ inputs.record_compare }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: perf-compare-recorded
+          path: scripts/perf_compare.json
+          if-no-files-found: error
 
   bench-free-threaded:
     name: bench (free-threaded)

@@ -231,6 +231,18 @@ an absent number: `error_report` spreads a third of its own value, being the one
 shape timing a path that raises and formats a Python exception, and a row holds
 every shape to a tolerance or an argument in both directions.
 
+**The ratchet beside the ceiling is armed from the lane.** The comparison gate
+holds each shape to a ceiling, and beside it holds the shape to the ratio it
+*last measured* -- which is the ratchet, and which needs a recording to arm.
+A ratio belongs to the environment it was taken in (the interpreter's minor
+version, whether it has a global lock, and the pydantic-core on the other
+side), and `scripts/compare_gate.py` refuses to judge across those rather than
+compare a number about somewhere else. So the recording is made where it is
+read: run the CI workflow from the Actions tab with **`record_compare`**
+checked, take the `perf-compare-recorded` artifact, and commit
+`scripts/perf_compare.json` from it. The lane cannot commit, which is the point
+-- a floor is a thing somebody chose.
+
 **The lane names the interpreter these are read on**, which is CPython 3.12,
 and it is written in `ci.yml` rather than left to the runner image: a ratio
 belongs to the pair of libraries *and* the interpreter running them, and a lane
