@@ -46,7 +46,7 @@
   "~int&~str": true,
   "~~int": true
  },
- "commit": "1d038fb4bf1a078830d547d8db85bc4497d892e3",
+ "commit": "ac242a75b5b158854801d343f1501142026c1d3a",
  "decisions": {
   "(int|str)&~str <= (int|str)&~str": "y",
   "(int|str)&~str <= anything": "y",
@@ -85,7 +85,7 @@
   "(int|str)&~str <= set[int]": "n",
   "(int|str)&~str <= str": "n",
   "(int|str)&~str <= str-regex-a": "n",
-  "(int|str)&~str <= tree": "n",
+  "(int|str)&~str <= tree": "y",
   "(int|str)&~str <= tuple-empty": "n",
   "(int|str)&~str <= tuple[int,...]": "n",
   "(int|str)&~str <= tuple[int,str]": "n",
