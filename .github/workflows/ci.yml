@@ -626,6 +626,10 @@ jobs:
       # This lane cannot commit, so the recording leaves as an artifact and a
       # human puts it in the tree -- which is also what keeps the floor a thing
       # somebody chose rather than a thing that drifted.
+      #
+      # Only this lane records. The free-threaded job below measures a second
+      # environment and the file holds one recorded block, so a recording from
+      # both would be each overwriting the other's.
       - name: Record the competitive ratios
         if: ${{ inputs.record_compare }}
         run: uv run --no-sync --group bench python scripts/compare_gate.py --update

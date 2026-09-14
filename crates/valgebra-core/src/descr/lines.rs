@@ -180,8 +180,12 @@ impl Lines {
 
     /// The lines of the values this holds, complementing a negated form.
     ///
-    /// `whole` is the kind these lines are a part of: complementing *no* lines
-    /// is the whole kind, and an empty union carries no line to read one off.
+    /// `whole` names the kind these lines are a part of: complementing *no*
+    /// lines is the whole kind, and an empty union carries no line to read one
+    /// off. It is a name rather than a set because this is the only place that
+    /// wants the set, and only on the negated path -- so the eleven wholes an
+    /// operation runs over are built where they are read and nowhere else.
+    ///
     /// Borrowed where the list is already positive, which is the common case
     /// and the one asked most often: a component is asked whether it is empty
     /// once per kind per constraint, and copying a list to read whether it

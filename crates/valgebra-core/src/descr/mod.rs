@@ -430,13 +430,14 @@ const KINDLESS: Component = Component::Coarse(true);
 
 /// The whole a component is a part of, **named** rather than built.
 ///
-/// Every operation over a descriptor runs all twelve slots, and each of them
-/// needs the whole of its own only where it has to complement: a negated union
-/// is read back by complementing it, and a positive one is read where it lies.
-/// Building the whole for every slot is eleven sets constructed to be dropped
-/// -- an interval, a span, two automata, a set lattice, a map atom -- for the
-/// one or two a shape actually negates, and each of those constructions
-/// allocates.
+/// Every operation over a descriptor runs all twelve slots -- the eleven kinds
+/// and the kindless one -- and each of them needs the whole of its own only
+/// where it has to complement: a negated union is read back by complementing
+/// it, and a positive one is read where it lies. Eleven of the twelve name a
+/// kind, and nine of those eleven allocate to say what their whole is: an
+/// interval set, a span list, two automata, a set lattice, a map atom. Building
+/// all of them per operation is that many sets constructed to be dropped, for
+/// the one or two a shape actually negates.
 ///
 /// So the slot is named by its kind and the component is built where it is
 /// wanted. `Copy`, because a name is a name.
