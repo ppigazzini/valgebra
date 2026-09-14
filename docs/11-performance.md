@@ -96,7 +96,15 @@ debug build as either -- `maturin develop` without `--release` installs one, it
 is indistinguishable from the release extension at the Python prompt, and a
 timing of it reads an order of magnitude slow. `scripts/compare_gate.py` refuses
 such a build outright, and so does `benches/` from its own `conftest.py`; a
-figure timed by hand has only the habit to protect it. How much PGO adds over a plain `--release` build is not a
+figure timed by hand has only the habit to protect it.
+
+**Every wall-clock figure on this page, and in the changelog, is a release
+build on an idle machine, read as the best of five runs and taken twice.** The
+two guards above hold the first of those and neither holds the other two: a
+timing taken while something else has the CPU reads slow, and one taken once
+reads whatever that run did. Both have produced a published number here that
+was wrong by a factor, which is why the sentence is written rather than
+assumed. How much PGO adds over a plain `--release` build is not a
 constant this page can state. It is whatever the profile can still arrange that
 fat LTO did not, so it shrinks as the hot paths themselves get shorter: measured
 on one machine it has ranged from 1.75x down to 1.01x, and the shapes where the

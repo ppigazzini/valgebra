@@ -34,15 +34,21 @@ answer of its own, or a repair to a change not yet released.
   -- importing `dataclasses` pulls `inspect`, `copy` and `functools` in with
   it, and the tracked objects they leave behind are walked by every later
   garbage collection, which costs a program that never compiles a dataclass
-  6.45% of its compile. A fifty-field dataclass compiles about 5% faster; a
-  program that compiles none imports nothing.
+  6.45% of its compile -- which is an instruction count, taken twice. A
+  fifty-field dataclass compiles in 32.7--34.2 us against 34.4--35.8 (release
+  build, idle machine, three runs each); a program that compiles none imports
+  nothing.
 
-- **Compiling a refinement is a third cheaper, and a `TypedDict` a fifth.** The
-  frontend read an annotation's optional attributes by *trying* them: a marker
-  carries one of `ge`, `gt`, `le`, `lt` and not the other three, and each
-  absence answered by raising an exception that was built, caught and dropped.
-  It asks instead. Fifty `Annotated[int, Ge(0)]` fields compile in 226 us where
-  they took 341, and as a `TypedDict` in 315 where they took 421.
+- **Compiling a refinement is nearly half again cheaper on Python 3.13 and
+  later.** The frontend read an annotation's optional attributes by *trying*
+  them: a marker carries one of `ge`, `gt`, `le`, `lt` and not the other three,
+  and each absence answered by raising an exception that was built, caught and
+  dropped. It asks instead, through `PyObject_GetOptionalAttr` where the
+  runtime has it -- which is 3.13 onward; below that the exception is still the
+  interpreter's only answer to an absent attribute. Fifty
+  `Annotated[int, Ge(0)]` fields compile in **86 us where they took 149**, and
+  as a `TypedDict` in **136 where they took 209** (release build, idle machine,
+  best of five runs of three hundred, twice).
 
 - **Building a validator is about four times cheaper.** The frontend asked the
   interpreter to import `typing` and resolve `get_origin`, `get_args` and the
