@@ -81,7 +81,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Twenty-one of them:
+for and misses the other. Twenty-two of them:
 
 | Ledger | Holds |
 |---|---|
@@ -105,12 +105,13 @@ for and misses the other. Twenty-one of them:
 | `tests/test_cited_commits.py` | every commit a tracked file cites is one a clone can reach |
 | `tests/test_fuzz_lane.py` | the fuzz soak names its allocation ceiling and forks its batches |
 | `tests/test_floor_names.py` | every typing and enum name read at import time, and every stdlib module imported, exists on the floor |
+| `tests/test_module_placement.py` | no inline test module is longer than a screen |
 | `tests/test_ledger_plants.py` | every ledger fails on the defect it exists to catch |
 
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are twenty-one.
+because a table nothing counts is the one that drifts: there are twenty-two.
 
 The last is a ledger over the rest, and it exists because reading a
 ledger cannot tell you whether it can fail. `test_local_gate.py` filtered its
@@ -143,6 +144,16 @@ What changes is reading. `decision.rs` was 3,570 lines of which 1,500 were
 tests, and `lib.rs` was 4,211 of which nearly all were: a reader looking for the
 subtype rules scrolled past a thousand lines of assertions to find them, and a
 bound had to be told apart from a test fixture by its indentation.
+
+**A screen is a hundred lines**, and `tests/test_module_placement.py` holds the
+rule to that number. It needed one: the rule was stated here and followed
+nowhere in particular, so ten modules drifted to between 163 and 1,154 lines
+inside the file they test, and `descr/lower.rs` reached 1,829 lines of which
+1,154 were assertions -- a worse ratio than the one this section was written to
+end. The bar is generous, and three modules sit under it and stay where they
+are: a module short enough to read past is in nobody's way. What the bar catches
+is the drift, one case at a time, until a file is mostly not the thing it is
+named for.
 
 The two ledgers that read the tree know the shape: `tests/test_mutation_scope.py`
 does not ask a test module to be swept, and `tests/test_harness_conditionals.py`

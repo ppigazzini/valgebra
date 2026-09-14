@@ -160,6 +160,20 @@ UNREQUIRED_JOB = """jobs:
 
 PLANTS = (
     Plant(
+        "tests/test_module_placement.py",
+        ("crates/valgebra-core/src/descr/budget.rs",),
+        # The drift the bar exists to catch, in its smallest form: the shortest
+        # inline test module in the tree, padded past a hundred lines. Nothing
+        # about it fails to compile and no test changes its answer, which is
+        # exactly why a ledger has to be the thing that notices.
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/descr/budget.rs",
+            "mod tests {",
+            "mod tests {\n" + "    // one case at a time\n" * 60,
+        ),
+    ),
+    Plant(
         "tests/test_closure_ledger.py",
         ("crates/valgebra-core/src/ir.rs",),
         lambda tree: _edit(
