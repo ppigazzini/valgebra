@@ -24,6 +24,21 @@ fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
              \x20   MinLen = staticmethod(\n\
              \x20       lambda n: types.SimpleNamespace(min_length=n)\n\
              \x20   )\n\
+             class slotted:\n\
+             \x20   class Ge:\n\
+             \x20       __slots__ = ('ge',)\n\
+             \x20       def __init__(self, n): self.ge = n\n\
+             \x20   class MinLen:\n\
+             \x20       __slots__ = ('min_length',)\n\
+             \x20       def __init__(self, n): self.min_length = n\n\
+             class guarded:\n\
+             \x20   __slots__ = ('ge',)\n\
+             \x20   def __init__(self, n): self.ge = n\n\
+             \x20   def __getattr__(self, name): raise AttributeError(name)\n\
+             class hooked:\n\
+             \x20   def __getattr__(self, name):\n\
+             \x20       if name == 'ge': return 0\n\
+             \x20       raise AttributeError(name)\n\
              class Timezone:\n\
              \x20   pass\n\
              Timezone.__module__ = 'annotated_types'\n",
@@ -120,6 +135,30 @@ fn each_spelling_builds_its_own_schema() {
             // A refinement carries its markers on the base it narrows, and
             // a nested one folds onto that base rather than nesting.
             ("typing.Annotated[int, at.Ge(0)]", "Annotated[int, Ge(0)]"),
+            // The shapes a marker keeps its names in, which decide where the
+            // frontend reads them from. `SimpleNamespace` above keeps them in
+            // an instance dictionary; the vocabulary this stands in for ships
+            // `slots` dataclasses, which keep them on the *type* as
+            // descriptors, and a marker may answer through `__getattr__` for a
+            // name no dictionary of either holds. For three releases this
+            // corpus asked only the first, so the reading of the others was
+            // held by pytest alone -- which the mutation sweep cannot see.
+            (
+                "typing.Annotated[int, slotted.Ge(0)]",
+                "Annotated[int, Ge(0)]",
+            ),
+            (
+                "typing.Annotated[str, slotted.MinLen(1)]",
+                "Annotated[str, MinLen(1)]",
+            ),
+            ("typing.Annotated[int, hooked()]", "Annotated[int, Ge(0)]"),
+            // Both at once: the name is on the type *and* the type has a hook,
+            // which is the one marker whose mask is exactly the bit for that
+            // name beside the hook's. A reading that compared those two the
+            // wrong way would answer "nothing carried" for precisely this
+            // shape and for no other, so the row is the shape rather than an
+            // example.
+            ("typing.Annotated[int, guarded(0)]", "Annotated[int, Ge(0)]"),
             (
                 "typing.Annotated[str, at.MinLen(1)]",
                 "Annotated[str, MinLen(1)]",
@@ -356,7 +395,9 @@ fn a_patterns_flags_are_written_into_it_or_refused() {
             // Two flags are one group, in the order the engine spells them.
             ("re.I | re.M", "(?im)"),
         ] {
-            let pattern = with_inline_flags(&compiled(flags), "a".to_owned())
+            let marker = compiled(flags);
+            let probes = Probes::of(&marker).expect("the marker reads");
+            let pattern = with_inline_flags(&marker, &probes, "a".to_owned())
                 .unwrap_or_else(|error| panic!("{flags} refused: {error}"));
             assert!(
                 pattern.contains(inline),
@@ -380,7 +421,9 @@ fn a_patterns_flags_are_written_into_it_or_refused() {
             .expect("the marker builds")
         };
         for (bit, name) in [(256u32, "re.ASCII"), (4, "re.LOCALE"), (128, "re.DEBUG")] {
-            let refusal = match with_inline_flags(&marked(bit), "a".to_owned()) {
+            let carrier = marked(bit);
+            let probes = Probes::of(&carrier).expect("the marker reads");
+            let refusal = match with_inline_flags(&carrier, &probes, "a".to_owned()) {
                 Err(refusal) => refusal.to_string(),
                 Ok(pattern) => panic!("{name} was written into {pattern}"),
             };
@@ -392,7 +435,12 @@ fn a_patterns_flags_are_written_into_it_or_refused() {
         // A marker with no flags at all is the pattern it carries.
         let bare = PyString::new(py, "a");
         assert_eq!(
-            with_inline_flags(&bare, "a".to_owned()).expect("no flags to read"),
+            with_inline_flags(
+                &bare,
+                &Probes::of(&bare).expect("a str reads"),
+                "a".to_owned()
+            )
+            .expect("no flags to read"),
             "a"
         );
     });

@@ -24,10 +24,35 @@ answer of its own, or a repair to a change not yet released.
 - perf: a marker is asked by a name the interpreter already holds
 - perf: the dataclass question is asked of a handle, and only where it is asked
 - fix: a sequence's length is read from the container that holds it
+- perf: a marker is read through the names its type carries
 
 -->
 
 ### Changed
+
+- **Compiling a refinement is about three times cheaper.** The frontend read a
+  marker's optional attributes by *trying* them: a marker carries one of `ge`,
+  `gt`, `le`, `lt`, `min_length`, `max_length`, `multiple_of`, `pattern`,
+  `flags` and `func` and not the other nine, and each absence answered by
+  raising an exception that was built, caught and dropped -- four hundred of
+  them to compile fifty fields.
+
+  Two changes remove them. The absences that could be asked for are asked,
+  through `PyObject_GetOptionalAttr` where the runtime has it, which is 3.13
+  onward. And which names a marker can carry is a property of its *type* --
+  every `annotated_types` marker is a `slots` dataclass, so `Ge.ge` is the
+  descriptor that reads the slot and `Ge.gt` does not exist -- so the type is
+  asked once and the answer kept, which removes the rest on every interpreter:
+  below 3.13 there is no non-raising `getattr`, and `func` was asked with a bare
+  one even above it. A marker that keeps its values in a dictionary of its own
+  is read from that dictionary, which answers for a name it does not hold
+  without raising; a type with a `__getattr__` hook answers for names no
+  dictionary holds, and is asked for everything exactly as before.
+
+  Fifty `Annotated[int, Ge(0)]` fields compile in **48 us where they took 153**
+  on 3.14 and **45 where they took 144** on 3.12, and as a `TypedDict` in **100
+  where they took 240** and **86 where they took 238** (release build, idle
+  machine, best of five runs of three hundred, twice).
 
 - **A validator no longer imports `dataclasses` to ask whether a class is
   one.** Every class node imported the module and called through it; the
@@ -39,17 +64,6 @@ answer of its own, or a repair to a change not yet released.
   fifty-field dataclass compiles in 32.7--34.2 us against 34.4--35.8 (release
   build, idle machine, three runs each); a program that compiles none imports
   nothing.
-
-- **Compiling a refinement is nearly half again cheaper on Python 3.13 and
-  later.** The frontend read an annotation's optional attributes by *trying*
-  them: a marker carries one of `ge`, `gt`, `le`, `lt` and not the other three,
-  and each absence answered by raising an exception that was built, caught and
-  dropped. It asks instead, through `PyObject_GetOptionalAttr` where the
-  runtime has it -- which is 3.13 onward; below that the exception is still the
-  interpreter's only answer to an absent attribute. Fifty
-  `Annotated[int, Ge(0)]` fields compile in **86 us where they took 149**, and
-  as a `TypedDict` in **136 where they took 209** (release build, idle machine,
-  best of five runs of three hundred, twice).
 
 - **Building a validator is about four times cheaper.** The frontend asked the
   interpreter to import `typing` and resolve `get_origin`, `get_args` and the

@@ -1499,7 +1499,11 @@ fn check_constraint_fits(base: &Schema, constraint: &Constraint, lits: &Pool) ->
 /// character class means in ways this engine spells differently, and `re.DEBUG`
 /// asks the other engine to talk about itself, so all three are refused rather
 /// than approximated.
-fn with_inline_flags(marker: &Bound<'_, PyAny>, pattern: String) -> PyResult<String> {
+fn with_inline_flags(
+    marker: &Bound<'_, PyAny>,
+    probes: &Probes<'_>,
+    pattern: String,
+) -> PyResult<String> {
     // `re`'s own bit values, which are part of its published interface.
     const IGNORECASE: u32 = 2;
     const LOCALE: u32 = 4;
@@ -1509,7 +1513,7 @@ fn with_inline_flags(marker: &Bound<'_, PyAny>, pattern: String) -> PyResult<Str
     const VERBOSE: u32 = 64;
     const ASCII: u32 = 256;
 
-    let Some(flags) = marker.getattr_opt(intern!(marker.py(), "flags"))? else {
+    let Some(flags) = probes.get(marker, Probe::Flags)? else {
         return Ok(pattern);
     };
     let Ok(flags) = flags.extract::<u32>() else {
@@ -1580,6 +1584,178 @@ fn is_unhandled_constraint(marker: &Bound<'_, PyAny>) -> bool {
     from_vocabulary && !documentation
 }
 
+/// An optional attribute a refinement marker is read through.
+///
+/// A marker carries one or two of these and not the other eight: `Ge(0)` has a
+/// `ge` and nothing else, and a compiled pattern has a `pattern` and `flags`.
+/// Absence is the common answer, and it was asked for by *trying*: a `getattr`
+/// for an absent name answers by raising, and `func` was asked with a bare one
+/// on every interpreter while the rest were asked with
+/// `PyObject_GetOptionalAttr` -- the first non-raising spelling the interpreter
+/// offers, and there is none before 3.13. A fifty-field record of
+/// `Annotated[int, Ge(0)]` built, threw and dropped four hundred exceptions to
+/// learn nine times over that a marker was what it said it was.
+///
+/// Which names a marker can carry is a property of its *type*, so the question
+/// is asked there, once, and the answer kept: see [`Probes`].
+#[derive(Clone, Copy)]
+enum Probe {
+    Pattern,
+    Flags,
+    Ge,
+    Gt,
+    Le,
+    Lt,
+    MinLength,
+    MaxLength,
+    MultipleOf,
+    Func,
+}
+
+impl Probe {
+    /// Every probe, which is what a type is read for when it is first seen.
+    const ALL: [Self; 10] = [
+        Self::Pattern,
+        Self::Flags,
+        Self::Ge,
+        Self::Gt,
+        Self::Le,
+        Self::Lt,
+        Self::MinLength,
+        Self::MaxLength,
+        Self::MultipleOf,
+        Self::Func,
+    ];
+
+    /// The attribute's name, as a handle the interpreter already holds: text
+    /// would be decoded into a fresh `PyString` and hashed before the lookup
+    /// could begin, once per name per marker.
+    fn name(self, py: Python<'_>) -> &Bound<'_, PyString> {
+        match self {
+            Self::Pattern => intern!(py, "pattern"),
+            Self::Flags => intern!(py, "flags"),
+            Self::Ge => intern!(py, "ge"),
+            Self::Gt => intern!(py, "gt"),
+            Self::Le => intern!(py, "le"),
+            Self::Lt => intern!(py, "lt"),
+            Self::MinLength => intern!(py, "min_length"),
+            Self::MaxLength => intern!(py, "max_length"),
+            Self::MultipleOf => intern!(py, "multiple_of"),
+            Self::Func => intern!(py, "func"),
+        }
+    }
+
+    /// This probe's bit in a type's mask.
+    const fn bit(self) -> u16 {
+        1 << (self as u16)
+    }
+}
+
+/// The mask each marker type reads under, one bit per [`Probe`] plus the two
+/// above. Keyed by the type, which is what the answer is a property of.
+static CARRIED: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
+
+/// How many marker types the mask cache keeps.
+///
+/// A cache entry holds a type, so it keeps one alive. The markers a program
+/// uses are a handful of module-level classes and the map stops growing after
+/// them; a program that *builds* a marker class per call would grow it without
+/// a bound, and `typing` memoises `Annotated[...]` in a cache of its own that
+/// holds the last hundred and twenty-eight, so this map would be the one that
+/// grows. Past the bound a type is read each time rather than remembered --
+/// slower than the cache, and no worse than having none.
+///
+/// The far side is exercised by `tests/test_adversarial_bounds.py`, which
+/// builds marker types well past this and reads the same answers from them.
+const MAX_MARKER_TYPES: usize = 256;
+
+/// How a marker's optional attributes are read, decided once per marker.
+///
+/// Two questions settle it. Which names the *type* carries is asked of the type
+/// and kept, because it cannot differ between two markers of one class: every
+/// `annotated_types` marker is a `slots` dataclass, so `Ge.ge` is the
+/// descriptor that reads the slot and `Ge.gt` does not exist. And a marker that
+/// is an ordinary object keeps its values in a dictionary of its own, which is
+/// read directly -- a dictionary answers for a name it does not hold without
+/// raising, which is the whole point.
+///
+/// A type with a `__getattr__` hook answers for names neither holds, so it is
+/// asked for everything, exactly as the frontend asked before this. That path
+/// is correct and gives up only the saving.
+struct Probes<'py> {
+    mask: u16,
+    own: Option<Bound<'py, PyDict>>,
+}
+
+impl<'py> Probes<'py> {
+    /// The type answers for names no dictionary of its own holds -- a
+    /// `__getattr__` hook -- so every name is asked of the marker, as before.
+    const HAS_HOOK: u16 = 1 << 14;
+
+    /// Instances of the type keep their values in a dictionary of their own,
+    /// which is where a marker that is not a `slots` class puts them.
+    const HAS_OWN_DICT: u16 = 1 << 15;
+
+    /// Read how this marker answers, from its type and its own dictionary.
+    fn of(marker: &Bound<'py, PyAny>) -> PyResult<Self> {
+        let py = marker.py();
+        let ty = marker.get_type();
+        let cache = CARRIED
+            .get_or_try_init(py, || Ok::<_, PyErr>(PyDict::new(py).unbind()))?
+            .bind(py);
+        let mask = if let Some(held) = cache.get_item(&ty)? {
+            held.extract()?
+        } else {
+            let read = Self::read_type(&ty, marker)?;
+            if cache.len() < MAX_MARKER_TYPES {
+                cache.set_item(&ty, read)?;
+            }
+            read
+        };
+        let own = if mask & Self::HAS_OWN_DICT == 0 {
+            None
+        } else {
+            marker
+                .getattr_opt(intern!(py, "__dict__"))?
+                .and_then(|dict| dict.cast_into::<PyDict>().ok())
+        };
+        Ok(Self { mask, own })
+    }
+
+    /// Which names the type carries, and how its instances keep the rest.
+    fn read_type(ty: &Bound<'py, PyType>, marker: &Bound<'py, PyAny>) -> PyResult<u16> {
+        let py = ty.py();
+        let mut mask = 0;
+        for probe in Probe::ALL {
+            if ty.getattr_opt(probe.name(py))?.is_some() {
+                mask |= probe.bit();
+            }
+        }
+        if ty.getattr_opt(intern!(py, "__getattr__"))?.is_some() {
+            mask |= Self::HAS_HOOK;
+        }
+        if marker
+            .getattr_opt(intern!(py, "__dict__"))?
+            .is_some_and(|dict| dict.is_instance_of::<PyDict>())
+        {
+            mask |= Self::HAS_OWN_DICT;
+        }
+        Ok(mask)
+    }
+
+    /// Read one of the marker's attributes, asking only where an answer can be.
+    fn get(&self, marker: &Bound<'py, PyAny>, probe: Probe) -> PyResult<Option<Bound<'py, PyAny>>> {
+        let name = probe.name(marker.py());
+        if self.mask & (probe.bit() | Self::HAS_HOOK) != 0 {
+            return marker.getattr_opt(name);
+        }
+        match &self.own {
+            Some(own) => own.get_item(name),
+            None => Ok(None),
+        }
+    }
+}
+
 fn parse_constraint(
     marker: &Bound<'_, PyAny>,
     out: &mut Vec<Constraint>,
@@ -1599,12 +1775,16 @@ fn parse_constraint(
         return Ok(());
     }
     let before = out.len();
+    // How this marker answers, read once per marker and mostly once per type.
+    // Every question below goes through it, so a name nothing carries is
+    // answered from a dictionary rather than by the interpreter raising.
+    let probes = Probes::of(marker)?;
 
     // A string-pattern marker: valgebra's `Regex(...)` or a compiled
     // `re.Pattern`, both carrying the source pattern as `.pattern`. The pattern
     // is validated (anchored) here so an invalid expression fails at compile
     // time, not at first validation; the compiled regex is cached per validator.
-    if let Some(attr) = marker.getattr_opt(intern!(marker.py(), "pattern"))? {
+    if let Some(attr) = probes.get(marker, Probe::Pattern)? {
         let Ok(pattern) = attr.extract::<String>() else {
             // A `bytes` pattern: `re` compiles one against `bytes` values, and a
             // pattern constraint here matches the text of a `str`. Reading the
@@ -1616,7 +1796,7 @@ fn parse_constraint(
                  against text, so write the pattern as a str",
             ));
         };
-        let pattern = with_inline_flags(marker, pattern)?;
+        let pattern = with_inline_flags(marker, &probes, pattern)?;
         crate::check::compile_pattern(&pattern).map_err(|err| {
             PyValueError::new_err(format!("invalid regular expression {pattern:?}: {err}"))
         })?;
@@ -1631,19 +1811,16 @@ fn parse_constraint(
     // `PyString` and hashed before the lookup can begin, once per name per
     // marker.
     let py = marker.py();
-    for (attr, make) in [
-        (
-            intern!(py, "ge"),
-            Constraint::Ge as fn(OperandIx) -> Constraint,
-        ),
-        (intern!(py, "gt"), Constraint::Gt),
-        (intern!(py, "le"), Constraint::Le),
-        (intern!(py, "lt"), Constraint::Lt),
+    for (probe, make) in [
+        (Probe::Ge, Constraint::Ge as fn(OperandIx) -> Constraint),
+        (Probe::Gt, Constraint::Gt),
+        (Probe::Le, Constraint::Le),
+        (Probe::Lt, Constraint::Lt),
     ] {
-        if let Some(bound) = marker.getattr_opt(attr)?
+        if let Some(bound) = probes.get(marker, probe)?
             && !bound.is_none()
         {
-            refuse_unordered_bound(&attr.to_string_lossy(), &bound)?;
+            refuse_unordered_bound(&probe.name(py).to_string_lossy(), &bound)?;
             out.push(make(lits.intern_operand(&bound)));
         }
     }
@@ -1651,14 +1828,14 @@ fn parse_constraint(
     // past what a container can hold -- is refused rather than dropped: dropping
     // it leaves a schema that admits every value of its base, and the marker was
     // written to admit fewer.
-    for (attr, make) in [
+    for (probe, make) in [
         (
-            intern!(py, "min_length"),
+            Probe::MinLength,
             Constraint::MinLen as fn(usize) -> Constraint,
         ),
-        (intern!(py, "max_length"), Constraint::MaxLen),
+        (Probe::MaxLength, Constraint::MaxLen),
     ] {
-        if let Some(bound) = marker.getattr_opt(attr)?
+        if let Some(bound) = probes.get(marker, probe)?
             && !bound.is_none()
         {
             // A `bool` is read as the length it equals: `MinLen(True)` is
@@ -1670,7 +1847,8 @@ fn parse_constraint(
             // else, which is worse than reading the value the marker holds.
             let n = bound.extract::<usize>().map_err(|_| {
                 PyValueError::new_err(format!(
-                    "{attr} must be a length a value can have, and {} is not",
+                    "{} must be a length a value can have, and {} is not",
+                    probe.name(py),
                     summarize(&bound)
                 ))
             })?;
@@ -1680,7 +1858,7 @@ fn parse_constraint(
     // Numeric multiple-of bound. A zero divisor is rejected here: no value is a
     // multiple of zero, and checking one would divide by zero at validation time,
     // so the schema is unsatisfiable and the error belongs at construction.
-    if let Some(multiple) = marker.getattr_opt(intern!(marker.py(), "multiple_of"))?
+    if let Some(multiple) = probes.get(marker, Probe::MultipleOf)?
         && !multiple.is_none()
     {
         if multiple.extract::<f64>().is_ok_and(f64::is_nan) {
@@ -1708,7 +1886,7 @@ fn parse_constraint(
     // `functools.partial` of its bound arguments — both carry a `.func` too.
     if marker.is_callable() {
         out.push(Constraint::Predicate(lits.intern_predicate(marker)));
-    } else if let Ok(func) = marker.getattr("func")
+    } else if let Some(func) = probes.get(marker, Probe::Func)?
         && func.is_callable()
     {
         out.push(Constraint::Predicate(lits.intern_predicate(&func)));

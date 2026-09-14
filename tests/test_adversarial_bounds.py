@@ -498,3 +498,30 @@ def test_two_steps_that_meet_past_the_period_bound_are_refused() -> None:
     for n in (2, 64, 81, 4096):
         assert step(n).is_subtype_of(step(n))
         assert intersection(step(n), complement(step(n))).is_empty()
+
+
+def test_a_marker_type_past_the_cache_bound_is_still_read() -> None:
+    """`MAX_MARKER_TYPES`: the cache stops growing; the reading stays right.
+
+    Which attributes a refinement marker carries is a property of its type, so
+    it is asked once per type and kept -- and a cache entry keeps its type
+    alive, so a program that builds a marker class per call would grow it
+    forever. Past the bound a type is read each time instead of remembered,
+    which is the slower path and must not be a different answer.
+
+    Built well past the bound on purpose: the rows below are the ones the cache
+    cannot have seen.
+    """
+    # Four times the bound `docs/dev/00-architecture.md` records for it. The
+    # value is not published -- it changes no answer, only how often one is
+    # recomputed -- so it is spelled here, and a bound raised past this is a
+    # bound whose test stops reaching the far side.
+    past_the_cache = 4 * 256
+    made = [
+        type(f"Bound{n}", (), {"__slots__": (), "ge": n})()
+        for n in range(past_the_cache)
+    ]
+    for n, marker in enumerate(made):
+        schema = Validator(Annotated[int, marker])
+        assert schema.is_valid(n), "the bound its type carries admits its own value"
+        assert not schema.is_valid(n - 1), "and refuses the one below it"

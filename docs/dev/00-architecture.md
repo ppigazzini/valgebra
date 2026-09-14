@@ -133,6 +133,7 @@ comment. A `limit` or a `shape` carries the reason it is where it is.
 | `crates/valgebra-py/src/validator.rs` | `MAX_DEFINITIONS` | `128` | shape | recursive definitions chained in one schema | `tests/test_adversarial_bounds.py` |
 | `crates/valgebra-py/src/validator.rs` | `MAX_SCHEMA_NODES` | `100_000` | shape | a schema that is shallow and exponentially wide | `tests/test_adversarial_bounds.py` |
 | `crates/valgebra-py/src/build.rs` | `MAX_BUILD_DEPTH` | `crate::validator::MAX_SCHEMA_DEPTH + 1` | shape | the frontend descending past what `checked` will accept, so the schema past the bound is built and refused by name | `tests/test_adversarial_bounds.py` |
+| `crates/valgebra-py/src/build.rs` | `MAX_MARKER_TYPES` | `256` | shape | the per-type cache of which attributes a refinement marker carries growing with a program that builds a marker class per call, since a cache entry keeps its type alive | `tests/test_adversarial_bounds.py` |
 | `crates/valgebra-py/src/render.rs` | `MAX_RENDER_DEPTH` | `200` | shape | `repr` overflowing the stack on a chain of definitions | `tests/test_adversarial_bounds.py` |
 | `crates/valgebra-py/src/check/ctx.rs` | `MAX_WALK_DEPTH` | `512` | shape | a walk overflowing the smallest thread stack a platform gives | its own tests, and `tests/test_adversarial_bounds.py` |
 | `crates/valgebra-py/src/check/walk.rs` | `MAX_RECURSION_DEPTH` | `128` | shape | a pathologically deep *value* overflowing the stack | its own tests, and `tests/test_adversarial_bounds.py` |
