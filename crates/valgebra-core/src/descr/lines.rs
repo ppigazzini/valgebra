@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use super::budget;
 use super::records::RecordLattice;
-use super::{Component, Descr, Op};
+use super::{Component, Descr, Op, Whole};
 use std::borrow::Cow;
 
 use crate::kind::Kind;
@@ -186,7 +186,7 @@ impl Lines {
     /// and the one asked most often: a component is asked whether it is empty
     /// once per kind per constraint, and copying a list to read whether it
     /// holds a line was the whole cost of asking.
-    fn positive(&self, whole: &Component) -> Option<Cow<'_, [Line]>> {
+    fn positive(&self, whole: Whole) -> Option<Cow<'_, [Line]>> {
         if self.negated {
             complement_lines(&self.lines, whole).map(Cow::Owned)
         } else {
@@ -200,9 +200,9 @@ impl Lines {
     /// proved empty, inhabited as soon as one is. A negated form has to be
     /// expanded first, and a refusal there is *unknown* rather than inhabited --
     /// past the bound there is no union to read, so nothing is proved either way.
-    pub(crate) fn emptiness(&self, whole: &Component, kind: Option<Kind>) -> Verdict {
+    pub(crate) fn emptiness(&self, whole: Whole) -> Verdict {
         match self.positive(whole) {
-            Some(lines) => Verdict::any(lines.iter().map(|line| line.emptiness(kind))),
+            Some(lines) => Verdict::any(lines.iter().map(|line| line.emptiness(whole.kind()))),
             None => Verdict::Unknown,
         }
     }
@@ -228,7 +228,7 @@ impl Lines {
     ///
     /// A union concatenates and a meet multiplies, which is where the bound
     /// bites.
-    pub(crate) fn combine(&self, other: &Lines, op: Op, whole: &Component) -> Option<Lines> {
+    pub(crate) fn combine(&self, other: &Lines, op: Op, whole: Whole) -> Option<Lines> {
         let mine = self.positive(whole)?;
         let theirs = other.positive(whole)?;
         let lines = match op {
@@ -256,7 +256,7 @@ impl Lines {
     /// Total, which is what the [`Guard`](super::Guard) contract asks. The lines
     /// are rebuilt where the product fits, so the common forms stay comparable,
     /// and the polarity carries the rest.
-    pub(crate) fn complement(&self, whole: &Component) -> Lines {
+    pub(crate) fn complement(&self, whole: Whole) -> Lines {
         // A negated union's complement is its own lines held positively; a
         // positive one's is De Morgan over them, where that fits, and the
         // same lines under the flipped flag where it does not.
@@ -284,8 +284,8 @@ impl Lines {
 /// De Morgan over the lines: `¬⋁ᵢ Lᵢ` is `⋀ᵢ ¬Lᵢ`, and each `¬Lᵢ` is the two
 /// lines [`Line::complement`] gives. The fold starts from the whole kind, which
 /// is what complementing no lines yields.
-fn complement_lines(lines: &[Line], whole: &Component) -> Option<Vec<Line>> {
-    let mut kept = vec![Line::everything(whole.clone())];
+fn complement_lines(lines: &[Line], whole: Whole) -> Option<Vec<Line>> {
+    let mut kept = vec![Line::everything(whole.component())];
     for line in lines {
         kept = product(&kept, &line.complement())?;
     }

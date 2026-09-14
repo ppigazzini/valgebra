@@ -428,6 +428,44 @@ pub struct Descr {
 /// attributes do the work.
 const KINDLESS: Component = Component::Coarse(true);
 
+/// The whole a component is a part of, **named** rather than built.
+///
+/// Every operation over a descriptor runs all twelve slots, and each of them
+/// needs the whole of its own only where it has to complement: a negated union
+/// is read back by complementing it, and a positive one is read where it lies.
+/// Building the whole for every slot is eleven sets constructed to be dropped
+/// -- an interval, a span, two automata, a set lattice, a map atom -- for the
+/// one or two a shape actually negates, and each of those constructions
+/// allocates.
+///
+/// So the slot is named by its kind and the component is built where it is
+/// wanted. `Copy`, because a name is a name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Whole {
+    /// The whole of one listed kind.
+    Kind(Kind),
+    /// The whole of the kindless slot.
+    Kindless,
+}
+
+impl Whole {
+    /// The component this names, built now.
+    fn component(self) -> Component {
+        match self {
+            Whole::Kind(kind) => Component::top(kind),
+            Whole::Kindless => KINDLESS,
+        }
+    }
+
+    /// The kind this names, or `None` for the slot that has none.
+    const fn kind(self) -> Option<Kind> {
+        match self {
+            Whole::Kind(kind) => Some(kind),
+            Whole::Kindless => None,
+        }
+    }
+}
+
 impl Descr {
     /// The empty set.
     #[must_use]
@@ -813,11 +851,11 @@ impl Descr {
     pub fn complement(&self) -> Descr {
         let mut kinds = Descr::no_lines();
         for ((slot, mine), kind) in kinds.iter_mut().zip(&self.kinds).zip(Kind::ALL) {
-            *slot = mine.complement(&Component::top(kind));
+            *slot = mine.complement(Whole::Kind(kind));
         }
         Descr {
             kinds,
-            other: self.other.complement(&KINDLESS),
+            other: self.other.complement(Whole::Kindless),
         }
     }
 
@@ -840,11 +878,11 @@ impl Descr {
         let mut kinds = Descr::no_lines();
         let pairs = self.kinds.iter().zip(&other.kinds);
         for ((slot, (mine, theirs)), kind) in kinds.iter_mut().zip(pairs).zip(Kind::ALL) {
-            *slot = mine.combine(theirs, op, &Component::top(kind))?;
+            *slot = mine.combine(theirs, op, Whole::Kind(kind))?;
         }
         Some(Descr {
             kinds,
-            other: self.other.combine(&other.other, op, &KINDLESS)?,
+            other: self.other.combine(&other.other, op, Whole::Kindless)?,
         })
     }
 
@@ -880,9 +918,8 @@ impl Descr {
     /// it used to be declined -- more decided, not decided differently.
     pub(crate) fn within(&self, kinds: &[Kind]) -> bool {
         self.kinds.iter().zip(Kind::ALL).all(|(lines, kind)| {
-            kinds.contains(&kind)
-                || lines.emptiness(&Component::top(kind), Some(kind)) == Verdict::Empty
-        }) && self.other.emptiness(&KINDLESS, None) == Verdict::Empty
+            kinds.contains(&kind) || lines.emptiness(Whole::Kind(kind)) == Verdict::Empty
+        }) && self.other.emptiness(Whole::Kindless) == Verdict::Empty
     }
 
     /// Whether this set is not proved to hold every value of `kind` away.
@@ -892,9 +929,7 @@ impl Descr {
     /// of kinds then asks which of them it actually reaches, once per kind,
     /// where it used to meet the base with each kind in turn.
     pub(crate) fn reaches(&self, kind: Kind) -> bool {
-        self.component(kind)
-            .emptiness(&Component::top(kind), Some(kind))
-            != Verdict::Empty
+        self.component(kind).emptiness(Whole::Kind(kind)) != Verdict::Empty
     }
 
     /// What is known about this set admitting a value.
@@ -910,8 +945,8 @@ impl Descr {
             self.kinds
                 .iter()
                 .zip(Kind::ALL)
-                .map(|(lines, kind)| lines.emptiness(&Component::top(kind), Some(kind)))
-                .chain([self.other.emptiness(&KINDLESS, None)]),
+                .map(|(lines, kind)| lines.emptiness(Whole::Kind(kind)))
+                .chain([self.other.emptiness(Whole::Kindless)]),
         )
     }
 

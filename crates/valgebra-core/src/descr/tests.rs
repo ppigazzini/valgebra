@@ -1,4 +1,4 @@
-use super::{BoolSet, Class, Component, Descr, Label, Lines, Op, Value, Verdict};
+use super::{BoolSet, Class, Component, Descr, Label, Lines, Op, Value, Verdict, Whole};
 use crate::descr::budget;
 use crate::descr::lines;
 use crate::descr::records::RecordLattice;
@@ -78,9 +78,9 @@ fn a_meet_past_the_allowance_refuses() {
 /// the only charge there is.
 #[test]
 fn a_line_product_past_the_allowance_refuses() {
-    let whole = Component::top(Kind::Str);
-    let lines = Lines::everything(whole.clone());
-    let meet = || lines.combine(&lines, Op::Intersect, &whole);
+    let whole = Whole::Kind(Kind::Str);
+    let lines = Lines::everything(Component::top(Kind::Str));
+    let meet = || lines.combine(&lines, Op::Intersect, whole);
 
     // One unit, not none: meeting two lines meets the objects under them
     // too, and that charges. An empty allowance would be refused by either
@@ -99,6 +99,7 @@ fn a_line_product_past_the_allowance_refuses() {
 #[test]
 fn a_kind_past_its_line_bound_refuses() {
     let whole = Component::top(Kind::Dict);
+    let slot = Whole::Kind(Kind::Dict);
     let line = |n: i64| {
         Lines::objects(
             &whole,
@@ -108,10 +109,10 @@ fn a_kind_past_its_line_bound_refuses() {
     let mut wide = line(0);
     for n in 1..i64::try_from(lines::MAX_LINES).unwrap_or(i64::MAX) {
         wide = wide
-            .combine(&line(n), Op::Union, &whole)
+            .combine(&line(n), Op::Union, slot)
             .expect("inside the bound");
     }
-    assert!(wide.combine(&line(-1), Op::Union, &whole).is_none());
+    assert!(wide.combine(&line(-1), Op::Union, slot).is_none());
 }
 
 /// Every value the descriptor can currently tell apart.
@@ -1463,21 +1464,13 @@ fn the_boolean_set_is_a_two_element_boolean_algebra() {
 #[test]
 fn a_kind_is_bottom_or_top_of_its_own_lines() {
     for kind in Kind::ALL {
-        let whole = Component::top(kind);
+        let whole = Whole::Kind(kind);
         let bottom = Lines::bottom();
-        let top = Lines::everything(whole.clone());
-        assert_eq!(
-            bottom.emptiness(&whole, Some(kind)),
-            Verdict::Empty,
-            "{kind:?} bottom"
-        );
-        assert_eq!(
-            top.emptiness(&whole, Some(kind)),
-            Verdict::Inhabited,
-            "{kind:?} top"
-        );
-        assert_eq!(bottom.complement(&whole), top, "{kind:?} bottom");
-        assert_eq!(top.complement(&whole), bottom, "{kind:?} top");
+        let top = Lines::everything(Component::top(kind));
+        assert_eq!(bottom.emptiness(whole), Verdict::Empty, "{kind:?} bottom");
+        assert_eq!(top.emptiness(whole), Verdict::Inhabited, "{kind:?} top");
+        assert_eq!(bottom.complement(whole), top, "{kind:?} bottom");
+        assert_eq!(top.complement(whole), bottom, "{kind:?} top");
     }
 }
 
