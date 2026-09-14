@@ -76,6 +76,39 @@ def test_a_recorded_step_applies_to_its_own_base_and_no_other() -> None:
     assert gate.recorded_step("core", stepped) is None
 
 
+def test_a_step_the_file_has_outlived_is_refused() -> None:
+    """A record that outlives what it records is worse than no record.
+
+    A step describes one transition -- from a base, by at most a ceiling -- and
+    is worth keeping while the shape's budget is somewhere inside it. The
+    `binding-build` record below is the one this rule was written for: its shape
+    was re-recorded at less than half the base it steps from, for a reason that
+    had nothing to do with the step, and the record sat in the file reading as
+    an argument somebody still stood behind.
+    """
+    budget = json.loads((ROOT / "scripts" / "perf_budget.json").read_text("utf-8"))
+    assert not gate.stale_steps(budget), (
+        "these recorded steps name a transition the shape can no longer take; "
+        "remove each with the reason, as the changelog roll is trimmed"
+    )
+
+    outlived = {
+        "binding_build_workload_irefs": 222_939_220,
+        "steps": [
+            {
+                "shape": "binding-build",
+                "base_irefs": 464_986_514,
+                "ceiling": 1.7,
+                "why": "the instrument changed and the build did not",
+            }
+        ],
+    }
+    assert gate.stale_steps(outlived), "the rule cannot see the record it is for"
+    # And the live shape of the same record: a budget inside the window stays.
+    inside = dict(outlived, binding_build_workload_irefs=1_181_988_860)
+    assert not gate.stale_steps(inside)
+
+
 def test_a_count_inside_the_band_passes() -> None:
     assert gate.check_against_budget(BUDGET, BUDGET, TOLERANCE) == 0
     assert gate.check_against_budget(1_050_000, BUDGET, TOLERANCE) == 0

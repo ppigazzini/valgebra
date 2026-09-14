@@ -463,6 +463,42 @@ def recorded_step(mode: str, base: Measurement) -> dict | None:
     return None
 
 
+def stale_steps(budget: dict) -> list[str]:
+    """Name every recorded step the file has outlived.
+
+    A step describes one transition: from `base_irefs`, by at most `ceiling`.
+    It is worth keeping while the shape's recorded budget is still somewhere in
+    that window -- the count a base measures, or the count a head measures once
+    the step is taken. A budget outside it says the shape has been re-recorded
+    for some other reason since, so the comparison the record was written to
+    excuse is one nobody can make any more.
+
+    This is the changelog roll's rule, one file over: a record that outlives
+    what it records is worse than no record, because it reads as an argument
+    somebody still stands behind. `binding-build`'s step sat here after its
+    shape was re-recorded at less than half the base it steps from, and nothing
+    said so.
+    """
+    stale = []
+    for step in budget.get("steps", []):
+        shape = step.get("shape", "")
+        key = f"{shape.replace('-', '_')}_workload_irefs"
+        recorded = budget.get(key)
+        if recorded is None:
+            stale.append(f"{shape}: no budget is recorded for the shape")
+            continue
+        base = int(step["base_irefs"])
+        low = base * (1 - RELATIVE_TOLERANCE)
+        high = base * (1 + float(step["ceiling"])) * (1 + RELATIVE_TOLERANCE)
+        if not low <= int(recorded) <= high:
+            stale.append(
+                f"{shape}: steps from {base:,} by at most "
+                f"{float(step['ceiling']):.0%}, and the shape records "
+                f"{int(recorded):,}, which is outside that window"
+            )
+    return stale
+
+
 def check_against_base(
     head: Measurement, base: Measurement, subject: str, step: dict | None = None
 ) -> int:
