@@ -498,6 +498,9 @@ BOUND = re.compile(
     re.MULTILINE,
 )
 BOUND_ROW = re.compile(r"^\| `([^`]+)` \| `([^`]+)` \| `([^`]+)` \|", re.MULTILINE)
+#: A constant whose value is read off a table rather than chosen: the width of a
+#: partition is a property of the partition, and moves only when the table does.
+DERIVED_WIDTH = re.compile(r"\.len\(\)")
 #: Where a source file's test module begins: a `cfg(test)` attribute on a `mod`,
 #: and not on whatever else a file gates behind one.
 TEST_MODULE_START = re.compile(
@@ -551,7 +554,10 @@ def check_bounds_ledger() -> list[str]:
     how a project ends up refusing schemas for reasons nobody can restate.
 
     The universe is mechanical: a **file-scope integer constant** in a crate's
-    source. That reads a couple of things that are not bounds -- an arity, say --
+    source whose value is a figure somebody chose. A constant read off a table's
+    length is a width rather than a bound and is outside it -- that much the rule
+    can tell, and a row for one would record the table's size in a second place.
+    What is left reads a couple of things that are not bounds -- an arity, say --
     and the table carries them with a row saying so, which is cheaper than an
     exclusion list nobody maintains and honest about what the rule can see. A
     constant inside a test module is not in it: the scan stops where the test
@@ -585,6 +591,11 @@ def check_bounds_ledger() -> list[str]:
             continue  # a test module's constants are fixtures, not bounds
         text = before_the_test_module(source.read_text(encoding="utf-8"))
         for name, value in BOUND.findall(text):
+            if DERIVED_WIDTH.search(value):
+                # A width read off a table's length is not a number somebody
+                # chose: it moves when the table does, and a row for it would
+                # record the table's size in a second place.
+                continue
             tree[where, name] = value.strip()
     listed = {
         (where, name): value

@@ -230,6 +230,25 @@ def test_a_test_gated_item_does_not_hide_the_bounds_below_it() -> None:
     assert {name for name, _ in lint.BOUND.findall(read)} == {"ABOVE", "BELOW"}
 
 
+def test_a_width_read_off_a_table_is_not_a_bound() -> None:
+    """The universe is the figures somebody chose, and a width is not one.
+
+    A constant whose value is a table's length moves when the table does, so a
+    row for it records that length in a second place -- which is the failure the
+    ledger exists to catch, pointed at itself.
+    """
+    width = "const PARTS: usize = KEY_KINDS.len() + 1;\n"
+    chosen = "const CEILING: usize = 4096;\n"
+    found = dict(lint.BOUND.findall(width + chosen))
+    assert set(found) == {"PARTS", "CEILING"}, "the scan reads both constants"
+    kept = {
+        name: value
+        for name, value in found.items()
+        if not lint.DERIVED_WIDTH.search(value)
+    }
+    assert set(kept) == {"CEILING"}
+
+
 def test_a_baseline_comment_is_held_to_the_prose_rules() -> None:
     """A baseline's own argument is prose, and was the prose no rule read.
 

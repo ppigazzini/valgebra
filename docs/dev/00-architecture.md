@@ -138,12 +138,13 @@ sort of thing and only one of them is a defect.
 A bound that is `debt` carries the change that retires it in its own doc
 comment. A `limit`, a `shape` or a `reach` carries the reason it is where it is.
 
-One row is kinded **not a bound**. The scan that holds this table to the tree
-reads every file-scope integer constant in a crate's source, and a couple of
-those are widths rather than bounds. The table carries each with a row saying so,
-which is cheaper than an exclusion list nobody maintains and honest about what
-the rule can see; the kind column is where a reader sees it without reading to
-the end of the row.
+A row kinded **not a bound** is possible. The scan that holds this table to the
+tree reads every file-scope integer constant in a crate's source whose value is a
+figure somebody chose, and a couple of those are arities rather than bounds. The
+table carries each with a row saying so, which is cheaper than an exclusion list
+nobody maintains and honest about what the rule can see; the kind column is where
+a reader sees it without reading to the end of the row. A width read off a
+table's length is outside the scan: it is the table's size, in one place.
 
 | where | bound | value | kind | what it stops | what measures it |
 |---|---|---|---|---|---|
@@ -162,14 +163,13 @@ the end of the row.
 | `crates/valgebra-py/src/check/walk.rs` | `CLOSEST_BRANCH_PROBE_LIMIT` | `64` | shape | the error path's second walk costing the branch count | `tests/test_union_messages.py` |
 | `crates/valgebra-py/src/check/walk.rs` | `UNION_LABEL_LIMIT` | `64` | shape | a union naming a thousand labels in one `expected` | its own tests |
 | `crates/valgebra-core/src/descr/lower.rs` | `UNFOLDS` | `1` | reach | a fixpoint unfolded past its own body, which multiplies the schema the descriptor must build against its node bound for relations nobody asks about | its own tests, and `tests/test_completeness_ledger.py` |
-| `crates/valgebra-core/src/decision.rs` | `DECISION_BUDGET` | `1_000_000` | debt | one query spending unbounded work before answering conservatively | its own tests, and `tests/test_decision_adversarial.py` |
+| `crates/valgebra-core/src/decision.rs` | `DECISION_BUDGET` | `1_000_000` | debt | one query spending more work than a caller waits for: the goals a decision constructs are bounded by its input, so termination rests on that rather than on this figure, and the debt the number carries is the *cost* argument | its own tests, and `tests/test_decision_adversarial.py` |
 | `crates/valgebra-core/src/descr/lower.rs` | `BUDGET` | `64` | debt | the schema nodes one lowering reads | its own tests, and `crates/valgebra-core/benches/core.rs` |
 | `crates/valgebra-core/src/descr/lower.rs` | `DEPTH` | `5` | debt | the nesting one lowering descends, which is the exponential | its own tests, and `crates/valgebra-core/benches/core.rs` |
 | `crates/valgebra-core/src/descr/lower.rs` | `WORK` | `1024` | debt | the multiplying work one build spends before refusing | its own tests, and `crates/valgebra-core/benches/core.rs` |
 | `crates/valgebra-core/src/descr/lines.rs` | `MAX_LINES` | `256` | limit | the lines one kind carries, which a meet multiplies and a complement doubles | `crates/valgebra-core/src/descr/mod.rs` tests |
 | `crates/valgebra-core/src/descr/sets.rs` | `MAX_LINES` | `256` | limit | the lines a set lattice holds | its own tests |
 | `crates/valgebra-core/src/descr/maps.rs` | `MAX_ATOMS` | `256` | limit | the atoms a map union holds | its own tests |
-| `crates/valgebra-core/src/descr/maps.rs` | `PARTS` | `KEY_KINDS.len() + 1` | not a bound | nothing -- it is the key-kind partition's width, listed because it is a file-scope integer constant and the check that reads this table cannot tell the two apart | its own tests |
 | `crates/valgebra-core/src/descr/records.rs` | `MAX_ATOMS` | `256` | limit | the atoms a record union holds, which a complement multiplies | its own tests |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_STATES` | `4096` | limit | a product of two automata multiplying past memory | its own tests |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_ROW` | `MAX_STATES` | limit | one row of a product growing past the alternatives a shape has | its own tests |

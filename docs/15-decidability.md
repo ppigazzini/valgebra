@@ -333,6 +333,22 @@ the shape. What is left below is what the descriptor cannot hold.
   Whether such a schema *has a value* is a different question and the rules
   answer it, since a set of any length is built by repeating one element.
 
+- **An integer bound outside the 64-bit range.** The integer component carries
+  its bounds as `i64`, so `Annotated[int, Ge(2**70)]` is held as the widest set
+  the carrier spells rather than as the half-line it names. The schema validates
+  exactly -- membership reads the Python integer -- and a *relation* between two
+  such bounds declines: `Ge(2**70)` against `Ge(2**70 + 1)` is `undecided` in
+  the direction a value refutes, and `subset` in the direction the carrier
+  proves. Python's integers are unbounded and the carrier is not, which is a
+  property of the representation rather than of the schema.
+
+- **A modulus above the periods the representation holds.** A `MultipleOf`
+  becomes a residue class, and a class is materialised per residue up to a
+  recorded period. `MultipleOf(4)` against `MultipleOf(2)` is `subset`; the same
+  question at `MultipleOf(5000)` against `MultipleOf(2500)` declines, because
+  neither period is one the integer component builds. A rounded period would be
+  wrong in one direction or the other, so it refuses instead.
+
 - **A schema too large to build.** The descriptor is bounded three ways: the
   nodes it will read, the nesting it will descend, and the work a build may
   spend. Past any of them it refuses, and the caller keeps the rules' answer.
