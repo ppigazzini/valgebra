@@ -30,12 +30,13 @@ Three workloads, and seven shapes across them:
   the core one never calls.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
-  thirteen shapes: the membership walk (`--binding`), the call boundary alone
+  fourteen shapes: the membership walk (`--binding`), the call boundary alone
   (`--binding-boundary`), the walk over a wide record (`--binding-record`), the
   same walk over a value whose keys are interned (`--binding-keys`), the same
   fields declared by an open record (`--binding-open`), walking a `tuple`
   subclass (`--binding-subclass`), matching a string against a compiled pattern
-  (`--binding-pattern`), parsing and walking a JSON document
+  (`--binding-pattern`), walking a value against a recursive schema
+  (`--binding-recursive`), parsing and walking a JSON document
   (`--binding-json`), building a validator from its Python spelling
   (`--binding-build`), compiling one written as a `TypedDict` of refined
   integers (`--binding-annotated`), compiling a fifty-field dataclass
@@ -304,6 +305,7 @@ MODES = {
     "binding-keys": ("binding_workload", "binding record walk by interned keys"),
     "binding-json": ("binding_workload", "binding JSON document parse and walk"),
     "binding-pattern": ("binding_workload", "binding pattern refinement walk"),
+    "binding-recursive": ("binding_workload", "binding recursive schema walk"),
 }
 
 #: The workload argument each binding mode passes, and the budget key it reads.
@@ -325,6 +327,7 @@ BINDING_ITERATIONS = {
     "binding-keys": (20_000, 5_000),
     "binding-json": (500, 150),
     "binding-pattern": (150_000, 50_000),
+    "binding-recursive": (50_000, 15_000),
 }
 
 BINDING_SHAPES = {
@@ -341,6 +344,7 @@ BINDING_SHAPES = {
     "binding-keys": "keys",
     "binding-json": "json",
     "binding-pattern": "pattern",
+    "binding-recursive": "recursive",
 }
 
 

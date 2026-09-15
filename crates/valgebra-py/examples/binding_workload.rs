@@ -26,7 +26,8 @@ fn main() {
     let Some(shape) = BindingShape::named(&name) else {
         eprintln!(
             "unknown shape {name:?}: walk, boundary, record, keys, build, \
-             annotated, explain, explain-accept, open"
+             annotated, explain, explain-accept, open, subclass, json, \
+             pattern, object, recursive"
         );
         std::process::exit(2);
     };

@@ -20,7 +20,7 @@
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyInt, PyList, PyModule, PyString};
-use valgebra_core::{Constraint, Field, MapClause, Schema, SeqKind, SeqShape};
+use valgebra_core::{Constraint, DefIx, Field, MapClause, Schema, SeqKind, SeqShape};
 
 use crate::build::{Pool, build_schema};
 use crate::check::{Frame, WalkMode, WalkState, member};
@@ -176,6 +176,16 @@ pub enum BindingShape {
     /// instead of matching against one, and nothing else in the tree would
     /// say so.
     Pattern,
+    /// A nested tree walked against a **recursive** schema: `mu X. int | list[X]`
+    /// over a list nested eight deep.
+    ///
+    /// The one shape that enters a reference. Every other shape here walks a
+    /// schema with no `Ref` in it, so the trail the walk keeps to refuse a
+    /// cyclic value -- entered and left once per level, per value -- is reached
+    /// by none of them, and a change to how it is held reads as free. The
+    /// recursive schema is also the one a caller writes for a JSON document or
+    /// a syntax tree, which is the shape most likely to carry real depth.
+    Recursive,
 }
 
 impl BindingShape {
@@ -196,6 +206,7 @@ impl BindingShape {
             "subclass" => BindingShape::Subclass,
             "json" => BindingShape::Json,
             "pattern" => BindingShape::Pattern,
+            "recursive" => BindingShape::Recursive,
             _ => return None,
         })
     }
@@ -501,6 +512,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             }
             checksum
         }
+        BindingShape::Recursive => recursive_walk(py, iters),
         BindingShape::Json => json_walk(py, iters),
         BindingShape::Pattern => pattern_walk(py, iters),
         BindingShape::ExplainAccept => explaining_record(py, iters, Wrong::No),
@@ -550,6 +562,50 @@ fn json_walk(py: Python<'_>, iters: usize) -> u64 {
         let ok = validator
             .matches_json(py, std::hint::black_box(&document))
             .expect("a well-formed document raises nothing");
+        checksum = checksum.wrapping_add(u64::from(ok));
+    }
+    checksum
+}
+
+/// The recursive schema's own shape: `mu X. int | list[X]` over a nested list.
+///
+/// Eight levels of nesting, each a one-element list, so the walk enters and
+/// leaves the reference eight times per iteration and the leaf is an integer.
+/// A one-element list at each level rather than a wide one keeps what is
+/// counted the *descent* -- the reference, the trail, and the union choice --
+/// rather than a list loop the homogeneous shapes already measure.
+///
+/// The value is built once, outside the loop, like every shape here.
+fn recursive_walk(py: Python<'_>, iters: usize) -> u64 {
+    // mu X. int | list[X], as the frontend's own `recursive` spelling lowers it:
+    // one definition, and a reference standing for the whole.
+    let body = Schema::union([
+        Schema::Int,
+        Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+    ]);
+    let validator = Validator::checked(Schema::Ref(DefIx::new(0)), Vec::new(), vec![body])
+        .expect("one definition is within every limit");
+    let mut value = 42_i64
+        .into_pyobject(py)
+        .expect("an i64 always converts")
+        .into_any();
+    for _ in 0..8 {
+        value = PyList::new(py, [value])
+            .expect("a one-element list always builds")
+            .into_any();
+    }
+    let mut checksum: u64 = 0;
+    for _ in 0..iters {
+        let state = WalkState::new();
+        let ok = member(
+            std::hint::black_box(&validator.schema),
+            &Value::Py(std::hint::black_box(&value)),
+            &mut Frame::new(
+                &mut Vec::new(),
+                &mut Vec::new(),
+                validator.context(py, &state, WalkMode::Fast),
+            ),
+        );
         checksum = checksum.wrapping_add(u64::from(ok));
     }
     checksum

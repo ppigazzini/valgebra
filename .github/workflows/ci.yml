@@ -620,6 +620,7 @@ jobs:
               --binding-build --binding-annotated --binding-object \
               --binding-subclass --binding-explain --binding-explain-accept \
               --binding-open --binding-json --binding-pattern \
+              --binding-recursive \
               --against "$BASE"
         env:
           BASE: ${{ steps.base.outputs.sha }}
@@ -643,7 +644,8 @@ jobs:
               --binding --binding-boundary --binding-record --binding-keys \
               --binding-build --binding-annotated --binding-object \
               --binding-subclass --binding-explain --binding-explain-accept \
-              --binding-open --binding-json --binding-pattern
+              --binding-open --binding-json --binding-pattern \
+              --binding-recursive
       # Smoke-run the wall-clock benches once (timing disabled) so the suites
       # keep working; their numbers are recorded by hand in the performance
       # page. The files are named bench_*, so override the collection pattern.
