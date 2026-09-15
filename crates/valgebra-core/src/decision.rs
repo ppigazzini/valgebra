@@ -392,9 +392,6 @@ impl Schema {
         self.subtype_decide(other, supertype_regions, cx, assumptions)
     }
 
-    /// The structural subtyping decision: the lattice, recursion, and
-    /// constructor-matching rules. Reached from [`is_subtype_rec`] after the
-    /// coinductive, scalar, identity, and memo fast paths.
     /// Whether one of the lattice bounds settles `self ⊆ other`: `self` denotes
     /// the empty set, or `other` denotes the whole universe.
     ///
@@ -639,6 +636,12 @@ impl Schema {
         placed
     }
 
+    /// The structural subtyping decision: the lattice, recursion, and
+    /// constructor-matching rules.
+    ///
+    /// Reached from [`is_subtype_rec`](Self::is_subtype_rec) after the
+    /// coinductive, scalar and identity fast paths, which are the three that
+    /// answer without reading a shape.
     fn subtype_decide(
         &self,
         other: &Schema,
@@ -1097,6 +1100,15 @@ pub(crate) fn has_disjoint_pair(members: &[Schema], oracle: &dyn LeafRelations) 
     unordered_pairs(members).any(|(a, b)| a.disjoint_with(b, oracle))
 }
 
+/// A refinement below another: the base narrows and every constraint holds.
+///
+/// A refinement is a subset of its base. Against another refinement the base
+/// must subtype and every constraint of the supertype must hold of every
+/// subtype value: either it appears verbatim, or it is entailed by the
+/// subtype's bounds (a tighter lower, upper or length bound entails a looser
+/// one, decided through the ordering oracle). A bound the oracle cannot compare
+/// and a non-order constraint stay on the verbatim path, so a constraint
+/// neither written nor entailed leaves the pair unproven rather than refuted.
 fn refinement_subtype(
     narrow_base: &Schema,
     narrow_cons: &[Constraint],

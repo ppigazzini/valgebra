@@ -1,10 +1,25 @@
-//! valgebra schema intermediate representation.
+//! valgebra's schema algebra: the IR, the two deciders, and the frame they share.
 //!
-//! A schema denotes a set of Python values; validation is membership. This
-//! crate is pure Rust: it defines the IR, the denotation of every node, and the
-//! structured [`Violation`] produced when membership fails. Inspecting a Python
-//! object requires `PyO3`, so the validator walk itself lives in the bindings
-//! crate; this crate is the stable, language-agnostic core.
+//! A schema denotes a set of Python values; validation is membership, inclusion
+//! is `a ∧ ¬b = ∅`, and this crate is where both are defined. It holds four
+//! things, in the order a reader meets them:
+//!
+//! * [`Schema`] and its transforms -- the node set, with each variant's doc
+//!   comment stating which set of values it admits, which is where a claim
+//!   about *meaning* is checked;
+//! * [`kind`](Kind) and the two three-valued answers, [`Verdict`] and
+//!   [`Relation`] -- the frame both deciders read, below either of them;
+//! * `descr` -- the **definition**: one representation per kind, each closed
+//!   under union, intersection and complement, deciding a relation by the
+//!   emptiness of one combination;
+//! * `decision` -- the **fast path**: structural rules over the schema tree,
+//!   answering first and handing a pair they decline to the definition.
+//!
+//! Inspecting a Python object requires `PyO3`, so the membership walk lives in
+//! the bindings crate and reaches back through [`LeafRelations`] for the
+//! questions only an interpreter answers. This crate is the stable,
+//! language-agnostic core, and the [`Violation`] it produces is the structured
+//! report a failure carries.
 //!
 //! The crate forbids `unsafe`: the security policy's no-unsafe guarantee is
 //! compiler-enforced here, not merely asserted, so a future `unsafe` block fails

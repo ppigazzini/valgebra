@@ -23,6 +23,15 @@ use crate::errors::into_pyerr;
 use crate::input::{JsonInput, Value, decode_json_input, parse_json};
 use crate::oracle::PoolRelations;
 use crate::render::render;
+/// The deepest structural nesting a constructed schema may reach.
+///
+/// A real schema is nowhere near this deep and the annotation frontend caps its
+/// own nesting lower, so a validator this deep is one built in an unbounded
+/// loop. Every recursive walk over the tree -- clone, drop, the decision
+/// procedure -- descends one native stack frame per level, so building past this
+/// bound returns an error rather than overflowing the stack. Structural
+/// recursion in a schema is written with `recursive`, whose back edge is a `Ref`
+/// leaf and does not count toward this depth.
 pub(crate) const MAX_SCHEMA_DEPTH: usize = 128;
 /// The most recursive definitions a constructed schema may hold. A recursive
 /// schema needs a mere handful; a validator with more is one whose definitions

@@ -141,23 +141,15 @@ fn binder(open: usize) -> String {
     }
 }
 
-/// Render a meet, reading a class's `isinstance` atom beside its attribute
-/// record back as the class name the user wrote.
-///
-/// The pair is [`Schema::object_class`]; the members that are not the pair
-/// render as themselves, so a meet that flattened others in beside a class still
-/// names the class. Without this the annotation `Pt` would print as
-/// `intersection(Pt, object(x=int))` -- the algebra's spelling of a thing the
-/// user spelled with one name.
 /// Render a union's members, ordering the literals among them by what they are.
 ///
 /// Construction sorts a union's members with the IR's own `Ord`, and a
 /// `Literal` sorts there by its **pool slot** -- which is the order the
 /// constants were first seen, not a property of the schema. So `Literal[1, 2]`
 /// and `Literal[2, 1]` are one schema by `==` and by `hash`, and printed as
-/// `Literal[1] | Literal[2]` and `Literal[2] | Literal[1]`. `docs/04-algebra.md`
-/// says "`repr` shows it and `==` compares it", and there were two `repr`s of
-/// one *it*.
+/// `Literal[1] | Literal[2]` and `Literal[2] | Literal[1]`, which are two
+/// spellings of one schema. `docs/04-algebra.md` says "`repr` shows it and `==`
+/// compares it", so the two have to be one rendering.
 ///
 /// The sort puts every `Literal` in one contiguous run -- the IR's `Ord` orders
 /// by variant first -- so ordering that run by the constant's own rendering
@@ -186,6 +178,14 @@ fn render_union(members: &[Schema], render: &impl Fn(&Schema) -> String) -> Stri
         .join(" | ")
 }
 
+/// Render a meet, reading a class's `isinstance` atom beside its attribute
+/// record back as the class name the user wrote.
+///
+/// The pair is [`Schema::object_class`]; the members that are not the pair
+/// render as themselves, so a meet that flattened others in beside a class still
+/// names the class. Without this the annotation `Pt` would print as
+/// `intersection(Pt, object(x=int))` -- the algebra's spelling of a thing the
+/// user spelled with one name.
 fn render_meet(
     py: Python<'_>,
     schema: &Schema,

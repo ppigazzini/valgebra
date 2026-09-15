@@ -240,9 +240,8 @@ impl Schema {
     ///
     /// **A cut widens the difference, so only an empty one proves anything.**
     /// An inhabited reading of a cut difference names a value of the widened set
-    /// rather than of the real one, and refutes nothing;
-    /// [`descriptor_contained_in`](crate::Schema::descriptor_contained_in)
-    /// holds that condition.
+    /// rather than of the real one, and refutes nothing; the caller that reads
+    /// the difference is where that condition is held.
     ///
     /// A schema with no reference is returned as it stands, so the caller pays
     /// nothing for the common case.
