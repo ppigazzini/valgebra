@@ -1,4 +1,4 @@
-use super::{Ctx, MAX_WALK_DEPTH, WalkMode, WalkState};
+use super::{Ctx, Entered, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, Trail, WalkMode, WalkState};
 use pyo3::exceptions::PyKeyboardInterrupt;
 use rustc_hash::FxHashMap;
 
@@ -102,5 +102,79 @@ fn the_recorded_signal_leaves_with_the_state() {
     assert!(
         state.into_fatal().is_some(),
         "the signal must reach the entry point that re-raises it"
+    );
+}
+
+/// Asking for room answers exactly what taking a level would do.
+///
+/// A leaf loop reads [`Ctx::room_to_descend`] instead of holding a level, so
+/// the two have to agree at the boundary or a scalar element is refused where
+/// its container's child would be admitted, or admitted where it would not --
+/// which is the two walks parting at the depth edge, in the other direction.
+#[test]
+fn asking_for_room_answers_what_taking_a_level_does() {
+    let state = WalkState::new();
+    with_ctx(&state, |ctx| {
+        assert!(ctx.room_to_descend(), "an empty walk has room");
+        let mut open = Vec::new();
+        for level in 0..MAX_WALK_DEPTH {
+            assert!(
+                ctx.room_to_descend(),
+                "level {level} is inside the bound, so there is room for it"
+            );
+            open.push(ctx.descend().expect("a level inside the bound is open"));
+        }
+        assert!(
+            !ctx.room_to_descend(),
+            "at the bound there is no room, and descend refuses here too"
+        );
+        assert!(ctx.descend().is_none(), "the two answers must not part");
+        drop(open);
+        assert!(ctx.room_to_descend(), "the levels came back");
+    });
+}
+
+/// A level leaves the pair it entered, so a sibling may enter the same one.
+///
+/// The trail is what refuses a value reached from inside itself. One object in
+/// two *sibling* positions is not that: it is a value a caller writes without
+/// thinking about it, and a level that entered its pair and did not leave would
+/// report the second sibling as cyclic. The height is the recursion depth for
+/// the same reason.
+#[test]
+fn a_level_leaves_the_pair_it_entered() {
+    let mut trail = Trail::default();
+    let pair = (0x1234, 0);
+
+    assert!(matches!(trail.enter(pair), Entered::Open));
+    assert!(
+        matches!(trail.enter(pair), Entered::Cycle),
+        "the same pair inside itself is a cycle"
+    );
+    trail.leave();
+    assert!(
+        matches!(trail.enter(pair), Entered::Open),
+        "a sibling enters the pair the level before it left"
+    );
+    trail.leave();
+
+    // The height is what the bound is read against, so a trail that does not
+    // come back down refuses a value at a depth it never reached.
+    for level in 0..MAX_RECURSION_DEPTH {
+        assert!(
+            matches!(trail.enter((level, 0)), Entered::Open),
+            "level {level} is inside the bound"
+        );
+    }
+    assert!(
+        matches!(trail.enter((MAX_RECURSION_DEPTH, 0)), Entered::Full),
+        "the level past the bound is refused"
+    );
+    for _ in 0..MAX_RECURSION_DEPTH {
+        trail.leave();
+    }
+    assert!(
+        matches!(trail.enter(pair), Entered::Open),
+        "and the bound is not a one-way latch"
     );
 }
