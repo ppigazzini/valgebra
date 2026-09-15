@@ -110,6 +110,19 @@ fn reraise_fatal(state: WalkState, ok: bool) -> PyResult<bool> {
 /// keeps true. It cannot be subclassed: every method reads a schema this type
 /// built, and a subclass overriding one would be a validator whose answers are
 /// not the algebra's.
+/// Which side of `|` the other operand sits on.
+///
+/// A union is commutative as a set and not as a rendering, so the members are
+/// built in the order the caller wrote them. Named rather than spelled as a
+/// boolean, because `true` at a call site says nothing about which side it is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Operand {
+    /// `other | self`, which `__ror__` answers.
+    Left,
+    /// `self | other`, which `__or__` answers.
+    Right,
+}
+
 #[pyclass(frozen, weakref, module = "valgebra")]
 pub struct Validator {
     pub(crate) schema: Schema,
@@ -270,13 +283,13 @@ impl Validator {
     /// first when it is the `|` right operand. Backs `__or__`/`__ror__`: the
     /// fresh pool seeds with this validator's constants so its schema indices
     /// stay valid, then `other` interns into it.
-    fn union_with(&self, other: &Bound<'_, PyAny>, other_first: bool) -> PyResult<Validator> {
+    fn union_with(&self, other: &Bound<'_, PyAny>, side: Operand) -> PyResult<Validator> {
         let py = other.py();
         let mut literals =
             Pool::seeded(py, self.literals.iter().map(|o| o.clone_ref(py)).collect());
         let mut definitions = self.definitions.clone();
         let other_schema = build_schema(other, &mut literals, &mut definitions)?;
-        let members = if other_first {
+        let members = if side == Operand::Left {
             vec![other_schema, self.schema.clone()]
         } else {
             vec![self.schema.clone(), other_schema]
@@ -813,13 +826,13 @@ impl Validator {
     /// complement stay spelled out as `intersection`/`complement`. `other` is any
     /// schema spec or validator.
     fn __or__(&self, other: &Bound<'_, PyAny>) -> PyResult<Validator> {
-        self.union_with(other, false)
+        self.union_with(other, Operand::Right)
     }
 
     /// The union `other | validator`, used when the left operand does not handle
     /// `|` (for example `None | validator`).
     fn __ror__(&self, other: &Bound<'_, PyAny>) -> PyResult<Validator> {
-        self.union_with(other, true)
+        self.union_with(other, Operand::Left)
     }
 
     /// Structural equality: two validators are equal when their schema trees,

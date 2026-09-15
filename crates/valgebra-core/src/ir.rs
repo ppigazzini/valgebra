@@ -701,9 +701,14 @@ pub enum Schema {
     /// definition at this index in the validator's definitions table. The back
     /// edge of a fixpoint, produced by `recursive`.
     Ref(DefIx),
-    /// A transient self-reference marker used only while a `recursive` definition is
-    /// being built; it is resolved to a [`Schema::Ref`] before the validator is
-    /// returned and never appears in a finished schema.
+    /// Denotes the **empty set**: the walk admits no value against one, and
+    /// every decider reads it as a schema it cannot relate.
+    ///
+    /// The marker a `recursive` body carries where its own back edge will go,
+    /// resolved to a [`Schema::Ref`] before the validator is returned. A
+    /// finished schema holds none, so the denotation is what a value meets only
+    /// where that resolution did not happen -- which is a build this refuses
+    /// rather than a set a caller can write.
     SelfRef(u64),
 }
 
