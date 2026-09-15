@@ -232,3 +232,63 @@ fn a_union_past_the_bound_refuses() {
     }
     assert!(wide.union(&entry(-1)).is_none());
 }
+
+/// A dict has one entry for `1` and for `True`, so an atom requiring both
+/// keys holds no dict.
+///
+/// The two are separate labels and stay separate, because `Literal[1]` and
+/// `Literal[True]` are disjoint *sets* -- a key is an `int` or a `bool` and
+/// the walk tells them apart. What they are not is two entries: `True` hashes
+/// as `1` and equals it, so `{1: "a", True: "b"}` is a dict of one key. An
+/// atom that requires both describes a dict Python cannot build, and reading
+/// it as inhabited is a complement wrongly wide -- which is the only way to
+/// reach it, since nothing a caller writes directly requires two keys at once.
+///
+/// `0` and `False` are the other pair, and `1` and `False` are not one.
+#[test]
+fn an_atom_requiring_a_key_and_its_boolean_holds_no_dict() {
+    let required = |label: Label| MapLattice::label(label, IntSet::just(1), false);
+    let both = |a: Label, b: Label| {
+        required(a)
+            .intersect(&required(b))
+            .expect("two single-label atoms meet")
+            .emptiness()
+    };
+
+    assert_eq!(
+        both(Label::Int(1), Label::Bool(true)),
+        Verdict::Empty,
+        "no dict carries a key 1 and a key True"
+    );
+    assert_eq!(
+        both(Label::Int(0), Label::Bool(false)),
+        Verdict::Empty,
+        "nor a key 0 and a key False"
+    );
+    assert_eq!(
+        both(Label::Int(1), Label::Bool(false)),
+        Verdict::Inhabited,
+        "1 and False are two keys, and a dict carries both"
+    );
+    assert_eq!(
+        both(Label::Int(1), Label::Int(2)),
+        Verdict::Inhabited,
+        "and two integers are always two keys"
+    );
+}
+
+/// An optional key is not a required one, so the pair above is only empty
+/// where the atom asks for both.
+#[test]
+fn an_optional_boolean_key_leaves_the_integer_key_alone() {
+    let one = MapLattice::label(Label::Int(1), IntSet::just(1), false);
+    let maybe_true = MapLattice::label(Label::Bool(true), IntSet::just(1), true);
+
+    assert_eq!(
+        one.intersect(&maybe_true)
+            .expect("two atoms meet")
+            .emptiness(),
+        Verdict::Inhabited,
+        "a dict of the integer key alone lets the boolean one go missing"
+    );
+}
