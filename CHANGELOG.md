@@ -17,11 +17,28 @@ answer of its own, or a repair to a change not yet released.
 - fix: every kind's representation is the set the schema denotes
 - fix: a word kind's universe is the words that kind can hold
 - fix: a refinement marker is immutable, and the manifest states the link
+- fix: a class-set operator is refused rather than read as another engine's
 
 -->
 
 ### Fixed
 
+- **A character class carrying `--`, `&&`, `~~` or a nested `[` is refused.**
+  Those combine classes in this engine and are literal characters to `re`, so
+  one pattern denoted two sets and compiling it said nothing about which:
+  `Annotated[str, Regex(r"[\w--\d]")]` admitted the non-digit word characters
+  here and the word characters plus `-` there. `re` gives three different
+  answers to the four forms -- it raises on the doubled hyphen, warns that it
+  reserves the two symbol operators, and says nothing at all about a nested set
+  -- so a reader porting a pattern found out at once, eventually, or never. Each
+  now raises a `ValueError` naming the operator this engine would have read.
+  Escape the characters to mean them literally, or write the classes out. A
+  POSIX class (`[[:alpha:]]`) is read rather than refused: it is the divergence
+  `docs/05-refinements.md` already names, with both readings shown.
+- **A pattern in extended mode may end in a comment.** `(?x)` makes `#` run to
+  the end of the line, and the anchor a whole-string match needs was appended
+  after it -- so the closing half was swallowed and a pattern `re` accepts
+  raised here. It is the form a long pattern is written in.
 - **A relation answers for the set a schema denotes, at the edge of every
   kind.** Eight readings named a set the schema does not have, and each is one
   wrong answer a caller could see. `is_empty` reported an inhabited schema empty

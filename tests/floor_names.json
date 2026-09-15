@@ -643,6 +643,9 @@
     "typing": {
       "since": "3.10"
     },
+    "warnings": {
+      "since": "3.10"
+    },
     "weakref": {
       "since": "3.10"
     }

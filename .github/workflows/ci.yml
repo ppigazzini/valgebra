@@ -990,6 +990,7 @@ jobs:
             --file crates/valgebra-py/src/build/classes.rs \
             --file crates/valgebra-py/src/build/generics.rs \
             --file crates/valgebra-py/src/build/refine.rs \
+            --file crates/valgebra-py/src/build/dialect.rs \
             --file crates/valgebra-py/src/equality.rs \
             --file crates/valgebra-py/src/oracle.rs \
             --features interpreter-tests -j 2 --timeout-multiplier 20 \
@@ -1466,6 +1467,7 @@ jobs:
             --file crates/valgebra-py/src/build/classes.rs \
             --file crates/valgebra-py/src/build/generics.rs \
             --file crates/valgebra-py/src/build/refine.rs \
+            --file crates/valgebra-py/src/build/dialect.rs \
             --file crates/valgebra-py/src/equality.rs \
             --file crates/valgebra-py/src/oracle.rs \
             --features interpreter-tests -j 4 --timeout-multiplier 20 \
