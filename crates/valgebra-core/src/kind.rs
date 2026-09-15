@@ -187,15 +187,25 @@ impl Regions {
 pub enum Kind {
     /// `None`.
     NoneType,
+    /// `bool`, whose two values are also `int`s.
     Bool,
+    /// `int`, of any width Python spells.
     Int,
+    /// `float`, the IEEE doubles and the three values outside the order.
     Float,
+    /// `str`, a sequence of code points.
     Str,
+    /// `bytes`, a sequence of octets.
     Bytes,
+    /// `list`, ordered and mutable.
     List,
+    /// `tuple`, ordered and immutable.
     Tuple,
+    /// `set`, unordered, mutable, and holding hashable members.
     Set,
+    /// `frozenset`, the immutable and hashable `set`.
     FrozenSet,
+    /// `dict`, a mapping from hashable keys to values.
     Dict,
 }
 

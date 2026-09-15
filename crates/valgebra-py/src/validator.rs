@@ -93,6 +93,19 @@ fn reraise_fatal(state: WalkState, ok: bool) -> PyResult<bool> {
     }
 }
 
+/// Which side of `|` the other operand sits on.
+///
+/// A union is commutative as a set and not as a rendering, so the members are
+/// built in the order the caller wrote them. Named rather than spelled as a
+/// boolean, because `true` at a call site says nothing about which side it is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Operand {
+    /// `other | self`, which `__ror__` answers.
+    Left,
+    /// `self | other`, which `__or__` answers.
+    Right,
+}
+
 /// A compiled, immutable schema validator.
 ///
 /// Build one by calling `Validator(schema)`, or with a combinator such as
@@ -110,19 +123,6 @@ fn reraise_fatal(state: WalkState, ok: bool) -> PyResult<bool> {
 /// keeps true. It cannot be subclassed: every method reads a schema this type
 /// built, and a subclass overriding one would be a validator whose answers are
 /// not the algebra's.
-/// Which side of `|` the other operand sits on.
-///
-/// A union is commutative as a set and not as a rendering, so the members are
-/// built in the order the caller wrote them. Named rather than spelled as a
-/// boolean, because `true` at a call site says nothing about which side it is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Operand {
-    /// `other | self`, which `__ror__` answers.
-    Left,
-    /// `self | other`, which `__or__` answers.
-    Right,
-}
-
 #[pyclass(frozen, weakref, module = "valgebra")]
 pub struct Validator {
     pub(crate) schema: Schema,

@@ -38,6 +38,13 @@ valgebra-core = { path = "crates/valgebra-core" }
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"
 unreachable_pub = "warn"
+# A public item with no doc comment is one a reader meets with no statement of
+# what it denotes, and this project's doc comments carry the denotations. It also
+# catches the shape a doc-comment sweep by eye does not: an item inserted between
+# a comment and the item it describes leaves the comment attached to the newcomer
+# and the original undocumented, which is what this found on the binding's public
+# type.
+missing_docs = "warn"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
