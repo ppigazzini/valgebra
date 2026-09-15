@@ -111,8 +111,18 @@ pub(crate) type RegexIndex = FxHashMap<usize, Regex>;
 /// Anchor a user pattern so the whole string must match (`re.fullmatch`
 /// semantics): `\A` and `\z` are absolute string boundaries, and the
 /// non-capturing group keeps the user's alternation from escaping them.
+///
+/// In extended mode a `#` runs to the end of the line, so a pattern that ends
+/// inside a comment swallows the wrapper's own `)\z` and the anchored form
+/// fails to parse while the pattern alone is fine. A newline ends the comment,
+/// and in extended mode a newline is whitespace that denotes nothing -- so the
+/// second wrapper is the same language as the first wherever the first parses,
+/// and is reached only where it does not. Outside extended mode nothing is
+/// line-terminated, so a pattern the first wrapper rejects the second rejects
+/// too, and the caller gets the first wrapper's message either way.
 pub(crate) fn compile_pattern(pattern: &str) -> Result<Regex, regex::Error> {
     Regex::new(&format!(r"\A(?:{pattern})\z"))
+        .or_else(|anchored| Regex::new(&format!("\\A(?:{pattern}\n)\\z")).map_err(|_| anchored))
 }
 
 /// The per-validator precompute: record-field lookups, literal-union decision

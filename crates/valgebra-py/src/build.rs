@@ -689,6 +689,7 @@ pub(crate) fn not_implemented(message: &str) -> PyErr {
 /// identity is the refusal for a vocabulary member this frontend does not check,
 /// and it reads `type(marker).__module__`, which a class here can set.
 mod classes;
+mod dialect;
 mod generics;
 mod refine;
 

@@ -194,18 +194,35 @@ assert re.fullmatch("(?i)i", "\u0131") is not None
 # Property escapes. `\p{...}` is a pattern only this engine accepts.
 assert admits(r"\p{L}+", "ab")
 
-# Class-set operators. `--`, `&&`, `~~` and a nested `[` combine classes here
-# and are literal characters to Python, which warns about exactly this.
-assert admits(r"[\w~~\d]", "a")
-assert not admits(r"[\w~~\d]", "~")
-assert re.fullmatch(r"[\w~~\d]", "~") is not None
+# Class-set operators. `--`, `&&` and `~~` combine classes here and are literal
+# characters to Python, so a class carrying one is refused rather than read.
+try:
+    admits(r"[\w~~\d]", "a")
+except ValueError as err:
+    assert "set symmetric difference" in str(err)
+# A nested set is refused for the same reason: a union here, four literals
+# there.
+try:
+    admits(r"[a[bc]]", "a")
+except ValueError as err:
+    assert "nested set" in str(err)
 ```
 
 The third is the loud case: `re.compile(r"\p{L}+")` raises, so a pattern that
-works here fails there and a reader finds out at once. The other three are the
+works here fails there and a reader finds out at once. The first two are the
 quiet ones — both engines build the pattern and answer differently — and they
 are the reason a library holding itself to `re`'s decisions cannot adopt `Regex`
 behind a fallback that triggers on compile failure.
+
+The fourth is neither, because it is not accepted: a character class carrying
+`--`, `&&`, `~~` or a nested `[` raises a `ValueError` naming the operator, in
+the words `re` warns about it with. Python reserves all four and warns that it
+may one day read them as operators; this engine reads them as operators now, so
+the same pattern denotes two sets and nothing about compiling it says which.
+Refusing is the loud direction, and it is the one a reader can act on. Escape
+the characters to mean them literally — `[\w\~\~\d]` — or write the classes
+out. A POSIX class (`[[:alpha:]]`) is the one nested `[` that is read rather
+than refused, because it is the first divergence above and is documented there.
 
 **A pattern Python spells and this engine does not is refused**, which is the
 loud direction and the one to prefer. A lookaround (`(?=...)`, `(?<=...)`), a
