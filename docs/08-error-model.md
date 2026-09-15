@@ -201,11 +201,17 @@ are built by the first access that wants one. A caller that logs `str(error)`
 and moves on never pays for the rows; one that reads `errors` pays once, and the
 value is kept on the exception so a second read is an ordinary attribute lookup.
 
-That is a difference worth stating because it is large: a report over 10,000
-failing rows took **26 ms** when every row was built at raise time and takes
-**9 ms** when nobody reads one. Nothing about the model changes -- the same
-attributes, the same values, the same `str()` -- and pickling still carries the
-plain data, because crossing a process boundary builds the model first.
+The difference is large enough to state: over ten thousand failing rows, a
+caller that reads none of them pays about a third of what building every row
+would cost. Measure it against your own shape with
+
+```bash
+uv run --group bench pytest benches/bench_validate.py -k error
+```
+
+Nothing about the model depends on it -- the same attributes, the same values,
+the same `str()` -- and pickling carries the plain data, because crossing a
+process boundary builds the model first.
 
 ## When a value changes while it is checked
 
