@@ -43,7 +43,12 @@ jobs:
       fail-fast: false
       matrix:
         # `pgo: true` adds profile-guided optimization on top of the release
-        # profile, a measured ~30-45% faster on the validation hot paths.
+        # profile. What it buys is **per shape and not one number**: measured on
+        # one box against a plain release build of the same source, a large
+        # homogeneous list and the JSON document come out ahead and the
+        # fifty-field record walk comes out behind. No lane measures it where it
+        # is applied, so the matrix applies it and the performance page says
+        # what is known rather than a figure nothing owns.
         # Recording a profile means *running* the instrumented build, so PGO
         # applies only where the build host executes its own output: the glibc
         # Linux (x86_64 and aarch64), macOS, and Windows x64 runners. Two

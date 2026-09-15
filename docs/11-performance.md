@@ -102,25 +102,37 @@ uv run maturin build --release --pgo -i .venv/bin/python
 pydantic's PyPI wheels are likewise PGO-built, so this is a release-to-release
 comparison.
 
-**Build with PGO if you build your own wheel**, and read no figure taken from a
-debug build as either -- `maturin develop` without `--release` installs one, it
-is indistinguishable from the release extension at the Python prompt, and a
-timing of it reads an order of magnitude slow. `scripts/compare_gate.py` refuses
-such a build outright, and so does `benches/` from its own `conftest.py`; a
-figure timed by hand has only the habit to protect it.
+**Read no figure taken from a debug build as either** -- `maturin develop`
+without `--release` installs one, it is indistinguishable from the release
+extension at the Python prompt, and a timing of it reads an order of magnitude
+slow. `scripts/compare_gate.py` refuses such a build outright, and so does
+`benches/` from its own `conftest.py`; a figure timed by hand has only the habit
+to protect it.
+
+**Whether to add PGO is a question about your shapes**, not a setting to turn
+on. Measured on one box, against a plain release build of the same source, best
+of nine and repeated: a `list[int]` of ten thousand and the JSON document come
+out ahead, and the accepting walk over a fifty-field record comes out **behind**
+by a tenth. The direction holds across an instruction count and a wall clock,
+and re-weighting the training workload toward accepting values recovers only a
+part of it. The shapes PGO serves worst are the ones that run a container's full
+element loop; the ones it serves best exit early.
+
+That is one microarchitecture and one interpreter, and the release lane builds
+on five targets none of which is this one, so it is a reason to measure your own
+build rather than a ranking. `scripts/compare_gate.py` against each wheel is how.
 
 **Every wall-clock figure on this page, and in the changelog, is a release
 build on an idle machine, read as the best of five runs and taken twice.** The
 two guards above hold the first of those and neither holds the other two: a
 timing taken while something else has the CPU reads slow, and one taken once
 reads whatever that run did. Either is enough to put a published figure out by a
-factor, so the discipline is written down rather than assumed. How much PGO
-adds over a plain `--release` build is not a
-constant this page can state. It is whatever the profile can still arrange that
-fat LTO did not, so it shrinks as the hot paths themselves get shorter: measured
-on one machine it has ranged from 1.75x down to 1.01x, and the shapes where the
-release build is already tightest are the ones it buys least on. If the number matters to you, measure it on your own build:
-`scripts/compare_gate.py` against each wheel is the way.
+factor, so the discipline is written down rather than assumed.
+
+How much PGO adds over a plain `--release` build is not a constant this page can
+state, and on some shapes it is not a gain at all. It is whatever the profile can
+still arrange that fat LTO did not, so it shrinks as the hot paths get shorter,
+and where the layout it picks suits one shape it can cost another.
 
 The figures are measured on the wheel carrying valgebra's full feature set — the
 per-validator precompute (record-field lookups, literal-union dispatch) and
