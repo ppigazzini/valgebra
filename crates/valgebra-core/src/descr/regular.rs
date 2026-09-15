@@ -35,7 +35,7 @@ use regex_automata::util::syntax;
 use regex_automata::{Anchored, Input};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 /// The most states an automaton may hold.
 ///
@@ -517,19 +517,31 @@ pub enum Alphabet {
 }
 
 /// The valid UTF-8 words, which is the `str` kind's universe.
-static UTF8: OnceLock<Dfa> = OnceLock::new();
+static UTF8: OnceLock<Arc<Dfa>> = OnceLock::new();
+
+/// Every byte string, which is the `bytes` kind's universe.
+static EVERY_WORD: OnceLock<Arc<Dfa>> = OnceLock::new();
 
 /// A set of words: a regular language.
+///
+/// The table sits behind a handle, so a copy is a reference count. A descriptor
+/// carries one of these per word kind and is cloned wherever a line is built --
+/// a kind's universe alone is rebuilt at every complement of every slot -- and
+/// the table is immutable once built, which is the shape a shared handle is
+/// for. Equality and order read the table through it, so two spellings of one
+/// language stay one value.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RegularSet {
-    dfa: Dfa,
+    dfa: Arc<Dfa>,
 }
 
 impl RegularSet {
     /// The empty set.
     #[must_use]
     pub fn empty() -> RegularSet {
-        RegularSet { dfa: Dfa::empty() }
+        RegularSet {
+            dfa: Arc::new(Dfa::empty()),
+        }
     }
 
     /// Every word of an alphabet.
@@ -542,15 +554,15 @@ impl RegularSet {
     /// against.
     #[must_use]
     pub fn all(alphabet: Alphabet) -> RegularSet {
+        // Both are built once and handed out as handles. A universe is asked for
+        // wherever a slot is complemented -- which is every kind of every
+        // descriptor -- and neither table depends on anything, so rebuilding one
+        // per ask is a cost a constant has no business carrying.
         RegularSet {
-            dfa: match alphabet {
-                // Built once. This is asked for wherever a `str` component is
-                // complemented, and the table is fixed, so rebuilding and
-                // re-minimising it per ask is the kind of cost a universe has
-                // no business carrying.
-                Alphabet::Text => UTF8.get_or_init(Dfa::utf8).clone(),
-                Alphabet::Bytes => Dfa::universal(),
-            },
+            dfa: Arc::clone(match alphabet {
+                Alphabet::Text => UTF8.get_or_init(|| Arc::new(Dfa::utf8())),
+                Alphabet::Bytes => EVERY_WORD.get_or_init(|| Arc::new(Dfa::universal())),
+            }),
         }
     }
 
@@ -582,7 +594,9 @@ impl RegularSet {
             .configure(config)
             .build(&anchored)
             .ok()?;
-        Dfa::from_automaton(&built).map(|dfa| RegularSet { dfa: dfa.minimal() })
+        Dfa::from_automaton(&built).map(|dfa| RegularSet {
+            dfa: Arc::new(dfa.minimal()),
+        })
     }
 
     /// The one-word language.
@@ -617,13 +631,15 @@ impl RegularSet {
             *flag = true;
         }
         RegularSet {
-            dfa: Dfa {
-                classes,
-                class_count,
-                transitions,
-                accepting,
-            }
-            .minimal(),
+            dfa: Arc::new(
+                Dfa {
+                    classes,
+                    class_count,
+                    transitions,
+                    accepting,
+                }
+                .minimal(),
+            ),
         }
     }
 
@@ -657,7 +673,7 @@ impl RegularSet {
     pub fn union(&self, other: &RegularSet) -> Option<RegularSet> {
         self.dfa
             .product(&other.dfa, |a, b| a || b)
-            .map(|dfa| RegularSet { dfa })
+            .map(|dfa| RegularSet { dfa: Arc::new(dfa) })
     }
 
     /// The words in both sets, or `None` past [`MAX_STATES`].
@@ -665,7 +681,7 @@ impl RegularSet {
     pub fn intersect(&self, other: &RegularSet) -> Option<RegularSet> {
         self.dfa
             .product(&other.dfa, |a, b| a && b)
-            .map(|dfa| RegularSet { dfa })
+            .map(|dfa| RegularSet { dfa: Arc::new(dfa) })
     }
 
     /// Every word this set does not hold, **over every byte string**.
@@ -681,7 +697,7 @@ impl RegularSet {
     #[must_use]
     pub fn complement(&self) -> RegularSet {
         RegularSet {
-            dfa: self.dfa.complement(),
+            dfa: Arc::new(self.dfa.complement()),
         }
     }
 }
