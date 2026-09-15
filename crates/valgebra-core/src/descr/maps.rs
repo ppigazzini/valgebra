@@ -167,6 +167,29 @@ struct Wanted<G> {
     besides: BTreeSet<Label>,
 }
 
+/// Whether two labels name one key of a dict.
+///
+/// `True` hashes as `1` and equals it, and `False` as `0`, so `{1: a, True: b}`
+/// is a dict of one entry. Every other pair of distinct labels is two keys: the
+/// kinds are disjoint and, within a kind, two constants that differ are two
+/// keys.
+fn one_key(a: &Label, b: &Label) -> bool {
+    match (a, b) {
+        (Label::Int(n), Label::Bool(flag)) | (Label::Bool(flag), Label::Int(n)) => {
+            *n == i64::from(*flag)
+        }
+        _ => false,
+    }
+}
+
+/// Every unordered pair of distinct items, each once.
+fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> {
+    items
+        .iter()
+        .enumerate()
+        .flat_map(|(i, a)| items[i + 1..].iter().map(move |b| (a, b)))
+}
+
 /// One map atom, `⟨(τ_ℓ)_{ℓ∈L} ; t₀ ; S⟩`.
 ///
 /// Both collections are ordered, so two ways of writing one atom compare equal.
@@ -253,6 +276,15 @@ impl<G: Guard> MapAtom<G> {
     /// that holds no dict.
     fn emptiness(&self) -> Verdict {
         let labels = self.labels.values().map(Field::emptiness);
+        // The keys the atom requires a dict to carry, which is what the check
+        // after the loop is about: a label the atom does not let go missing, and
+        // a label that is the only thing a want could be satisfied by.
+        let mut required: Vec<&Label> = self
+            .labels
+            .iter()
+            .filter(|(_, field)| !field.absent)
+            .map(|(label, _)| label)
+            .collect();
         // A want asks for *some* key of its part, outside its exclusion set, to
         // map into `ty`. Any such key can be the witness, so the verdict is the
         // union over the candidates: the part's default, which governs the keys
@@ -260,9 +292,11 @@ impl<G: Guard> MapAtom<G> {
         // out. Reading the default alone reports an atom empty that
         // [`holds`](Self::holds) admits a dict for -- a labelled key satisfies a
         // want there -- and an atom wrongly empty is a complement wrongly wide.
-        let wanted = self.wanted.iter().map(|want| {
+        let mut wanted = Vec::with_capacity(self.wanted.len());
+        for want in &self.wanted {
             let Some(default) = self.defaults.get(want.slot) else {
-                return Verdict::Empty;
+                wanted.push(Verdict::Empty);
+                continue;
             };
             let free_key_left = match KEY_KINDS.get(want.slot) {
                 Some(Kind::Bool) => {
@@ -279,15 +313,40 @@ impl<G: Guard> MapAtom<G> {
                     key_slot(Some(label.kind())) == Some(want.slot)
                         && !want.besides.contains(*label)
                 })
-                .map(|(_, field)| &field.ty)
-                .chain(free_key_left.then_some(&default.ty));
-            Verdict::any(witnesses.map(|ty| match ty.meet(&want.ty) {
-                Some(shared) => shared.emptiness(),
-                // Past a guard's own bound there is no set to read, so nothing is
-                // proved either way.
-                None => Verdict::Unknown,
-            }))
-        });
+                .map(|(label, field)| (Some(label), &field.ty))
+                .chain(free_key_left.then_some((None, &default.ty)));
+            // The candidates a dict could satisfy this want with, kept as well
+            // as folded: a want with one candidate left is a want that names a
+            // key, and the atom requires that key to be there.
+            let mut open: Vec<Option<&Label>> = Vec::new();
+            let verdict = Verdict::any(witnesses.map(|(label, ty)| {
+                let verdict = match ty.meet(&want.ty) {
+                    Some(shared) => shared.emptiness(),
+                    // Past a guard's own bound there is no set to read, so
+                    // nothing is proved either way.
+                    None => Verdict::Unknown,
+                };
+                // An undecided candidate is still a candidate: it may be what
+                // satisfies the want, so a key is only *required* where nothing
+                // else could be.
+                if verdict != Verdict::Empty {
+                    open.push(label);
+                }
+                verdict
+            }));
+            if let [Some(only)] = open[..] {
+                required.push(only);
+            }
+            wanted.push(verdict);
+        }
+        // `True` hashes as `1` and equals it, so a dict has one entry for the
+        // two and no dict carries both. The parts are separate here, because
+        // `Literal[1]` and `Literal[True]` are disjoint *sets* -- a key is one
+        // value or the other -- but an atom requiring both keys at once
+        // describes a dict Python cannot build.
+        if unordered_pairs(&required).any(|(a, b)| one_key(a, b)) {
+            return Verdict::Empty;
+        }
         Verdict::every(labels.chain(wanted))
     }
 

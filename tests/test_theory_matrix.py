@@ -239,6 +239,28 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
         "subset",
         [{}, {True: 1}, {False: 1}, {True: 1, False: 2}],
     ),
+    (
+        "a dict has one entry for an int key and its boolean",
+        intersection(
+            complement(dict[Literal[1], str]),
+            complement(dict[Literal[True], str]),
+            dict[Literal[1, True], str],
+        ),
+        nothing,
+        "subset",
+        [{}, {1: "x"}, {True: "x"}, {1: "x", True: "y"}, {0: "x"}],
+    ),
+    (
+        "two integers are two keys, so the same shape is inhabited",
+        intersection(
+            complement(dict[Literal[1], str]),
+            complement(dict[Literal[2], str]),
+            dict[Literal[1, 2], str],
+        ),
+        nothing,
+        "not_subset",
+        [{}, {1: "x"}, {2: "x"}, {1: "x", 2: "y"}],
+    ),
     # -- a clause governs only the keys it can spell -------------------------
     (
         "a clause keyed by another kind spells no field name",

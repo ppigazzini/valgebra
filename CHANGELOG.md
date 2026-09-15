@@ -19,11 +19,24 @@ answer of its own, or a repair to a change not yet released.
 - fix: a refinement marker is immutable, and the manifest states the link
 - fix: a class-set operator is refused rather than read as another engine's
 - fix: a set lattice charges its product like the three beside it -- internal
+- fix: a dict has one entry for an int key and its boolean
 
 -->
 
 ### Fixed
 
+- **A dict has one entry for `1` and for `True`.** `True` hashes as `1` and
+  equals it, so `{1: "a", True: "b"}` is a dict of one key -- while the
+  descriptor held the two as separate slots and read a schema requiring both as
+  inhabited. `is_empty` answered `False` for
+  `intersection(complement(Validator(dict[Literal[1], str])),
+  complement(Validator(dict[Literal[True], str])),
+  Validator(dict[Literal[1, True], str]))`, which admits no dict at all. The
+  same shape over two integers is inhabited and still says so.
+
+  `Literal[1]` and `Literal[True]` stay disjoint: a key is an `int` or a
+  `bool` and the walk tells them apart. What changes is that no dict carries
+  both of them at once.
 - **A character class carrying `--`, `&&`, `~~` or a nested `[` is refused.**
   Those combine classes in this engine and are literal characters to `re`, so
   one pattern denoted two sets and compiling it said nothing about which:

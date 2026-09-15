@@ -1,4 +1,4 @@
-use super::{Entry, KEY_KINDS, Label, MAX_ATOMS, MapLattice, key_slot};
+use super::{Entry, KEY_KINDS, Label, MAX_ATOMS, MapLattice, key_slot, unordered_pairs};
 use crate::descr::budget;
 use crate::descr::integers::IntSet;
 use crate::kind::Kind;
@@ -231,4 +231,92 @@ fn a_union_past_the_bound_refuses() {
         wide = wide.union(&entry(n)).expect("inside the bound");
     }
     assert!(wide.union(&entry(-1)).is_none());
+}
+
+/// A dict has one entry for `1` and for `True`, so an atom requiring both
+/// keys holds no dict.
+///
+/// The two are separate labels and stay separate, because `Literal[1]` and
+/// `Literal[True]` are disjoint *sets* -- a key is an `int` or a `bool` and
+/// the walk tells them apart. What they are not is two entries: `True` hashes
+/// as `1` and equals it, so `{1: "a", True: "b"}` is a dict of one key. An
+/// atom that requires both describes a dict Python cannot build, and reading
+/// it as inhabited is a complement wrongly wide -- which is the only way to
+/// reach it, since nothing a caller writes directly requires two keys at once.
+///
+/// `0` and `False` are the other pair, and `1` and `False` are not one.
+#[test]
+fn an_atom_requiring_a_key_and_its_boolean_holds_no_dict() {
+    let required = |label: Label| MapLattice::label(label, IntSet::just(1), false);
+    let both = |a: Label, b: Label| {
+        required(a)
+            .intersect(&required(b))
+            .expect("two single-label atoms meet")
+            .emptiness()
+    };
+
+    assert_eq!(
+        both(Label::Int(1), Label::Bool(true)),
+        Verdict::Empty,
+        "no dict carries a key 1 and a key True"
+    );
+    assert_eq!(
+        both(Label::Int(0), Label::Bool(false)),
+        Verdict::Empty,
+        "nor a key 0 and a key False"
+    );
+    assert_eq!(
+        both(Label::Int(1), Label::Bool(false)),
+        Verdict::Inhabited,
+        "1 and False are two keys, and a dict carries both"
+    );
+    assert_eq!(
+        both(Label::Int(1), Label::Int(2)),
+        Verdict::Inhabited,
+        "and two integers are always two keys"
+    );
+}
+
+/// An optional key is not a required one, so the pair above is only empty
+/// where the atom asks for both.
+#[test]
+fn an_optional_boolean_key_leaves_the_integer_key_alone() {
+    let one = MapLattice::label(Label::Int(1), IntSet::just(1), false);
+    let maybe_true = MapLattice::label(Label::Bool(true), IntSet::just(1), true);
+
+    assert_eq!(
+        one.intersect(&maybe_true)
+            .expect("two atoms meet")
+            .emptiness(),
+        Verdict::Inhabited,
+        "a dict of the integer key alone lets the boolean one go missing"
+    );
+}
+
+/// Every unordered pair of *distinct* items, each once.
+///
+/// The contract the name states, and the one the caller rests on: the scan for
+/// two labels that are one dict key asks the question of two labels, and a pair
+/// of a label with itself is not that question. The helper is small enough to
+/// read and small enough to get wrong -- an off-by-one in the slice it takes
+/// yields each item beside itself, which no dict distinguishes because the
+/// collision test is false on a self-pair, and which the next caller would
+/// inherit.
+#[test]
+fn unordered_pairs_yields_each_distinct_pair_once() {
+    let items = ["a", "b", "c"];
+    let pairs: Vec<(&&str, &&str)> = unordered_pairs(&items).collect();
+    assert_eq!(pairs.len(), 3, "three items make three pairs");
+    assert_eq!(
+        pairs,
+        vec![(&"a", &"b"), (&"a", &"c"), (&"b", &"c")],
+        "each pair once, in order, and never an item with itself"
+    );
+    for (left, right) in &pairs {
+        assert_ne!(left, right, "a pair is of two distinct items");
+    }
+    // The degenerate sizes, where an off-by-one shows first.
+    assert_eq!(unordered_pairs(&items[..1]).count(), 0, "one item, no pair");
+    assert_eq!(unordered_pairs::<&str>(&[]).count(), 0, "no items, no pair");
+    assert_eq!(unordered_pairs(&items[..2]).count(), 1);
 }
