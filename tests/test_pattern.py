@@ -82,3 +82,23 @@ def test_regex_marker_repr_eq_and_hash() -> None:
     assert marker != Regex(r"[a-z]+")
     assert marker != "not a marker"
     assert hash(marker) == hash(Regex(r"[0-9]+"))
+
+
+def test_a_regex_marker_refuses_to_change() -> None:
+    """The marker is hashable and a schema holds it, so its pattern is fixed.
+
+    A rebound pattern is a hash that changes underneath a value already in use,
+    and a marker written into an `Annotated` is exactly such a value.
+    """
+    marker = Regex(r"[0-9]+")
+    before = hash(marker)
+
+    with pytest.raises(AttributeError, match="immutable"):
+        marker.pattern = r"[a-z]+"
+    with pytest.raises(AttributeError, match="immutable"):
+        marker.added = 1
+    with pytest.raises(AttributeError, match="immutable"):
+        del marker.pattern
+
+    assert marker.pattern == r"[0-9]+"
+    assert hash(marker) == before

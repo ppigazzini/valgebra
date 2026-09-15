@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a sync rebuilds when a build input changes, not only when pyproject does -- internal
 - fix: every kind's representation is the set the schema denotes
+- fix: a word kind's universe is the words that kind can hold
 
 -->
 
@@ -25,7 +26,8 @@ answer of its own, or a repair to a change not yet released.
   wrong answer a caller could see. `is_empty` reported an inhabited schema empty
   and `is_subtype_of` reported an inclusion a value refutes, for:
   a length bound over a `str` or `bytes`, which counted every symbol but the
-  newline; a `set` whose element kind is unhashable, whose members were cut
+  newline; a `str` complement, whose universe was every byte string rather than
+  the valid UTF-8 ones, so a difference holding only the rest read as inhabited; a `set` whose element kind is unhashable, whose members were cut
   although a subclass defining `__hash__` is a legal member; an integer bound or
   step at the end of the 64-bit range, whose residue class was read as another;
   and a `float` bound written with an integer past 2^53, which no float equals

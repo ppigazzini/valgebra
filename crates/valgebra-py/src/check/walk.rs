@@ -735,7 +735,7 @@ fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> boo
         // A reference past the definitions table is an internal invariant break,
         // not reachable from user input; release builds degrade to a non-member
         // rather than panicking across the language boundary.
-        debug_assert!(false, "definition index {} frame.out of range", id.get());
+        debug_assert!(false, "definition index {} out of range", id.get());
         ctx.guard.borrow_mut().remove(&key);
         return false;
     };
