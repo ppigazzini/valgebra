@@ -270,6 +270,15 @@ impl Dfa {
     /// A flip of the accepting flags, which is only sound because the table is
     /// *complete*: a partial automaton rejects by falling off the end, and
     /// flipping its flags would accept those words instead of the ones it meant.
+    ///
+    /// **The flip of a minimal table is minimal**, so this re-minimises nothing.
+    /// A word distinguishes two states in `L` exactly when it distinguishes them
+    /// in `¬L` -- it leads one to acceptance and the other not, either way round
+    /// -- so the state partition is the same; and the transitions and the byte
+    /// classes are untouched, so the canonical numbering a walk over them
+    /// produces is too. Every constructor here returns a minimal table, which is
+    /// what makes that precondition hold, and
+    /// `a_complement_is_already_minimal` holds the conclusion.
     fn complement(&self) -> Dfa {
         Dfa {
             classes: self.classes.clone(),
@@ -277,7 +286,6 @@ impl Dfa {
             transitions: self.transitions.clone(),
             accepting: self.accepting.iter().map(|a| !a).collect(),
         }
-        .minimal()
     }
 
     /// The product of two automata, accepting where `accept` says so.
