@@ -2584,7 +2584,7 @@ fn a_complement_plus_a_covering_scalar_is_the_universe() {
 // sharing no code with `simplify` or the decision procedure under test.
 
 /// A concrete Python-shaped value.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum Obj {
     None,
     Bool(bool),
@@ -2596,7 +2596,9 @@ enum Obj {
     Int(i64),
     Float(f64),
     Str(&'static str),
-    Bytes,
+    /// A byte string, as its length: a length bound over the kind is decided at
+    /// a count, and a kind with one value has no count to be decided at.
+    Bytes(usize),
     List(Vec<Obj>),
     Tuple(Vec<Obj>),
     Set(Vec<Obj>),
@@ -2635,6 +2637,7 @@ fn as_num(v: &Obj) -> Option<f64> {
 fn val_len(v: &Obj) -> Option<usize> {
     match v {
         Obj::Str(s) => Some(s.chars().count()),
+        Obj::Bytes(len) => Some(*len),
         Obj::List(xs) | Obj::Tuple(xs) | Obj::Set(xs) | Obj::FrozenSet(xs) => Some(xs.len()),
         Obj::Map(m) => Some(m.len()),
         _ => None,
@@ -2645,7 +2648,8 @@ fn val_len(v: &Obj) -> Option<usize> {
 /// neither `True` nor `1.0`.
 fn typed_eq(constant: &Obj, v: &Obj) -> bool {
     match (constant, v) {
-        (Obj::None, Obj::None) | (Obj::Bytes, Obj::Bytes) => true,
+        (Obj::None, Obj::None) => true,
+        (Obj::Bytes(a), Obj::Bytes(b)) => a == b,
         (Obj::Bool(a), Obj::Bool(b)) => a == b,
         (Obj::Int(a), Obj::Int(b)) => a == b,
         (Obj::Float(a), Obj::Float(b)) => a == b,
@@ -2708,7 +2712,7 @@ fn member_full(schema: &Schema, value: &Obj, pool: &[Obj]) -> bool {
         Schema::Int => matches!(value, Obj::Bool(_) | Obj::Int(_)), // bool ⊆ int
         Schema::Float => matches!(value, Obj::Float(_)),
         Schema::Str => matches!(value, Obj::Str(_)),
-        Schema::Bytes => matches!(value, Obj::Bytes),
+        Schema::Bytes => matches!(value, Obj::Bytes(_)),
         Schema::Literal(index) => typed_eq(&pool[index.get()], value),
         Schema::Coll { container, element } => match (container, value) {
             (CollKind::Set, Obj::Set(items)) | (CollKind::FrozenSet, Obj::FrozenSet(items)) => {
@@ -2788,7 +2792,8 @@ fn kind_edges() -> Vec<Obj> {
         // equal, and the value outside every order.
         Obj::Str("\n"),
         Obj::Str("a\nb"),
-        Obj::Bytes,
+        Obj::Bytes(0),
+        Obj::Bytes(1),
         Obj::List(vec![]),
         Obj::List(vec![Obj::Int(1)]),
         Obj::List(vec![Obj::Int(1), Obj::Str("a")]),
@@ -2838,23 +2843,190 @@ const EDGE_SPAN: usize = 1;
 /// of every record's width -- and the property is judged over the union of
 /// those with the fixed kind edges.
 fn boundary_values(schemas: &[&Schema]) -> Vec<Obj> {
-    let mut values = kind_edges();
-    for schema in schemas {
-        edges_of(schema, &mut values);
-    }
-    let mut seen: Vec<String> = Vec::new();
-    values.retain(|value| {
-        let key = format!("{value:?}");
-        let fresh = !seen.contains(&key);
-        if fresh {
-            seen.push(key);
+    let mut pool = kind_edges();
+    // Twice over the same pool. The first pass is what each schema contributes
+    // on its own; the second builds the composites again with every schema's
+    // contribution already in the pool, so a node is probed with values the
+    // other schema put there. One pass cannot: the pair is read left to right,
+    // and the left schema's nodes are built before the right has contributed.
+    let mut sources: Vec<Vec<Obj>> = Vec::new();
+    for _ in 0..2 {
+        sources.clear();
+        for schema in schemas {
+            sources.push(edges_of(schema, &mut pool));
         }
-        fresh
-    });
+    }
+    sources.push(crossed_sequences(schemas, &mut pool));
+    // The fixed edges first, then the sources round-robin.
+    //
+    // Round-robin rather than concatenated, and the reason is the cap below: a
+    // universe read off a concatenation spends its budget on whichever source
+    // came first, and the cross pass -- which is last, and which is the only
+    // source holding one schema's head beside another's tail -- filled the
+    // budget on its own. A pair whose subject contributed nothing that
+    // survived then read as "no value refutes it" while the universe held 768
+    // values of the other schema.
+    let mut values = kind_edges();
+    values.extend(interleaved(&sources));
     // The cap is read after the duplicates leave, so a node that repeats a
     // value cannot push another node's own values past the end.
+    let mut values = deduplicated(values);
     values.truncate(CAP_UNIVERSE);
     values
+}
+
+/// The values in order, each kept the first time it is seen.
+///
+/// Read before a cap, because a cap spent on a value the list already holds
+/// buys nothing and costs the value behind it. The universe's cap has always
+/// been read this way; a *node's* cap needs it for the same reason and at a
+/// shape where it decides the answer. `candidates` round-robins three sources
+/// that overlap by construction -- the pool the inherited values are strided
+/// from already holds the node's own -- so a variadic tuple over the top spent
+/// four of its first twenty on one repeated single-element tuple, and the
+/// tuple holding a `bool` fell past the quarter-cap. That is the value which
+/// separates the shape from a tuple over the complement of `bool`, and a
+/// refutation between the two then had no witness in the universe.
+///
+/// Compared rather than rendered to a key. A key per value is what the
+/// universe could afford at one call; this is read once per node, and a node
+/// builds a member from every candidate of its element, so spelling a tree of
+/// values at each of them costs four times the laws' running time -- measured,
+/// against one-and-a-third for the comparison. Two NaNs compare unequal and
+/// both stay, which is the only repeat a rendered key would have dropped and
+/// this keeps.
+fn deduplicated(values: Vec<Obj>) -> Vec<Obj> {
+    let mut kept: Vec<Obj> = Vec::with_capacity(values.len());
+    for value in values {
+        if !kept.contains(&value) {
+            kept.push(value);
+        }
+    }
+    kept
+}
+
+/// Values of one sequence whose positions come from another's.
+///
+/// The construction a per-schema universe cannot reach, and a refutation about
+/// a sequence needs it. A pair of sequences is separated at a position: a value
+/// of `a` whose position *i* lies outside `b`'s element there. Building each
+/// schema's values on its own gives `a`'s positions filled from `a` and `b`'s
+/// from `b`, and the witness is one schema's head beside the other's tail -- a
+/// combination neither builds.
+///
+/// `list[not None, X] <= list[not tuple[Any, Float], Y]` is the shape that
+/// found this. It is refuted, because a two-element tuple ending in a float is
+/// not `None` and is not outside `tuple[Any, Float]`. The universe held
+/// `[that tuple, None]` from the right schema and `[a small tuple, an int]`
+/// from the left, and never `[that tuple, an int]`, which is the value under
+/// the refutation.
+///
+/// Bounded the way everything here is: each ordered pair, each position of the
+/// one with a fixed width, each of a capped set of candidates.
+fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
+    let shapes: Vec<(SeqKind, &SeqShape)> = schemas
+        .iter()
+        .filter_map(|schema| match schema {
+            Schema::Seq { container, shape } => Some((*container, shape)),
+            _ => None,
+        })
+        .collect();
+    // The schema at one position of a shape: the prefix where it reaches, and
+    // the repeating tail past it. A tailed shape has a schema at every width,
+    // which is what lets a fixed one be crossed against it.
+    let at = |shape: &SeqShape, position: usize| {
+        shape
+            .prefix
+            .get(position)
+            .or(shape.tail.as_deref())
+            .cloned()
+    };
+    let mut made = Vec::new();
+    for (container, mine) in &shapes {
+        if mine.tail.is_some() {
+            continue; // no fixed width to fill
+        }
+        let Some(base): Option<Vec<Obj>> = mine
+            .prefix
+            .iter()
+            .map(|element| a_member(element, MEMBER_FUEL))
+            .collect()
+        else {
+            continue; // a position with no member of its own builds no value
+        };
+        for (_, theirs) in &shapes {
+            for position in 0..base.len() {
+                let Some(element) = at(theirs, position) else {
+                    continue;
+                };
+                for value in candidates(&element, out).into_iter().take(CAP_PER_NODE / 4) {
+                    let mut items = base.clone();
+                    items[position] = value;
+                    made.push(hold(*container, items));
+                }
+            }
+        }
+    }
+    made.truncate(CAP_PER_NODE * 4);
+    out.extend(made.iter().cloned());
+    made
+}
+
+/// The universe separates a pair at a position *inside* a shape.
+///
+/// What this universe is for, asked at the depth its caps govern rather than
+/// at the top. `list[tuple[*Any], list[float]]` is refuted below the same list
+/// whose tuple runs over a complement, and it is refuted at the first
+/// position: the witness is a list whose head is a tuple carrying a value the
+/// complement excludes, and every part of that is a value some node of the
+/// pair already names.
+///
+/// The universe held none of them, and for two reasons that are one reason. A
+/// scalar sat behind twelve sized containers in the one-per-kind probes, and a
+/// repeated single-element tuple took four of the first twenty places in a
+/// candidate list, so the quarter-cap a position reads through was spent
+/// before either reached the tuple. A cap spent on what it did not need to buy
+/// is what this asserts against; the two values are how it showed.
+#[test]
+fn the_universe_separates_a_pair_inside_a_shape() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let variadic = |element: Schema| Schema::Seq {
+        container: SeqKind::Tuple,
+        shape: SeqShape::homogeneous(element),
+    };
+    let floats = Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape::homogeneous(Schema::Float),
+    };
+    let a = Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape::fixed([variadic(Schema::ANYTHING), floats]),
+    };
+    for excluded in [Schema::NoneType, Schema::Bool, Schema::Int, Schema::Str] {
+        let b = Schema::Seq {
+            container: SeqKind::List,
+            shape: SeqShape::fixed([
+                variadic(Schema::Complement(Arc::new(excluded.clone()))),
+                Schema::Ref(DefIx::new(1)),
+            ]),
+        };
+        // The premise the law carries: a row whose pair is not refuted asserts
+        // nothing about the universe.
+        assert_eq!(
+            a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+            Relation::Fails,
+            "the pair excluding {excluded:?} is not refuted"
+        );
+        let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+        let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+        assert!(
+            boundary_values(&[&subject, &other]).iter().any(|value| {
+                member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+            }),
+            "no value of the universe refutes the pair excluding {excluded:?}"
+        );
+    }
 }
 
 /// Every value of `len` items, in each container a length is read from.
@@ -2891,6 +3063,87 @@ fn numbers_around(index: OperandIx, out: &mut Vec<Obj>) {
     out.push(Obj::Float(operand * 2.0));
 }
 
+/// The length a constraint asks a container for, where it asks for one.
+fn length_wanted(constraint: &Constraint) -> Option<usize> {
+    match constraint {
+        Constraint::MinLen(len) | Constraint::MaxLen(len) => Some(*len),
+        _ => None,
+    }
+}
+
+/// Containers of `len` members of the schema's element, in every shape a length
+/// is read from.
+///
+/// A set holds its members once, so its `len` members are *distinct*: padding
+/// one with a repeat would claim a value the interpreter reads as shorter. Where
+/// the element cannot supply that many, there is no such set and none is built.
+fn sized_like(schema: &Schema, len: usize, fuel: usize) -> Vec<Obj> {
+    let element = match schema {
+        Schema::Seq { shape, .. } => shape.elements().next().unwrap_or(&Schema::ANYTHING),
+        Schema::Coll { element, .. } => element,
+        _ => &Schema::ANYTHING,
+    };
+    let pool = const_pool();
+    let mut distinct: Vec<Obj> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    // A series per scalar kind, because a set of three `bytes` needs three byte
+    // strings and a fixed corpus carries two: the kinds with more values than a
+    // bound names have to supply them on demand.
+    let series = (0..len.min(SIZED.len())).flat_map(|index| {
+        #[expect(
+            clippy::cast_precision_loss,
+            clippy::cast_possible_wrap,
+            reason = "the index is a small count, exact in both carriers"
+        )]
+        let (whole, float) = (index as i64, index as f64);
+        [
+            Obj::Int(whole),
+            Obj::Float(float),
+            Obj::Str(SIZED[index]),
+            Obj::Bytes(index),
+        ]
+    });
+    for candidate in a_member(element, fuel.saturating_sub(1))
+        .into_iter()
+        .chain(series)
+        .chain(kind_edges())
+    {
+        let key = format!("{candidate:?}");
+        if !seen.contains(&key) && member_full(element, &candidate, &pool) {
+            seen.push(key);
+            distinct.push(candidate);
+        }
+        if distinct.len() == len {
+            break;
+        }
+    }
+    let Some(first) = distinct.first().cloned() else {
+        return Vec::new(); // an element with no member builds no container
+    };
+    // A sequence repeats, so one member fills every position. A set does not,
+    // so it is built only where the element supplied that many values that
+    // differ -- which is the same reading the emptiness decision takes.
+    let repeated = vec![first.clone(); len];
+    let mut built = vec![
+        Obj::Str(SIZED[len.min(SIZED.len() - 1)]),
+        Obj::Bytes(len),
+        Obj::List(repeated.clone()),
+        Obj::Tuple(repeated),
+        Obj::Map(
+            NAMES
+                .iter()
+                .take(len)
+                .map(|name| (*name, first.clone()))
+                .collect(),
+        ),
+    ];
+    if distinct.len() == len {
+        built.push(Obj::Set(distinct.clone()));
+        built.push(Obj::FrozenSet(distinct));
+    }
+    built
+}
+
 /// How deep a constructed member is built before the attempt is given up.
 const MEMBER_FUEL: usize = 4;
 
@@ -2919,7 +3172,7 @@ fn a_member(schema: &Schema, fuel: usize) -> Option<Obj> {
         Schema::Bool => Some(Obj::Bool(true)),
         Schema::Float => Some(Obj::Float(1.0)),
         Schema::Str => Some(Obj::Str("a")),
-        Schema::Bytes => Some(Obj::Bytes),
+        Schema::Bytes => Some(Obj::Bytes(1)),
         Schema::Literal(index) => Some(pool[index.get()].clone()),
         Schema::Seq { container, shape } => {
             let mut items = shape
@@ -2967,7 +3220,22 @@ fn a_member(schema: &Schema, fuel: usize) -> Option<Obj> {
             .filter_map(|member| a_member(member, fuel - 1))
             .chain(kind_edges())
             .find(|value| member_full(schema, value, &pool)),
-        Schema::Complement(_) | Schema::Refine { .. } => kind_edges()
+        // A refinement is asked of candidates rather than constructed: the
+        // base's own member, that member grown to each length a constraint
+        // names, and the kind edges. A length bound is the constraint a fixed
+        // corpus cannot answer -- a set of two is no kind's edge -- so it is
+        // the one the candidates are built for.
+        Schema::Refine { base, constraints } => {
+            let mut candidates: Vec<Obj> = a_member(base, fuel - 1).into_iter().collect();
+            for length in constraints.iter().filter_map(length_wanted) {
+                candidates.extend(sized_like(base, length, fuel));
+            }
+            candidates.extend(kind_edges());
+            candidates
+                .into_iter()
+                .find(|value| member_full(schema, value, &pool))
+        }
+        Schema::Complement(_) => kind_edges()
             .into_iter()
             .find(|value| member_full(schema, value, &pool)),
         // The empty set has no member, and a leaf this does not model is one
@@ -2982,25 +3250,50 @@ fn a_member(schema: &Schema, fuel: usize) -> Option<Obj> {
 
 /// The values every container arm is probed with, whatever its element says.
 ///
-/// One per kind, so a container of a schema and a container of its complement
-/// are told apart by an element that belongs to one of them.
+/// One per kind at each small width, so a container of a schema and a container
+/// of its complement are told apart by an element that belongs to one of them.
+///
+/// Three kinds were missing outright, and a position excluding tuples is
+/// separated only by a tuple: a refutation about such a position read as "no
+/// value refutes it" while the value existed. The widths matter one step in,
+/// because an empty tuple is outside `tuple[Any, Any]` as surely as an integer
+/// is.
 fn probes() -> Vec<Obj> {
-    vec![
+    // Round-robin over the two groups, for the reason [`interleaved`] gives: a
+    // cap read over a concatenation spends itself on whichever came first.
+    //
+    // The sized containers ran ahead of the scalars, on the argument that a
+    // scalar is separated by a value `kind_edges` already holds and a
+    // two-element tuple is not. That holds of a position at the top and fails
+    // of one inside a shape: `kind_edges` carrying `None` does not put
+    // `(None,)` in the universe, and a variadic tuple over the top is
+    // separated from one over the complement of `None` by exactly that value.
+    // Both groups are wanted at every depth, so the cap cuts them equally.
+    let mut sized = Vec::new();
+    for width in 0..=2 {
+        let items = vec![Obj::Int(1); width];
+        sized.push(Obj::Tuple(items.clone()));
+        sized.push(Obj::List(items.clone()));
+        sized.push(Obj::Set(items.clone()));
+        sized.push(Obj::FrozenSet(items));
+    }
+    let scalars = vec![
         Obj::None,
         Obj::Bool(true),
         Obj::Int(1),
         Obj::Float(1.0),
         Obj::Str("a"),
-        Obj::Bytes,
-        Obj::List(vec![]),
+        Obj::Bytes(0),
+        Obj::Bytes(1),
         Obj::Map(vec![]),
-    ]
+    ];
+    interleaved(&[sized, scalars])
 }
 
 /// How many values one node contributes, so a nested shape stays bounded.
-const CAP_PER_NODE: usize = 28;
+const CAP_PER_NODE: usize = 64;
 /// How many values the whole universe holds.
-const CAP_UNIVERSE: usize = 512;
+const CAP_UNIVERSE: usize = 768;
 
 fn hold(container: SeqKind, items: Vec<Obj>) -> Obj {
     match container {
@@ -3048,29 +3341,12 @@ fn edges_of(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
             }
         }
         Schema::Seq { container, shape } => {
-            let mut elements = probes();
-            for element in shape.elements() {
-                elements.extend(edges_of(element, out));
-            }
-            elements.truncate(CAP_PER_NODE);
-            // The composed values first: a cap that cut them would leave the
-            // universe holding widths alone, which is the corpus this replaces.
-            mine.extend(
-                elements
-                    .into_iter()
-                    .map(|element| hold(*container, vec![element])),
-            );
-            let width = shape.prefix.len();
-            for len in width.saturating_sub(EDGE_SPAN)..=(width + EDGE_SPAN) {
-                containers_of(len, &mut mine);
-            }
+            mine.extend(sequence_edges(*container, shape, out));
         }
         Schema::Coll {
             container, element, ..
         } => {
-            let mut elements = probes();
-            elements.extend(edges_of(element, out));
-            elements.truncate(CAP_PER_NODE);
+            let elements = candidates(element, out);
             mine.push(gather(*container, vec![]));
             mine.extend(
                 elements
@@ -3096,57 +3372,207 @@ fn edges_of(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
     mine
 }
 
+/// Round-robin over the groups, so a cap cuts each of them equally.
+///
+/// A record's second field and a sequence's second position are where a pair is
+/// separated as often as the first, and a cap read over a concatenation spends
+/// itself on whichever came first.
+fn interleaved(groups: &[Vec<Obj>]) -> Vec<Obj> {
+    let longest = groups.iter().map(Vec::len).max().unwrap_or(0);
+    (0..longest)
+        .flat_map(|index| {
+            groups
+                .iter()
+                .filter_map(move |group| group.get(index).cloned())
+        })
+        .collect()
+}
+
+/// The values a position is probed with: the schema's own, then one per kind.
+///
+/// The schema's own come first because they are what separates it from the
+/// schema beside it -- a set where the other admits `None` -- and a cap that cut
+/// them in favour of the fixed probes would leave the pair undecided by the
+/// universe. The probes follow for the schema whose own values are thin: the top
+/// builds one member and is separated from a complement by any of the others.
+fn candidates(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
+    let before = out.len();
+    let mut mine = deduplicated(edges_of(schema, out));
+    // A quarter of a node's budget, so the two sources that follow are inside
+    // every cap a caller of this applies: a position probed with the schema's
+    // own values alone is one no `bool` reaches where the schema is an `int`.
+    mine.truncate(CAP_PER_NODE / 4);
+    // What the rest of the comparison contributed, most recent first.
+    //
+    // This is the half a fixed probe list cannot supply. A position is
+    // separated from the *other* schema's position by a value of the shape
+    // that one names, and no list written here holds it: `tuple[Any, Float]`
+    // is refuted by a two-element tuple whose second item is a float, and the
+    // next pair asks for a different shape again. The values are already built
+    // -- the other schema contributed them when its own edges were read -- so
+    // a position is let see them rather than the list guessing wider.
+    let wanted = CAP_PER_NODE / 4;
+    // Strided rather than taken from either end: the pool is ordered by the
+    // node that contributed, so its tail is one schema's outermost values and
+    // its head is the fixed kind edges. What separates a position sits in the
+    // middle, where another schema's *inner* nodes put theirs.
+    let step = (before / wanted).max(1);
+    let inherited: Vec<Obj> = out[..before]
+        .iter()
+        .rev()
+        .step_by(step)
+        .take(wanted)
+        .cloned()
+        .collect();
+    // Round-robin rather than concatenated, for the reason `interleaved` gives:
+    // a cap read over a concatenation spends itself on whichever came first,
+    // and the three sources separate a pair about equally often. Deduplicated
+    // because the three overlap -- the pool the inherited values are strided
+    // from already holds this node's own -- and a caller caps what comes back.
+    deduplicated(interleaved(&[mine, probes(), inherited]))
+}
+
+/// The sequences one shape puts a boundary at: its own member with each
+/// position probed in turn, and a container at each side of its width.
+///
+/// Probing a position inside the shape's own member is what a flat corpus
+/// cannot do. `[Any, X]` against `[Any, int]` is separated only by a two-element
+/// list whose *second* element is an `X` outside `int`, and a corpus of
+/// single-element containers holds no such value whatever it holds at depth one.
+fn sequence_edges(container: SeqKind, shape: &SeqShape, out: &mut Vec<Obj>) -> Vec<Obj> {
+    let mut mine = Vec::new();
+    let base: Option<Vec<Obj>> = shape
+        .prefix
+        .iter()
+        .map(|element| a_member(element, MEMBER_FUEL))
+        .collect();
+    let mut elements: Vec<Obj> = shape
+        .elements()
+        .flat_map(|element| candidates(element, out))
+        .collect();
+    elements.truncate(CAP_PER_NODE);
+    let mut groups: Vec<Vec<Obj>> = Vec::new();
+    for (position, element) in shape.prefix.iter().enumerate() {
+        let Some(base) = base.clone() else {
+            break; // a position with no member of its own builds no sequence
+        };
+        groups.push(
+            candidates(element, out)
+                .into_iter()
+                .map(|value| {
+                    let mut items = base.clone();
+                    items[position] = value;
+                    hold(container, items)
+                })
+                .collect(),
+        );
+    }
+    mine.extend(interleaved(&groups));
+    if let (Some(base), Some(tail)) = (base.clone(), shape.tail.as_deref()) {
+        // The prefix, and one and two elements past it. That is where a tail
+        // and a fixed width are told apart, and where a length bound over the
+        // shape is decided.
+        //
+        // Two, not one. A tailed shape is separated from a *fixed* one of
+        // width n by a value of width n whose elements are the tail's, and one
+        // element past the prefix reaches n = 1 only: `list[float, ...]`
+        // against the complement of `list[Any, Any]` is refuted by a
+        // two-element list of floats, and the universe held every one-element
+        // list and no two-element one.
+        mine.push(hold(container, base.clone()));
+        for value in candidates(tail, out) {
+            let mut items = base.clone();
+            items.push(value.clone());
+            mine.push(hold(container, items.clone()));
+            items.push(value);
+            mine.push(hold(container, items));
+        }
+    }
+    mine.extend(
+        elements
+            .into_iter()
+            .map(|element| hold(container, vec![element])),
+    );
+    let width = shape.prefix.len();
+    for len in width.saturating_sub(EDGE_SPAN)..=(width + EDGE_SPAN) {
+        containers_of(len, &mut mine);
+    }
+    mine
+}
+
 /// The mappings one record puts a boundary at: the three widths its own clauses
 /// separate, and each field and default clause probed under a key it governs.
 fn record_edges(fields: &Fields, defaults: &Clauses, out: &mut Vec<Obj>) -> Vec<Obj> {
+    // Every probe sits in a mapping that carries the record's required fields,
+    // because a mapping missing one is refused before the probed entry is read.
+    let base: Vec<(&'static str, Obj)> = fields
+        .iter()
+        .filter(|field| field.required)
+        .filter_map(|field| {
+            Some((
+                static_name(&field.name)?,
+                a_member(&field.schema, MEMBER_FUEL)?,
+            ))
+        })
+        .collect();
+    let with = |key: &'static str, value: Obj| {
+        let mut entries: Vec<(&'static str, Obj)> = base
+            .iter()
+            .filter(|(name, _)| *name != key)
+            .cloned()
+            .collect();
+        entries.push((key, value));
+        Obj::Map(entries)
+    };
     let mut mine = Vec::new();
-    {
-        {
-            // A mapping of exactly the declared names, one short of them, and
-            // one past them: the three widths a record's own clauses separate.
-            let declared: Vec<(&'static str, Obj)> = fields
-                .iter()
-                .filter_map(|field| Some((static_name(&field.name)?, Obj::Int(1))))
-                .collect();
-            let mut short = declared.clone();
-            short.pop();
-            let mut wide = declared.clone();
-            wide.push(("z", Obj::Int(1)));
-            for field in fields.iter() {
-                let mut values = probes();
-                values.extend(edges_of(&field.schema, out));
-                values.truncate(CAP_PER_NODE / 2);
-                if let Some(name) = static_name(&field.name) {
-                    mine.extend(
-                        values
-                            .into_iter()
-                            .map(|value| Obj::Map(vec![(name, value)])),
-                    );
-                }
-            }
-            // A default clause governs the keys no field declares, so its
-            // probes go under a name this record does not declare: under a
-            // declared one the field decides and the clause is never read.
-            let undeclared = NAMES
+    let mut groups: Vec<Vec<Obj>> = Vec::new();
+    for field in fields.iter() {
+        let Some(name) = static_name(&field.name) else {
+            continue;
+        };
+        groups.push(
+            candidates(&field.schema, out)
                 .into_iter()
-                .chain(["z"])
-                .find(|name| !fields.iter().any(|field| &*field.name == *name))
-                .unwrap_or("z");
-            for clause in defaults.iter() {
-                let mut values = probes();
-                values.extend(edges_of(&clause.value, out));
-                values.truncate(CAP_PER_NODE / 2);
-                mine.extend(
-                    values
-                        .into_iter()
-                        .map(|value| Obj::Map(vec![(undeclared, value)])),
-                );
-            }
-            mine.push(Obj::Map(declared));
-            mine.push(Obj::Map(short));
-            mine.push(Obj::Map(wide));
+                .map(|value| with(name, value))
+                .collect(),
+        );
+    }
+    // A default clause governs the keys no field declares, so its probes go
+    // under names this record does not declare: under a declared one the field
+    // decides and the clause is never read. More than one name, because the key
+    // that separates this record from another is one *neither* declares -- a
+    // record of no fields would otherwise probe under the name the other one
+    // declares, and the value it builds would be admitted by both.
+    let undeclared: Vec<&'static str> = NAMES
+        .into_iter()
+        .chain(["z"])
+        .filter(|name| !fields.iter().any(|field| &*field.name == *name))
+        .take(2)
+        .collect();
+    for clause in defaults.iter() {
+        for key in &undeclared {
+            groups.push(
+                candidates(&clause.value, out)
+                    .into_iter()
+                    .map(|value| with(key, value))
+                    .collect(),
+            );
         }
     }
+    mine.extend(interleaved(&groups));
+    // The three widths a record's own clauses separate: exactly the declared
+    // names, one short of them, and one past them.
+    let declared: Vec<(&'static str, Obj)> = fields
+        .iter()
+        .filter_map(|field| Some((static_name(&field.name)?, Obj::Int(1))))
+        .collect();
+    let mut short = declared.clone();
+    short.pop();
+    let mut wide = declared.clone();
+    wide.push(("z", Obj::Int(1)));
+    mine.push(Obj::Map(declared));
+    mine.push(Obj::Map(short));
+    mine.push(Obj::Map(wide));
     mine
 }
 
