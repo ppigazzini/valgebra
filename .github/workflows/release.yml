@@ -46,9 +46,18 @@ jobs:
         # profile. What it buys is **per shape and not one number**: measured on
         # one box against a plain release build of the same source, a large
         # homogeneous list and the JSON document come out ahead and the
-        # fifty-field record walk comes out behind. No lane measures it where it
-        # is applied, so the matrix applies it and the performance page says
-        # what is known rather than a figure nothing owns.
+        # fifty-field record walk comes out behind.
+        #
+        # It stays on, and that is a decision about a trade rather than a
+        # default nobody revisited. Two of the three shapes gain more than the
+        # third loses -- the list by about a third, the document by about a
+        # fifth, the record walk behind by about a fifth -- and the two that
+        # gain are the ones whose cost grows with the caller's data, where the
+        # record walk's is fixed at its field count. A caller for whom the
+        # record walk is the shape that matters builds their own plain wheel,
+        # and `docs/11-performance.md` carries the two commands and the numbers.
+        # No lane measures it where it is applied, which is why the figures are
+        # the page's and not this file's.
         # Recording a profile means *running* the instrumented build, so PGO
         # applies only where the build host executes its own output: the glibc
         # Linux (x86_64 and aarch64), macOS, and Windows x64 runners. Two
