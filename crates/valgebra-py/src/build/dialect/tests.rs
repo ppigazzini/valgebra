@@ -15,6 +15,12 @@ use super::*;
 /// them: it raises on a doubled hyphen after a member, warns about the two
 /// symbol operators and about a `[` in a class's first place, and says nothing
 /// at all about a `[` anywhere else.
+///
+/// Reading the message needs a live interpreter, because a `PyErr` renders
+/// through one, so this row runs under the `interpreter-tests` feature. The two
+/// rows that only ask whether a pattern is refused carry no such need and run
+/// on every build.
+#[cfg(feature = "interpreter-tests")]
 #[test]
 fn a_reserved_form_is_refused_by_the_operator_it_would_have_read() {
     for (pattern, said) in [
@@ -128,6 +134,9 @@ fn an_unbalanced_pattern_is_left_to_the_compile() {
 }
 
 /// The message carries the position, so a long pattern says where to look.
+///
+/// Reading it needs a live interpreter, as the row above does.
+#[cfg(feature = "interpreter-tests")]
 #[test]
 fn a_refusal_names_the_position_and_the_pattern() {
     let pattern = r"^abc[\w&&\d]$";

@@ -184,10 +184,13 @@ fn one_key(a: &Label, b: &Label) -> bool {
 
 /// Every unordered pair of distinct items, each once.
 fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> {
-    items
-        .iter()
-        .enumerate()
-        .flat_map(|(i, a)| items[i + 1..].iter().map(move |b| (a, b)))
+    items.iter().enumerate().flat_map(|(i, a)| {
+        items
+            .get(i + 1..)
+            .into_iter()
+            .flatten()
+            .map(move |b| (a, b))
+    })
 }
 
 /// One map atom, `⟨(τ_ℓ)_{ℓ∈L} ; t₀ ; S⟩`.
