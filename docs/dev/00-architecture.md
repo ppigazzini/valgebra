@@ -10,13 +10,14 @@ direction their dependencies run, and the two invariants the compiler holds.
 | `crates/valgebra-core/src/ir.rs` | the schema IR: the node set, what each node denotes, the sharing of nodes built alike (`ir/intern.rs`), and the rewrites from one node to another (`ir/transform.rs`) | [01-schema-ir.md](01-schema-ir.md) |
 | `crates/valgebra-core/src/kind.rs`, `verdict.rs` | the value-universe partition, its region summary, and the two three-valued answers — the frame both deciders read | [02-decision.md](02-decision.md) |
 | `crates/valgebra-core/src/decision.rs`, `decision/` | the structural rules: subtyping, equivalence and disjointness in the file, emptiness and the constructor rules one module each beside it | [02-decision.md](02-decision.md) |
-| `crates/valgebra-core/src/descr/` | the set representation: one component per kind, each closed under the three operations | [02-decision.md](02-decision.md) |
+| `crates/valgebra-core/src/descr/` | the set representation: one component per kind, each closed under the three operations. `lower.rs` maps a term to a set and holds the build's `Bounds`; the components are `integers.rs` and its span arithmetic (`interval.rs`), `floats.rs`, `regular.rs` for the two word kinds, `records.rs`, `maps.rs`, `sets.rs` and `symbolic.rs` for the sequence automaton, `classes.rs` for the class atoms; `lines.rs` is the per-kind normal form they share, `values.rs` the `T⊥` a key or attribute holds, and `budget.rs` what a build may spend | [02-decision.md](02-decision.md) |
 | `crates/valgebra-py/src/build.rs`, `build/` | typing annotations and native forms into the IR: the dispatch, the pool and the guard in the file, the marker protocol in `build/refine.rs`, what a class declares in `build/classes.rs`, and the typing introspection in `build/generics.rs` | [03-frontend.md](03-frontend.md) |
-| `crates/valgebra-py/src/check/` | the membership walk: the dispatcher in `walk.rs`, the leaves in `walk/scalar.rs`, the containers in `walk/record.rs` and `walk/sequence.rs`, and the per-validator precompute in `check/index.rs` | [04-walk.md](04-walk.md) |
+| `crates/valgebra-py/src/check.rs`, `check/` | the membership walk: the aggregator that re-exports it in `check.rs`, the dispatcher in `walk.rs`, the leaves in `walk/scalar.rs`, the containers in `walk/record.rs` and `walk/sequence.rs`, and the per-validator precompute in `check/index.rs`. `check/ctx.rs` holds the read-only context a walk threads, its two depth bounds and the trail that refuses a cyclic value; `check/violation.rs` is the structured failure a walk records | [04-walk.md](04-walk.md) |
 | `crates/valgebra-py/src/input.rs` | the `Value` the walk runs over: a borrowed Python object or a borrowed parsed JSON value, and the decoders that turn a caller's `str` or `bytes` into one — which is what keeps the two input paths membership-equivalent by construction | [04-walk.md](04-walk.md) |
 | `crates/valgebra-py/src/equality.rs` | `==` on two validators, read through the constant pools rather than slot for slot: whether two schemas *are* the same set, which is what the constructors settle and not what the decision procedures prove | [01-schema-ir.md](01-schema-ir.md) |
 | `crates/valgebra-py/src/errors.rs`, `render.rs` | the Python exception and the annotation render | [05-errors.md](05-errors.md) |
 | `crates/valgebra-py/src/oracle.rs` | the binding's half of `LeafRelations`: the questions the core cannot decide alone — whether a literal belongs to a set, whether two sets of constants share a value, how two bounds order, what an enumeration lists | [02-decision.md](02-decision.md) |
+| `python/valgebra/` | the Python half of the package: `__init__.py` re-exports the extension's names and is what `import valgebra` costs, `_markers.py` defines the refinement markers a caller writes without importing `annotated_types`, and `_valgebra.pyi` is the stub `stubtest` holds against the built extension | [03-frontend.md](03-frontend.md) |
 | `crates/valgebra-py/src/lib.rs` | the module: what the extension exports, the four set constructors, the recursive fixpoint, and the two lattice bounds | [03-frontend.md](03-frontend.md) |
 | `crates/valgebra-py/src/workload.rs` | the instruction gate's instrument: the shapes `scripts/perf_gate.py --binding-*` measures, which no caller reaches and no suite runs, so coverage and the mutation sweep skip it by name | [07-tooling-ci.md](07-tooling-ci.md) |
 | `python/valgebra/` | the re-export package a user imports | — |
@@ -110,7 +111,7 @@ both directions by `scripts/docs_lint.py`, values included, so a number that
 moves in the source and not here fails, and a row naming a constant that is gone
 fails too.
 
-Each row says which of three kinds its bound is, because they are not the same
+Each row says which of four kinds its bound is, because they are not the same
 sort of thing and only one of them is a defect.
 
 * **limit** -- past it this representation holds no sound answer, so the
@@ -129,8 +130,20 @@ sort of thing and only one of them is a defect.
   procedure it would cover, each budget names the work that removes it, and none
   of them is called a limit in the meantime.
 
+* **reach** -- how much of a schema a reading is *given to build from*, rather
+  than what it may spend building. Raising one decides more relations and costs
+  more; nothing is unsound at any setting, which is what separates it from a
+  limit, and no caller writes it, which is what separates it from a shape.
+
 A bound that is `debt` carries the change that retires it in its own doc
-comment. A `limit` or a `shape` carries the reason it is where it is.
+comment. A `limit`, a `shape` or a `reach` carries the reason it is where it is.
+
+One row is kinded **not a bound**. The scan that holds this table to the tree
+reads every file-scope integer constant in a crate's source, and a couple of
+those are widths rather than bounds. The table carries each with a row saying so,
+which is cheaper than an exclusion list nobody maintains and honest about what
+the rule can see; the kind column is where a reader sees it without reading to
+the end of the row.
 
 | where | bound | value | kind | what it stops | what measures it |
 |---|---|---|---|---|---|
@@ -148,7 +161,7 @@ comment. A `limit` or a `shape` carries the reason it is where it is.
 | `crates/valgebra-py/src/check/walk/record.rs` | `SMALL_OBJECT` | `8` | shape | an object narrow enough that a table of its keys costs more than looking forward for a repeat of each | its own tests, and `scripts/compare_gate.py` |
 | `crates/valgebra-py/src/check/walk.rs` | `CLOSEST_BRANCH_PROBE_LIMIT` | `64` | shape | the error path's second walk costing the branch count | `tests/test_union_messages.py` |
 | `crates/valgebra-py/src/check/walk.rs` | `UNION_LABEL_LIMIT` | `64` | shape | a union naming a thousand labels in one `expected` | its own tests |
-| `crates/valgebra-core/src/descr/lower.rs` | `UNFOLDS` | `1` | shape | a fixpoint unfolded past its own body, which multiplies the schema the descriptor must build against its node bound for relations nobody asks about | its own tests, and `tests/test_completeness_ledger.py` |
+| `crates/valgebra-core/src/descr/lower.rs` | `UNFOLDS` | `1` | reach | a fixpoint unfolded past its own body, which multiplies the schema the descriptor must build against its node bound for relations nobody asks about | its own tests, and `tests/test_completeness_ledger.py` |
 | `crates/valgebra-core/src/decision.rs` | `DECISION_BUDGET` | `1_000_000` | debt | one query spending unbounded work before answering conservatively | its own tests, and `tests/test_decision_adversarial.py` |
 | `crates/valgebra-core/src/descr/lower.rs` | `BUDGET` | `64` | debt | the schema nodes one lowering reads | its own tests, and `crates/valgebra-core/benches/core.rs` |
 | `crates/valgebra-core/src/descr/lower.rs` | `DEPTH` | `5` | debt | the nesting one lowering descends, which is the exponential | its own tests, and `crates/valgebra-core/benches/core.rs` |
@@ -156,7 +169,7 @@ comment. A `limit` or a `shape` carries the reason it is where it is.
 | `crates/valgebra-core/src/descr/lines.rs` | `MAX_LINES` | `256` | limit | the lines one kind carries, which a meet multiplies and a complement doubles | `crates/valgebra-core/src/descr/mod.rs` tests |
 | `crates/valgebra-core/src/descr/sets.rs` | `MAX_LINES` | `256` | limit | the lines a set lattice holds | its own tests |
 | `crates/valgebra-core/src/descr/maps.rs` | `MAX_ATOMS` | `256` | limit | the atoms a map union holds | its own tests |
-| `crates/valgebra-core/src/descr/maps.rs` | `PARTS` | `KEY_KINDS.len() + 1` | limit | nothing -- it is the key-kind partition's width, listed because it is a file-scope integer constant and the check that reads this table cannot tell the two apart | its own tests |
+| `crates/valgebra-core/src/descr/maps.rs` | `PARTS` | `KEY_KINDS.len() + 1` | not a bound | nothing -- it is the key-kind partition's width, listed because it is a file-scope integer constant and the check that reads this table cannot tell the two apart | its own tests |
 | `crates/valgebra-core/src/descr/records.rs` | `MAX_ATOMS` | `256` | limit | the atoms a record union holds, which a complement multiplies | its own tests |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_STATES` | `4096` | limit | a product of two automata multiplying past memory | its own tests |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_ROW` | `MAX_STATES` | limit | one row of a product growing past the alternatives a shape has | its own tests |

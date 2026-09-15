@@ -22,6 +22,7 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **definition** | an entry in the validator's definitions table; the target of a `Ref` back edge, produced by `recursive` |
 | **contractive** | a recursive definition whose every self-reference sits under a structural constructor. `Schema::occurs_unguarded` decides it |
 | **the walk** | `member` in `crates/valgebra-py/src/check/walk.rs`, with the leaf arms in `walk/scalar.rs` and the container arms in `walk/record.rs` and `walk/sequence.rs`. There is one, and it serves both input paths and all three modes |
+| **the trail** | `Trail` in `crates/valgebra-py/src/check/ctx.rs`: the `(value, definition)` pairs the walk is inside, innermost last. A level enters its pair before walking the definition and leaves it after, so a value reached from inside itself meets its own pair and is refused as cyclic |
 | **violation** | the structured failure: a stable code, a path, an expected label and a value summary ([05-errors.md](05-errors.md)) |
 
 ## The decision procedure
@@ -40,6 +41,12 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **the oracle** (in the core) | `LeafRelations` in `crates/valgebra-core/src/oracle.rs`, the trait through which every reading asks the bindings about a class or a value -- the decision procedure, the descriptor, and the constructors that apply the lattice laws. `crates/valgebra-py/src/oracle.rs` holds the implementation that answers |
 | **verdict** | `Verdict` in `crates/valgebra-core/src/verdict.rs`: what a schema's emptiness is proven to be -- empty, inhabited, or neither. The three-valued reading a refutation needs; a bool of it turns *unknown* into *inhabited* |
 | **the budget** (in the core) | `DECISION_BUDGET`, the work ceiling one top-level query may spend before returning the conservative answer |
+| **declined** | what a reading says when it has no answer: the rules decline and the descriptor is asked, and a descriptor that declines leaves the relation `Unknown`. Never a "no" -- a decline claims nothing about the relation |
+| **refuted** | a relation disproved by a value: `Relation::Fails`, which asserts that some value of the subject lies outside the other schema. A refutation stands on a witness, so a reading that cannot name one declines instead |
+| **lowering** | turning a schema into the set it denotes -- `descr::lower`, which walks the tree and builds one `Descr`. The descriptor's entry point, and the step a `Bounds` holds |
+| **unfolding** | replacing a `Ref` with the definition it names, once. The fixpoint reading a relation over a recursive schema needs: the subject is unfolded to widen and the supertype to narrow, which is what [`Polarity`](02-decision.md) names |
+| **goal** | one pair a decision is asked about, subject and supertype together, as the recursion carries it. The unit a trail of seen goals would memoise, and the unit `DECISION_BUDGET` charges |
+| **the readings** | the two ways a relation is answered -- the rules and the descriptor -- and, in `decision/readings.rs`, the structural cases the rules decide by reading a schema's shape rather than its set |
 | **the ledger** (of completeness) | `tests/test_completeness_ledger.py`, enumerated relations the procedure must *decide*, failing in both directions |
 
 ## Verification
@@ -63,7 +70,7 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **witness** | a value that settles a relation by example: one inside the subtype and outside the supertype disproves inclusion. A `False` with no witness is the probe's subject |
 | **detached surface** | a `Cargo.toml` outside the root workspace, which no workspace-wide command reaches ([07-tooling-ci.md](07-tooling-ci.md)) |
 
-## Five collisions, and both senses are live
+## Six collisions, and both senses are live
 
 Say which one you mean.
 
@@ -73,6 +80,7 @@ Say which one you mean.
 | **oracle** | an independent judge in a test | `LeafRelations`, the trait the decision procedure asks about a class or a value |
 | **budget** | the committed instruction count a workload is held to | `DECISION_BUDGET`, the work ceiling one decision query may spend. Not `Bounds`, which holds a *build* rather than a query |
 | **ledger** | a list held to the tree in both directions | the completeness ledger, which is that shape but about *relations* rather than about files |
+| **snapshot** | a recorded expected output a test compares against, held by `syrupy` under `tests/__snapshots__` | the copy a container walk takes of a value's storage before reading it, so a `__len__` that lies or a mutation mid-walk cannot change what was measured |
 | **witness** | the value a probe looks for: one inside the subtype and outside the supertype, which disproves inclusion | the value a *refutation* stands on, which the `witnessed` guard reads against the subject's own emptiness before believing a mismatch |
 
 ## Words this set avoids
