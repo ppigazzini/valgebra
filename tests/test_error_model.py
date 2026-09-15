@@ -51,11 +51,11 @@ def test_str_is_the_single_message_for_one_failure() -> None:
 def test_an_integer_key_stays_an_integer_in_the_path() -> None:
     """`d[2]` and `d["2"]` are different entries, and the path says which.
 
-    The path is what a caller walks back down to the offending value, and every
-    key used to arrive as text -- so a dict keyed by numbers reported a location
-    that indexed nothing. A string key is still itself; anything that is neither
-    a string nor an integer has no spelling in a path made of the two, and
-    appears as its repr.
+    The path is what a caller walks back down to the offending value, so a key
+    arriving as text makes a dict keyed by numbers report a location that
+    indexes nothing. A string key is itself; anything that is neither a string
+    nor an integer has no spelling in a path made of the two, and appears as its
+    repr.
     """
     numbered = Validator(dict[int, int])
     with pytest.raises(ValidationError) as failure:
@@ -168,9 +168,9 @@ def test_every_documented_attribute_answers_after_the_change() -> None:
 def test_an_error_built_by_hand_reports_an_empty_model() -> None:
     """The model describes *failures*, and one built by hand has none.
 
-    Class defaults used to say this. They cannot now -- a default makes ordinary
-    lookup succeed, so the hook that builds the attributes would never run -- so
-    the empty answers come from the hook instead, and the type keeps one shape.
+    Class defaults cannot say it: a default makes ordinary lookup succeed, so
+    the hook that builds the attributes would never run. The empty answers come
+    from the hook instead, and the type keeps one shape.
     """
     hand = ValidationError("built by hand")
     assert hand.code == ""

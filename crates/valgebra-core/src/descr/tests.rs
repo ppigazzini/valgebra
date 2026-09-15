@@ -1505,10 +1505,10 @@ fn a_length_bound_over_a_sequence_kind_counts_its_elements() {
 /// The kinds a set lies within, read off the components rather than built.
 ///
 /// [`Descr::within`] answers what a constraint asks of the base it narrows:
-/// is every value of this base one of these kinds? It used to be asked by
-/// meeting the base with the complement of a union of those kinds and testing
-/// the result, which builds a whole descriptor to ask one question of it; two
-/// thirds of the relation matrix was that build.
+/// is every value of this base one of these kinds? Asked by meeting the base
+/// with the complement of a union of those kinds and testing the result, it
+/// builds a whole descriptor to ask one question of it, which costs two thirds
+/// of the relation matrix.
 ///
 /// A read is only equal to the build where it reads the same components, so
 /// both halves of the representation are exercised here: the **kindless** slot,

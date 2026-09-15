@@ -9,11 +9,11 @@
 //! **They live apart from the crate root for a reason a number tells.** The
 //! coverage lane holds the binding to 95% of its lines, measured by the Python
 //! suite and the Rust unit tests -- and a workload is run by neither, so every
-//! line here counts against a figure it says nothing about. With these in
-//! `lib.rs` that file read 229 lines and 168 of them missed, and two shapes
-//! added to it took the binding from 95.14% to 94.50% without a single line of
-//! shipped code changing. So the lane skips this file by name, and what it
-//! measures is what it claims to: the surface a caller reaches.
+//! line here counts against a figure it says nothing about: held in a file the
+//! lane reads, these shapes are lines nothing covers, so adding one lowers the
+//! binding's coverage without a line of the caller's surface changing. The lane
+//! skips this file by name, and what it measures is what it claims to: the
+//! surface a caller reaches. `.github/workflows/ci.yml` owns the floor.
 //!
 //! The mutation sweep skips it for the same reason, beside `lib.rs`, which it
 //! already skipped.

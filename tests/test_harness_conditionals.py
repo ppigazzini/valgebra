@@ -70,11 +70,10 @@ def _cfg_sites() -> list[tuple[str, str, str]]:
 def _test_module_files() -> set[str]:
     """Every `.rs` file some parent module declares under a `#[cfg(test)]`.
 
-    A test module used to be a block inside the file it tested; the long ones
-    are now sibling files, declared as `#[cfg(test)] mod tests;`. The file is
-    still test-only -- it is not compiled into the wheel -- and reading the
-    declaration is how that is known from the tree rather than from a naming
-    convention.
+    A long test module is a sibling file, declared as `#[cfg(test)] mod tests;`
+    rather than written inline. Such a file is test-only -- it is not compiled
+    into the wheel -- and reading the declaration is how that is known from the
+    tree rather than from a naming convention.
     """
     declared: set[str] = set()
     for source in ROOT.rglob("*.rs"):

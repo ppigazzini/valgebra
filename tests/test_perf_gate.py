@@ -227,11 +227,9 @@ def test_every_mode_names_an_example_the_tree_builds() -> None:
 def test_the_usage_names_every_binding_shape_and_counts_them() -> None:
     """The module docstring is the gate's `--help`, and it drifts.
 
-    It described "five shapes" while listing nine, and then "twelve" while
-    thirteen were registered -- the second time within an hour of fixing the
-    first, because a shape was added after the sentence was written. A count
-    written by hand beside a registry is a claim about the registry, so it is
-    read from the registry.
+    A count written by hand beside a registry is a claim about the registry,
+    and a shape added to the registry does not edit the sentence. So the count
+    is read from the registry rather than written next to it.
     """
     usage = gate.__doc__ or ""
     # The backticked form, not the bare flag: `--binding` is a prefix of every

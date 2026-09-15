@@ -109,9 +109,9 @@ pub(super) enum Base {
 /// The C accessor is not the way to read the storage either. `PyTuple_Size`
 /// reads it on `CPython`; `PyPy`'s `cpyext` implements it *through the object's
 /// own* `__len__`, so it is the overridden answer again under another name, and
-/// a walk that indexes against it runs off the end of the allocation -- a
-/// `tuple` subclass reporting ten over one element used to take the process
-/// down. Asking past the end does not report cleanly there either: the accessor
+/// a walk that indexes against it runs off the end of the allocation: a
+/// `tuple` subclass reporting ten over one element takes the process down.
+/// Asking past the end does not report cleanly there either: the accessor
 /// answers with nothing and sets no exception.
 ///
 /// So the length comes from the base type's own slot, called on the value. It
@@ -542,8 +542,7 @@ fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, 
 ///
 /// A branch walked in explain mode already answers both: it returns whether it
 /// matched, and it reports what failed if it did not. Asking once makes the
-/// recursion linear, and the walk that used to be thrown away is the one that
-/// is kept.
+/// recursion linear, and keeps the walk a second question would throw away.
 fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
     // The *closest* branch -- the one that descended furthest into the value

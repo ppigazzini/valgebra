@@ -272,9 +272,9 @@ impl Schema {
             // value can carry that attribute; required fields that are all
             // *proven* inhabited make it inhabited, because an object carrying
             // one witness per attribute is a value of the record. That second
-            // half is what the class half used to take away: an `isinstance`
-            // atom is opaque, so a node holding both could never be more than
-            // unknown.
+            // half is what a class in the same node would take away: an
+            // `isinstance` atom is opaque, so a node holding both can never be
+            // more than unknown.
             Schema::AttrRecord { fields } => {
                 let required = fields.iter().filter(|field| field.required);
                 let verdict = Verdict::every(

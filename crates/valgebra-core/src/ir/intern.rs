@@ -109,10 +109,9 @@ const SLOTS: usize = 1024;
 /// **What holds this number is `perf_gate.py --core`** (measured 2026-09-14):
 /// hashing every entry instead of four reads that workload **4.47% higher**,
 /// and the decision workload 0.10%, because the core one is the one that
-/// builds wide lists. It was recorded against the validator-building shape
-/// when it landed, and that shape has since been rebuilt to read a Python
-/// spelling once per iteration: it interns one list per build and repeats
-/// none, so it no longer sees this number at all.
+/// builds wide lists. The validator-building shape does not see it: that shape
+/// reads a Python spelling once per iteration, so it interns one list per build
+/// and repeats none.
 const SUMMARY: usize = 4;
 
 /// The address a shared handle holds, as a number to hash.

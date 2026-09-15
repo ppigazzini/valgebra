@@ -283,8 +283,8 @@ PLANTS = (
     Plant(
         "tests/test_lane_interpreters.py",
         (".github/workflows/ci.yml",),
-        # A lane that installs an interpreter and names none, which is what
-        # every lane did until the versions were written down.
+        # A lane that installs an interpreter and names none, which is the
+        # shape the ledger's version column exists to refuse.
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",

@@ -5,8 +5,8 @@
 //! [`Violation`] for each independent failure into `out` (each record field,
 //! each sequence element, each mapping entry), unless the fail-fast mode stops it
 //! at the first. In *fast* mode it allocates nothing and short-circuits as soon as
-//! membership is decided — the path it took before this module fused the two
-//! walks into one. There is no second walk to keep in sync.
+//! membership is decided. One walk serves both, so there is no second walk to
+//! keep in sync.
 //!
 //! The walk runs over a [`Value`], so the object path and the in-place JSON path
 //! share one traversal. The explain side only ever sees a Python value (the JSON

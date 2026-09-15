@@ -260,10 +260,10 @@ impl Schema {
     ///
     /// **This is the one place the child set of each variant is written down.** A
     /// walk that only descends -- moving indices, resolving a self-reference --
-    /// used to spell the whole descent out per pass, and the compiler forced an
-    /// arm without being able to check the arm recursed into everything: a
-    /// forgotten child was a silent stale subtree. Written once, every such pass
-    /// inherits the child set.
+    /// inherits the child set from here instead of spelling the descent out per
+    /// pass. Spelled per pass, the compiler forces an arm without being able to
+    /// check that the arm recursed into everything, and a forgotten child is a
+    /// silent stale subtree.
     ///
     /// A new variant carrying a child schema must map it here, or every pass
     /// built on this drops it. A new variant carrying a *pooled index* must also

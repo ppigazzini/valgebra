@@ -147,8 +147,8 @@ def _binding_sources() -> set[str]:
 def _test_module_files() -> set[str]:
     """Every `.rs` file some parent module declares under a `#[cfg(test)]`.
 
-    A test module used to be a block inside the file it tested; the long ones
-    are now sibling files, declared as `#[cfg(test)] mod tests;`. The file is
+    A long test module is a sibling file, declared as `#[cfg(test)] mod tests;`
+    rather than written inline. The file is
     still test-only -- it is not compiled into the wheel -- and reading the
     declaration is how that is known from the tree rather than from a naming
     convention.

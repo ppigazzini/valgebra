@@ -1,11 +1,11 @@
 use super::{Kind, Region, Regions};
 
 /// Every region operation is a set operation, and each is pinned here rather
-/// than inside the folds that use it. The bits used to be combined at each
-/// call site with a raw `|`, `&`, `!`, or `|=`, where the wrong operator is a
-/// one-character defect no test in that fold could distinguish; concentrating
-/// them into five methods is only worth it if the five are tested, so they
-/// are, over the boundary cases the folds start and end at.
+/// than inside the folds that use it. Combined at each call site with a raw
+/// `|`, `&`, `!`, or `|=`, the wrong operator is a one-character defect no test
+/// in that fold can distinguish; concentrating them into five methods is only
+/// worth it if the five are tested, so they are, over the boundary cases the
+/// folds start and end at.
 #[test]
 fn the_region_operations_are_the_set_operations() {
     let a = Kind::Bool.region().union(Kind::Int.region());

@@ -19,8 +19,8 @@
 //! The alternative shapes each fail one test, recorded in
 //! `docs/dev/01-schema-ir.md` under "Where a class and an attribute record go":
 //! a DNF over the whole descriptor loses the partition, and scoping classes to
-//! the kindless slot -- which is where they were -- cannot describe a value that
-//! has both a builtin kind and a class.
+//! the kindless slot cannot describe a value that has both a builtin kind and a
+//! class.
 
 use std::sync::Arc;
 

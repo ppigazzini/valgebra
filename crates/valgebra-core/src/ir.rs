@@ -229,7 +229,8 @@ pool_index!(
 /// [`Schema::Ref`] back edge.
 ///
 /// A different table from the constants pool, and therefore a different type:
-/// before the split both travelled as `usize`, so either reached either.
+/// carried as a bare `usize` it would reach the pool's accessors, which answer
+/// with a Python object rather than a schema.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct DefIx(usize);
@@ -743,10 +744,9 @@ pub enum SeqKind {
 /// Hosoya-Vouillon-Pierce give it, and deciding inclusion between two of those
 /// wants the automaton construction `docs/15-decidability.md` records as
 /// unbuilt. Nothing in this crate or the bindings builds an alternation or a
-/// nested repetition, so carrying the general form meant every walk answering
-/// for shapes no value could reach and every membership check first proving the
-/// shape it held was one of the three. The shape it holds is now the only shape
-/// there is.
+/// nested repetition, so the general form would make every walk answer for
+/// shapes no value reaches, and every membership check prove first that the
+/// shape it holds is one of the three. This shape is the only one there is.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct SeqShape {
     /// The positional element schemas, matched in order from the front.
@@ -1057,11 +1057,10 @@ impl Schema {
 /// Put a record's fields in the order two spellings of one record agree on.
 ///
 /// A record's fields are a *map*: `{"a": int, "b": str}` and `{"b": str, "a":
-/// int}` admit exactly the same dicts, and until they were ordered here the two
-/// were different terms -- `==` said so, `hash` said so, and a union of the pair
-/// kept both members because the dedup that folds a repeated member compares
-/// terms. Ordering by name is what makes the written order stop being part of
-/// the schema.
+/// int}` admit exactly the same dicts. Unordered they are two terms -- `==`
+/// says so, `hash` says so, and a union of the pair keeps both members, since
+/// the dedup that folds a repeated member compares terms. Ordering by name is
+/// what keeps the written order out of the schema.
 ///
 /// The name alone is the key: a record cannot declare one name twice (the
 /// frontend refuses it, and a dict literal cannot express it), so the order is

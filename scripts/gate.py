@@ -2,10 +2,10 @@
 
 `AGENTS.md` lists a build-health gate: a handful of commands a developer runs in
 a full clone with a warm virtual environment. CI is forty-odd jobs in *shallow*
-clones with pinned tool versions on three operating systems, and the first
-difference that mattered was found by a push -- a ledger that reads `git
-describe` passed for a week locally and reddened eight jobs at once, because a
-local clone has tags and a checkout does not.
+clones with pinned tool versions on three operating systems. A local clone
+carries tags and a checkout does not, so a check that reads `git describe`
+answers one way in each -- and a difference of that shape stays invisible until
+a push finds it.
 
 So this runs the lane's steps rather than a list that resembles them. The
 commands come out of ``.github/workflows/ci.yml``; the working tree is a fresh
@@ -469,10 +469,10 @@ def runner_environment() -> dict[str, str]:
     there writes plain text -- including into any file it generates. A
     developer's terminal sets `FORCE_COLOR`, some harnesses set it for every
     child process, and a tool that honours it writes escape codes into that
-    file too. `pip-audit` then refused the requirements file `uv export` had
-    just written, and the gate reported a failed step: a verdict about the
-    caller's terminal rather than about the tree, which is the one thing this
-    gate must never give.
+    file too. `pip-audit` refuses a requirements file `uv export` wrote that
+    way, and the gate reports a failed step: a verdict about the caller's
+    terminal rather than about the tree, which is the one thing this gate must
+    never give.
 
     Dropped rather than overridden with `NO_COLOR`, because the runner carries
     neither: what a step should see is the absence.

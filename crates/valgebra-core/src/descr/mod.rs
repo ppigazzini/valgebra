@@ -905,18 +905,18 @@ impl Descr {
     /// hold nothing.
     ///
     /// Asked the other way -- meet the base with the complement of a union of
-    /// those kinds and test the result for emptiness -- it was two thirds of
-    /// the relation matrix's cost. A complement walks all eleven components and
+    /// those kinds and test the result for emptiness -- it costs two thirds of
+    /// the relation matrix. A complement walks all eleven components and
     /// turns each empty one into a full one; a meet clones eleven line lists
     /// and multiplies each against the other side's. Both build a descriptor
     /// whose only use is to be asked whether it is empty, and the components
     /// already answer that one at a time.
     ///
-    /// It never refuses where the built form could, which is the one difference
-    /// worth stating: a build past its allowance returned `None` and the
-    /// constraint declined with it, and a read spends nothing and has nothing
-    /// to run out of. So a base at the edge of the allowance is narrowed where
-    /// it used to be declined -- more decided, not decided differently.
+    /// It never refuses where the built form can, which is the one difference
+    /// worth stating: a build past its allowance answers `None` and the
+    /// constraint declines with it, while a read spends nothing and has nothing
+    /// to run out of. So a base at the edge of the allowance is narrowed rather
+    /// than declined -- more decided, not decided differently.
     pub(crate) fn within(&self, kinds: &[Kind]) -> bool {
         self.kinds.iter().zip(Kind::ALL).all(|(lines, kind)| {
             kinds.contains(&kind) || lines.emptiness(Whole::Kind(kind)) == Verdict::Empty
@@ -928,7 +928,7 @@ impl Descr {
     /// The companion of [`within`](Descr::within), and the reason both are
     /// reads: a constraint that has established its base lies within a handful
     /// of kinds then asks which of them it actually reaches, once per kind,
-    /// where it used to meet the base with each kind in turn.
+    /// rather than meeting the base with each kind in turn.
     pub(crate) fn reaches(&self, kind: Kind) -> bool {
         self.component(kind).emptiness(Whole::Kind(kind)) != Verdict::Empty
     }

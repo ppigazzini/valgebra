@@ -232,10 +232,9 @@ jobs:
           # new reading arrives with the rows that reach both of its arms.
           # The workload module is the instruction gate's own instrument: no
           # caller reaches it and neither suite runs it, so every line of it
-          # counted against a figure it says nothing about. Two shapes added to
-          # it took this lane from 95.14% to 94.50% with no shipped line
-          # changed, which is a gate failing for a property it does not
-          # measure.
+          # counts against a figure it says nothing about: adding a shape moves
+          # this lane's percentage with no line of the caller's surface changed,
+          # which is a gate failing for a property it does not measure.
           cargo llvm-cov report --summary-only \
             --ignore-filename-regex 'valgebra-core|valgebra-py/src/workload\.rs' \
             --fail-under-lines 95
@@ -1130,11 +1129,11 @@ jobs:
       # there; the committed seeds are read-only inputs beside it. Reversing the
       # two would write new inputs into the tracked seed directory.
       #
-      # Twice what the simplifier's target used to get, because a run costs
-      # roughly seventy times
-      # what it did: every relation the structural rules decline is asked again
-      # of the *sets* the two schemas denote, and building those is the work.
-      # Measured at 143 executions a second against 10,544 before, and CPU-bound
+      # Twice the budget a target over the constructors alone needs, because a
+      # run here costs roughly seventy times as much: every relation the
+      # structural rules decline is asked again of the *sets* the two schemas
+      # denote, and building those is the work. Measured at 143 executions a
+      # second against 10,544 for the constructors, and CPU-bound
       # throughout, so the only thing that buys back reach is time.
       #
       # Each batch runs in a child process, and the two memory ceilings are
@@ -1213,11 +1212,11 @@ jobs:
     # unrelated to test coverage.
     #
     # Sharded, as the diff sweep beside it is. The whole core is sixteen hundred
-    # mutants at fifteen to twenty seconds each: one job reached its two-hour
-    # timeout every night for a week and was cancelled before the ratchet below
-    # it ran, so the strict ratchet -- the only place a baseline entry is held to
-    # a survivor that still exists -- ran nowhere. Each shard reports its own
-    # slice and uploads it; the job after merges them and ratchets once.
+    # mutants at fifteen to twenty seconds each, which is more than one job's
+    # two-hour timeout holds -- and a job that times out is cancelled, so the
+    # ratchet after it never runs and the sweep reports nowhere. Each shard
+    # reports its own slice and uploads it; the job after merges them and
+    # ratchets once.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     # The slowest shard of twelve runs forty-five minutes on a shared runner
@@ -1330,8 +1329,8 @@ jobs:
           esac
       # Each shard's results, for the job that ratchets the whole sweep. A
       # shard's own outcome says nothing about the baseline: a survivor is a
-      # survivor of the *sweep*, and an entry no longer a survivor is only
-      # known to be so once every shard has reported.
+      # survivor of the *sweep*, and an entry whose mutant the tests kill is
+      # known to be one only once every shard has reported.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: core-mutants-${{ matrix.shard }}
@@ -1341,7 +1340,7 @@ jobs:
   nightly-mutants-ratchet:
     name: nightly mutation report
     # Ratchet: fail when a survivor appears that the committed baseline does not
-    # accept, and when a baseline entry is no longer a survivor. The baseline is
+    # accept, and when the tests kill a baseline entry's mutant. The baseline is
     # an accepted hole, not a target -- equivalent mutants stay in it with a
     # reason -- and it only ever shrinks. A survivor the sweep reported as a
     # warning becomes a hard failure here unless it is already known.
@@ -1622,8 +1621,8 @@ jobs:
       # The scheduled jobs are read the same way with one value more allowed:
       # a push skips them, and `skipped` is the answer that says so. Everything
       # else is refused, **cancellation included** -- a job that reaches its
-      # timeout is reported cancelled rather than failed, and the nightly ran
-      # red for a week behind a two-hour cancellation nothing waited on.
+      # timeout is reported cancelled rather than failed, so a cancellation
+      # nothing waits on leaves a red nightly reading green.
       - name: Fail unless every required job succeeded
         if: >-
           needs.rust-lint.result != 'success' ||

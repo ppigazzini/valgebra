@@ -1,25 +1,21 @@
 """A test module longer than a screen lives in a file of its own.
 
-`docs/dev/08-testing.md` states the rule and the reason: `decision.rs` was 3,570
-lines of which 1,500 were tests, and a reader looking for the subtype rules
-scrolled past a thousand assertions to find them. The fix was to declare
-`#[cfg(test)] mod tests;` and put the body in `decision/tests.rs` -- still a
-child module, still reaching private items through `use super::*`, still
-compiled only under `cfg(test)`, and no longer in the way.
+`docs/dev/08-testing.md` states the rule and the reason: a module holding more
+assertions than code makes a reader looking for the subtype rules scroll past
+them to find the rules. The shape that fixes it is `#[cfg(test)] mod tests;`
+with the body in a sibling file -- a child module, reaching private items
+through `use super::*`, compiled only under `cfg(test)`, and out of the way.
 
-Nothing held the rule. Ten modules ran to between 163 and 1,154 lines inside the
-file they test, and `descr/lower.rs` reached 1,829 lines of which 1,154 were
-assertions -- a worse ratio than the one the page was written to end. A page
-stating a rule the tree does not follow is the same defect as a page stating a
-dependency order the module graph does not, which `tests/test_module_direction.py`
-holds for that case: the page is the definition of what the code is organised
-into, and a rule nothing holds decays into prose.
+A page stating a rule the tree does not follow is the same defect as a page
+stating a dependency order the module graph does not, which
+`tests/test_module_direction.py` holds for that case: the page is the definition
+of what the code is organised into, and a rule nothing holds decays into prose.
 
-"A screen" needs a number to be checkable, and this is it. The bar is generous
-on purpose: three modules sit under it (51, 61 and 76 lines) and stay where they
-are, because a module short enough to read past is not in anybody's way. What
-the bar refuses is the drift -- a module that grows, one case at a time, until
-the file it tests is mostly not that file.
+"A screen" needs a number to be checkable, and this file is where that number
+lives. The bar is generous on purpose: a module short enough to read past is not
+in anybody's way, and several sit under it and stay where they are. What the bar
+refuses is the drift -- a module that grows, one case at a time, until the file
+it tests is mostly not that file.
 
 The count is of the module's own body, braces included, which is what a reader
 scrolls past. A file may hold more than one such module (`check/ctx.rs` declares

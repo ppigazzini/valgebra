@@ -393,9 +393,9 @@ def test_no_module_imports_a_stdlib_module_outside_the_releases_that_ship_it() -
 def test_the_reader_sees_a_module_the_floor_does_not_ship() -> None:
     """The plant for the half above: the import that reddened the floor leg.
 
-    Written out rather than reached for, because the tree no longer carries it:
-    a check whose only evidence is that the tree passes is a check nobody has
-    run against a tree that breaks it.
+    Written out rather than reached for, because the tree carries no such
+    import: a check whose only evidence is that the tree passes is a check
+    nobody has run against a tree that breaks it.
     """
     planted = "import sys\nimport tomllib\n\nDATA = tomllib.loads('')\n"
     # Its span is written here rather than read from the table, because the

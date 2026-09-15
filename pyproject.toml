@@ -80,12 +80,12 @@ docs = [
 # build on `pyproject.toml` alone, and every input that decides what the
 # extension *is* lives somewhere else: the version is `[workspace.package]` in
 # the root `Cargo.toml`, the code is under `crates/`, and the dependency set is
-# `Cargo.lock`. So a sync after a Rust change reinstalled the previous build,
-# and the two halves of one install disagreed -- the `.so` a `maturin develop`
-# had just written against metadata from the build before it, which is how
-# `uv run pytest` reported the version of a release that was already cut.
-# `tests/test_version.py` is what catches that, and it can only catch it because
-# `__version__` comes from the crate rather than from the metadata being read.
+# `Cargo.lock`. Keyed on `pyproject.toml` alone, a sync after a Rust change
+# reinstalls the previous build over the current one, leaving the two halves of
+# one install disagreeing: the `.so` a `maturin develop` wrote, beside metadata
+# from an earlier build. `tests/test_version.py` catches that, and can only
+# catch it because `__version__` comes from the crate rather than from the
+# metadata being read.
 #
 # Naming any key replaces the default, so `pyproject.toml` is listed here rather
 # than inherited. The cost is a rebuild when one of these changes and uv is the

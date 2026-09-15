@@ -21,15 +21,12 @@
 # running this by hand, or read a verdict that is about the interpreter --
 # `docs/dev/07-tooling-ci.md` carries the whole invocation.
 #
-# The files still excluded are reached only through pytest, which this harness
+# The files excluded below are reached only through pytest, which this harness
 # cannot observe, so their mutants would all "survive" and say nothing about the
-# tests. That sentence used to cover nine files and was believed rather than
-# checked: asked of the oracle it turned out to be hiding 62 survivors, and
-# asked of two more it was wrong in both directions at once -- `input.rs` has no
-# viable survivor for pytest to be covering, and `check/index.rs` has eight
-# nobody had seen. Both are in the sweep. The seven below are the ones whose
-# answers really do come from the Python suite, and bringing one in means
-# writing it a Rust corpus first, which is what the oracle needed.
+# tests. That claim is checked per file rather than assumed: a file excluded on
+# it and swept anyway reports survivors the Python suite was believed to cover,
+# and a file excluded on it wrongly hides them. Bringing one into the sweep
+# means writing it a Rust corpus first.
 #
 # Each is excluded by name rather than by a crate-wide glob, so a new file joins
 # the sweep by default instead of silently inheriting an exclusion — and
@@ -46,14 +43,14 @@ exclude_globs = [
     "crates/valgebra-py/src/check/violation.rs",
     "crates/valgebra-py/src/errors.rs",
     "crates/valgebra-py/src/lib.rs",
-    # The annotation render, whose answers are the snapshot corpus in pytest:
-    # grouped under the workload comment below until the count above was
-    # written, which is the kind of thing a list keeps quiet about.
+    # The annotation render, whose answers are the snapshot corpus in pytest.
+    # Named on its own line rather than grouped with the workload below, because
+    # a file sharing another's reason is a file whose own reason nobody checks.
     "crates/valgebra-py/src/render.rs",
     # The instruction gate's own workload: a measuring instrument no caller
     # reaches and no suite runs, so a mutant of it is a mutant nothing can
-    # observe. It sat inside `lib.rs` until the coverage lane said what
-    # counting it costs.
+    # observe. It is its own file for that reason -- held inside `lib.rs` its
+    # lines count against the binding's coverage floor.
     "crates/valgebra-py/src/workload.rs",
 ]
 
@@ -66,8 +63,8 @@ exclude_globs = [
 # keeps the sweep honest rather than chasing a target no test can hit.
 #
 # Every entry below names a mutant `cargo mutants --list` really offers, which
-# `tests/test_mutation_scope.py` checks: a regex matching nothing is a hole in
-# the coverage claim that argues for a target that no longer exists.
+# `tests/test_mutation_scope.py` checks: a regex matching nothing excuses a
+# target that does not exist, which reads as coverage and is not.
 exclude_re = [
     "has_disjoint_complement_pair",
     # `snapshot_pays` chooses between two readings of a list of one scalar kind

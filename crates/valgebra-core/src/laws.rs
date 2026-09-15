@@ -2142,8 +2142,8 @@ fn intersection_of_unions_tower(depth: usize, leaf: Schema) -> Schema {
 #[test]
 fn simplify_stays_linear_on_a_complemented_tower() {
     let schema = complemented_tower(18);
-    // The duplicate union members collapse, so the reduced form is small;
-    // the point is the work it took to get there.
+    // The duplicate union members collapse, so the reduced form is small. What
+    // this measures is the work of reaching it, not the size of the result.
     assert!(matches!(schema.simplify(), Schema::Complement(_)));
     let nodes = schema.node_count() as u64;
     let steps = schema.simplify_steps();

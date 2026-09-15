@@ -28,9 +28,9 @@ on any machine, with no re-recording. The fine-grained work is
 base under cachegrind at 2%.
 
 **A ceiling a shape passes by a wide margin stops measuring it.** The JSON
-document sat at 0.87 under a ceiling of 1.00 while a commit message claimed 0.78
-for it, and nothing was red for as long as it took somebody to re-run the gate
-for an unrelated reason. So beside each ceiling -- the claim -- the file carries
+document sits under a ceiling of 1.00 and clears it by a fifth, so its ratio
+moves by a tenth with nothing red until somebody re-runs the gate and reads the
+number. So beside each ceiling -- the claim -- the file carries
 a *recorded* ratio and a per-shape tolerance, which is the ratchet the mutation
 sweep and the instruction gate already have: a shape drifting past what it last
 measured is red even while it is under what the project promises.

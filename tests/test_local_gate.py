@@ -2,9 +2,9 @@
 
 `AGENTS.md` lists commands a developer runs in a full clone with a warm virtual
 environment; CI is forty-odd jobs in shallow clones with pinned tools on three
-operating systems. The first difference that mattered was found by a push: a
-ledger reading `git describe` passed locally for a week and reddened eight jobs
-at once, because a local clone has tags and a checkout does not.
+operating systems. A local clone carries tags and a checkout does not, so a
+check reading `git describe` answers one way in each -- and a difference of that
+shape is invisible until a push finds it.
 
 `scripts/gate.py` closes that by running the workflow's own `run:` steps in a
 clone shaped like the runner's. This holds the two halves of that claim:
