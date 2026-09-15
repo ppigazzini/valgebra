@@ -12,7 +12,7 @@ it decides.
 schema tree, matching shapes and applying rules, with one module per surface
 beside it: `decision/emptiness.rs` for the three-valued verdict every relation
 reduces to, `decision/readings.rs` for what a pair no rule decides is read
-for, `decision/oracle.rs` for the questions only the bindings can answer,
+for, `oracle.rs` for the questions only the bindings can answer,
 `decision/constraints.rs` for a refinement's bounds,
 `decision/products.rs` for sequences split across a union,
 `decision/records.rs` for keyed maps and attribute records, and
@@ -242,7 +242,7 @@ any other way, which is what the fuzz target builds.
 
 A class hierarchy and a concrete value are Python facts, and `valgebra-core`
 cannot see Python ([00-architecture.md](00-architecture.md)). The `LeafRelations`
-trait is how it asks, `decision/oracle.rs` is where the core asks it, and
+trait is how it asks, `oracle.rs` is where the core asks it, and
 `crates/valgebra-py/src/oracle.rs` is the answer the bindings give — the two
 sides of one seam, each in a module named for it, the binding's side with a
 corpus of its own driving every question below

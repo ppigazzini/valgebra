@@ -28,7 +28,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "docs" / "dev" / "02-decision.md"
-TRAIT = ROOT / "crates" / "valgebra-core" / "src" / "decision" / "oracle.rs"
+TRAIT = ROOT / "crates" / "valgebra-core" / "src" / "oracle.rs"
 #: The structural rules, where a pair no rule decides is handed to the
 #: readings that refute.
 RULES = ROOT / "crates" / "valgebra-core" / "src" / "decision.rs"

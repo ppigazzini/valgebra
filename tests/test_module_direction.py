@@ -20,10 +20,17 @@ it, and `Verdict` and `Relation` the two three-valued answers both deciders
 give. Each belongs to the frame the pair shares, and none to the half that
 happened to define it.
 
-So the frame sits in `kind.rs` and `verdict.rs`, below both, and this holds the
-direction. The reverse edge stays allowed -- an optimisation may depend on the
-definition it optimises -- which is what makes this a direction rather than a
-separation.
+So the frame sits in `kind.rs`, `verdict.rs` and `oracle.rs`, below both, and
+this holds the direction. The reverse edge stays allowed -- an optimisation may
+depend on the definition it optimises -- which is what makes this a direction
+rather than a separation.
+
+`ir.rs` is under the same rule and for a stronger reason: it is the term, which
+both readings are readings *of*. Its constructors apply the lattice laws while a
+schema is built -- a join carrying a member together with its complement is the
+top -- and the one statement of that law is in `oracle.rs`, which `simplify.rs`
+and the emptiness decision read from there too. Stated inside either decider it
+would be an edge from the term to a reading of it.
 """
 
 from __future__ import annotations
@@ -73,6 +80,31 @@ def test_the_definition_imports_nothing_from_the_optimisation() -> None:
     )
 
 
+def test_the_term_imports_nothing_from_the_optimisation() -> None:
+    """The constructors apply lattice laws, not decisions.
+
+    A law about the term is a law wherever it is read, so it sits below every
+    reader. The edge this refuses is the one that was there: `ir.rs` naming
+    `crate::decision` to fold `A | ~A` at construction.
+    """
+    for name in ("ir.rs", "ir/transform.rs", "ir/intern.rs", "simplify.rs"):
+        source = CORE / name
+        assert source.exists(), f"{name} is gone; this rule names a file that moved"
+        offenders = [
+            f"{name}:{number}: {line.strip()}"
+            for number, line in enumerate(
+                source.read_text(encoding="utf-8").splitlines(), start=1
+            )
+            if _DECISION.search(line) and "has_disjoint_pair" not in line
+        ]
+        assert not offenders, (
+            "the term reaches into the structural procedure:\n"
+            + "\n".join(offenders)
+            + "\nA lattice law both readings apply belongs in `oracle.rs`, below "
+            "both; import it from there."
+        )
+
+
 def test_the_frame_is_where_the_definition_can_reach_it() -> None:
     # The other direction of the same claim: the modules the descriptor was
     # emptied into exist and hold what it needs. Without this the test above
@@ -84,6 +116,13 @@ def test_the_frame_is_where_the_definition_can_reach_it() -> None:
     assert "enum Regions" in kind
     assert "pub enum Verdict" in verdict
     assert "pub enum Relation" in verdict
+    # The third frame module: what neither reading can decide alone, and the
+    # two lattice laws all three apply.
+    oracle = (CORE / "oracle.rs").read_text(encoding="utf-8")
+    assert "pub trait LeafRelations" in oracle
+    assert "fn has_complementary_pair_within" in oracle
+    assert "fn denotes_a_set_within" in oracle
+    assert not _DECISION.search(oracle), "oracle.rs imports the optimisation"
     # And the frame does not reach back into either decider.
     for name, source in (("kind.rs", kind), ("verdict.rs", verdict)):
         assert not _DECISION.search(source), f"{name} imports the optimisation"
