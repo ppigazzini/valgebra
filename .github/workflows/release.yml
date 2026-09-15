@@ -90,6 +90,37 @@ jobs:
       # before-script-linux below.
       - if: ${{ matrix.platform.pgo && runner.os != 'Linux' }}
         run: rustup component add llvm-tools
+      # The action pulls its container itself, once, with no retry, so a registry
+      # answering `504` fails a release dispatch that has nothing wrong with it --
+      # and a dispatch is a person at a button rather than a push that reruns
+      # itself. `ci.yml` pre-pulls for the same reason; this is the lane where it
+      # matters more.
+      #
+      # The image is written out per target rather than derived from what
+      # `manylinux:` resolves to, as it is there: a name the action resolves
+      # differently pulls something unused and the build is unaffected, so a
+      # wrong guess costs a pause and never a wheel. A pull that succeeds leaves
+      # the image in the daemon and the action's own pull is a no-op; one that
+      # does not still lets the action try, because this step exists to make the
+      # lane sturdier and not to become a new way for it to fail.
+      - name: Pull the build container, with retries
+        if: ${{ runner.os == 'Linux' }}
+        env:
+          POLICY: ${{ matrix.platform.manylinux || 'manylinux2014' }}
+          TARGET: ${{ matrix.platform.target }}
+        run: |
+          case "$POLICY" in
+            musllinux_1_2) image="quay.io/pypa/musllinux_1_2_${TARGET}:latest" ;;
+            *)             image="quay.io/pypa/manylinux2014_${TARGET}:latest" ;;
+          esac
+          for attempt in 1 2 3; do
+            if docker pull "$image"; then
+              exit 0
+            fi
+            echo "pull attempt $attempt failed"
+            sleep 15
+          done
+          echo "::warning::could not pre-pull $image; the build step will try"
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           command: build
