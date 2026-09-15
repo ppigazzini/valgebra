@@ -53,6 +53,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 pytestmark = pytest.mark.repository
 
@@ -211,8 +212,52 @@ def test_the_workflow_runs_this_ledger_with_full_history() -> None:
     stop, one level up. So the lane that carries the project's own audit checks
     out with `fetch-depth: 0`, and this holds it there.
     """
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert "fetch-depth: ${{ (matrix.os == 'ubuntu-latest'" in workflow, (
-        "the python lane no longer takes the full history on its floor leg, so "
-        "the changelog ledger skips in every lane that runs it"
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     )
+    checkouts = [
+        step
+        for step in workflow["jobs"]["python"]["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    ]
+    assert len(checkouts) == 1, "the python lane checks out once"
+    depth = str(checkouts[0].get("with", {}).get("fetch-depth", ""))
+
+    # The expression is read for what it *yields*, not matched as text: a
+    # rewording that keeps the full history is fine, and a `'1'` in both arms is
+    # not -- which a substring match reads the other way round on both counts.
+    floor = {"matrix.os": "ubuntu-latest", "matrix.python-version": FLOOR}
+    assert _expression(depth, floor) == "0", (
+        f"the python lane takes fetch-depth {_expression(depth, floor)!r} on its "
+        f"floor leg, so the changelog ledger skips in every lane that runs it"
+    )
+
+
+#: The interpreter the floor leg runs, which is the leg that takes the history.
+FLOOR = "3.10"
+
+#: A workflow expression of the one shape this ledger reads: a parenthesised
+#: conjunction of `lhs == 'literal'` tests choosing between two quoted results.
+_TERNARY = re.compile(
+    r"\$\{\{\s*\((?P<cond>.+?)\)\s*&&\s*'(?P<then>[^']*)'"
+    r"\s*\|\|\s*'(?P<other>[^']*)'\s*\}\}"
+)
+# `python-version` carries a hyphen, so an identifier is not `\w` alone -- a
+# pattern that stops at one reads `matrix.python-version` as `version` and finds
+# no such key in the context, which is a condition that quietly never holds.
+_TEST = re.compile(r"(?P<lhs>[\w.-]+)\s*==\s*'(?P<rhs>[^']*)'")
+
+
+def _expression(text: str, context: dict[str, str]) -> str:
+    """Evaluate the one workflow-expression shape this ledger reads.
+
+    A literal is itself. Anything else must be the conjunction-and-ternary the
+    checkout step uses; a shape this cannot read fails rather than passing, so a
+    rewrite into something else is a change someone looks at.
+    """
+    match = _TERNARY.fullmatch(text.strip())
+    assert match, f"the ledger cannot read this fetch-depth expression: {text!r}"
+    tests = _TEST.findall(match["cond"])
+    assert tests, f"no equality test in {match['cond']!r}"
+    holds = all(context.get(lhs) == rhs for lhs, rhs in tests)
+    return match["then"] if holds else match["other"]
