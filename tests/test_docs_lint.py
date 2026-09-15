@@ -234,6 +234,29 @@ def test_a_test_gated_item_does_not_hide_the_bounds_below_it() -> None:
     assert {name for name, _ in lint.BOUND.findall(read)} == {"ABOVE", "BELOW"}
 
 
+def test_a_baseline_comment_is_held_to_the_prose_rules() -> None:
+    """A baseline's own argument is prose, and was the prose no rule read.
+
+    The counts that went stale in those fields were the counts the same file
+    records: a comment saying a budget was re-recorded at some figure reads as
+    current for as long as it sits there, and the number beside it is the one
+    thing in the tree guaranteed to move.
+    """
+    assert lint.baseline_prose(), "no baseline carries a comment field"
+    for relative, prose in lint.baseline_prose():
+        assert not lint.check_pinned_numbers(prose, lint.gate_numbers()), relative
+        assert not lint.check_internal_reference(prose), relative
+
+
+def test_a_baseline_comment_quoting_its_own_budget_is_refused() -> None:
+    """Refuse a comment that quotes a count its own file records."""
+    numbers = lint.gate_numbers()
+    assert numbers, "the budget file records no count"
+    assert lint.check_pinned_numbers(f"re-recorded at {numbers[0]}", numbers)
+    prose = "re-recorded; the file owns the count"
+    assert not lint.check_pinned_numbers(prose, numbers)
+
+
 def test_the_bounds_ledger_is_held_in_both_directions() -> None:
     # Driven against the real tree, since the check reads a fixed page. The
     # value comparison is the half a name check would miss, so it is the one

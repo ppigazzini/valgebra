@@ -67,11 +67,11 @@ repos:
       # reach it and a change to the core's public types compiles cleanly here
       # while breaking the fuzz lane. Checked, not clippy-linted: its own lane
       # lints it under the nightly it needs.
-      # `ty` runs in the merge gate and in `scripts/gate.py`, and ran nowhere a
-      # commit passes through: two type errors in this repository's own gate
-      # script were committed and pushed before the gate reached the step that
-      # reads them. It is a second of wall clock and it reads the whole project,
-      # so it is asked where `ruff` is asked rather than twenty minutes later.
+      # `ty` runs in the merge gate and in `scripts/gate.py`, neither of which a
+      # commit passes through, so a type error in this repository's own gate
+      # script reaches a push before anything reads it. It is a second of wall
+      # clock and it reads the whole project, so it is asked where `ruff` is
+      # asked rather than twenty minutes later.
       - id: ty-check
         name: ty type check
         entry: uv run --no-sync ty check

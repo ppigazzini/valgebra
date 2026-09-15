@@ -43,9 +43,7 @@ unreachable_pub = "warn"
 pedantic = { level = "warn", priority = -1 }
 # The summary rustdoc prints in a module listing is an item's first *paragraph*,
 # so a paragraph running four sentences is a listing entry running four
-# sentences. The tree splits summary from body nearly everywhere -- `MAX_ROW`
-# does it directly beside the `MAX_STATES` that did not -- and three items had
-# drifted. Named rather than taken with the group it belongs to: one lint whose
+# sentences. Named rather than taken with the group it belongs to: one lint whose
 # subject is how this project already writes, against a group whose other
 # members are style preferences it has not made.
 too_long_first_doc_paragraph = "warn"

@@ -104,11 +104,10 @@ python-source = "python"
 module-name = "valgebra._valgebra"
 manifest-path = "crates/valgebra-py/Cargo.toml"
 # Build the abi3-incompatible per-version module. Stripping is the *profile's*
-# decision and is written there: `[profile.release]` strips and `[profile.profiling]`
-# does not. Setting it here overrode both, so `maturin build --profile profiling`
-# -- the profile that exists to keep symbols -- produced a binary with none, and
-# a callgrind run against the shipped extension could attribute nothing. The
-# release wheel is unchanged: it is built from `[profile.release]`, which strips.
+# decision and is written there: `[profile.release]` strips and
+# `[profile.profiling]` does not. A `strip` key here overrides both, so the
+# profile that exists to keep symbols would produce a binary with none and a
+# callgrind run against the shipped extension could attribute nothing.
 # Profile-guided-optimization training workload for `maturin build --pgo`
 # (release lane only). Runs against the instrumented build to record a profile
 # over a broad, production-like spread of validation shapes; depends only on the

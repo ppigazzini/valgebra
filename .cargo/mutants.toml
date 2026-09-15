@@ -85,10 +85,9 @@ exclude_re = [
     "replace && with \\|\\| in member",
     # An oracle default is unkillable only where *every* call site collapses
     # cannot-decide into the answer the mutant returns, and that is a claim
-    # about the call sites rather than about the default. Two rows here
-    # outlived theirs: `leaf_subtype` grew a site that reads `Some(false)` as a
-    # refutation, and `literals_disjoint` grew one that reads all three answers
-    # apart. Both mutants die in about a minute, and both are back in the sweep.
+    # about the call sites rather than about the default: a question that grows
+    # a site reading the other answer has a killable default, and belongs in the
+    # sweep. `leaf_subtype` and `literals_disjoint` are both that case.
     #
     # `no_int_between` has one site, `== Some(true)`, so cannot-decide and
     # decided-against are one conservative verdict there and no test can tell
@@ -121,9 +120,9 @@ exclude_re = [
     # The other direction is a real defect and is killed rather than excused:
     # read as always true, a clause keyed by `int` -- which no parsed key can
     # satisfy -- would govern every key by its value alone and admit an object
-    # nothing covers. The row is interpreter-backed deliberately, because the
-    # rows that held this reading first were in pytest, which this sweep cannot
-    # observe, so the nightly read both mutants as new.
+    # nothing covers. The row is interpreter-backed deliberately: a row in pytest
+    # is one this sweep cannot observe, and the nightly then reads the mutant as
+    # new.
     "replace match guard matches!\\(clause.key, Schema::Str \\| Schema::Anything\\(_\\)\\) with false in undeclared_covered",
     # `Decided::resume_at` chooses where the explaining walk starts: at the
     # point the deciding walk stopped, or at the beginning. Both answer the same
