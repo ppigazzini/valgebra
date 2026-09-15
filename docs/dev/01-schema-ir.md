@@ -117,12 +117,12 @@ Three arguments look like they settle case 1 and do not:
 - **"The behaviour already looks right."** A `Validator` probe shows what the
   walk does. The walk can agree with a denotation by accident, and a node's
   denotation is what the doc comment in this file says.
-- **"The implementation already computes it."** `build_object` computed
-  per-attribute checks on its way to a node that denoted instances of a class,
-  and for as long as that was the only node, "any object with these attributes"
-  was not in the closure. It took splitting the node — a commit, a denotation, a
-  membership rule — to put it there. A computation on the way to a set is not
-  that set.
+- **"The implementation already computes it."** `build_object` computes
+  per-attribute checks on its way to a class's instances, and that computation
+  does not put "any object with these attributes" in the closure: what puts a
+  set there is a node with a denotation and a membership rule, which is why
+  `Instance` and `AttrRecord` are two nodes and a dataclass is their meet. A
+  computation on the way to a set is not that set.
 - **"It only changes which values a constructor sees, not the algebra."**
   Subtyping is defined from the denotation (`[[s ∧ ¬t]] = ∅`), so changing which
   values inhabit a constructor changes the subtyping relation. There is no lever
@@ -258,10 +258,10 @@ tests and the fuzz targets.
 Being the same operation, it is one walk: `Remap` names the difference — append
 by a distance, or intern through a table — and the walk asks each index space how
 it moves. A definitions index moves the same way under both, which is what makes
-one walk enough. The two were separate walks, identical but for the leaf action,
-and a payload site reached by one and missed by the other was a wrong index that
-neither the types nor an exhaustive `match` could see: the compiler forces an arm
-per variant and cannot check that the arm moved anything. `Schema::map_children`
+one walk enough. Two walks identical but for the leaf action would put every
+payload site in both, and a site reached by one and missed by the other is a
+wrong index neither the types nor an exhaustive `match` can see: the compiler
+forces an arm per variant and cannot check that the arm moved anything. `Schema::map_children`
 holds the other half of that argument — it is the single place each variant's
 child schemas are written down, so a walk that only descends inherits the child
 set instead of restating it. `Schema::remapped_by` takes no wildcard on purpose:
@@ -433,9 +433,8 @@ cannot hold both is one that cannot decide it. Per-kind lines keep the
 partition, split a line's complement into at most three atoms, and are the
 shape the record atom already has, so the code exists once.
 
-It waited on one thing, and that has landed: guards held by handle, so a
-component may be a union without multiplying the memory of every automaton that
-holds one.
+Its one precondition holds: guards are held by handle, so a component may be a
+union without multiplying the memory of every automaton that carries one.
 
 What is *not* a precondition, and once read as one, is the descriptor replacing
 the decision procedure. That caution is about **consulting** a DNF descriptor
@@ -587,11 +586,10 @@ else moves it.
 
 ## What a bare builtin class denotes
 
-`list` and `list[object]` admit exactly the same values -- every list, a
-subclass instance included -- and neither was decided below the other. The two
-were different sorts of thing: `list[object]` is a sequence node in the `List`
-kind, and `list` was an `isinstance` atom in no kind at all, so the two never met
-on a line.
+`list` and `list[object]` admit exactly the same values: every list, a subclass
+instance included. Read as two sorts of thing they are undecidable against each
+other -- `list[object]` is a sequence node in the `List` kind, and an
+`isinstance` atom sits in no kind at all, so the two never meet on a line.
 
 **A bare builtin container is its kind.** The frontend maps `list`, `tuple`,
 `set`, `frozenset` and `dict` to the kind's own top -- `list[anything]`,
@@ -684,10 +682,10 @@ is answering the language. `&` and `~` would be second spellings of
 shorter is not a reason. A validator does not pickle either, and the refusal
 says what to send instead ([docs/17-boundaries.md](../17-boundaries.md)).
 
-`simplify` was the lattice normal form of a term the constructors left
-un-normalised. Once construction settles the laws -- see the next section -- the
-schema a caller holds *is* that normal form, `repr` shows it and `==` compares
-it, and `simplify` is the identity under another name. It is deprecated rather
+`simplify` is the lattice normal form of a term, and construction settles the
+laws -- see the next section -- so the schema a caller holds already *is* that
+normal form: `repr` shows it, `==` compares it, and the method is the identity
+under another name. It is deprecated rather
 than removed at once, because a method that quietly starts returning its
 argument is worse than one that says it is going.
 

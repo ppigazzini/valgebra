@@ -164,10 +164,9 @@ fn _valgebra(module: &Bound<'_, PyModule>) -> PyResult<()> {
     // ordinary lookup fails, and it caches what it built on the instance, so the
     // second access is a plain attribute read.
     //
-    // There are no class defaults any more, and there must not be: a default
-    // makes ordinary lookup *succeed*, so the hook would never run. The empty
-    // answers a hand-built error used to get from those defaults come from the
-    // hook instead, which keeps the type one shape rather than two.
+    // The type carries no class defaults, and must not: a default makes ordinary
+    // lookup *succeed*, so the hook would never run. The hook is what answers
+    // for a hand-built error, which keeps the type one shape rather than two.
     install_lazy_attributes(py)?;
     module.add("ValidationError", failure)?;
     module.add_class::<Validator>()?;

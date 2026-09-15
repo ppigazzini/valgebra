@@ -201,8 +201,8 @@ pub(crate) fn validation_error_getattr<'py>(
         )));
     }
     // An error built by hand reports no failures, and the model describes
-    // *failures*: the empty answer is the honest one rather than an
-    // `AttributeError`, which is what the class defaults used to say.
+    // *failures*: the empty answer is the honest one, and an `AttributeError`
+    // here would describe the object rather than the model.
     let Ok(carried) = instance.getattr(intern!(py, "_failures")) else {
         return empty_attribute(py, name);
     };
@@ -339,7 +339,7 @@ fn attach_failures(py: Python<'_>, err: &PyErr, violations: Vec<Violation>) -> P
 /// Interned rather than passed as `&str`. A `set_item("code", ..)` builds a
 /// fresh Python string for the key on every call, and one failing `validate`
 /// writes eleven of them -- five per item plus the six attributes -- which is
-/// most of what raising used to cost. `intern!` caches one object per call site
+/// most of what raising a failure costs. `intern!` caches one object per call site
 /// for the interpreter's life, so the write is a hash of a string that already
 /// knows its hash.
 struct Keys<'py> {

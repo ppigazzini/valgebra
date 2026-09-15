@@ -6,9 +6,9 @@ when an accept looks wrong.
 
 ## One walk, two input paths, three modes
 
-There is **one** `member` function. It was two — a fast one and an explaining one
-— and the two drifted; fusing them removed the class of defect where the answer
-depended on which walk ran.
+There is **one** `member` function, parameterised by mode rather than a fast one
+and an explaining one side by side. Two walks drift, and the defect that follows
+is an answer that depends on which of them ran.
 
 It runs over a `Value`, which is either a borrowed Python object or a borrowed
 parsed JSON value. That is what keeps the object path and the in-place JSON path

@@ -206,7 +206,7 @@ tree is a partial version of it. What the citation buys today is the knowledge
 that the relation is decidable in EXPTIME, and that is a statement about the
 relation rather than a budget an implementation can be held to.
 
-**A goal memo is not the missing piece, and this page used to say it was.**
+**A goal memo is not the missing piece.**
 Interning is in the tree — `crates/valgebra-core/src/ir/intern.rs` shares the
 nodes of two schemas built alike — and it is the identity a table over goals
 would need for its key, which is why it read as half of one. Counted over the
@@ -337,17 +337,6 @@ one the next reader rediscovers as a bug.
 | 5 | Clauses are quasi-K-step rather than quasi-constant | nothing against the literature, which introduces exactly this generalisation |
 | 6 | The assumption trail is popped rather than threaded | every relation proved on the way is discarded, so a goal reached twice by different paths is decided twice |
 | 7 | A class is described by what the frontend can read of it | a class laying down a layout the frontend cannot read is its `isinstance` test and its kind, and nothing else; every relation about the structure its instances have is then a question no rule can answer |
-
-Three departures earlier drafts of this table carried are closed. The trail
-held whole terms, which cost a subtree copy per step; it holds shared handles,
-and a copy is a reference count. The gradual atom was a variant every lattice
-rule had to remember to exclude; `Any` is the top, spelled, so no rule can tell
-them apart. And a draft of row seven blamed the *set* reading for refuting that
-a named tuple of two integers is a `tuple[int, int]` -- the reading was right
-about the schema it was given, which described the instance's attributes and
-not its positions. The frontend reads both and says both, so the question is
-one the rules answer; the departure that remains is the general one above, for
-a class whose layout the frontend cannot read at all.
 
 Tooling and toolchain facts are [11-references.md](11-references.md), not this
 page.

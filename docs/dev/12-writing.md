@@ -182,8 +182,7 @@ A path `.gitignore` names is exempt from the second rule, because the repository
 decided not to carry it and a page naming one is usually documenting the tool
 that writes it. **The exemption is asked of git rather than of the filesystem**,
 so the answer is the same on a fresh clone and on a machine that has run that
-tool. It was not, once, and the lane that caught it is the only reason anyone
-knew: a check whose verdict changes with local build output is measuring the
+tool: a check whose verdict changes with local build output is measuring the
 machine rather than the tree.
 
 That exemption is also what makes the third rule necessary. The untracked working

@@ -299,10 +299,10 @@ sites rather than of the default, and it holds for exactly three of the ten:
 | `direct_instance_of_kind`, `kind_derives_from` | `== Some(false)` | `Some(true)` |
 
 The other direction of each is killable and is swept: it turns a declined
-question into a claim, which is the unsound direction. `leaf_subtype` used to
-belong to this table and does not: it has three call sites, and the one the meet
-rule added reads `== Some(false)` as a refutation, so a default of `Some(false)`
-now refutes a pair the oracle declined and dies in about a minute.
+question into a claim, which is the unsound direction. `leaf_subtype` is **not**
+on this table, and the reason is its call sites: one of the three reads
+`== Some(false)` as a refutation, so a default of `Some(false)` refutes a pair
+the oracle declined, and the sweep kills it in about a minute.
 `.cargo/mutants.toml` carries the same argument beside each excluded row, and
 `tests/test_oracle_ledger.py` holds this list to the trait in both directions.
 
@@ -479,15 +479,16 @@ saved the queries with something.
 over a DAG of thirty-two fields sharing one interned inner record, the number of
 subtyping goals a query *repeats* is zero: the trail absorbs recursion, and the
 field and position caches absorb the shape where one goal is asked many times.
-A table over goals would have nothing to hit, so the sentence this page used to
-carry -- that memoisation would make budget exhaustion rarer -- is not a promise
-being kept later. What would reopen it is a shape where one goal is reached by
-two rules with no cache between them, and none is in hand.
+A table over goals would have nothing to hit, so memoisation is not a way to
+make budget exhaustion rarer. What would reopen it is a shape where one goal is
+reached by two rules with no cache between them, and none is in hand.
 
 Part of the argument the counter stands in for is already in the code: the trail
 holds each `(subject, supertype)` pair it is deciding, and a pair that comes back
 returns against the hypothesis rather than unfolding again, which is what makes a
-recursive schema decide at all. What it does not cover is the goals a rule
+recursive schema decide at all. A pair is a pair of shared handles, so pushing
+one costs a reference count rather than a copy of the subtree, and comparing two
+short-circuits on pointer identity where the two schemas were built alike. What it does not cover is the goals a rule
 *builds*: deciding a fixed-length sequence against a union expands the branches
 and constructs a sequence per expansion, and those are not subterms of anything
 the query was handed, so the set the trail draws from is not obviously finite.

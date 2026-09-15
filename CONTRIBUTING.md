@@ -198,7 +198,7 @@ Scheduled lanes run the deep property suites, a libFuzzer soak over the
 core, and two mutation sweeps — the core crate, and the membership walk under an
 embedded interpreter — whose survivors are ratcheted against their own committed
 baselines: a survivor the baseline does not accept fails the lane, and so does a
-baseline entry that is no longer a survivor. The target is never zero —
+baseline entry whose mutant the tests kill. The target is never zero —
 equivalent mutants exist and are undecidable — so an accepted survivor carries
 the argument for why no test can kill it.
 Every push also runs the same sweeps **restricted to the lines the diff

@@ -149,7 +149,7 @@ impl PoolRelations<'_, '_> {
     ///
     /// Reading a class as the union of `list(cls)` is sound only when every
     /// instance of the class is one of the values listed, and that takes four
-    /// things rather than the three this used to check:
+    /// things:
     ///
     /// * it is an enumeration, so the members are fixed when the class is
     ///   created;

@@ -100,9 +100,9 @@ materialising Python objects first.
 
 Nothing here is unbounded. A schema is built under limits, a walk descends under
 one, a decision spends a budget, and every representation in the descriptor
-refuses past a size rather than returning a set it cannot hold. They accumulated
-one at a time, in eight files, and the list was nowhere -- so a reader could not
-tell a measured number from a guessed one, and a new bound cost nothing to add.
+refuses past a size rather than returning a set it cannot hold. They live in
+eight files, so without one list a reader cannot tell a measured bound from a
+guessed one, and adding another costs nothing.
 
 The rule is: **no bound without a gate that measures it.** Adding one means
 adding a row here and a test that reaches it. The table is held to the tree in

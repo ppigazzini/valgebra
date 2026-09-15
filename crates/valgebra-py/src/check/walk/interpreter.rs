@@ -3012,7 +3012,7 @@ fn a_tuple_subclass_is_walked_over_the_elements_it_holds() {
     // that read past the end of the allocation and took the process down. The
     // walk reads the base type's own slot instead, and the rows below are the
     // answers that reading has to give: the elements the value holds, on every
-    // interpreter, and the same answers CPython gave before the repair.
+    // interpreter, whatever the subclass reports for its own length.
     Python::attach(|py| {
         let module = PyModule::from_code(
             py,

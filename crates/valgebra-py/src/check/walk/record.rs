@@ -75,12 +75,12 @@ pub(super) fn scan_dict<'py>(
 /// so the explaining walk has nothing to learn by asking again.
 ///
 /// What that costs to know is three integers and no allocation, which is why it
-/// is carried rather than recomputed. An earlier draft kept the probed values
-/// themselves; it saved the probes and not the checks, and charged every
-/// *accepting* validation a clone per field -- 13.5% on the explaining accept
-/// path and 2.35% even in the fast mode that records nothing, against 15.7%
-/// saved on the path that fails. The shape that measures the accepting side is
-/// `BindingShape::ExplainAccept`, and it was added before either draft.
+/// is carried rather than recomputed. Carrying the probed values themselves
+/// instead saves the probes and not the checks, and charges every *accepting*
+/// validation a clone per field -- 13.5% on the explaining accept path and
+/// 2.35% even in the fast mode that records nothing, against 15.7% saved on the
+/// path that fails. `BindingShape::ExplainAccept` is the shape that measures the
+/// accepting side, which is the side such a trade charges.
 ///
 /// The guard is the one the deciding walk already applies to itself: the entry
 /// count. A value that changed size between the passes resumes from the start,

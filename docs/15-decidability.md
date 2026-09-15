@@ -46,9 +46,8 @@ answers `"undecided"`.
   empty.
 - **A bare container class and its parameterised form.** `list` and
   `list[object]` are one schema: an unparameterised generic names its kind's
-  whole set, which is what the typing spec assigns it and what the check has
-  always performed. `tuple`, `set`, `frozenset` and `dict` read the same way, as
-  `str` and `int` always did.
+  whole set, which is what the typing spec assigns it. `tuple`, `set`,
+  `frozenset` and `dict` read the same way, as `str` and `int` do.
 - **Class and literal inclusion.** A class is a subtype of its base *classes*,
   by `issubclass`, and a literal is a subtype of any schema it is a member of. A
   dataclass or named tuple relates the same way: its schema is below one over a
@@ -108,8 +107,8 @@ answers `"undecided"`.
 - **Sequences.** Homogeneous, fixed-length, and prefix-plus-tail lists and tuples,
   with the container as part of the type (a list is never a tuple). Every sequence
   schema valgebra builds takes this linear shape, so inclusion *between two
-  sequence schemas* is decided completely — a bare `list` is a class atom rather
-  than a sequence, and relates as a class does, not as a sequence. A
+  sequence schemas* is decided completely — a bare `list` among them, since it is
+  the sequence node its kind's top spells (above). A
   **fixed-length** sequence is also decided against a union of
   fixed-length ones it splits across, where no single branch contains it:
   `tuple[int | str, int]` is below `tuple[int, int] | tuple[str, int]`. The rule
@@ -545,9 +544,9 @@ its constants in the order it met them, relating two validators renumbers one
 pool into the other, and a table written backwards is renumbered backwards. A
 member list is read as a set only in the canonical order its constructor leaves
 it in, so the transform that renumbers one sorts it again
-(`crates/valgebra-core/src/ir/transform.rs`, `mapped_member_set`). Before it
-did, two tables that agreed on nothing about where each constant sat were
-distributed against each other as if the rule were not there.
+(`crates/valgebra-core/src/ir/transform.rs`, `mapped_member_set`). Without that
+sort, two tables agreeing on nothing about where each constant sits fall out of
+the canonical order and are distributed against each other instead.
 
 The refutation is the bindings' to give: two constants at two pool positions are
 two *values* only where their type's equality can be trusted, and a constant

@@ -81,9 +81,8 @@ uv run python scripts/gate.py --list    # what it runs, and what needs a runner
 
 It reads the commands out of `.github/workflows/ci.yml` rather than restating
 them, and every step is either run or named with the reason it cannot be. The
-difference is not academic: a check that read `git describe` passed here for a
-week and reddened eight jobs at once, because a local clone has tags and a
-checkout does not.
+difference is not academic: a local clone carries tags and a checkout does not,
+so a check reading `git describe` answers one way here and another on a runner.
 
 
 ## Layout

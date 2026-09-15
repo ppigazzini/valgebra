@@ -113,9 +113,9 @@ figure timed by hand has only the habit to protect it.
 build on an idle machine, read as the best of five runs and taken twice.** The
 two guards above hold the first of those and neither holds the other two: a
 timing taken while something else has the CPU reads slow, and one taken once
-reads whatever that run did. Both have produced a published number here that
-was wrong by a factor, which is why the sentence is written rather than
-assumed. How much PGO adds over a plain `--release` build is not a
+reads whatever that run did. Either is enough to put a published figure out by a
+factor, so the discipline is written down rather than assumed. How much PGO
+adds over a plain `--release` build is not a
 constant this page can state. It is whatever the profile can still arrange that
 fat LTO did not, so it shrinks as the hot paths themselves get shorter: measured
 on one machine it has ranged from 1.75x down to 1.01x, and the shapes where the
@@ -239,11 +239,12 @@ mean it.
 A failing validation walks the value **twice** here -- once to decide, once to
 say which field -- where pydantic-core walks it once and collects as it goes.
 That is a deliberate trade for the passing path, which is the common one and
-which walks once. The second walk no longer repeats the first: it resumes where
+which walks once. The second walk does not repeat the first: it resumes where
 the deciding walk stopped, since a field that matched has no violation to report
-([dev/04-walk.md](dev/04-walk.md)), which took 36.8% off it on the instruction
-gate -- a fifty-field record refused at the thirty-second position costs 14,861
-instructions where it cost 23,516. What is left of the gap is one extra walk of
+([dev/04-walk.md](dev/04-walk.md)). Resuming rather than restarting is worth
+36.8% of that walk on the instruction gate, which
+`scripts/perf_gate.py --binding-explain` measures. What is left of the gap is
+one extra walk of
 the fields *after* the failure, and the exception.
 
 **What a closed record costs is the interpreter's own dict lookup.** Profiled
@@ -319,9 +320,9 @@ which reads every field so the report names all of them, a hundred dict probes
 between them. The third is the raise itself, which the interpreter charges for
 building the exception and unwinding to the caller. Nothing in the three is a
 walk over what the schema already knows, so a further cut would be a cheaper
-report rather than a shorter walk -- and the shape the same count *did* find
-was the open record, read a third dearer than the closed one until it was read
-by its keys.
+report rather than a shorter walk. The same count reaches a shape the wall clock
+does not: an open record read by a scan costs a third more than the closed one
+beside it, which is why both are budgeted.
 
 ## How large literal unions dispatch
 
@@ -386,16 +387,17 @@ boundary alone, a wide record closed and the same record open the way a
 from its Python spelling, compiling one written as a `TypedDict` of refined
 integers, compiling a fifty-field dataclass, walking a `NamedTuple` against a
 tuple schema, and explaining a failure
-(`crates/valgebra-py/examples/binding_workload.rs`): the walk is the
-shipped hot path neither pure-Rust workload reaches, schema construction grew
-twelve percent over a release cycle while only the walk was counted, and an open
-record was read a third dearer than a closed one while only the closed one was.
+(`crates/valgebra-py/examples/binding_workload.rs`): the walk is the shipped
+hot path neither pure-Rust workload reaches, and construction and the open
+record are each a cost no other shape's count carries. A surface with no shape
+of its own can move by percents a release at a time with every gate green.
+
 Each binding shape embeds CPython, whose startup is not a fixed count, so the
-gate measures the difference between two iteration counts. What a shape's loop
-holds is part of what its count means: the build shape once assembled its fifty
-fields in Rust inside the loop, so three quarters of its count was the harness
-naming them and none of it was the annotation walk, and a shape is read for that
-before its number is read for anything.
+gate measures the difference between two iteration counts. **What a shape's loop
+holds is part of what its count means**, and is read before the number is: a
+build shape that assembles its fifty fields inside the loop spends most of its
+count on the harness naming them and none of it on the annotation walk, which is
+the half a build gate exists to measure.
 
 **Compiling a schema costs less on 3.13 and later, and the difference is
 exceptions.** A refinement marker carries one or two of ten optional attributes

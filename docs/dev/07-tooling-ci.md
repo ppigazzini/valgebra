@@ -100,16 +100,15 @@ environment it checks is worse than one that names three steps, so each carries
 that cost as its reason rather than "the caller has already run it".
 
 A step is **accounted for** when it is in the plan the gate builds or named in
-`NEEDS_A_RUNNER`, and the ledger asks it of the plan. Asking it of "is this name
-excused" instead was a contradiction that no workflow could fail, and underneath
-it `resolved` searched for `${{ env.X }}` alone -- so a step carrying
-`${{ github.sha }}` came back resolved with its braces intact and would have
-reached bash that way. Every expression the gate cannot fill in makes the step
-unresolved, which is a skip with a reason rather than a command.
+`NEEDS_A_RUNNER`, and the ledger asks it of the **plan**. Asking instead whether
+a name is excused is a question no workflow can fail. Every expression the gate
+cannot fill in makes the step unresolved, which is a skip with a reason rather
+than a command: a step carrying `${{ github.sha }}` is unresolved exactly as one
+carrying `${{ env.X }}` is, so neither reaches bash with its braces intact.
 
-The reason it exists is a measurement rather than a principle: a ledger reading
-`git describe` passed locally for a week and turned eight jobs red on one push,
-because the clone shape differed. Everything else on this page is about what the
+The reason this gate exists is the clone shape rather than a principle. A check
+reading `git describe` answers one way in a local clone, which carries tags, and
+another in a checkout, which does not. Everything else on this page is about what the
 gates check; this is about *where* they check it.
 
 A change is not done until every command exits 0. `CONTRIBUTING.md` holds the
@@ -202,9 +201,9 @@ gate only catches what it exercises:
   hold it and this count is what does: reverting the line reads +171.65%.
 
   **And a shape that wins by a wide margin measures nothing.** The JSON
-  document is the comparison gate's closest race and its ratio drifted from
-  0.78 to 0.87 with no gate red, because a wall clock under a ceiling it clears
-  by a third says nothing until somebody looks — which the section on the
+  document is the comparison gate's closest race, and its ratio moves by a tenth
+  -- 0.78 to 0.87 -- with no gate red, because a wall clock under a ceiling it
+  clears by a third says nothing until somebody looks — which the section on the
   competitive ratio, below, records as the reason the recorded block exists at
   all. `--binding-json` is that shape's deterministic twin, over the same two
   hundred records read against the same `list[JsonRecord]`. Most of what it
@@ -408,15 +407,15 @@ entry that no mutant answers to, and an accepted entry naming a file the tree
 does not track. The second keeps the accepted set honest: an accepted hole the
 tree does not have silently re-accepts a future survivor with the same identity.
 The third is about the key rather than the entry: a baseline keyed by path goes
-stale when the path moves, and eight entries did when the frontend's surfaces
-became their own modules. The sweep reads each of that file's survivors as new,
+stale when the path moves, and splitting one module into several moves every
+entry that file holds at once. The sweep reads each of its survivors as new,
 nine minutes into a shard, with the mutants listed and no hint that what changed
 was the path. Checking the path costs nothing and runs before the sweep.
 
 **Run it on the interpreter the lane names.** The verdict is the embedded
 interpreter's: a mutant this box's 3.14 reports as a survivor is one CPython
-3.12 kills, and half an hour went into a difference that was the interpreter
-rather than the tree. The lane pins 3.12, so a local sweep does too:
+3.12 kills, so a disagreement with the lane is the interpreter before it is the
+tree. The lane pins 3.12, so a local sweep does too:
 
 ```bash
 export PYO3_PYTHON="$(uv python find 3.12)"
@@ -469,8 +468,8 @@ not-failure. The duplicated list is a deliberate second copy.
 
 **A cancelled job is red.** A job that reaches its timeout is reported
 `cancelled` rather than `failure`, and a job nothing waits on is cancelled in
-silence: the strict mutation ratchet ran nowhere for a week behind a two-hour
-cancellation the aggregate never read. So the aggregate waits on the scheduled
+silence -- so a ratchet behind a timeout runs nowhere while every lane reads
+green. The aggregate therefore waits on the scheduled
 jobs too, allowing one answer more from them than from the others — `skipped`,
 which is what a push gives a job it does not run — and refusing everything
 else. `tests/test_required_jobs.py` reads which jobs those are from their own
@@ -487,10 +486,11 @@ legs on every push bought minutes rather than information.
 line and nobody re-measures.
 
 **PyPy builds, links, and runs the suite.** The release matrix publishes four
-PyPy 3.11 wheels and nothing on a push linked against PyPy until 0.0.10 broke
-there: `cpyext` carries the limited API and not every static type object CPython
-exports, so an extension naming one links on CPython and fails at `import` on
-PyPy — after the release, since the smoke jobs run on CPython. The `pypy 3.11`
+PyPy 3.11 wheels, and a push that does not link against PyPy cannot see what
+breaks there: `cpyext` carries the limited API and not every static type object
+CPython exports, so an extension naming one links on CPython and fails at
+`import` on PyPy. The smoke jobs run on CPython, so without a PyPy lane the
+first run to find it is a user's. The `pypy 3.11`
 job builds a release wheel against PyPy and runs `scripts/pypy_import_check.py`
 first, which imports it and builds the annotation forms whose compilation
 reaches a type object: that is the *link*, and it fails with one line naming the

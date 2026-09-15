@@ -658,8 +658,8 @@ pub enum Schema {
         /// it and its value, so the clauses are a disjunction and not a
         /// precedence list: the order is the order they are rendered in, and
         /// carries no meaning to membership or to subtyping. Both consumers ask
-        /// `any`, and this comment once said "ordered", which is a semantics no
-        /// code here implements.
+        /// `any`; a clause list read as ordered is a semantics no code here
+        /// implements.
         defaults: Clauses,
     },
     /// Denotes the union of the member sets: a value is a member iff it belongs

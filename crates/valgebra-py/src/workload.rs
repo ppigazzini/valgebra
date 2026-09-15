@@ -219,9 +219,8 @@ impl BindingShape {
 /// which puts `f37` at position **31** and `f7` at position **47**. The fast
 /// pass stops at the first field that fails and the explain pass walks them
 /// all, so this shape probes *sixteen fewer* fields than the gate's, not thirty
-/// more. An earlier draft of this comment had it the other way round and read
-/// the 15% below as "failing earlier costs more"; it is failing **later** that
-/// costs more, and the profile agrees.
+/// more. Read the 15% below accordingly: failing **later** is what costs more,
+/// and the profile agrees.
 ///
 /// Aligning them was tried and reverted: the count moves 15% and
 /// `perf_gate.py --against` rebuilds the *base* to compare, so a workload whose

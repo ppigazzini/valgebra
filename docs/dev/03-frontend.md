@@ -42,10 +42,10 @@ consumer for metadata it does not recognise.
 protocol asks for is asked by an interned `PyString` the interpreter already
 holds, because text would be decoded into a fresh string and hashed before the
 lookup could begin, once per name per marker. And a marker carries one or two
-of the ten names and not the rest, so absence is the common answer: it used to
-be given by *raising*, which is an exception built, thrown and dropped — four
-hundred of them to compile fifty fields. Which names a marker can carry is a
-property of its type (`Ge` is a `slots` dataclass, so `Ge.ge` is the descriptor
+of the ten names and not the rest, so absence is the common answer, and giving
+it by *raising* costs an exception built, thrown and dropped — four hundred of
+them to compile fifty fields. Which names a marker can carry is a property of
+its type (`Ge` is a `slots` dataclass, so `Ge.ge` is the descriptor
 that reads the slot and `Ge.gt` does not exist), so the type is read once and
 its answer kept, and a marker that keeps its values in a dictionary of its own
 is read from that dictionary. A type with a `__getattr__` hook answers for

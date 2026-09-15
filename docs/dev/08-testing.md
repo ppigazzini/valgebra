@@ -116,8 +116,9 @@ because a table nothing counts is the one that drifts: there are twenty-two.
 The last is a ledger over the rest, and it exists because reading a
 ledger cannot tell you whether it can fail. `test_local_gate.py` filtered its
 steps with `not runnable(name) and name not in NEEDS_A_RUNNER`, which is `X and
-not X` -- so its list was empty for every possible workflow and the assertion
-passed on a tree that had already broken the claim. `tests/test_ledger_plants.py`
+not X` -- a list empty for every possible workflow, so the assertion passes on
+any tree, including one that breaks the claim, and reads exactly like one that
+checked something. `tests/test_ledger_plants.py`
 plants, for each ledger, the defect that ledger exists to catch: a schema variant
 in no column, a gate script in no lane, a job the merge gate does not require, a
 `feat` commit off the roll. Each is planted in a throwaway clone, that ledger is
@@ -140,17 +141,14 @@ through `use super::*`, which an integration test in `tests/` cannot -- and it i
 still compiled only under `cfg(test)`, so nothing about the shipped build
 changes.
 
-What changes is reading. `decision.rs` was 3,570 lines of which 1,500 were
-tests, and `lib.rs` was 4,211 of which nearly all were: a reader looking for the
-subtype rules scrolled past a thousand lines of assertions to find them, and a
-bound had to be told apart from a test fixture by its indentation.
+What changes is reading. A module holding more assertions than code makes a
+reader looking for the subtype rules scroll past them to find the rules, and
+makes a bound something to tell apart from a test fixture by its indentation.
 
 **A screen is a hundred lines**, and `tests/test_module_placement.py` holds the
-rule to that number. It needed one: the rule was stated here and followed
-nowhere in particular, so ten modules drifted to between 163 and 1,154 lines
-inside the file they test, and `descr/lower.rs` reached 1,829 lines of which
-1,154 were assertions -- a worse ratio than the one this section was written to
-end. The bar is generous, and three modules sit under it and stay where they
+rule to that number. It needs one: a bar stated in prose and held by nothing
+drifts a module at a time, and the file that owns the count is the test rather
+than this page. The bar is generous, and three modules sit under it and stay where they
 are: a module short enough to read past is in nobody's way. What the bar catches
 is the drift, one case at a time, until a file is mostly not the thing it is
 named for.
@@ -187,9 +185,10 @@ The **oracle** carries a question corpus in
 `crates/valgebra-py/src/oracle/interpreter.rs`: one row per question
 `LeafRelations` asks, each handing the oracle two pool slots or a class and a
 kind and reading the `Option` it answers. It exists for the reason the
-frontend's does, and its number is the sharpest of the three: swept before it,
-`oracle.rs` gave **62 survivors of 109**, because the only Rust rows reaching
-the file built the pool and read it back.
+frontend's does, and its number is the sharpest of the three: without a corpus
+the only Rust rows reaching that file build the pool and read it back, so a
+sweep reports most of `oracle.rs` as surviving. `scripts/mutation_baseline.json`
+records what survives with the corpus in place.
 
 What it deliberately does not do is compile a schema and ask `is_subtype_of`.
 That is what the decision suite in `tests/` does, and a Rust row shaped the same
