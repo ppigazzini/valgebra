@@ -11,6 +11,11 @@
 //! iteration count is large. Keep the corpus and `ITERATIONS` fixed; changing
 //! either moves the budget and requires re-recording it.
 
+#![expect(
+    deprecated,
+    reason = "the reducer is measured while it is still shipped; a deprecation is not a licence to let its cost drift"
+)]
+
 use std::sync::Arc;
 
 use valgebra_core::{ConstIx, DefShift, Field, Openness, PoolShift, Schema, SeqShape};
