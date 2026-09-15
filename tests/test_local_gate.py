@@ -217,6 +217,41 @@ def test_the_interpreter_backed_binding_tests_are_in_the_plan() -> None:
     )
 
 
+def test_the_workspace_test_step_is_handed_the_interpreter_on_the_loader_path(
+    tmp_path: Path,
+) -> None:
+    """The other half: the environment the step is handed, not the plan it is in.
+
+    The workspace test binary links libpython -- `crates/valgebra-py` sets no
+    `extension-module` -- so `cargo test` starts only where a shared-libpython
+    interpreter's library directory is on the loader path. A runner's system
+    interpreter is there and a virtual environment's is not, which is what
+    `interpreter_env` supplies and `step_environment` composes.
+
+    Asked of the composition rather than of a spawned shell: what a step is
+    handed is the same on every operating system, while the shell that would
+    read it back is not.
+    """
+    spec = gate.workflow()
+    plan, _ = gate.build_plan(spec, gate.required_jobs(spec))
+    workspace = [
+        command
+        for _, _, command, _ in plan
+        if "cargo test" in command and "--manifest-path" not in command
+    ]
+    assert workspace, "the workspace test step is in no plan the gate builds"
+
+    supplied = gate.interpreter_env()
+    assert set(supplied) == {"PYO3_PYTHON", "LD_LIBRARY_PATH"}
+    composed = gate.step_environment({}, tmp_path)
+    assert {name: composed[name] for name in supplied} == supplied
+    # A step's own variables win over the defaults, and the runner's CI marker
+    # is set whatever the caller's shell says.
+    theirs = gate.step_environment({"PYO3_PYTHON": "theirs"}, tmp_path)
+    assert theirs["PYO3_PYTHON"] == "theirs"
+    assert composed["CI"] == "1"
+
+
 def test_every_excuse_carries_a_reason() -> None:
     empty = sorted(name for name, why in gate.NEEDS_A_RUNNER.items() if not why.strip())
     assert not empty, f"steps excused with no reason: {empty}"

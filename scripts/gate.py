@@ -480,6 +480,36 @@ def runner_environment() -> dict[str, str]:
     return {key: value for key, value in os.environ.items() if key not in FORCED_COLOUR}
 
 
+def step_environment(environment: dict[str, str], outputs: Path) -> dict[str, str]:
+    """Compose the environment a planned step runs in.
+
+    A runner's environment, the interpreter the binding's tests link, and the
+    step's own variables, in that order -- so a workflow's `env:` wins over a
+    default and the runner's terminal wins over nothing.
+
+    Named rather than built inside the run, because what a step is handed is
+    half of what "the gate runs the lane's steps" means: a `cargo test` that
+    cannot find libpython fails on a missing shared object, which reads as a
+    broken tree rather than as a caller's loader path.
+    """
+    return {
+        **runner_environment(),
+        **interpreter_env(),
+        **environment,
+        "CI": "1",
+        # One build directory across the jobs and across runs. The clone is what
+        # this reproduces; a cold Rust build is not, and paying for one per job
+        # would make the gate something nobody runs.
+        "CARGO_TARGET_DIR": str(ROOT / "target" / "gate"),
+        # A step that records an output writes to a file the runner names.
+        # Nothing here reads it back -- the steps that would are the ones this
+        # gate cannot run -- but the write must land somewhere rather than
+        # failing.
+        "GITHUB_OUTPUT": str(outputs / "github_output"),
+        "GITHUB_STEP_SUMMARY": str(outputs / "step_summary"),
+    }
+
+
 def run_step(name: str, command: str, cwd: Path, environment: dict[str, str]) -> bool:
     print(f"\n=== {name}")
     with tempfile.TemporaryDirectory() as outputs:
@@ -487,22 +517,7 @@ def run_step(name: str, command: str, cwd: Path, environment: dict[str, str]) ->
             ["bash", "-euo", "pipefail", "-c", command],
             cwd=cwd,
             check=False,
-            # One build directory across the jobs and across runs. The clone is
-            # what this reproduces; a cold Rust build is not, and paying for one
-            # per job would make the gate something nobody runs.
-            env={
-                **runner_environment(),
-                **interpreter_env(),
-                **environment,
-                "CI": "1",
-                "CARGO_TARGET_DIR": str(ROOT / "target" / "gate"),
-                # A step that records an output writes to a file the runner
-                # names. Nothing here reads it back -- the steps that would are
-                # the ones this gate cannot run -- but the write must land
-                # somewhere rather than failing.
-                "GITHUB_OUTPUT": str(Path(outputs) / "github_output"),
-                "GITHUB_STEP_SUMMARY": str(Path(outputs) / "step_summary"),
-            },
+            env=step_environment(environment, Path(outputs)),
         )
     if result.returncode != 0:
         print(f"FAILED: {name} (exit {result.returncode})")

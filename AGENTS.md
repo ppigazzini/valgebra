@@ -64,6 +64,11 @@ and list what was checked instead.
 ```bash
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
+# The workspace links libpython: a virtual environment's interpreter is not on
+# the default loader path, and a test binary that cannot find it does not start.
+# `scripts/gate.py` sets the same two variables for the steps it runs.
+export PYO3_PYTHON="$(uv run python -c 'import sys; print(sys.executable)')"
+export LD_LIBRARY_PATH="$(uv run python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):${LD_LIBRARY_PATH:-}"
 cargo test
 maturin develop --uv                    # after any Rust change
 ruff check . && ruff format --check .
