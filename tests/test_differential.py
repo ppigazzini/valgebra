@@ -354,7 +354,7 @@ _TEXT = st.text(
 )
 # Mixing strings with integers makes a list[str] reject path that both the oracle
 # and valgebra must agree on, without touching the numeric tower (the schema is
-# string, so an int is simply not a member).
+# string, so an int is not a member).
 _LIST_ELEMS = st.one_of(_TEXT, st.integers(), st.none())
 
 _STR_LIST_SCHEMA = {"type": "array", "items": {"type": "string"}}

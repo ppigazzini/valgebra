@@ -157,7 +157,7 @@ def test_a_ceiling_outranks_a_drift() -> None:
 def test_every_shape_is_ratcheted_or_argued_out_of_it() -> None:
     """A shape carries a tolerance or a reason, and never neither or both.
 
-    A shape with no tolerance is simply not judged, which is the right answer for
+    A shape with no tolerance is not judged, which is the right answer for
     one whose spread is a third of its own value -- and an invisible one, if it
     reaches that state by nobody writing a number down. `unratcheted` is where
     such a shape is named with the measurement that put it there, the same way

@@ -15,8 +15,8 @@ fn violation(code: &'static str, path: Vec<PathSegment>) -> Violation {
 /// well-formed error rather than panicking across the language boundary.
 ///
 /// This pins the debug half, which is the one a test profile can observe. The
-/// release half needs no case of its own any more: the boundary reads the
-/// first violation through `split_first`, so there is no index to be wrong --
+/// release half needs no case of its own: the boundary reads the first
+/// violation through `split_first`, so there is no index to be wrong --
 /// the degradation is what the `Option` already means.
 #[test]
 #[should_panic(expected = "into_pyerr needs a failure")]

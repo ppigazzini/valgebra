@@ -75,7 +75,7 @@ impl<G: Guard> Atom<G> {
     }
 
     /// The objects in both: every label of either, met where they share one,
-    /// and every class constraint of either, which simply collect.
+    /// and every class constraint of either, which collect.
     fn meet(&self, other: &Atom<G>) -> Option<Atom<G>> {
         let mut fields = self.fields.clone();
         for (label, theirs) in &other.fields {

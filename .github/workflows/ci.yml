@@ -713,10 +713,9 @@ jobs:
         with:
           persist-credentials: false
       # The action pulls its manylinux image itself, once, with no retry, so a
-      # registry hiccup takes a green tree red on a job no local gate reaches:
-      # quay.io answered `504 Gateway Time-out` on 2026-09-14 and the push that
-      # carried four documentation commits read red. Pulling here first means a
-      # transient answer costs a pause instead of the lane. A pull that succeeds
+      # registry answering `504` takes a green tree red on a job no local gate
+      # reaches, and the change that reads red need not have touched any code.
+      # Pulling here first means a transient answer costs a pause, not the lane. A pull that succeeds
       # leaves the image in the daemon, so the action's own pull is then a
       # no-op; one that does not still lets the action try, because this step
       # exists to make the lane sturdier and not to become a new way for it to

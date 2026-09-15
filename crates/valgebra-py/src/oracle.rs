@@ -45,7 +45,8 @@ pub(crate) struct PoolRelations<'py, 'pool> {
     /// a Python class has is its address -- which does not fit one. So an id is
     /// handed out on first sight and remembered for the rest of the query, which
     /// is as long as any descriptor built from it lives. The pool holds every
-    /// class it names alive, so an address cannot be reused under us.
+    /// class it names alive, so an address cannot be reused while an id for it
+    /// is outstanding.
     classes: RefCell<FxHashMap<usize, u32>>,
 }
 

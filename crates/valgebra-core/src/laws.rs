@@ -800,7 +800,7 @@ fn an_intersection_is_empty_when_any_member_is() {
     // Order does not matter: the fold runs over every member.
     assert!(Schema::Intersection(vec![Schema::ANYTHING, empty_list].into()).is_empty());
     // And an intersection of two inhabited members with an opaque region is
-    // not reported empty, so the fold is not simply answering true.
+    // not reported empty, so the fold is not merely answering true.
     let list_of_int = Schema::list(SeqShape::homogeneous(Schema::Int));
     assert!(!Schema::Intersection(vec![list_of_int, Schema::ANYTHING].into()).is_empty());
 }

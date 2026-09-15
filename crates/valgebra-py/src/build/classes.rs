@@ -281,7 +281,7 @@ pub(super) fn gave_no_extra_items(extra: &Bound<'_, PyAny>) -> PyResult<bool> {
 ///
 /// `closed=True` shuts them and `extra_items=T` gives them a type -- PEP 728,
 /// which the typing spec carries. Neither marker is in `typing` yet, so both are
-/// read where a runtime that has them puts them and are simply absent otherwise:
+/// read where a runtime that has them puts them and are absent otherwise:
 /// a `TypedDict` written for a runtime without PEP 728 cannot have said either,
 /// and the spec's default is what is left.
 pub(super) fn unnamed_keys(

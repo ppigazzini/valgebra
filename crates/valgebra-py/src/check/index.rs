@@ -248,7 +248,7 @@ fn collect(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], index: &mut Vali
 /// Build a [`UnionPlan`] when every union member is a literal, bucketing the
 /// `int` and `str` literal values; returns `None` (so the union stays a linear
 /// scan) when any member is not a literal. A big-integer or other-typed literal
-/// is simply not bucketed — values of those types are scanned linearly.
+/// is not bucketed — values of those types are scanned linearly.
 fn literal_union_plan(py: Python<'_>, members: &[Schema], pool: &[Py<PyAny>]) -> Option<UnionPlan> {
     let mut ints = FxHashSet::default();
     let mut strs = FxHashSet::default();

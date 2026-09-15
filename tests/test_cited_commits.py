@@ -2,11 +2,11 @@
 
 A file that records *which build* a number, a corpus or a decision came from is
 recording provenance, and provenance nobody can resolve is a claim about
-nothing. This tree rewrote history three times in one week -- twice to amend a
-commit that had broken a lane -- and each rewrite orphaned every commit it
-replayed. One citation survived that: `scripts/metamorphic_reference.json`
-named the commit its reference corpus was taken at, the rewrite on the sixth
-made that commit unreachable, and nothing said so for eight days.
+nothing. This tree amends a commit that breaks a lane rather than following it
+with a fix, and every such rewrite orphans the commits it replays -- so a hash
+written into a tracked file goes unreachable without anything saying so. A
+reference corpus naming the commit it was taken at is the shape most exposed to
+it, because nothing else reads that name.
 
 So every commit-shaped string in a tracked file is held to the one property
 that makes it worth writing down: it resolves, and it is an ancestor of the

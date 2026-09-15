@@ -322,7 +322,7 @@ impl<G: Guard> MapAtom<G> {
     /// - an **unnamed** key of some part maps outside that part's default, which
     ///   is (13)'s `¬t′₀` disjunct, one per part because the default is one per
     ///   part;
-    /// - a constraint of `S` is simply not met: **no** unnamed key of its part
+    /// - a constraint of `S` is not met: **no** unnamed key of its part
     ///   maps into it, which is the `N` above.
     ///
     /// The third is why this is a complement rather than a difference. (13) is

@@ -669,7 +669,7 @@ pub(super) fn keyed_map_explain(
             member(&clause.value, &Value::Py(val), frame);
             frame.path.pop();
         } else {
-            // A closed record: the key is simply not allowed.
+            // A closed record: the key is not allowed.
             let key_text = key
                 .str()
                 .map_or_else(|_| String::new(), |text| text.to_string());

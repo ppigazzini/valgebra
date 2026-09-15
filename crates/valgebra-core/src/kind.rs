@@ -238,9 +238,9 @@ impl Kind {
     /// The [`Region`] this kind falls in.
     ///
     /// The one place that says where a kind lands, so adding a kind is a change
-    /// in one file that the compiler makes you finish. The two vocabularies were
-    /// separate lists -- the kinds here and a set of region constants beside
-    /// them -- with nothing tying `List` to the region a list belongs to.
+    /// in one file that the compiler makes you finish. Held as two lists -- the
+    /// kinds here and a set of region constants beside them -- nothing ties
+    /// `List` to the region a list belongs to.
     ///
     /// The six scalar kinds each get a region of their own, because a schema can
     /// name one exactly: `str` denotes every string and nothing else, so the

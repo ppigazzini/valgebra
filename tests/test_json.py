@@ -136,7 +136,7 @@ def test_malformed_json_raises_a_structured_error() -> None:
 
 
 def test_malformed_json_is_not_valid() -> None:
-    # is_valid_json never raises; unparseable input is simply not a member.
+    # is_valid_json never raises; unparseable input is not a member.
     assert not Validator(int).is_valid_json("{not json")
     assert not Validator(int).is_valid_json("")
 

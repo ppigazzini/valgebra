@@ -18,7 +18,7 @@ use crate::descr::lower::Constants;
 use crate::ir::{ClassIx, ConstIx, OperandIx, Schema};
 use crate::kind::Kind;
 
-/// Resolves the leaf relations the structural subtyping decision cannot.
+/// Resolve the leaf relations the structural subtyping decision cannot.
 ///
 /// Those are the ones that depend on the Python class hierarchy (an `Instance`)
 /// or on a concrete value (a `Literal`). The bindings implement it with

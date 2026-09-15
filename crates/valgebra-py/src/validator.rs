@@ -515,7 +515,7 @@ impl Validator {
     /// Whether a JSON document parses and is a member of the schema's set.
     ///
     /// Check-only: malformed or undecodable JSON, or input that is neither `str`
-    /// nor `bytes`, is simply not a member and returns `False`. The raising entries
+    /// nor `bytes`, is not a member and returns `False`. The raising entries
     /// (`validate_json`/`load`) report the same undecodable input as a structured
     /// `json_invalid` error. The document is validated in place
     /// against the parsed value, with no intermediate Python objects for the
@@ -537,7 +537,7 @@ impl Validator {
         let py = data.py();
         match decode_json_input(data) {
             JsonInput::Bytes(bytes) => self.matches_json(py, bytes),
-            // An undecodable string and a non-str/bytes argument are both simply
+            // An undecodable string and a non-str/bytes argument are both
             // not members — the same verdict the raising path reports structurally.
             JsonInput::Undecodable | JsonInput::NotStrOrBytes => Ok(false),
         }

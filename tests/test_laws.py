@@ -5,7 +5,7 @@ checked over generated values drawn from a strategy spanning scalars and nested
 containers, seeded with a curated spread that pins the atom boundaries (the
 int/bool/float distinctions and the typed-singleton literals). Generating the
 witness values, rather than iterating a fixed list, means two schemas that merely
-agree on a handful of constants no longer pass a law: a value that distinguishes
+agree on a handful of constants do not pass a law: a value that distinguishes
 them is searched for. The semantic decision (`is_equivalent`) is cross-checked
 against membership separately in the subtyping suite.
 """

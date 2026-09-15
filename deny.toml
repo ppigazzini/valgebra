@@ -37,7 +37,8 @@ private = { ignore = true }
 
 [bans]
 # A crate pulled in at several versions is a warning, not a hard failure: it is a
-# tree-hygiene signal, and a transitive duplicate is often out of our control.
+# tree-hygiene signal, and a transitive duplicate is usually the dependency's
+# choice rather than this tree's.
 multiple-versions = "warn"
 # A registry crate pinned to `*` is a supply-chain risk and fails; the internal
 # workspace crates are path dependencies, exempt via allow-wildcard-paths.

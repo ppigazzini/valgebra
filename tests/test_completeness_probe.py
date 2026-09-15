@@ -207,7 +207,7 @@ def _admits(schema: Validator, value: Any) -> bool:
     """Report whether the schema admits the value, counting a refusal as no.
 
     A value the walk cannot reach at all -- a recursive container, an object
-    whose attribute access raises -- is simply not a member for this survey, and
+    whose attribute access raises -- is not a member for this survey, and
     swallowing that is deliberate: the probe is searching for a missing *rule*,
     and a value it cannot classify must not be read as a witness either way.
     """

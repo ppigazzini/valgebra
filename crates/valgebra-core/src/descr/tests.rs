@@ -204,7 +204,7 @@ fn universe() -> Vec<Value> {
     // The one with an attribute nobody names is what holds the record open.
     values.extend(OBJECTS.map(Value::object));
     // The same objects under each class of the little order below, plus the
-    // one whose class nobody told us.
+    // one whose class the oracle is never told.
     for class in [&ANIMAL, &DOG, &MINERAL] {
         values.extend(OBJECTS.map(|attributes| Value::instance(class, attributes)));
     }

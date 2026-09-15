@@ -68,7 +68,7 @@ def _meta_pred(meta: object) -> Callable[[object], bool]:
     """Build an independent predicate for an `annotated_types` constraint.
 
     Each guards on the value's shape (numeric for a bound, sized for a length), so
-    a value of the wrong shape is simply not a member, matching the walk.
+    a value of the wrong shape is not a member, matching the walk.
     """
     if isinstance(meta, at.Ge):
         lo = cast("float", meta.ge)
