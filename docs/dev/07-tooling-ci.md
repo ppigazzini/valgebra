@@ -83,21 +83,19 @@ machine for something the runner does not have, and passes locally for that
 reason alone. The gate models it by cloning: a clone inherits no `user.*`, and
 pointing git's global and system config at an empty file removes the rest.
 
-The last is a different kind and is the newest: it is not a difference between
-a lane and a local run at all, but between what a gate measures and what its
-own text says it measures. Both halves of a gate are a claim -- the number and
-the scope -- and only the number is held to anything. Three red lanes in one
-week were that same finding, so it is a row here rather than a rule nobody
-wrote: when a gate moves, read what it now counts against the sentence that
-says what it counts.
+The last row is a different kind: not a difference between a lane and a local
+run at all, but between what a gate measures and what its own text says it
+measures. Both halves of a gate are a claim -- the number and the scope -- and
+only the number is held to anything. **When a gate moves, read what it counts
+against the sentence that says what it counts.**
 
 Three of the excused steps need only what a developer's machine already has --
 the dependency sync, the extension build, and the stub check that needs both --
-and lending the caller's virtual environment to the clone was tried so they
-could run. It is **reverted and recorded**: `uv run` inside the clone *writes*
-the environment it is pointed at, and doing so uninstalled the built extension
-and the bench group from the tree being worked in. A gate that damages the
-environment it checks is worse than one that names three steps, so each carries
+and it is tempting to lend the caller's virtual environment to the clone so they
+can run. **Do not**: `uv run` inside the clone *writes* the environment it is
+pointed at, which uninstalls the built extension and the bench group from the
+tree being worked in. A gate that damages the environment it checks is worse
+than one that names three steps, so each carries
 that cost as its reason rather than "the caller has already run it".
 
 A step is **accounted for** when it is in the plan the gate builds or named in
@@ -539,9 +537,9 @@ mutant is not in the diff.
 
 **A slow network is not a red lane.** `astral-sh/setup-uv` reads its version
 manifest from `raw.githubusercontent.com` under a hard five-second timeout and
-never retries, so a slow response there does not make a job slow — it fails it.
-That took the pip-audit lane down on 2026-08-10 while the twelve other lanes in
-the same run installed uv fine. Every lane installs through
+never retries, so a slow response there does not make a job slow — it fails it,
+and it fails that one job while every other lane in the same run installs uv
+fine. Every lane installs through
 `.github/actions/setup-uv` instead: it pins the uv release, which is one fewer
 thing resolved over the network, and makes a second attempt when the first one
 fails. The release workflow's two smoke jobs stay on the upstream action, because

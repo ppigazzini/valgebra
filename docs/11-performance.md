@@ -418,14 +418,13 @@ build shape that assembles its fifty fields inside the loop spends most of its
 count on the harness naming them and none of it on the annotation walk, which is
 the half a build gate exists to measure.
 
-**Compiling a schema costs less on 3.13 and later, and the difference is
-exceptions.** A refinement marker carries one or two of ten optional attributes
-and not the rest, and asking for one a marker does not have is answered by
-raising below 3.13 -- `PyObject_GetOptionalAttr` is the first spelling that
-does not, and there is none before it. The frontend asks the marker's *type*
-instead, once, and remembers what it carries, which removes the exceptions on
-every interpreter: fifty `Annotated[int, Ge(0)]` fields compile in 48 us on
-3.14 and 45 on 3.12, where they took 153 and 144 in 0.0.10. Compilation happens
+**A refinement marker is read by its type, once.** A marker carries one or two
+of ten optional attributes and not the rest, and below 3.13 asking for one it
+does not have is answered by raising -- `PyObject_GetOptionalAttr` is the first
+spelling that does not, and there is none before it. So the frontend asks the
+marker's *type* and remembers what that type carries, which costs no exceptions
+on any interpreter: fifty `Annotated[int, Ge(0)]` fields compile in about 48 us
+on CPython 3.14 and 45 on 3.12, on the machine class above. Compilation happens
 once per schema, so this is a startup figure rather than a per-call one -- it
 matters to a program that builds validators per request, and to nothing else.
 

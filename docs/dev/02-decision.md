@@ -540,13 +540,14 @@ whether a schema **denotes** the empty set — not by matching the `Nothing` or
 `Anything` atom — so a record with an uninhabited required field, a cancelling
 intersection, and a union that covers the universe are all recognised.
 
-Stating a bound over the atom is a rule that confirms itself: the pattern matches
-only the shape the rule is written for, so nothing else is ever the subject. That
-is how this held a gap for months while every instrument stayed green — the
-fuzzer asserted `Nothing ≤ b` with the atom hardcoded on the left, the property
-suite examined only the consequences of a `true`, and the region check upstream
-decides a scalar right-hand side correctly, so the difference was invisible
-unless the other side was a container, a record or an instance.
+**Stating a bound over the atom is a rule that confirms itself**, and that is
+why neither is stated that way. A pattern matching only the shape the rule is
+written for makes every other shape invisible to it, and the instruments do not
+close the gap: a fuzz target that hardcodes `Nothing` on the left asserts the
+atom rather than the property, a property suite that reads only the consequences
+of a `true` never reaches the subject, and the region check upstream answers a
+scalar right-hand side correctly on its own. What is left uncovered is exactly a
+container, a record or an instance on the other side.
 
 Both laws are stated over the property, in the fuzz targets and in the core
 property suite, and the enumerated cases are in the completeness ledger.
@@ -565,19 +566,19 @@ and an empty subject is below everything whichever of them says so.
 
 The bounds were not the only ones, and the same search found the rest.
 
-**A complement on the right had no arm at all.** `A ⊆ ¬B` was decided only when
-`A` was itself a complement, by contraposition. There is no shape on the right to
-recurse into, so the structural arms had nothing to say and the answer fell
-through to `false` — a container was never seen inside the complement of a
-scalar. It is one question: `A ⊆ ¬B` exactly when `A ∩ B = ∅`, which emptiness
-already answers through kind disjointness and the scalar regions.
+**A complement on the right is one question, not a shape to recurse into.**
+`A ⊆ ¬B` holds exactly when `A ∩ B = ∅`, which emptiness answers through kind
+disjointness and the scalar regions. Deciding it by contraposition alone --
+where `A` is itself a complement -- leaves the structural arms with nothing to
+say about a container inside the complement of a scalar, and the pair falls
+through to `false`.
 
-**The closed record had a branch of its own.** The keyed-map rule dispatched on
-`defaults.is_empty()` into a rule that required every field to meet a like-named
-field of the supertype, so a field the supertype covers through a catch-all read
-as undecided — although the general branch beside it already decided exactly
-that. A second branch for the pure mapping computed what the general one
-computes. Both are gone; one rule serves every shape a keyed map takes.
+**A closed record is not a shape of its own.** One keyed-map rule serves every
+shape a keyed map takes. Dispatching on `defaults.is_empty()` into a rule that
+requires every field to meet a like-named field of the supertype reads a field
+the supertype covers through a catch-all as undecided, which the general branch
+beside it decides; a second branch for the pure mapping computes what the
+general one computes.
 
 The pattern in all four: a branch keyed on a shape answers a narrower question
 than the general rule beside it, and reads as a deliberate special case because
@@ -585,24 +586,22 @@ it has a comment. Prefer one rule that asks the question.
 
 ## The limit
 
-Read [docs/15-decidability.md](../15-decidability.md) for the published fragment
-and `tests/test_completeness_ledger.py` for the relations it decides. Its strict
-expected-failure mark is for a relation that regresses, and it names none. The
-published page owns the list of what is declined, so it is not restated here: a
-second copy is a second thing to keep true, and this one was wrong about four
-entries for as long as it existed.
+[docs/15-decidability.md](../15-decidability.md) owns the published fragment and
+`tests/test_completeness_ledger.py` the relations it decides; the ledger's
+strict expected-failure mark is for a relation that regresses, and it names
+none. **The list of what is declined is not restated here.** A second copy is a
+second thing to hold true, and nothing holds this one.
 
-What is worth stating here is the **shape** of what is left, because it is one
-shape. Every kind now carries a representation closed under complement, so a
-negated atom has somewhere to go and the fragment the rules decline is decided
-by the sets instead. What neither reaches is a *cycle*: no finite representation
-holds one, so a recursive schema is unfolded once and everything past that
-belongs to the coinductive rule alone. Beside it sit the three build bounds, a
-predicate, and a class whose metaclass answers the check by running code — each
-a refusal rather than an answer, and each named on the published page with what
-it costs.
+What this page owes instead is the **shape** of what is left, which is one
+shape. Every kind carries a representation closed under complement, so a negated
+atom has a component to land in and a pair the rules decline goes to the sets.
+What neither holds is a **cycle**: a finite representation has no room for one,
+so a recursive schema is unfolded once and everything past that belongs to the
+coinductive rule alone. Beside it stand the three build bounds, a predicate, and
+a class whose metaclass answers the check by running code — each a refusal
+rather than an answer, each with its cost on the published page.
 
-One property is worth more than the list. A refutation is a claim that a value
-exists, so where a reading cannot name one it declines: an unfolding that cut a
+One property outranks the list. **A refutation is a claim that a value exists**,
+so a reading that cannot name one declines instead: an unfolding that cuts a
 reference widens the difference it reads, and a widened difference proves an
 inclusion when it is empty and refutes nothing when it is not.

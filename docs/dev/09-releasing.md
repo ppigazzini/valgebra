@@ -15,8 +15,8 @@ installed metadata answered the same question and cost two thirds of
 `import valgebra`, so the number travels in the `.so` instead.
 
 That is what makes `tests/test_version.py` worth having. `__version__` and the
-distribution metadata are now two *different* readings of one manifest, so
-holding them equal catches an install whose halves came from different builds --
+distribution metadata are two *different* readings of one manifest, so holding
+them equal catches an install whose halves came from different builds --
 which is a real state, because uv and maturin both write into the same venv.
 `[tool.uv] cache-keys` in `pyproject.toml` is the other half of that: it names
 the manifests and sources a rebuild depends on, so a sync after a bump rebuilds
@@ -111,12 +111,11 @@ VIRTUAL_ENV=/tmp/vg uv pip install --group dev   # from the repository root
 /tmp/vg/bin/python -m pytest -q
 ```
 
-The separate install is the point, and the reason is what the first attempt at
-it did: the test dependencies are not the package under test, and resolving them
-against TestPyPI serves whatever was last uploaded there by anyone — a 2023
-`syrupy` and a `pytest` 7.4.4, which refused to start. Only valgebra comes from
-the index being checked; everything else comes from PyPI, where it comes from in
-every other environment. The group is read from `pyproject.toml` rather than
+**The separate install is the point.** The test dependencies are not the package
+under test, and resolving them against TestPyPI serves whatever anyone last
+uploaded there — an ancient `syrupy` beside a `pytest` too old to start it. Only
+valgebra comes from the index being checked; everything else comes from PyPI,
+where it comes from in every other environment. The group is read from `pyproject.toml` rather than
 listed here, so it cannot drift from the one the lanes install.
 
 A test that needs a dependency the environment lacks skips rather than fails, so
