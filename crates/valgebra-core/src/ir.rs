@@ -32,6 +32,8 @@
 use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 
+use crate::oracle::{NoLeafRelations, has_complementary_pair_within};
+
 mod intern;
 mod transform;
 
@@ -875,18 +877,16 @@ impl Schema {
             // A join carrying a schema together with its complement is the top,
             // whatever those are, so no such join survives construction and no rule
             // downstream may assume one does. `has_complementary_pair` is the one
-            // statement of the law, shared with the simplifier; it reaches a pairwise
+            // statement of the law, read here, by the simplifier and by the
+            // emptiness decision from `oracle.rs` -- which is below all three,
+            // because a lattice law belongs to none of them. It reaches a pairwise
             // comparison only for a member that is itself a complement.
             // With no oracle here the law declines for an atom only the bindings can
             // read, which is the safe direction: a join left unfolded still denotes
             // what it denotes. `definitions` is what a *recursive* member needs: a
             // reference is not a set on its own evidence, so without them the law
             // declines for every fixpoint, `json | ~json` included.
-            if crate::decision::has_complementary_pair_within(
-                flat,
-                &crate::decision::NoLeafRelations,
-                definitions,
-            ) {
+            if has_complementary_pair_within(flat, &NoLeafRelations, definitions) {
                 return Schema::ANYTHING;
             }
             match flat.len() {
@@ -932,11 +932,7 @@ impl Schema {
             // is the bottom. Both constructors state it or neither does -- a law
             // folded on one side and left standing on the other is two answers to
             // one question.
-            if crate::decision::has_complementary_pair_within(
-                flat,
-                &crate::decision::NoLeafRelations,
-                definitions,
-            ) {
+            if has_complementary_pair_within(flat, &NoLeafRelations, definitions) {
                 return Schema::Nothing;
             }
             match flat.len() {
@@ -1392,10 +1388,10 @@ impl Schema {
             Schema::Complement(inner) | Schema::Coll { element: inner, .. } => {
                 out.push(inner);
             }
-            Schema::Seq { shape, .. } => {
-                out.extend(shape.prefix.iter());
-                out.extend(shape.tail.as_deref());
-            }
+            // The sequence's own element set, read from the shape rather than
+            // restated here: where a sequence keeps an element is the shape's
+            // to say.
+            Schema::Seq { shape, .. } => out.extend(shape.elements()),
             Schema::KeyedMap { fields, defaults } => {
                 out.extend(fields.iter().map(|field| &field.schema));
                 for clause in defaults.iter() {
@@ -1415,40 +1411,19 @@ impl Schema {
 
     /// Every child schema of this node, in declaration order.
     ///
-    /// The one place a *reading* walk learns what a node contains, as
-    /// [`map_children`](Self::map_children) is the one place a *rebuilding* walk
-    /// does. A measure that restates the child set can read a different set than
-    /// the map writes, and neither the types nor an exhaustive `match` sees the
-    /// difference; a test holds the two together.
-    pub(crate) fn children(&self) -> Box<dyn Iterator<Item = &Schema> + '_> {
-        match self {
-            Schema::Anything(_)
-            | Schema::Nothing
-            | Schema::NoneType
-            | Schema::Bool
-            | Schema::Int
-            | Schema::Float
-            | Schema::Str
-            | Schema::Bytes
-            | Schema::Literal(_)
-            | Schema::Instance(_)
-            | Schema::Ref(_)
-            | Schema::SelfRef(_) => Box::new(core::iter::empty()),
-            Schema::Seq { shape, .. } => Box::new(shape.elements()),
-            Schema::Coll { element: inner, .. } | Schema::Complement(inner) => {
-                Box::new(core::iter::once(inner.as_ref()))
-            }
-            Schema::Union(members) | Schema::Intersection(members) => Box::new(members.iter()),
-            Schema::KeyedMap { fields, defaults } => Box::new(
-                fields.iter().map(|field| &field.schema).chain(
-                    defaults
-                        .iter()
-                        .flat_map(|clause| [&clause.key, &clause.value].into_iter()),
-                ),
-            ),
-            Schema::AttrRecord { fields } => Box::new(fields.iter().map(|field| &field.schema)),
-            Schema::Refine { base, .. } => Box::new(core::iter::once(base.as_ref())),
-        }
+    /// The reading counterpart of [`map_children`](Self::map_children), and a
+    /// second spelling of [`push_children`](Self::push_children) rather than a
+    /// second statement of what a node holds: the child set is matched on in one
+    /// place, and this is the shape a caller that wants an iterator takes. A
+    /// measure that restated the set could read a different set than the map
+    /// writes, and neither the types nor an exhaustive `match` would see the
+    /// difference; a test holds the two that remain together.
+    ///
+    /// A leaf allocates nothing, since an empty `Vec` does not.
+    pub(crate) fn children(&self) -> std::vec::IntoIter<&Schema> {
+        let mut out = Vec::new();
+        self.push_children(&mut out);
+        out.into_iter()
     }
 
     /// The nodes this node contributes besides its children: itself, plus a
@@ -1491,7 +1466,18 @@ impl Schema {
     /// or wide one. A regex constructor is not a schema node and is not counted.
     #[must_use]
     pub fn node_count(&self) -> usize {
-        self.own_nodes() + self.children().map(Schema::node_count).sum::<usize>()
+        // A worklist rather than the obvious recursion: the sum needs no order,
+        // so the whole tree is counted against one buffer instead of one per
+        // node. The root is held beside the worklist so a leaf -- which is most
+        // of a schema -- allocates nothing at all.
+        let mut total = 0;
+        let mut pending: Vec<&Schema> = Vec::new();
+        let mut root = Some(self);
+        while let Some(node) = root.take().or_else(|| pending.pop()) {
+            total += node.own_nodes();
+            node.push_children(&mut pending);
+        }
+        total
     }
 
     /// Whether this constructor guards its children.

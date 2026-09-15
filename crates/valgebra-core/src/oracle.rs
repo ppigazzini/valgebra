@@ -13,9 +13,18 @@
 //! Each question is a method rather than a callback so the shipped page can
 //! list what the core asks and the mutation sweep can name the arms an answer
 //! is allowed to take.
+//!
+//! The module sits **below both deciders**, beside `kind.rs` and `verdict.rs`,
+//! and for the same reason: three readings ask these questions and none of them
+//! owns the answer. `descr/` builds the set a schema denotes, `decision.rs`
+//! decides structurally, and the constructors in `ir.rs` apply the lattice laws
+//! while a schema is built -- a join carrying a member together with its
+//! complement is the top, whichever of the three is looking. A law stated inside
+//! one of them and imported by the others is the edge `tests/
+//! test_module_direction.py` refuses.
 
 use crate::descr::lower::Constants;
-use crate::ir::{ClassIx, ConstIx, OperandIx, Schema};
+use crate::ir::{ClassIx, ConstIx, Constraint, DefIx, OperandIx, Schema};
 use crate::kind::Kind;
 
 /// Resolve the leaf relations the structural subtyping decision cannot.
@@ -175,3 +184,115 @@ impl LeafRelations for NoLeafRelations {
 /// An oracle that decides nothing reads no pool either, so a schema naming a
 /// constant refuses to lower here and is decided by the rules alone.
 impl Constants for NoLeafRelations {}
+
+/// Whether the intersection contains a schema and its complement (`A ∩ ¬A = ∅`).
+///
+/// The law is a law **about sets**, and it is applied only where both sides are
+/// one. Two atoms are not: the gradual `Any`, whose complement is not its set
+/// complement, and an atom that runs a callback -- a predicate is arbitrary code
+/// evaluated once per occurrence, so nothing makes the two occurrences agree.
+/// A predicate that alternates puts a value in `A` and in `¬A` at once, and the
+/// law would report the meet empty with that value as a witness against it.
+///
+/// This is the completeness law `simplify` applies, decided structurally on the
+/// (small) member list. Shared with the simplifier so both read the same lattice
+/// law -- and so the simplifier does not rewrite to `nothing` what the decision
+/// declines to call empty.
+pub(crate) fn has_complementary_pair(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
+    has_complementary_pair_within(members, oracle, &[])
+}
+
+/// The same, with the definitions a reference in `members` may name.
+///
+/// A `Ref` is not a set on its own evidence -- what it names is elsewhere -- so
+/// with no definitions to read, the fold declines for every recursive schema and
+/// `json & ~json` stands. Given them, the reference is resolved and the law
+/// applies to a fixpoint like any other set.
+pub(crate) fn has_complementary_pair_within(
+    members: &[Schema],
+    oracle: &dyn LeafRelations,
+    definitions: &[Schema],
+) -> bool {
+    members.iter().any(|member| match member {
+        Schema::Complement(inner) => {
+            denotes_a_set_within(inner, oracle, definitions)
+                && members.iter().any(|other| other == &**inner)
+        }
+        _ => false,
+    })
+}
+
+/// Whether a schema denotes a *set*: the same values however often it is asked.
+///
+/// Sound rather than complete, and conservative in the direction that declines.
+/// A callback is the atom this rules out: `Predicate` runs user code, so two
+/// occurrences of one schema can disagree, and a law that assumes they agree is
+/// not a law about this. The gradual `Any` is ruled out because its complement
+/// is not its set complement.
+///
+/// A class is referred to the `oracle`: `isinstance` against a metaclass that
+/// overrides `__instancecheck__` is a callback too, and telling a pure class from
+/// a hooked one needs the class object, which only the bindings hold.
+///
+/// A **reference** is read where `definitions` holds what it names, and refused
+/// where it does not -- a callback may hide behind a body that is not in hand.
+/// Given the body, a reference met again while that body is being walked is
+/// *assumed* to be a set: the greatest-fixpoint reading the rest of the
+/// recursion uses, and the only one that terminates.
+pub(crate) fn denotes_a_set_within(
+    schema: &Schema,
+    oracle: &dyn LeafRelations,
+    definitions: &[Schema],
+) -> bool {
+    // The root is held beside the worklist rather than inside it. A one-element
+    // `vec![...]` is a heap allocation, and most schemas asked this question
+    // answer from the root alone -- an atom has no children to defer, and the
+    // two refusals below return before reaching any. Seeding the loop this way
+    // leaves the worklist empty until a node actually has children, so the
+    // common call allocates nothing; the order is the stack's either way, since
+    // the root is the only thing the vector held.
+    let mut pending: Vec<&Schema> = Vec::new();
+    let mut root = Some(schema);
+    let mut open: Vec<DefIx> = Vec::new();
+    while let Some(node) = root.take().or_else(|| pending.pop()) {
+        match node {
+            Schema::Ref(index) => {
+                if open.contains(index) {
+                    continue;
+                }
+                let Some(body) = definitions.get(index.get()) else {
+                    return false;
+                };
+                open.push(*index);
+                pending.push(body);
+            }
+            Schema::SelfRef(_) => return false,
+            // Only the bindings hold the class, so only they can tell a pure one
+            // from a hooked one. No answer is the conservative answer.
+            Schema::Instance(_) => {
+                if oracle.atom_denotes_a_set(node) != Some(true) {
+                    return false;
+                }
+            }
+            Schema::Refine { constraints, .. } => {
+                if constraints
+                    .iter()
+                    .any(|constraint| matches!(constraint, Constraint::Predicate(_)))
+                {
+                    return false;
+                }
+                node.push_children(&mut pending);
+            }
+            // Every other node is searched through its children, which the term
+            // states once. Restating the child set here is how a variant added
+            // later hides a callback from this walk while an exhaustive `match`
+            // reports nothing: the arms above are the ones with something to say
+            // beyond "look inside".
+            _ => node.push_children(&mut pending),
+        }
+    }
+    true
+}
+
+#[cfg(test)]
+pub(crate) mod tests;

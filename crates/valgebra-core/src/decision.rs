@@ -11,7 +11,6 @@
 mod constraints;
 mod emptiness;
 mod literals;
-mod oracle;
 mod products;
 mod readings;
 mod records;
@@ -19,10 +18,11 @@ mod records;
 use std::cell::Cell;
 
 use crate::descr::lower::{Constants, lower_unfolded};
-use crate::ir::{Constraint, DefIx, Polarity, Schema, SeqShape};
+use crate::ir::{Constraint, Polarity, Schema, SeqShape};
 use crate::kind::{Region, Regions};
 use crate::verdict::{Relation, Verdict};
 
+use crate::oracle::has_complementary_pair;
 use constraints::constraint_entailed;
 use emptiness::class_with_attributes;
 use literals::{finite_set, finite_set_below};
@@ -30,7 +30,7 @@ use products::{linear_subtype, seq_splits_across_union};
 use readings::outside_every_kind;
 use records::{attr_record_subtype, keyed_map_subtype};
 
-pub use oracle::{LeafRelations, NoLeafRelations};
+pub use crate::oracle::{LeafRelations, NoLeafRelations};
 
 /// The most decision steps one top-level query may take before it stops and
 /// returns the conservative answer. Subtyping distributes over unions and
@@ -965,130 +965,6 @@ pub(crate) fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> 
             .iter()
             .map(move |b| (a, b))
     })
-}
-
-/// Whether the intersection contains a schema and its complement (`A ∩ ¬A = ∅`).
-///
-/// The law is a law **about sets**, and it is applied only where both sides are
-/// one. Two atoms are not: the gradual `Any`, whose complement is not its set
-/// complement, and an atom that runs a callback -- a predicate is arbitrary code
-/// evaluated once per occurrence, so nothing makes the two occurrences agree.
-/// A predicate that alternates puts a value in `A` and in `¬A` at once, and the
-/// law would report the meet empty with that value as a witness against it.
-///
-/// This is the completeness law `simplify` applies, decided structurally on the
-/// (small) member list. Shared with the simplifier so both read the same lattice
-/// law -- and so the simplifier does not rewrite to `nothing` what the decision
-/// declines to call empty.
-pub(crate) fn has_complementary_pair(members: &[Schema], oracle: &dyn LeafRelations) -> bool {
-    has_complementary_pair_within(members, oracle, &[])
-}
-
-/// The same, with the definitions a reference in `members` may name.
-///
-/// A `Ref` is not a set on its own evidence -- what it names is elsewhere -- so
-/// with no definitions to read, the fold declines for every recursive schema and
-/// `json & ~json` stands. Given them, the reference is resolved and the law
-/// applies to a fixpoint like any other set.
-pub(crate) fn has_complementary_pair_within(
-    members: &[Schema],
-    oracle: &dyn LeafRelations,
-    definitions: &[Schema],
-) -> bool {
-    members.iter().any(|member| match member {
-        Schema::Complement(inner) => {
-            denotes_a_set_within(inner, oracle, definitions)
-                && members.iter().any(|other| other == &**inner)
-        }
-        _ => false,
-    })
-}
-
-/// Whether a schema denotes a *set*: the same values however often it is asked.
-///
-/// Sound rather than complete, and conservative in the direction that declines.
-/// A callback is the atom this rules out: `Predicate` runs user code, so two
-/// occurrences of one schema can disagree, and a law that assumes they agree is
-/// not a law about this. The gradual `Any` is ruled out because its complement
-/// is not its set complement.
-///
-/// A class is referred to the `oracle`: `isinstance` against a metaclass that
-/// overrides `__instancecheck__` is a callback too, and telling a pure class from
-/// a hooked one needs the class object, which only the bindings hold.
-///
-/// A **reference** is read where `definitions` holds what it names, and refused
-/// where it does not -- a callback may hide behind a body that is not in hand.
-/// Given the body, a reference met again while that body is being walked is
-/// *assumed* to be a set: the greatest-fixpoint reading the rest of the
-/// recursion uses, and the only one that terminates.
-pub(crate) fn denotes_a_set_within(
-    schema: &Schema,
-    oracle: &dyn LeafRelations,
-    definitions: &[Schema],
-) -> bool {
-    // The root is held beside the worklist rather than inside it. A one-element
-    // `vec![...]` is a heap allocation, and most schemas asked this question
-    // answer from the root alone -- an atom has no children to defer, and the
-    // two refusals below return before reaching any. Seeding the loop this way
-    // leaves the worklist empty until a node actually has children, so the
-    // common call allocates nothing; the order is the stack's either way, since
-    // the root is the only thing the vector held.
-    let mut pending: Vec<&Schema> = Vec::new();
-    let mut root = Some(schema);
-    let mut open: Vec<DefIx> = Vec::new();
-    while let Some(node) = root.take().or_else(|| pending.pop()) {
-        match node {
-            Schema::Ref(index) => {
-                if open.contains(index) {
-                    continue;
-                }
-                let Some(body) = definitions.get(index.get()) else {
-                    return false;
-                };
-                open.push(*index);
-                pending.push(body);
-            }
-            Schema::SelfRef(_) => return false,
-            // Only the bindings hold the class, so only they can tell a pure one
-            // from a hooked one. No answer is the conservative answer.
-            Schema::Instance(_) => {
-                if oracle.atom_denotes_a_set(node) != Some(true) {
-                    return false;
-                }
-            }
-            Schema::Refine { base, constraints } => {
-                if constraints
-                    .iter()
-                    .any(|constraint| matches!(constraint, Constraint::Predicate(_)))
-                {
-                    return false;
-                }
-                pending.push(base);
-            }
-            Schema::Seq { shape, .. } => {
-                pending.extend(shape.prefix.iter());
-                pending.extend(shape.tail.as_deref());
-            }
-            Schema::Coll { element: inner, .. } | Schema::Complement(inner) => {
-                pending.push(inner);
-            }
-            Schema::Union(members) | Schema::Intersection(members) => {
-                pending.extend(members.iter());
-            }
-            Schema::KeyedMap { fields, defaults } => {
-                pending.extend(fields.iter().map(|field| &field.schema));
-                for clause in defaults.iter() {
-                    pending.push(&clause.key);
-                    pending.push(&clause.value);
-                }
-            }
-            Schema::AttrRecord { fields } => {
-                pending.extend(fields.iter().map(|field| &field.schema));
-            }
-            _ => {}
-        }
-    }
-    true
 }
 
 /// Whether some two members are provably disjoint (distinct concrete kinds,

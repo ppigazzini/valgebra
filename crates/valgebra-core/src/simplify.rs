@@ -3,11 +3,10 @@
 
 use std::sync::Arc;
 
-use crate::decision::{
-    NoLeafRelations, has_complementary_pair, has_disjoint_pair, unordered_pairs,
-};
+use crate::decision::{has_disjoint_pair, unordered_pairs};
 use crate::ir::{Constraint, Schema, share_members, share_node, with_member_buffer};
 use crate::kind::{Region, Regions};
+use crate::oracle::{NoLeafRelations, has_complementary_pair};
 
 #[cfg(test)]
 thread_local! {
