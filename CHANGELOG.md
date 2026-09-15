@@ -16,6 +16,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a sync rebuilds when a build input changes, not only when pyproject does -- internal
 - fix: every kind's representation is the set the schema denotes
 - fix: a word kind's universe is the words that kind can hold
+- fix: a refinement marker is immutable, and the manifest states the link
 
 -->
 
@@ -48,6 +49,8 @@ answer of its own, or a repair to a change not yet released.
 - **A record resolves a key the way the dict does.** A `str` subclass carrying a
   field's text was read as that field where a catch-all clause sat beside it,
   and as an undeclared key where none did, so one value had two answers.
+- **A `Regex` marker is immutable.** It is hashable and a schema holds it, so a
+  `pattern` rebound after the fact changed the hash of a value already in use.
 - **`MultipleOf` is a remainder equal to zero**, which is what the constraint
   documents. The check read the remainder's truthiness, which differs for a type
   whose `__bool__` and `__eq__` disagree.

@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -310,6 +311,51 @@ def test_every_binding_shape_has_iterations_and_a_budget() -> None:
         key = f"{mode.replace('-', '_')}_workload_irefs"
         assert key in budget, f"{mode} has no recorded budget under {key}"
         assert budget[key] > 0
+
+
+def _bench_steps() -> list[str]:
+    """Collect the bench job's steps that measure a binding shape."""
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["bench"]["steps"]
+    return [step["run"] for step in steps if "--binding" in step.get("run", "")]
+
+
+def test_every_binding_shape_is_measured_by_a_lane() -> None:
+    """A budget no lane reads is a ceiling nothing can cross.
+
+    A shape with a mode, an iteration pair and a recorded budget still measures
+    nothing until a step passes its flag, and the three tables above cannot see
+    that. A mutation survivor accepted on the strength of one of these counts is
+    accepted on a count no push takes.
+    """
+    passed = {
+        flag[2:]
+        for step in _bench_steps()
+        for flag in re.findall(r"--binding[a-z-]*", step)
+    }
+    missing = sorted(set(gate.BINDING_SHAPES) - passed)
+    assert not missing, (
+        f"binding shapes with a budget that no bench step measures: {missing}. "
+        f"Add the flag to both gate steps of the bench job in "
+        f".github/workflows/ci.yml, or drop the shape."
+    )
+
+
+def test_the_regression_gate_measures_every_shape_the_nightly_records() -> None:
+    """The gate against the merge base and the nightly record read one set.
+
+    A shape recorded nightly and not gated drifts between releases with every
+    lane green; a shape gated and not recorded has no history to read the drift
+    against.
+    """
+    steps = _bench_steps()
+    assert len(steps) == 2, "the bench job runs two gate steps"
+    gated, recorded = (
+        {flag[2:] for flag in re.findall(r"--binding[a-z-]*", step)} for step in steps
+    )
+    assert gated == recorded, sorted(gated ^ recorded)
 
 
 def _merge_base_step() -> str:
