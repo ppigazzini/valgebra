@@ -27,8 +27,10 @@ from valgebra import (
     MAX_DEFINITIONS,
     MAX_SCHEMA_DEPTH,
     MAX_SCHEMA_NODES,
+    Regex,
     ValidationError,
     Validator,
+    __version__,
     anything,
     complement,
     intersection,
@@ -116,3 +118,32 @@ def bounds() -> tuple[int, int, int]:
 def builder() -> Callable[[Validator], object]:
     """Name the shape `recursive` takes, so the checker has to agree on it."""
     return lambda inner: union(None, [inner])
+
+
+def refine() -> Validator:
+    """Build through the marker the package defines itself.
+
+    `Regex` is valgebra's own, not `annotated_types`', so a caller who writes a
+    pattern refinement reads this stub rather than a third party's -- which is
+    the case the rest of this file does not reach.
+    """
+    pattern: Regex = Regex(r"[a-z]+")
+    source: str = pattern.pattern
+    del source
+    return Validator(Annotated[str, pattern])
+
+
+def relate(a: Validator, b: Validator) -> str:
+    """Read the relation surface, which answers in strings rather than bools.
+
+    `relation_to` is the one that tells a refutation from a decline, so its
+    return type is what a caller branches on.
+    """
+    decided: bool = a.is_subtype_of(b) and a.is_equivalent(b) and a.is_empty()
+    del decided
+    return a.relation_to(b)
+
+
+def released() -> str:
+    """Read the version, which is a `str` compiled into the extension."""
+    return __version__

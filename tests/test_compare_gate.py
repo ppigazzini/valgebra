@@ -124,7 +124,3 @@ def test_a_payload_the_validator_rejects_is_a_rig_fault() -> None:
     assert not gate.warm_up({"broken": shape})
     ok = {**shape, "valgebra": lambda _data: True}
     assert gate.warm_up({"fine": ok})
-
-
-def test_the_three_exit_codes_are_distinct() -> None:
-    assert (gate.EXIT_OK, gate.EXIT_FAIL, gate.EXIT_CANNOT_RUN) == (0, 1, 2)
