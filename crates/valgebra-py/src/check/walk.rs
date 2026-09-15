@@ -38,7 +38,7 @@ use valgebra_core::{
     ClassIx, CollKind, ConstIx, DefIx, OperandIx, PathSegment, PredIx, Schema, Violation,
 };
 
-use crate::check::ctx::{Ctx, MAX_WALK_DEPTH, WalkMode};
+use crate::check::ctx::{Ctx, Entered, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, WalkMode};
 use crate::check::violation::{summarize_value, type_mismatch};
 use crate::errors::{class_label, summarize};
 use crate::input::Value;
@@ -696,17 +696,19 @@ fn check_instance(index: ClassIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '
     ok
 }
 
-/// The most levels of recursive descent allowed before a value is rejected. A
-/// finite value never reaches this; the bound exists so a pathologically deep
-/// value fails with `recursion_limit` instead of overflowing the native stack.
-const MAX_RECURSION_DEPTH: usize = 128;
-
+/// Whether this value is a member of the definition the reference names.
+///
+/// The reference is entered on the trail for the length of the definition's
+/// walk, so a value reached from inside itself meets its own pair and is
+/// refused as cyclic rather than walked forever. Each of the three refusals
+/// below leaves the trail as it found it: two are refused before a level is
+/// opened, and the third closes the level it opened.
 fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
     let key = (value.id(), id.get());
-    let depth = {
-        let mut guard = ctx.guard.borrow_mut();
-        if !guard.insert(key) {
+    match ctx.guard.borrow_mut().enter(key) {
+        Entered::Open => {}
+        Entered::Cycle => {
             if ctx.mode.explains() {
                 frame.out.push(Violation {
                     code: "recursion_loop",
@@ -717,30 +719,28 @@ fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> boo
             }
             return false;
         }
-        guard.len()
-    };
-    if depth > MAX_RECURSION_DEPTH {
-        ctx.guard.borrow_mut().remove(&key);
-        if ctx.mode.explains() {
-            frame.out.push(Violation {
-                code: "recursion_limit",
-                path: frame.path.clone(),
-                expected: format!("at most {MAX_RECURSION_DEPTH} levels of recursion"),
-                value_summary: summarize_value(value),
-            });
+        Entered::Full => {
+            if ctx.mode.explains() {
+                frame.out.push(Violation {
+                    code: "recursion_limit",
+                    path: frame.path.clone(),
+                    expected: format!("at most {MAX_RECURSION_DEPTH} levels of recursion"),
+                    value_summary: summarize_value(value),
+                });
+            }
+            return false;
         }
-        return false;
     }
     let Some(def) = ctx.defs.get(id.get()) else {
         // A reference past the definitions table is an internal invariant break,
         // not reachable from user input; release builds degrade to a non-member
         // rather than panicking across the language boundary.
         debug_assert!(false, "definition index {} out of range", id.get());
-        ctx.guard.borrow_mut().remove(&key);
+        ctx.guard.borrow_mut().leave();
         return false;
     };
     let result = member(def, value, frame);
-    ctx.guard.borrow_mut().remove(&key);
+    ctx.guard.borrow_mut().leave();
     result
 }
 
