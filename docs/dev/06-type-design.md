@@ -41,8 +41,8 @@ confirm the compiler rejects it:
 | a pool shift applied to a length bound | a length bound moved by a pool length |
 
 **It cost nothing measurable.** The core workload's instruction count is
-identical to the instruction across the split, and the binding walk moved under a
-hundredth of a percent. Five newtypes over `usize`, all `#[repr(transparent)]`,
+identical across the split, to the instruction, and the binding walk moved under
+a hundredth of a percent. Five newtypes over `usize`, all `#[repr(transparent)]`,
 carried and consumed one at a time: the free shape.
 
 ## The maps
@@ -91,6 +91,41 @@ The raw operators left the folds entirely. That is worth more than it reads: a
 `|` where a `^` belongs is a one-character defect sitting inside a fold no test
 could distinguish it in, and concentrating the five operations into five one-line
 methods put each somewhere a five-line test reaches.
+
+### The answers
+
+```
+  Verdict   = Empty  | Inhabited | Unknown
+  Relation  = Holds  | Fails     | Unknown
+```
+
+Both live in `crates/valgebra-core/src/verdict.rs`, and both exist because the
+thing they answer has **three** states while a `bool` has two. A schema is proven
+empty, proven inhabited, or neither -- an opaque leaf the core cannot read, or a
+descent the work bound stopped. A relation is proved, refuted by a value, or
+neither. Collapsing either onto a `bool` does not lose a rare case; it loses the
+*contract*, which is "a positive answer is a proof, a negative is no **or not yet
+proven**". A `false` that means both cannot say which it is, and a bail-out
+becomes indistinguishable from a decision.
+
+Three consequences follow, and they are why this is a type rather than a comment:
+
+- **The reduction is named once.** `Relation::holds` is the only place a
+  three-valued answer becomes the `bool` the public relations return, and it
+  reads `matches!(self, Relation::Holds)` -- so only a proof is `true`, at one
+  line rather than at every call site.
+- **The combinators propagate it.** `Relation::and` and `Relation::or_else`
+  carry `Unknown` through a conjunction and a disjunction, so a rule that
+  declines one conjunct cannot have its decline read as a refutation by the rule
+  above it.
+- **It reaches the caller.** `Validator.relation_to` maps the three to
+  `"subset"`, `"not_subset"` and `"undecided"`, which is what lets a test assert
+  that a pair is *declined* rather than merely not proved
+  ([02-decision.md](02-decision.md)).
+
+The public `is_subtype_of` still answers `True`/`False`, because that is the
+contract a caller is held to. The three-valued type is what makes the distinction
+a property of the procedure instead of a sentence in a document.
 
 ### The modes
 

@@ -21,7 +21,8 @@ assert is_int.is_valid(42)
 assert not is_int.is_valid("42")
 ```
 
-A validator has three entry points:
+A validator has three entry points on the object path; the JSON path adds its
+own, below:
 
 - `is_valid(obj)` returns a `bool` (the fast path). Since validation is set
   membership, `obj in validator` is the same check written as an operator.

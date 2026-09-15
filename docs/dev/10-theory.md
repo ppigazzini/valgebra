@@ -248,6 +248,37 @@ its *order* reads the spelling (`descr/integers.rs`). The set, record and
 sequence components are not canonical either way, and equality on them is
 emptiness of both differences — which is the same question, asked twice.
 
+## Three representations with no paper here
+
+The page's contract is that a citation names a line that exists because of it.
+Three components of the descriptor ship and have **no row above**, and saying so
+is what keeps the rest of the page readable as a complete account rather than a
+selective one. None is an unbuilt idea -- each is code, with a test suite, in the
+file named -- and each carries the construction the literature would attribute it
+to, written here as a description rather than as a citation because the source
+was not read first-hand:
+
+| where | the construction | the work it belongs to |
+|---|---|---|
+| `crates/valgebra-core/src/descr/regular.rs` | a minimal deterministic automaton per word kind: refine a partition of the states until the signatures stop changing, coarsen the alphabet, renumber canonically | **Moore's** algorithm, named at the function. Not Hopcroft's `n log n`, which this does not implement |
+| `crates/valgebra-core/src/descr/symbolic.rs` | the same refinement one alphabet up, where a letter is a descriptor, an edge carries a guard and the total transition is an *else* edge rather than a guard naming the universe | the minimisation of **symbolic automata** over a Boolean algebra of guards |
+| `crates/valgebra-core/src/descr/integers.rs` | eventually periodic sets as an interval set per residue class, two periods meeting at their least common multiple | the ultimately periodic sets, which are the **one-variable fragment of Presburger arithmetic**. The representation is semilinear rather than automaton-based |
+
+**Why they are described and not cited.** A citation here is held to the rule the
+rest of the page is: the theorem was read, and matched to what the code does. For
+these three it was matched to the code and not to the paper, so a row above would
+be an attribution from memory -- which is the failure mode this page exists to
+avoid, in a politer form than quoting a theorem number a secondary source
+reported. The reading that can be done here has been: each description above is
+against the source, and `regular.rs` names Moore at the line that refines the
+partition.
+
+The consequence worth stating: **the descriptor's components are the part of
+this design least anchored in a read source.** They are held by their own test
+modules and by the completeness ledger rather than by a theorem, which is a
+weaker guarantee than the rest of the page offers and is the honest place to
+start looking if one of them is wrong.
+
 ## Property-based testing
 
 **Claessen & Hughes, QuickCheck (2000)**, and the modern shrinking work behind
@@ -286,6 +317,10 @@ structural procedure is sound and budget-bounded and exact on a published
 fragment, not a decision procedure for the whole relation. And the interning that
 shares a name with hash consing is a table of nodes, not a decision procedure.
 Where a page here says otherwise, the page is wrong.
+
+**And three components are attributed to no source at all**, which is a
+different and larger gap than any of the above: see [Three representations with
+no paper here](#three-representations-with-no-paper-here).
 
 ### Where this tree departs from its sources
 

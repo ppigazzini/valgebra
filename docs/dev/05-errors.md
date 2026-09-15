@@ -26,12 +26,27 @@ is the user-facing statement of the same thing.
 
 ## The path is segments, not a string
 
-`PathSegment` is a key or an index, and `Violation::location` renders the pair as
-`name[2].id`. Keeping them apart is what lets a consumer walk to the offending
-value rather than parse a string back into steps.
+`PathSegment` in `crates/valgebra-core/src/ir.rs` is one step of a location, and
+`Violation::location` renders a sequence of them as `name[2].id`. Keeping the
+steps apart is what lets a consumer walk down to the offending value rather than
+parse a string back into steps.
 
-`PathSegment::Index(usize)` is a position in the **value being validated**. It is
-not one of the validator's index spaces and shares no type with them
+There are **four** variants, and the split between the first three is the whole
+reason the path is usable on a dict:
+
+| variant | what it addresses |
+|---|---|
+| `Key(Arc<str>)` | a string key. Shared rather than owned, so a record's failure path carries the name the schema already declares instead of allocating one per failing field |
+| `IntKey(i64)` | an integer key. Separate from `Key` because `d[2]` and `d["2"]` are different entries of one dict, and rendering the integer as its text made them indistinguishable |
+| `BigIntKey(String)` | an integer key past `i64`. Python's integers are unbounded and a dict may be keyed by any of them; the core holds no Python object, so the digits travel and the binding rebuilds the `int` |
+| `Index(usize)` | a **position** in a sequence, which is not a key at all |
+
+A consumer that flattens the path to strings loses the distinction the type
+exists to keep. `docs/08-error-model.md` states the same split for a caller, in
+the form the Python tuple takes.
+
+`Index` is a position in the **value being validated**, so it is not one of the
+validator's own index spaces and shares no type with them
 ([06-type-design.md](06-type-design.md)).
 
 ## Aggregation is the caller's choice
@@ -66,4 +81,5 @@ not to reconstruct it.
 **`render` is not a round-trip guarantee.** It produces *an* annotation that
 compiles to the schema, not the one the user wrote: a schema built through the
 combinators may have no annotation spelling, and one that does may differ in
-member order after simplification.
+member order from the spelling it was written in, because the constructors order
+a union's members when they build it.

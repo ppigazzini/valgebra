@@ -64,7 +64,7 @@ assert not numbers.is_valid([1, "two", 3])  # one bad element fails the list
 ## 4. Describing a record
 
 Real data is usually structured. Write a record as a `TypedDict` — the standard
-typing form — and valgebra validates the shape and every field:
+typing form — and valgebra validates every declared field:
 
 ```python
 from typing import TypedDict
@@ -80,7 +80,14 @@ class User(TypedDict):
 users = Validator(User)
 assert users.is_valid({"name": "Ada", "age": 36})
 assert not users.is_valid({"name": "Ada", "age": "old"})  # age must be an int
+assert users.is_valid({"name": "Ada", "age": 36, "note": "extra"})  # open
 ```
+
+That last line is the one to notice: a `TypedDict` is **open**, so a key it does
+not declare is admitted. That is the typing spec's reading of the form rather
+than a valgebra choice, and step 6 shows the spelling that is closed. The
+[schema language](03-schema-language.md#a-typeddict-is-open-a-dict-literal-is-closed)
+has both, and `closed=True` for a `TypedDict` that should refuse.
 
 ## 5. Adding a constraint
 
