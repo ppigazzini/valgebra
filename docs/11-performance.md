@@ -110,10 +110,17 @@ slow. `scripts/compare_gate.py` refuses such a build outright, and so does
 to protect it.
 
 **Whether to add PGO is a question about your shapes**, not a setting to turn
-on. Measured on one box, against a plain release build of the same source, best
-of nine and repeated: a `list[int]` of ten thousand and the JSON document come
-out ahead, and the accepting walk over a fifty-field record comes out **behind**
-by a tenth. The direction holds across an instruction count and a wall clock,
+on. Build both and time the shapes you run:
+
+```bash
+uv run maturin build --release --pgo -i .venv/bin/python --out profiled
+uv run maturin build --release       -i .venv/bin/python --out plain
+```
+
+Measured that way on one box, best of nine and repeated three times, the
+direction is not one way. A `list[int]` of ten thousand and the JSON document
+come out ahead; the accepting walk over a fifty-field record comes out
+**behind**, by about a quarter. An instruction count agrees with the wall clock,
 and re-weighting the training workload toward accepting values recovers only a
 part of it. The shapes PGO serves worst are the ones that run a container's full
 element loop; the ones it serves best exit early.
