@@ -598,16 +598,18 @@ jobs:
           --against "$BASE"
         env:
           BASE: ${{ steps.base.outputs.sha }}
-      # The same gate for the binding hot paths, in the five shapes the
-      # comparison gate times: the membership walk, the call boundary alone, the
-      # walk over a wide record, building one, and explaining a failure in one.
-      # Schema construction grew twelve percent over one release cycle while
-      # only the walk was counted, which is what the other four are for. All
-      # five are measured against one build of the base, since the build is the
-      # expensive half. The workload embeds the interpreter, so PYO3_PYTHON
-      # selects it at build time and its library directory goes on the loader
-      # path at run time; each shape subtracts two iteration counts so the
-      # interpreter startup cancels.
+      # The same gate for the binding hot paths, in every shape the binding
+      # budget records: the membership walk, the call boundary alone, the walk
+      # over a wide record, building one, explaining a failure in one and
+      # accepting one, the JSON document, the compiled pattern, and the
+      # reference a recursive schema enters. Schema construction grows twelve
+      # percent over a release cycle where only the walk is counted, which is
+      # what the shapes beside it are for, and a budget no flag here passes is a
+      # ceiling nothing crosses. Every shape is measured against one build of
+      # the base, since the build is the expensive half. The workload embeds the
+      # interpreter, so PYO3_PYTHON selects it at build time and its library
+      # directory goes on the loader path at run time; each shape subtracts two
+      # iteration counts so the interpreter startup cancels.
       - name: Binding-path instruction-count regression gate
         run: |
           py="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
