@@ -7,6 +7,11 @@
 //! over Python values lives in the bindings crate and is benchmarked from
 //! Python; this harness isolates the work that is independent of `PyO3`.
 
+#![expect(
+    deprecated,
+    reason = "the reducer is timed while it is still shipped; a deprecation is not a licence to let its cost drift"
+)]
+
 use std::hint::black_box;
 use std::sync::Arc;
 

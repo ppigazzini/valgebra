@@ -1,3 +1,8 @@
+#![expect(
+    deprecated,
+    reason = "a decision is compared against the reducer's answer while the reducer is still shipped"
+)]
+
 use std::sync::Arc;
 
 use super::records::keyed_map_meet_empty;
@@ -5,14 +10,14 @@ use super::*;
 use crate::descr::classes::Class;
 use crate::descr::lower::Operand;
 use crate::ir::{CollKind, Field, MapClause, OperandIx, SeqKind};
+use crate::ir::{DefIx, Openness};
 use crate::kind::Kind;
+use crate::oracle::tests::Pure;
 
 /// The structural inclusion procedure alone, with no descriptor beside it.
 ///
 /// `is_subtype_of_under` asks the descriptor where the rules decline, which
-use crate::ir::{DefIx, Openness};
 /// is what widens the public relations -- and what makes a defect in a rule
-use crate::oracle::tests::Pure;
 /// invisible through them, since the answer comes out right for the other
 /// reason. A rule is pinned by asking it on its own.
 fn structural(sub: &Schema, sup: &Schema) -> bool {

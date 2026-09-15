@@ -1,3 +1,8 @@
+#![expect(
+    deprecated,
+    reason = "the laws of a deprecated reducer are held until it is removed, and a law nobody checks is how a deprecation period ships a regression"
+)]
+
 use std::sync::Arc;
 
 use super::*;

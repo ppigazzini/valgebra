@@ -28,6 +28,10 @@ impl Schema {
     /// than timed. A wall-clock bound answers the same question only on a
     /// machine fast enough to tell the two growths apart.
     #[cfg(test)]
+    #[expect(
+        deprecated,
+        reason = "the reducer's own recursion; the deprecation is addressed to callers outside it"
+    )]
     pub(crate) fn simplify_steps(&self) -> u64 {
         SIMPLIFY_STEPS.with(|steps| steps.set(0));
         let _ = self.simplify();
@@ -59,6 +63,12 @@ impl Schema {
     /// [`is_empty`](Self::is_empty), [`is_subtype_of`](Self::is_subtype_of), and
     /// [`is_equivalent`](Self::is_equivalent) are the stronger, separate decision
     /// procedures, deciding a wider fragment than `simplify` folds.
+    #[deprecated(
+        since = "0.0.10",
+        note = "a schema is built in the lattice normal form, so this returns the schema \
+                the caller already holds; ask is_empty, is_subtype_of or is_equivalent \
+                for what it folds beyond the laws"
+    )]
     pub fn simplify(&self) -> Schema {
         #[cfg(test)]
         SIMPLIFY_STEPS.with(|steps| steps.set(steps.get() + 1));
@@ -129,6 +139,10 @@ fn canonical_refine(mut base: Schema, mut constraints: Vec<Constraint>) -> Schem
 /// the loop, so the top identity short-circuits the moment a member reduces to it,
 /// without normalising the members that follow. This is the entry from the top of
 /// `simplify`, where the members are not yet normal.
+#[expect(
+    deprecated,
+    reason = "the reducer's own recursion; the deprecation is addressed to callers outside it"
+)]
 fn simplify_union(members: &[Schema]) -> Schema {
     with_member_buffer(|flat| {
         for member in members {
@@ -201,6 +215,10 @@ fn finish_union(flat: &mut Vec<Schema>) -> Schema {
 /// lazily inside the loop, so the bottom identity short-circuits the moment a
 /// member reduces to it, without normalising the members that follow. This is the
 /// entry from the top of `simplify`, where the members are not yet normal.
+#[expect(
+    deprecated,
+    reason = "the reducer's own recursion; the deprecation is addressed to callers outside it"
+)]
 fn simplify_intersection(members: &[Schema]) -> Schema {
     with_member_buffer(|flat| {
         for member in members {
@@ -266,6 +284,10 @@ fn finish_intersection(flat: &mut Vec<Schema>) -> Schema {
 /// push the complement inward. The inner is normalised lazily here (its own
 /// short-circuits intact); the De Morgan arms then operate on its already-normal
 /// members through [`complement_of_simplified`], so no member is normalised twice.
+#[expect(
+    deprecated,
+    reason = "the reducer's own recursion; the deprecation is addressed to callers outside it"
+)]
 fn simplify_complement(inner: &Schema) -> Schema {
     complement_of_simplified(inner.simplify())
 }

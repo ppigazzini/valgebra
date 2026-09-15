@@ -802,6 +802,11 @@ impl Validator {
     ///     ValueError: If negation-normal form expands the schema past the size
     ///         bound (distributing a complement over a wide union can grow the
     ///         node count); a schema built within the bounds does not hit this.
+    #[expect(
+        deprecated,
+        reason = "the binding that carries the deprecation to a Python caller calls the \
+                  deprecated core method to do it; the two are removed together"
+    )]
     fn simplify(&self, py: Python<'_>) -> PyResult<Validator> {
         PyErr::warn(
             py,
