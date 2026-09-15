@@ -2020,8 +2020,9 @@ proptest! {
                 union(not(a.clone()), not(b.clone())),
             ),
         ];
+        let universe = boundary_values(&[&a, &b]);
         for (left, right) in pairs {
-            for value in &sample_values() {
+            for value in &universe {
                 let held = member_full(&left, value, &pool);
                 prop_assert_eq!(
                     held,
@@ -2760,7 +2761,8 @@ fn member_full(schema: &Schema, value: &Obj, pool: &[Obj]) -> bool {
     }
 }
 
-fn sample_values() -> Vec<Obj> {
+/// The values at the edge of every kind, which no schema has to name.
+fn kind_edges() -> Vec<Obj> {
     vec![
         Obj::None,
         Obj::Bool(true),
@@ -2805,6 +2807,442 @@ fn sample_values() -> Vec<Obj> {
         Obj::Map(vec![("c", Obj::Int(1))]),
         Obj::Map(vec![("a", Obj::Int(1)), ("c", Obj::Str("a"))]),
     ]
+}
+
+/// Strings of each small length, so a length bound has a word on both sides.
+const SIZED: [&str; 7] = ["", "a", "ab", "abc", "abcd", "abcde", "abcdef"];
+/// Field names in the order the generator declares them.
+const NAMES: [&str; 6] = ["a", "b", "c", "d", "e", "f"];
+
+/// The corpus's own spelling of a field name, since a value's keys are static.
+///
+/// A record admits a mapping whose keys are *its* names, so a value built with
+/// any other name is a non-member however well it is shaped -- which reads as a
+/// universe too thin rather than as the bug it is.
+fn static_name(name: &str) -> Option<&'static str> {
+    NAMES.into_iter().find(|known| *known == name)
+}
+/// How far past a schema's own width the derived universe reaches.
+const EDGE_SPAN: usize = 1;
+
+/// The universe a property is judged over: every kind's edge, and every value
+/// the schemas drawn put a boundary at.
+///
+/// A corpus written by hand holds the values its author thought of, and a
+/// generator draws schemas whose boundaries that author never saw: a length
+/// bound at three decides on sequences of two, three and four, and a universe
+/// holding none of them reports the relation sound because nothing in it can
+/// say otherwise. So each schema contributes its own edges -- the operand of
+/// every bound with its two neighbours, a container of each kind at each side
+/// of every length, the constant of every literal, and a mapping at each side
+/// of every record's width -- and the property is judged over the union of
+/// those with the fixed kind edges.
+fn boundary_values(schemas: &[&Schema]) -> Vec<Obj> {
+    let mut values = kind_edges();
+    for schema in schemas {
+        edges_of(schema, &mut values);
+    }
+    let mut seen: Vec<String> = Vec::new();
+    values.retain(|value| {
+        let key = format!("{value:?}");
+        let fresh = !seen.contains(&key);
+        if fresh {
+            seen.push(key);
+        }
+        fresh
+    });
+    // The cap is read after the duplicates leave, so a node that repeats a
+    // value cannot push another node's own values past the end.
+    values.truncate(CAP_UNIVERSE);
+    values
+}
+
+/// Every value of `len` items, in each container a length is read from.
+fn containers_of(len: usize, out: &mut Vec<Obj>) {
+    let items = vec![Obj::Int(1); len];
+    let entries = NAMES
+        .iter()
+        .take(len)
+        .map(|name| (*name, Obj::Int(1)))
+        .collect();
+    out.push(Obj::Str(SIZED[len.min(SIZED.len() - 1)]));
+    out.push(Obj::List(items.clone()));
+    out.push(Obj::Tuple(items.clone()));
+    out.push(Obj::Set(items.clone()));
+    out.push(Obj::FrozenSet(items));
+    out.push(Obj::Map(entries));
+}
+
+/// The numbers on both sides of a bound's operand, and the floats beside them.
+fn numbers_around(index: OperandIx, out: &mut Vec<Obj>) {
+    let Some(operand) = as_num(&const_pool()[index.get()]) else {
+        return;
+    };
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "every pool operand is a small integer or a bool"
+    )]
+    let whole = operand as i64;
+    for step in -1..=1 {
+        out.push(Obj::Int(whole.saturating_add(step)));
+    }
+    out.push(Obj::Float(operand));
+    out.push(Obj::Float(operand + 0.5));
+    out.push(Obj::Float(operand * 2.0));
+}
+
+/// How deep a constructed member is built before the attempt is given up.
+const MEMBER_FUEL: usize = 4;
+
+/// A value of the schema, built from the schema's own denotation.
+///
+/// The universe's other half. The kind edges and the derived boundaries are
+/// values a *reader* would think of; a refutation, though, asserts that a value
+/// of the subject lies outside the other schema, and the subject may be a shape
+/// no fixed corpus spells -- a list of a set of a record. So each subterm is
+/// asked for one member of itself, and what it answers joins the universe.
+///
+/// `None` is honest rather than convenient: an empty schema has no member, and
+/// a leaf the oracle does not model (a class, a reference, an attribute record)
+/// is one this cannot build. A law reads the answer as "no witness here", never
+/// as "no witness exists".
+fn a_member(schema: &Schema, fuel: usize) -> Option<Obj> {
+    if fuel == 0 {
+        return None;
+    }
+    let pool = const_pool();
+    match schema {
+        // The top is answered by any value at all, and an integer is the
+        // shortest one to read in a failure message.
+        Schema::Anything(_) | Schema::Int => Some(Obj::Int(1)),
+        Schema::NoneType => Some(Obj::None),
+        Schema::Bool => Some(Obj::Bool(true)),
+        Schema::Float => Some(Obj::Float(1.0)),
+        Schema::Str => Some(Obj::Str("a")),
+        Schema::Bytes => Some(Obj::Bytes),
+        Schema::Literal(index) => Some(pool[index.get()].clone()),
+        Schema::Seq { container, shape } => {
+            let mut items = shape
+                .prefix
+                .iter()
+                .map(|element| a_member(element, fuel - 1))
+                .collect::<Option<Vec<Obj>>>()?;
+            if let Some(tail) = shape.tail.as_deref() {
+                // One element past the prefix where the tail admits one, so a
+                // length bound over the shape has a value on the long side.
+                items.extend(a_member(tail, fuel - 1));
+            }
+            Some(match container {
+                SeqKind::List => Obj::List(items),
+                SeqKind::Tuple => Obj::Tuple(items),
+            })
+        }
+        Schema::Coll {
+            container, element, ..
+        } => {
+            let items = a_member(element, fuel - 1).map_or_else(Vec::new, |item| vec![item]);
+            Some(match container {
+                CollKind::Set => Obj::Set(items),
+                CollKind::FrozenSet => Obj::FrozenSet(items),
+            })
+        }
+        Schema::KeyedMap { fields, .. } => Some(Obj::Map(
+            fields
+                .iter()
+                .filter(|field| field.required)
+                .map(|field| {
+                    Some((
+                        static_name(&field.name)?,
+                        a_member(&field.schema, fuel - 1)?,
+                    ))
+                })
+                .collect::<Option<Vec<(&'static str, Obj)>>>()?,
+        )),
+        Schema::Union(members) => members.iter().find_map(|member| a_member(member, fuel - 1)),
+        // A meet and a complement are asked of the candidates rather than
+        // constructed: the oracle decides membership, so a value that answers
+        // is a member and one that does not is dropped.
+        Schema::Intersection(members) => members
+            .iter()
+            .filter_map(|member| a_member(member, fuel - 1))
+            .chain(kind_edges())
+            .find(|value| member_full(schema, value, &pool)),
+        Schema::Complement(_) | Schema::Refine { .. } => kind_edges()
+            .into_iter()
+            .find(|value| member_full(schema, value, &pool)),
+        // The empty set has no member, and a leaf this does not model is one
+        // no member can be built for. A law reads either as "no witness here".
+        Schema::Nothing
+        | Schema::Ref(_)
+        | Schema::SelfRef(_)
+        | Schema::Instance(_)
+        | Schema::AttrRecord { .. } => None,
+    }
+}
+
+/// The values every container arm is probed with, whatever its element says.
+///
+/// One per kind, so a container of a schema and a container of its complement
+/// are told apart by an element that belongs to one of them.
+fn probes() -> Vec<Obj> {
+    vec![
+        Obj::None,
+        Obj::Bool(true),
+        Obj::Int(1),
+        Obj::Float(1.0),
+        Obj::Str("a"),
+        Obj::Bytes,
+        Obj::List(vec![]),
+        Obj::Map(vec![]),
+    ]
+}
+
+/// How many values one node contributes, so a nested shape stays bounded.
+const CAP_PER_NODE: usize = 28;
+/// How many values the whole universe holds.
+const CAP_UNIVERSE: usize = 512;
+
+fn hold(container: SeqKind, items: Vec<Obj>) -> Obj {
+    match container {
+        SeqKind::List => Obj::List(items),
+        SeqKind::Tuple => Obj::Tuple(items),
+    }
+}
+
+fn gather(container: CollKind, items: Vec<Obj>) -> Obj {
+    match container {
+        CollKind::Set => Obj::Set(items),
+        CollKind::FrozenSet => Obj::FrozenSet(items),
+    }
+}
+
+/// The values one schema puts a boundary at: its own, and its subterms' lifted
+/// into it.
+///
+/// Composed bottom-up, which is the half a flat corpus cannot have. A list of
+/// anything and a list of everything-but-`None` are separated by `[None]` and
+/// by nothing else, so a container arm builds itself around each value its
+/// element schemas contributed -- and around a fixed probe per kind, so the
+/// separation survives an element the oracle builds no member of. Every node is
+/// capped: a shape three deep would otherwise multiply its levels together.
+fn edges_of(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
+    let mut mine: Vec<Obj> = a_member(schema, MEMBER_FUEL).into_iter().collect();
+    match schema {
+        Schema::Literal(index) => mine.push(const_pool()[index.get()].clone()),
+        Schema::Refine { base, constraints } => {
+            mine.extend(edges_of(base, out));
+            for constraint in constraints.iter() {
+                match constraint {
+                    Constraint::Ge(index)
+                    | Constraint::Gt(index)
+                    | Constraint::Le(index)
+                    | Constraint::Lt(index)
+                    | Constraint::MultipleOf(index) => numbers_around(*index, &mut mine),
+                    Constraint::MinLen(len) | Constraint::MaxLen(len) => {
+                        for width in len.saturating_sub(EDGE_SPAN)..=(len + EDGE_SPAN) {
+                            containers_of(width, &mut mine);
+                        }
+                    }
+                    Constraint::Predicate(_) | Constraint::Regex(_) => {}
+                }
+            }
+        }
+        Schema::Seq { container, shape } => {
+            let mut elements = probes();
+            for element in shape.elements() {
+                elements.extend(edges_of(element, out));
+            }
+            elements.truncate(CAP_PER_NODE);
+            // The composed values first: a cap that cut them would leave the
+            // universe holding widths alone, which is the corpus this replaces.
+            mine.extend(
+                elements
+                    .into_iter()
+                    .map(|element| hold(*container, vec![element])),
+            );
+            let width = shape.prefix.len();
+            for len in width.saturating_sub(EDGE_SPAN)..=(width + EDGE_SPAN) {
+                containers_of(len, &mut mine);
+            }
+        }
+        Schema::Coll {
+            container, element, ..
+        } => {
+            let mut elements = probes();
+            elements.extend(edges_of(element, out));
+            elements.truncate(CAP_PER_NODE);
+            mine.push(gather(*container, vec![]));
+            mine.extend(
+                elements
+                    .into_iter()
+                    .map(|item| gather(*container, vec![item])),
+            );
+        }
+        Schema::KeyedMap { fields, defaults } => {
+            mine.extend(record_edges(fields, defaults, out));
+        }
+        Schema::Union(members) | Schema::Intersection(members) => {
+            for member in members.iter() {
+                mine.extend(edges_of(member, out));
+            }
+        }
+        // A complement is separated from its inner set by the inner set's own
+        // values: one of them is in exactly one of the two.
+        Schema::Complement(inner) => mine.extend(edges_of(inner, out)),
+        _ => {}
+    }
+    mine.truncate(CAP_PER_NODE);
+    out.extend(mine.iter().cloned());
+    mine
+}
+
+/// The mappings one record puts a boundary at: the three widths its own clauses
+/// separate, and each field and default clause probed under a key it governs.
+fn record_edges(fields: &Fields, defaults: &Clauses, out: &mut Vec<Obj>) -> Vec<Obj> {
+    let mut mine = Vec::new();
+    {
+        {
+            // A mapping of exactly the declared names, one short of them, and
+            // one past them: the three widths a record's own clauses separate.
+            let declared: Vec<(&'static str, Obj)> = fields
+                .iter()
+                .filter_map(|field| Some((static_name(&field.name)?, Obj::Int(1))))
+                .collect();
+            let mut short = declared.clone();
+            short.pop();
+            let mut wide = declared.clone();
+            wide.push(("z", Obj::Int(1)));
+            for field in fields.iter() {
+                let mut values = probes();
+                values.extend(edges_of(&field.schema, out));
+                values.truncate(CAP_PER_NODE / 2);
+                if let Some(name) = static_name(&field.name) {
+                    mine.extend(
+                        values
+                            .into_iter()
+                            .map(|value| Obj::Map(vec![(name, value)])),
+                    );
+                }
+            }
+            // A default clause governs the keys no field declares, so its
+            // probes go under a name this record does not declare: under a
+            // declared one the field decides and the clause is never read.
+            let undeclared = NAMES
+                .into_iter()
+                .chain(["z"])
+                .find(|name| !fields.iter().any(|field| &*field.name == *name))
+                .unwrap_or("z");
+            for clause in defaults.iter() {
+                let mut values = probes();
+                values.extend(edges_of(&clause.value, out));
+                values.truncate(CAP_PER_NODE / 2);
+                mine.extend(
+                    values
+                        .into_iter()
+                        .map(|value| Obj::Map(vec![(undeclared, value)])),
+                );
+            }
+            mine.push(Obj::Map(declared));
+            mine.push(Obj::Map(short));
+            mine.push(Obj::Map(wide));
+        }
+    }
+    mine
+}
+
+/// The definitions the soundness laws draw against.
+///
+/// Two fixpoints: one with a word branch, whose unfolding has to keep the two
+/// word kinds apart, and one whose reference sits **under a complement**, which
+/// is where the polarity of an unfolding decides whether a difference is sound.
+fn fixpoint_defs() -> Vec<Schema> {
+    let list_of = |element: Schema| Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape::homogeneous(element),
+    };
+    vec![
+        union(Schema::Str, list_of(Schema::Ref(DefIx::new(0)))),
+        union(Schema::Int, list_of(not(Schema::Ref(DefIx::new(1))))),
+    ]
+}
+
+/// How far a reference is unfolded before the value oracle reads it.
+///
+/// Every value of the universe is shallower than this, so a membership answer
+/// is exact whatever sits at the cut: the walk reaches the cut only where the
+/// value is deeper than the unfolding, and no value here is.
+const ORACLE_UNFOLDS: usize = 6;
+
+/// A schema with its references resolved, for the oracle to read.
+///
+/// The decision procedure is asked about the schema *with* its definitions;
+/// the oracle is a transcription of the denotation and has no rule for a
+/// cycle, so it reads an unfolding deep enough that the corpus cannot tell the
+/// two apart.
+fn unfold_for_oracle(schema: &Schema, defs: &[Schema], fuel: usize) -> Schema {
+    match schema {
+        Schema::Ref(index) => match defs.get(index.get()) {
+            Some(body) if fuel > 0 => unfold_for_oracle(body, defs, fuel - 1),
+            // Past the fuel, and an unresolved reference: no value of the
+            // corpus reaches either, so the empty set is the exact answer.
+            _ => Schema::Nothing,
+        },
+        Schema::Seq { container, shape } => Schema::Seq {
+            container: *container,
+            shape: SeqShape {
+                prefix: shape
+                    .prefix
+                    .iter()
+                    .map(|element| unfold_for_oracle(element, defs, fuel))
+                    .collect(),
+                tail: shape
+                    .tail
+                    .as_deref()
+                    .map(|tail| Arc::new(unfold_for_oracle(tail, defs, fuel))),
+            },
+        },
+        Schema::Coll { container, element } => Schema::Coll {
+            container: *container,
+            element: Arc::new(unfold_for_oracle(element, defs, fuel)),
+        },
+        Schema::KeyedMap { fields, defaults } => Schema::KeyedMap {
+            fields: fields
+                .iter()
+                .map(|field| Field {
+                    name: Arc::clone(&field.name),
+                    schema: unfold_for_oracle(&field.schema, defs, fuel),
+                    required: field.required,
+                })
+                .collect(),
+            defaults: defaults
+                .iter()
+                .map(|clause| MapClause {
+                    key: unfold_for_oracle(&clause.key, defs, fuel),
+                    value: unfold_for_oracle(&clause.value, defs, fuel),
+                })
+                .collect(),
+        },
+        Schema::Refine { base, constraints } => Schema::Refine {
+            base: Arc::new(unfold_for_oracle(base, defs, fuel)),
+            constraints: constraints.clone(),
+        },
+        Schema::Union(members) => Schema::Union(
+            members
+                .iter()
+                .map(|member| unfold_for_oracle(member, defs, fuel))
+                .collect(),
+        ),
+        Schema::Intersection(members) => Schema::Intersection(
+            members
+                .iter()
+                .map(|member| unfold_for_oracle(member, defs, fuel))
+                .collect(),
+        ),
+        Schema::Complement(inner) => {
+            Schema::Complement(Arc::new(unfold_for_oracle(inner, defs, fuel)))
+        }
+        other => other.clone(),
+    }
 }
 
 /// A bound or length constraint over the pool: comparisons point at the
@@ -3007,7 +3445,7 @@ proptest! {
     fn simplify_preserves_membership_over_values(schema in decidable_schema()) {
         let pool = const_pool();
         let simplified = schema.simplify();
-        for value in &sample_values() {
+        for value in &boundary_values(&[&schema]) {
             prop_assert_eq!(
                 member_full(&simplified, value, &pool),
                 member_full(&schema, value, &pool),
@@ -3032,9 +3470,10 @@ proptest! {
         b in decidable_schema(),
     ) {
         let pool = const_pool();
+        let universe = boundary_values(&[&a, &b]);
         prop_assert!(a.is_subtype_of(&a), "reflexivity");
         if a.is_subtype_of(&b) {
-            for value in &sample_values() {
+            for value in &universe {
                 prop_assert!(
                     !member_full(&a, value, &pool) || member_full(&b, value, &pool),
                     "{:?} is in the subtype and not in the supertype", value
@@ -3042,10 +3481,80 @@ proptest! {
             }
         }
         if a.is_empty() {
-            for value in &sample_values() {
+            for value in &universe {
                 prop_assert!(
                     !member_full(&a, value, &pool),
                     "{:?} is a member of a schema decided empty", value
+                );
+            }
+        }
+    }
+}
+
+/// The structural fragment with a reference into [`fixpoint_defs`] among its
+/// leaves, so a drawn schema reaches a fixpoint with a word branch and one
+/// whose reference sits under a complement.
+fn recursive_schema() -> impl Strategy<Value = Schema> {
+    prop_oneof![
+        8 => decidable_schema(),
+        1 => Just(Schema::Ref(DefIx::new(0))),
+        1 => Just(Schema::Ref(DefIx::new(1))),
+        2 => decidable_schema().prop_map(|schema| union(schema, Schema::Ref(DefIx::new(0)))),
+        2 => decidable_schema().prop_map(|schema| Schema::Seq {
+            container: SeqKind::List,
+            shape: SeqShape::fixed([schema, Schema::Ref(DefIx::new(1))]),
+        }),
+    ]
+}
+
+proptest! {
+    /// A refutation stands on a value, and the universe names it.
+    ///
+    /// `Fails` is the strongest answer either decider gives: it asserts that a
+    /// value of the subject lies outside the other schema, and a caller reads
+    /// it as `"not_subset"`. Every other property here checks a *proof* -- that
+    /// an accepted inclusion admits no counterexample -- and a wrong refutation
+    /// passes all of them, because nothing asks the refutation for its witness.
+    ///
+    /// The universe is the schemas' own: each subterm contributes a member of
+    /// itself and each bound its two neighbours, so a shape no fixed corpus
+    /// spells still has a value here. A failure is either a refutation with
+    /// nothing under it or a universe too thin to hold the witness, and the
+    /// message carries the pair so the two are told apart by reading it.
+    #[test]
+    fn a_refutation_is_a_value(a in recursive_schema(), b in recursive_schema()) {
+        let pool = const_pool();
+        let defs = fixpoint_defs();
+        if a.subtype_relation_under(&b, &NoLeafRelations, &defs) == Relation::Fails {
+            let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+            let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+            prop_assert!(
+                boundary_values(&[&subject, &other]).iter().any(|value| {
+                    member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+                }),
+                "{:?} <= {:?} is refuted and no value of the universe refutes it",
+                a, b
+            );
+        }
+    }
+
+    /// An emptiness is refused by every value of the universe.
+    ///
+    /// The companion claim, on the same universe: `is_empty` asserts that *no*
+    /// value belongs, which a single member refutes. Held over the recursive
+    /// fragment too, where a fixpoint unfolded with the wrong polarity is the
+    /// way an inhabited schema reads empty.
+    #[test]
+    fn an_emptiness_is_refused_by_every_boundary_value(a in recursive_schema()) {
+        let pool = const_pool();
+        let defs = fixpoint_defs();
+        if a.is_empty_under(&defs) {
+            let schema = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+            for value in &boundary_values(&[&schema]) {
+                prop_assert!(
+                    !member_full(&schema, value, &pool),
+                    "{:?} is a member of {:?}, which is decided empty",
+                    value, a
                 );
             }
         }
@@ -3075,7 +3584,9 @@ proptest! {
         if a.holds_a_value_shallowly() {
             let pool = const_pool();
             prop_assert!(
-                sample_values().iter().any(|value| member_full(&a, value, &pool)),
+                boundary_values(&[&a])
+                    .iter()
+                    .any(|value| member_full(&a, value, &pool)),
                 "no value of the corpus is in a schema read as inhabited: {:?}", a
             );
             prop_assert_ne!(

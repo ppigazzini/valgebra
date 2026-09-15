@@ -33,7 +33,7 @@ LEDGER: every suspected completeness gap is accepted with a reason
 from __future__ import annotations
 
 import json
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, Protocol, TypedDict, runtime_checkable
 
 import annotated_types as at
 import pytest
@@ -48,6 +48,49 @@ class _Rec(TypedDict):
 class _Rec2(TypedDict):
     a: int
     b: str
+
+
+class _Plain:
+    """A class with no hook, and the set `_Adopts` answers for."""
+
+
+class _AdoptsMeta(type):
+    """A metaclass that answers both class questions by running code.
+
+    It answers for `_Plain`'s instances rather than for everything, so the class
+    denotes a set a value can be outside of: a hook that admits every value
+    makes every relation into it vacuously true, and a universe cannot tell such
+    a class from a procedure that declines to read it.
+    """
+
+    def __instancecheck__(cls, instance: object) -> bool:
+        return isinstance(instance, _Plain)
+
+    def __subclasscheck__(cls, subclass: type) -> bool:
+        return issubclass(subclass, _Plain)
+
+
+class _Adopts(metaclass=_AdoptsMeta):
+    """A class whose instance and subclass questions run code."""
+
+
+@runtime_checkable
+class _HasX(Protocol):
+    """A runtime-checkable protocol with a data member, whose `issubclass` raises."""
+
+    x: int
+
+
+class _HasXValue:
+    """A value the protocol above admits, so the protocol's set is not empty."""
+
+    x = 1
+
+
+class _HashableList(list):
+    """A hashable `list`, which is a legal member of a `set` of lists."""
+
+    __hash__ = object.__hash__  # type: ignore[assignment]
 
 
 def _v(annotation: Any) -> Validator:
@@ -119,6 +162,31 @@ SCHEMAS: list[tuple[str, Validator]] = [
     # A fixpoint, whose definitions table nothing else in this universe reaches.
     ("mu t.None|{a:int,next:t}", _LINKED),
     ("None|{a:int,next:mu t}", union(None, {"a": int, "next": _LINKED})),
+    # The edges of each kind's universe, which a schema written for a reader
+    # does not reach and a relation is decided at: the end of the integer
+    # carrier, the first float no integer equals, a key kind that is a subset of
+    # another, a set whose element kind is unhashable, and the two class
+    # questions a metaclass answers by running code.
+    ("Lit[-2**63+1]", _v(Literal[-(2**63) + 1])),  # ty: ignore[invalid-type-form]
+    ("int&Ge(-2**63+1)", _v(Annotated[int, at.Ge(-(2**63) + 1)])),
+    ("float&Lt(2**53+1)", _v(Annotated[float, at.Lt(2**53 + 1)])),
+    ("dict[bool,int]", _v(dict[bool, int])),
+    ("dict[Lit[True,False],int]", _v(dict[Literal[True, False], int])),
+    ("dict[int,str]", _v(dict[int, str])),
+    ("{a?:int,int:str}", _v({"a?": int, int: str})),
+    ("set[list[int]]", _v(set[list[int]])),
+    ("Adopts", _v(_Adopts)),
+    ("Plain", _v(_Plain)),
+    ("HasX", _v(_HasX)),
+    # The pair a polarity cut widens: every list of `a+` strings is a member of
+    # the fixpoint, through `list[a*] <= list[X] <= X`.
+    ("list[str&Regex['a+']]", _v(list[Annotated[str, Regex("a+")]])),
+    (
+        "mu X.list[X]|str&Regex['a*']",
+        recursive(
+            lambda x: union(list[x], Annotated[str, Regex("a*")]),  # ty: ignore[invalid-type-form]
+        ),
+    ),
 ]
 
 
@@ -126,11 +194,15 @@ class _Obj:
     a = 1
 
 
-# The witnesses. A thin universe turns a decided-false relation into a reported
-# gap, so each addition here is a false report removed: the non-string key is
-# what separates an open record (whose catch-all admits any key) from a
+# The seed of the universe. A thin universe turns a decided-false relation into
+# a reported gap, so each addition here is a false report removed: the non-string
+# key is what separates an open record (whose catch-all admits any key) from a
 # `dict[str, ...]`, and without it the two look equal.
-VALUES: list[Any] = [
+#
+# The seed is where a reader adds a value by hand. `VALUES` below is derived
+# from it and from `SCHEMAS`, because a corpus written by hand holds the values
+# its author thought of and a schema decides at edges the author never saw.
+_SEED: list[Any] = [
     # A link of the fixpoint above, and the value that separates it from `None`:
     # without one, every relation with the fixpoint on the left looks true.
     {"a": 1, "next": None},
@@ -185,22 +257,141 @@ VALUES: list[Any] = [
     ({"a": 1},),
 ]
 
+#: The values at the edge of a kind's universe, which no schema has to name and
+#: every relation over that kind is decided at: the ends of the integer carrier
+#: the descriptor lifts a residue class across, the first float no integer
+#: equals, the value outside every order, the newline a length bound counts, and
+#: the members a kind is said not to have -- a hashable `list`, and an instance
+#: of a class whose metaclass answers both questions by running code.
+_KIND_EDGES: list[Any] = [
+    -(2**63),
+    -(2**63) + 1,
+    2**63 - 1,
+    2**63,
+    2**53,
+    2**53 + 1,
+    float(2**53),
+    float("nan"),
+    float("inf"),
+    -0.0,
+    "\n",
+    "a\nb",
+    b"\n",
+    _HashableList([1]),
+    _Plain(),
+    _Adopts(),
+    _HasXValue(),
+]
+
+#: How a value is carried into a container, by the shape that carries it. A
+#: shape is used only where some schema admits a value of it, so the universe
+#: grows with the schemas rather than with this table.
+_SHAPES: list[tuple[Any, Any]] = [
+    ([1], lambda value: [value]),
+    ((1,), lambda value: (value,)),
+    ({1}, lambda value: {value}),
+    (frozenset({1}), lambda value: frozenset({value})),
+    ({"a": 1}, lambda value: {"a": value}),
+    ({"z": 1}, lambda value: {"z": value}),
+    ({1: 1}, lambda value: {value: 1}),
+    ({1: "a"}, lambda value: {value: "a"}),
+]
+
+
+def _built(into: Any, value: Any) -> Any:
+    """Carry the value into the shape, or report nothing where it cannot go."""
+    try:
+        return into(value)
+    except TypeError:
+        return None
+
+
+def _carried(value: Any) -> bool:
+    """Report whether a value is one a container is filled with here.
+
+    A scalar, or anything a key and a set member can be: the element that
+    separates a set of an unhashable kind from a set of another is a hashable
+    subclass of that kind, so a container is not excluded for being one.
+    """
+    if not isinstance(value, (list, tuple, set, frozenset, dict)):
+        return True
+    try:
+        hash(value)
+    except TypeError:
+        return False
+    return True
+
+
+def _universe(schemas: list[tuple[str, Validator]]) -> list[Any]:
+    """Build the seed and the kind edges, and carry each into the schemas' shapes.
+
+    A container schema and a container of its complement are told apart by one
+    value: an element of the difference, inside the container. No fixed list
+    holds that for a schema nobody has written yet, so the shapes come from the
+    schemas themselves -- a shape is filled only where some schema admits a
+    value of it -- and the elements come from the seed. Adding a schema to the
+    table above therefore adds the values that decide it.
+    """
+    values = [*_SEED, *_KIND_EDGES]
+    carried = [value for value in values if _carried(value)]
+    for witness, into in _SHAPES:
+        if not any(_admits(schema, witness) for _, schema in schemas):
+            continue  # no schema reads this shape, so a value of it decides nothing
+        # An unhashable value is no key and no set member, so the shape skips it.
+        values.extend(
+            built for value in carried if (built := _built(into, value)) is not None
+        )
+    return values
+
+
 # Suspected gaps accepted for now, each with why it is not decided. An entry is
 # an admission, not a design: a gap described as a decision is what keeps it
 # alive. Every one of these has a known route to being decided.
 #
-# **It is empty.** The probe's universe holds no relation that is true, answered
-# False, and not decided. The four that were here took the route each of them
-# named: three asked for one regular language to be compared against another,
-# and the fourth for `bool` to be read as the two values it denotes rather than
-# as a scalar region. All four are what the descriptor holds a kind as -- a set
-# -- so asking it where the rules decline decided them together.
+# Two families sit here, and they are different in kind. The class rows are the
+# open world: a value universe is a closed one, so a relation that holds of every
+# value here is not a relation that holds of every value, and the procedure is
+# right to decline. The fixpoint row is a real incompleteness with a named route.
 #
 # `{a:int}` here is a `TypedDict`, which the typing spec makes **open**, so the
 # two entries about a literal-keyed catch-all covering its field are gone: an
 # open record admits a dict carrying a key the catch-all does not name, and a
 # value refutes each relation rather than the procedure failing to decide it.
-ACCEPTED: dict[str, str] = {}
+_OPEN_WORLD = (
+    "The open world, not a gap in the rules: a subclass of this class may also "
+    "derive from {kind}, so no value of this universe refutes the relation and "
+    "no argument proves it. Deciding it would mean reading the class hierarchy "
+    "as closed, which is the one assumption `docs/15-decidability.md` names and "
+    "declines to make."
+)
+
+ACCEPTED: dict[str, str] = {
+    "Plain <= ~int": _OPEN_WORLD.format(kind="`int`"),
+    "Plain <= ~str": _OPEN_WORLD.format(kind="`str`"),
+    "Adopts <= ~int": _OPEN_WORLD.format(kind="`int`"),
+    "Adopts <= ~str": _OPEN_WORLD.format(kind="`str`"),
+    "HasX <= ~int": _OPEN_WORLD.format(kind="`int`"),
+    "HasX <= ~str": _OPEN_WORLD.format(kind="`str`"),
+    "Plain <= Adopts": (
+        "`_Adopts`'s metaclass answers `issubclass` by running code, so the "
+        "class denotes whatever that code says at the moment it is asked and "
+        "the oracle declines to read it as a set. The relation holds of every "
+        "value here because the hook admits `_Plain`'s instances today. The "
+        "route is a decision about the hook, not about the rules: reading a "
+        "hooked class would make a relation's answer depend on user code that "
+        "may raise, may be slow, and may answer differently twice."
+    ),
+    "list[str&Regex['a+']] <= mu X.list[X]|str&Regex['a*']": (
+        "Every list of `a+` strings belongs to the fixpoint, through "
+        "`list[a*] <= list[X] <= X`. The descriptor reads the pair through a "
+        "polarity cut: the supertype's reference becomes the bottom under one, "
+        "so the difference the reading holds is wider than the real one and its "
+        "inhabitance proves nothing. Emptiness of the widened difference still "
+        "proves the inclusion, which is why the answer is `undecided` rather "
+        "than a refutation. The route is an unfolding of the supertype past one "
+        "level before the cut, bounded by the reach the descriptor records."
+    ),
+}
 
 
 def _admits(schema: Validator, value: Any) -> bool:
@@ -215,6 +406,10 @@ def _admits(schema: Validator, value: Any) -> bool:
         return bool(schema.is_valid(value))
     except Exception:  # noqa: BLE001 - see the docstring
         return False
+
+
+#: Every value the survey is judged over.
+VALUES: list[Any] = _universe(SCHEMAS)
 
 
 def _members(schema: Validator) -> frozenset[int]:
