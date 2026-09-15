@@ -504,12 +504,24 @@ impl LeafRelations for PoolRelations<'_, '_> {
                 let class = self.literals.get(index.get())?.bind(self.py);
                 if let Schema::Instance(superindex) = sup {
                     let superclass = self.literals.get(superindex.get())?.bind(self.py);
-                    let decided = class
+                    // Both sides must denote a set before the class order can
+                    // answer for them, the way every other class question here
+                    // asks first. A metaclass that computes `__subclasscheck__`
+                    // makes `issubclass` say something `isinstance` does not --
+                    // CPython's instance check reads the real order and never
+                    // calls the hook -- and one that computes `__instancecheck__`
+                    // gives its class a membership no snapshot of the order
+                    // predicts. Neither is a set this algebra holds.
+                    if !self.denotes_a_set(class)? || !self.denotes_a_set(superclass)? {
+                        return None;
+                    }
+                    // A check that raises has answered nothing. Reading the
+                    // error as `false` turns a question the bindings could not
+                    // put into a refutation the rules then believe.
+                    return class
                         .cast::<PyType>()
                         .ok()
-                        .and_then(|class| class.is_subclass(superclass).ok())
-                        .unwrap_or(false);
-                    return Some(decided);
+                        .and_then(|class| class.is_subclass(superclass).ok());
                 }
                 // An enumeration whose members compare by identity is the union
                 // of them: the members are fixed when the class is defined, a

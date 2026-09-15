@@ -92,13 +92,20 @@ pub(super) fn scalar_admits(kind: Scalar, value: &Value<'_, '_>) -> bool {
 /// bookkeeping: a depth guard, a fatal-signal check and a dispatch around a
 /// single type test. An explaining walk is not this shape, since it records the
 /// position of each element it rejects.
+///
+/// **The depth is read, and the level is not held.** Every element sits one
+/// level below the container, and the explaining walk reaches each through
+/// [`member`](super::member), which takes that level and refuses at the bound.
+/// The two must refuse together, so this declines to the general path wherever
+/// no level is available and lets that path refuse. Holding one is what a
+/// caller that can descend needs, and a scalar cannot.
 #[inline]
 pub(super) fn homogeneous_scalar(
     prefix: &[Schema],
     tail: Option<&Schema>,
     ctx: Ctx<'_>,
 ) -> Option<Scalar> {
-    if !prefix.is_empty() || ctx.mode.explains() {
+    if !prefix.is_empty() || ctx.mode.explains() || !ctx.room_to_descend() {
         return None;
     }
     scalar_of(tail?)
@@ -188,7 +195,12 @@ pub(crate) fn literal_matches(
 /// divides an `int` — and `NotImplemented` is truthy, so reading the dunder's
 /// result directly reports every such pair a non-multiple.
 fn is_multiple_of(value: &Bound<'_, PyAny>, operand: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(!value.rem(operand)?.is_truthy()?)
+    // The remainder compared against zero, which is what the node denotes:
+    // `value % operand == 0`. Reading the remainder's truthiness instead asks a
+    // different question of any type whose `__bool__` and `__eq__` disagree --
+    // `timedelta(0)` is falsy and does not equal `0` -- and the denotation is
+    // the one a caller reads.
+    value.rem(operand)?.eq(0)
 }
 
 /// Run a user predicate and report whether it returned a truthy result.

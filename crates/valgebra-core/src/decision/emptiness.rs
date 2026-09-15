@@ -17,7 +17,7 @@
 use std::cell::Cell;
 
 use crate::descr::lower::{Constants, lower_unfolded};
-use crate::ir::{Constraint, Constraints, DefIx, Schema};
+use crate::ir::{Constraint, Constraints, DefIx, Polarity, Schema};
 use crate::kind::{Kind, Region, Regions};
 use crate::verdict::Verdict;
 
@@ -100,7 +100,8 @@ impl Schema {
     /// cannot hold -- a recursive one -- refuses the same way. Either way the
     /// caller keeps the verdict the rules reached.
     fn denotes_no_value(&self, pool: &dyn Constants, defs: &[Schema]) -> bool {
-        lower_unfolded(self, defs, true, pool).is_some_and(|set| set.emptiness() == Verdict::Empty)
+        lower_unfolded(self, defs, Polarity::Widen, pool)
+            .is_some_and(|set| set.emptiness() == Verdict::Empty)
     }
 
     /// The decision steps [`is_empty`](Self::is_empty) spends on this schema.

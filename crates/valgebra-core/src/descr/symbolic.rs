@@ -157,6 +157,30 @@ impl<G: Guard> Edge<G> {
     }
 }
 
+/// Which edges a reachability walk follows.
+///
+/// The two walks [`SymbolicDfa::emptiness`] runs, named so the condition each
+/// applies is read off the call rather than out of a boolean.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reach {
+    /// Every edge whose guard is not proved dead, so failing to reach an
+    /// accepting state proves the language empty.
+    Generous,
+    /// Only edges whose guard is proved to hold a value, so reaching an
+    /// accepting state names a sequence.
+    Certain,
+}
+
+impl Reach {
+    /// Whether an edge whose guard has this verdict is followed.
+    fn follows(self, verdict: Verdict) -> bool {
+        match self {
+            Reach::Generous => verdict != Verdict::Empty,
+            Reach::Certain => verdict == Verdict::Inhabited,
+        }
+    }
+}
+
 /// What distinguishes one state from another during minimisation: whether it
 /// accepts, and the values it sends to each block it can reach.
 type Signature<G> = (bool, Vec<(u32, Option<G>)>);
@@ -248,8 +272,42 @@ impl<G: Guard> SymbolicDfa<G> {
     }
 
     /// Whether this language holds no sequence.
+    ///
+    /// A *proof*: [`emptiness`](Self::emptiness) is what tells an unproved
+    /// language from an empty one.
     #[must_use]
     pub fn is_empty(&self) -> bool {
+        self.emptiness() == Verdict::Empty
+    }
+
+    /// What is known about this language holding a sequence.
+    ///
+    /// Two walks rather than one. The generous walk follows every edge whose
+    /// guard is not *proved* dead: reaching no accepting state there proves the
+    /// language empty, since even the letters that might hold a value lead
+    /// nowhere. The certain walk follows only edges whose guard is proved to
+    /// hold a value: reaching an accepting state there names a sequence. An
+    /// accepting state the first walk reaches and the second does not is one
+    /// behind a guard whose own emptiness is open -- a class the core cannot
+    /// enumerate the subclasses of -- and the answer is neither.
+    ///
+    /// Reading the generous walk alone reports a sequence of such a guard
+    /// inhabited, which is a refutation standing on a value nobody has.
+    #[must_use]
+    pub fn emptiness(&self) -> Verdict {
+        if self.accepts_under(Reach::Certain) {
+            return Verdict::Inhabited;
+        }
+        if self.accepts_under(Reach::Generous) {
+            Verdict::Unknown
+        } else {
+            Verdict::Empty
+        }
+    }
+
+    /// Whether an accepting state is reachable, following the edges `reach`
+    /// admits.
+    fn accepts_under(&self, reach: Reach) -> bool {
         let mut seen: FxHashSet<u32> = FxHashSet::default();
         let mut pending: VecDeque<u32> = VecDeque::from([0]);
         while let Some(state) = pending.pop_front() {
@@ -257,25 +315,24 @@ impl<G: Guard> SymbolicDfa<G> {
                 continue;
             }
             if self.accepts(state) {
-                return false;
+                return true;
             }
             let row = self.outgoing(state);
-            // The else edge's own set is what the guarded edges leave, so it is
-            // asked separately -- and where a guard refuses to answer, the edge
-            // is followed. That direction is the safe one: it can only report a
-            // language inhabited, never empty.
-            let rest_is_dead = rest_of(row).as_ref().is_some_and(Guard::is_empty);
+            let rest = rest_of(row);
+            let rest_verdict = rest.as_ref().map_or(Verdict::Unknown, Guard::emptiness);
             for edge in row {
-                let dead = match &edge.guard {
-                    Some(_) => edge.is_dead(),
-                    None => rest_is_dead,
+                let verdict = match &edge.guard {
+                    Some(guard) => guard.emptiness(),
+                    // The else edge's own set is what the guarded edges leave,
+                    // and a join this cannot build says nothing about it.
+                    None => rest_verdict,
                 };
-                if !dead {
+                if reach.follows(verdict) {
                     pending.push_back(edge.target);
                 }
             }
         }
-        true
+        false
     }
 
     /// Whether this language holds the sequence `values`.

@@ -489,8 +489,10 @@ fn check_elements(
     }
     // A set of one scalar kind, as a sequence of one is: the element schema is
     // read once and each element tested against the kind, without the walk's
-    // per-element depth guard, signal check and dispatch.
-    let scalar = scalar_of(element);
+    // per-element signal check and dispatch. The level every element sits at is
+    // taken once for the loop rather than skipped, so this answers what the
+    // explaining walk beside it answers at the depth bound.
+    let scalar = scalar_of(element).filter(|_| ctx.room_to_descend());
     let mut ok = true;
     let scan = scan_set(container, ctx, |item| {
         let value = Value::Py(item);

@@ -360,9 +360,11 @@ fn a_set_lowers_to_a_powerset() {
     )
     .expect("a small set");
 
-    // A list is unhashable, so the only member left is none at all.
+    // The members are the element schema as written: a `list` subclass that
+    // defines `__hash__` is a list and a legal member, so the set of lists is
+    // not the set of nothing.
     assert!(of_lists.admits(Value::sequence(NOTHING, Kind::Set)));
-    assert_eq!(
+    assert_ne!(
         of_lists,
         Descr::set(&Descr::nothing(), Kind::Set).expect("a set kind")
     );
@@ -992,9 +994,12 @@ fn a_clause_opens_the_part_its_key_names() {
         )
         .expect("a mapping lowers");
         for (other, entry) in KEYS {
+            // A `bool` key is an `int` key: the walk reads `{True: 1}` as a
+            // dict whose key is an integer, so an `int`-keyed clause covers it.
+            let covered = other == kind || (kind == Kind::Int && other == Kind::Bool);
             assert_eq!(
                 opened.admits(Value::dict(entry)),
-                other == kind,
+                covered,
                 "a {kind:?}-keyed map against a {other:?} key"
             );
         }
@@ -1144,4 +1149,157 @@ fn a_length_bound_stays_within_the_kinds_of_its_base() {
     assert!(over_lists.admits(Value::sequence(ONE, Kind::List)));
     assert!(!over_lists.admits(Value::word(b"a", Kind::Str)));
     assert!(!over_lists.admits(Value::sequence(ONE, Kind::Tuple)));
+}
+
+/// An integer bound no float equals is read against the neighbour on the
+/// bound's own side, and which side that is decides which neighbour.
+///
+/// Past 2^53 the floats are two apart, so an odd integer there lies between two
+/// of them and a bound written over it cuts at one or the other. A lower bound
+/// cuts at the float *above*, an upper bound at the float *below*; reading the
+/// nearest one instead moves the boundary by one representable step, and
+/// reading the wrong side of it turns a lower bound into an upper one.
+#[test]
+fn a_float_bound_over_an_inexact_integer_cuts_at_the_right_neighbour() {
+    // Two integers with no float of their own, one either side of the rounding:
+    // the nearest float is *below* the first and *above* the second, so between
+    // them they reach both directions the neighbour is picked in. Which side the
+    // bound is on decides which neighbour, and the rounding decides nothing.
+    const ROUNDS_DOWN: (i64, f64, f64) = (
+        9_007_199_254_740_993,
+        9_007_199_254_740_992.0,
+        9_007_199_254_740_994.0,
+    );
+    const ROUNDS_UP: (i64, f64, f64) = (
+        9_007_199_254_740_995,
+        9_007_199_254_740_994.0,
+        9_007_199_254_740_996.0,
+    );
+
+    for (between, below, above) in [ROUNDS_DOWN, ROUNDS_UP] {
+        let pool = Pool(vec![Operand::Integer(between)]);
+        let refined = |constraints: Vec<Constraint>| {
+            lower(
+                &Schema::Refine {
+                    base: Arc::new(Schema::Float),
+                    constraints: constraints.into(),
+                },
+                &pool,
+            )
+            .expect("a small refinement")
+        };
+
+        for lower_bound in [Constraint::Ge, Constraint::Gt] {
+            let set = refined(vec![lower_bound(OperandIx::new(0))]);
+            assert!(
+                set.admits(Value::float(above)),
+                "a lower bound over {between} admits the float above it"
+            );
+            assert!(
+                !set.admits(Value::float(below)),
+                "a lower bound over {between} refuses the float below it"
+            );
+        }
+        for upper_bound in [Constraint::Le, Constraint::Lt] {
+            let set = refined(vec![upper_bound(OperandIx::new(0))]);
+            assert!(
+                set.admits(Value::float(below)),
+                "an upper bound over {between} admits the float below it"
+            );
+            assert!(
+                !set.admits(Value::float(above)),
+                "an upper bound over {between} refuses the float above it"
+            );
+        }
+
+        // No float is on both sides, so the two together admit none -- which is
+        // the answer only where each cut at its own neighbour.
+        assert!(
+            refined(vec![
+                Constraint::Ge(OperandIx::new(0)),
+                Constraint::Le(OperandIx::new(0)),
+            ])
+            .is_empty(),
+            "no float lies between two adjacent ones ({between})"
+        );
+    }
+}
+
+/// A clause over a key kind with finitely many keys is exhausted by naming them.
+///
+/// `bool` has two keys and `None` has one, so a constraint that excludes every
+/// key of such a part leaves its default governing nothing. Reading the default
+/// as a witness anyway reports a map inhabited that holds no dict -- which is a
+/// refutation standing on a value nobody has, since the difference below is the
+/// dicts a `bool`-keyed map holds and a map keyed by both booleans does not.
+#[test]
+fn a_clause_over_a_finite_key_part_is_exhausted_by_its_keys() {
+    let pool = Pool(vec![Operand::Boolean(true), Operand::Boolean(false)]);
+    let keyed = |key: Schema| {
+        lower(
+            &Schema::KeyedMap {
+                fields: Vec::new().into(),
+                defaults: vec![MapClause {
+                    key,
+                    value: Schema::Int,
+                }]
+                .into(),
+            },
+            &pool,
+        )
+        .expect("a small mapping")
+    };
+
+    let literal = |slot| Schema::Literal(ConstIx::new(slot));
+    let both = Schema::Union(vec![literal(0), literal(1)].into());
+
+    let apart = |a: &Descr, b: &Descr| a.intersect(&b.complement()).expect("a small difference");
+
+    // Both booleans named: the kind has no key left, so neither side holds a
+    // dict the other misses.
+    assert!(
+        apart(&keyed(Schema::Bool), &keyed(both.clone())).is_empty(),
+        "every bool key is one of the two the names list"
+    );
+    assert!(
+        apart(&keyed(both), &keyed(Schema::Bool)).is_empty(),
+        "and every named key is a bool"
+    );
+
+    // One of the two named: the other is a key the clause still governs, so the
+    // difference holds a dict. Reading the part as exhausted by *either* name
+    // reports it empty.
+    assert!(
+        !apart(&keyed(Schema::Bool), &keyed(literal(0))).is_empty(),
+        "one boolean named leaves the other"
+    );
+    assert!(
+        !apart(&keyed(Schema::Bool), &keyed(literal(1))).is_empty(),
+        "whichever of the two it is"
+    );
+
+    // `None` is the other finite part, and it has one key rather than two.
+    let none_pool = Pool(vec![Operand::NoneType]);
+    let none_keyed = |key: Schema| {
+        lower(
+            &Schema::KeyedMap {
+                fields: Vec::new().into(),
+                defaults: vec![MapClause {
+                    key,
+                    value: Schema::Int,
+                }]
+                .into(),
+            },
+            &none_pool,
+        )
+        .expect("a small mapping")
+    };
+    assert!(
+        apart(&none_keyed(Schema::NoneType), &none_keyed(literal(0))).is_empty(),
+        "the one key of the None part is exhausted by naming it"
+    );
+    assert!(
+        !apart(&none_keyed(Schema::NoneType), &none_keyed(Schema::Nothing)).is_empty(),
+        "and naming nothing leaves it"
+    );
 }

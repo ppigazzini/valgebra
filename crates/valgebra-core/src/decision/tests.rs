@@ -3974,3 +3974,55 @@ fn a_complement_names_a_witness_from_the_kinds_its_inner_schema_is_not() {
         Relation::Unknown
     );
 }
+
+/// A difference over a cut reference proves an inclusion and refutes nothing.
+///
+/// The descriptor holds no cycle, so a recursive schema reaches it unfolded
+/// once with a lattice bound where the reference was -- the top on the subject's
+/// side, the bottom on the supertype's. That widens the difference the reading
+/// takes: `self⁺ ∧ ¬other⁻` contains `self ∧ ¬other` and is not contained by it.
+/// An empty widening still proves the inclusion, and an inhabited one names a
+/// value of the wider set rather than of the real one, so it decides nothing.
+///
+/// The pair below is that shape: every list of `a`-strings is a value of the
+/// fixpoint, and the cut leaves the supertype's own element empty, so the
+/// widened difference holds the very lists the inclusion is about.
+#[test]
+fn an_inhabited_difference_over_a_cut_reference_refutes_nothing() {
+    let words = |pattern: &str| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![Constraint::Regex(pattern.into())].into(),
+    };
+    // μX. list[X] | a*
+    let defs = vec![Schema::union([
+        Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+        words("a*"),
+    ])];
+    let fixpoint = Schema::Ref(DefIx::new(0));
+    let lists = Schema::list(SeqShape::homogeneous(words("a+")));
+
+    assert_ne!(
+        lists.subtype_relation_under(&fixpoint, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "no list of a-strings lies outside the fixpoint"
+    );
+
+    // Definitions in scope are not by themselves a cut. Neither side below
+    // names one, so the difference is the real one and its inhabitant is a
+    // counterexample -- the same refutation the pair earns with no definitions
+    // at all. Widening what the cut covers to every pair asked alongside a
+    // recursive schema would forfeit that refutation.
+    let bounded = Schema::Refine {
+        base: Arc::new(Schema::list(SeqShape::homogeneous(Schema::Int))),
+        constraints: vec![Constraint::MinLen(2)].into(),
+    };
+    assert_eq!(
+        Schema::list(SeqShape::homogeneous(Schema::Int)).descriptor_contained_in(
+            &bounded,
+            &NoLeafRelations,
+            &defs
+        ),
+        Relation::Fails,
+        "the empty list is a list of ints and is shorter than two"
+    );
+}

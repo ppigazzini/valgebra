@@ -35,7 +35,7 @@ use std::sync::{Arc, OnceLock};
 mod intern;
 mod transform;
 
-pub use transform::pruned;
+pub use transform::{Polarity, pruned};
 
 /// Remap a pool index through the map built when two validators merge.
 ///

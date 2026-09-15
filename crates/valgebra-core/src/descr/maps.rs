@@ -246,11 +246,11 @@ impl<G: Guard> MapAtom<G> {
     /// The paper's (11) reads `S` against the default alone, because its labels
     /// are fixed and `S` is always about a key outside them. Here a constraint
     /// carries its own exclusion set, so a label the set does not cover is a
-    /// witness too, and both are read. What is *not* read is whether the part has
-    /// a key left at all: with every label a `str`, and `str` inexhaustible, it
-    /// always does. A label of a finite kind -- which is a typed literal key,
-    /// not a name -- is what makes that clause able to fire, and it belongs with
-    /// the commit that introduces one.
+    /// witness too, and both are read -- and so is whether the part has a key
+    /// left at all. Two parts are finite: `bool` has two keys and `None` has
+    /// one, so an exclusion set naming every one of them leaves the default
+    /// governing nothing, and reading it as a witness reports an atom inhabited
+    /// that holds no dict.
     fn emptiness(&self) -> Verdict {
         let labels = self.labels.values().map(Field::emptiness);
         // A want asks for *some* key of its part, outside its exclusion set, to
@@ -264,6 +264,14 @@ impl<G: Guard> MapAtom<G> {
             let Some(default) = self.defaults.get(want.slot) else {
                 return Verdict::Empty;
             };
+            let free_key_left = match KEY_KINDS.get(want.slot) {
+                Some(Kind::Bool) => {
+                    !(want.besides.contains(&Label::Bool(true))
+                        && want.besides.contains(&Label::Bool(false)))
+                }
+                Some(Kind::NoneType) => !want.besides.contains(&Label::NoneType),
+                _ => true,
+            };
             let witnesses = self
                 .labels
                 .iter()
@@ -272,7 +280,7 @@ impl<G: Guard> MapAtom<G> {
                         && !want.besides.contains(*label)
                 })
                 .map(|(_, field)| &field.ty)
-                .chain([&default.ty]);
+                .chain(free_key_left.then_some(&default.ty));
             Verdict::any(witnesses.map(|ty| match ty.meet(&want.ty) {
                 Some(shared) => shared.emptiness(),
                 // Past a guard's own bound there is no set to read, so nothing is

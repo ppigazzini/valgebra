@@ -178,7 +178,7 @@ impl Schema {
     }
 
     /// [`type_tag`](Self::type_tag) with the oracle that kinds a `Literal`.
-    fn type_tag_with(&self, oracle: &dyn LeafRelations) -> Option<Kind> {
+    pub(super) fn type_tag_with(&self, oracle: &dyn LeafRelations) -> Option<Kind> {
         Some(match self {
             Schema::Literal(constant) => return oracle.literal_kind(*constant),
             Schema::NoneType => Kind::NoneType,

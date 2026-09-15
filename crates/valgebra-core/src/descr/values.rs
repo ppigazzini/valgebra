@@ -53,12 +53,6 @@ impl<G: Guard> Values<G> {
         }
     }
 
-    /// Whether no value is in here.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.emptiness() == Verdict::Empty
-    }
-
     /// What is known about a value being in here. The universe holds one
     /// whatever the guards say.
     #[must_use]
@@ -78,7 +72,14 @@ impl<G: Guard> Values<G> {
     pub fn covers(&self, inner: &Values<G>) -> Option<bool> {
         match self {
             Values::Every => Some(true),
-            Values::Only(_) => Some(inner.meet(&self.complement())?.is_empty()),
+            // A difference whose own emptiness is unproved settles neither
+            // direction. Reading it as "does not cover" keeps a line on no
+            // evidence, and a line kept is a set reported inhabited.
+            Values::Only(_) => match inner.meet(&self.complement())?.emptiness() {
+                Verdict::Empty => Some(true),
+                Verdict::Inhabited => Some(false),
+                Verdict::Unknown => None,
+            },
         }
     }
 

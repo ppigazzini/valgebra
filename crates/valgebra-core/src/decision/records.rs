@@ -17,6 +17,7 @@ use std::cell::Cell;
 use rustc_hash::FxHashMap;
 
 use crate::ir::{Field, MapClause, Schema};
+use crate::kind::Kind;
 use crate::verdict::Relation;
 
 use super::{LeafRelations, SubtypeCx};
@@ -182,10 +183,33 @@ pub(super) fn keyed_map_subtype(
                 // is what the reading around this rule settles -- an empty `a`
                 // is below every schema, this one included.
                 None if b_field.required => Relation::Fails,
+                // An optional field `b` declares that `a` does not: a value of
+                // `a` carries that key only where one of `a`'s clauses produces
+                // it, so only a clause whose **key admits the name** has
+                // anything to say about it. A clause keyed by another kind
+                // never spells a string, so it governs nothing here and its
+                // value type is beside the point; reading it anyway refutes on
+                // a value `a` does not have.
                 None => Relation::all(da.iter().map(|clause| {
-                    clause
+                    let covers = clause
                         .value
-                        .is_subtype_rec(&b_field.schema, cx, assumptions)
+                        .is_subtype_rec(&b_field.schema, cx, assumptions);
+                    match &clause.key {
+                        // Every string key, so this clause does spell the name.
+                        Schema::Str | Schema::Anything(_) => covers,
+                        // A key of a settled kind that is not a string: no value
+                        // of `a` carries this name through this clause.
+                        key if key
+                            .type_tag_with(cx.oracle)
+                            .is_some_and(|kind| kind != Kind::Str) =>
+                        {
+                            Relation::Holds
+                        }
+                        // A key the rules cannot read -- a string literal, a
+                        // union of them -- might admit the name, so a proof
+                        // carries and a refutation does not.
+                        _ => covers.proof_only(),
+                    }
                 })),
             }
         }));

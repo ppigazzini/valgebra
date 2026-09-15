@@ -222,18 +222,31 @@ impl IntervalSet {
     /// down at the upper -- because a `k` outside the rounded range maps to an
     /// integer outside the span.
     #[must_use]
+    /// The subtraction is done in `i128` and the quotient converted back. A
+    /// span ending at `i64::MIN` minus a positive offset is not an `i64`, and a
+    /// saturating subtraction answers with a different residue class than the
+    /// one the span is in -- naming a set that holds values the schema does not
+    /// and misses values it does. The quotient always fits, since dividing by a
+    /// stride of at least one shrinks the magnitude.
     pub fn preimage(&self, offset: i64, stride: i64) -> IntervalSet {
         debug_assert!(stride > 0, "a stride is a positive step");
+        let shifted = |bound: i64| i128::from(bound) - i128::from(offset);
+        let stride = i128::from(stride);
+        // Restate the range rather than branch on it. The quotient is inside
+        // `i64` by the argument above, so a hand-written saturation would name
+        // two ends no argument reaches, reading as a choice the conversion
+        // never makes.
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "the clamp leaves a value inside the i64 range"
+        )]
+        let clamp = |wide: i128| wide.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64;
         let spans = self
             .spans
             .iter()
             .map(|span| Span {
-                lo: span
-                    .lo
-                    .map(|lo| div_ceil(lo.saturating_sub(offset), stride)),
-                hi: span
-                    .hi
-                    .map(|hi| div_floor(hi.saturating_sub(offset), stride)),
+                lo: span.lo.map(|lo| clamp(div_ceil(shifted(lo), stride))),
+                hi: span.hi.map(|hi| clamp(div_floor(shifted(hi), stride))),
             })
             .collect();
         IntervalSet { spans }.canonical()
@@ -241,7 +254,7 @@ impl IntervalSet {
 }
 
 /// `a / b` rounded towards positive infinity, for a positive `b`.
-fn div_ceil(a: i64, b: i64) -> i64 {
+fn div_ceil(a: i128, b: i128) -> i128 {
     let quotient = a.div_euclid(b);
     if a.rem_euclid(b) == 0 {
         quotient
@@ -251,7 +264,7 @@ fn div_ceil(a: i64, b: i64) -> i64 {
 }
 
 /// `a / b` rounded towards negative infinity, for a positive `b`.
-fn div_floor(a: i64, b: i64) -> i64 {
+fn div_floor(a: i128, b: i128) -> i128 {
     a.div_euclid(b)
 }
 
