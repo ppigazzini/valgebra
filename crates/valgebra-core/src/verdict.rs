@@ -195,9 +195,15 @@ impl Relation {
     /// differently, one in a microsecond and one in two hundred. A decline is
     /// not an answer, so it cannot end the fold.
     ///
-    /// A `Fails` still ends it, and no conjunct can produce one from a
-    /// coinductive assumption -- an assumption yields `Holds` -- so the answer
-    /// rests on a value rather than on the hypothesis being discharged.
+    /// A `Fails` still ends it, and one rule reaches a `Fails` *through* a
+    /// coinductive assumption: `A ⊆ ¬B` is refuted by proving `A ⊆ B` with `A`
+    /// inhabited, and that proof may rest on a hypothesis the trail carries.
+    /// The refutation is sound by cases. It propagates only through
+    /// conjunctions of the one claim the hypothesis was assumed for, so it
+    /// reaches the goal that assumed it and no other. If the hypothesis holds,
+    /// the proof it supports is a proof and the refutation is a value. If it
+    /// does not, the goal that assumed it is refused along with every answer
+    /// taken under it, and this one goes with them.
     #[inline]
     pub(crate) fn all(items: impl IntoIterator<Item = Relation>) -> Relation {
         let mut declined = false;
