@@ -372,11 +372,16 @@ impl<G: Guard> SymbolicDfa<G> {
     /// sequences instead of the ones it meant.
     #[must_use]
     pub fn complement(&self) -> SymbolicDfa<G> {
+        // The flip of a minimal machine is minimal: a sequence separates two
+        // states in one language exactly when it separates them in the other,
+        // and the edges it walks are untouched, so neither the partition nor the
+        // numbering a walk over them gives can move. Every constructor here
+        // returns a minimal machine, which is the precondition, and
+        // `a_complement_is_already_minimal` holds the conclusion.
         SymbolicDfa {
             edges: self.edges.clone(),
             accepting: self.accepting.iter().map(|a| !a).collect(),
         }
-        .minimal()
     }
 
     /// The sequences in either language, or `None` past [`MAX_STATES`],

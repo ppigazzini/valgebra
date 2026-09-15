@@ -422,3 +422,40 @@ fn a_text_complement_cut_to_its_kind_holds_only_str_words() {
         "the two halves are the kind"
     );
 }
+
+/// Complementing a minimal table leaves a minimal table.
+///
+/// The property `RegularSet::complement` relies on to skip a minimisation pass:
+/// a word distinguishes two states in `L` exactly when it distinguishes them in
+/// `¬L`, and the transitions are untouched, so both the partition and the
+/// canonical numbering survive the flip.
+#[test]
+fn a_complement_is_already_minimal() {
+    for pattern in ["a", "a*", "(a|b)*c", "[0-9]{2,4}", "", "a(bc)*d?"] {
+        for alphabet in [Alphabet::Text, Alphabet::Bytes] {
+            let Some(set) = RegularSet::pattern(pattern, alphabet) else {
+                continue;
+            };
+            let once = set.complement();
+            assert_eq!(
+                once,
+                once.complement().complement(),
+                "{pattern:?} under {alphabet:?}"
+            );
+            assert_eq!(set, once.complement(), "the flip is an involution");
+        }
+    }
+    let universe = RegularSet::all(Alphabet::Text);
+    // The flip of the text universe is the words that are *not* UTF-8, which is
+    // a language over bytes and not an empty one; cut back to the kind it is.
+    assert!(!universe.complement().is_empty());
+    assert_eq!(
+        universe.intersect(&universe.complement()),
+        Some(RegularSet::empty())
+    );
+    assert_eq!(universe.complement().complement(), universe);
+
+    let bytes = RegularSet::all(Alphabet::Bytes);
+    assert!(bytes.complement().is_empty());
+    assert_eq!(bytes.complement().complement(), bytes);
+}
