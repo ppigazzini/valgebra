@@ -110,7 +110,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | competitive ratio | `scripts/perf_compare.json` | `uv run --group bench python scripts/compare_gate.py` |
 | membership held and decisions only widened | `scripts/metamorphic_reference.json` | `uv run python scripts/metamorphic_gate.py` |
 | core mutation adequacy | `scripts/mutation_baseline.json` | `cargo mutants --package valgebra-core -- -- --skip deep_subtype_into_bottom_terminates --skip subtyping_terminates_on_a_distributed_tower` |
-| walk mutation adequacy | `scripts/mutation_baseline_walk.json` | `cargo mutants --package valgebra-py --file crates/valgebra-py/src/check/walk.rs --file crates/valgebra-py/src/check/ctx.rs --features interpreter-tests -- -- --skip recursion_deeper_than_the_bound_is_refused` |
+| walk mutation adequacy | `scripts/mutation_baseline_walk.json` | `cargo mutants --package valgebra-py --features interpreter-tests -- -- --skip recursion_deeper_than_the_bound_is_refused` |
 | a mutation verdict | either baseline | `python3 scripts/mutation_gate.py --baseline core` |
 | supply chain (Rust) | `deny.toml` | `cargo deny check` |
 | supply chain (Python) | `uv.lock` | `uv run pip-audit` |
@@ -118,7 +118,11 @@ file that owns the contract and the single command that reproduces its verdict.
 | the profile-guided build's training run | `scripts/pgo_workload.py`, `pyproject.toml` `pgo-command` | `uv run --group bench maturin build --release --pgo --out dist` |
 
 The two mutation rows take a skip list; `docs/dev/07-tooling-ci.md` says which
-and why. Commands that need an embedded interpreter need its library directory
+and why. The binding row sweeps the crate minus the exclusions
+`.cargo/mutants.toml` names, which is a superset of what the lane's own step
+runs; that step's `--file` list lives in `.github/workflows/ci.yml` and is not
+copied here, because a list in two places drifts by one entry and reads exactly
+like one that has not. Commands that need an embedded interpreter need its library directory
 on the loader path — the binding-coverage job in `.github/workflows/ci.yml` shows
 the two lines that set it.
 
@@ -177,16 +181,14 @@ finishes a merge gate, and `nightly` the deep one that hunts the long tail.
 ## Continuous integration
 
 The `ci.yml` workflow gates every push and pull request; the aggregated `ci`
-check is green only when every job is. The jobs: Rust lint and test (Linux,
-macOS, Windows), an MSRV build at the manifest's `rust-version`, two coverage
-lanes (the core crate, and the bindings measured by instrumenting the extension
-and driving it with the Python suite against a line floor), a Python matrix that
-runs the **ends** of the supported span on every push — the floor, the current
-release, the free-threaded build and the prerelease, the last of those without
-blocking — and fills in the interpreters between them nightly, a differential
-lane that cross-checks membership against pydantic-core and jsonschema, the
-doc-example runner, a strict docs build, and a Linux wheel build. `ci.yml` owns
-the matrix, so it is not listed here, and
+check is green only when every job is. `ci.yml` owns the job set, and
+`tests/test_required_jobs.py` holds the aggregator to it in both directions, so
+the list is not restated here: a second copy drifts by one entry and reads
+exactly like one that has not. What is worth knowing about its shape is the
+Python matrix, which runs the **ends** of the supported span on every push — the
+floor, the current release, the free-threaded build and the prerelease, the last
+of those without blocking — and fills in the interpreters between them nightly.
+`ci.yml` owns the matrix too, and
 `test_the_push_matrix_is_the_ends_and_the_odd_ones` in
 `tests/test_required_jobs.py` holds the push set to four legs that the nightly
 also runs, the floor and the free-threaded build among them.
@@ -201,7 +203,7 @@ baselines: a survivor the baseline does not accept fails the lane, and so does a
 baseline entry whose mutant the tests kill. The target is never zero —
 equivalent mutants exist and are undecidable — so an accepted survivor carries
 the argument for why no test can kill it.
-Every push also runs the same sweeps **restricted to the lines the diff
+Every push also runs the same sweeps **restricted to the whole files the diff
 touches**, which is bounded by the change rather than by the tree and so blocks
 merges; it checks the new-survivor direction alone, because a partial sweep never
 generates most of the baseline and the expiry direction is not its to judge.

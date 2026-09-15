@@ -66,8 +66,9 @@ it fails.
 `render` produces the annotation that would compile to the schema, and it is what
 `repr(validator)` shows. Two properties it must keep:
 
-- **It terminates on a recursive schema.** A back edge to a reference already
-  being rendered shows as `...`, so the form is finite.
+- **It terminates on a recursive schema.** A back edge shows as the parameter
+  of the `recursive` lambda that bound it, so the form is finite and reads back
+  as the schema it came from. `...` marks one thing only, the render depth bound.
 - **It is stable under a rebuild.** A rendered form reads back as a schema that
   renders the same way, so `repr` is a fixed point rather than a form that
   drifts each time it is built again.

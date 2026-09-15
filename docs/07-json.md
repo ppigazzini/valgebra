@@ -171,7 +171,7 @@ attribute check — is the documented step back into Python (detailed below). Th
 same walk runs over either input source — a Python object or a JSON value — so
 the two paths stay equivalent. On the benchmark machine (AMD Ryzen 7 PRO 7840U,
 WSL2, CPython 3.14.7 built as the [performance page](11-performance.md)
-records, jiter 0.16, the PGO release wheel — the same profile the release
+records, the jiter the lockfile pins, the PGO release wheel — the same profile the release
 ships), per-call median on a passing document:
 
 | Shape | `is_valid_json` | `json.loads` + `is_valid` | speedup |

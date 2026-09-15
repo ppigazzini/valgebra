@@ -210,9 +210,10 @@ wheel-build time rather than set in `Cargo.toml`, so non-maturin builds (such as
 
 ## Where to look next
 
-- Building or changing a node: start at the `Schema` enum and its `//!` header
-  in [`crates/valgebra-core/src/lib.rs`](crates/valgebra-core/src/lib.rs), then
-  the frontend and the walk.
+- Building or changing a node: start at the `Schema` enum in
+  [`crates/valgebra-core/src/ir.rs`](crates/valgebra-core/src/ir.rs), whose
+  variant comments are where a node's denotation is written, then the frontend
+  and the walk.
 - The theory behind the algebra: [docs/13-foundations.md](docs/13-foundations.md).
 - The development gate, the testing strategy, and the CI pipeline:
   [CONTRIBUTING.md](CONTRIBUTING.md).

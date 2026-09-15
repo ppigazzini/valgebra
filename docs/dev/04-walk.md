@@ -203,7 +203,7 @@ re-emits them; without it such a question reads "an older interpreter" against
 every interpreter, silently, and the fast path is taken everywhere.
 
 Two widths bound the copy, `SNAPSHOT_MIN_ELEMENTS` and `SNAPSHOT_MAX_ELEMENTS`
-in `crates/valgebra-py/src/check/walk.rs`: below the first it cannot pay for its
+in `crates/valgebra-py/src/check/walk/sequence.rs`: below the first it cannot pay for its
 own allocation, above the second walking it costs more cache than the counts it
 avoids, and the transient stops at two mebibytes. Both are in the bounds table of
 [00-architecture.md](00-architecture.md), and neither changes an answer.

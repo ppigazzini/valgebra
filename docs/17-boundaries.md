@@ -125,9 +125,12 @@ assert not page.is_valid([{"id": 1}, {"id": "two"}])
 
 What bounds it is Python's own recursion limit, not a valgebra one: a predicate
 that re-enters without a base case raises `RecursionError` where an ordinary
-Python function would. Two exceptions are **not** turned into a verdict —
-`KeyboardInterrupt` and `SystemExit` propagate, because a check that swallowed
-them would make the process unstoppable from inside a loop. Everything else a
+Python function would. Five exceptions are **not** turned into a verdict —
+`KeyboardInterrupt`, `SystemExit`, `GeneratorExit`, `MemoryError` and
+`RecursionError` propagate, because a check that swallowed one would make the
+process unstoppable from inside a loop or hide the interpreter running out of a
+resource. The set is the one [the walk page](dev/04-walk.md) owns and
+[the error model](08-error-model.md) lists. Everything else a
 predicate raises is reported as `predicate_error` rather than as a rejected
 value ([refinements](05-refinements.md)), so a bug in your callable is not
 mistaken for data that failed.
