@@ -18,6 +18,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a word kind's universe is the words that kind can hold
 - fix: a refinement marker is immutable, and the manifest states the link
 - fix: a class-set operator is refused rather than read as another engine's
+- fix: a set lattice charges its product like the three beside it -- internal
 
 -->
 
