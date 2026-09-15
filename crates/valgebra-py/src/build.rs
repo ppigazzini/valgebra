@@ -403,9 +403,6 @@ pub(crate) fn build_schema(
     Ok(Schema::Literal(lits.intern_const(obj)))
 }
 
-/// True if `obj` is a type variable or a typing special form (`Final`,
-/// `ClassVar`, a bare `Optional`/`Union`/`Literal`, ...): a type-system
-/// construct carrying no runtime value, so it cannot denote a set of values.
 /// True if `obj` is a `typing.ForwardRef`, on a runtime that has one.
 fn is_forward_reference(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = obj.py();
@@ -415,6 +412,9 @@ fn is_forward_reference(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
     }
 }
 
+/// True if `obj` is a type variable or a typing special form (`Final`,
+/// `ClassVar`, a bare `Optional`/`Union`/`Literal`, ...): a type-system
+/// construct carrying no runtime value, so it cannot denote a set of values.
 fn is_typing_construct(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = obj.py();
     for class in &forms(py)?.type_variables {

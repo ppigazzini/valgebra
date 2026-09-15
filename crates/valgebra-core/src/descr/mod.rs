@@ -1093,6 +1093,7 @@ pub struct Value {
     /// For a set kind these are its *members*, in no particular order -- a set
     /// is its members and the powerset rule reads them as a whole rather than
     /// as a word.
+    pub elements: Option<&'static [Value]>,
     /// The class, where the value is of no listed kind.
     ///
     /// What the value *is*, as far as the snapshot of the class order can say.
@@ -1105,7 +1106,6 @@ pub struct Value {
     /// each one holds. An attribute absent from the list is one the object does
     /// not carry, which an open record reads as the undefined value.
     pub attributes: Option<&'static [(&'static str, Value)]>,
-    pub elements: Option<&'static [Value]>,
     /// The entries, where the kind is [`Kind::Dict`]: each key beside what it
     /// maps to.
     ///

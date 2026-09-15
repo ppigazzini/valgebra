@@ -301,24 +301,25 @@ pub(super) fn attr_record_subtype(
     }))
 }
 
-/// Index a field list by name for O(1) cross-list lookup during subtyping.
-///
-/// Unique field names are a hard caller invariant: `collect` into a map keeps the
-/// last entry per key, so a duplicate name would silently shadow an earlier field
-/// and could make the `required`/width checks that consume it unsound. The
-/// frontend rejects duplicates; the `debug_assert` makes that dependency explicit
-/// and catches a malformed IR in debug rather than deciding on a shadowed field.
-///
-/// A cursor rather than a table. Both lists are in name order, so one walk over
-/// the querying list finds each partner by moving forward -- no allocation, and
-/// one string compare per field passed, against a hash table built and freed per
-/// side per comparison. That table was a fifth of the repeating workload.
 /// Whether a field list is in name order, which is what lets a cursor over it
 /// move forward only.
 pub(super) fn sorted_by_name(list: &[Field]) -> bool {
     list.is_sorted_by(|one, two| one.name <= two.name)
 }
 
+/// One walk over a field list, finding each name of another list as it passes.
+///
+/// Both lists are in name order, so a partner is found by moving forward: no
+/// allocation, and one string compare per field passed. The table this replaces
+/// was built and freed once per side per comparison, and was a fifth of the
+/// repeating workload.
+///
+/// **Unique names are the caller's invariant**, and the order is what makes it
+/// load-bearing here: two fields of one name would let the cursor answer with
+/// whichever it reached first, and the `required` and width readings that
+/// consume the answer would decide on a field the other shadows. The frontend
+/// refuses a duplicate; the `debug_assert` names the dependency and catches a
+/// malformed IR in debug rather than deciding on the wrong field.
 pub(super) struct FieldCursor<'a, 'o> {
     fields: &'a [Field],
     rest: &'a [Field],

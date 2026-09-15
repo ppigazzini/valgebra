@@ -62,6 +62,12 @@ pub(super) fn tightest_bounds<'a>(
     (lower, upper, ordered)
 }
 
+/// Whether a refinement's bound and length constraints cannot hold together: a
+/// required minimum length above the allowed maximum, or a numeric lower bound
+/// above the upper bound (or equal with a strict end).
+///
+/// Sound: it reports unsatisfiable only when the ordering the oracle returns
+/// forces it, and stays conservative when the oracle cannot compare two bounds.
 pub(super) fn bounds_unsatisfiable<'a>(
     constraints: impl Iterator<Item = &'a Constraint> + Clone,
     oracle: &dyn LeafRelations,

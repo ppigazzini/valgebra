@@ -22,26 +22,6 @@ thread_local! {
 }
 
 impl Schema {
-    /// Return a membership-equivalent schema reduced by the lattice laws.
-    ///
-    /// Every rewrite preserves the set of admitted values: nested unions and
-    /// intersections are flattened, members sorted and deduplicated
-    /// (associativity, commutativity, idempotence), the top and bottom
-    /// identities are applied, complements are pushed inward to negation-normal
-    /// form (De Morgan) and double negations cancelled. `Any` (gradual) is left
-    /// untouched: it is never treated as the top. Conservative by design — it
-    /// never claims an equivalence it cannot justify structurally.
-    ///
-    /// This is purely the lattice-law normal form: it does **not** run the
-    /// emptiness/subtyping decision. So an intersection that is empty only by a
-    /// deeper argument — contradictory refinement bounds like
-    /// `int & Ge(10) & Le(0)`, or two disjoint refined bases — survives
-    /// simplification unchanged, even though [`is_empty`](Self::is_empty) reports
-    /// it empty. A caller must not treat a simplified schema as fully reduced and
-    /// then read membership relations off its structure;
-    /// [`is_empty`](Self::is_empty), [`is_subtype_of`](Self::is_subtype_of), and
-    /// [`is_equivalent`](Self::is_equivalent) are the stronger, separate decision
-    /// procedures, deciding a wider fragment than `simplify` folds.
     /// The nodes one [`simplify`](Self::simplify) of this schema visits.
     ///
     /// A single bottom-up pass visits each node once, so this against
@@ -56,6 +36,30 @@ impl Schema {
     }
 
     #[must_use]
+    /// A membership-equivalent schema reduced by the lattice laws.
+    ///
+    /// **Deprecated, and removed with the next minor version.** A schema is
+    /// built in the lattice normal form, so the reduction this promises is the
+    /// schema a caller already holds, and the folds it adds beyond the laws are
+    /// decisions the three relations make better.
+    ///
+    /// Every rewrite preserves the set of admitted values: nested unions and
+    /// intersections are flattened, members sorted and deduplicated
+    /// (associativity, commutativity, idempotence), the top and bottom
+    /// identities are applied, complements are pushed inward to negation-normal
+    /// form (De Morgan) and double negations cancelled. `Any` is the top,
+    /// spelled, so the identities reach it like any other set.
+    ///
+    /// This is purely the lattice-law normal form: it does **not** run the
+    /// emptiness/subtyping decision. So an intersection that is empty only by a
+    /// deeper argument — contradictory refinement bounds like
+    /// `int & Ge(10) & Le(0)`, or two disjoint refined bases — survives
+    /// simplification unchanged, even though [`is_empty`](Self::is_empty) reports
+    /// it empty. A caller must not treat a simplified schema as fully reduced and
+    /// then read membership relations off its structure;
+    /// [`is_empty`](Self::is_empty), [`is_subtype_of`](Self::is_subtype_of), and
+    /// [`is_equivalent`](Self::is_equivalent) are the stronger, separate decision
+    /// procedures, deciding a wider fragment than `simplify` folds.
     pub fn simplify(&self) -> Schema {
         #[cfg(test)]
         SIMPLIFY_STEPS.with(|steps| steps.set(steps.get() + 1));

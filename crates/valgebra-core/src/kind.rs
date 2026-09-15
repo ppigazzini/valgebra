@@ -235,19 +235,6 @@ impl Kind {
 }
 
 impl Kind {
-    /// The [`Region`] this kind falls in.
-    ///
-    /// The one place that says where a kind lands, so adding a kind is a change
-    /// in one file that the compiler makes you finish. Held as two lists -- the
-    /// kinds here and a set of region constants beside them -- nothing ties
-    /// `List` to the region a list belongs to.
-    ///
-    /// The six scalar kinds each get a region of their own, because a schema can
-    /// name one exactly: `str` denotes every string and nothing else, so the
-    /// complement of `str` is exactly the other six regions. The five container
-    /// kinds share the non-scalar region, because no schema names one exactly --
-    /// `list[int]` is a proper part of the lists, so the fold keeps a container
-    /// opaque rather than claiming a region for it (see [`Regions`]).
     /// The regions a value of a schema *tagged* this kind may be in.
     ///
     /// A kind's own region, with one exception, and it is the exception
@@ -263,6 +250,17 @@ impl Kind {
         }
     }
 
+    /// The [`Region`] this kind falls in.
+    ///
+    /// The one place that says where a kind lands, so adding a kind is a change
+    /// in one file the compiler makes you finish.
+    ///
+    /// The six scalar kinds each get a region of their own, because a schema can
+    /// name one exactly: `str` denotes every string and nothing else, so the
+    /// complement of `str` is exactly the other six regions. The five container
+    /// kinds share the non-scalar region, because no schema names one exactly --
+    /// `list[int]` is a proper part of the lists, so the fold keeps a container
+    /// opaque rather than claiming a region for it (see [`Regions`]).
     pub(crate) const fn region(self) -> Region {
         match self {
             Kind::NoneType => Region(1 << 0),
