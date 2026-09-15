@@ -200,8 +200,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "tests/test_completeness_probe.py",
-            "ACCEPTED: dict[str, str] = {}",
-            'ACCEPTED: dict[str, str] = {"planted gap": ""}',
+            "ACCEPTED: dict[str, str] = {",
+            'ACCEPTED: dict[str, str] = {\n    "planted gap": "",',
         ),
     ),
     Plant(
