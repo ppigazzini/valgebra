@@ -35,6 +35,7 @@ use regex_automata::util::syntax;
 use regex_automata::{Anchored, Input};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
+use std::sync::OnceLock;
 
 /// The most states an automaton may hold.
 ///
@@ -156,6 +157,112 @@ impl Dfa {
             transitions: vec![0],
             accepting: vec![true],
         }
+    }
+
+    /// The automaton accepting exactly the valid UTF-8 words.
+    ///
+    /// Written out rather than compiled from a pattern, for the reason
+    /// [`RegularSet::word`] is: this is the `str` kind's *universe*, so it is
+    /// asked for wherever a complement is taken, and a constructor that can
+    /// refuse would leave a caller choosing between a wrong set and a panic.
+    /// Nine states and thirteen byte classes, which is the standard decoder
+    /// read as an acceptor:
+    ///
+    /// * `0x00..=0x7F` stands alone;
+    /// * `0xC2..=0xDF` takes one continuation, `0xE0..=0xEF` two and
+    ///   `0xF0..=0xF4` three;
+    /// * `0xE0`, `0xED`, `0xF0` and `0xF4` narrow the *first* of those, which
+    ///   is what rules out an overlong encoding, a surrogate and a code point
+    ///   above `U+10FFFF`;
+    /// * `0xC0`, `0xC1` and `0xF5..=0xFF` begin nothing.
+    fn utf8() -> Dfa {
+        // Class 0 is the catch-all, which here is the bytes no well-formed word
+        // contains at all; the states are named by what they still expect, and
+        // `DEAD` absorbs.
+        const ASCII: Class = 1;
+        const CONT_LOW: Class = 2;
+        const CONT_MID: Class = 3;
+        const CONT_HIGH: Class = 4;
+        const LEAD_TWO: Class = 5;
+        const LEAD_E0: Class = 6;
+        const LEAD_THREE: Class = 7;
+        const LEAD_ED: Class = 8;
+        const LEAD_THREE_HIGH: Class = 9;
+        const LEAD_F0: Class = 10;
+        const LEAD_FOUR: Class = 11;
+        const LEAD_F4: Class = 12;
+        const CLASSES: usize = 13;
+        const START: u32 = 0;
+        const ONE: u32 = 1;
+        const TWO: u32 = 2;
+        const TWO_HIGH: u32 = 3;
+        const TWO_LOW: u32 = 4;
+        const THREE_MID_UP: u32 = 5;
+        const THREE_LOW: u32 = 6;
+        const THREE: u32 = 7;
+        const DEAD: u32 = 8;
+        const STATES: usize = 9;
+
+        let mut classes: Vec<Class> = vec![0; 256];
+        let mut put = |range: core::ops::RangeInclusive<u8>, class: Class| {
+            for byte in range {
+                if let Some(slot) = classes.get_mut(usize::from(byte)) {
+                    *slot = class;
+                }
+            }
+        };
+        put(0x00..=0x7F, ASCII);
+        put(0x80..=0x8F, CONT_LOW);
+        put(0x90..=0x9F, CONT_MID);
+        put(0xA0..=0xBF, CONT_HIGH);
+        put(0xC2..=0xDF, LEAD_TWO);
+        put(0xE0..=0xE0, LEAD_E0);
+        put(0xE1..=0xEC, LEAD_THREE);
+        put(0xED..=0xED, LEAD_ED);
+        put(0xEE..=0xEF, LEAD_THREE_HIGH);
+        put(0xF0..=0xF0, LEAD_F0);
+        put(0xF1..=0xF3, LEAD_FOUR);
+        put(0xF4..=0xF4, LEAD_F4);
+
+        let mut transitions = vec![DEAD; STATES * CLASSES];
+        let mut edge = |state: u32, class: Class, target: u32| {
+            let index = (state as usize) * CLASSES + usize::from(class);
+            if let Some(slot) = transitions.get_mut(index) {
+                *slot = target;
+            }
+        };
+        edge(START, ASCII, START);
+        edge(START, LEAD_TWO, ONE);
+        edge(START, LEAD_E0, TWO_HIGH);
+        edge(START, LEAD_THREE, TWO);
+        edge(START, LEAD_ED, TWO_LOW);
+        edge(START, LEAD_THREE_HIGH, TWO);
+        edge(START, LEAD_F0, THREE_MID_UP);
+        edge(START, LEAD_FOUR, THREE);
+        edge(START, LEAD_F4, THREE_LOW);
+        for class in [CONT_LOW, CONT_MID, CONT_HIGH] {
+            edge(ONE, class, START);
+            edge(TWO, class, ONE);
+            edge(THREE, class, TWO);
+        }
+        edge(TWO_HIGH, CONT_HIGH, ONE);
+        edge(TWO_LOW, CONT_LOW, ONE);
+        edge(TWO_LOW, CONT_MID, ONE);
+        edge(THREE_MID_UP, CONT_MID, TWO);
+        edge(THREE_MID_UP, CONT_HIGH, TWO);
+        edge(THREE_LOW, CONT_LOW, TWO);
+
+        let mut accepting = vec![false; STATES];
+        if let Some(flag) = accepting.get_mut(START as usize) {
+            *flag = true;
+        }
+        Dfa {
+            classes,
+            class_count: CLASSES,
+            transitions,
+            accepting,
+        }
+        .minimal()
     }
 
     /// Every word this automaton does not accept.
@@ -401,6 +508,9 @@ pub enum Alphabet {
     Bytes,
 }
 
+/// The valid UTF-8 words, which is the `str` kind's universe.
+static UTF8: OnceLock<Dfa> = OnceLock::new();
+
 /// A set of words: a regular language.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RegularSet {
@@ -414,11 +524,25 @@ impl RegularSet {
         RegularSet { dfa: Dfa::empty() }
     }
 
-    /// Every word.
+    /// Every word of an alphabet.
+    ///
+    /// The two differ, and the difference is the `str` kind's whole complement:
+    /// every byte string is a `bytes`, and only the valid UTF-8 ones are a
+    /// `str`. Reading the wider set as the `str` universe puts words in that
+    /// kind's complement that no value of it takes, so a difference that holds
+    /// only those reads as inhabited and refutes an inclusion nothing stands
+    /// against.
     #[must_use]
-    pub fn all() -> RegularSet {
+    pub fn all(alphabet: Alphabet) -> RegularSet {
         RegularSet {
-            dfa: Dfa::universal(),
+            dfa: match alphabet {
+                // Built once. This is asked for wherever a `str` component is
+                // complemented, and the table is fixed, so rebuilding and
+                // re-minimising it per ask is the kind of cost a universe has
+                // no business carrying.
+                Alphabet::Text => UTF8.get_or_init(Dfa::utf8).clone(),
+                Alphabet::Bytes => Dfa::universal(),
+            },
         }
     }
 
@@ -536,10 +660,16 @@ impl RegularSet {
             .map(|dfa| RegularSet { dfa })
     }
 
-    /// Every word this set does not hold.
+    /// Every word this set does not hold, **over every byte string**.
     ///
     /// Total, unlike the other two: a complement neither adds states nor
     /// refines the alphabet, so it cannot pass the bound.
+    ///
+    /// A `RegularSet` carries no alphabet, so this cannot cut its answer back to
+    /// one. That matters for [`Alphabet::Text`] alone -- every byte string is a
+    /// `bytes` and only the valid UTF-8 ones are a `str` -- and the cut belongs
+    /// to the caller that knows the kind: `Line::complement` meets this with
+    /// [`RegularSet::all`] for the kind it complements within.
     #[must_use]
     pub fn complement(&self) -> RegularSet {
         RegularSet {

@@ -1370,6 +1370,51 @@ fn a_coarse_kind_admits_all_of_its_values_or_none() {
 /// The two word kinds are exact and separate: a pattern over one says
 /// nothing about the other, which is what keeps `str` and `bytes` disjoint
 /// while sharing a representation.
+/// A kind's complement holds only the values that kind takes.
+///
+/// One automaton carries both word kinds, and their universes are not one set:
+/// every byte string is a `bytes`, and a `str` is one that encodes a sequence of
+/// code points. So the raw flip of a `str` table holds the rest of the byte
+/// strings, where no value of the kind lives -- and a difference holding only
+/// those reads as inhabited and refutes an inclusion nothing stands against.
+///
+/// What cuts them back is the fold in `complement_lines`, which starts from the
+/// kind's own top and meets each line's complement into it. The rows below are
+/// the answers that fold has to give, asked of the kind whose table is wider
+/// than the kind and of the one whose table spells it exactly.
+#[test]
+fn a_kinds_complement_holds_only_the_values_that_kind_takes() {
+    let text = Descr::pattern("a", Kind::Str).expect("a small pattern");
+    let rest = text.complement();
+    // The words of the kind the pattern misses are in the complement.
+    assert!(rest.admits(Value::word(b"b", Kind::Str)));
+    assert!(rest.admits(Value::word("\u{e9}".as_bytes(), Kind::Str)));
+    // The byte strings no `str` encodes are not: a lone continuation byte, a
+    // lead byte with nothing after it, and a code point past the range.
+    for outside in [
+        b"\xff".as_slice(),
+        b"\x80",
+        b"\xed\xa0",
+        b"\xf5\x80\x80\x80",
+    ] {
+        assert!(
+            !rest.admits(Value::word(outside, Kind::Str)),
+            "a str's complement holds only words a str takes: {outside:?}"
+        );
+    }
+    // And the pattern's own word is in neither the complement nor outside it.
+    assert!(!rest.admits(Value::word(b"a", Kind::Str)));
+    assert!(text.admits(Value::word(b"a", Kind::Str)));
+
+    // The `bytes` kind's table spells its kind exactly, so its complement is
+    // the flip and holds every byte string the pattern misses.
+    let raw = Descr::pattern("a", Kind::Bytes).expect("a small pattern");
+    let others = raw.complement();
+    assert!(others.admits(Value::word(b"\xff", Kind::Bytes)));
+    assert!(others.admits(Value::word(b"b", Kind::Bytes)));
+    assert!(!others.admits(Value::word(b"a", Kind::Bytes)));
+}
+
 #[test]
 fn the_word_kinds_are_languages_and_stay_apart() {
     let text = Descr::pattern("ab?", Kind::Str).expect("a small pattern");
