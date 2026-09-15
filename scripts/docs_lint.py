@@ -215,6 +215,56 @@ def gate_numbers() -> list[str]:
     return numbers
 
 
+#: The JSON baselines whose `_comment` fields are prose about this tree, and are
+#: the one prose surface no rule reached: a recorded budget quoting its own
+#: number, or a count from the run that recorded it, reads as current forever.
+COMMENTED_BASELINES = (
+    "scripts/perf_budget.json",
+    "scripts/perf_compare.json",
+    "scripts/mutation_baseline.json",
+    "scripts/mutation_baseline_walk.json",
+    "scripts/metamorphic_reference.json",
+)
+
+
+def baseline_prose() -> list[tuple[str, str]]:
+    """Every comment field of the JSON baselines, with the file it sits in.
+
+    A baseline's argument lives in keys the gate ignores and a reader does not,
+    so it is prose by every rule that governs prose -- and it was the one prose
+    in the tree no rule read. The counts that went stale there were the counts
+    the file itself records.
+    """
+    prose: list[tuple[str, str]] = []
+    for relative in COMMENTED_BASELINES:
+        path = ROOT / relative
+        if not path.exists():
+            continue
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        prose += [
+            (relative, value)
+            for key, value in _commented(loaded)
+            if key.startswith("_") and isinstance(value, str)
+        ]
+    return prose
+
+
+def _commented(node: object) -> list[tuple[str, object]]:
+    """Every key and value of a JSON tree, at any depth."""
+    if isinstance(node, dict):
+        return [
+            pair
+            for key, value in node.items()
+            for pair in [(key, value), *_commented(value)]
+        ]
+    if isinstance(node, list):
+        return [pair for item in node for pair in _commented(item)]
+    return []
+
+
 def check_fences(text: str) -> list[str]:
     """Refuse a code fence that carries prose where its language belongs.
 
@@ -652,6 +702,16 @@ def main() -> int:
             f"{path.relative_to(ROOT)}: {problem}"
             for problem in check_internal_reference(text)
         ]
+    # A baseline's own comment fields are prose about this tree, held to the
+    # rules that govern prose. The counts that went stale in them were the
+    # counts the same file records, which is the shape the pinned-number rule
+    # exists for and the one surface it did not read.
+    failures += [
+        f"{relative}: {problem}"
+        for relative, prose in baseline_prose()
+        for problem in check_pinned_numbers(prose, numbers)
+        + check_internal_reference(prose)
+    ]
     failures += check_index("docs/dev") + check_index("docs")
     failures += check_ledger_table()
     failures += check_bounds_ledger()
