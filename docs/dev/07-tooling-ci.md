@@ -482,6 +482,7 @@ prerelease (3.15), plus one macOS and one Windows leg; 3.11, 3.12 and 3.13 run
 nightly. The extension is compiled against a version-specific ABI, so what
 differs between two adjacent interpreters differs at an end first, and seven
 legs on every push bought minutes rather than information.
+`test_the_push_matrix_is_the_ends_and_the_odd_ones` in
 `tests/test_required_jobs.py` holds the split, because a matrix grows by one
 line and nobody re-measures.
 

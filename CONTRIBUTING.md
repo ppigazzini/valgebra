@@ -186,10 +186,13 @@ release, the free-threaded build and the prerelease, the last of those without
 blocking — and fills in the interpreters between them nightly, a differential
 lane that cross-checks membership against pydantic-core and jsonschema, the
 doc-example runner, a strict docs build, and a Linux wheel build. `ci.yml` owns
-the matrix and `tests/test_required_jobs.py` holds the blocking/non-blocking
-split, so neither is listed here;
+the matrix, so it is not listed here, and
+`test_the_push_matrix_is_the_ends_and_the_odd_ones` in
+`tests/test_required_jobs.py` holds the push set to four legs that the nightly
+also runs, the floor and the free-threaded build among them.
 [docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md) explains why the span is
-sampled at its ends.
+sampled at its ends. Which leg is allowed to fail without blocking is `ci.yml`'s
+`continue-on-error` and nothing else reads it.
 
 Scheduled lanes run the deep property suites, a libFuzzer soak over the
 core, and two mutation sweeps — the core crate, and the membership walk under an

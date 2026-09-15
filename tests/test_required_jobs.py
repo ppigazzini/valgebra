@@ -17,6 +17,7 @@ LEDGER: the merge gate requires every job the workflow defines
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -193,3 +194,38 @@ def test_both_binding_sweeps_read_the_same_files() -> None:
         f"only the nightly sweeps {sorted(nightly - push)}. The nightly records "
         "the baseline the push lane is judged against, so the two are one list."
     )
+
+
+def test_the_push_matrix_is_the_ends_and_the_odd_ones() -> None:
+    """What a push runs across interpreters is a decision, not a list.
+
+    Seven interpreters on every push is job-minutes for a change that cannot see
+    most of them: the extension is compiled against a version-specific ABI, and
+    what breaks between 3.11 and 3.12 breaks at the floor or at the current
+    release first. So a push runs the ends and the odd ones -- the supported
+    floor, the current release, the free-threaded build, the prerelease -- and
+    the interpreters between the ends run nightly.
+
+    Held here because a matrix grows by one line and nobody re-measures, and
+    because sampling the ends is only sound while the nightly covers the
+    interpreters the push leaves out.
+    """
+    text = WORKFLOW.read_text(encoding="utf-8")
+    matrix = re.search(
+        r"python-version: \$\{\{ github\.event_name == 'schedule'\s*"
+        r"&& fromJSON\('(\[[^\]]*\])'\)\s*\|\| fromJSON\('(\[[^\]]*\])'\)",
+        text,
+    )
+    assert matrix, "the python matrix is no longer split by event"
+    nightly = json.loads(matrix.group(1))
+    push = json.loads(matrix.group(2))
+
+    assert set(push) <= set(nightly), "a push runs an interpreter the nightly does not"
+    assert len(push) <= 4, f"the push matrix grew to {push}"
+    # The four are the ones a compiled extension can actually differ on.
+    assert {"3.10", "3.14t"} <= set(push), (
+        "the floor and the free-threaded build are the two legs a push cannot "
+        f"drop: {push}"
+    )
+    # And the nightly keeps the ones the push gave up, or they run nowhere.
+    assert set(nightly) - set(push), "the nightly runs nothing extra"

@@ -95,7 +95,7 @@ for and misses the other. Twenty-two of them:
 | `tests/test_completeness_ledger.py` | every relation the procedure must decide is decided; every relation it declines is still declined |
 | `tests/test_suite_partition.py` | every test file is a product test or a marked repository check |
 | `tests/test_metamorphic_gate.py` | every relation the metamorphic gate holds can be driven to fail |
-| `tests/test_required_jobs.py` | every pull-request job is required by the merge gate |
+| `tests/test_required_jobs.py` | the merge gate requires every job the workflow defines, and a push runs the ends of the interpreter range |
 | `tests/test_changelog_ledger.py` | every `feat`/`fix` commit since the last release is on the changelog roll |
 | `tests/test_closure_ledger.py` | every schema variant is a generator, a representative, or a marker |
 | `tests/test_local_gate.py` | every merge-gate step is planned by the local gate or excused by name |
