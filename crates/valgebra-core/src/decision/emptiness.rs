@@ -21,7 +21,7 @@ use crate::ir::{Constraint, Constraints, DefIx, Polarity, Schema};
 use crate::kind::{Kind, Region, Regions};
 use crate::verdict::Verdict;
 
-use super::constraints::{bounds_unsatisfiable, shortest, tightest_bounds};
+use super::constraints::{Density, bounds_unsatisfiable, shortest, tightest_bounds};
 use super::records::keyed_map_meet_empty;
 use super::{
     DECISION_BUDGET, LeafRelations, NoLeafRelations, has_complementary_pair, has_disjoint_pair,
@@ -381,10 +381,15 @@ impl Schema {
 /// Sound and not complete for `bool`: the rule counts the integers in the
 /// interval rather than the two values a boolean has, so an interval holding an
 /// integer that is neither zero nor one stays conservatively inhabited.
-fn bounded_to_the_integers<'a>(bases: impl IntoIterator<Item = &'a Schema>) -> bool {
-    bases
+fn density_of<'a>(bases: impl IntoIterator<Item = &'a Schema>) -> Density {
+    if bases
         .into_iter()
         .any(|base| matches!(base.type_tag(), Some(Kind::Int | Kind::Bool)))
+    {
+        Density::Discrete
+    } else {
+        Density::Dense
+    }
 }
 
 /// The verdict and region set of an intersection.
@@ -491,9 +496,9 @@ fn refinement_verdict(
     visiting: &mut Vec<DefIx>,
     budget: &Cell<u32>,
 ) -> Verdict {
-    let int_discrete = bounded_to_the_integers([base]);
+    let density = density_of([base]);
     if base.is_empty_rec(oracle, defs, visiting, budget)
-        || bounds_unsatisfiable(constraints.iter(), oracle, int_discrete)
+        || bounds_unsatisfiable(constraints.iter(), oracle, density)
     {
         return Verdict::Empty;
     }
@@ -605,6 +610,6 @@ fn intersection_bounds_unsatisfiable(members: &[Schema], oracle: &dyn LeafRelati
         })
         .flatten()
         .collect();
-    let int_discrete = bounded_to_the_integers(members);
-    !merged.is_empty() && bounds_unsatisfiable(merged.iter().copied(), oracle, int_discrete)
+    let density = density_of(members);
+    !merged.is_empty() && bounds_unsatisfiable(merged.iter().copied(), oracle, density)
 }

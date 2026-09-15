@@ -273,9 +273,14 @@ impl Component {
                 };
                 Component::Sets(combined?)
             }
+            // Two components of one kind take one representation, so this pair
+            // cannot arise: `Descr` indexes by `Kind` and combines slot with
+            // slot. Refusing rather than answering is what keeps a broken
+            // invariant from becoming a set the caller acts on -- returning one
+            // side names a set neither operand denotes.
             (mine, theirs) => {
                 debug_assert!(false, "combining {mine:?} with {theirs:?} of another kind");
-                mine.clone()
+                return None;
             }
         })
     }

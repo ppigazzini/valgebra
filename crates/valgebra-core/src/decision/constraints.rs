@@ -18,6 +18,33 @@ use crate::ir::{Constraint, OperandIx};
 use super::LeafRelations;
 
 /// One end of an order bound: the constant, and whether the end is strict.
+/// Whether the values a bound cuts are countable between two points.
+///
+/// The whole numbers are discrete, so a pair of bounds with no integer between
+/// them admits nothing; the floats are dense, so the same pair admits many.
+/// Named rather than spelled as a boolean, because the reading that separates
+/// them is the one this module exists for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Density {
+    /// The base is the whole numbers, so the bounds count their values.
+    Discrete,
+    /// The base admits more than the integers, so a gap holds values.
+    Dense,
+}
+
+/// Which end of an interval a comparison bound sets.
+///
+/// A two-member domain the reading turns on, named rather than spelled as a
+/// boolean: a call site passing `true` says nothing about which end that is,
+/// and the two ends are what the whole of this module distinguishes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum End {
+    /// `Ge` and `Gt`: the bound below the values.
+    Lower,
+    /// `Le` and `Lt`: the bound above them.
+    Upper,
+}
+
 type Bound = Option<(OperandIx, bool)>;
 
 /// The shortest length a conjunction of bounds admits, which is the largest
@@ -48,16 +75,19 @@ pub(super) fn tightest_bounds<'a>(
     let mut upper: Bound = None;
     let mut ordered = true;
     for constraint in constraints {
-        let (bound, is_lower) = match constraint {
-            Constraint::Ge(i) => ((*i, false), true),
-            Constraint::Gt(i) => ((*i, true), true),
-            Constraint::Le(i) => ((*i, false), false),
-            Constraint::Lt(i) => ((*i, true), false),
+        let (bound, end) = match constraint {
+            Constraint::Ge(i) => ((*i, false), End::Lower),
+            Constraint::Gt(i) => ((*i, true), End::Lower),
+            Constraint::Le(i) => ((*i, false), End::Upper),
+            Constraint::Lt(i) => ((*i, true), End::Upper),
             _ => continue,
         };
-        let slot = if is_lower { &mut lower } else { &mut upper };
+        let slot = match end {
+            End::Lower => &mut lower,
+            End::Upper => &mut upper,
+        };
         ordered &= slot.is_none() || oracle.compare(bound.0, slot.unwrap_or(bound).0).is_some();
-        *slot = Some(tighter_bound(*slot, bound, oracle, is_lower));
+        *slot = Some(tighter_bound(*slot, bound, oracle, end));
     }
     (lower, upper, ordered)
 }
@@ -71,7 +101,7 @@ pub(super) fn tightest_bounds<'a>(
 pub(super) fn bounds_unsatisfiable<'a>(
     constraints: impl Iterator<Item = &'a Constraint> + Clone,
     oracle: &dyn LeafRelations,
-    int_discrete: bool,
+    density: Density,
 ) -> bool {
     use core::cmp::Ordering;
     let min_len = constraints
@@ -106,7 +136,9 @@ pub(super) fn bounds_unsatisfiable<'a>(
         // Lt(1)]` admits no value. The oracle answers only for a real numeric
         // pair and stays `None` otherwise, so floats and incomparable bounds keep
         // the interval conservatively non-empty.
-        if int_discrete && oracle.no_int_between(lo, lo_strict, hi, hi_strict) == Some(true) {
+        if density == Density::Discrete
+            && oracle.no_int_between(lo, lo_strict, hi, hi_strict) == Some(true)
+        {
             return true;
         }
     }
@@ -173,7 +205,7 @@ pub(super) fn tighter_bound(
     current: Option<(OperandIx, bool)>,
     candidate: (OperandIx, bool),
     oracle: &dyn LeafRelations,
-    is_lower: bool,
+    end: End,
 ) -> (OperandIx, bool) {
     use core::cmp::Ordering;
     let Some(current) = current else {
@@ -182,14 +214,14 @@ pub(super) fn tighter_bound(
     match oracle.compare(candidate.0, current.0) {
         Some(Ordering::Equal) => (current.0, current.1 || candidate.1),
         Some(Ordering::Greater) => {
-            if is_lower {
+            if end == End::Lower {
                 candidate
             } else {
                 current
             }
         }
         Some(Ordering::Less) => {
-            if is_lower {
+            if end == End::Lower {
                 current
             } else {
                 candidate
