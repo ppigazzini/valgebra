@@ -302,11 +302,12 @@ nor a msgspec `Struct`: each reaches the frontend as a bare class, denoting the
 set of its instances. Check either one's fields through a mapping view of them.
 
 On a synthetic benchmark a passing check is faster than a strict pydantic
-`TypeAdapter`: roughly 3× on a 50-field record, 5× on a large `list[int]` and 6×
-on deep nesting, on CPython 3.12 and on 3.14 alike. The free-threaded build
-holds the first two and reads about 3× on deep nesting, where every element of a
-mutable container is read under that container's lock. All of them are far
-faster than pure-Python jsonschema. The comparison is not
+`TypeAdapter` on every shape measured, and far faster than pure-Python
+jsonschema. The margins differ by shape and by interpreter, and the
+free-threaded build reads differently again, where every element of a mutable
+container is read under that container's lock — so the numbers live on one page
+with the harness, the machine and the versions beside them rather than being
+quoted here. The comparison is not
 apples-to-apples and is gated against regression in CI; see the
 [performance page](docs/11-performance.md) for the method, the matrix, and the limits.
 

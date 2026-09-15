@@ -298,20 +298,20 @@ Core micro-benchmarks (criterion, release+LTO, indicative single run):
 
 ## How the record fast path is tuned
 
-The closed-record membership check visits each dict entry once and matches the
-key against the declared fields, rather than looking up every declared field in
-turn (which builds a temporary Python string per field) and then scanning the
-dict a second time for undeclared keys. The key's UTF-8 is borrowed without
-allocating, and the field-name index is computed once when the validator is
-first used — with a fast non-cryptographic hasher, since the keys are the
-schema's own declared names rather than attacker input — then reused across
-calls, so a wide record does not rebuild or reallocate its name map on every
-validation. The `wide_record` row of the table above is what it costs. Profiling
-with cachegrind attributed the removed cost to temporary-string creation,
-hashing, and allocation churn from the per-field lookups, and that attribution
-is an instruction count, so it holds across machine classes. The bool fast path
-and the aggregating explain walk stay membership-equivalent, locked by tests
-that assert both reach the same verdict across record shapes.
+A closed record is answered by **probing the dict for each declared key**, not
+by scanning the value's entries: the probe carries the key's hash already, where
+an iteration step increments two refcounts, casts and decodes the key, and hashes
+it. The alternative was measured and is 47.9% dearer, which is the figure
+recorded above; the probe is the floor for this shape and the walk is at it.
+
+The keys a validator probes with are interned once when it is first used, so a
+wide record rebuilds no name map per call, and a dict whose own keys are interned
+settles each field on a pointer comparison. Where the record is **open** — a
+clause covers the keys it does not declare — the entries are scanned instead,
+because the clause has to see each one. The two readings answer alike by
+construction: neither resolves a key by decoding its bytes, so a `str` subclass
+carrying a field's text is found exactly where the dict finds it
+([dev/04-walk.md](dev/04-walk.md)).
 
 A **report** on that record -- one field wrong, explained, raised -- costs about
 three accepting walks, and the count attributes the three. Two are the walks:

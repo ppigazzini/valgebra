@@ -166,8 +166,12 @@ spellings. A shape is a fixed prefix and then a repeating tail, so nothing may
 follow the tail and a tuple cannot begin with `...`; both are refused by naming
 the spelling that was meant.
 
-Every other parametrized container — `list`, `set`, `frozenset`, `dict`, the
-`collections.abc` equivalents — reads its arguments as element and key types.
+Five origins are read as containers — `list`, `set`, `frozenset`, `dict` and
+`tuple` — and their arguments become element and key types. A parametrized
+`collections.abc` generic is **refused**, not read: `Sequence[int]` names a
+protocol whose instances a check cannot enumerate without consuming them, and
+the bare abstract class is available as an `isinstance` atom instead
+([the API page](../16-api.md) records the refusal).
 `dict[K, V]`'s two are read by name rather than by position, because the two
 transposed is `dict[V, K]`, which typechecks and validates real values.
 

@@ -165,7 +165,7 @@ the pattern, which is how this engine spells them.
 Running natively is what buys the linear-time guarantee, and it is also what
 makes the dialect the Rust engine's. The two languages are close but not equal,
 and **a pattern both engines accept can denote different sets**. Compiling
-successfully is therefore not a test of which language a pattern is in. Three
+successfully is therefore not a test of which language a pattern is in. Four
 places the two engines part, which a ported pattern should be checked against —
 this is where they differ, not a complete audit of what a pattern denotes:
 
@@ -193,13 +193,26 @@ assert re.fullmatch("(?i)i", "\u0131") is not None
 
 # Property escapes. `\p{...}` is a pattern only this engine accepts.
 assert admits(r"\p{L}+", "ab")
+
+# Class-set operators. `--`, `&&`, `~~` and a nested `[` combine classes here
+# and are literal characters to Python, which warns about exactly this.
+assert admits(r"[\w~~\d]", "a")
+assert not admits(r"[\w~~\d]", "~")
+assert re.fullmatch(r"[\w~~\d]", "~") is not None
 ```
 
 The third is the loud case: `re.compile(r"\p{L}+")` raises, so a pattern that
-works here fails there and a reader finds out at once. The first two are the
+works here fails there and a reader finds out at once. The other three are the
 quiet ones — both engines build the pattern and answer differently — and they
 are the reason a library holding itself to `re`'s decisions cannot adopt `Regex`
 behind a fallback that triggers on compile failure.
+
+**A pattern Python spells and this engine does not is refused**, which is the
+loud direction and the one to prefer. A lookaround (`(?=...)`, `(?<=...)`), a
+backreference (`\1`, `(?P=name)`), an inline comment (`(?#...)`), a named
+character (`\N{BULLET}`), the ASCII flag `(?a)`, the `\Z` anchor and the
+open-ended `{,n}` repetition all raise a `ValueError` naming the parse error,
+rather than being read as something else.
 
 ### Agreement with `re` is not ASCII
 

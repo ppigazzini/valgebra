@@ -43,8 +43,9 @@ into the requirements file it generates, and `pip-audit` refused the file
 against a dependency tree with no advisory in it. The two variables whose only
 purpose is that override are dropped (`runner_environment`).
 
-**The whole list, since two of these cost a day each.** A lane differs from a
-local run in ten ways, and the gate models the first four:
+**The whole list, since two of these cost a day each.** The table is what a
+lane differs from a local run in, and the `modelled` column is what the gate
+reproduces; the count is the table's rather than this sentence's:
 
 | difference | modelled | what it cost when it was not |
 | --- | --- | --- |
@@ -149,8 +150,9 @@ gate only catches what it exercises:
 - the **core** transformations — the constructors' normal form, the composition
   remap, the record transform;
 - the **decision** procedures (`--decision`, `--decision-refute`,
-  `--decision-repeat`) — subtyping, emptiness, equivalence, in three
-  workloads: one whose relations hold, one whose relations are refuted, and one
+  `--decision-repeat`, `--decision-matrix`) — subtyping, emptiness, equivalence;
+  `MODES` in `scripts/perf_gate.py` owns the list, and the first three are the
+  workloads one whose relations hold, one whose relations are refuted, and one
   whose goals repeat. The core workload never calls a decision, so without
   these the whole decision surface is unmeasured in both directions: neither
   what a new rule costs nor what a cheaper one saves. Three because a proof, a

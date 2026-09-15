@@ -302,8 +302,10 @@ algebraic combinators alone".
 All of them: a schema is built in the lattice normal form. Members of a union or
 a meet are flattened, ordered and deduplicated; the two identities are applied
 (`A | nothing` is `A`, `A & anything` is `A`) and the two absorbing elements too;
-absorption removes a member that contains another; `~~A` is `A`, `A | ~A` is the
-top, and `A & ~A` is the bottom.
+`~~A` is `A`, `A | ~A` is the top, and `A & ~A` is the bottom. **Absorption is
+not among them**: `A | (A & B)` is `A` exactly when `A` contains `A & B`, and a
+containment is what the decision procedures answer rather than what a
+constructor folds ([02-decision.md](02-decision.md) draws the line).
 
 The three complement laws differ from the rest in what they need. `~~A` holds of
 anything, because a complement is evaluated by negating what is under it, so
@@ -411,9 +413,10 @@ sets are spellable both ways, so the choice fixes defaults only, and each
 default is the one its author's spec gives.
 
 `ReadOnly` is stripped: it constrains writers, and a value has no writers.
-`total`, `Required` and `NotRequired` set key optionality as today.
-The frontend reads every `TypedDict` closed today; this is the rule it moves
-to, and the map milestone that closes the negative set is where it moves.
+`total`, `Required` and `NotRequired` set key optionality. A `TypedDict` is
+read **open**: the typing spec lets a value carry keys the class does not
+declare, so the schema carries a catch-all clause and `{"name": "Ada", "note":
+"x"}` is a member of one declaring only `name`.
 
 ## Where a class and an attribute record go
 
@@ -426,8 +429,7 @@ class beside a builtin kind is one more line of that kind.
 The two other shapes were weighed and fail one test each. A DNF over the whole
 descriptor loses the kind partition — every operation becomes a DNF operation
 over every kind, and the cheap disjointness across kinds, which is most of what
-the partition buys, goes with it. Scoping classes to the `other` kind, which is
-what the descriptor does today, fails the value it was built for: a dataclass
+the partition buys, goes with it. Scoping classes to the `other` kind fails the value it was built for: a dataclass
 that subclasses `int` has an integer kind and a class, and a component that
 cannot hold both is one that cannot decide it. Per-kind lines keep the
 partition, split a line's complement into at most three atoms, and are the

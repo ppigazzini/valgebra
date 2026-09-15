@@ -558,6 +558,8 @@ What is left under the budget is the Boolean tower: a deeply nested combination
 of unions, meets and complements, where subtyping distributes over both sides
 and the work is a product of the branches. A `False` there may mean "not proven
 within the bound" rather than "not a subtype"; on anything else it means the
-relation is outside the decided fragment above. The bound is the price of a
-procedure with no memo over its goals, and writing one is the work the theory
-names.
+relation is outside the decided fragment above. The bound stands in for a
+termination argument rather than for a missing optimisation: counted over the
+decision workloads the goals a query *repeats* number zero, because the trail
+absorbs recursion and the per-rule caches absorb the shape where one goal is
+asked once per field. A table over goals would have nothing to hit.
