@@ -38,82 +38,78 @@ use pyo3::prelude::*;
 /// `re`.
 pub(crate) fn reject_reserved_class_syntax(pattern: &str) -> PyResult<()> {
     let chars: Vec<char> = pattern.chars().collect();
-    let mut depth = 0_usize;
-    let mut index = 0;
-    // Where the open class's members begin, past the `^` and the `]` that are
-    // literal there. A doubled operator at that first position is two literal
-    // characters to both engines, so the position is what tells an operator
-    // from a member -- `[--/]` is the range from `-` to `/` either way.
-    let mut content = 0;
-    while index < chars.len() {
-        let here = chars[index];
-        if here == '\\' {
-            index += 2;
-            continue;
-        }
-        if depth == 0 {
-            if here == '[' {
-                depth = 1;
-                // A class opening with `^` and a `]` immediately inside are
-                // both literal, and `re` reads them the same way.
-                index += 1;
-                if chars.get(index) == Some(&'^') {
-                    index += 1;
-                }
-                if chars.get(index) == Some(&']') {
-                    index += 1;
-                }
-                content = index;
-                continue;
+    let mut cursor = chars.iter().copied().enumerate().peekable();
+    let mut inside = false;
+    // Where the open class's first member sits. A doubled character *there* is
+    // two literal characters to both engines, so the position is what tells an
+    // operator from a member -- `[--/]` is the range from `-` to `/` either way.
+    let mut first = 0;
+    // The cursor advances by taking from the iterator and never by arithmetic,
+    // so the scan terminates by construction: an arm that looks ahead either
+    // takes what it saw or leaves it for the next turn.
+    while let Some((at, here)) = cursor.next() {
+        let next = cursor.peek().copied();
+        match here {
+            // An escape carries its character with it, whichever side of a
+            // class it is on: `[\[&&x]` holds an operator and no nested set.
+            '\\' => {
+                cursor.next();
             }
-            index += 1;
-            continue;
-        }
-        if here == ']' {
-            depth -= 1;
-            index += 1;
-            continue;
-        }
-        if here == '[' {
-            // `[:name:]` is a POSIX class, which this engine reads and `re` does
-            // not -- a divergence `docs/05-refinements.md` names, with the
-            // example that shows how the two read it. Skipping to its close
-            // keeps the class depth right; every other `[` opens a nested set,
-            // which is a union here and four literals there.
-            if chars.get(index + 1) == Some(&':') {
-                index = posix_class_end(&chars, index);
-                continue;
+            '[' if !inside => {
+                inside = true;
+                // A `^` negates the class and is not a member of it, so the
+                // first member is what follows.
+                let opening = if next.map(|(_, symbol)| symbol) == Some('^') {
+                    cursor.next();
+                    cursor.peek().copied()
+                } else {
+                    next
+                };
+                first = opening.map_or(at, |(where_, _)| where_);
+                // A `]` in the first member's place is that member rather than
+                // the class's close, and `re` reads it the same way. Being a
+                // member, it *takes* the position where a doubled character is
+                // literal: `[]&&x]` carries the operator at the next one, which
+                // is where `re` warns about it.
+                if opening.map(|(_, symbol)| symbol) == Some(']') {
+                    cursor.next();
+                }
             }
-            return Err(reserved("nested set", pattern, index));
+            // A `]` outside a class is a literal and closes nothing, so this
+            // arm takes no guard: the flag is already down, and putting it down
+            // again is the same statement.
+            ']' => inside = false,
+            // `[:name:]` is a POSIX class, which this engine reads and `re`
+            // does not -- a divergence `docs/05-refinements.md` names, with the
+            // example that shows how the two read it. It is skipped whole, so
+            // an operator after it is still read as one.
+            '[' if next.map(|(_, symbol)| symbol) == Some(':') => {
+                cursor.next();
+                let mut previous = ':';
+                for (_, symbol) in cursor.by_ref() {
+                    if previous == ':' && symbol == ']' {
+                        break;
+                    }
+                    previous = symbol;
+                }
+            }
+            // Every other `[` inside a class opens a nested set, which is a
+            // union here and four literal characters there.
+            '[' => return Err(reserved("nested set", pattern, at)),
+            '-' | '&' | '~'
+                if inside && next.map(|(_, symbol)| symbol) == Some(here) && at > first =>
+            {
+                let what = match here {
+                    '-' => "set difference",
+                    '&' => "set intersection",
+                    _ => "set symmetric difference",
+                };
+                return Err(reserved(what, pattern, at));
+            }
+            _ => {}
         }
-        // A doubled operator is an operator only past the first position of the
-        // class, which is where `re` warns and where this engine reads one.
-        if matches!(here, '-' | '&' | '~') && chars.get(index + 1) == Some(&here) && index > content
-        {
-            let what = match here {
-                '-' => "set difference",
-                '&' => "set intersection",
-                _ => "set symmetric difference",
-            };
-            return Err(reserved(what, pattern, index));
-        }
-        index += 1;
     }
     Ok(())
-}
-
-/// Just past the `:]` closing the POSIX class opening at `start`, or just past
-/// the `[` when nothing closes it -- an unterminated class is refused by the
-/// compile that follows, and this scan only has to stop reading it.
-fn posix_class_end(chars: &[char], start: usize) -> usize {
-    let mut index = start + 2;
-    while index + 1 < chars.len() {
-        if chars[index] == ':' && chars[index + 1] == ']' {
-            return index + 2;
-        }
-        index += 1;
-    }
-    start + 1
 }
 
 /// The refusal, in the words `re` warns with, plus what to write instead.
