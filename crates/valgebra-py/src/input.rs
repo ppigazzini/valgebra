@@ -29,7 +29,7 @@ pub(crate) enum Value<'a, 'py> {
 }
 
 impl<'py> Value<'_, 'py> {
-    /// The interpreter token, used to bind pooled objects and to materialize.
+    /// The interpreter token, which binds pooled objects and materializes.
     pub(crate) fn py(&self) -> Python<'py> {
         match self {
             Value::Py(v) => v.py(),

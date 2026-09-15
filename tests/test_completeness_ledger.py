@@ -333,11 +333,11 @@ _DECIDED = [
         id="empty:float>inf",
     ),
     pytest.param("subtype", bytes, complement(_JSON), id="bytes<=~json"),
-    # A fixpoint beside its own complement. Two occurrences of one recursive
-    # schema used to compile to two definitions, so the fold that cancels a
-    # schema against its complement compared terms and saw two; a merged
-    # validator now reuses definitions it already holds, and the law reaches a
-    # fixpoint like any other set.
+    # A fixpoint beside its own complement. A merged validator reuses the
+    # definitions it holds, so two occurrences of one recursive schema are one
+    # definition and the fold that cancels a schema against its complement
+    # compares one term against itself. The law reaches a fixpoint like any
+    # other set.
     pytest.param(
         "empty",
         intersection(_RECURSIVE, complement(_RECURSIVE)),
@@ -676,11 +676,11 @@ _DECIDED = [
         id="{a?:int}&{b?:int}=={}",
     ),
     # A subject disjoint from a meet is below that meet's complement, which is
-    # the same question `is_empty` answers about the meet -- and the two used to
-    # disagree. The rule that decides most meets empty compares the members of
-    # one intersection pairwise, and the meet this rule builds held the second
-    # operand as a nested intersection, so the tuple and the dict inside it were
-    # never compared.
+    # the same question `is_empty` answers about the meet, and the two answer
+    # alike. The rule that decides most meets empty compares the members of one
+    # intersection pairwise, so a meet holding its second operand as a nested
+    # intersection is flattened before the comparison rather than leaving the
+    # tuple and the dict inside it uncompared.
     pytest.param(
         "subtype",
         tuple[int, str],

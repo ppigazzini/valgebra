@@ -265,6 +265,69 @@ def _commented(node: object) -> list[tuple[str, object]]:
     return []
 
 
+#: Words that state what this tree was rather than what it is. Narrow on
+#: purpose: `no longer` states a rule a reader applies to a *run* -- a baseline
+#: entry that is no longer a survivor fails -- and a list that refused it would
+#: be a list nobody could keep.
+HISTORY = re.compile(
+    r"\b(previously|formerly|historically|originally|used to|at one point"
+    r"|in the past|back then|before this change|this was fixed in"
+    r"|the old behaviou?r|we had)\b",
+    re.IGNORECASE,
+)
+COMMENTED_SOURCES = frozenset({".rs", ".py", ".toml", ".yml"})
+#: Where a history word is the subject rather than the claim: the changelog is a
+#: record of releases and is read as one, and the rule has to spell the words to
+#: forbid them.
+HISTORY_EXEMPT = {
+    "CHANGELOG.md",
+    "docs/dev/12-writing.md",
+    "scripts/docs_lint.py",
+    "tests/test_docs_lint.py",
+}
+#: A line comment, in the four shapes the tree spells one. The lookbehind keeps
+#: a URL's `//` and a fragment's `#` out: both follow a character a comment
+#: marker does not.
+LINE_COMMENT = re.compile(r"(?:(?<=^)|(?<=[\s(\[{,;]))(?://+|#)[^\n]*", re.MULTILINE)
+#: A quoted run, removed before a comment marker is looked for, so a `#` or a
+#: `//` inside a string is not read as the start of one.
+QUOTED = re.compile(r'"(?:[^"\\\n]|\\.)*"' + r"|'(?:[^'\\\n]|\\.)*'")
+
+
+def comments(text: str) -> str:
+    """Read the comment lines of a source file, with code and strings removed.
+
+    A comment is prose about this tree that no page carries, and it goes stale
+    the same way -- so the rules that govern prose read it too. The quoted runs
+    go first: a `#` inside a string starts no comment, and a scan that read one
+    as prose would refuse a pattern for the words it matches.
+    """
+    # Line for line with the file, so a problem names the line a reader opens.
+    return "\n".join(
+        " ".join(LINE_COMMENT.findall(QUOTED.sub("", line)))
+        for line in text.splitlines()
+    )
+
+
+def check_history(text: str) -> list[str]:
+    """Refuse a sentence about what this tree was.
+
+    A page states the rule a reader applies. What the tree did before is the
+    changelog's business and the history's, and a sentence carrying it ages into
+    a false one: the incident it describes is fixed, the reader cannot tell
+    whether the behaviour it names is current, and every sweep that reads the
+    surface reads the sentence as a claim about today.
+    """
+    problems = []
+    for number, line in enumerate(text.splitlines(), start=1):
+        problems += [
+            f"line {number}: says {found.group(0)!r}, which states what this "
+            "tree was; state the rule a reader applies instead"
+            for found in HISTORY.finditer(line)
+        ]
+    return problems
+
+
 def check_fences(text: str) -> list[str]:
     """Refuse a code fence that carries prose where its language belongs.
 
@@ -701,6 +764,7 @@ def main() -> int:
                 if path.name == "CHANGELOG.md"
                 else check_pinned_numbers(text, numbers) + check_comparison_claims(text)
             )
+            + ([] if rel.as_posix() in HISTORY_EXEMPT else check_history(text))
         ]
     for path in referencing:
         if path.suffix == ".md":
@@ -709,10 +773,17 @@ def main() -> int:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue  # a binary or unreadable file names nothing
+        relative = path.relative_to(ROOT).as_posix()
         failures += [
-            f"{path.relative_to(ROOT)}: {problem}"
-            for problem in check_internal_reference(text)
+            f"{relative}: {problem}" for problem in check_internal_reference(text)
         ]
+        # A comment is prose about this tree, kept beside the code it describes
+        # and read by nobody who is checking pages. It states the rule a reader
+        # applies, on the same terms a page does.
+        if path.suffix in COMMENTED_SOURCES and relative not in HISTORY_EXEMPT:
+            failures += [
+                f"{relative}: {problem}" for problem in check_history(comments(text))
+            ]
     # A baseline's own comment fields are prose about this tree, held to the
     # rules that govern prose. The counts that went stale in them were the
     # counts the same file records, which is the shape the pinned-number rule
@@ -722,6 +793,7 @@ def main() -> int:
         for relative, prose in baseline_prose()
         for problem in check_pinned_numbers(prose, numbers)
         + check_internal_reference(prose)
+        + check_history(prose)
     ]
     failures += check_index("docs/dev") + check_index("docs")
     failures += check_ledger_table()

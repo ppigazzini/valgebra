@@ -259,10 +259,10 @@ fn equal(
 /// for every type whose `__eq__` and `__hash__` agree -- which is the contract
 /// Python's own dictionaries already require.
 ///
-/// A constant with no hash contributes nothing and the shape stands alone. That
-/// is the old behaviour for the one case that needed it: a validator must be
-/// usable as a key whatever it pools, and refusing to hash would be worse than
-/// a collision.
+/// A constant with no hash contributes nothing and the shape stands alone,
+/// which is what the one case needing it asks for: a validator is usable as a
+/// key whatever it pools, and refusing to hash would be worse than a
+/// collision.
 fn hash_constant<H: Hasher>(py: Python<'_>, slot: usize, pool: &[Py<PyAny>], hasher: &mut H) {
     let Some(object) = pool.get(slot) else {
         return;

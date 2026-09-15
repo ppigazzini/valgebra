@@ -230,6 +230,50 @@ def test_a_test_gated_item_does_not_hide_the_bounds_below_it() -> None:
     assert {name for name, _ in lint.BOUND.findall(read)} == {"ABOVE", "BELOW"}
 
 
+def test_a_sentence_about_what_the_tree_was_is_refused() -> None:
+    """The rule, and the line it names.
+
+    A comment is prose about this tree that no page carries: it ages the same
+    way, and a reader cannot tell whether the behaviour it describes is current.
+    """
+    assert lint.check_history("The walk previously read the element twice.")
+    assert lint.check_history("# a record used to compile to two definitions")
+    problems = lint.check_history("fine\nthis was fixed in the release before")
+    assert problems
+    assert problems[0].startswith("line 2:")
+    # The rule a reader applies to a run, which the list leaves alone.
+    assert not lint.check_history("an entry that is no longer a survivor fails")
+
+
+def test_a_comment_is_read_and_a_string_is_not() -> None:
+    """The universe of the comment sweep, in both directions.
+
+    A `#` inside a string starts no comment, and a scan that read one as prose
+    would refuse a pattern for the words it spells.
+    """
+    source = (
+        'let anchor = "https://example.invalid/#originally";\n'
+        "// the shape previously carried a hash\n"
+        'let hash = "previously";\n'
+    )
+    read = lint.comments(source)
+    assert "the shape previously carried a hash" in read
+    assert read.splitlines()[0] == "", "a URL inside a string reads as a comment"
+    assert len(read.split("\n")) == 3, "the sweep drops the line numbers"
+    assert lint.check_history(read)[0].startswith("line 2:")
+
+
+def test_every_history_exemption_names_a_file_that_spells_the_words() -> None:
+    """An exemption outlives its reason silently, so it is held to one."""
+    for relative in lint.HISTORY_EXEMPT:
+        path = ROOT / relative
+        assert path.exists(), relative
+        assert lint.check_history(path.read_text(encoding="utf-8")), (
+            f"{relative} is exempt from the history rule and carries none of "
+            "its words; the exemption has outlived its reason"
+        )
+
+
 def test_a_width_read_off_a_table_is_not_a_bound() -> None:
     """The universe is the figures somebody chose, and a width is not one.
 

@@ -77,8 +77,8 @@ def test_a_value_that_moved_the_other_way_fails() -> None:
 
 
 def test_a_raised_error_is_a_verdict_like_any_other() -> None:
-    # The walk answers `recursion_limit` on purpose, so a build that starts
-    # accepting what it used to refuse has moved membership.
+    # The walk answers `recursion_limit` on purpose, so a build that accepts
+    # what the reference refuses has moved membership.
     reference = {**MEMBERSHIP, "narrow @ one": "!ValidationError"}
     assert gate.moved_membership(reference, MEMBERSHIP) == [
         "narrow @ one: !ValidationError -> y"

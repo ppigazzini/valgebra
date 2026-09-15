@@ -91,6 +91,18 @@ tried Z" is out of date the day after it is written. The before-and-after belong
 in the commit message, which is the durable per-task record. A page states what
 is true **now**.
 
+`scripts/docs_lint.py` holds a narrow list of those words -- `previously`,
+`formerly`, `historically`, `originally`, `used to`, `at one point`, `in the
+past`, `back then`, `before this change`, `this was fixed in`, `the old
+behaviour`, `we had` -- over every tracked page, every line comment in the Rust,
+Python, TOML and YAML sources, and the comment fields of the JSON baselines. A
+comment ages exactly as a page does and is read by fewer people, which is why it
+is in the sweep. The list stops there on purpose: `no longer` states a rule a
+reader applies to a run -- a baseline entry that is no longer a survivor fails --
+and a sweep refusing it would be one nobody could keep. The changelog is a record
+of releases and is exempt, as is this page, which spells the words to forbid
+them.
+
 A measurement is the exception, and only as a rule: where a number explains why
 the code has its shape — the walk mode's discriminant order in
 [06-type-design.md](06-type-design.md) — write it as the rule a reader applies
