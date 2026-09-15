@@ -197,10 +197,6 @@ def test_the_shipped_tree_is_clean() -> None:
     assert result.returncode == 0, result.stdout
 
 
-def test_the_three_exit_codes_are_distinct() -> None:
-    assert (lint.EXIT_OK, lint.EXIT_FAIL, lint.EXIT_CANNOT_RUN) == (0, 1, 2)
-
-
 @pytest.mark.parametrize("relative", ["docs", "docs/dev"])
 def test_each_index_is_held_in_both_directions(relative: str) -> None:
     # Driven against the real sets, since the check reads a fixed location. Both

@@ -183,19 +183,6 @@ def test_a_missing_baseline_is_could_not_run(tmp_path: Path) -> None:
     assert "no core baseline" in result.stderr
 
 
-def test_the_three_exit_codes_are_distinct() -> None:
-    # The vocabulary itself: a caller can dispatch on the code, which it cannot
-    # if "could not run" and "failed" share one.
-    import importlib.util  # noqa: PLC0415
-
-    spec = importlib.util.spec_from_file_location("mutation_gate_codes", GATE)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    assert (module.EXIT_OK, module.EXIT_FAIL, module.EXIT_CANNOT_RUN) == (0, 1, 2)
-
-
 def test_a_partial_sweep_opts_out_of_the_expiry_direction(tmp_path: Path) -> None:
     # An `--in-diff` sweep never generates most of the baseline, so every
     # untouched accepted survivor is absent by construction. Without --new-only

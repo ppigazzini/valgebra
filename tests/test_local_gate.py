@@ -43,6 +43,7 @@ if TYPE_CHECKING:
 
 ROOT = Path(__file__).resolve().parent.parent
 GATE = ROOT / "scripts" / "gate.py"
+SCRIPTS = ROOT / "scripts"
 
 
 def _load_gate() -> ModuleType:
@@ -270,8 +271,48 @@ def test_a_forced_colour_variable_does_not_reach_a_step(
     assert environment.get("PATH") == os.environ.get("PATH")
 
 
-def test_the_three_exit_codes_are_distinct() -> None:
-    assert (gate.EXIT_OK, gate.EXIT_FAIL, gate.EXIT_CANNOT_RUN) == (0, 1, 2)
+#: Every script that answers in the three-code vocabulary, by the path a caller
+#: runs. Each is loaded by path rather than imported, because three of the four
+#: are scripts rather than modules of a package.
+GATE_SCRIPTS = [
+    "docs_lint.py",
+    "gate.py",
+    "compare_gate.py",
+    "mutation_gate.py",
+    "perf_gate.py",
+]
+
+
+@pytest.mark.parametrize("script", GATE_SCRIPTS)
+def test_a_gate_script_answers_in_the_three_code_vocabulary(script: str) -> None:
+    """Every gate script says the same three things with the same three codes.
+
+    `0` ran and passed, `1` ran and failed, `2` **could not run**. The third is
+    the one that has to be its own code: a gate that could not run has proven
+    nothing, and a caller that reads it as a failure reruns forever while one
+    that reads it as a pass ships on no evidence.
+
+    Held over every script at once rather than once per script, because the
+    vocabulary is shared. Four copies of this assertion each said their own
+    script uses 0, 1 and 2 and none of them said the four agree -- which is the
+    half a caller dispatching on the code depends on.
+    """
+    name = f"gate_codes_{script}"
+    spec = importlib.util.spec_from_file_location(name, SCRIPTS / script)
+    assert spec is not None, f"{script} has no spec"
+    assert spec.loader is not None, f"{script} has no loader"
+    module = importlib.util.module_from_spec(spec)
+    # Registered before it runs: a script defining a dataclass has its class
+    # read back out of `sys.modules` under its own `__module__`, and a module
+    # executed without being registered is not there to read.
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        del sys.modules[name]
+
+    codes = (module.EXIT_OK, module.EXIT_FAIL, module.EXIT_CANNOT_RUN)
+    assert codes == (0, 1, 2), f"{script} answers with {codes}"
 
 
 def test_every_merge_gate_job_is_planned_excused_or_named_unreached() -> None:

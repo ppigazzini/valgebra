@@ -248,7 +248,9 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
         ),
         nothing,
         "subset",
-        [{}, {1: "x"}, {True: "x"}, {1: "x", True: "y"}, {0: "x"}],
+        # `{1: "x", True: "y"}` is `{1: "y"}`, and ruff says so -- which is the
+        # fact the row is about, so the literal stays and the rule is answered.
+        [{}, {1: "x"}, {True: "x"}, {1: "x", True: "y"}, {0: "x"}],  # noqa: F601
     ),
     (
         "two integers are two keys, so the same shape is inhabited",
