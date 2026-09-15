@@ -13,6 +13,8 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: a sync rebuilds when a build input changes, not only when pyproject does -- internal
+
 -->
 
 ## [0.0.11] - 2026-09-15

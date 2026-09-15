@@ -15,6 +15,13 @@ appear in a workflow, or it is a build surface nothing drives.
 Held in both directions: a manifest that is neither a member nor detached fails,
 and a detached entry naming a manifest that is gone fails.
 
+The second subject here is the other way a build surface goes wrong: not a crate
+nothing compiles, but a build input nothing *notices*. uv keys a local package's
+cached build on the patterns in `[tool.uv] cache-keys`, and an input outside them
+is one a sync reinstalls the previous build over -- leaving a `.so` from one
+build beside metadata from another. So every file the wheel is built from is
+held to being covered by a pattern, and every pattern to matching something.
+
 LEDGER: every manifest is a workspace member or a named detached surface
 """
 
@@ -32,6 +39,7 @@ pytestmark = pytest.mark.repository
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = ROOT / ".github" / "workflows"
 CONTRIBUTING = ROOT / "CONTRIBUTING.md"
+PYPROJECT = ROOT / "pyproject.toml"
 
 # Manifests outside the root workspace, each with the command that builds it and
 # why it is not a member. A detached surface is a hole in every local gate, so it
@@ -108,4 +116,84 @@ def test_the_local_gate_names_every_detached_surface() -> None:
         assert entry["local"] in gate, (
             f"{path}: the contributor gate in CONTRIBUTING.md does not run "
             f"{entry['local']!r}, so a local run does not compile it"
+        )
+
+
+def _cache_key_patterns() -> list[str]:
+    """Return the `file` globs `[tool.uv] cache-keys` declares.
+
+    Read with a regex rather than parsed: `tomllib` is 3.11+ and this suite runs
+    from 3.10, which is the floor the package claims.
+    """
+    text = PYPROJECT.read_text(encoding="utf-8")
+    match = re.search(r"^cache-keys\s*=\s*\[(.*?)^\]", text, re.DOTALL | re.MULTILINE)
+    assert match is not None, (
+        "pyproject.toml declares no `[tool.uv] cache-keys`, so uv keys this "
+        "project's cached build on pyproject.toml alone and notices no Rust change"
+    )
+    return re.findall(r'file\s*=\s*"([^"]+)"', match.group(1))
+
+
+def _matches(pattern: str) -> set[str]:
+    """Return the tree's files that `pattern` reaches, as repository paths.
+
+    Expanded with `pathlib`, which is a *model* of uv's matcher and not the
+    matcher itself. That is the right side to be wrong on: the two agree on the
+    literal paths and the two glob shapes used here, and where they parted this
+    would report a real input as uncovered rather than pass an uncovered one.
+    """
+    return {
+        str(hit.relative_to(ROOT)).replace("\\", "/")
+        for hit in ROOT.glob(pattern)
+        if hit.is_file()
+    }
+
+
+def _build_inputs() -> set[str]:
+    """Every file that decides what the built extension is.
+
+    The version and the workspace shape (`Cargo.toml`), the resolved dependency
+    set (`Cargo.lock`), each member's own manifest, and the sources themselves.
+    The detached fuzz crate is deliberately absent: it is built by its own
+    command and no wheel is built from it.
+    """
+    sources = {
+        str(p.relative_to(ROOT)).replace("\\", "/")
+        for p in (ROOT / "crates").rglob("*.rs")
+        if "target" not in p.parts
+    }
+    manifests = {"Cargo.toml", "Cargo.lock", "pyproject.toml"} | _workspace_members()
+    return manifests | sources
+
+
+def test_every_build_input_is_covered_by_a_uv_cache_key() -> None:
+    inputs = _build_inputs()
+    # The glob is the detector; an empty universe would pass having found
+    # nothing to check.
+    assert len(inputs) >= 10, f"the build-input glob found only {sorted(inputs)}"
+
+    covered = set().union(*(_matches(p) for p in _cache_key_patterns()))
+    uncovered = sorted(inputs - covered)
+    assert not uncovered, (
+        f"build inputs no `[tool.uv] cache-keys` pattern reaches: {uncovered}. "
+        "uv will reinstall the previous build over a newer one when these "
+        "change, so the extension and its metadata come from different builds."
+    )
+
+
+def test_pyproject_is_named_among_the_cache_keys() -> None:
+    # Naming any key replaces uv's default rather than adding to it, so the
+    # default has to be written back out or a dependency-group edit stops
+    # invalidating the build.
+    assert "pyproject.toml" in _cache_key_patterns(), (
+        "`pyproject.toml` is uv's default cache key and declaring any key "
+        "replaces the default, so it has to be listed explicitly"
+    )
+
+
+def test_no_cache_key_pattern_is_dead() -> None:
+    # A pattern matching nothing is a typo that reads as coverage.
+    for pattern in _cache_key_patterns():
+        assert _matches(pattern), (
+            f"the cache-key pattern {pattern!r} matches no file in the tree"
         )

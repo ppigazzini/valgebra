@@ -75,6 +75,30 @@ docs = [
     "mkdocs-llmstxt>=0.5",
 ]
 
+[tool.uv]
+# What a rebuild of this project depends on. uv keys a local package's cached
+# build on `pyproject.toml` alone, and every input that decides what the
+# extension *is* lives somewhere else: the version is `[workspace.package]` in
+# the root `Cargo.toml`, the code is under `crates/`, and the dependency set is
+# `Cargo.lock`. So a sync after a Rust change reinstalled the previous build,
+# and the two halves of one install disagreed -- the `.so` a `maturin develop`
+# had just written against metadata from the build before it, which is how
+# `uv run pytest` reported the version of a release that was already cut.
+# `tests/test_version.py` is what catches that, and it can only catch it because
+# `__version__` comes from the crate rather than from the metadata being read.
+#
+# Naming any key replaces the default, so `pyproject.toml` is listed here rather
+# than inherited. The cost is a rebuild when one of these changes and uv is the
+# first command to notice; in the documented flow it is free, because
+# `uv run maturin develop` syncs before maturin runs and leaves the cache warm.
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "Cargo.lock" },
+    { file = "crates/*/Cargo.toml" },
+    { file = "crates/**/*.rs" },
+]
+
 [tool.maturin]
 python-source = "python"
 module-name = "valgebra._valgebra"

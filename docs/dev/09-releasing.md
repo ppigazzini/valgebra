@@ -9,13 +9,23 @@ order and the checks that happen outside it.
 
 `Cargo.toml`'s `[workspace.package] version` is the only declaration.
 `pyproject.toml` is `dynamic = ["version"]`, so maturin reads the crate version
-and the wheel cannot disagree with the workspace. `valgebra.__version__` reads the
-installed distribution's metadata (`python/valgebra/__init__.py`), so it reports
-the wheel a caller actually has rather than a literal in the tree.
+and the wheel cannot disagree with the workspace. `valgebra.__version__` is that
+same crate version, compiled into the extension: reading it back out of the
+installed metadata answered the same question and cost two thirds of
+`import valgebra`, so the number travels in the `.so` instead.
+
+That is what makes `tests/test_version.py` worth having. `__version__` and the
+distribution metadata are now two *different* readings of one manifest, so
+holding them equal catches an install whose halves came from different builds --
+which is a real state, because uv and maturin both write into the same venv.
+`[tool.uv] cache-keys` in `pyproject.toml` is the other half of that: it names
+the manifests and sources a rebuild depends on, so a sync after a bump rebuilds
+rather than reinstalling the build before it.
 
 Two lockfiles record the version and both must move with it: `Cargo.lock`, and
 `fuzz/Cargo.lock` — the fuzz crate is a detached workspace, so a workspace-only
-refresh leaves it naming the previous version.
+refresh leaves it naming the previous version. `uv.lock` records the project as
+an editable source with no version of its own, so it does not.
 
 ## Publishing is a dispatch, and a tag publishes nothing
 
