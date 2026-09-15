@@ -325,6 +325,13 @@ jobs:
       - name: ty type check
         if: ${{ matrix.python-version == '3.10' }}
         run: uv run ty check
+      # The whole tree is read at the newest supported release, because the
+      # suite names typing members later releases added. The shipped package is
+      # read again at the floor `requires-python` claims, which is the reading a
+      # caller on that release gets; one setting cannot answer both, so both run.
+      - name: ty type check, at the supported floor
+        if: ${{ matrix.python-version == '3.10' }}
+        run: uv run ty check python/ --python-version 3.10
       # The stub is checked against the *built* extension, so this one is not
       # runner-independent the way the two above are: it imports the module and
       # compares every signature, and a mismatch is a stub that type-checks code
