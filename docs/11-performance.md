@@ -71,15 +71,26 @@ the manifest), CPython 3.14.7 built from source with
 `CFLAGS=-march=native -mtune=native`, and **the GIL enabled**
 (`sysconfig.get_config_var("Py_GIL_DISABLED")` is `0`; the free-threaded build
 of the same version runs this work about twice as slow, so a figure measured on
-one is not comparable with the other), criterion 0.8.2 and pytest-benchmark
-5.2.3. The comparison packages are whichever versions the bench group resolves:
-`uv.lock` records them and `scripts/compare_gate.py` prints them beside the
-figures, so a version written here could only go stale.
+one is not comparable with the other). Every package version -- the two
+benchmark harnesses and the libraries compared against -- is whichever the bench
+group resolves. `uv.lock` owns them and `scripts/compare_gate.py` prints them
+beside the figures, so none is written here: a version copied into prose is
+stale the next time the lock moves, and a reader cannot tell a stale one from a
+current one.
 
-`sysconfig.get_config_var("CONFIG_ARGS")` reports that build on the machine
-these figures come from. The native tuning is the flag that matters when
-reproducing them: a stock distribution interpreter is a different binary, so a
-figure measured against one is not comparable with a figure here.
+`sysconfig.get_config_var("CONFIG_ARGS")` reports that build, and is how to
+check you are on it. The native tuning is the flag that matters when reproducing
+these numbers: a stock distribution interpreter is a different binary, and so is
+the one `uv sync` provisions for this repository, which is a
+python-build-standalone image rather than a source build. Point the bench run at
+the interpreter you mean --
+
+```bash
+uv run --python /path/to/that/python --group bench python scripts/compare_gate.py
+```
+
+-- because a figure measured against another binary is not comparable with a
+figure here.
 
 The extension is the **PGO** release build — the profile-guided, fat-LTO wheel
 the release ships:
@@ -404,10 +415,9 @@ walk past the end of its storage — but it can trust the accessor for a subclas
 that *inherits* the base's slot, which is every `NamedTuple`. Telling the two
 apart costs one type lookup per validation: on CPython 3.14 a three-field
 `NamedTuple` reads **69 ns against the 57 a plain tuple takes**, and with a
-length bound 77 against 58. Reading every subclass as a liar instead cost 100
-and 117, which is what this repository carried between the repair that made a
-lying subclass safe and the one that made an honest subclass cheap again --
-about a day, and no release.
+length bound 77 against 58. The safe alternative that does not tell them apart
+-- reading every `tuple` subclass through its own `__len__` -- reads 100 and
+117 on the same shapes, which is what the type lookup buys.
 
 **Interned keys are the fast path, and Python interns most of them for you.** A
 validator holds an interned `str` for every declared field, and a dict probe

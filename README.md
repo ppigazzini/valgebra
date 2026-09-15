@@ -338,7 +338,8 @@ uv run maturin develop  # build the Rust extension into the venv
   deliberately conservative beyond it ([foundations](docs/13-foundations.md),
   [decidability](docs/15-decidability.md), [soundness argument](docs/14-soundness.md)).
 - **A closed, irreducible algebra.** Five primitives generate everything; the
-  laws are property-tested and a law-justified simplifier exploits them.
+  laws are property-tested against membership, and a schema is *built* in the
+  lattice normal form, so `repr` shows it and `==` compares it.
 - **Check, don't parse.** `validate`/`is_valid` never copy or coerce; `ensure` is
   the explicit value-returning mode.
 - **One boundary crossing.** Tree walks, key lookups, and bound checks run in

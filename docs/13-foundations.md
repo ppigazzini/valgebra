@@ -8,9 +8,10 @@ This page records the theory valgebra rests on: what a schema *means*, why the
 combinators form a real Boolean algebra, and where the algebra decides
 relationships versus where it stays deliberately conservative. It is the
 reference behind the claims the rest of the docs make — "a closed, lawful
-lattice", "subtyping is set inclusion", "a law-justified simplifier" — so each
-is backed rather than asserted. The [soundness argument](14-soundness.md) takes the
-next step: why an accept is never wrong, node by node.
+lattice", "subtyping is set inclusion", "sound but deliberately conservative" —
+so each is backed rather than asserted. The [soundness
+argument](14-soundness.md) takes the next step: why an accept is never wrong,
+node by node.
 
 ## Schemas denote sets; validation is membership
 
@@ -45,9 +46,9 @@ either order is one member, and a schema beside its own complement folds to a
 bound. Absorption is the law construction does **not** apply: `A | (A & B)` is
 `A` only when `A` contains `A & B`, and containment is the decision procedure
 rather than a shape -- so the two are equivalent sets and two terms.
-`repr` shows that form and `==` compares it. (`simplify` was the pass that used
-to do this and is deprecated; [the algebra guide](04-algebra.md) says what it
-still does.)
+`repr` shows that form and `==` compares it. The deprecated `simplify` method
+folds nothing construction has not already folded; [the algebra
+guide](04-algebra.md) says what remains of it.
 
 ## Semantic (set-theoretic) subtyping
 
@@ -101,9 +102,10 @@ fields. They are fast, they answer the shapes a caller writes, and where no rule
 matches a pair they say so rather than guessing.
 
 The **sets** are the other reading. Each kind of value has a representation
-closed under union, intersection and complement — the integers as interval sets,
-the strings as automata, the containers as automata over letters that are
-themselves sets — so inclusion becomes one question about emptiness: `a` is
+closed under union, intersection and complement — the integers as interval
+sets, the strings and bytes as automata, the lists and tuples as automata over
+letters that are themselves sets, the sets as a powerset lattice, the dicts as a
+lattice of map atoms — so inclusion becomes one question about emptiness: `a` is
 below `b` exactly when `a` and the complement of `b` share no value. That
 decides pairs no rule about shapes reaches, and it costs about two orders of
 magnitude more than a rule, which is why it is asked second and only where the
@@ -185,10 +187,13 @@ The essential reading, in the order it maps onto valgebra:
 4. **Castagna — "Typing Records, Maps, and Structs", *ICFP* 2023.**
    [doi:10.1145/3607838](https://doi.org/10.1145/3607838). Records and maps as
    keyed-default functions.
-5. **Castagna & Lanvin — "Gradual Typing with Union and Intersection Types",
-   *PACMPL* 1(ICFP), 2017**, and **Castagna, Lanvin, Petrucciani & Siek —
-   "Gradual Typing: A New Perspective", *PACMPL* 3(POPL), 2019.** The gradual
-   dynamic type under set-theoretic connectives — why `Any` is not the top.
+5. **Castagna, Lanvin, Petrucciani & Siek — "Gradual Typing: A New
+   Perspective", *PACMPL* 3(POPL), 2019.** The gradual dynamic type under
+   set-theoretic connectives, held apart from the top and given a
+   *materialization* relation of its own. Cited because valgebra **declines**
+   it: what separates the dynamic type from the top is the consistency question,
+   and a validator has no site for one, so `Any` here is the top
+   ([above](#any-is-the-top-spelled)).
 
 A current synthesis is Castagna, "Programming with Union, Intersection, and
 Negation Types", 2024 ([arXiv:2111.03354](https://arxiv.org/abs/2111.03354)).

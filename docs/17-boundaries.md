@@ -179,8 +179,11 @@ assert complement(int).is_valid("x")
 It holds the classes an `isinstance` atom names and the callables a predicate
 runs, so pickling one would have to pickle those — a different question with a
 different answer per object. Send the **schema** instead and rebuild on the
-other side: compiling is cheap (a fifty-field record takes about eleven
-microseconds), and `repr(validator)` gives an expression that rebuilds every
+other side: compiling is cheap, and gated as such — building a fifty-field
+record from its Python spelling is one of the shapes
+`scripts/perf_gate.py --binding-build` holds to an instruction count, and
+`scripts/perf_budget.json` owns the figure. `repr(validator)` gives an
+expression that rebuilds every
 form except three: a class and a predicate, which are objects rather than
 syntax, and a **required record key whose name ends in `?`**, which the dict
 literal cannot spell because every trailing `?` there marks the key optional

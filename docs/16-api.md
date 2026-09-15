@@ -73,8 +73,9 @@ truncates with `...`. Do not parse it: it is for a person to read, and
   `intersection`.
 
 Both are ordinary validators: they compose with the combinators, compare with
-`is_subtype_of`, and appear as the reduced form the [simplifier](04-algebra.md)
-produces. `Any` is the same set and the same schema as `anything`, differing
+`is_subtype_of`, and are what the constructors fold to — `intersection(int,
+complement(int))` **is** `nothing` ([the algebra](04-algebra.md)). `Any` is the
+same set and the same schema as `anything`, differing
 only in what `repr` gives back; see
 [`Any` versus `anything`](04-algebra.md#any-versus-anything).
 
@@ -100,7 +101,7 @@ three, and which one says what went wrong:
 | Raised | When | Example |
 | --- | --- | --- |
 | `NotImplementedError` | The spec names a form with no decidable runtime membership. | `Sequence[int]`, `Mapping[str, int]`, a `TypeVar`, `Final`, `ClassVar` |
-| `NotImplementedError` | Compiling descends 128 levels without reaching a leaf. | a self-referential class, whose field type names the class |
+| `NotImplementedError` | Compiling descends one level past the construction depth bound without reaching a leaf. | a self-referential class, whose field type names the class |
 | `ValueError` | A constructed schema crosses a size bound: depth, definitions, or nodes. | growing a schema in a loop with `\|`, `union`, `intersection`, `open` |
 | `ValueError` | A marker's value cannot denote a set. | `MultipleOf(0)` |
 | `ValueError` | A `recursive` body is not contractive — its back edge is not under a structural constructor. | `recursive(lambda s: s)` |
@@ -109,9 +110,13 @@ three, and which one says what went wrong:
 The two `NotImplementedError` rows are **different bounds** that happen to share
 a class. The first is about the *form* and no depth would help it; the second is
 about *depth while compiling*, and is what a self-referential class reaches
-because its field type names the class again. The `ValueError` depth row is a
-third bound, on the schema a sequence of calls has constructed. The
-[resource limits](10-limits.md) guide covers all three sizes.
+because its field type names the class again — the frontend descends one level
+past what a constructed schema may carry, so the message names the bound and the
+schema past it is refused rather than half-built. The `ValueError` depth row is
+that construction bound itself, on the schema a sequence of calls has built, and
+`MAX_SCHEMA_DEPTH` is importable so code that sizes a schema reads it rather
+than repeating it. The [resource limits](10-limits.md) guide covers all three
+sizes.
 
 ```python
 from collections.abc import Sequence

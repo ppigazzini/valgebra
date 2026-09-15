@@ -15,7 +15,7 @@ the hot path crosses into Rust exactly once per call.
 
 | Component | Path | Owns | PyO3 |
 | --- | --- | --- | --- |
-| Core | [`crates/valgebra-core/`](crates/valgebra-core/src/ir.rs) | the schema IR, the denotation of every node, the structured `Violation` | no |
+| Core | [`crates/valgebra-core/`](crates/valgebra-core/src/ir.rs) | the schema IR and the denotation of every node, the two schema-to-schema deciders (`decision.rs` and `descr/`), and the structured `Violation` | no |
 | Bindings | [`crates/valgebra-py/`](crates/valgebra-py/src/lib.rs) | the schema frontend, the membership walk, the error and `repr` layers; built as the `_valgebra` extension | yes |
 | Package | [`python/valgebra/`](python/valgebra/__init__.py) | the importable public surface; `_valgebra` is private | — |
 
@@ -75,44 +75,84 @@ The JSON path validates the parsed document in place against the same walk, so a
 JSON document is judged exactly as `json.loads` of it would be — same decision,
 same errors.
 
+## How two schemas are compared
+
+`is_subtype_of`, `relation_to`, `is_equivalent` and `is_empty` take no value at
+all, so they run entirely in the core. Two representations answer them and both
+answer in three values — proved, refuted, or neither:
+
+- **the rules** ([`decision.rs`](crates/valgebra-core/src/decision.rs) and the
+  modules beside it) recurse over the two schema trees and apply inclusion rules
+  to their shapes;
+- **the descriptor** ([`descr/`](crates/valgebra-core/src/descr/mod.rs)) is the
+  definition rather than an optimisation of it: the value universe is
+  partitioned by `Kind`, each kind carries a representation closed under union,
+  intersection and complement, and `a <= b` is asked as `a ∧ ¬b` admitting no
+  value.
+
+The rules are asked first and the descriptor only where they *decline*, because
+building one costs about two orders of magnitude more than a rule that already
+answered. Neither can overturn the other: both are sound, so the pair gives
+whichever of them decides. The core cannot see a Python object, so a question
+about a class, a constant or a comparison operand is asked back through the
+`LeafRelations` trait, which
+[`crates/valgebra-py/src/oracle.rs`](crates/valgebra-py/src/oracle.rs)
+implements. [docs/dev/02-decision.md](docs/dev/02-decision.md) owns the detail
+and [docs/15-decidability.md](docs/15-decidability.md) the published boundary.
+
 ## The IR
 
 The schema IR is one enum, [`Schema`](crates/valgebra-core/src/ir.rs), whose
 variants are the node set:
 
-- **Atoms** — `Anything` (lattice top), `Nothing` (bottom), `Dynamic` (the gradual
-  dynamic type, distinct from the top), `NoneType`, `Bool`, `Int`, `Float`,
-  `Str`, `Bytes`, and `Literal` (a typed singleton, pooled).
+- **Atoms** — `Anything(Spelling)` (lattice top), `Nothing` (bottom), `NoneType`,
+  `Bool`, `Int`, `Float`, `Str`, `Bytes`, and `Literal` (a typed singleton,
+  pooled). There is no separate gradual node: `typing.Any` builds `Anything`
+  carrying the spelling `repr` reads, so every law and every relation sees the
+  top.
 - **Containers** — `Seq { container, shape }` carries every list and tuple form
   as a `SeqShape`: a positional `prefix` of element schemas and an optional
-  repeated `tail`; `Set` and `FrozenSet`; `KeyedMap { fields, defaults }`
-  carries dicts, records, and maps as named fields plus key-schema-keyed default
-  clauses.
+  repeated `tail`. `Coll { container, element }` carries sets and frozensets,
+  the container being the `CollKind` rather than a variant each.
+  `KeyedMap { fields, defaults }` carries dicts, records, and maps as named
+  fields plus key-schema-keyed default clauses, which are a disjunction and not
+  a precedence list.
 - **Combinators** — `Union`, `Intersection`, `Complement`: the Boolean algebra.
 - **Classes and refinement** — `Instance` (an `isinstance` check, pooled),
-  `Attrs { class_index, fields }` (an instance whose attributes satisfy field
-  schemas), `Refine { base, constraints }` (a base narrowed by bound, length, or
+  `AttrRecord { fields }` (a value whose attributes satisfy field schemas, with
+  **no class** of its own, so a dataclass is the meet `Instance(C) ∧
+  AttrRecord` and the algebra can relate either half alone),
+  `Refine { base, constraints }` (a base narrowed by bound, length, pattern, or
   predicate constraints).
 - **Recursion** — `SelfRef` / `Ref` tie the `recursive` fixpoint; the body must
   be guarded by a structural constructor so membership stays decidable.
 
-`simplify` reduces a schema by the lattice laws — flatten, dedup, identities,
-negation-normal form — and decides the complement laws and provable disjointness
-for the concrete fragment, without ever changing which values the schema admits.
-The theory this rests on is in [docs/13-foundations.md](docs/13-foundations.md).
+Every variant's doc comment states its **denotation** — the set of Python values
+it admits — and that comment is where a claim about meaning is checked. A schema
+is built in the lattice normal form, so the folds are the constructors' rather
+than a later pass's; `crates/valgebra-core/src/simplify.rs` is that pass, and it
+is deprecated. The theory is in [docs/13-foundations.md](docs/13-foundations.md)
+and, for a contributor, [docs/dev/01-schema-ir.md](docs/dev/01-schema-ir.md).
 
 ## Public surface
 
 The package re-exports everything from the top-level `valgebra` namespace:
 the `Validator` class -- `Validator(schema)` compiles a schema -- and its
 methods (`validate`, `is_valid`, `ensure`, `validate_json`, `load`,
-`is_valid_json`, the whole-schema transforms `simplify`, `open`, and `close`,
-and the set relations `is_subtype_of`, `is_equivalent`, `is_empty`); the
+`is_valid_json`, the record-openness transforms `open` and `close`, and the set
+relations `is_subtype_of`, `relation_to`, `is_equivalent`, `is_empty`); the
 combinators `union`, `intersection`, and `complement`; the `recursive` fixpoint;
-the `Regex` refinement marker; the lattice bounds `anything` and `nothing`; and
-`ValidationError`. A fixed-length list is the native `[A, B]` literal.
-Conditional fields and key cardinality are composed from the algebra (documented
-recipes), not shipped as combinators.
+the `Regex` refinement marker; the lattice bounds `anything` and `nothing`; the
+three construction limits `MAX_SCHEMA_DEPTH`, `MAX_DEFINITIONS` and
+`MAX_SCHEMA_NODES`; and `ValidationError`. `Validator.simplify` is exported too
+and is **deprecated**, removed in the next minor version. A fixed-length list is
+the native `[A, B]` literal. Conditional fields and key cardinality are composed
+from the algebra (documented recipes), not shipped as combinators.
+
+The operator surface is `obj in validator` (membership), `a | b` (union, the
+spelling typing itself uses), `==` (the normal form, kept distinct from the
+semantic `is_equivalent`) and `hash`. There is no `&` and no `~`: typing has no
+operator for intersection or complement, so valgebra invents none.
 
 ## Invariants
 

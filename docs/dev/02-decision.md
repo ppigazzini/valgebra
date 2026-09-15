@@ -78,6 +78,64 @@ schema is built in the lattice normal form, so the reduction it promises is the
 schema a caller already holds, and the folds it adds beyond the laws are
 decisions the three relations make better.
 
+## What the descriptor is made of
+
+The shape is three layers deep, and reading it in that order is what makes the
+bounds in [00-architecture.md](00-architecture.md) legible: each one belongs to
+exactly one layer.
+
+**A descriptor is twelve slots.** `Descr` in
+`crates/valgebra-core/src/descr/mod.rs` holds one per `Kind` -- eleven -- plus a
+**kindless** slot for the values no
+listed kind covers: a callable, a generator, an instance of a class deriving from
+no builtin. The slot exists so that a complement means what it says; without it
+`complement(int)` would name only the ten other kinds. Union, intersection and
+complement run slot by slot, which is the whole reason to partition first: no
+rule has to relate a list to an int, because the two never share a slot.
+
+**A slot is a union of lines.** A class and an attribute record constrain a value
+*within* its kind rather than instead of it -- a dataclass deriving from `int`
+has an integer's structure *and* a class -- so `descr/lines.rs` carries each
+slot as `⋁ᵢ (structureᵢ ∧ classesᵢ ∧ attrsᵢ)`. That is a disjunctive normal form
+*inside* one kind, over a handful of lines, rather than over all twelve slots at
+once. `descr/classes.rs` holds the class order as a **snapshot**, because the
+core cannot call `issubclass` and should not want to: `ABC.register` can change
+that relation after a schema is built, and a relation that moves is not a lattice
+to reason in. `descr/records.rs` holds the attributes as a union of always-open
+record atoms, a field's type living in `T⊥` so that optionality is membership
+rather than a flag with rules of its own.
+
+**A line's structure is one component per representation**, not one per kind, so
+two kinds that hold their values alike share one:
+
+| Component | Serves | Representation | Module |
+|---|---|---|---|
+| `Booleans` | `bool` | a two-bit subset, which is exact for a kind with two values | `descr/mod.rs` |
+| `Integers` | `int` | eventually periodic sets: an interval set per residue class, which is what holds a bound, a point *and* a step | `descr/integers.rs` |
+| `Floats` | `float` | intervals over the ordered line, plus a bit for `nan`, which sits outside the order | `descr/floats.rs` |
+| `Words` | `str`, `bytes` | a minimal deterministic automaton, canonically numbered, so two spellings of one language are one table | `descr/regular.rs` |
+| `Sequences` | `list`, `tuple` | an automaton whose transitions are guarded by value sets -- the letters are descriptors, so the component recurses through the automaton's *states* | `descr/symbolic.rs` |
+| `Sets` | `set`, `frozenset` | a union of powerset lines: a set is its members and has no order for an automaton to walk | `descr/sets.rs` |
+| `Maps` | `dict` | a union of map atoms -- finitely many named keys plus a per-kind default and a negative set | `descr/maps.rs` |
+| `Coarse` | `NoneType`, the kindless slot | every value of the kind or none, which is **exact** where the kind has one value | `descr/mod.rs` |
+
+`Component::top` is the one place that says which kind takes which
+representation, and it is the sentence to read rather than this table. Every
+listed kind has a representation that separates its values; `Coarse` survives
+only where it is exact.
+
+**What no component holds is a cycle**, which is why a recursive schema is
+lowered by unfolding its body once, with a lattice bound where the reference was
+(`UNFOLDS` in `descr/lower.rs`), and belongs to the rules past that. The other
+refusals are size: each representation has a ceiling it will not exceed, because
+a union too wide is complemented into one too *narrow*, so rounding is never the
+alternative to refusing. `descr/budget.rs` bounds the work spent reaching a
+result, which is a different quantity from the size of one.
+
+`descr/lower.rs` is the map from a term to a set, and the two live side by side
+rather than one replacing the other: the walk still decides membership, and the
+descriptor is what the algebra reasons in.
+
 ## Why every rule stays
 
 A rule earns its place by reaching a shape the descriptor refuses, or by

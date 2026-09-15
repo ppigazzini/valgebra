@@ -199,9 +199,12 @@ is opaque.
 ## Decision procedures, for widening the decided fragment
 
 **Gesbert, Genevès & Layaïda, "A Logical Approach to Deciding Semantic
-Subtyping".** **[IN PROGRESS]** — the automata engine that would decide the cases
-[02-decision.md](02-decision.md) records as conservative is not written, and the
-tag is about that engine.
+Subtyping".** **[PLANNED]** — and planned means unstarted. The paper translates
+the relation into a tree logic and decides satisfiability there, which is a
+*replacement* for `decision.rs` rather than a widening of it, so nothing in the
+tree is a partial version of it. What the citation buys today is the knowledge
+that the relation is decidable in EXPTIME, and that is a statement about the
+relation rather than a budget an implementation can be held to.
 
 **A goal memo is not the missing piece, and this page used to say it was.**
 Interning is in the tree — `crates/valgebra-core/src/ir/intern.rs` shares the
@@ -218,7 +221,7 @@ comparisons. What would reopen the question is a shape where one goal is reached
 by two rules with no cache between them, and none is in hand.
 
 **The descriptor**, the representation the two Castagna papers above give and
-Elixir's `Module.Types.Descr` implements, is **[IN PROGRESS]** in
+Elixir's `Module.Types.Descr` implements, is **[LOAD-BEARING]** in
 `crates/valgebra-core/src/descr/`. Where the procedure in `decision.rs` reads a
 schema's syntax and applies inclusion rules, the descriptor gives the *set* a
 representation closed under union, intersection and complement, so a relation is
@@ -227,11 +230,15 @@ shape a caller wrote.
 
 It is built beside the structural procedure and is the second decider a caller
 reaches: the rules answer first and this answers where they decline
-([02-decision.md](02-decision.md)). What the tag is about is *coverage* rather
-than reach — each kind's component starts *coarse* — every value of the kind, or none —
-and each step replaces one with a representation that separates its values; the
-type says which is which, so what the descriptor can and cannot see is read off
-it. Two properties hold of it that the structural IR does not have. Emptiness
+([02-decision.md](02-decision.md)). Every kind now carries a representation that
+separates its values — `Component::top` in
+[descr/mod.rs](../../crates/valgebra-core/src/descr/mod.rs) is the one place that
+says which, and it is the sentence to read rather than this one. `Coarse`, the
+all-or-nothing component, survives only for `NoneType`, where a kind with one
+value makes it exact. What the descriptor cannot hold is a *cycle*, which is why
+a recursive schema is lowered by unfolding once and belongs to the rules; and
+anything past the three bounds a build is held to. Two properties hold of it
+that the structural IR does not have. Emptiness
 over the fragment it covers is a decision rather than a conservative answer,
 with a third verdict, `Unknown`, where an atom is not a set. And equality is
 semantic: the scalar components and the word automata compare as sets, so
@@ -269,11 +276,16 @@ That page's trust base records it.
 
 ## The limit
 
-**None of these is implemented as its paper describes it.** The decision
-procedure is a sound, budget-bounded structural one that is exact on a published
-fragment; it is not the automata engine, and the interning it shares a name with
-is a table of nodes rather than a decision procedure. Where a page here says
-otherwise, the page is wrong.
+**No result here is implemented whole.** What is implemented is named per
+entry, and the shape of every gap is the same: a construction the paper gives
+over its own type language, carried out here over the fragment this IR can
+spell. The word component *is* Hosoya-Vouillon-Pierce's automaton construction,
+on the regular languages a `str` refinement denotes; the tree-automata inclusion
+their paper decides is not built, and neither is the tree-logic engine above. The
+structural procedure is sound and budget-bounded and exact on a published
+fragment, not a decision procedure for the whole relation. And the interning that
+shares a name with hash consing is a table of nodes, not a decision procedure.
+Where a page here says otherwise, the page is wrong.
 
 ### Where this tree departs from its sources
 

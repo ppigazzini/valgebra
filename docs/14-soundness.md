@@ -20,9 +20,9 @@ Write `⟦S⟧` for the set of Python values a schema `S` denotes (its
    check.
 2. **Construction preserves meaning.** The normal form a constructor builds
    denotes the set the spelling names: `⟦union(A, B)⟧ = ⟦A⟧ ∪ ⟦B⟧` however the
-   members are flattened, absorbed, ordered or folded on the way in. (`simplify`
-   was the pass that reduced a term afterwards; it is deprecated, and while it
-   remains it preserves meaning for the same reason.)
+   members are flattened, absorbed, ordered or folded on the way in. The
+   deprecated `simplify` method preserves meaning for the same reason, since
+   every fold it applies is a law of the same algebra.
 3. **Decisions are sound.** If `is_subtype_of(A, B)` is `True` then `⟦A⟧ ⊆ ⟦B⟧`;
    if `is_empty(S)` is `True` then `⟦S⟧ = ∅`. The converses are *not* claimed —
    the decision is deliberately conservative.
@@ -52,7 +52,7 @@ Complement(A)    A does not accept x            (¬: set complement)
 Refine(B, c_j)   B accepts x and every c_j      (base ∩ constraints)
 Seq(kind, r)     x is a kind whose elements     (regular language over
                  match the regex r                element denotations)
-Coll{kind, A}     every element accepts A        (homogeneous container)
+Coll{kind, A}    every element accepts A         (homogeneous container)
 KeyedMap(f, d)   fields present-and-match, and   (named fields ∩ keyed
                  every other key matches a       default clauses)
                  default clause
@@ -69,7 +69,7 @@ both.
 
 For the Boolean nodes the equivalence is the definition of the set operation, so
 the step is immediate given the hypothesis on the children. For the structural
-nodes (`Seq`, `KeyedMap`, `Set`) the walk evaluates the children exactly by
+nodes (`Seq`, `Coll`, `KeyedMap`) the walk evaluates the children exactly by
 hypothesis and combines them by the same connective the denotation uses. The
 scalar and `Instance` leaves reduce to `isinstance`, which is Python's own
 membership test for those sets, and `Literal` adds the same-type guard that keeps
@@ -131,7 +131,9 @@ is conservative, and why the docs say *closed algebra, conservative decision*.
 
 ## How the argument is mechanized
 
-The argument is checked, not just asserted, by four independent test layers:
+The argument is checked, not just asserted. Four of the suite's layers bear on
+it directly; `docs/dev/08-testing.md` in the repository owns the full list, with
+what each layer is blind to beside it.
 
 - **Denotation oracle.** Each node's `⟦S⟧` is written as a reference predicate
   over a value generator, and the walk is property-tested to agree with it — this
@@ -220,5 +222,5 @@ The soundness is relative to a small, explicit trust base:
   the layers above raise the cost of a defect surviving without bounding it.
 
 Within that base, an accept is a claim that `x ∈ ⟦S⟧`, justified node by node
-above and exercised by the four test layers — which is what "rock solid" can
+above and exercised by the layers named there — which is what "rock solid" can
 honestly mean before a machine-checked proof and outside review exist.

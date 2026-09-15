@@ -8,9 +8,12 @@ project's design rules and non-negotiable invariants live in
 ## Orientation
 
 valgebra is two Rust crates plus a Python package: the pure-Rust core
-(`crates/valgebra-core/`) holds the schema IR and the denotation of every node;
-the PyO3 bindings (`crates/valgebra-py/`) hold the schema frontend and the single
-membership walk; and `python/valgebra/` is the public surface.
+(`crates/valgebra-core/`) holds the schema IR, the denotation of every node, and
+the two schema-to-schema deciders — the structural rules in `decision.rs` and
+the set representation in `descr/`; the PyO3 bindings (`crates/valgebra-py/`)
+hold the schema frontend, the single membership walk, and the oracle the core
+asks about a Python class or constant; and `python/valgebra/` is the public
+surface.
 [ARCHITECTURE.md](ARCHITECTURE.md) maps the components and the path a value takes
 from a typing annotation through the walk to a violation; read it before a
 non-trivial change.
@@ -125,8 +128,10 @@ not exist fails.
 
 ## Testing
 
-Correctness is checked against the denotation, not against itself. The harness
-has six layers:
+Correctness is checked against the denotation, not against itself. The layers
+below are the ones a contributor runs into first;
+[docs/dev/08-testing.md](docs/dev/08-testing.md) owns the full table, with what
+each layer is blind to beside it.
 
 - **Denotation oracle.** Each node's denotation is written as a reference
   predicate over a value generator; the membership walk is property-tested to
@@ -140,12 +145,13 @@ has six layers:
   enumerated set of documented intentional differences (bool as a subtype of
   int, int and float as disjoint regions, exact-match `Literal` membership).
 - **Algebra laws as property tests.** Every claimed equivalence — associativity,
-  De Morgan, the complement laws, a simplifier rewrite — is proved with proptest
-  (Rust) and hypothesis (Python) against the membership relation, never asserted.
+  De Morgan, the complement laws, the folds construction applies — is proved
+  with proptest (Rust) and hypothesis (Python) against the membership relation,
+  never asserted.
 - **Snapshots.** Error messages and `repr` output are pinned with insta and
   syrupy so a wording change is a deliberate, reviewed diff.
-- **Coverage-guided fuzzing.** libFuzzer targets in `fuzz/` drive the simplifier
-  the decision procedures with `arbitrary`-built schemas, asserting the sound
+- **Coverage-guided fuzzing.** The libFuzzer target in `fuzz/` drives the
+  decision procedures with `arbitrary`-built schemas, asserting the sound
   invariants (no panic, the order laws). The same invariants run on the merge
   gate as structural property tests; the fuzz soak runs nightly, and its corpus
   is cached across runs and minimized after each, so the fuzzer accumulates the
@@ -156,8 +162,17 @@ has six layers:
   learns lands there rather than in the tracked seeds.
 
 Run the Rust property suites with `cargo test`; raise the example count with
-`PROPTEST_CASES=30000`. Run the Python suites with `uv run pytest`; raise it with
-`HYPOTHESIS_MAX_EXAMPLES`.
+`PROPTEST_CASES=30000`. Run the Python suites with `uv run pytest`; the example
+count there is a **profile** rather than a number, selected by
+`HYPOTHESIS_PROFILE` and registered in `tests/conftest.py`, which owns the
+budgets:
+
+```bash
+HYPOTHESIS_PROFILE=nightly uv run pytest tests/test_laws.py
+```
+
+`dev` is the default and the edit-test loop's, `ci` the wider budget that still
+finishes a merge gate, and `nightly` the deep one that hunts the long tail.
 
 ## Continuous integration
 
@@ -165,12 +180,18 @@ The `ci.yml` workflow gates every push and pull request; the aggregated `ci`
 check is green only when every job is. The jobs: Rust lint and test (Linux,
 macOS, Windows), an MSRV build at the manifest's `rust-version`, two coverage
 lanes (the core crate, and the bindings measured by instrumenting the extension
-and driving it with the Python suite against a line floor), a Python matrix from
-3.10 through 3.15 — the 3.15 prerelease lane runs without blocking, while the
-free-threaded 3.14t lane blocks merges — a differential lane that cross-checks
-membership against pydantic-core
-and jsonschema, the doc-example runner, a strict docs build, and a Linux wheel
-build. Scheduled lanes run the deep property suites, a libFuzzer soak over the
+and driving it with the Python suite against a line floor), a Python matrix that
+runs the **ends** of the supported span on every push — the floor, the current
+release, the free-threaded build and the prerelease, the last of those without
+blocking — and fills in the interpreters between them nightly, a differential
+lane that cross-checks membership against pydantic-core and jsonschema, the
+doc-example runner, a strict docs build, and a Linux wheel build. `ci.yml` owns
+the matrix and `tests/test_required_jobs.py` holds the blocking/non-blocking
+split, so neither is listed here;
+[docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md) explains why the span is
+sampled at its ends.
+
+Scheduled lanes run the deep property suites, a libFuzzer soak over the
 core, and two mutation sweeps — the core crate, and the membership walk under an
 embedded interpreter — whose survivors are ratcheted against their own committed
 baselines: a survivor the baseline does not accept fails the lane, and so does a

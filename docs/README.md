@@ -66,9 +66,10 @@ valgebra as a bare class and is not deep-checked.
 - **Schemas denote sets; validation is membership.** Subtyping is set inclusion
   and equivalence is mutual inclusion — decided soundly over a wide fragment and
   deliberately conservative beyond it. The whole model is one idea.
-- **A real Boolean algebra.** `union`, `intersection`, and `complement` compose any
-  schema into a lattice whose laws are property-tested, with a law-justified
-  [simplifier](04-algebra.md) that never changes a schema's value set.
+- **A real Boolean algebra.** `union`, `intersection`, and `complement` compose
+  any schema into a lattice whose laws are property-tested, and a schema is built
+  in the [lattice normal form](04-algebra.md): `repr` shows it and `==` compares
+  it, so no later pass is needed to reach it.
 - **Typing-first.** Standard annotations are the primary notation, read through
   the typing spec's own introspection.
 - **Check, don't parse.** `validate` and `is_valid` never copy or coerce; `ensure`
@@ -94,7 +95,7 @@ cover.
 | [01-tutorial.md](01-tutorial.md) | a guided path from a scalar schema to an inspected failure |
 | [02-quickstart.md](02-quickstart.md) | the condensed tour, for a reader who knows the domain |
 | [03-schema-language.md](03-schema-language.md) | every schema form, with its denotation as a set of values |
-| [04-algebra.md](04-algebra.md) | the Boolean lattice, and the law-justified simplifier |
+| [04-algebra.md](04-algebra.md) | the Boolean lattice, the normal form construction builds, and the composition recipes |
 | [05-refinements.md](05-refinements.md) | constraints and predicate refinements over a base schema |
 | [06-recursion.md](06-recursion.md) | the fixpoint for self-referential schemas |
 | [07-json.md](07-json.md) | parsing and validating JSON on the Rust path |

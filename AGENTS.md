@@ -40,7 +40,9 @@ zone you are changing before changing it, and fix that page in the same commit.
 | any prose at all | [docs/dev/12-writing.md](docs/dev/12-writing.md) |
 
 [docs/dev/13-glossary.md](docs/dev/13-glossary.md) defines the words this project
-uses without stopping to define them, and names four where both senses are live.
+uses without stopping to define them, and collects the ones that collide with an
+unrelated sense used nearby, where both senses are live. It owns that list;
+counting it here would be a second copy that drifts.
 
 ## Setup
 
@@ -133,9 +135,9 @@ what to do instead.
   computes internally, to what the algebra denotes.
 
 - **Prove laws, don't assert them.** Any claimed algebraic equivalence
-  (associativity, De Morgan, top/bottom identity, simplifier rewrites) ships
-  with a property test — proptest on the Rust side, hypothesis on the Python
-  side. Do not document a law without covering it.
+  (associativity, De Morgan, top/bottom identity, the folds a constructor
+  applies) ships with a property test — proptest on the Rust side, hypothesis on
+  the Python side. Do not document a law without covering it.
 
 - **Keep the hot path allocation-free and Rust-only.** `validate` and
   `is_valid` check membership of the actual object; they do not copy or coerce.

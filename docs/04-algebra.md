@@ -1,5 +1,5 @@
 ---
-description: The Boolean lattice (union, intersection, complement) and the law-justified simplifier.
+description: The Boolean lattice (union, intersection, complement), the normal form construction builds, and the recipes derived from them.
 ---
 
 # The Boolean algebra
@@ -62,8 +62,8 @@ rather than asserting it.
 The model — schemas as value-sets, subtyping as set inclusion, full union,
 intersection, and complement — is *semantic subtyping*. The
 [foundations](13-foundations.md) page records the theory and its references, and
-states where the simplifier decides relationships versus where it stays
-conservative.
+names the two readings that answer a relation — the rules and the sets — and
+where they stay conservative.
 
 ## Composition recipes
 
