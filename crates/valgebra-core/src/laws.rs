@@ -2582,7 +2582,12 @@ fn a_complement_plus_a_covering_scalar_is_the_universe() {
 enum Obj {
     None,
     Bool(bool),
-    Int(i32),
+    /// An integer, as wide as the component that represents one.
+    ///
+    /// A corpus narrower than the representation cannot reach the ends of it,
+    /// and the ends are where the lift a modulus takes stops being exact: the
+    /// subtraction it performs is the operation that leaves the range.
+    Int(i64),
     Float(f64),
     Str(&'static str),
     Bytes,
@@ -2611,7 +2616,11 @@ fn as_num(v: &Obj) -> Option<f64> {
     match v {
         // bool is an int in Python, so it orders numerically.
         Obj::Bool(b) => Some(f64::from(u8::from(*b))),
-        Obj::Int(i) => Some(f64::from(*i)),
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "the model's own comparison, which rounds as Python's float() does"
+        )]
+        Obj::Int(i) => Some(*i as f64),
         Obj::Float(f) => Some(*f),
         _ => None,
     }
@@ -2755,11 +2764,23 @@ fn sample_values() -> Vec<Obj> {
         Obj::Int(1),
         Obj::Int(2),
         Obj::Int(5),
+        Obj::Int(i64::MIN),
+        Obj::Int(i64::MIN + 1),
+        Obj::Int(i64::MAX),
         Obj::Float(1.0),
         Obj::Float(2.5),
+        Obj::Float(f64::NAN),
+        Obj::Float(9_007_199_254_740_992.0),
         Obj::Str("a"),
         Obj::Str("b"),
         Obj::Str(""),
+        // The values at the edge of a kind's universe, which is where a
+        // representation built by hand stops describing the set it names: the
+        // newline a length bound must count, the end of the integer range a
+        // residue class is lifted across, the first float that is no integer's
+        // equal, and the value outside every order.
+        Obj::Str("\n"),
+        Obj::Str("a\nb"),
         Obj::Bytes,
         Obj::List(vec![]),
         Obj::List(vec![Obj::Int(1)]),

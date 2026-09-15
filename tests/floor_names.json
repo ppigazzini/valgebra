@@ -565,6 +565,9 @@
     "dataclasses": {
       "since": "3.10"
     },
+    "datetime": {
+      "since": "3.10"
+    },
     "decimal": {
       "since": "3.10"
     },
