@@ -20,11 +20,22 @@ answer of its own, or a repair to a change not yet released.
 - fix: a class-set operator is refused rather than read as another engine's
 - fix: a set lattice charges its product like the three beside it -- internal
 - fix: a dict has one entry for an int key and its boolean
+- fix: a set is at most as long as the values its element denotes
 
 -->
 
 ### Fixed
 
+- **A set is at most as long as the values its element denotes.** A sequence
+  takes any length by repeating one element and a set does not: it holds each
+  member once, so `Annotated[set[None], MinLen(2)]` denotes no set at all. The
+  refinement was read as inhabited, and an inhabited subject is what lets a kind
+  mismatch refute an inclusion -- so `relation_to` answered `"not_subset"` for
+  `Annotated[set[None], MinLen(2)]` against `None`, asserting a value that does
+  not exist, and `is_empty` answered `False`. Both answer for the set now:
+  `is_empty` is `True` and the inclusion holds vacuously. `set[bool]` decides
+  the same way at three members, `set[int]` at any bound, and a list is
+  unchanged at every one.
 - **A dict has one entry for `1` and for `True`.** `True` hashes as `1` and
   equals it, so `{1: "a", True: "b"}` is a dict of one key -- while the
   descriptor held the two as separate slots and read a schema requiring both as

@@ -1715,15 +1715,103 @@ fn a_subject_with_no_value_is_below_a_shape_it_cannot_match() {
     assert!(unrepeating.is_equivalent(&empty_list));
 }
 
+/// A set holds each member once, so a length bound over one asks its element
+/// for that many values that differ.
+///
+/// Reading a set as a sequence -- "any length, by repeating one element" --
+/// claimed `set[None]` with `MinLen(2)` inhabited, and an inhabited subject is
+/// what lets a kind mismatch refute an inclusion: `Annotated[set[None],
+/// MinLen(2)] <= None` answered `not_subset`, which asserts a value that does
+/// not exist. The set of two `None`s is a set of one.
+#[test]
+fn a_length_bound_over_a_set_asks_its_element_for_that_many_values() {
+    let bounded = |base: Schema, min: usize| Schema::refine(base, vec![Constraint::MinLen(min)]);
+    // One value, so one member: a bound of one is met and a bound of two is not.
+    assert_eq!(
+        bounded(Schema::set(Schema::NoneType), 1).verdict(),
+        Verdict::Inhabited
+    );
+    assert_eq!(
+        bounded(Schema::set(Schema::NoneType), 2).verdict(),
+        Verdict::Empty
+    );
+    // Two values, and the bound moves through them.
+    assert_eq!(
+        bounded(Schema::frozen_set(Schema::Bool), 2).verdict(),
+        Verdict::Inhabited
+    );
+    assert_eq!(
+        bounded(Schema::frozen_set(Schema::Bool), 3).verdict(),
+        Verdict::Empty
+    );
+    // A kind with more values than any bound names supplies every bound.
+    assert_eq!(
+        bounded(Schema::set(Schema::Int), 9).verdict(),
+        Verdict::Inhabited
+    );
+    // A list repeats, so the same element and the same bound decide the other
+    // way: `[None, None]` is a list of two.
+    assert_eq!(
+        bounded(Schema::list(SeqShape::homogeneous(Schema::NoneType)), 2).verdict(),
+        Verdict::Inhabited
+    );
+    // A union may name one value twice, so its members' counts sum to an upper
+    // bound and the largest is a lower one. Neither reaches two here, and the
+    // reading declines rather than counting a value twice.
+    let two_spellings = Schema::Union(vec![Schema::NoneType, Schema::NoneType].into());
+    assert_eq!(
+        bounded(Schema::set(two_spellings), 2).verdict(),
+        Verdict::Unknown
+    );
+    // Each side of a union's bounds decides one answer. Three values at most --
+    // two booleans and `None` -- so a set of four is empty; two at least, from
+    // the widest member alone, so a set of two has members to fill it.
+    let bools_or_none = Schema::Union(vec![Schema::Bool, Schema::NoneType].into());
+    assert_eq!(
+        bounded(Schema::set(bools_or_none), 4).verdict(),
+        Verdict::Empty
+    );
+    let bools_or_nothing = Schema::Union(vec![Schema::Bool, Schema::Nothing].into());
+    assert_eq!(
+        bounded(Schema::set(bools_or_nothing), 2).verdict(),
+        Verdict::Inhabited
+    );
+    // A collection is a value of its own, and the empty one is a value whatever
+    // its element says: one member at least, and no upper bound this reads.
+    assert_eq!(
+        bounded(Schema::set(Schema::set(Schema::Int)), 1).verdict(),
+        Verdict::Inhabited
+    );
+    // An element with no value at all: the set of one is empty, while the set
+    // of none is the empty set and is not.
+    assert_eq!(
+        bounded(Schema::set(Schema::Nothing), 1).verdict(),
+        Verdict::Empty
+    );
+    assert_eq!(
+        bounded(Schema::set(Schema::Nothing), 0).verdict(),
+        Verdict::Inhabited
+    );
+    // An element this cannot count declines in both directions.
+    assert_eq!(
+        bounded(Schema::set(Schema::Instance(ClassIx::new(0))), 2).verdict(),
+        Verdict::Unknown
+    );
+    // And the inclusion the wrong answer reached: an empty subject is below
+    // every schema, vacuously.
+    assert!(bounded(Schema::set(Schema::NoneType), 2).is_subtype_of(&Schema::NoneType));
+}
+
 /// A length bound is read for the values its base has, not only for the values
 /// it cannot have.
 ///
 /// A bound is satisfiable in the abstract and still empty over its base, which
 /// is why a refinement is unknown in general. The bases a length bound is
 /// *written* for are the exception: a string and a bytes take any length, and a
-/// container takes any length by repeating one element -- so the string decides
-/// itself and the container's element decides it. That is also what closes the
-/// fixpoint whose every unfolding needs one more element.
+/// sequence takes any length by repeating one element -- so the string decides
+/// itself and the sequence's element decides it. That is also what closes the
+/// fixpoint whose every unfolding needs one more element. A set is the case
+/// below, since it repeats nothing.
 #[test]
 fn a_length_bound_over_a_repeated_element_is_decided_by_the_element() {
     let bounded = |base: Schema, min: usize| Schema::refine(base, vec![Constraint::MinLen(min)]);

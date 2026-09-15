@@ -520,12 +520,20 @@ fn refinement_verdict(
         // themselves satisfy -- which the check above has already read -- is met
         // by a value of the shortest length it admits.
         Schema::Str | Schema::Bytes => Verdict::Inhabited,
-        // A container takes any length too, and is built by repeating one
-        // element: a bound of zero is met by the empty container whatever the
-        // element admits, and a longer one by as many copies as it asks for.
+        // A container takes any length too: a bound of zero is met by the empty
+        // container whatever the element admits. Past zero the two container
+        // families part. A sequence repeats one element, so a bound of any size
+        // is met by that many copies of a single witness. A **set holds each
+        // member once**, so a bound of `n` asks the element for `n` values that
+        // differ -- `set[None]` with `MinLen(2)` denotes no set at all, and
+        // reading it as inhabited let a kind mismatch refute an inclusion that
+        // holds vacuously.
         _ => match repeated_element(base) {
             Some(_) if shortest(constraints.iter()) == 0 => Verdict::Inhabited,
-            Some(element) => element.verdict_rec(oracle, defs, visiting, budget),
+            Some(element) if repeats_a_member(base) => {
+                element.verdict_rec(oracle, defs, visiting, budget)
+            }
+            Some(element) => distinct_members(element, shortest(constraints.iter())),
             None => Verdict::Unknown,
         },
     }
@@ -584,6 +592,62 @@ fn bounded_integer_verdict(constraints: &Constraints, oracle: &dyn LeafRelations
 ///
 /// A value of such a container is any number of values of that element, which
 /// is what lets a length bound be met by building one.
+/// Whether the container admits one value more than once.
+///
+/// A list and a tuple do; a set and a frozenset hold each member once, which is
+/// what makes a length bound over one a question about the element's values
+/// rather than about the container.
+fn repeats_a_member(base: &Schema) -> bool {
+    matches!(base, Schema::Seq { .. })
+}
+
+/// Whether a set of `wanted` members of this schema exists.
+///
+/// The question is how many values the schema denotes, and it is answered from
+/// bounds rather than from a count: a schema is read as denoting at least
+/// `least` values and at most `most`, and each side decides one answer. Where
+/// the two do not reach the bound, the answer is a decline -- a union may name
+/// one value twice, so its members' counts sum to an upper bound and the
+/// largest of them is a lower one, and neither is the count.
+fn distinct_members(element: &Schema, wanted: usize) -> Verdict {
+    let (least, most) = value_count_bounds(element);
+    if most < wanted {
+        return Verdict::Empty;
+    }
+    if least >= wanted {
+        return Verdict::Inhabited;
+    }
+    Verdict::Unknown
+}
+
+/// How many values a schema denotes, as a lower and an upper bound.
+///
+/// [`usize::MAX`] stands for "more than any bound a caller writes". The pair is
+/// read in one direction each: the upper bound proves a set empty, the lower
+/// one proves it inhabited, and a schema this cannot count reports `(0, MAX)`,
+/// which proves neither.
+fn value_count_bounds(schema: &Schema) -> (usize, usize) {
+    match schema {
+        Schema::Anything(_) | Schema::Int | Schema::Float | Schema::Str | Schema::Bytes => {
+            (usize::MAX, usize::MAX)
+        }
+        Schema::Nothing => (0, 0),
+        Schema::NoneType | Schema::Literal(_) => (1, 1),
+        Schema::Bool => (2, 2),
+        // Every collection of an inhabited element is a value, and the empty
+        // one is a value whatever the element is -- so one at least, and no
+        // upper bound this reads.
+        Schema::Coll { .. } => (1, usize::MAX),
+        Schema::Union(members) => members.iter().map(value_count_bounds).fold(
+            (0, 0),
+            |(least, most), (member_least, member_most)| {
+                (least.max(member_least), most.saturating_add(member_most))
+            },
+        ),
+        _ => (0, usize::MAX),
+    }
+}
+
 fn repeated_element(base: &Schema) -> Option<&Schema> {
     match base {
         Schema::Seq { shape, .. } if shape.prefix.is_empty() => shape.tail.as_deref(),

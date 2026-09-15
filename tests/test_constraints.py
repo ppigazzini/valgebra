@@ -360,3 +360,27 @@ def test_the_lengths_a_value_can_have_still_build() -> None:
     assert Validator(Annotated[str, at.MinLen(0)]).is_valid("")
     assert Validator(Annotated[str, at.MinLen(3)]).is_valid("abc")
     assert Validator(Annotated[str, at.MaxLen(0)]).is_valid("")
+
+
+def test_a_set_of_a_narrow_element_cannot_be_longer_than_the_element() -> None:
+    """A set holds each member once, so its length bounds its element's values.
+
+    A sequence takes any length by repeating one element; a set does not, and
+    reading it as one claimed `set[None]` with `MinLen(2)` inhabited. An
+    inhabited subject is what lets a kind mismatch refute an inclusion, so the
+    relation against `None` asserted a value that does not exist.
+    """
+    two_nones = Validator(Annotated[set[None], at.MinLen(2)])
+    assert two_nones.is_empty()
+    assert two_nones.relation_to(Validator(None)) == "subset"
+    assert not Validator(Annotated[set[None], at.MinLen(1)]).is_empty()
+
+    # `bool` has two values, and the bound moves through them.
+    assert not Validator(Annotated[set[bool], at.MinLen(2)]).is_empty()
+    assert Validator(Annotated[frozenset[bool], at.MinLen(3)]).is_empty()
+
+    # A kind with more values than a bound names supplies every bound, and a
+    # list repeats, so the same element and bound decide the other way.
+    assert not Validator(Annotated[set[int], at.MinLen(9)]).is_empty()
+    assert not Validator(Annotated[list[None], at.MinLen(9)]).is_empty()
+    assert Validator(Annotated[list[None], at.MinLen(2)]).is_valid([None, None])
