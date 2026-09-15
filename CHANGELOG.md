@@ -14,8 +14,41 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a sync rebuilds when a build input changes, not only when pyproject does -- internal
+- fix: every kind's representation is the set the schema denotes
 
 -->
+
+### Fixed
+
+- **A relation answers for the set a schema denotes, at the edge of every
+  kind.** Eight readings named a set the schema does not have, and each is one
+  wrong answer a caller could see. `is_empty` reported an inhabited schema empty
+  and `is_subtype_of` reported an inclusion a value refutes, for:
+  a length bound over a `str` or `bytes`, which counted every symbol but the
+  newline; a `set` whose element kind is unhashable, whose members were cut
+  although a subclass defining `__hash__` is a legal member; an integer bound or
+  step at the end of the 64-bit range, whose residue class was read as another;
+  and a `float` bound written with an integer past 2^53, which no float equals
+  and which was rounded to one that does.
+- **A refutation stands on a value.** `relation_to` answered `"not_subset"` --
+  which asserts a value of the subject lies outside the other schema -- where no
+  such value exists: through a recursive reference the lowering had cut, for a
+  `dict[bool, V]` against a clause listing both booleans, for a `dict[int, V]`
+  against the `bool` keys it admits, for a clause whose key cannot spell a field
+  name, for a union of literals whose only missing member is `float("nan")`, for
+  a container of a meet of two unrelated classes, and for a class whose
+  metaclass answers `issubclass` by running code or by raising. Each answers
+  `"undecided"` or `"subset"` now, and `is_subtype_of` is unchanged on all of
+  them.
+- **`is_valid` and `validate` are one answer at the walk's depth bound.** A
+  homogeneous list, tuple or set of a scalar kind was admitted by the first and
+  refused by the second at the deepest level a walk reaches.
+- **A record resolves a key the way the dict does.** A `str` subclass carrying a
+  field's text was read as that field where a catch-all clause sat beside it,
+  and as an undeclared key where none did, so one value had two answers.
+- **`MultipleOf` is a remainder equal to zero**, which is what the constraint
+  documents. The check read the remainder's truthiness, which differs for a type
+  whose `__bool__` and `__eq__` disagree.
 
 ## [0.0.11] - 2026-09-15
 
