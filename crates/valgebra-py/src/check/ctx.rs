@@ -8,7 +8,6 @@
 use std::cell::{Cell, RefCell};
 
 use pyo3::prelude::*;
-use rustc_hash::FxHashSet;
 use valgebra_core::Schema;
 
 use super::index::{AttrsIndex, RecordIndex, RegexIndex, UnionIndex};
@@ -41,7 +40,7 @@ pub(crate) struct Ctx<'a> {
     /// Compiled string patterns, keyed by source pattern; the refinement walk
     /// reads it for a `Regex(...)` constraint instead of recompiling.
     pub(crate) regexes: &'a RegexIndex,
-    pub(crate) guard: &'a RefCell<FxHashSet<(usize, usize)>>,
+    pub(crate) guard: &'a RefCell<Trail>,
     /// How many walk levels are open below the entry point. Each level is a
     /// native stack frame, and [`MAX_WALK_DEPTH`] is the ceiling
     /// [`descend`](Ctx::descend) holds it under.
@@ -62,6 +61,64 @@ pub(crate) struct Ctx<'a> {
     pub(crate) mode: WalkMode,
 }
 
+/// The most levels of recursive descent allowed before a value is rejected.
+///
+/// A finite value never reaches this; the bound exists so a pathologically deep
+/// value fails with `recursion_limit` instead of overflowing the native stack.
+/// It is the height [`Trail`] refuses to grow past, which is where a walk turns
+/// a deep value into an answer rather than a crash.
+pub(crate) const MAX_RECURSION_DEPTH: usize = 128;
+
+/// The `(object id, definition index)` pairs a walk is inside, innermost last.
+///
+/// A level enters its pair before walking the definition and leaves it after,
+/// so the trail is a stack rather than a set with holes: the pair a level
+/// removes is the pair that level added, and the height is the recursion depth.
+/// Entering a pair the trail already holds is a value that contains itself, and
+/// that is the whole of the cycle test.
+///
+/// A `Vec` rather than an array of [`MAX_RECURSION_DEPTH`]: the bound is what a
+/// pathological value reaches, not what a walk holds, and an array of it would
+/// be written on every membership test including the ones that enter no
+/// reference at all. An empty `Vec` allocates for a recursive schema alone, and
+/// scanning a trail no deeper than the bound costs less than hashing a pair.
+#[derive(Default)]
+pub(crate) struct Trail(Vec<(usize, usize)>);
+
+/// What entering a reference at a value found.
+pub(crate) enum Entered {
+    /// The level is open, and [`Trail::leave`] closes it.
+    Open,
+    /// The pair is already on the trail, so the value contains itself.
+    Cycle,
+    /// The trail stands at [`MAX_RECURSION_DEPTH`], so no level was opened.
+    Full,
+}
+
+impl Trail {
+    /// Open a level for this pair, or say why none was opened.
+    ///
+    /// Nothing is pushed unless the answer is [`Entered::Open`], so a caller
+    /// leaves exactly the levels it entered and the two refusals need no
+    /// unwinding of their own.
+    pub(crate) fn enter(&mut self, key: (usize, usize)) -> Entered {
+        if self.0.contains(&key) {
+            return Entered::Cycle;
+        }
+        if self.0.len() >= MAX_RECURSION_DEPTH {
+            return Entered::Full;
+        }
+        self.0.push(key);
+        Entered::Open
+    }
+
+    /// Close the level [`enter`](Self::enter) opened.
+    pub(crate) fn leave(&mut self) {
+        let left = self.0.pop();
+        debug_assert!(left.is_some(), "a level closes a pair that was entered");
+    }
+}
+
 /// The mutable state one membership test carries: the recursion guard, the
 /// first fatal signal and the flag mirroring it, and the count of open walk
 /// levels.
@@ -73,7 +130,7 @@ pub(crate) struct Ctx<'a> {
 pub(crate) struct WalkState {
     /// `(object id, definition index)` pairs open on the current path, so a value
     /// that contains itself fails with `recursion_loop` instead of looping.
-    pub(crate) guard: RefCell<FxHashSet<(usize, usize)>>,
+    pub(crate) guard: RefCell<Trail>,
     pub(crate) fatal: RefCell<Option<PyErr>>,
     pub(crate) fatal_seen: Cell<bool>,
     pub(crate) depth: Cell<usize>,
@@ -82,7 +139,7 @@ pub(crate) struct WalkState {
 impl WalkState {
     pub(crate) fn new() -> Self {
         Self {
-            guard: RefCell::new(FxHashSet::default()),
+            guard: RefCell::new(Trail::default()),
             fatal: RefCell::new(None),
             fatal_seen: Cell::new(false),
             depth: Cell::new(0),

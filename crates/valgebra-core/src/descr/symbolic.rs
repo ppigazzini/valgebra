@@ -27,7 +27,7 @@
 use super::budget;
 use crate::verdict::Verdict;
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 
 /// The most states an automaton may hold.
 ///
@@ -592,19 +592,21 @@ impl<G: Guard> SymbolicDfa<G> {
             // its first appearance. That numbering is what puts the start
             // state's block at zero -- its signature is the first seen -- and
             // it makes the ids depend on the signatures rather than on how many
-            // splits the round made. A list rather than a map, because a
-            // signature holds guards, and a guard is ordered rather than
-            // hashed.
-            let mut seen: Vec<Signature<G>> = Vec::with_capacity(count);
+            // splits the round made.
+            //
+            // A `BTreeMap` rather than a hash map, because a signature holds
+            // guards and a guard is ordered rather than hashed; the entry it
+            // vacates takes the next id, which is the first-appearance
+            // numbering the paragraph above requires. A scan for an equal
+            // signature would give the same ids and read every kept signature
+            // per state, which is a round quadratic in the state count on a
+            // table a length bound sizes.
+            let mut seen: BTreeMap<Signature<G>, usize> = BTreeMap::new();
             let mut next: Vec<u32> = Vec::with_capacity(count);
             for state in 0..count {
                 let signature = normalised.signature(state, &block);
-                let id = if let Some(id) = seen.iter().position(|kept| *kept == signature) {
-                    id
-                } else {
-                    seen.push(signature);
-                    seen.len() - 1
-                };
+                let fresh = seen.len();
+                let id = *seen.entry(signature).or_insert(fresh);
                 next.push(u32::try_from(id).unwrap_or(0));
             }
             if next == block {
