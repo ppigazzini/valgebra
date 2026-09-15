@@ -24,8 +24,8 @@ mod violation;
 pub use decision::{LeafRelations, NoLeafRelations};
 pub use ir::{
     ClassIx, Clauses, CollKind, ConstIx, Constraint, Constraints, DefIx, DefShift, Field, Fields,
-    Guarded, MapClause, Members, Openness, OperandIx, PathSegment, PoolShift, PredIx, Schema,
-    SeqKind, SeqShape, Spelling, pruned,
+    Guarded, MapClause, Members, Openness, OperandIx, PathSegment, Polarity, PoolShift, PredIx,
+    Schema, SeqKind, SeqShape, Spelling, pruned,
 };
 pub use kind::Kind;
 pub use verdict::{Relation, Verdict};

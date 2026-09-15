@@ -1,5 +1,6 @@
 use super::{Edge, Guard, MAX_EDGES, MAX_ROW, MAX_STATES, SymbolicDfa};
 use crate::descr::integers::IntSet;
+use crate::verdict::Verdict;
 use proptest::prelude::*;
 
 /// Integer sets as guards, so the machine is exercised over a letter whose
@@ -518,5 +519,121 @@ fn a_product_past_the_state_bound_refuses() {
     assert!(
         cycle(31).intersect(&cycle(37)).is_some(),
         "31 * 37 is inside it"
+    );
+}
+
+/// A letter that can decline, which is the third answer a guard may give.
+///
+/// The machine's own emptiness is exact only where its letters are. One level
+/// up a guard is a whole descriptor, and a descriptor carrying a class the core
+/// cannot enumerate the subclasses of answers neither empty nor inhabited --
+/// so the language behind such an edge is unproved rather than reachable.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Opaque {
+    /// A letter whose emptiness is a computation.
+    Exact(IntSet),
+    /// A letter that holds a value, or does not, and cannot say which.
+    Undecided,
+}
+
+impl Guard for Opaque {
+    type Value = i64;
+
+    fn none() -> Self {
+        Opaque::Exact(IntSet::empty())
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (Opaque::Exact(a), Opaque::Exact(b)) => a.intersect(b).map(Opaque::Exact),
+            _ => Some(Opaque::Undecided),
+        }
+    }
+
+    fn join(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (Opaque::Exact(a), Opaque::Exact(b)) => a.union(b).map(Opaque::Exact),
+            _ => Some(Opaque::Undecided),
+        }
+    }
+
+    fn complement(&self) -> Self {
+        match self {
+            Opaque::Exact(set) => Opaque::Exact(IntSet::complement(set)),
+            Opaque::Undecided => Opaque::Undecided,
+        }
+    }
+
+    /// A *proof*, so an undecided letter answers `false`: it is not known empty.
+    fn is_empty(&self) -> bool {
+        matches!(self, Opaque::Exact(set) if IntSet::is_empty(set))
+    }
+
+    fn emptiness(&self) -> Verdict {
+        match self {
+            Opaque::Exact(set) if IntSet::is_empty(set) => Verdict::Empty,
+            Opaque::Exact(_) => Verdict::Inhabited,
+            Opaque::Undecided => Verdict::Unknown,
+        }
+    }
+
+    fn holds(&self, value: &i64) -> bool {
+        matches!(self, Opaque::Exact(set) if IntSet::holds(set, *value))
+    }
+}
+
+/// An accepting state reachable only through a letter that cannot say whether
+/// it holds a value leaves the language unproved, not inhabited.
+///
+/// Two walks decide it: the generous one follows every edge not proved dead, so
+/// reaching nothing proves the language empty; the certain one follows only
+/// edges proved to hold a value, so reaching an accepting state names a
+/// sequence. A state the first reaches and the second does not is behind
+/// exactly such a letter, and the answer is neither.
+#[test]
+fn an_accepting_state_behind_an_undecided_letter_is_unproved() {
+    let sink = 2;
+    let behind = |guard: Opaque| SymbolicDfa {
+        edges: vec![
+            vec![
+                Edge {
+                    guard: Some(guard),
+                    target: 1,
+                },
+                Edge {
+                    guard: None,
+                    target: sink,
+                },
+            ],
+            vec![Edge {
+                guard: None,
+                target: sink,
+            }],
+            vec![Edge {
+                guard: None,
+                target: sink,
+            }],
+        ],
+        accepting: vec![false, true, false],
+    };
+
+    assert_eq!(
+        behind(Opaque::Undecided).emptiness(),
+        Verdict::Unknown,
+        "a sequence exists only if the letter holds a value, and it cannot say"
+    );
+    assert_eq!(
+        behind(Opaque::Exact(IntSet::all())).emptiness(),
+        Verdict::Inhabited,
+        "a letter that holds a value names the sequence"
+    );
+    assert_eq!(
+        behind(Opaque::Exact(IntSet::empty())).emptiness(),
+        Verdict::Empty,
+        "a letter proved empty leads nowhere"
+    );
+    assert!(
+        !behind(Opaque::Undecided).is_empty(),
+        "unproved is not a proof of emptiness"
     );
 }

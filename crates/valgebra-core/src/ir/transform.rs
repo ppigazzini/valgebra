@@ -191,6 +191,33 @@ impl SeqShape {
     }
 }
 
+/// Which side of an inclusion a schema is read on.
+///
+/// An unfolding cuts the reference no finite representation holds, and which
+/// lattice bound it cuts to depends on the side. Named rather than spelled as a
+/// `bool`, because the two members are what the soundness of a difference turns
+/// on and a call site reading `true` says nothing about which side that is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Polarity {
+    /// The subject's side: a cut reference becomes the top, so the lowered set
+    /// is at least the one the schema denotes.
+    Widen,
+    /// The supertype's side: a cut reference becomes the bottom, so the lowered
+    /// set is at most the one the schema denotes.
+    Narrow,
+}
+
+impl Polarity {
+    /// The side a complement puts the schema under it on.
+    #[must_use]
+    pub fn flipped(self) -> Polarity {
+        match self {
+            Polarity::Widen => Polarity::Narrow,
+            Polarity::Narrow => Polarity::Widen,
+        }
+    }
+}
+
 impl Schema {
     /// This schema with its references unfolded, and the cut replaced by the
     /// bound the position makes sound.
@@ -203,28 +230,31 @@ impl Schema {
     /// can hold and an answer that still holds of the original, provided the
     /// bound is chosen for the position.
     ///
-    /// `positive` says which. In a positive position the top is the cut, so the
-    /// result denotes a superset: proving *that* empty proves the original
-    /// empty. In a negative one -- under a complement -- the bottom is the cut
-    /// and the result denotes a subset, which is what keeps a difference sound.
-    /// `Complement` is the only node that flips the polarity: every other one is
-    /// monotone in what it holds, a map clause included, since widening a clause
-    /// only makes more dicts covered by it.
+    /// [`Polarity`] says which. Widening cuts to the top, so the result denotes
+    /// a superset: proving *that* empty proves the original empty. Narrowing --
+    /// under a complement -- cuts to the bottom and the result denotes a subset,
+    /// which is what keeps a difference sound. `Complement` is the only node
+    /// that flips the polarity: every other one is monotone in what it holds, a
+    /// map clause included, since widening a clause only makes more dicts
+    /// covered by it.
+    ///
+    /// **A cut widens the difference, so only an empty one proves anything.**
+    /// An inhabited reading of a cut difference names a value of the widened set
+    /// rather than of the real one, and refutes nothing;
+    /// [`descriptor_contained_in`](crate::Schema::descriptor_contained_in)
+    /// holds that condition.
     ///
     /// A schema with no reference is returned as it stands, so the caller pays
     /// nothing for the common case.
     #[must_use]
-    pub fn unfolded(&self, definitions: &[Schema], unfolds: u32, positive: bool) -> Schema {
-        let cut = || {
-            if positive {
-                Schema::ANYTHING
-            } else {
-                Schema::Nothing
-            }
+    pub fn unfolded(&self, definitions: &[Schema], unfolds: u32, polarity: Polarity) -> Schema {
+        let cut = || match polarity {
+            Polarity::Widen => Schema::ANYTHING,
+            Polarity::Narrow => Schema::Nothing,
         };
         match self {
             Schema::Ref(index) => match definitions.get(index.get()) {
-                Some(body) if unfolds > 0 => body.unfolded(definitions, unfolds - 1, positive),
+                Some(body) if unfolds > 0 => body.unfolded(definitions, unfolds - 1, polarity),
                 // Out of unfoldings, or a reference to a definition this caller
                 // does not hold: the bound stands in for what is not read.
                 _ => cut(),
@@ -232,10 +262,12 @@ impl Schema {
             // A marker for a definition still being built. Nothing can be read
             // from it, so the bound stands in for it too.
             Schema::SelfRef(_) => cut(),
-            Schema::Complement(inner) => {
-                Schema::Complement(share_node(inner.unfolded(definitions, unfolds, !positive)))
-            }
-            other => other.map_children(&|child| child.unfolded(definitions, unfolds, positive)),
+            Schema::Complement(inner) => Schema::Complement(share_node(inner.unfolded(
+                definitions,
+                unfolds,
+                polarity.flipped(),
+            ))),
+            other => other.map_children(&|child| child.unfolded(definitions, unfolds, polarity)),
         }
     }
 

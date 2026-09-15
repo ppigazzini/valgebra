@@ -159,3 +159,37 @@ fn a_lower_bound_above_its_upper_bound_holds_nothing() {
         IntervalSet::empty()
     );
 }
+
+/// A residue class holds the values it holds at the bottom of the range.
+///
+/// `preimage` is the change of variable a modulus needs: it holds exactly the
+/// `k` whose image `offset + stride * k` lies in the span. At the bottom of the
+/// range that subtraction leaves `i64`, so the quotient is taken wide and
+/// clamped back -- and the clamp has a side. Clamping the low end to the *top*
+/// of the range gives a class holding nothing below it, which is a set neither
+/// the schema nor any other class denotes.
+#[test]
+fn a_residue_class_at_the_bottom_of_the_range_keeps_its_members() {
+    const WIDTH: i128 = 8;
+    let low = i128::from(i64::MIN);
+    let span = IntervalSet::between(Some(i64::MIN), Some(i64::MIN + 8));
+
+    for stride in [1i64, 2, 3, 5] {
+        for offset in 0..stride {
+            let lifted = span.preimage(offset, stride);
+            let centre = low / i128::from(stride);
+            for wide in (centre - 4)..=(centre + 4) {
+                let Ok(k) = i64::try_from(wide) else {
+                    continue;
+                };
+                let image = i128::from(offset) + i128::from(stride) * wide;
+                let inside = image >= low && image <= low + WIDTH;
+                assert_eq!(
+                    lifted.holds(k),
+                    inside,
+                    "k = {k} maps to {image} under stride {stride} offset {offset}"
+                );
+            }
+        }
+    }
+}

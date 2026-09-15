@@ -190,7 +190,7 @@ impl Component {
             Component::Integers(set) => exact(set.is_empty()),
             Component::Floats(set) => exact(set.is_empty()),
             Component::Words(set) => exact(set.is_empty()),
-            Component::Sequences(set) => exact(set.is_empty()),
+            Component::Sequences(set) => set.emptiness(),
             Component::Sets(set) => set.emptiness(),
             Component::Maps(set) => set.emptiness(),
         }
@@ -339,21 +339,6 @@ fn alphabet_of(kind: Kind) -> Option<Alphabet> {
         _ => None,
     }
 }
-
-/// The values a set may hold: everything but the three kinds Python cannot hash.
-///
-/// A `list`, a `set` and a `dict` are mutable and unhashable, so no set holds
-/// one. Written as the complement of those three rather than as a list of the
-/// rest, so a kind added later is hashable until someone says otherwise -- the
-/// direction that leaves a set *larger*, which declines rather than admits.
-fn hashable() -> Descr {
-    let mut unhashable = Descr::nothing();
-    for kind in [Kind::List, Kind::Set, Kind::Dict] {
-        unhashable.put(kind, Component::top(kind));
-    }
-    unhashable.complement()
-}
-
 /// Whether a kind's values are sets of values, which is what the powerset
 /// component reads.
 fn is_set(kind: Kind) -> bool {
@@ -545,6 +530,31 @@ impl Descr {
         Some(descr)
     }
 
+    /// The words of at least `least` symbols, for a word kind.
+    ///
+    /// A symbol is what the kind's alphabet counts: a code point for `str`, a
+    /// byte for `bytes`. Built by [`RegularSet::at_least`] rather than from a
+    /// pattern written here, because a bound counts every symbol a word has and
+    /// a pattern's `.` skips the newline unless it is told not to.
+    #[must_use]
+    pub fn words_at_least(least: usize, kind: Kind) -> Option<Descr> {
+        let language = RegularSet::at_least(least, alphabet_of(kind)?)?;
+        let mut descr = Descr::nothing();
+        descr.put(kind, Component::Words(language));
+        Some(descr)
+    }
+
+    /// The words of at most `most` symbols, for a word kind.
+    ///
+    /// The upper half of [`Descr::words_at_least`], on the same alphabet.
+    #[must_use]
+    pub fn words_at_most(most: usize, kind: Kind) -> Option<Descr> {
+        let language = RegularSet::at_most(most, alphabet_of(kind)?)?;
+        let mut descr = Descr::nothing();
+        descr.put(kind, Component::Words(language));
+        Some(descr)
+    }
+
     /// The one-word set, for a word kind. A `str` is its UTF-8 bytes.
     #[must_use]
     pub fn word(word: &[u8], kind: Kind) -> Option<Descr> {
@@ -620,28 +630,25 @@ impl Descr {
 
     /// The sets whose members all lie in `elements`, for a set kind.
     ///
-    /// The members are first cut down to what a set can *hold*. A set's members
-    /// are hashed, and a list, a set and a dict are not hashable, so `elements`
-    /// meets the hashable values before the powerset is taken. That is what makes
-    /// `set[list[int]]` the same set as `set[nothing]`: neither holds a list, so
-    /// both hold exactly one value, the empty set.
+    /// The members are `elements` as given. **Hashability is a property of a
+    /// value, not of its kind**, and the walk decides membership by the kind: a
+    /// `list` subclass that defines `__hash__` is a list and a legal member, so
+    /// `{L([1])}` is a value of `set[list[int]]`. Cutting the unhashable kinds
+    /// out of the members would name a set *smaller* than the schema denotes,
+    /// and a smaller set is what a proof rests on -- `set[list[int]]` would be
+    /// proved equal to `set[nothing]` while a value stands against it.
     ///
-    /// The cut is coarser than Python's rule in one place, and coarser in the
-    /// direction that declines rather than admits: a tuple is hashable only when
-    /// its elements are, and this keeps every tuple. So `set[tuple[list[int]]]`
-    /// reads as inhabited by more than the empty set when it is not, which
-    /// leaves a question undecided rather than answering it wrongly.
-    ///
-    /// `None` where the kind's values are not sets, or where a component cannot
-    /// hold the meet.
+    /// `None` where the kind's values are not sets.
     #[must_use]
     pub fn set(elements: &Descr, kind: Kind) -> Option<Descr> {
         if !is_set(kind) {
             return None;
         }
-        let members = elements.intersect(&hashable())?;
         let mut descr = Descr::nothing();
-        descr.put(kind, Component::Sets(SetLattice::of(Arc::new(members))));
+        descr.put(
+            kind,
+            Component::Sets(SetLattice::of(Arc::new(elements.clone()))),
+        );
         Some(descr)
     }
 

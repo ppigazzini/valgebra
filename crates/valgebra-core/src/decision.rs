@@ -19,7 +19,7 @@ mod records;
 use std::cell::Cell;
 
 use crate::descr::lower::{Constants, lower_unfolded};
-use crate::ir::{Constraint, DefIx, Schema, SeqShape};
+use crate::ir::{Constraint, DefIx, Polarity, Schema, SeqShape};
 use crate::kind::{Region, Regions};
 use crate::verdict::{Relation, Verdict};
 
@@ -126,24 +126,38 @@ impl Schema {
         defs: &[Schema],
     ) -> Relation {
         // The two sides are unfolded in opposite directions, which is what makes
-        // a difference over a recursive schema sound: the left grows and the
-        // right shrinks, so a difference proved empty here was empty before.
+        // a difference over a recursive schema sound *in one direction*: the
+        // left grows and the right shrinks, so a difference proved empty here
+        // was empty before.
+        //
+        // **The other direction does not carry.** `self⁺ ∧ ¬other⁻` contains
+        // the real difference and is not contained by it, so a value found in
+        // the widened reading need be no value of `self ∧ ¬other` at all, and
+        // the inhabited answer refutes nothing. Where a reference was cut, an
+        // empty difference proves the inclusion and an inhabited one is a
+        // decline.
         //
         // A side this reading cannot lower, and a difference it cannot build,
         // are declines rather than refutations: nothing about the inclusion is
         // known from a set that was never constructed.
-        let Some(mine) = lower_unfolded(self, defs, true, pool) else {
+        let cut = !defs.is_empty() && (self.has_reference() || other.has_reference());
+        let Some(mine) = lower_unfolded(self, defs, Polarity::Widen, pool) else {
             return Relation::Unknown;
         };
         if mine.emptiness() == Verdict::Empty {
             return Relation::Holds;
         }
-        let Some(theirs) = lower_unfolded(other, defs, false, pool) else {
+        let Some(theirs) = lower_unfolded(other, defs, Polarity::Narrow, pool) else {
             return Relation::Unknown;
         };
         mine.intersect(&theirs.complement())
             .map_or(Relation::Unknown, |difference| {
-                Relation::of_difference(difference.emptiness())
+                let emptiness = difference.emptiness();
+                if cut {
+                    Relation::proven(emptiness == Verdict::Empty)
+                } else {
+                    Relation::of_difference(emptiness)
+                }
             })
     }
 

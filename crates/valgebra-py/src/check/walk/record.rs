@@ -176,6 +176,29 @@ fn covered(defaults: &[MapClause], key: &Value<'_, '_>, val: &Value<'_, '_>, ctx
 /// field; or a probe raised, which is not an answer. A value that changes size
 /// under the probes is not one of those: it is answered here, as the scan
 /// answers it, because there is no reading of it left to fall back to.
+/// The field name a key resolves to, read the way the dict resolves one.
+///
+/// A key of a `str` subclass carries the text of a field name without being
+/// that field: `__hash__` and `__eq__` are the subclass's, and a dict finds a
+/// key only where both agree with the name's. Decoding the bytes and matching
+/// those would read a required field as present under a key the dict cannot
+/// find, and the two readings of one record would answer differently for the
+/// same value -- which of them runs is decided by whether a catch-all clause
+/// sits beside the field.
+///
+/// The exact `str` is every key a caller writes and costs nothing extra; the
+/// subclass pays one temporary name and the two questions the dict asks.
+fn as_field_name<'a>(key: &'a Bound<'_, PyAny>) -> Option<&'a str> {
+    let text = key.cast::<PyString>().ok()?;
+    let name = text.to_str().ok()?;
+    if text.is_exact_instance_of::<PyString>() {
+        return Some(name);
+    }
+    let plain = PyString::new(key.py(), name);
+    let resolves = text.hash().ok()? == plain.hash().ok()? && text.as_any().eq(&plain).ok()?;
+    resolves.then_some(name)
+}
+
 /// What a record's clauses say about a key it does not declare, where that can
 /// be said without reading the key and its value together.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -359,11 +382,7 @@ fn keyed_map_scan(
         // A non-string key, or a string carrying a lone surrogate (which cannot
         // equal a field name, since names are valid UTF-8 by build-time check),
         // resolves to no field and must instead be covered by a default clause.
-        let index = key
-            .cast::<PyString>()
-            .ok()
-            .and_then(|s| s.to_str().ok())
-            .and_then(&lookup);
+        let index = as_field_name(key).and_then(&lookup);
         match index.and_then(|i| fields.get(i)) {
             Some(field) => {
                 if !member(&field.schema, &Value::Py(val), &mut sub) {
@@ -653,7 +672,7 @@ pub(super) fn keyed_map_explain(
     // record that answers by count never reaches it.
     let declared: FxHashSet<&str> = fields.iter().map(|field| &*field.name).collect();
     let scan = scan_dict(dict, |key, val| {
-        if let Some(name) = key.cast::<PyString>().ok().and_then(|s| s.to_str().ok())
+        if let Some(name) = as_field_name(key)
             && declared.contains(name)
         {
             return ControlFlow::Continue(());

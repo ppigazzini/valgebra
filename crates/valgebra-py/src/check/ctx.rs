@@ -143,6 +143,18 @@ impl<'a> Ctx<'a> {
     /// The caller turns a refusal into a non-member with a `recursion_limit`
     /// violation — the same answer an over-deep value gets from the unfolding
     /// bound, because it is the same fact about the value.
+    /// Whether one more level is available, without taking it.
+    ///
+    /// The question a *leaf* loop asks. A scalar element cannot descend, so the
+    /// level it would sit at need not be held while the loop runs -- only the
+    /// refusal has to match, and [`descend`](Self::descend) refuses exactly
+    /// where this answers `false`. Holding the level instead costs the loop's
+    /// container a counter pair and a guard drop, which on a shape whose whole
+    /// check is a type test per element is a measurable share of it.
+    pub(crate) fn room_to_descend(self) -> bool {
+        self.depth.get() < MAX_WALK_DEPTH
+    }
+
     pub(crate) fn descend(self) -> Option<Descent<'a>> {
         let level = self.depth.get() + 1;
         if level > MAX_WALK_DEPTH {

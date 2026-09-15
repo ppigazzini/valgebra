@@ -477,8 +477,16 @@ fn two_sets_of_disjoint_elements_meet_in_the_empty_set() {
 
 /// The distinction row 22 asks for: a set of an unhashable element holds
 /// only the empty set, because no value of that kind can be a member.
+/// Hashability is a property of a value, not of its kind, so the members of a
+/// set are the element schema as written.
+///
+/// `class L(list): __hash__ = object.__hash__` is a list and a legal member, so
+/// `{L([1])}` is a value of `set[list[int]]`. Cutting the list kind out of the
+/// members would make that schema equal to `set[nothing]` while a value stands
+/// against it -- a set smaller than the schema denotes, which is what a subtype
+/// proof rests on.
 #[test]
-fn a_set_of_an_unhashable_element_is_the_set_of_nothing() {
+fn a_set_of_an_unhashable_kind_keeps_its_elements() {
     const NOTHING: &[Value] = &[];
     const A_LIST: &[Value] = &[Value::sequence(&[], Kind::List)];
 
@@ -488,26 +496,26 @@ fn a_set_of_an_unhashable_element_is_the_set_of_nothing() {
     let none = Descr::set(&Descr::nothing(), Kind::Set).expect("a set kind");
 
     assert!(!of_lists.is_empty(), "the empty set is still a set");
-    assert_eq!(of_lists, none);
+    assert_ne!(of_lists, none);
     assert!(of_lists.admits(Value::sequence(NOTHING, Kind::Set)));
-    assert!(!of_lists.admits(Value::sequence(A_LIST, Kind::Set)));
+    assert!(of_lists.admits(Value::sequence(A_LIST, Kind::Set)));
 }
 
-/// A frozenset is hashable and a set is not, which is the one place the two
-/// set kinds differ.
+/// The element schema reaches the members whichever set kind holds them.
 #[test]
-fn a_frozenset_is_a_member_and_a_set_is_not() {
+fn either_set_kind_holds_the_elements_it_is_given() {
     let frozen = Descr::set(&Descr::of_kind(Kind::Int), Kind::FrozenSet).expect("a set kind");
     let mutable = Descr::set(&Descr::of_kind(Kind::Int), Kind::Set).expect("a set kind");
     let none = Descr::set(&Descr::nothing(), Kind::Set).expect("a set kind");
 
-    let of_frozen = Descr::set(&frozen, Kind::Set).expect("a set kind");
-    assert!(
-        !of_frozen.is_empty(),
-        "a set of frozensets holds more than the empty set"
-    );
-    assert_ne!(of_frozen, none);
-    assert_eq!(Descr::set(&mutable, Kind::Set).expect("a set kind"), none);
+    for members in [&frozen, &mutable] {
+        let outer = Descr::set(members, Kind::Set).expect("a set kind");
+        assert!(
+            !outer.is_empty(),
+            "a set of sets holds more than the empty set"
+        );
+        assert_ne!(outer, none);
+    }
 }
 
 /// The two set kinds are separate components, so a set is never a frozenset.

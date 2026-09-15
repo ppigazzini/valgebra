@@ -122,7 +122,7 @@ pub(super) fn finite_set_below(
         Schema::Literal(index) => Some(*index),
         _ => None,
     };
-    let Some(missing) = subject.iter().find(|member| {
+    let absent = |member: &Schema| {
         index_of(member).is_none_or(|wanted| {
             supertype
                 .binary_search_by(|held| match index_of(held) {
@@ -131,8 +131,34 @@ pub(super) fn finite_set_below(
                 })
                 .is_err()
         })
-    }) else {
-        return Relation::Holds;
+    };
+    // A member the supertype does not hold refutes only where it **is a value**.
+    // A constant that does not equal itself -- `float("nan")` -- denotes the
+    // empty set, which is a subset of every set, so a union carrying one beside
+    // members the supertype does hold is still below it. Asking the oracle
+    // whether a constant is disjoint from itself is asking whether it denotes
+    // anything at all.
+    let mut missing = None;
+    let mut every_absent_member_settled = true;
+    for member in subject {
+        if !absent(member) {
+            continue;
+        }
+        match index_of(member).and_then(|index| oracle.literals_disjoint(index, index)) {
+            Some(true) => {}
+            Some(false) => {
+                missing = Some(member);
+                break;
+            }
+            None => every_absent_member_settled = false,
+        }
+    }
+    let Some(missing) = missing else {
+        return if every_absent_member_settled {
+            Relation::Holds
+        } else {
+            Relation::Unknown
+        };
     };
     // Both sides are literals by construction, so both readings are `Some`; a
     // `None` here would be this rule and `literal_constants` disagreeing about

@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use crate::ir::Polarity;
+
 use super::*;
 use std::cell::Cell;
 
@@ -1218,25 +1220,31 @@ fn unfolding_reads_the_body_then_stands_in_the_bound_the_position_makes_sound() 
     let defs = vec![Schema::Int];
     let reference = Schema::Ref(DefIx::new(0));
 
-    assert_eq!(reference.unfolded(&defs, 1, true), Schema::Int);
-    assert_eq!(reference.unfolded(&defs, 1, false), Schema::Int);
-    assert_eq!(reference.unfolded(&defs, 0, true), Schema::ANYTHING);
-    assert_eq!(reference.unfolded(&defs, 0, false), Schema::Nothing);
+    assert_eq!(reference.unfolded(&defs, 1, Polarity::Widen), Schema::Int);
+    assert_eq!(reference.unfolded(&defs, 1, Polarity::Narrow), Schema::Int);
+    assert_eq!(
+        reference.unfolded(&defs, 0, Polarity::Widen),
+        Schema::ANYTHING
+    );
+    assert_eq!(
+        reference.unfolded(&defs, 0, Polarity::Narrow),
+        Schema::Nothing
+    );
 
     // Under a complement the polarity flips, so the cut inside is the other
     // bound: `~Ref` in a positive position over-approximates as `~nothing`.
     let negated = Schema::Complement(Arc::new(reference.clone()));
     assert_eq!(
-        negated.unfolded(&defs, 0, true),
+        negated.unfolded(&defs, 0, Polarity::Widen),
         Schema::Complement(Arc::new(Schema::Nothing))
     );
     assert_eq!(
-        negated.unfolded(&defs, 0, false),
+        negated.unfolded(&defs, 0, Polarity::Narrow),
         Schema::Complement(Arc::new(Schema::ANYTHING))
     );
 
     // A schema with no reference comes back as it stands.
-    assert_eq!(Schema::Int.unfolded(&defs, 1, true), Schema::Int);
+    assert_eq!(Schema::Int.unfolded(&defs, 1, Polarity::Widen), Schema::Int);
 }
 
 /// A reference is found under every variant that holds a child, so the caller

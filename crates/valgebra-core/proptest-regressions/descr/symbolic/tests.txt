@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 212ab72811d675eb03e6df831406c31ee8577d9695df15ceeac5ca76b84e6f9c # shrinks to a = SymbolicDfa { edges: [[Edge { guard: None, target: 0 }]], accepting: [true] }

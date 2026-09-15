@@ -20,7 +20,8 @@ use super::floats::FloatSet;
 use super::maps::{KEY_KINDS, Label};
 use super::{BoolSet, Descr, integers::IntSet};
 use crate::ir::{
-    ClassIx, CollKind, ConstIx, Constraint, Field, MapClause, OperandIx, Schema, SeqKind, SeqShape,
+    ClassIx, CollKind, ConstIx, Constraint, Field, MapClause, OperandIx, Polarity, Schema, SeqKind,
+    SeqShape,
 };
 use crate::kind::Kind;
 use std::cell::Cell;
@@ -144,10 +145,10 @@ pub const UNFOLDS: u32 = 1;
 
 /// [`lower`], resolving a recursive schema's references through `definitions`.
 ///
-/// `positive` is the side the schema is read on, and it is the caller's to
+/// `polarity` is the side the schema is read on, and it is the caller's to
 /// know: unfolding grows the set on one side and shrinks it on the other, so a
 /// difference stays sound only when the two sides are unfolded in opposite
-/// directions.
+/// directions -- and only in the direction that proves it empty.
 ///
 /// # Errors
 ///
@@ -156,7 +157,7 @@ pub const UNFOLDS: u32 = 1;
 pub fn lower_unfolded(
     schema: &Schema,
     definitions: &[Schema],
-    positive: bool,
+    polarity: Polarity,
     pool: &dyn Constants,
 ) -> Option<Descr> {
     // The empty check first: it is one comparison, and it is true for every
@@ -167,7 +168,7 @@ pub fn lower_unfolded(
     if definitions.is_empty() || !schema.has_reference() {
         return lower(schema, pool);
     }
-    lower(&schema.unfolded(definitions, UNFOLDS, positive), pool)
+    lower(&schema.unfolded(definitions, UNFOLDS, polarity), pool)
 }
 
 /// What a lowering may spend, in the three quantities it can run out of.
@@ -390,7 +391,10 @@ fn key_cover(key: &Schema, pool: &dyn Constants) -> Option<(Vec<Label>, Vec<Opti
         )),
         Schema::NoneType => part(Kind::NoneType),
         Schema::Bool => part(Kind::Bool),
-        Schema::Int => part(Kind::Int),
+        // A `bool` key **is** an `int` key: `{True: 1}` is a dict whose key is
+        // an integer, and the walk admits it under `dict[int, V]`. Opening only
+        // the `Int` part would name a set smaller than the schema denotes.
+        Schema::Int => Some((Vec::new(), vec![Some(Kind::Int), Some(Kind::Bool)])),
         Schema::Float => part(Kind::Float),
         Schema::Str => part(Kind::Str),
         Schema::Bytes => part(Kind::Bytes),
@@ -535,33 +539,24 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
     // carries the *integer* zero, and it orders the floats all the same. So the
     // side a bound lands on is chosen by the **base**, not by the operand's own
     // type, and the operand is read as a number either way.
-    let as_float = |index: &OperandIx| match pool.operand(*index) {
-        Some(Operand::Float(value)) => Some(value),
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "a bound past 2^53 rounds to the nearest float, which is the \
-                      comparison Python makes for the same pair"
-        )]
-        Some(Operand::Integer(value)) => Some(value as f64),
-        _ => None,
+    //
+    // An integer operand past 2^53 has **no float equal to it**, and rounding it
+    // to the nearest one moves the boundary whichever way that rounding went --
+    // naming a set of floats the schema does not denote, in either direction. It
+    // is read against its two neighbours instead: a float is `>= n` exactly when
+    // it is at or above the smallest float above `n`, and `<= n` exactly when it
+    // is at or below the largest float below `n`. Python compares an `int` with
+    // a `float` exactly, and so does this.
+    let float_bound = |constraint: &Constraint, index: &OperandIx| {
+        float_bound(constraint, &pool.operand(*index)?)
     };
     let base_is_floats = base.within(&[Kind::Float]);
     match constraint {
         Constraint::Ge(index) | Constraint::Gt(index) if base_is_floats => {
-            let bound = as_float(index)?;
-            floats(if matches!(constraint, Constraint::Gt(_)) {
-                FloatSet::above(bound)
-            } else {
-                FloatSet::at_least(bound)
-            })
+            floats(float_bound(constraint, index)?)
         }
         Constraint::Le(index) | Constraint::Lt(index) if base_is_floats => {
-            let bound = as_float(index)?;
-            floats(if matches!(constraint, Constraint::Lt(_)) {
-                FloatSet::below(bound)
-            } else {
-                FloatSet::at_most(bound)
-            })
+            floats(float_bound(constraint, index)?)
         }
         Constraint::Ge(index) | Constraint::Gt(index) => {
             let Operand::Integer(bound) = pool.operand(*index)? else {
@@ -591,17 +586,93 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
             };
             integers(IntSet::multiple_of(step)?)
         }
-        Constraint::MinLen(least) => lengths(base, &format!(".{{{least},}}"), &|kind| {
-            Descr::sequences_at_least(*least, kind)
-        }),
-        Constraint::MaxLen(most) => lengths(base, &format!(".{{0,{most}}}"), &|kind| {
-            Descr::sequences_at_most(*most, kind)
-        }),
+        Constraint::MinLen(least) => {
+            lengths(base, &|kind| Descr::words_at_least(*least, kind), &|kind| {
+                Descr::sequences_at_least(*least, kind)
+            })
+        }
+        Constraint::MaxLen(most) => {
+            lengths(base, &|kind| Descr::words_at_most(*most, kind), &|kind| {
+                Descr::sequences_at_most(*most, kind)
+            })
+        }
         Constraint::Regex(pattern) => words(pattern, base),
         // A callback is a leaf the core cannot read, which is what makes it
         // opaque to the procedure beside this one too.
         Constraint::Predicate(_) => None,
     }
+}
+
+/// Where an integer bound falls among the floats.
+///
+/// Every integer up to 2^53 is a float. Past that a bound may have *no* float
+/// equal to it, and then the set it cuts is bounded by a neighbour rather than
+/// by the bound itself -- which is a different set from the one the nearest
+/// float would cut, in whichever direction that rounding went.
+enum Straddle {
+    /// A float equals the bound.
+    Exact(f64),
+    /// No float does; this is the smallest one above it.
+    Above(f64),
+    /// No float does; this is the largest one below it.
+    Below(f64),
+}
+
+/// Which floats an integer bound cuts between.
+///
+/// `lower` picks the side: a lower bound is answered by the smallest float above
+/// an inexact value, an upper bound by the largest below it, and both by the
+/// value itself where it is exact.
+fn straddle(value: i64, lower: bool) -> Straddle {
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "the rounding is the thing measured: its direction picks the neighbour"
+    )]
+    let nearest = value as f64;
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "an integral float inside the i64 range converts exactly"
+    )]
+    let round_trip = nearest as i128;
+    match round_trip.cmp(&i128::from(value)) {
+        core::cmp::Ordering::Equal => Straddle::Exact(nearest),
+        // The nearest float overshot, so it *is* the one above.
+        core::cmp::Ordering::Greater if lower => Straddle::Above(nearest),
+        core::cmp::Ordering::Greater => Straddle::Below(nearest.next_down()),
+        core::cmp::Ordering::Less if lower => Straddle::Above(nearest.next_up()),
+        core::cmp::Ordering::Less => Straddle::Below(nearest),
+    }
+}
+
+/// The floats a comparison bound admits, for a base that is the floats.
+///
+/// An integer operand past 2^53 has no float equal to it, and rounding it to the
+/// nearest one moves the boundary whichever way that rounding went -- naming a
+/// set of floats the schema does not denote, in either direction. It is read
+/// against its neighbours instead: a float is `>= n` exactly when it is at or
+/// above the smallest float above `n`, and `<= n` exactly when it is at or below
+/// the largest float below `n`. Strictness costs nothing there, since no float
+/// equals the bound for `>` or `<` to exclude. Python compares an `int` with a
+/// `float` exactly, and so does this.
+fn float_bound(constraint: &Constraint, operand: &Operand) -> Option<FloatSet> {
+    let lower = matches!(constraint, Constraint::Ge(_) | Constraint::Gt(_));
+    let strict = matches!(constraint, Constraint::Gt(_) | Constraint::Lt(_));
+    let value = match *operand {
+        Operand::Float(value) => Straddle::Exact(value),
+        Operand::Integer(value) => straddle(value, lower),
+        _ => return None,
+    };
+    // No float equals an inexact bound, so `>` and `>=` admit the same ones and
+    // the neighbour carries what the strictness would have.
+    Some(match value {
+        Straddle::Exact(bound) if lower && strict => FloatSet::above(bound),
+        Straddle::Exact(bound) if strict => FloatSet::below(bound),
+        Straddle::Exact(bound) | Straddle::Above(bound) if lower => FloatSet::at_least(bound),
+        Straddle::Exact(bound) | Straddle::Below(bound) => FloatSet::at_most(bound),
+        // `lower` picks the variant `straddle` returns, so the two crossed
+        // cases are unreachable and answer with the set for the side they name.
+        Straddle::Above(bound) => FloatSet::at_least(bound),
+    })
 }
 
 /// The values of the base's kinds whose length the bound admits.
@@ -620,7 +691,7 @@ fn constrained(constraint: &Constraint, base: &Descr, pool: &dyn Constants) -> O
 /// complement: a subtype proof no value supports.
 fn lengths(
     base: &Descr,
-    pattern: &str,
+    words: &dyn Fn(Kind) -> Option<Descr>,
     sequences: &dyn Fn(Kind) -> Option<Descr>,
 ) -> Option<Descr> {
     const WORDS: [Kind; 2] = [Kind::Str, Kind::Bytes];
@@ -632,7 +703,7 @@ fn lengths(
     let mut whole = Descr::nothing();
     for kind in WORDS {
         if base.reaches(kind) {
-            whole = whole.union(&Descr::pattern(pattern, kind)?)?;
+            whole = whole.union(&words(kind)?)?;
         }
     }
     for kind in SEQUENCES {

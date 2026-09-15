@@ -549,3 +549,49 @@ fn two_builtins_lay_down_layouts_that_conflict() {
         });
     });
 }
+
+#[test]
+fn a_class_relation_needs_both_sides_to_denote_a_set() {
+    // `leaf_subtype` reads the class order for a pair of `Instance` atoms, and
+    // the order answers for a class only where `isinstance` is a property of a
+    // value's type. A metaclass that computes either check breaks that on its
+    // own side alone: a hooked *superclass* holds whatever its code says, and a
+    // hooked *subject* is a set no snapshot of the order describes. So the
+    // decline is either side, not both -- reading it as both lets one hooked
+    // class through whichever position it takes.
+    Python::attach(|py| {
+        let source = "types.SimpleNamespace(\
+             plain=type('Plain', (), {}),\
+             also=type('Also', (), {}),\
+             instance_hook=type('MetaI', (type,), {'__instancecheck__': lambda self, other: True})('HookedI', (), {}),\
+             subclass_hook=type('MetaS', (type,), {'__subclasscheck__': lambda self, other: True})('HookedS', (), {}),\
+         )";
+        let built = built(py, source);
+        let slots: Vec<Py<PyAny>> = ["plain", "also", "instance_hook", "subclass_hook"]
+            .iter()
+            .map(|name| built.getattr(*name).unwrap().unbind())
+            .collect();
+        asking(py, slots, |oracle| {
+            let relate = |sub: usize, sup: usize| {
+                oracle.leaf_subtype(
+                    &Schema::Instance(ClassIx::new(sub)),
+                    &Schema::Instance(ClassIx::new(sup)),
+                )
+            };
+            assert_eq!(
+                relate(0, 1),
+                Some(false),
+                "two ordinary classes are read from the order"
+            );
+            assert_eq!(relate(0, 0), Some(true), "a class is below itself");
+            for hooked in [2, 3] {
+                assert_eq!(
+                    relate(0, hooked),
+                    None,
+                    "a hooked supertype is a set the order does not describe"
+                );
+                assert_eq!(relate(hooked, 0), None, "and so is a hooked subject");
+            }
+        });
+    });
+}
