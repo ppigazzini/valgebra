@@ -22,6 +22,7 @@ import re
 from pathlib import Path
 
 import pytest
+import tomllib
 import yaml
 
 # A repository check: it reads the workflow, which ships in no wheel.
@@ -196,36 +197,39 @@ def test_both_binding_sweeps_read_the_same_files() -> None:
     )
 
 
-def test_the_push_matrix_is_the_ends_and_the_odd_ones() -> None:
-    """What a push runs across interpreters is a decision, not a list.
+def test_every_supported_interpreter_runs_on_every_event() -> None:
+    """What a push runs across interpreters is the list the package claims.
 
-    Seven interpreters on every push is job-minutes for a change that cannot see
-    most of them: the extension is compiled against a version-specific ABI, and
-    what breaks between 3.11 and 3.12 breaks at the floor or at the current
-    release first. So a push runs the ends and the odd ones -- the supported
-    floor, the current release, the free-threaded build, the prerelease -- and
-    the interpreters between the ends run nightly.
+    The release ships a wheel built per version against a version-specific ABI,
+    so each interpreter is a separate artifact a caller installs. A lane that
+    runs only at night is a wheel nothing exercised until somebody reported it,
+    and a lane that runs on no event at all is one `requires-python` promises
+    and nothing checks.
 
-    Held here because a matrix grows by one line and nobody re-measures, and
-    because sampling the ends is only sound while the nightly covers the
-    interpreters the push leaves out.
+    Held in both directions: every version between the floor and the prerelease
+    is here, and a version added to the package's own floor-to-ceiling range has
+    to be added here too. The list is read from the matrix rather than from a
+    schedule condition, because there is no longer one to read.
     """
     text = WORKFLOW.read_text(encoding="utf-8")
-    matrix = re.search(
-        r"python-version: \$\{\{ github\.event_name == 'schedule'\s*"
-        r"&& fromJSON\('(\[[^\]]*\])'\)\s*\|\| fromJSON\('(\[[^\]]*\])'\)",
-        text,
-    )
-    assert matrix, "the python matrix is no longer split by event"
-    nightly = json.loads(matrix.group(1))
-    push = json.loads(matrix.group(2))
+    matrix = re.search(r"python-version: (\[[^\]]*\])", text)
+    assert matrix, "the python matrix is not a list"
+    versions = json.loads(matrix.group(1))
 
-    assert set(push) <= set(nightly), "a push runs an interpreter the nightly does not"
-    assert len(push) <= 4, f"the push matrix grew to {push}"
-    # The four are the ones a compiled extension can actually differ on.
-    assert {"3.10", "3.14t"} <= set(push), (
-        "the floor and the free-threaded build are the two legs a push cannot "
-        f"drop: {push}"
+    # The floor `requires-python` names, and every release up to the prerelease.
+    assert versions == [
+        "3.10",
+        "3.11",
+        "3.12",
+        "3.13",
+        "3.14",
+        "3.14t",
+        "3.15",
+    ], f"the matrix is {versions}"
+
+    floor = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    claimed = floor["project"]["requires-python"].removeprefix(">=")
+    assert versions[0] == claimed, (
+        f"the matrix starts at {versions[0]} and the package claims {claimed}; "
+        "the floor a caller installs on is the floor a lane runs"
     )
-    # And the nightly keeps the ones the push gave up, or they run nowhere.
-    assert set(nightly) - set(push), "the nightly runs nothing extra"
