@@ -118,12 +118,19 @@ uv run maturin build --release       -i .venv/bin/python --out plain
 ```
 
 Measured that way on one box, best of nine and repeated three times, the
-direction is not one way. A `list[int]` of ten thousand and the JSON document
-come out ahead; the accepting walk over a fifty-field record comes out
-**behind**, by about a quarter. An instruction count agrees with the wall clock,
-and re-weighting the training workload toward accepting values recovers only a
-part of it. The shapes PGO serves worst are the ones that run a container's full
-element loop; the ones it serves best exit early.
+direction is not one way. A `list[int]` of ten thousand comes out ahead by about
+a third and the JSON document by about a fifth; the accepting walk over a
+fifty-field record comes out **behind**, by about a fifth. An instruction count
+agrees with the wall clock, and re-weighting the training workload toward
+accepting values recovers only a part of it.
+
+The split is not container against scalar, and it is worth saying so because the
+obvious reading is the wrong one: the ten-thousand element list runs a
+container's whole element loop and is the shape PGO serves *best*. What the two
+winners share is one hot loop over one element type, which is what a profile can
+lay out straight. The record walk is the other shape: fifty key lookups, each
+dispatching on the field's own schema, so the profile has many warm paths and no
+hot one, and laying them out costs the branches it does not predict.
 
 That is one microarchitecture and one interpreter, and the release lane builds
 on five targets none of which is this one, so it is a reason to measure your own
