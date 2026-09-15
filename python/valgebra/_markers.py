@@ -18,12 +18,30 @@ class Regex:
     Rust path (a linear-time engine), so a pattern check stays on the validation
     fast path rather than crossing into Python like a predicate. A bare
     `re.Pattern` (from `re.compile`) is accepted as metadata too.
+
+    Immutable, because it is hashable: a marker whose `pattern` can be rebound
+    after it is written into an `Annotated` is one whose hash changes while a
+    schema holds it. Written out rather than taken from `dataclasses`, and
+    annotated without `typing`, because this module is on the import path of
+    every program that imports the package and both cost it modules --
+    `tests/test_version.py` holds the count.
     """
 
     __slots__ = ("pattern",)
 
+    pattern: str
+
     def __init__(self, pattern: str) -> None:
-        self.pattern = pattern
+        object.__setattr__(self, "pattern", pattern)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError(self._immutable())
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError(self._immutable())
+
+    def _immutable(self) -> str:
+        return f"{type(self).__name__} is immutable"
 
     def __repr__(self) -> str:
         return f"Regex({self.pattern!r})"

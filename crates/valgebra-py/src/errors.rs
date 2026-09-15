@@ -116,6 +116,8 @@ pub(crate) fn shorten(text: String, max_chars: usize) -> String {
     format!("{head}...")
 }
 
+/// `text` cut to `max_chars`, for a caller that holds a borrow rather than a
+/// `String`.
 pub(crate) fn truncate(text: &str, max_chars: usize) -> String {
     shorten(text.to_owned(), max_chars)
 }
@@ -131,7 +133,7 @@ pub(crate) fn json_invalid_error(py: Python<'_>, description: &str) -> PyErr {
         code: "json_invalid",
         path: Vec::new(),
         expected: "valid JSON".to_owned(),
-        value_summary: truncate(description, 80),
+        value_summary: truncate(description, SUMMARY_CHARS),
     };
     into_pyerr(py, vec![violation])
 }
@@ -298,9 +300,6 @@ pub(crate) fn validation_error_reduce<'py>(
         let _ = instance.getattr(name)?;
     }
     let _ = instance.delattr(intern!(instance.py(), "_failures"));
-    instance
-        .get_type()
-        .getattr(intern!(instance.py(), "__mro__"))?;
     let base = instance.py().get_type::<pyo3::exceptions::PyException>();
     base.getattr(intern!(instance.py(), "__reduce__"))?
         .call1((instance,))
