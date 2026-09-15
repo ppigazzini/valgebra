@@ -48,8 +48,11 @@ dev = [
     "syrupy>=6.0.0",
     "ty>=0.0.80",
 ]
-# Benchmark-only tools: the wall-clock harness and the external comparison
-# points. They are never runtime dependencies of valgebra.
+# The wall-clock harness and the external comparison points: the libraries the
+# benchmarks time valgebra against, and the same libraries the boundary suite
+# asks where each draws the line between a value it accepts and one it does
+# not. Never runtime dependencies of valgebra, and every reader of them skips
+# when the group is absent.
 bench = [
     "pytest-benchmark>=5.3.0",
     "pydantic>=2.13.5",
@@ -201,6 +204,16 @@ show_missing = true
 exclude_also = ["if TYPE_CHECKING:"]
 
 [tool.ty.environment]
+# The newest interpreter the package supports, because the suite is what this
+# setting governs: `tests/` names `typing.Unpack`, `ReadOnly`, `TypeVarTuple`
+# and `Required` to check that the frontend reads each, and those are members
+# releases after the floor added.
+#
+# The floor is checked too, and separately: `ty check python/ --python-version
+# 3.10` reads the shipped package alone at the oldest release `requires-python`
+# claims. Both run in the type lane, because one setting cannot answer both
+# questions -- the newest release accepts a construct the floor cannot import,
+# and the floor rejects the names the suite exists to exercise.
 python-version = "3.14"
 
 [tool.ty.src]
