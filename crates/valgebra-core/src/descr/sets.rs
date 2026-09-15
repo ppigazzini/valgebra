@@ -22,6 +22,7 @@
 //! no subtracted powerset is therefore always inhabited, which the rule gives
 //! for free -- there is no `j` to find.
 
+use super::budget;
 use super::symbolic::Guard;
 use super::values::Values;
 use crate::verdict::Verdict;
@@ -137,7 +138,12 @@ fn product<G: Guard>(left: &[Line<G>], right: &[Line<G>]) -> Option<Vec<Line<G>>
     let mut lines = Vec::new();
     for mine in left {
         for theirs in right {
-            if lines.len() >= MAX_LINES {
+            // The bound says how wide the result may be; the budget says how
+            // much reaching one may cost, and a product is the step that
+            // multiplies. The three sibling lattices charge here and this is
+            // the fourth, so a build that has spent its allowance refuses in
+            // every one of them rather than in three.
+            if lines.len() >= MAX_LINES || !budget::spend() {
                 return None;
             }
             let mut minus = mine.minus.clone();

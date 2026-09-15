@@ -1,6 +1,24 @@
 use super::{MAX_LINES, SetLattice};
+use crate::descr::budget;
 use crate::descr::integers::IntSet;
 use proptest::prelude::*;
+
+/// A meet past the build's allowance refuses, and the same meet succeeds
+/// under one that covers it.
+///
+/// The fourth of the four polarity lattices to be held to this, and the one
+/// that was not charging: the bound above says how wide a result may be, and
+/// the allowance says what reaching one may cost. A product is where a build
+/// multiplies, so a lattice whose product does not charge is one a caller can
+/// spend unbounded time in after every other lattice has refused.
+#[test]
+fn a_meet_past_the_allowance_refuses() {
+    let x = SetLattice::of(IntSet::just(1));
+    let y = SetLattice::of(IntSet::just(2));
+
+    assert!(budget::under(0, || x.intersect(&y)).is_none());
+    assert!(budget::under(64, || x.intersect(&y)).is_some());
+}
 
 /// The member sets a law is checked over.
 ///
