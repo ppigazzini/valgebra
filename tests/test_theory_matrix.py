@@ -247,6 +247,28 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
         "subset",
         [{}, {1: "x"}, {"a": 1}, {1: "x", 2: "y"}],
     ),
+    # -- a word kind's universe is the words the kind can hold ---------------
+    (
+        "every string matches a pattern that matches everything",
+        str,
+        union(Annotated[str, Regex(r"[\s\S]*")], int),
+        "subset",
+        ["", "a", "\n", "\u00e9", "\U0001f600", 1],
+    ),
+    (
+        "a string kind and a pattern over it have the same universe",
+        intersection(str, complement(Annotated[str, Regex("(?s:.)*")])),
+        nothing,
+        "subset",
+        ["", "a", "\n", "\u00e9", "\U0001f600"],
+    ),
+    (
+        "bytes keeps the wider universe a str does not have",
+        bytes,
+        complement(str),
+        "subset",
+        [b"", b"a", b"\xff", "a", ""],
+    ),
     # -- the open world, inside a container ----------------------------------
     (
         "a meet of two unrelated classes has no value to refute with",

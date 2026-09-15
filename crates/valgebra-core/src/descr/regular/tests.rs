@@ -67,7 +67,7 @@ fn language(pattern: &str) -> RegularSet {
 fn regular_set() -> impl Strategy<Value = RegularSet> {
     let leaf = prop_oneof![
         Just(RegularSet::empty()),
-        Just(RegularSet::all()),
+        Just(RegularSet::all(Alphabet::Bytes)),
         Just(language("a")),
         Just(language("b")),
         Just(language("ab?")),
@@ -79,8 +79,9 @@ fn regular_set() -> impl Strategy<Value = RegularSet> {
     ];
     leaf.prop_recursive(3, 12, 2, |inner| {
         prop_oneof![
-            (inner.clone(), inner.clone())
-                .prop_map(|(a, b)| a.union(&b).unwrap_or_else(RegularSet::all)),
+            (inner.clone(), inner.clone()).prop_map(|(a, b)| a
+                .union(&b)
+                .unwrap_or_else(|| RegularSet::all(Alphabet::Bytes))),
             (inner.clone(), inner.clone())
                 .prop_map(|(a, b)| a.intersect(&b).unwrap_or_else(RegularSet::empty)),
             inner.prop_map(|a| a.complement()),
@@ -147,7 +148,7 @@ proptest! {
             a.intersect(&a.complement())
                 .is_some_and(|met| met.is_empty())
         );
-        prop_assert_eq!(a.union(&a.complement()), Some(RegularSet::all()));
+        prop_assert_eq!(a.union(&a.complement()), Some(RegularSet::all(Alphabet::Bytes)));
         prop_assert_eq!(&a.complement().complement(), &a);
         prop_assert_eq!(
             a.union(&b).map(|set| set.complement()),
@@ -334,8 +335,11 @@ fn an_unbuildable_or_oversized_pattern_is_refused() {
 fn the_empty_language_and_the_empty_word_are_different_sets() {
     assert!(RegularSet::empty().is_empty());
     assert!(!RegularSet::empty().holds(b""));
-    assert!(!RegularSet::all().is_empty());
-    assert!(RegularSet::all().holds(b"") && RegularSet::all().holds(b"anything"));
+    assert!(!RegularSet::all(Alphabet::Bytes).is_empty());
+    assert!(
+        RegularSet::all(Alphabet::Bytes).holds(b"")
+            && RegularSet::all(Alphabet::Bytes).holds(b"anything")
+    );
 
     let just_empty_word = RegularSet::word(b"");
     assert!(!just_empty_word.is_empty());
@@ -343,6 +347,78 @@ fn the_empty_language_and_the_empty_word_are_different_sets() {
     assert!(!just_empty_word.holds(b"a"));
     assert_eq!(just_empty_word, language(""));
 
-    assert_eq!(RegularSet::empty().complement(), RegularSet::all());
-    assert_eq!(RegularSet::all().complement(), RegularSet::empty());
+    assert_eq!(
+        RegularSet::empty().complement(),
+        RegularSet::all(Alphabet::Bytes)
+    );
+    assert_eq!(
+        RegularSet::all(Alphabet::Bytes).complement(),
+        RegularSet::empty()
+    );
+}
+
+/// The `str` kind's universe is the words a `str` can hold, and no others.
+///
+/// Every byte string is a `bytes`; only the valid UTF-8 ones are a `str`. The
+/// difference is the whole of what a `str` complement must not contain, so the
+/// acceptor is held to the encoding's own edges: the four sequence lengths, and
+/// each of the four ways a byte string fails to be one.
+#[test]
+fn the_text_universe_is_the_utf8_words() {
+    let text = RegularSet::all(Alphabet::Text);
+    for word in [
+        "".as_bytes(),
+        "a".as_bytes(),
+        "\u{e9}".as_bytes(),
+        "\u{20ac}".as_bytes(),
+        "\u{1f600}".as_bytes(),
+        "a\u{e9}\u{1f600}".as_bytes(),
+        "\u{10ffff}".as_bytes(),
+    ] {
+        assert!(text.holds(word), "a str's bytes: {word:?}");
+    }
+    for word in [
+        b"\xff".as_slice(),
+        b"\x80",
+        b"\xc0\x80",
+        b"\xc1\xbf",
+        b"\xe0\x80\x80",
+        b"\xed\xa0\x80",
+        b"\xf0\x80\x80\x80",
+        b"\xf4\x90\x80\x80",
+        b"\xf5\x80\x80\x80",
+        b"\xc2",
+        b"a\xc2",
+    ] {
+        assert!(!text.holds(word), "not a str's bytes: {word:?}");
+    }
+    assert!(RegularSet::all(Alphabet::Bytes).holds(b"\xff"));
+}
+
+/// A complement cut to the text universe holds no word outside the encoding.
+///
+/// [`RegularSet::complement`] is the flip over every byte string, because a
+/// `RegularSet` carries no alphabet. The cut belongs to the caller that knows
+/// the kind, which for `str` is `descr/lines.rs`; this is the composition it
+/// performs.
+#[test]
+fn a_text_complement_cut_to_its_kind_holds_only_str_words() {
+    let letter = RegularSet::pattern("a", Alphabet::Text).expect("a pattern");
+    let universe = RegularSet::all(Alphabet::Text);
+    let outside = universe
+        .intersect(&letter.complement())
+        .expect("a product of two small tables");
+
+    assert!(outside.holds("b".as_bytes()));
+    assert!(!outside.holds("a".as_bytes()));
+    assert!(!outside.holds(b"\xff"), "an invalid word is in no str set");
+    assert!(
+        letter.complement().holds(b"\xff"),
+        "the uncut flip is the one over every byte string"
+    );
+    assert_eq!(
+        letter.union(&outside),
+        Some(universe),
+        "the two halves are the kind"
+    );
 }

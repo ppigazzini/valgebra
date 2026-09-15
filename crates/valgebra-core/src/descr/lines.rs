@@ -109,14 +109,31 @@ impl Line {
     /// `¬(s ∧ o)` is `¬s ∨ ¬o`: either the structure fails, or it holds and the
     /// object constraints do not. Two lines, which is why a complement doubles
     /// the count rather than exploding it.
-    fn complement(&self) -> [Line; 2] {
-        [
-            Line::everything(self.structure.complement()),
+    ///
+    /// **Both halves are taken within the kind**, which `whole` names. A
+    /// representation does not always say which kind it serves -- one automaton
+    /// carries the `str` words and the `bytes` ones -- and their universes are
+    /// not the same set: every byte string is a `bytes` and only the valid UTF-8
+    /// ones are a `str`. Complementing the structure alone leaves the rest in a
+    /// `str`'s complement, where no value of the kind lives.
+    ///
+    /// `None` past a component's own bound, which the caller turns into the
+    /// negated form rather than into a set it cannot hold.
+    fn complement(&self, whole: Whole) -> Option<[Line; 2]> {
+        let kind = whole.component();
+        let flipped = self.structure.complement();
+        let outside = if whole.narrower_than_its_table() {
+            kind.combine(&flipped, Op::Intersect)?
+        } else {
+            flipped
+        };
+        Some([
+            Line::everything(outside),
             Line {
-                structure: self.structure.top_like(),
+                structure: kind,
                 objects: self.objects.complement(),
             },
-        ]
+        ])
     }
 }
 
@@ -291,7 +308,7 @@ impl Lines {
 fn complement_lines(lines: &[Line], whole: Whole) -> Option<Vec<Line>> {
     let mut kept = vec![Line::everything(whole.component())];
     for line in lines {
-        kept = product(&kept, &line.complement())?;
+        kept = product(&kept, &line.complement(whole)?)?;
     }
     Some(kept)
 }

@@ -161,7 +161,8 @@ impl Component {
             Kind::Bool => Component::Booleans(BoolSet::BOTH),
             Kind::Int => Component::Integers(IntSet::all()),
             Kind::Float => Component::Floats(FloatSet::all()),
-            Kind::Str | Kind::Bytes => Component::Words(RegularSet::all()),
+            Kind::Str => Component::Words(RegularSet::all(Alphabet::Text)),
+            Kind::Bytes => Component::Words(RegularSet::all(Alphabet::Bytes)),
             Kind::List | Kind::Tuple => Component::Sequences(SymbolicDfa::all()),
             Kind::Set | Kind::FrozenSet => Component::Sets(SetLattice::all()),
             Kind::Dict => Component::Maps(MapLattice::all()),
@@ -277,24 +278,6 @@ impl Component {
                 mine.clone()
             }
         })
-    }
-
-    /// Every value of the kind this component describes a part of.
-    ///
-    /// The kind read off the *representation* rather than passed alongside it: a
-    /// line complementing its structure needs the whole of the kind to put
-    /// beside the other half, and the variant already names which kind that is.
-    fn top_like(&self) -> Component {
-        match self {
-            Component::Coarse(_) => Component::Coarse(true),
-            Component::Booleans(_) => Component::Booleans(BoolSet::BOTH),
-            Component::Integers(_) => Component::Integers(IntSet::all()),
-            Component::Floats(_) => Component::Floats(FloatSet::all()),
-            Component::Words(_) => Component::Words(RegularSet::all()),
-            Component::Sequences(_) => Component::Sequences(SymbolicDfa::all()),
-            Component::Sets(_) => Component::Sets(SetLattice::all()),
-            Component::Maps(_) => Component::Maps(MapLattice::all()),
-        }
     }
 
     /// Every value of the kind this component does not admit.
@@ -441,6 +424,18 @@ impl Whole {
             Whole::Kind(kind) => Component::top(kind),
             Whole::Kindless => KINDLESS,
         }
+    }
+
+    /// Whether this kind's values are fewer than its representation can spell.
+    ///
+    /// True for `str` alone. One automaton carries both word kinds, and every
+    /// byte string is a `bytes` while only the valid UTF-8 ones are a `str`, so
+    /// flipping a `str` table's accepting states leaves words in the kind's
+    /// complement that no value of it takes. Every other representation spells
+    /// its kind and nothing else, and cutting a complement back to the kind
+    /// there is a product whose answer is the operand it started from.
+    const fn narrower_than_its_table(self) -> bool {
+        matches!(self, Whole::Kind(Kind::Str))
     }
 
     /// The kind this names, or `None` for the slot that has none.
