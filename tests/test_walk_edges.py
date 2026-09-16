@@ -239,3 +239,118 @@ def test_a_scalar_subclass_is_its_kind_and_not_its_literal() -> None:
     assert Validator(Literal[1, 2, 3]).is_valid(MyInt(1)) is False
     wide = union(*[Literal[i] for i in range(80)])  # ty: ignore[invalid-type-form]
     assert Validator(wide).is_valid(MyInt(1)) is False
+
+
+#: A refinement base that is neither a builtin scalar nor a container, with a
+#: bound its values *can* answer and a value that misses it.
+#:
+#: Each is a type a caller reaches for when a float will not do -- money, an
+#: exact ratio, a duration -- and each answers a comparison through its own
+#: `__ge__` rather than through a number's.
+OFF_THE_SCALARS: list[tuple[str, object, object, object]] = [
+    ("a decimal", decimal.Decimal, at.Ge(0), decimal.Decimal(-1)),
+    ("a fraction", fractions.Fraction, at.Ge(0), fractions.Fraction(-1, 2)),
+    (
+        "a duration",
+        datetime.timedelta,
+        at.Ge(datetime.timedelta(0)),
+        datetime.timedelta(seconds=-1),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("base", "marker", "value"),
+    [(row[1], row[2], row[3]) for row in OFF_THE_SCALARS],
+    ids=[row[0] for row in OFF_THE_SCALARS],
+)
+def test_a_bound_off_the_scalar_kinds_is_explained_not_only_decided(
+    base: object, marker: object, value: object
+) -> None:
+    """A refinement over a class reports the constraint that failed.
+
+    These bases were driven through `is_valid` alone, which answers a `bool`:
+    a walk that reached them and reported the wrong thing -- the class rather
+    than the bound, or the bound at the wrong location -- gave the same `False`
+    either way. The explaining walk is where a report is built, and it is a
+    different arm of every node it passes.
+    """
+    schema = Validator(Annotated[base, marker])  # ty: ignore[invalid-type-form]
+    assert not schema.is_valid(value)
+
+    with pytest.raises(ValidationError) as caught:
+        schema.validate(value)
+    assert caught.value.code == "greater_than_equal"
+    assert caught.value.path == ()
+    # The report names the bound rather than the class: what failed is the
+    # constraint, and the value is an instance of the base.
+    assert "0" in str(caught.value.errors[0]["expected"])
+
+    # Inside a container, so the location is the way down to it rather than
+    # the root -- the reading a flat row cannot check.
+    nested = Validator({"amount": Annotated[base, marker]})  # ty: ignore[invalid-type-form]
+    with pytest.raises(ValidationError) as inside:
+        nested.validate({"amount": value})
+    assert inside.value.code == "greater_than_equal"
+    assert inside.value.path == ("amount",)
+
+
+def test_a_bytes_refinement_is_explained_at_its_own_bound() -> None:
+    """A length over `bytes` counts bytes, and reports them.
+
+    `bytes` is the one scalar kind with a length that is not text, so its
+    length bound is a separate reading from a string's -- and it was decided
+    and never explained.
+    """
+    schema = Validator(Annotated[bytes, at.MinLen(3)])
+    assert schema.is_valid(b"abc")
+    with pytest.raises(ValidationError) as caught:
+        schema.validate(b"ab")
+    assert caught.value.code == "too_short"
+    assert "3" in str(caught.value.errors[0]["expected"])
+
+
+#: The widths where the scalar list walk changes how it reads the value.
+#:
+#: Below the first it reads in place, between them it reads a copy, above the
+#: second it reads in place again. The numbers are the walk's own, restated
+#: here because a test asserting behaviour at a boundary has to name it -- and
+#: `tests/test_bounds_ledger.py` holds the pair to the constants.
+SNAPSHOT_BAND = (16, 262_144)
+
+
+@pytest.mark.parametrize(
+    "width",
+    [
+        SNAPSHOT_BAND[0] - 1,
+        SNAPSHOT_BAND[0],
+        SNAPSHOT_BAND[1] - 1,
+        SNAPSHOT_BAND[1],
+        SNAPSHOT_BAND[1] + 1,
+    ],
+    ids=["under", "at the floor", "under the ceiling", "at it", "over it"],
+)
+def test_a_list_of_scalars_decides_the_same_at_every_width(width: int) -> None:
+    """Both readings of a list answer alike, at each edge of the band.
+
+    Past a width the walk copies the list and reads the copy borrowed; past a
+    second it stops, because the copy costs more than it saves. Neither end
+    changes an answer -- both sides read the same elements -- and that is the
+    claim, so it is asserted at the widths where the reading changes rather
+    than at a width somebody picked.
+
+    The upper edge was in no test: every row sat well below it, so the arm that
+    stops copying was reached by no value the suite had.
+    """
+    schema = Validator(list[int])
+    whole = [1] * width
+    assert schema.is_valid(whole)
+
+    # One element of another kind, at the end, where a reading that stopped
+    # early would miss it.
+    spoiled = [*whole[:-1], "x"]
+    assert not schema.is_valid(spoiled)
+    with pytest.raises(ValidationError) as caught:
+        schema.validate(spoiled, fail_fast=True)
+    assert caught.value.code == "int_type"
+    assert caught.value.path == (width - 1,)

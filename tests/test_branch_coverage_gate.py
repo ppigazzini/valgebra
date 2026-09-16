@@ -95,7 +95,7 @@ def test_a_figure_below_the_floor_fails(tmp_path: Path) -> None:
 
 
 def test_a_report_that_cannot_be_read_is_not_a_pass(tmp_path: Path) -> None:
-    """"Did not measure" has its own answer, and it is not "did not regress"."""
+    """A report that could not be read has its own answer, not a passing one."""
     assert _run([str(tmp_path / "absent.json")]).returncode == EXIT_CANNOT_RUN
     assert _run([]).returncode == EXIT_CANNOT_RUN
 
