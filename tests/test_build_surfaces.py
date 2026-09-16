@@ -6,9 +6,10 @@ with libFuzzer -- so every stable gate a contributor runs locally skips it, and
 the first thing that compiles it is a CI lane. That is exactly how a change to
 the core's public types ships green and turns the fuzz lane red.
 
-The universe is globbed from the tree, because the direction that matters is "a
-manifest arrived and nothing local builds it". Every `Cargo.toml` is therefore
-either a member of the root workspace, or carries a **detached** entry naming the
+The universe is read from the files the repository tracks, because the direction
+that matters is "a manifest arrived and nothing local builds it". Every tracked
+`Cargo.toml` is therefore either a member of the root workspace, or carries a
+**detached** entry naming the
 command that builds it and the reason it is detached -- and that command must
 appear in a workflow, or it is a build surface nothing drives.
 
@@ -28,6 +29,7 @@ LEDGER: every manifest is a workspace member or a named detached surface
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -58,10 +60,35 @@ DETACHED: dict[str, dict[str, str]] = {
 
 
 def _manifests() -> set[str]:
-    return {
-        str(p.relative_to(ROOT)).replace("\\", "/")
-        for p in ROOT.rglob("Cargo.toml")
-        if "target" not in p.parts and ".venv" not in p.parts
+    """Give every manifest in the tree that git does not ignore.
+
+    A bare glob answers for anything sitting in the directory, and two things
+    routinely do: a `git worktree` placed under `.claude/`, and a vendored
+    checkout. Each carries a full copy of every manifest here, and the ledger
+    then reports four that nothing builds -- true of the copies, and nothing
+    about this tree.
+
+    Ignored rather than tracked is the right line. Tracked would miss the
+    direction that matters: a manifest arrives *untracked* first, and a ledger
+    that waited for it to be committed would pass on the change that adds it.
+    What an ignore says is that the path is not part of this repository at all.
+    """
+    found = {
+        str(path.relative_to(ROOT)).replace("\\", "/")
+        for path in ROOT.rglob("Cargo.toml")
+        if "target" not in path.parts and ".venv" not in path.parts
+    }
+    if not found:
+        return found
+    ignored = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        ["git", "-C", str(ROOT), "check-ignore", "--stdin"],  # noqa: S607
+        input="\n".join(sorted(found)),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return found - {
+        line.strip() for line in ignored.stdout.splitlines() if line.strip()
     }
 
 
@@ -74,9 +101,9 @@ def _workspace_members() -> set[str]:
 
 def test_every_manifest_is_a_member_or_detached_with_a_reason() -> None:
     manifests = _manifests()
-    # The glob is the detector; an empty universe would pass having found
+    # The listing is the detector; an empty universe would pass having found
     # nothing to check.
-    assert len(manifests) >= 3, f"the manifest glob found only {sorted(manifests)}"
+    assert len(manifests) >= 3, f"the listing found only {sorted(manifests)}"
 
     accounted = _workspace_members() | set(DETACHED) | {"Cargo.toml"}
     orphans = sorted(manifests - accounted)

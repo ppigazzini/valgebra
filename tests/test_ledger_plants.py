@@ -431,6 +431,19 @@ PLANTS = (
         _cite_an_orphan,
     ),
     Plant(
+        "tests/test_typed_consumer.py",
+        ("tests/typing/consumer.py",),
+        # The failure the ledger is for: a name checked by assignment alone,
+        # which `Any` satisfies. Planted as the weaker reading rather than as a
+        # deletion, because that is the shape it arrives in.
+        lambda tree: _edit(
+            tree,
+            "tests/typing/consumer.py",
+            "    assert_type(schema.is_valid(value), bool)",
+            "    valid: bool = schema.is_valid(value)\n    del valid",
+        ),
+    ),
+    Plant(
         "tests/test_coverage_scope.py",
         (".github/workflows/ci.yml",),
         # The failure the ledger is for: a corpus counted as shipped code,
