@@ -271,3 +271,28 @@ def test_fixed_and_variadic_sequences_reject_wrong_json_shapes() -> None:
     assert Validator([int, str]).is_valid_json("{}") is False
     assert Validator([int, str]).is_valid_json("5") is False
     assert Validator(tuple[int, ...]).is_valid_json("[1, 2]") is False
+
+
+def test_a_byte_order_mark_is_not_part_of_a_document() -> None:
+    """A leading BOM makes the input malformed, on both readings and both types.
+
+    RFC 8259 is explicit that a JSON text does not begin with one, and the
+    parser holds to that. It is worth pinning because of who meets it: a
+    document written by a Windows editor or exported by a spreadsheet carries
+    one, the bytes look like JSON to a reader, and the failure names column 1
+    rather than a byte nobody can see. A caller strips it, and the page says so.
+    """
+    document = '{"a": 1}'
+    schema = Validator({"a": int})
+    assert schema.is_valid_json(document)
+    assert schema.is_valid_json(document.encode())
+
+    for carrying in ("﻿" + document, ("﻿" + document).encode()):
+        assert not schema.is_valid_json(carrying)
+        with pytest.raises(ValidationError) as caught:
+            schema.validate_json(carrying)
+        assert caught.value.code == "json_invalid"
+        assert "column 1" in str(caught.value.errors[0]["value"])
+
+    # And stripping it is what a caller does, which then validates.
+    assert schema.is_valid_json(("﻿" + document).lstrip("﻿"))

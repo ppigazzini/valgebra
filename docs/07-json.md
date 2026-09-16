@@ -152,6 +152,21 @@ except ValidationError as err:
 
 A non-`str`, non-`bytes` argument is a `TypeError`, not a validation failure.
 
+**A leading byte-order mark makes the input malformed.** RFC 8259 says a JSON
+text does not begin with one, and the parser holds to that, so a document
+exported by a spreadsheet or written by a Windows editor is refused at column 1
+with `json_invalid` — reading as an error about a character nobody can see.
+Strip it before validating:
+
+```python
+from valgebra import Validator
+
+v = Validator({"a": int})
+carrying = '\ufeff{"a": 1}'
+assert not v.is_valid_json(carrying)
+assert v.is_valid_json(carrying.lstrip("\ufeff"))
+```
+
 **A document nested past the parser's own recursion limit is malformed input
 too**, not a deep document the walk then refuses: jiter stops at a couple of
 hundred levels of arrays and objects, and stops on both readings alike, so a
