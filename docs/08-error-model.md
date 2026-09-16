@@ -279,6 +279,22 @@ What is guaranteed here is the property a caller depends on: a code is stable an
 does not change meaning across releases, so branching on one written down today
 keeps working. New codes may appear for node kinds that gain a distinct failure.
 
+**Every code is reported the same way on both entry paths.** `validate_json` and
+`load` parse the document and then walk the *Python value* the parser built, so
+a document reaches the same codes a value does, with the same `loc`. Three are
+the exception, and each because the parser cannot build the value that reaches
+them:
+
+| Code | Why no document reaches it |
+|---|---|
+| `tuple_length` | a document's array is a list, never a tuple, so a tuple schema refuses it by kind first and the code is `tuple_type` |
+| `recursion_loop` | a parsed document is a tree, so no value contains itself |
+| `mutated_during_validation` | nothing runs against a parsed value while it is read, so it cannot move under the walk |
+
+`tests/test_error_matrix.py` drives every code through both modes and both
+paths, and carries that reason beside the code a document gets *instead*, so the
+claim is one a test can refute.
+
 ## Determinism
 
 For a given schema and value the error model is deterministic: the same codes,

@@ -230,3 +230,81 @@ def test_the_count_is_reported() -> None:
     assert reached | set(ACCEPTED) >= universe
     covered = len(reached) / len(universe)
     assert covered > 0.85, f"{len(reached)} of {len(universe)} use cases named"
+
+
+def _matrix_rows() -> tuple[set[str], dict[str, str]]:
+    """Give the error matrix's two tables, read from the file that holds them.
+
+    `tests/test_error_matrix.py` drives every code through both modes, both
+    paths and a nested location. It carries its tables as literals rather than
+    deriving them, because it runs against an installed wheel and the codes are
+    written in the Rust. This is the half that does read the Rust, so it is the
+    half that holds the tables to it.
+
+    Parsed rather than imported: importing a product test from a repository
+    check runs its module body, and what is wanted is the two lists.
+    """
+    tree = ast.parse(
+        (ROOT / "tests" / "test_error_matrix.py").read_text(encoding="utf-8")
+    )
+    rows: set[str] = set()
+    elsewhere: dict[str, str] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.AnnAssign) or not isinstance(node.target, ast.Name):
+            continue
+        if not isinstance(node.value, ast.Dict):
+            continue
+        keys = [
+            key.value
+            for key in node.value.keys
+            if isinstance(key, ast.Constant) and isinstance(key.value, str)
+        ]
+        if node.target.id == "CASES":
+            rows = set(keys)
+        elif node.target.id == "ELSEWHERE":
+            elsewhere = {
+                key: value.value
+                for key, value in zip(keys, node.value.values, strict=True)
+                if isinstance(value, ast.Constant) and isinstance(value.value, str)
+            }
+    assert rows, "the error matrix's CASES table did not parse"
+    assert elsewhere, "the error matrix's ELSEWHERE table did not parse"
+    return rows, elsewhere
+
+
+def _reachable_codes() -> set[str]:
+    """Every code a schema a caller can build can reach.
+
+    The accepted list above is the codes no such schema reaches, so a row for
+    one would be a row nothing produces. `not_subset` is a *relation* answer
+    that shares the shape this derivation looks for -- `relation_to` writes it
+    and reports no violation at all -- so it leaves too.
+    """
+    return _error_codes() - set(ACCEPTED) - {"not_subset"}
+
+
+def test_every_reachable_code_is_driven_by_the_error_matrix() -> None:
+    """A code the walk reports and the matrix does not drive fails here."""
+    rows, elsewhere = _matrix_rows()
+    missing = sorted(_reachable_codes() - rows - set(elsewhere))
+    assert not missing, (
+        f"codes the error matrix does not drive: {missing}. Add a row to its "
+        "CASES, or, where the code needs a value a table cannot carry, name "
+        "its test in ELSEWHERE."
+    )
+
+
+def test_the_error_matrix_drives_no_code_the_walk_cannot_report() -> None:
+    """A row for a code the tree no longer writes is a row nothing produces."""
+    rows, elsewhere = _matrix_rows()
+    stale = sorted((rows | set(elsewhere)) - _reachable_codes())
+    assert not stale, f"the error matrix has rows for absent codes: {stale}"
+
+
+def test_every_test_the_matrix_names_exists() -> None:
+    """A name in the matrix's ELSEWHERE that resolves to nothing holds no code."""
+    _, elsewhere = _matrix_rows()
+    text = (ROOT / "tests" / "test_error_matrix.py").read_text(encoding="utf-8")
+    defined = set(re.findall(r"^def (test_\w+)", text, re.MULTILINE))
+    missing = sorted(name for name in elsewhere.values() if name not in defined)
+    assert not missing, f"the matrix names tests it does not define: {missing}"
