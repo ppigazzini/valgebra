@@ -61,31 +61,65 @@ def test_typeddict_is_open_and_a_dict_literal_is_not() -> None:
     assert not shape.is_valid({"name": "Ada", "age": 36, "note": "extra"})
 
 
-@pytest.mark.skipif(not hasattr(typing, "NoExtraItems"), reason="PEP 728 markers")
 def test_typeddict_closed_and_extra_items_are_obeyed() -> None:
     """PEP 728's two markers say what a `TypedDict` allows besides the keys it names.
 
-    A runtime that has them fills `__extra_items__` either way — with the type
-    its author wrote, or with the `NoExtraItems` sentinel to say there was none.
-    The sentinel is not a type, and reading it as one turns the open default into
-    a record admitting exactly the sentinel: a closed record wearing an open
-    one's spelling.
+    Written as attributes on the class rather than through the functional
+    form's keyword arguments, which arrive in 3.15: the markers *are* those
+    attributes, the spec says a runtime fills them, and a consumer reads them.
+    Passing them to the constructor is one interpreter's way of setting them,
+    so a row written that way skipped on every interpreter this project
+    supports -- which is every interpreter a caller runs on.
+
+    The default is open, and open over the string keys: a `TypedDict` relates
+    to `Mapping[str, object]` and nothing wider.
     """
-    # The functional form, and the markers written past the floor this project
-    # supports: both tools are right that they are 3.15's, and the skip above is
-    # what keeps them from running anywhere they are not.
-    shut = typing.TypedDict("shut", {"a": int}, closed=True)  # noqa: UP013  # ty: ignore[unknown-argument]
-    extra = typing.TypedDict("extra", {"a": int}, extra_items=str)  # noqa: UP013  # ty: ignore[unknown-argument]
-    plain = typing.TypedDict("plain", {"a": int})  # noqa: UP013
 
-    assert not Validator(shut).is_valid({"a": 1, "x": 2})
-    assert Validator(shut).is_valid({"a": 1})
+    class Shut(typing.TypedDict):
+        a: int
 
-    assert Validator(extra).is_valid({"a": 1, "x": "s"})
-    assert not Validator(extra).is_valid({"a": 1, "x": 2})
+    class Extra(typing.TypedDict):
+        a: int
+
+    class Plain(typing.TypedDict):
+        a: int
+
+    Shut.__closed__ = True  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    Extra.__extra_items__ = str  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+
+    # `closed=True` leaves the declared keys alone and admits nothing else.
+    assert Validator(Shut).is_valid({"a": 1})
+    assert not Validator(Shut).is_valid({"a": 1, "x": 2})
+
+    # `extra_items` types the rest rather than admitting anything.
+    assert Validator(Extra).is_valid({"a": 1, "x": "s"})
+    assert not Validator(Extra).is_valid({"a": 1, "x": 2})
 
     # No marker given is the spec's default, which is open.
-    assert Validator(plain).is_valid({"a": 1, "x": 2})
+    assert Validator(Plain).is_valid({"a": 1, "x": 2})
+
+    # And the three are three different sets, which is what makes the markers
+    # load bearing rather than decoration.
+    assert Validator(Shut) != Validator(Plain)
+    assert Validator(Extra) != Validator(Plain)
+
+
+@pytest.mark.skipif(
+    not hasattr(typing, "NoExtraItems"), reason="the sentinel arrives in 3.15"
+)
+def test_the_no_extra_items_sentinel_is_not_a_type_to_admit() -> None:
+    """A runtime that has the sentinel fills `__extra_items__` with it.
+
+    It says there was no `extra_items`, and it is not a type. Read as one, the
+    open default becomes a record admitting exactly the sentinel -- a closed
+    record wearing an open one's spelling, which no value satisfies.
+    """
+
+    class Plain(typing.TypedDict):
+        a: int
+
+    Plain.__extra_items__ = typing.NoExtraItems  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    assert Validator(Plain).is_valid({"a": 1, "x": 2})
 
 
 def test_typeddict_total_false_makes_keys_optional() -> None:

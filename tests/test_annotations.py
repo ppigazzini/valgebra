@@ -261,3 +261,29 @@ def test_a_bare_forward_reference_is_refused_like_one_in_an_argument() -> None:
     with pytest.raises(NotImplementedError) as inner:
         Validator(list[ForwardRef("int")])  # ty: ignore[invalid-type-form]
     assert "forward reference" in str(inner.value)
+
+
+def test_a_dataclass_whose_annotations_are_strings_is_read_through_them() -> None:
+    """A dataclass whose field annotations are strings names the same set.
+
+    PEP 563 makes every annotation in a module a string, and a dataclass
+    declares its fields as annotations, so under it the class carries
+    `{"x": "int", "y": "str"}` and nothing that is a type. Read as written,
+    each field would be a literal of the *string* and no instance would
+    belong; resolving them is what makes the class the set it names. A field
+    with a default is still a field the instance has, so it is checked like
+    any other.
+
+    The fixture lives in its own module because PEP 563 is per-module and
+    cannot be turned on inside a function.
+    """
+    schema = Validator(_deferred.DeferredRecord)
+    record = _deferred.DeferredRecord
+    assert schema.is_valid(record(1))
+    assert schema.is_valid(record(1, "written"))
+    assert not schema.is_valid(record("one"))  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+    assert not schema.is_valid(record(1, 2))  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+    # The strings resolved, so the repr names the class rather than the text.
+    assert repr(schema) == "DeferredRecord"
+    # And the same class written without the deferral is the same set.
+    assert "'int'" not in repr(schema)

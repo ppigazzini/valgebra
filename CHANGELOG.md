@@ -32,6 +32,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a walk reports what it found, at the edges a corpus reaches last
 - fix: an arity refusal names the annotation it is about
 - fix: a form with no set is refused, and a class prints as its name
+- fix: a snapshot pins a code the walk writes, and every code is pinned -- internal
 
 -->
 
