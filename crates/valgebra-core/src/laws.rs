@@ -3915,6 +3915,47 @@ proptest! {
             }
         }
     }
+
+    /// A proof over a fixpoint has no witness against it either.
+    ///
+    /// The property above draws from a fragment with no reference in it, so
+    /// every recursive pair the procedure accepts was held by hand-written
+    /// examples. That is the fragment where an accept is *hardest* to earn:
+    /// the rules assume the goal, unfold, and discharge it coinductively, so a
+    /// proof rests on an assumption rather than on a finished derivation. An
+    /// assumption discharged wrongly is an accept over a set that does not
+    /// contain the other, which is unsoundness a caller reads as `subset`.
+    ///
+    /// The bodies are drawn rather than fixed, and the definitions table
+    /// carries a **negative** occurrence -- a reference under a complement --
+    /// because that is the shape where a fixpoint's polarity decides which cut
+    /// an unfolding takes, and the shape a positive-only table never reaches.
+    ///
+    /// The oracle reads the schema unfolded past every value's depth, so a
+    /// membership answer is exact whatever sits at the cut.
+    #[test]
+    fn a_proof_over_a_fixpoint_has_no_witness_against_it(
+        a in recursive_schema(),
+        b in recursive_schema(),
+    ) {
+        let pool = const_pool();
+        let defs = fixpoint_defs();
+        prop_assert!(
+            a.is_subtype_of_under(&a, &NoLeafRelations, &defs),
+            "reflexivity over {a:?}"
+        );
+        if a.is_subtype_of_under(&b, &NoLeafRelations, &defs) {
+            let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+            let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+            for value in &boundary_values(&[&subject, &other]) {
+                prop_assert!(
+                    !member_full(&subject, value, &pool)
+                        || member_full(&other, value, &pool),
+                    "{value:?} is in {a:?} and not in {b:?}, which is accepted"
+                );
+            }
+        }
+    }
 }
 
 /// The structural fragment with a reference into [`fixpoint_defs`] among its
