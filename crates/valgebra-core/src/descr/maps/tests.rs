@@ -3,6 +3,7 @@ use crate::descr::budget;
 use crate::descr::integers::IntSet;
 use crate::kind::Kind;
 use crate::verdict::Verdict;
+use proptest::prelude::*;
 
 /// One dict entry: a `str` key with this text, mapping to this integer.
 fn at(label: &str, value: i64) -> Entry<i64> {
@@ -319,4 +320,156 @@ fn unordered_pairs_yields_each_distinct_pair_once() {
     assert_eq!(unordered_pairs(&items[..1]).count(), 0, "one item, no pair");
     assert_eq!(unordered_pairs::<&str>(&[]).count(), 0, "no items, no pair");
     assert_eq!(unordered_pairs(&items[..2]).count(), 1);
+}
+
+// --- The lattice laws, over the dicts --------------------------------------
+//
+// Every other component of the descriptor holds these as a property; this one
+// held its operations to hand-written pairs alone, which is the shape that
+// confirms the cases somebody thought of. A dict is the kind with the most
+// structure -- labelled keys, a default per part of the key partition, and the
+// wanted-key set (13) adds -- so it is the one where a law is most likely to
+// part from the form, and the `emptiness` arm the sweep accepts as equivalent
+// is inside it.
+//
+// The laws are read against the *dicts* rather than by comparing forms: a union
+// of atoms is not canonical, so two lattices holding the same dicts need not be
+// equal, and asserting equality would hold the representation to more than it
+// promises.
+
+/// The dicts a law is checked over.
+///
+/// Every combination of the two `str` labels the generator names, with and
+/// without a key of another part, plus the empty dict -- which is the value a
+/// record of optional fields turns on and the one an exclusion set is most
+/// often wrong about.
+fn dicts() -> Vec<Vec<Entry<i64>>> {
+    let other = |value: i64| Entry {
+        label: None,
+        kind: Some(Kind::Int),
+        value,
+    };
+    vec![
+        vec![],
+        vec![at("a", 1)],
+        vec![at("a", 2)],
+        vec![at("b", 1)],
+        vec![at("a", 1), at("b", 1)],
+        vec![at("a", 2), at("b", 1)],
+        vec![other(1)],
+        vec![at("a", 1), other(1)],
+    ]
+}
+
+fn same(a: &MapLattice<IntSet>, b: &MapLattice<IntSet>) -> bool {
+    dicts().iter().all(|d| a.holds(d) == b.holds(d))
+}
+
+/// Lattices over the integer sets whose own laws are already held.
+fn lattice() -> impl Strategy<Value = MapLattice<IntSet>> {
+    let leaf = prop_oneof![
+        Just(MapLattice::empty()),
+        Just(MapLattice::all()),
+        (1i64..=2).prop_map(|n| MapLattice::label(Label::str("a"), IntSet::just(n), false)),
+        (1i64..=2).prop_map(|n| MapLattice::label(Label::str("a"), IntSet::just(n), true)),
+        (1i64..=2).prop_map(|n| MapLattice::label(Label::str("b"), IntSet::just(n), false)),
+        Just(MapLattice::keyed(Kind::Str, IntSet::just(1))),
+        Just(MapLattice::keyed(Kind::Int, IntSet::all())),
+        Just(MapLattice::keys_among(&[Some(Kind::Str)])),
+    ];
+    leaf.prop_recursive(3, 12, 2, |inner| {
+        prop_oneof![
+            (inner.clone(), inner.clone())
+                .prop_map(|(a, b)| a.union(&b).unwrap_or_else(MapLattice::all)),
+            (inner.clone(), inner.clone())
+                .prop_map(|(a, b)| a.intersect(&b).unwrap_or_else(MapLattice::empty)),
+            inner.prop_map(|a| a.complement()),
+        ]
+    })
+}
+
+proptest! {
+    // A bounded shrink, so a broken invariant cannot turn a caught mutation
+    // into a run that outlasts a sweep.
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    /// The Boolean algebra, checked against the dicts.
+    #[test]
+    fn the_lattice_laws_hold_of_the_dicts(
+        a in lattice(),
+        b in lattice(),
+        c in lattice(),
+    ) {
+        if let (Some(ab), Some(ba)) = (a.union(&b), b.union(&a)) {
+            prop_assert!(same(&ab, &ba), "join commutes");
+        }
+        if let (Some(ab), Some(ba)) = (a.intersect(&b), b.intersect(&a)) {
+            prop_assert!(same(&ab, &ba), "meet commutes");
+        }
+        if let (Some(bc), Some(ab)) = (b.union(&c), a.union(&b))
+            && let (Some(left), Some(right)) = (a.union(&bc), ab.union(&c))
+        {
+            prop_assert!(same(&left, &right), "join associates");
+        }
+        if let (Some(bc), Some(ab)) = (b.intersect(&c), a.intersect(&b))
+            && let (Some(left), Some(right)) = (a.intersect(&bc), ab.intersect(&c))
+        {
+            prop_assert!(same(&left, &right), "meet associates");
+        }
+        if let Some(met) = a.intersect(&b)
+            && let Some(absorbed) = a.union(&met)
+        {
+            prop_assert!(same(&absorbed, &a), "join absorbs the meet");
+        }
+        if let (Some(bc), Some(ac)) = (b.union(&c), a.intersect(&c))
+            && let (Some(ab), Some(left)) = (a.intersect(&b), a.intersect(&bc))
+            && let Some(right) = ab.union(&ac)
+        {
+            prop_assert!(same(&left, &right), "meet distributes over join");
+        }
+    }
+
+    /// The complement laws, and De Morgan both ways.
+    #[test]
+    fn the_complement_laws_hold_of_the_dicts(a in lattice(), b in lattice()) {
+        let not_a = a.complement();
+        if let Some(met) = a.intersect(&not_a) {
+            prop_assert!(
+                dicts().iter().all(|d| !met.holds(d)),
+                "a dict is in one of the two"
+            );
+        }
+        if let Some(joined) = a.union(&not_a) {
+            prop_assert!(same(&joined, &MapLattice::all()), "and in one of them");
+        }
+        prop_assert!(same(&not_a.complement(), &a), "twice is nothing");
+        let not_b = b.complement();
+        if let (Some(joined), Some(met)) = (a.union(&b), not_a.intersect(&not_b)) {
+            prop_assert!(same(&joined.complement(), &met), "de Morgan one way");
+        }
+        if let (Some(met), Some(joined)) = (a.intersect(&b), not_a.union(&not_b)) {
+            prop_assert!(same(&met.complement(), &joined), "and the other");
+        }
+    }
+
+    /// Emptiness is a claim about the dicts: a lattice proved empty holds
+    /// none, and one proved inhabited is contradicted by no dict either.
+    ///
+    /// The third verdict is the point. `Unknown` is neither claim, and reading
+    /// it as "inhabited" is what a two-valued answer would do -- so the law
+    /// asserts only what each of the two proofs says, and says nothing for the
+    /// decline.
+    #[test]
+    fn emptiness_agrees_with_the_dicts(a in lattice()) {
+        match a.emptiness() {
+            Verdict::Empty => prop_assert!(
+                dicts().iter().all(|d| !a.holds(d)),
+                "an empty lattice holds no dict"
+            ),
+            Verdict::Inhabited | Verdict::Unknown => {}
+        }
+    }
 }

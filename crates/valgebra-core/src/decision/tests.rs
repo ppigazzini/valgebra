@@ -4115,3 +4115,227 @@ fn a_set_of_literals_is_counted_by_what_the_oracle_reads() {
     );
     assert_eq!(none_at_all.verdict_under(&Counted), Verdict::Inhabited);
 }
+
+/// An exhausted budget declines; it never refutes.
+///
+/// The contract the three-valued answer exists for. A `Fails` claims a value of
+/// the subject lies outside the other schema, and a bail-out has found no such
+/// value -- it has run out of allowance. Reading the boolean cannot tell the two
+/// apart, so a test asking `is_subtype_of` sees the conservative answer without
+/// saying which of the two it is, and a budget that refuted would be unsound in
+/// exactly the direction nothing would look.
+///
+/// The allowance is a parameter, so it is driven rather than provoked: each pair
+/// is asked twice, once with the allowance a caller gets and once with one too
+/// small to reach any arm. The first answer is what the rules decide and the
+/// second is what running out gives, and the rows are chosen so the first is a
+/// **refutation** -- which is what makes the second a change of answer rather
+/// than a pair that declines either way.
+#[test]
+fn an_exhausted_budget_declines_and_does_not_refute() {
+    let pairs: Vec<(Schema, Schema)> = vec![
+        // Two disjoint kinds: refuted by the regions.
+        (Schema::Int, Schema::Str),
+        // A container against a scalar, refuted by the kinds.
+        (
+            Schema::list(SeqShape::homogeneous(Schema::Int)),
+            Schema::Int,
+        ),
+        // A union whose second member leaves the supertype.
+        (Schema::union(vec![Schema::Int, Schema::Str]), Schema::Int),
+        // A fixed sequence against one of another arity.
+        (
+            Schema::tuple(SeqShape::fixed([Schema::Int, Schema::Int])),
+            Schema::tuple(SeqShape::fixed([Schema::Int])),
+        ),
+        // A record missing a key the supertype requires.
+        (
+            Schema::record(Vec::new(), Openness::Open),
+            Schema::record(
+                vec![Field {
+                    name: "a".into(),
+                    schema: Schema::Int,
+                    required: true,
+                }],
+                Openness::Closed,
+            ),
+        ),
+    ];
+    for (subject, supertype) in pairs {
+        let full = Cell::new(DECISION_BUDGET);
+        assert_eq!(
+            subject.subtype_relation(&supertype, &NoLeafRelations, &[], &full),
+            Relation::Fails,
+            "the row is chosen because the rules refute it: {subject:?}"
+        );
+        // And with nothing to spend, the same pair declines rather than
+        // reporting the refutation it has not reached.
+        let spent = Cell::new(0);
+        assert_eq!(
+            subject.subtype_relation(&supertype, &NoLeafRelations, &[], &spent),
+            Relation::Unknown,
+            "an exhausted budget refuted {subject:?} against {supertype:?}"
+        );
+    }
+}
+
+/// Two directions sharing one allowance leave the second declining, and the
+/// equivalence that reads both is conservative rather than a claim.
+#[test]
+fn a_shared_budget_declines_the_direction_it_cannot_reach() {
+    let left = Schema::union(vec![Schema::Int, Schema::Str]);
+    let right = Schema::Int;
+    // One cell for both directions, which is the shape `is_equivalent` spends.
+    let shared = Cell::new(0);
+    assert_eq!(
+        left.subtype_relation(&right, &NoLeafRelations, &[], &shared),
+        Relation::Unknown
+    );
+    assert_eq!(
+        right.subtype_relation(&left, &NoLeafRelations, &[], &shared),
+        Relation::Unknown,
+        "a direction with nothing left to spend declines"
+    );
+    // With an allowance the two answer, and they answer differently -- which is
+    // what says the declines above are the budget rather than the pair.
+    let full = Cell::new(DECISION_BUDGET);
+    assert_eq!(
+        right.subtype_relation(&left, &NoLeafRelations, &[], &full),
+        Relation::Holds
+    );
+}
+
+/// A self-reference is the marker a builder leaves behind, and every decider
+/// declines it.
+///
+/// `ir.rs` gives it the empty set and says in the same breath that "every
+/// decider reads it as a schema it cannot relate". Both halves are deliberate: a
+/// finished schema holds none, so deciding it buys nothing, and declining is
+/// sound whatever it denotes. The row exists because nothing else in the suite
+/// asks -- the node is unreachable through the frontend, so a rule that started
+/// answering for it would be a widening nobody chose.
+#[test]
+fn a_self_reference_is_declined_by_every_decider() {
+    let marker = Schema::SelfRef(7);
+    let others = [
+        Schema::Int,
+        Schema::list(SeqShape::homogeneous(Schema::Int)),
+    ];
+    for other in &others {
+        assert_eq!(
+            marker.subtype_relation_under(other, &NoLeafRelations, &[]),
+            Relation::Unknown,
+            "a marker related to {other:?}"
+        );
+        assert_eq!(
+            other.subtype_relation_under(&marker, &NoLeafRelations, &[]),
+            Relation::Unknown,
+            "{other:?} related to a marker"
+        );
+    }
+    // The two lattice bounds are the pairs decided without reading it at all:
+    // everything is below the top and the bottom is below everything, whatever
+    // the schema on the other side denotes.
+    assert_eq!(
+        marker.subtype_relation_under(&Schema::ANYTHING, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    assert_eq!(
+        Schema::Nothing.subtype_relation_under(&marker, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    // And the other halves of those two pairs are declines, since deciding one
+    // would mean reading the marker.
+    assert_eq!(
+        Schema::ANYTHING.subtype_relation_under(&marker, &NoLeafRelations, &[]),
+        Relation::Unknown
+    );
+    assert_eq!(
+        marker.subtype_relation_under(&Schema::Nothing, &NoLeafRelations, &[]),
+        Relation::Unknown
+    );
+    // And emptiness declines it too, rather than claiming the set its doc gives.
+    assert_eq!(marker.verdict(), Verdict::Unknown);
+    assert!(!marker.is_empty(), "a decline folds to `not proven empty`");
+}
+
+/// An attribute record relates through the values that carry its attributes.
+///
+/// The node behind every dataclass, and the one with the fewest relation rows.
+/// It carries no kind of its own -- it constrains a value *within* whatever kind
+/// the value has -- so a pair naming it is decided by whether an object carrying
+/// those attributes must be of the other schema's kind. Each row below names the
+/// value that settles it, in the comment, and `tests/test_theory_matrix.py`
+/// carries the ones a walk can check.
+#[test]
+fn an_attribute_record_relates_through_the_objects_that_carry_it() {
+    let attrs = Schema::attr_record(vec![Field {
+        name: "x".into(),
+        schema: Schema::Int,
+        required: true,
+    }]);
+    // Refuted: an object carrying an `x` need not be an integer, a string or a
+    // list, and a value of each kind is the witness.
+    for other in [
+        Schema::Int,
+        Schema::Str,
+        Schema::list(SeqShape::homogeneous(Schema::Int)),
+    ] {
+        assert_eq!(
+            attrs.subtype_relation_under(&other, &NoLeafRelations, &[]),
+            Relation::Fails,
+            "an object with an `x` is not always {other:?}"
+        );
+    }
+    // And the other direction is refuted too: an integer carries no `x`.
+    assert_eq!(
+        Schema::Int.subtype_relation_under(&attrs, &NoLeafRelations, &[]),
+        Relation::Fails
+    );
+    // Proven: itself, the top above it, the bottom below it, and a record
+    // asking for less than this one declares.
+    assert_eq!(
+        attrs.subtype_relation_under(&attrs, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    assert_eq!(
+        attrs.subtype_relation_under(&Schema::ANYTHING, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    assert_eq!(
+        Schema::Nothing.subtype_relation_under(&attrs, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    let optional = Schema::attr_record(vec![Field {
+        name: "x".into(),
+        schema: Schema::Int,
+        required: false,
+    }]);
+    assert_eq!(
+        attrs.subtype_relation_under(&optional, &NoLeafRelations, &[]),
+        Relation::Holds,
+        "a required attribute is one way of having an optional one"
+    );
+    // A wider attribute record asks for more, so the narrower one is not below
+    // it: an object with only an `x` is the witness.
+    let wider = Schema::attr_record(vec![
+        Field {
+            name: "x".into(),
+            schema: Schema::Int,
+            required: true,
+        },
+        Field {
+            name: "y".into(),
+            schema: Schema::Int,
+            required: true,
+        },
+    ]);
+    assert_eq!(
+        wider.subtype_relation_under(&attrs, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    assert_ne!(
+        attrs.subtype_relation_under(&wider, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+}
