@@ -30,10 +30,20 @@ answer of its own, or a repair to a change not yet released.
 - fix: a report keeps the promises the error model makes
 - fix: a union summary names its branches and keeps what stopped the walk
 - fix: a walk reports what it found, at the edges a corpus reaches last
+- fix: an arity refusal names the annotation it is about
 
 -->
 
 ### Fixed
+
+- **An arity refusal names the annotation it is about.** `list[int, str]`,
+  `set[int, str]` and `frozenset[int, str]` were refused with "expected exactly
+  one type argument" -- a count, naming neither the annotation it was about nor
+  what to write. A caller with one long annotation had nothing to search for.
+  Each now names the spelling, says how many arguments were written, and says
+  what to write instead, which differs by kind: a list of fixed length is the
+  list literal `[A, B]`, and a set schema is homogeneous, so several element
+  types are their union `set[A | B]`.
 
 - **A walk reports what it found, at the edges a corpus reaches last.** A dict
   holding a key whose `__eq__` raises was reported as not being a dict, which

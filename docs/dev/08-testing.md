@@ -81,7 +81,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Twenty-four of them:
+for and misses the other. Twenty-five of them:
 
 | Ledger | Holds |
 |---|---|
@@ -108,12 +108,13 @@ for and misses the other. Twenty-four of them:
 | `tests/test_module_placement.py` | no inline test module is longer than a screen |
 | `tests/test_theory_ledger.py` | every load-bearing theory result names a test, and every name is one |
 | `tests/test_use_case_ledger.py` | every public name and every error code is named by the suite, or accepted with a reason |
+| `tests/test_frontend_refusals.py` | every frontend refusal message is matched by a test, or accepted with a reason |
 | `tests/test_ledger_plants.py` | every ledger fails on the defect it exists to catch |
 
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are twenty-four.
+because a table nothing counts is the one that drifts: there are twenty-five.
 
 The last is a ledger over the rest, and it exists because reading a
 ledger cannot tell you whether it can fail. `test_local_gate.py` filtered its
@@ -237,6 +238,7 @@ ledger that holds it in both directions:
 | every public name a caller reaches | the type stub the package ships | `tests/test_use_case_ledger.py` |
 | every error code a report can carry | the walk that writes them | `tests/test_use_case_ledger.py` |
 | every load-bearing result the design rests on | `10-theory.md`'s tags | `tests/test_theory_ledger.py` |
+| every refusal the frontend writes | the error constructors in `build*.rs` | `tests/test_frontend_refusals.py` |
 
 The number is computed rather than written down. A cell with no test fails; a
 cell a test cannot reach is accepted with a reason, and a reason for a cell that

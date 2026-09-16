@@ -312,7 +312,7 @@ pub(crate) fn build_schema(
         {
             return build_type_object(class, lits, defs);
         }
-        return build_parametrized(&origin, args, lits, defs);
+        return build_parametrized(obj, &origin, args, lits, defs);
     }
 
     // PEP 695 `type X = ...` alias (3.12+): validate the aliased type, tying

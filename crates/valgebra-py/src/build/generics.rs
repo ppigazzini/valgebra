@@ -18,8 +18,24 @@ use super::classes::{field_name, is_truthy_attr};
 use super::{Pool, build_schema, checked_key, forms, is_forward_reference, not_implemented};
 use crate::errors::summarize;
 
+/// What to write instead of a container given several element types. Each is
+/// the remedy for its own kind rather than one sentence for all of them: a
+/// list has a fixed-length spelling and a set does not.
+const LIST_INSTEAD: &str = "write the element type on its own, or a list of \
+                            fixed length as the list literal [A, B]";
+const SET_INSTEAD: &str = "write the element type on its own -- a set schema is \
+                           homogeneous, so several element types are their \
+                           union, set[A | B]";
+const QUALIFIER_INSTEAD: &str = "write the one type it qualifies";
+const UNPACK_INSTEAD: &str = "write the one tuple type it unpacks";
+
 /// Build the IR for a parametrized typing generic given its origin and args.
+///
+/// `alias` is the annotation as the caller wrote it, carried for the refusals
+/// alone: an arity mistake is about the spelling, and `list[int, str]` is a
+/// sentence a reader can find in their own source where "a list" is not.
 pub(super) fn build_parametrized(
+    alias: &Bound<'_, PyAny>,
     origin: &Bound<'_, PyAny>,
     args: &Bound<'_, PyTuple>,
     lits: &mut Pool,
@@ -28,21 +44,21 @@ pub(super) fn build_parametrized(
     let py = origin.py();
     if origin.is(py.get_type::<PyList>()) {
         return Ok(Schema::list(SeqShape::homogeneous(build_type_argument(
-            &single_arg(args)?,
+            &single_arg(args, alias, LIST_INSTEAD)?,
             lits,
             defs,
         )?)));
     }
     if origin.is(py.get_type::<PySet>()) {
         return Ok(Schema::set(build_type_argument(
-            &single_arg(args)?,
+            &single_arg(args, alias, SET_INSTEAD)?,
             lits,
             defs,
         )?));
     }
     if origin.is(py.get_type::<PyFrozenSet>()) {
         return Ok(Schema::frozen_set(build_type_argument(
-            &single_arg(args)?,
+            &single_arg(args, alias, SET_INSTEAD)?,
             lits,
             defs,
         )?));
@@ -70,7 +86,7 @@ pub(super) fn build_parametrized(
         // A field qualifier survives hint resolution because field metadata is
         // kept (include_extras), so the frontend unwraps it and compiles the type
         // it qualifies.
-        return build_type_argument(&single_arg(args)?, lits, defs);
+        return build_type_argument(&single_arg(args, alias, QUALIFIER_INSTEAD)?, lits, defs);
     }
     if is_union_origin(origin)? {
         let mut members = Vec::with_capacity(args.len());
@@ -250,7 +266,7 @@ pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Un
             return Ok(None);
         }
         let wrapped = forms.get_args.bind(py).call1((arg,))?;
-        single_arg(wrapped.cast::<PyTuple>()?)?
+        single_arg(wrapped.cast::<PyTuple>()?, arg, UNPACK_INSTEAD)?
     };
     if !origin_of(&inner)?.is(py.get_type::<PyTuple>()) {
         return Err(not_implemented(&format!(
@@ -354,12 +370,31 @@ pub(super) fn build_tuple(
     Ok(Schema::tuple(regex))
 }
 
-pub(super) fn single_arg<'py>(args: &Bound<'py, PyTuple>) -> PyResult<Bound<'py, PyAny>> {
+/// The one type argument `form` takes, or a refusal that names the form.
+///
+/// `form` is the spelling the caller wrote and `instead` is what to write in
+/// its place, because neither is derivable here: the arity is the same mistake
+/// at every caller and the remedy is not. A list of several types is a
+/// fixed-length list, which this library spells as a list literal; a set of
+/// several is a set of their union, because a set schema is homogeneous.
+///
+/// Both halves are the message. Named only as an arity -- which this was --
+/// the refusal says a count is wrong without saying whose or what the caller
+/// should have written, which is a sentence a reader takes back to the page.
+pub(super) fn single_arg<'py>(
+    args: &Bound<'py, PyTuple>,
+    form: &Bound<'_, PyAny>,
+    instead: &str,
+) -> PyResult<Bound<'py, PyAny>> {
     if args.len() == 1 {
-        args.get_item(0)
-    } else {
-        Err(not_implemented("expected exactly one type argument"))
+        return args.get_item(0);
     }
+    Err(not_implemented(&format!(
+        "{} takes exactly one type argument, and this one is written with {}: \
+         {instead}",
+        summarize(form),
+        args.len()
+    )))
 }
 
 pub(super) fn build_sequence(

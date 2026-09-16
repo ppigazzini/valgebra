@@ -430,6 +430,20 @@ PLANTS = (
         ("scripts/metamorphic_reference.json",),
         _cite_an_orphan,
     ),
+    Plant(
+        "tests/test_frontend_refusals.py",
+        ("tests/test_refusal_messages.py",),
+        # The failure the ledger is for: a refusal reworded, or a row that
+        # stops reading its sentence, leaving the message held by the
+        # exception's type alone. Spelled as a row asking for the type,
+        # because that is what the weakened test looks like in review.
+        lambda tree: _edit(
+            tree,
+            "tests/test_refusal_messages.py",
+            '"must be @runtime_checkable",',
+            '"NotImplementedError",',
+        ),
+    ),
 )
 
 

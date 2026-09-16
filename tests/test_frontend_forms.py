@@ -7,6 +7,11 @@ annotation names is a validator that passes what it was written to stop.
 
 Each row below is a form whose reading was not its meaning, with the value that
 shows it, and beside it the form it must keep reading as it did.
+
+Some rows carry a `ty: ignore`. A form read as something other than what it says
+is often one a checker refuses outright, and the suppression marks that: the
+annotation is deliberate, and what is asserted is the reading the frontend gives
+it.
 """
 
 from __future__ import annotations
