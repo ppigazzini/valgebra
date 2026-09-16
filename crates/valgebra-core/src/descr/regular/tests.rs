@@ -359,12 +359,15 @@ fn the_empty_language_and_the_empty_word_are_different_sets() {
 
 /// The `str` kind's universe is the words a `str` can hold, and no others.
 ///
-/// Every byte string is a `bytes`; only the valid UTF-8 ones are a `str`. The
-/// difference is the whole of what a `str` complement must not contain, so the
-/// acceptor is held to the encoding's own edges: the four sequence lengths, and
-/// each of the four ways a byte string fails to be one.
+/// Every byte string is a `bytes`; a `str` is one that encodes a sequence of
+/// code points, **surrogates included** -- `"\u{d800}"` is one character long
+/// and is a member of `str`, and no codec writes it. So the language is WTF-8,
+/// and the difference from every byte string is the whole of what a `str`
+/// complement must not contain. The acceptor is held to the encoding's own
+/// edges: the four sequence lengths, the surrogate block, and each way a byte
+/// string fails to be one.
 #[test]
-fn the_text_universe_is_the_utf8_words() {
+fn the_text_universe_is_the_words_a_str_holds() {
     let text = RegularSet::all(Alphabet::Text);
     for word in [
         "".as_bytes(),
@@ -374,6 +377,11 @@ fn the_text_universe_is_the_utf8_words() {
         "\u{1f600}".as_bytes(),
         "a\u{e9}\u{1f600}".as_bytes(),
         "\u{10ffff}".as_bytes(),
+        // The surrogate block, which a `str` carries and UTF-8 does not spell:
+        // `U+D800`, `U+DFFF`, and one among ordinary characters.
+        b"\xed\xa0\x80".as_slice(),
+        b"\xed\xbf\xbf",
+        b"a\xed\xa0\x80b",
     ] {
         assert!(text.holds(word), "a str's bytes: {word:?}");
     }
@@ -383,16 +391,55 @@ fn the_text_universe_is_the_utf8_words() {
         b"\xc0\x80",
         b"\xc1\xbf",
         b"\xe0\x80\x80",
-        b"\xed\xa0\x80",
         b"\xf0\x80\x80\x80",
         b"\xf4\x90\x80\x80",
         b"\xf5\x80\x80\x80",
         b"\xc2",
         b"a\xc2",
+        // A surrogate lead byte with no continuation is still a broken word.
+        b"\xed\xa0",
     ] {
         assert!(!text.holds(word), "not a str's bytes: {word:?}");
     }
     assert!(RegularSet::all(Alphabet::Bytes).holds(b"\xff"));
+}
+
+/// A pattern's language holds no surrogate, and the kind's universe does.
+///
+/// The two are what the relation between `str` and a catch-all pattern rests
+/// on: a `Regex` matches the *text* of a string, a lone surrogate has none, and
+/// the difference between the kind and the pattern is exactly those words. A
+/// universe that stopped where UTF-8 does made that difference empty.
+#[test]
+fn a_pattern_does_not_reach_the_words_only_the_kind_holds() {
+    let universe = RegularSet::all(Alphabet::Text);
+    let every_text = RegularSet::pattern("(?s:.)*", Alphabet::Text).expect("a catch-all builds");
+    assert!(every_text.holds("a\u{1f600}".as_bytes()));
+    assert!(!every_text.holds(b"\xed\xa0\x80"));
+    let difference = universe
+        .intersect(&every_text.complement())
+        .expect("the difference builds");
+    assert!(!difference.is_empty(), "the words no pattern reaches");
+    assert!(difference.holds(b"\xed\xa0\x80"));
+    assert!(!difference.holds(b"a"));
+}
+
+/// A length bound counts a surrogate as the one character it is.
+#[test]
+fn a_length_bound_counts_the_characters_a_str_holds() {
+    let one_or_more = RegularSet::at_least(1, Alphabet::Text).expect("a bound builds");
+    let at_most_one = RegularSet::at_most(1, Alphabet::Text).expect("a bound builds");
+    assert!(one_or_more.holds(b"\xed\xa0\x80"), "one character");
+    assert!(at_most_one.holds(b"\xed\xa0\x80"));
+    assert!(!at_most_one.holds(b"\xed\xa0\x80\xed\xa0\x80"), "two");
+    assert!(!one_or_more.holds(b""));
+    // And the ordinary characters are counted as they were.
+    assert!(at_most_one.holds("\u{1f600}".as_bytes()));
+    assert!(!at_most_one.holds("ab".as_bytes()));
+    assert!(
+        one_or_more.holds("\n".as_bytes()),
+        "a newline is a character"
+    );
 }
 
 /// A complement cut to the text universe holds no word outside the encoding.

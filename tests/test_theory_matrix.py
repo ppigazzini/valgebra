@@ -126,6 +126,11 @@ class Plain:
 NAN = float("nan")
 TWO_53 = 2**53
 I64_MIN = -(2**63)
+#: A `str` no codec encodes. It is one character long, it is a member of `str`,
+#: and a pattern matches the text of a string, which this has none of -- so it is
+#: the value that tells a word kind's universe from the language of a pattern
+#: over it.
+LONE_SURROGATE = "\ud800"
 
 #: Every row: a name, the subject, the supertype, the relation the set model
 #: gives, and the values that decide it.
@@ -273,18 +278,25 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
     ),
     # -- a word kind's universe is the words the kind can hold ---------------
     (
-        "every string matches a pattern that matches everything",
+        "a pattern that matches every text does not reach every string",
         str,
         union(Annotated[str, Regex(r"[\s\S]*")], int),
-        "subset",
-        ["", "a", "\n", "\u00e9", "\U0001f600", 1],
+        "not_subset",
+        ["", "a", "\n", "\u00e9", "\U0001f600", 1, LONE_SURROGATE],
     ),
     (
-        "a string kind and a pattern over it have the same universe",
+        "a string kind holds the words no pattern matches",
         intersection(str, complement(Annotated[str, Regex("(?s:.)*")])),
         nothing,
+        "not_subset",
+        ["", "a", "\n", "\u00e9", "\U0001f600", LONE_SURROGATE],
+    ),
+    (
+        "every text a pattern matches is a string",
+        Annotated[str, Regex("(?s:.)*")],
+        str,
         "subset",
-        ["", "a", "\n", "\u00e9", "\U0001f600"],
+        ["", "a", "\n", "\u00e9", "\U0001f600", LONE_SURROGATE, 1],
     ),
     (
         "bytes keeps the wider universe a str does not have",

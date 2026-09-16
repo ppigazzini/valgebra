@@ -25,10 +25,23 @@ answer of its own, or a repair to a change not yet released.
 - fix: a container is read for what it holds, at every kind
 - fix: a bound at the end of the carrier keeps the integers past it
 - fix: a literal counts as one value where its constant is one
+- fix: a string kind holds the characters no pattern matches
 
 -->
 
 ### Fixed
+
+- **A string kind holds the characters no pattern matches.** A `str` is a
+  sequence of code points and a lone surrogate is one of them: `"\ud800"` is one
+  character long and is a member of `str`. No codec encodes it, and a `Regex`
+  matches the text of a string, so no pattern matches it -- which the walk has
+  always said. The kind's universe stopped where the codecs do, so the
+  difference between `str` and a catch-all pattern came out empty:
+  `Validator(str).relation_to(Annotated[str, Regex("(?s).*")])` answered
+  `"subset"` against a string a caller can write in one line. It answers
+  `"not_subset"`, and the difference between the two reports the character that
+  refutes it. A length bound counts that character as the one character it is,
+  and inclusion between two patterns is unmoved.
 
 - **A literal counts as one value only where its constant is one.**
   `Literal[c]` denotes the values of `c`'s type equal to `c`, which is one value

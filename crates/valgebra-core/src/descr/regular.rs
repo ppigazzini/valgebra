@@ -159,23 +159,34 @@ impl Dfa {
         }
     }
 
-    /// The automaton accepting exactly the valid UTF-8 words.
+    /// The automaton accepting the encodings of every Python `str`.
+    ///
+    /// A `str` is a sequence of code points, and a **lone surrogate is one of
+    /// them**: `"\u{d800}"` is one character long and is a member of `str`. Its
+    /// encoding is not valid UTF-8 -- no codec produces one -- so the language
+    /// here is WTF-8, which is UTF-8 with the surrogate code points spelled the
+    /// way the three-byte form spells everything else.
+    ///
+    /// That is the kind's *universe*, and it has to hold them. A pattern's
+    /// language is built in UTF-8 and holds none, which is the walk's answer too
+    /// (a `Regex` matches the text of a string and a lone surrogate has none),
+    /// so a universe without them makes the difference between `str` and a
+    /// catch-all pattern empty -- proving an inclusion `"\u{d800}"` refutes.
     ///
     /// Written out rather than compiled from a pattern, for the reason
-    /// [`RegularSet::word`] is: this is the `str` kind's *universe*, so it is
-    /// asked for wherever a complement is taken, and a constructor that can
-    /// refuse would leave a caller choosing between a wrong set and a panic.
-    /// Nine states and thirteen byte classes, which is the standard decoder
-    /// read as an acceptor:
+    /// [`RegularSet::word`] is: it is asked for wherever a complement is taken,
+    /// and a constructor that can refuse would leave a caller choosing between a
+    /// wrong set and a panic. Thirteen byte classes, which is the standard
+    /// decoder read as an acceptor:
     ///
     /// * `0x00..=0x7F` stands alone;
     /// * `0xC2..=0xDF` takes one continuation, `0xE0..=0xEF` two and
     ///   `0xF0..=0xF4` three;
-    /// * `0xE0`, `0xED`, `0xF0` and `0xF4` narrow the *first* of those, which
-    ///   is what rules out an overlong encoding, a surrogate and a code point
-    ///   above `U+10FFFF`;
+    /// * `0xE0`, `0xF0` and `0xF4` narrow the *first* of those, which is what
+    ///   rules out an overlong encoding and a code point above `U+10FFFF`;
+    /// * `0xED` does **not** narrow it, which is what admits the surrogates;
     /// * `0xC0`, `0xC1` and `0xF5..=0xFF` begin nothing.
-    fn utf8() -> Dfa {
+    fn wtf8() -> Dfa {
         // Class 0 is the catch-all, which here is the bytes no well-formed word
         // contains at all; the states are named by what they still expect, and
         // `DEAD` absorbs.
@@ -248,6 +259,10 @@ impl Dfa {
         edge(TWO_HIGH, CONT_HIGH, ONE);
         edge(TWO_LOW, CONT_LOW, ONE);
         edge(TWO_LOW, CONT_MID, ONE);
+        // `0xED 0xA0..0xBF` is `U+D800..U+DFFF`, the surrogates. A UTF-8
+        // acceptor stops here and a `str` does not, so the edge is what makes
+        // this the kind's universe rather than the codecs'.
+        edge(TWO_LOW, CONT_HIGH, ONE);
         edge(THREE_MID_UP, CONT_MID, TWO);
         edge(THREE_MID_UP, CONT_HIGH, TWO);
         edge(THREE_LOW, CONT_LOW, TWO);
@@ -516,8 +531,8 @@ pub enum Alphabet {
     Bytes,
 }
 
-/// The valid UTF-8 words, which is the `str` kind's universe.
-static UTF8: OnceLock<Arc<Dfa>> = OnceLock::new();
+/// The encodings of every Python `str`, which is that kind's universe.
+static STR_WORDS: OnceLock<Arc<Dfa>> = OnceLock::new();
 
 /// Every byte string, which is the `bytes` kind's universe.
 static EVERY_WORD: OnceLock<Arc<Dfa>> = OnceLock::new();
@@ -547,11 +562,11 @@ impl RegularSet {
     /// Every word of an alphabet.
     ///
     /// The two differ, and the difference is the `str` kind's whole complement:
-    /// every byte string is a `bytes`, and only the valid UTF-8 ones are a
-    /// `str`. Reading the wider set as the `str` universe puts words in that
-    /// kind's complement that no value of it takes, so a difference that holds
-    /// only those reads as inhabited and refutes an inclusion nothing stands
-    /// against.
+    /// every byte string is a `bytes`, and a `str` is one that encodes a
+    /// sequence of code points. Reading the wider set as the `str` universe puts
+    /// words in that kind's complement that no value of it takes, so a
+    /// difference that holds only those reads as inhabited and refutes an
+    /// inclusion nothing stands against.
     #[must_use]
     pub fn all(alphabet: Alphabet) -> RegularSet {
         // Both are built once and handed out as handles. A universe is asked for
@@ -560,7 +575,7 @@ impl RegularSet {
         // per ask is a cost a constant has no business carrying.
         RegularSet {
             dfa: Arc::clone(match alphabet {
-                Alphabet::Text => UTF8.get_or_init(|| Arc::new(Dfa::utf8())),
+                Alphabet::Text => STR_WORDS.get_or_init(|| Arc::new(Dfa::wtf8())),
                 Alphabet::Bytes => EVERY_WORD.get_or_init(|| Arc::new(Dfa::universal())),
             }),
         }
@@ -583,8 +598,17 @@ impl RegularSet {
     /// memory would be spent.
     #[must_use]
     pub fn pattern(pattern: &str, alphabet: Alphabet) -> Option<RegularSet> {
-        let anchored = format!("(?:{pattern})");
-        let syntax = syntax::Config::new().utf8(alphabet == Alphabet::Text);
+        // A caller's pattern is read over *text*, whichever kind it constrains,
+        // which is what the walk does with it: a `Regex` matches the characters
+        // of a string. So it compiles in UTF-8 mode for `str`, and its language
+        // holds no surrogate -- as the kind's universe does and the walk's
+        // answer says.
+        RegularSet::compile(&format!("(?:{pattern})"), alphabet == Alphabet::Text)
+    }
+
+    /// Build a language from a pattern the caller of this module wrote.
+    fn compile(anchored: &str, utf8: bool) -> Option<RegularSet> {
+        let syntax = syntax::Config::new().utf8(utf8);
         let config = dense::Config::new()
             .start_kind(regex_automata::dfa::StartKind::Anchored)
             .dfa_size_limit(Some(BUILD_SIZE_LIMIT))
@@ -592,7 +616,7 @@ impl RegularSet {
         let built = dense::Builder::new()
             .syntax(syntax)
             .configure(config)
-            .build(&anchored)
+            .build(anchored)
             .ok()?;
         Dfa::from_automaton(&built).map(|dfa| RegularSet {
             dfa: Arc::new(dfa.minimal()),
@@ -647,13 +671,13 @@ impl RegularSet {
     /// [`Alphabet::Text`], bytes for [`Alphabet::Bytes`].
     #[must_use]
     pub fn at_least(length: usize, alphabet: Alphabet) -> Option<RegularSet> {
-        RegularSet::pattern(&format!("{}{{{length},}}", dot(alphabet)), alphabet)
+        RegularSet::compile(&format!("{}{{{length},}}", code_point(alphabet)), false)
     }
 
     /// The words of at most `length` symbols.
     #[must_use]
     pub fn at_most(length: usize, alphabet: Alphabet) -> Option<RegularSet> {
-        RegularSet::pattern(&format!("{}{{0,{length}}}", dot(alphabet)), alphabet)
+        RegularSet::compile(&format!("{}{{0,{length}}}", code_point(alphabet)), false)
     }
 
     /// Whether this set holds no word.
@@ -702,12 +726,27 @@ impl RegularSet {
     }
 }
 
-/// The pattern for one symbol of an alphabet.
-fn dot(alphabet: Alphabet) -> &'static str {
+/// The pattern for one symbol of an alphabet, written over **bytes**.
+///
+/// A length bound counts the symbols a value has, and for text a symbol is a
+/// code point -- a lone surrogate among them, since a `str` may carry one and
+/// `"\u{d800}"` is one character long. UTF-8 mode cannot spell that character,
+/// so the expansion is written out and read as bytes: it is the kind's universe
+/// ([`Dfa::wtf8`]) taken one character at a time.
+///
+/// Neither arm skips a newline. A length bound is about how many symbols the
+/// word has, not about which of them a pattern would pass over.
+const fn code_point(alphabet: Alphabet) -> &'static str {
     match alphabet {
-        // `(?s)` so a newline counts: a length bound is about how many symbols
-        // the word has, not about which of them a pattern would skip.
-        Alphabet::Text => "(?s:.)",
+        Alphabet::Text => concat!(
+            r"(?s-u:[\x00-\x7F]",
+            r"|[\xC2-\xDF][\x80-\xBF]",
+            r"|\xE0[\xA0-\xBF][\x80-\xBF]",
+            r"|[\xE1-\xEF][\x80-\xBF][\x80-\xBF]",
+            r"|\xF0[\x90-\xBF][\x80-\xBF][\x80-\xBF]",
+            r"|[\xF1-\xF3][\x80-\xBF][\x80-\xBF][\x80-\xBF]",
+            r"|\xF4[\x80-\x8F][\x80-\xBF][\x80-\xBF])"
+        ),
         Alphabet::Bytes => "(?s-u:.)",
     }
 }

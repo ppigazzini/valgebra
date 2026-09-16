@@ -195,9 +195,11 @@ The soundness is relative to a small, explicit trust base:
   the compiler's.
 - **Predicate refinements are opaque.** A `Predicate` constraint runs arbitrary
   Python; valgebra checks that it returned truthy, and the soundness of *that*
-  leaf is the caller's. Regex constraints are matched natively and related only
-  by syntactic identity, and match the text of a `str`: a string carrying a lone
-  surrogate has no such text and matches no pattern.
+  leaf is the caller's. Regex constraints are matched natively and match the
+  text of a `str`: a string carrying a lone surrogate has no such text and
+  matches no pattern. The `str` kind holds one all the same — it is a string of
+  one character — so a kind is never a subtype of a pattern over it, however
+  much text that pattern matches, and `"\ud800"` is the value that says so.
 - **A literal is a singleton where its constant's equality is Python's own.**
   `Literal[c]` denotes `{x | type(x) is type(c) and x == c}`. For a builtin
   scalar that is one value; for a constant whose class defines `__eq__` it is
