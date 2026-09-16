@@ -81,7 +81,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Twenty-three of them:
+for and misses the other. Twenty-four of them:
 
 | Ledger | Holds |
 |---|---|
@@ -107,12 +107,13 @@ for and misses the other. Twenty-three of them:
 | `tests/test_floor_names.py` | every typing and enum name read at import time, and every stdlib module imported, exists on the floor |
 | `tests/test_module_placement.py` | no inline test module is longer than a screen |
 | `tests/test_theory_ledger.py` | every load-bearing theory result names a test, and every name is one |
+| `tests/test_use_case_ledger.py` | every public name and every error code is named by the suite, or accepted with a reason |
 | `tests/test_ledger_plants.py` | every ledger fails on the defect it exists to catch |
 
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are twenty-three.
+because a table nothing counts is the one that drifts: there are twenty-four.
 
 The last is a ledger over the rest, and it exists because reading a
 ledger cannot tell you whether it can fail. `test_local_gate.py` filtered its
@@ -219,6 +220,35 @@ workflow and `tests/conftest.py` — read them there.
 
 `tests/conftest.py` sets no hypothesis deadline, and says why: the job timeout is
 the bound. Every job carries one.
+
+## What a use case is, and how many there are
+
+"Every use case is covered" is a claim only once a use case is a thing something
+can count, and neither of the obvious candidates is one. A line count says a line
+ran, not that anything checked what it did. A list written beside the code grows
+a row when a reader remembers to.
+
+So the universe is **derived from the tree**, in products, and each product has a
+ledger that holds it in both directions:
+
+| Product | Derived from | Held by |
+|---|---|---|
+| every schema node, in every walk mode | the `Schema` enum in `ir.rs` | `tests/test_node_matrix.py` |
+| every public name a caller reaches | the type stub the package ships | `tests/test_use_case_ledger.py` |
+| every error code a report can carry | the walk that writes them | `tests/test_use_case_ledger.py` |
+| every load-bearing result the design rests on | `10-theory.md`'s tags | `tests/test_theory_ledger.py` |
+
+The number is computed rather than written down. A cell with no test fails; a
+cell a test cannot reach is accepted with a reason, and a reason for a cell that
+*is* reached fails too, so an excuse cannot outlive the gap it excuses.
+
+What a ledger cannot see is the half that matters most: naming a method is not
+asserting its documented outcome, and reaching a node is not checking every
+answer it gives. That is what the matrices beside them are for — the node matrix
+runs each node through all six entry points, and `test_error_contract.py` holds
+each promise the error model makes at each site that makes it. The ledger's job
+is narrower and nothing else does it: a name the tree grows and the suite never
+mentions, which is the state every one of them starts in.
 
 ## What is not tested here, deliberately
 

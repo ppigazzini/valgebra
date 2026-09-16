@@ -11,6 +11,7 @@ is asserted here rather than left to the stub alone.
 from __future__ import annotations
 
 import copy
+import importlib
 
 import pytest
 
@@ -119,6 +120,20 @@ def test_the_construction_limits_are_importable_from_the_package() -> None:
     for name in limits:
         assert name in valgebra.__all__
         assert isinstance(getattr(valgebra, name), int)
+
+
+def test_the_extension_says_whether_it_was_built_for_speed() -> None:
+    """`_debug_build` is on the extension, and is a bool.
+
+    Not part of the package's public surface -- it is not in `__all__` and a
+    caller has no use for it -- but it is in the stub, and the comparison gate
+    reads it to refuse a timing run against an unoptimised build. A rename would
+    make that gate measure a debug extension and report the numbers as a
+    release's.
+    """
+    extension = importlib.import_module("valgebra._valgebra")
+    assert isinstance(extension._debug_build, bool)  # noqa: SLF001
+    assert "_debug_build" not in valgebra.__all__
 
 
 def test_every_exported_name_exists() -> None:

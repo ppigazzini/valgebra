@@ -174,6 +174,19 @@ PLANTS = (
         ),
     ),
     Plant(
+        # A public name the suite never mentions: the state every method starts
+        # in, and the one a stub grows a line for without anyone noticing.
+        "tests/test_use_case_ledger.py",
+        ("python/valgebra/_valgebra.pyi",),
+        lambda tree: _edit(
+            tree,
+            "python/valgebra/_valgebra.pyi",
+            "    def is_valid(self, obj: object, /) -> bool: ...",
+            "    def is_valid(self, obj: object, /) -> bool: ...\n"
+            "    def unnamed_by_any_test(self) -> None: ...",
+        ),
+    ),
+    Plant(
         # A load-bearing result whose `HELD-BY:` names a test the tree does not
         # have: the shape a rename leaves behind, and the one the page cannot
         # detect on its own.

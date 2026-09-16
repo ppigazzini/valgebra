@@ -536,14 +536,13 @@ def check_ledger_table() -> list[str]:
         for wrong, word in spelled.items():
             if wrong == len(declared):
                 continue
-            # `twenty` ends on a word boundary inside `twenty-one`, so a
-            # bare `\b` reads the larger count as the smaller one and reports
-            # the page wrong for saying the right thing. The hyphen is the
-            # separator here, so the spelling stops where a hyphen follows.
-            spelling = (
-                rf"\b{word}\b(?!-) of them|There are {word}\b(?!-)|"
-                rf"the {word}\b(?!-) ledgers"
-            )
+            # A hyphen is a word boundary, so a bare `\b` reads a compound
+            # spelling as one of its halves and reports the page wrong for
+            # saying the right thing -- `twenty` inside `twenty-one`, and
+            # `four` inside `twenty-four`. The separator is the hyphen, so a
+            # spelling is bounded by one on neither side.
+            bounded = rf"(?<!-)\b{word}\b(?!-)"
+            spelling = rf"{bounded} of them|There are {bounded}|the {bounded} ledgers"
             if re.search(spelling, doc.read_text(encoding="utf-8"), re.IGNORECASE):
                 problems.append(
                     f"{doc.relative_to(ROOT)}: says {word} ledgers; there are "
