@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import enum
 import json
+import re
 from dataclasses import dataclass
 from typing import Annotated, NamedTuple
 
@@ -45,6 +46,9 @@ from valgebra import (
     recursive,
     union,
 )
+
+#: The address in an object's default repr, which differs between runs.
+_ADDRESS = re.compile(r"0x[0-9a-f]+")
 
 
 class Case(NamedTuple):
@@ -425,3 +429,34 @@ def test_a_document_the_parser_refuses_reports_the_parse() -> None:
     with pytest.raises(ValidationError) as caught:
         Validator(int).validate_json("{ not json", fail_fast=True)
     assert caught.value.code == "json_invalid"
+
+
+def test_every_code_renders_the_same_way(snapshot: object) -> None:
+    """One snapshot, over every code, taken from the walk itself.
+
+    `tests/test_error_snapshots.py` locks the rendering over a corpus somebody
+    chose, and the core's own snapshot locks the one-line format over rows it
+    builds by hand. Neither is a statement about *every* code: a code added to
+    the walk, or reworded, appears in neither unless a reader adds a row.
+
+    This corpus is the table above, which the use-case ledger holds to the
+    codes the tree emits -- so a code arrives here with the rest. What is
+    captured is `expected`, which names the set the value missed, and the
+    message built from it. Both are what a caller reads, and both are prose:
+    the failure worth catching is a wording that drifts into describing a
+    different set.
+
+    An object's repr carries its address, which differs per run, so the one row
+    whose value is an instance has that normalised out. Nothing else here has
+    an unstable repr, because every other row's value is a literal.
+    """
+    rendered = {}
+    for code in sorted(CASES):
+        case = CASES[code]
+        error = _fail_fast(case.spec, case.value)
+        entry = error.errors[0]
+        rendered[code] = {
+            "expected": str(entry["expected"]),
+            "message": _ADDRESS.sub("0xADDRESS", str(entry["message"])),
+        }
+    assert rendered == snapshot

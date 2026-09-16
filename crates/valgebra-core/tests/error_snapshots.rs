@@ -4,6 +4,14 @@
 //! contract (the message style guide in `docs/08-error-model.md`). This locks the
 //! exact format across a representative corpus so any change to it is reviewed
 //! in the snapshot diff, never silently accepted.
+//!
+//! The rows are built here rather than taken from a walk, because the subject
+//! is the *format* and a walk would tie the corpus to which failures a schema
+//! can reach. The cost is that a row's code is a string this file chose: one
+//! that was renamed, or never existed, renders perfectly and pins a format for
+//! a failure no caller can meet. It happened -- `extra_key` sat here while the
+//! walk wrote `extra_forbidden` -- so `tests/test_use_case_ledger.py` reads
+//! these codes against the ones the tree emits.
 
 use valgebra_core::{PathSegment, Violation};
 
@@ -34,7 +42,7 @@ fn violation_message_format() {
             "missing",
         ),
         violation(
-            "extra_key",
+            "extra_forbidden",
             vec![key("extra")],
             "no unexpected key",
             "'extra'",

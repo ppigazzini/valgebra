@@ -308,3 +308,36 @@ def test_every_test_the_matrix_names_exists() -> None:
     defined = set(re.findall(r"^def (test_\w+)", text, re.MULTILINE))
     missing = sorted(name for name in elsewhere.values() if name not in defined)
     assert not missing, f"the matrix names tests it does not define: {missing}"
+
+
+def _snapshot_codes() -> set[str]:
+    """Give the codes the core's message-format corpus pins.
+
+    The corpus is hand-built: each row is a `Violation` the test constructs, so
+    nothing in the core makes a row's code one the library ever writes. Read by
+    parsing the Rust for the first argument of each `violation(...)` call.
+    """
+    path = ROOT / "crates" / "valgebra-core" / "tests" / "error_snapshots.rs"
+    text = path.read_text(encoding="utf-8")
+    body = text[text.index("let corpus = [") :]
+    return set(re.findall(r'violation\(\s*"([a-z_]+)"', body))
+
+
+def test_the_snapshot_corpus_pins_codes_the_walk_can_write() -> None:
+    """A hand-built corpus can pin a code the library does not have.
+
+    The corpus locks the one-line rendering of a violation, and it builds its
+    own rows rather than taking them from a walk. That is what makes it a test
+    of the *format* -- and what lets a row drift from the library: a code
+    nobody writes renders perfectly and pins a format for a failure no caller
+    can meet. Read against the codes the tree emits, which is the same list
+    every other row here is read against.
+    """
+    pinned = _snapshot_codes()
+    assert len(pinned) >= 6, sorted(pinned)
+    unknown = sorted(pinned - _error_codes())
+    assert not unknown, (
+        f"the core's snapshot corpus pins codes the walk never writes: "
+        f"{unknown}. Each row's code is a string the corpus chose, so a code "
+        "that was renamed, or never existed, renders and passes."
+    )

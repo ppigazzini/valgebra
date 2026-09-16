@@ -1,0 +1,129 @@
+# serializer version: 1
+# name: test_every_code_renders_the_same_way
+  dict({
+    'bool_type': dict({
+      'expected': 'bool',
+      'message': 'expected bool, got 1 [bool_type]',
+    }),
+    'bytes_type': dict({
+      'expected': 'bytes',
+      'message': "expected bytes, got 'x' [bytes_type]",
+    }),
+    'dict_type': dict({
+      'expected': 'dict',
+      'message': 'expected dict, got [] [dict_type]',
+    }),
+    'extra_forbidden': dict({
+      'expected': 'no unexpected key',
+      'message': "at b: expected no unexpected key, got 'b' [extra_forbidden]",
+    }),
+    'float_type': dict({
+      'expected': 'float',
+      'message': 'expected float, got 1 [float_type]',
+    }),
+    'frozen_set_type': dict({
+      'expected': 'frozenset',
+      'message': 'expected frozenset, got {1} [frozen_set_type]',
+    }),
+    'greater_than': dict({
+      'expected': '> 0',
+      'message': 'expected > 0, got 0 [greater_than]',
+    }),
+    'greater_than_equal': dict({
+      'expected': '>= 0',
+      'message': 'expected >= 0, got -1 [greater_than_equal]',
+    }),
+    'instance_type': dict({
+      'expected': '_Color',
+      'message': 'expected _Color, got 1 [instance_type]',
+    }),
+    'int_type': dict({
+      'expected': 'int',
+      'message': "expected int, got 'x' [int_type]",
+    }),
+    'less_than': dict({
+      'expected': '< 0',
+      'message': 'expected < 0, got 0 [less_than]',
+    }),
+    'less_than_equal': dict({
+      'expected': '<= 0',
+      'message': 'expected <= 0, got 1 [less_than_equal]',
+    }),
+    'list_length': dict({
+      'expected': 'list of length 2',
+      'message': 'expected list of length 2, got [1] [list_length]',
+    }),
+    'list_type': dict({
+      'expected': 'list',
+      'message': "expected list, got 'x' [list_type]",
+    }),
+    'literal_error': dict({
+      'expected': "the literal 'active'",
+      'message': "expected the literal 'active', got 'paused' [literal_error]",
+    }),
+    'missing_attribute': dict({
+      'expected': 'attribute "x"',
+      'message': 'at x: expected attribute "x", got missing [missing_attribute]',
+    }),
+    'missing_key': dict({
+      'expected': 'required key "a"',
+      'message': 'at a: expected required key "a", got missing [missing_key]',
+    }),
+    'multiple_of': dict({
+      'expected': 'a multiple of 3',
+      'message': 'expected a multiple of 3, got 5 [multiple_of]',
+    }),
+    'no_match': dict({
+      'expected': 'nothing',
+      'message': 'expected nothing, got 1 [no_match]',
+    }),
+    'none_type': dict({
+      'expected': 'None',
+      'message': 'expected None, got 1 [none_type]',
+    }),
+    'predicate_error': dict({
+      'expected': 'a predicate that does not raise (raised RuntimeError: a predicate that will not answer)',
+      'message': 'expected a predicate that does not raise (raised RuntimeError: a predicate that will not answer), got 1 [predicate_error]',
+    }),
+    'predicate_failed': dict({
+      'expected': 'a passing predicate',
+      'message': 'expected a passing predicate, got -1 [predicate_failed]',
+    }),
+    'set_type': dict({
+      'expected': 'set',
+      'message': 'expected set, got [1] [set_type]',
+    }),
+    'string_pattern_mismatch': dict({
+      'expected': 'a string matching "\\\\\\\\d+"',
+      'message': 'expected a string matching "\\\\\\\\d+", got \'ab\' [string_pattern_mismatch]',
+    }),
+    'string_type': dict({
+      'expected': 'str',
+      'message': 'expected str, got 1 [string_type]',
+    }),
+    'too_long': dict({
+      'expected': 'length <= 1',
+      'message': "expected length <= 1, got 'ab' [too_long]",
+    }),
+    'too_short': dict({
+      'expected': 'length >= 2',
+      'message': "expected length >= 2, got 'a' [too_short]",
+    }),
+    'tuple_length': dict({
+      'expected': 'tuple of length 2',
+      'message': 'expected tuple of length 2, got (1,) [tuple_length]',
+    }),
+    'tuple_type': dict({
+      'expected': 'tuple',
+      'message': "expected tuple, got {1: 'a'} [tuple_type]",
+    }),
+    'unexpected_match': dict({
+      'expected': 'not int',
+      'message': 'expected not int, got 5 [unexpected_match]',
+    }),
+    'union_error': dict({
+      'expected': 'one of: int, str',
+      'message': 'expected one of: int, str, got 1.5 [union_error]',
+    }),
+  })
+# ---
