@@ -174,6 +174,19 @@ PLANTS = (
         ),
     ),
     Plant(
+        # A load-bearing result whose `HELD-BY:` names a test the tree does not
+        # have: the shape a rename leaves behind, and the one the page cannot
+        # detect on its own.
+        "tests/test_theory_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            "HELD-BY: test_walk_matches_denotation",
+            "HELD-BY: a_test_this_tree_does_not_have, test_walk_matches_denotation",
+        ),
+    ),
+    Plant(
         "tests/test_closure_ledger.py",
         ("crates/valgebra-core/src/ir.rs",),
         lambda tree: _edit(

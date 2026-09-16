@@ -19,6 +19,8 @@ subset inclusion. **[LOAD-BEARING]** — every variant's doc comment in
 `crates/valgebra-core/src/ir.rs` states a set, and
 [01-schema-ir.md](01-schema-ir.md) is that frame written out.
 
+HELD-BY: test_walk_matches_denotation, test_node_admits_its_denotation
+
 The consequence worth naming: because subtyping is inclusion and Python makes
 `bool` a subclass of `int`, `bool` is a **subtype** of `int` rather than disjoint
 from it. That is not a valgebra choice; it follows from the frame plus a fact
@@ -31,6 +33,8 @@ sets form a Boolean algebra; the folds the constructors apply are its laws.
 **[LOAD-BEARING]** — `crates/valgebra-core/src/ir.rs`, where a schema is built
 in the lattice normal form, and the property suites that check each claimed
 equivalence against membership rather than asserting it.
+
+HELD-BY: the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption
 
 **Stone's representation theorem (1936).** Every Boolean algebra is isomorphic to
 an algebra of sets. **[GUIDING]** — the licence for treating the scalar fragment
@@ -46,6 +50,8 @@ is `[[s ∧ ¬t]] = ∅`. **[LOAD-BEARING]**, with a qualifier: `is_subtype_of` 
 decompose each pair by shape, and it calls `is_empty` at the three places where no
 shape is available to recurse into: the two lattice bounds, and a complement on
 the right. Everywhere else the arms decide directly.
+
+HELD-BY: the_two_deciders_agree_under_an_oracle, test_the_two_deciders_are_measured_against_each_other
 
 The distinction is not pedantry. A rule stated as the reduction and implemented
 structurally has a hole wherever an arm is missing, and the reduction's name over
@@ -108,6 +114,8 @@ count the way Castagna & Duboc state the tuple rule for larger arities.
 and nowhere else: emptiness does not decompose a product, so the same relation
 asked as a meet with a complement is not decided.
 
+HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, test_a_product_splits_across_union_branches
+
 ## Records and maps
 
 **Castagna, "Typing Records, Maps, and Structs" (ICFP 2023).** One node with
@@ -115,6 +123,8 @@ named fields plus default clauses subsumes the record, the homogeneous mapping,
 the heterogeneous mapping and their combination. **[LOAD-BEARING]** —
 `Schema::KeyedMap`, where a closed record is no default clause and `dict[K, V]`
 is a single clause with no fields.
+
+HELD-BY: the_lattice_laws_hold_of_the_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_map_constrains_one_part_of_the_key_partition
 
 The paper's model is a *quasi-constant function*: named labels over a finite
 domain, with the rest given by a default keyed by a partition of the key space.
@@ -150,9 +160,13 @@ where the inductive set is that least fixpoint. Both are **[GUIDING]**.
 **Nakano, "A Modality for Recursion" (2000).** The guardedness modality: a
 recursion variable under a guard is productive. **[LOAD-BEARING]** for the
 *discipline* — `occurs_unguarded` is that condition, and it is what makes the
-induction above well founded. The paper proves soundness of a modal type system
+induction above well founded.
+
+The paper proves soundness of a modal type system
 by a step-indexed realizability argument; it states no theorem about contractive
 maps, and citing one to it is an error this page is written to avoid.
+
+HELD-BY: contractivity_requires_a_structural_guard, test_non_contractive_body_is_rejected
 
 [01-schema-ir.md](01-schema-ir.md) records why the check's structural arms
 compute nothing.
@@ -162,8 +176,12 @@ recursive types is decided coinductively over a **trail** of address pairs:
 assume the goal, unfold, and a pair already on the trail is a local success
 (§1.5, with the algorithm at §4.4). **[LOAD-BEARING]** — the assumption stack in
 `crates/valgebra-core/src/decision.rs` is that idea, with terms where the paper
-has addresses. The arms are not the paper's: it decides an ordering over
+has addresses.
+
+The arms are not the paper's: it decides an ordering over
 `⊥/⊤/→/µ` and valgebra decides a lattice with no arrow.
+
+HELD-BY: decides_recursive_subtyping_coinductively, test_recursive_subtyping_is_coinductive
 
 **Frisch, Castagna & Benzaken, Definition 6.9.** Emptiness is proved
 coinductively too: a *simulation* is "a self-justifying set, that is a
@@ -222,11 +240,15 @@ by two rules with no cache between them, and none is in hand.
 
 **The descriptor**, the representation the two Castagna papers above give and
 Elixir's `Module.Types.Descr` implements, is **[LOAD-BEARING]** in
-`crates/valgebra-core/src/descr/`. Where the procedure in `decision.rs` reads a
+`crates/valgebra-core/src/descr/`.
+
+Where the procedure in `decision.rs` reads a
 schema's syntax and applies inclusion rules, the descriptor gives the *set* a
 representation closed under union, intersection and complement, so a relation is
 decided by emptiness of one combination rather than by whether a rule matched the
 shape a caller wrote.
+
+HELD-BY: the_lattice_laws_hold_of_the_descriptors, the_complement_laws_hold_of_the_descriptors, emptiness_agrees_with_the_values
 
 It is built beside the structural procedure and is the second decider a caller
 reaches: the rules answer first and this answers where they decline
@@ -286,6 +308,8 @@ hypothesis and proptest. **[LOAD-BEARING]** — every algebra law is proved agai
 membership by a property suite rather than asserted
 ([08-testing.md](08-testing.md)).
 
+HELD-BY: test_de_morgan, the_lattice_laws_hold_of_the_sets, test_simplify_preserves_acceptance
+
 **Chen, Cheung & Yiu, "Metamorphic Testing: A New Approach for Generating Next
 Test Cases" (1998)**, and **Chen et al., "Metamorphic Testing: A Review of
 Challenges and Opportunities" (2018).** Derive a test case from one that passed
@@ -293,6 +317,8 @@ and check a relation between the two outputs; neither run needs an oracle.
 **[LOAD-BEARING]** — the JSON path against the object path, and fast mode against
 explain mode. Both relate a source run to a follow-up run, which is what makes
 them metamorphic relations rather than invariants that happen to hold.
+
+HELD-BY: test_json_walk_matches_the_object_walk, test_is_valid_agrees_with_validate
 
 The two are cited for different things. The 1998 report states the approach;
 neither "metamorphic relation" nor "necessary property" occurs in it. The
