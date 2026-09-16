@@ -4339,3 +4339,175 @@ fn an_attribute_record_relates_through_the_objects_that_carry_it() {
         Relation::Holds
     );
 }
+
+/// The trail a decision carries is left exactly as it was found.
+///
+/// The coinductive rule is that a goal already under way is *assumed*: the pair
+/// is pushed before the definition is entered and popped after. The pop is what
+/// makes the assumption scoped to the branch that made it, and nothing had
+/// asserted it happens. An unbalanced trail is not a crash and not a wrong
+/// answer on the branch that leaked -- it is a wrong answer on a *sibling*,
+/// which inherits an assumption it never made and proves a goal coinductively
+/// that has no proof. That is unsoundness reachable only through a second query.
+///
+/// Driven over pairs that make the rule work: a reference against a reference,
+/// a definition that names another, a union of them, and a pair the rules
+/// refute rather than prove, since a refutation returns by a different path.
+#[test]
+fn a_decision_leaves_the_trail_it_was_given() {
+    let defs = vec![
+        // 0: a list of itself, the fixpoint a `recursive` builds.
+        Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+        // 1: the same set written through a second definition.
+        Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(1)))),
+        // 2: a definition naming another, so the trail grows by two.
+        Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+    ];
+    let reference = |index| Schema::Ref(DefIx::new(index));
+    let pairs: Vec<(Schema, Schema)> = vec![
+        (reference(0), reference(1)),
+        (reference(0), reference(2)),
+        (reference(2), reference(0)),
+        (
+            Schema::union(vec![Schema::Int, reference(0)]),
+            Schema::union(vec![Schema::Int, reference(1)]),
+        ),
+        // Refuted rather than proved: the return path is the other one.
+        (reference(0), Schema::Int),
+        (Schema::Int, reference(0)),
+    ];
+    for (sub, sup) in pairs {
+        let budget = Cell::new(DECISION_BUDGET);
+        let mut trail = Vec::new();
+        let _ = sub.is_subtype_rec(
+            &sup,
+            SubtypeCx {
+                oracle: &NoLeafRelations,
+                defs: &defs,
+                budget: &budget,
+            },
+            &mut trail,
+        );
+        assert!(
+            trail.is_empty(),
+            "{sub:?} <= {sup:?} left {} assumption(s) behind",
+            trail.len()
+        );
+    }
+}
+
+/// A trail that was not empty to begin with comes back as it was.
+///
+/// The same property, asked where a caller has already assumed something: the
+/// decision may add to the trail and must leave the caller's entries in place
+/// and in order. A rule that cleared the trail instead of popping its own
+/// entries passes the test above and fails this one.
+#[test]
+fn a_decision_leaves_an_assumption_it_did_not_make() {
+    let defs = vec![Schema::list(SeqShape::homogeneous(Schema::Ref(
+        DefIx::new(0),
+    )))];
+    let seeded: Vec<(Schema, Schema)> =
+        vec![(Schema::Str, Schema::Bytes), (Schema::Int, Schema::Float)];
+    let budget = Cell::new(DECISION_BUDGET);
+    let mut trail = seeded.clone();
+    let _ = Schema::Ref(DefIx::new(0)).is_subtype_rec(
+        &Schema::Ref(DefIx::new(0)),
+        SubtypeCx {
+            oracle: &NoLeafRelations,
+            defs: &defs,
+            budget: &budget,
+        },
+        &mut trail,
+    );
+    assert_eq!(trail, seeded, "the caller's assumptions did not survive");
+}
+
+/// The assumption rule fires on the pair it was given and on no other.
+///
+/// A goal on the trail is assumed to hold: that is the coinduction, and it is
+/// sound because a pair only reaches the trail by being entered through a
+/// reference, which the frontend refuses to build unguarded. The risk is not
+/// that the rule fires -- it is that it fires on the *wrong* pair, through an
+/// assumption read positionally, or by a test coarser than equality, or by one
+/// side alone. Any of those lets an unrelated goal discharge a real one, and
+/// the answer is then a proof of something with no proof.
+///
+/// Asked in two groups, because the trail is consulted at one place and the
+/// decision does not always reach it.
+///
+/// A pair the **regions settle** is settled before any assumption is read:
+/// `int <= str` is refuted by the kinds, and stays refuted with the goal itself
+/// on the trail. That is the stronger property of the two, and the one worth
+/// having -- a descriptor answer is not a thing a hypothesis can overturn.
+///
+/// A pair the rules **descend into** is where the trail is consulted, and there
+/// the pair is assumed. The four readings below say it is keyed by the pair:
+/// the converse, one side alone, and an unrelated pair each move nothing, while
+/// the pair itself discharges the goal. Without that last line the four would
+/// be evidence that the rule never fires rather than evidence of what it fires
+/// on.
+#[test]
+fn an_assumption_is_read_as_the_pair_it_is() {
+    let list = |element| Schema::list(SeqShape::homogeneous(element));
+    let decide = |sub: &Schema, sup: &Schema, seed: Vec<(Schema, Schema)>| {
+        let budget = Cell::new(DECISION_BUDGET);
+        let mut trail = seed;
+        sub.is_subtype_rec(
+            sup,
+            SubtypeCx {
+                oracle: &NoLeafRelations,
+                defs: &[],
+                budget: &budget,
+            },
+            &mut trail,
+        )
+    };
+
+    // Settled by the regions: no hypothesis reaches them.
+    for (sub, sup) in [
+        (Schema::Int, Schema::Int),
+        (Schema::Int, Schema::Str),
+        (
+            Schema::union(vec![Schema::Int, Schema::Str]),
+            Schema::ANYTHING,
+        ),
+    ] {
+        let bare = decide(&sub, &sup, Vec::new());
+        for seed in [
+            vec![(Schema::Bytes, Schema::Float)],
+            vec![(sup.clone(), sub.clone())],
+            vec![(sub.clone(), sup.clone())],
+        ] {
+            assert_eq!(
+                bare,
+                decide(&sub, &sup, seed),
+                "a hypothesis moved {sub:?} <= {sup:?}, which the regions settle"
+            );
+        }
+    }
+
+    // Descended into, which is where the trail is read.
+    let (sub, sup) = (list(Schema::Int), list(Schema::Str));
+    let bare = decide(&sub, &sup, Vec::new());
+    assert!(
+        !bare.holds(),
+        "the row is chosen because the rules refute it"
+    );
+    for (seed, what) in [
+        (vec![(Schema::Bytes, Schema::Float)], "an unrelated pair"),
+        (vec![(sup.clone(), sub.clone())], "the converse"),
+        (vec![(sub.clone(), Schema::Bytes)], "a shared subject"),
+        (vec![(Schema::Bytes, sup.clone())], "a shared supertype"),
+    ] {
+        assert_eq!(
+            bare,
+            decide(&sub, &sup, seed),
+            "{what} discharged {sub:?} <= {sup:?}"
+        );
+    }
+    assert!(
+        decide(&sub, &sup, vec![(sub.clone(), sup.clone())]).holds(),
+        "the pair itself did not discharge the goal, so the rule never fired"
+    );
+}

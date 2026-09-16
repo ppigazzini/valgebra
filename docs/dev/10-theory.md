@@ -181,7 +181,11 @@ has addresses.
 The arms are not the paper's: it decides an ordering over
 `⊥/⊤/→/µ` and valgebra decides a lattice with no arrow.
 
-HELD-BY: decides_recursive_subtyping_coinductively, test_recursive_subtyping_is_coinductive
+HELD-BY: decides_recursive_subtyping_coinductively,
+test_recursive_subtyping_is_coinductive,
+a_decision_leaves_the_trail_it_was_given,
+a_decision_leaves_an_assumption_it_did_not_make,
+an_assumption_is_read_as_the_pair_it_is
 
 **Frisch, Castagna & Benzaken, Definition 6.9.** Emptiness is proved
 coinductively too: a *simulation* is "a self-justifying set, that is a
