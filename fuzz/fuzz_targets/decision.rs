@@ -7,6 +7,6 @@ use libfuzzer_sys::fuzz_target;
 use valgebra_core_fuzz::{SchemaPair, check_relations};
 
 fuzz_target!(|pair: SchemaPair| {
-    let SchemaPair(a, b) = &pair;
-    check_relations(a, b);
+    let SchemaPair(a, b, defs) = &pair;
+    check_relations(a, b, defs);
 });

@@ -18,7 +18,8 @@ use std::sync::Arc;
 
 use arbitrary::{Arbitrary, Result, Unstructured};
 use valgebra_core::{
-    ClassIx, ConstIx, Constraint, Field, MapClause, OperandIx, PredIx, Schema, SeqKind, SeqShape,
+    ClassIx, ConstIx, Constraint, DefIx, Field, MapClause, NoLeafRelations, OperandIx, PredIx,
+    Schema, SeqKind, SeqShape,
 };
 
 const NAMES: [&str; 4] = ["a", "b", "c", "d"];
@@ -91,7 +92,9 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
     // Atoms are always reachable; composites only while the depth budget holds.
     // The universe has one arm, not two: `typing.Any` is the top with a spelling
     // the term keeps for `repr`, and a fuzz target reads verdicts, not spellings.
-    let atoms = 10u8;
+    // `SelfRef` is an atom: it is the marker a builder leaves behind, and every
+    // decider declines it rather than descending, so it costs no depth.
+    let atoms = 12u8;
     let composites = 8u8;
     let span = if depth == 0 || u.is_empty() {
         atoms
@@ -109,7 +112,17 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
         7 => Schema::Bytes,
         8 => Schema::Literal(ConstIx::new(small(u)?)),
         9 => Schema::Instance(ClassIx::new(small(u)?)),
-        10 => {
+        // The marker an unfinished build carries. A finished schema holds none,
+        // and the laws must hold of it anyway: every decider is required to
+        // decline it, and a rule that answered instead would be answering about
+        // a set nothing defines.
+        10 => Schema::SelfRef(u.arbitrary::<u64>()? % 4),
+        // A back edge into the definitions table. The index is drawn wider than
+        // the table is built, so both a reference that resolves and one that
+        // does not are reached -- the second being what a decider meets after a
+        // pruned build, where the polarity's cut is the answer.
+        11 => Schema::Ref(DefIx::new(usize::from(u.arbitrary::<u8>()? % 6))),
+        12 => {
             let n = 1 + count(u, 3)?;
             let mut members = Vec::with_capacity(n);
             for _ in 0..n {
@@ -117,7 +130,7 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
             }
             Schema::Union(members.into())
         }
-        11 => {
+        13 => {
             let n = 1 + count(u, 3)?;
             let mut members = Vec::with_capacity(n);
             for _ in 0..n {
@@ -125,8 +138,8 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
             }
             Schema::Intersection(members.into())
         }
-        12 => Schema::Complement(Arc::new(build_schema(u, depth - 1)?)),
-        13 => {
+        14 => Schema::Complement(Arc::new(build_schema(u, depth - 1)?)),
+        15 => {
             let base = Arc::new(build_schema(u, depth - 1)?);
             let n = count(u, 3)?;
             let mut constraints = Vec::with_capacity(n);
@@ -138,9 +151,9 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
                 constraints: constraints.into(),
             }
         }
-        14 => Schema::set(build_schema(u, depth - 1)?),
-        15 => Schema::frozen_set(build_schema(u, depth - 1)?),
-        16 => Schema::Seq {
+        16 => Schema::set(build_schema(u, depth - 1)?),
+        17 => Schema::frozen_set(build_schema(u, depth - 1)?),
+        18 => Schema::Seq {
             container: if u.arbitrary()? {
                 SeqKind::List
             } else {
@@ -148,7 +161,7 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
             },
             shape: build_shape(u, depth - 1)?,
         },
-        _ => {
+        19 => {
             // Unique field names are a caller invariant the frontend guarantees
             // (a record's fields come from a Python type-hints dict, keyed by
             // name), and the decision procedures assert it. Drop a field whose
@@ -182,6 +195,31 @@ pub fn build_schema(u: &mut Unstructured, depth: u32) -> Result<Schema> {
                 defaults: defaults.into(),
             }
         }
+        _ => {
+            // The record of attributes, which is half of what a class with
+            // declared fields means. It is drawn on its own rather than only
+            // inside the meet the frontend builds, because the split exists so
+            // each half is a set the rules know -- and a half only ever seen
+            // beside the other is a half nothing tests.
+            let n = count(u, 3)?;
+            let mut fields: Vec<Field> = Vec::with_capacity(n);
+            for _ in 0..n {
+                let name = NAMES[usize::from(u.arbitrary::<u8>()?) % NAMES.len()];
+                let schema = build_schema(u, depth - 1)?;
+                let required = u.arbitrary()?;
+                if fields.iter().any(|f| &*f.name == name) {
+                    continue;
+                }
+                fields.push(Field {
+                    name: name.into(),
+                    schema,
+                    required,
+                });
+            }
+            Schema::AttrRecord {
+                fields: fields.into(),
+            }
+        }
     })
 }
 
@@ -195,28 +233,49 @@ impl<'a> Arbitrary<'a> for SchemaPlan {
     }
 }
 
-/// A pair of fuzzer-built schemas for the relational invariants.
+/// A pair of fuzzer-built schemas, and the definitions a reference in them
+/// names.
+///
+/// The table comes first, because a `Ref` is an index into it and a schema
+/// drawn without one can only carry references that resolve to nothing. Both
+/// are worth reaching -- an unresolvable reference is what a decider meets
+/// after a pruned build -- so the table is small and the indices are drawn
+/// wider than it, which produces both.
 #[derive(Debug)]
-pub struct SchemaPair(pub Schema, pub Schema);
+pub struct SchemaPair(pub Schema, pub Schema, pub Vec<Schema>);
 
 impl<'a> Arbitrary<'a> for SchemaPair {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
-        Ok(Self(build_schema(u, 4)?, build_schema(u, 4)?))
+        let n = count(u, 3)?;
+        let mut defs = Vec::with_capacity(n);
+        for _ in 0..n {
+            defs.push(build_schema(u, 2)?);
+        }
+        Ok(Self(build_schema(u, 4)?, build_schema(u, 4)?, defs))
     }
 }
 
 /// Sound relational invariants any subtype/equivalence/emptiness procedure must
 /// satisfy. A violation is a defect, not conservatism.
-pub fn check_relations(a: &Schema, b: &Schema) {
+pub fn check_relations(a: &Schema, b: &Schema, defs: &[Schema]) {
     // Reflexivity of the order and the equivalence it induces.
-    assert!(a.is_subtype_of(a), "subtyping not reflexive on {a:?}");
-    assert!(a.is_equivalent(a), "equivalence not reflexive on {a:?}");
+    assert!(
+        a.is_subtype_of_under(a, &NoLeafRelations, defs),
+        "subtyping not reflexive on {a:?}"
+    );
+    assert!(
+        a.is_equivalent_under(a, &NoLeafRelations, defs),
+        "equivalence not reflexive on {a:?}"
+    );
     // Top and bottom bound every schema. Stated over the ATOMS...
     assert!(
-        a.is_subtype_of(&Schema::ANYTHING),
+        a.is_subtype_of_under(&Schema::ANYTHING, &NoLeafRelations, defs),
         "{a:?} not below the top"
     );
-    assert!(Schema::Nothing.is_subtype_of(a), "bottom not below {a:?}");
+    assert!(
+        Schema::Nothing.is_subtype_of_under(a, &NoLeafRelations, defs),
+        "bottom not below {a:?}"
+    );
     // ...and over the PROPERTY, which is the law the atoms are only one case of.
     //
     // Written over the atoms alone this pair confirms the syntactic rule using
@@ -225,22 +284,22 @@ pub fn check_relations(a: &Schema, b: &Schema) {
     // subject, however long the fuzzer runs. Both sides are generated below, so
     // a cancelling intersection and an uninhabited record are reached -- and
     // they are common in this generator's space, not rare.
-    if a.is_empty() {
+    if a.is_empty_under(defs) {
         assert!(
-            a.is_subtype_of(b),
+            a.is_subtype_of_under(b, &NoLeafRelations, defs),
             "empty {a:?} not below {b:?}: the empty set is a subset of every set"
         );
     }
-    if Schema::Complement(Arc::new(b.clone())).is_empty() {
+    if Schema::Complement(Arc::new(b.clone())).is_empty_under(defs) {
         assert!(
-            a.is_subtype_of(b),
+            a.is_subtype_of_under(b, &NoLeafRelations, defs),
             "{a:?} not below universal {b:?}: every set is a subset of the universe"
         );
     }
     // Equivalence is exactly mutual inclusion.
-    let sub_ab = a.is_subtype_of(b);
-    let sub_ba = b.is_subtype_of(a);
-    if a.is_equivalent(b) {
+    let sub_ab = a.is_subtype_of_under(b, &NoLeafRelations, defs);
+    let sub_ba = b.is_subtype_of_under(a, &NoLeafRelations, defs);
+    if a.is_equivalent_under(b, &NoLeafRelations, defs) {
         assert!(
             sub_ab && sub_ba,
             "equivalent {a:?} and {b:?} are not mutually included"
@@ -248,7 +307,7 @@ pub fn check_relations(a: &Schema, b: &Schema) {
     }
     if sub_ab && sub_ba {
         assert!(
-            a.is_equivalent(b),
+            a.is_equivalent_under(b, &NoLeafRelations, defs),
             "mutually included {a:?} and {b:?} are not equivalent"
         );
     }
@@ -263,17 +322,25 @@ mod tests {
     /// inputs covers nested records and the records nested inside catch-all
     /// clauses, the shapes the live crash seed exercises.
     fn assert_unique_field_names(schema: &Schema) {
+        // Both record nodes, because both carry fields and the caller
+        // invariant is about fields. An attribute record is the half of a
+        // class that holds them, and a walk reading only the keyed map lets
+        // the generator emit a duplicate there and call the invariant held.
+        fn unique(fields: &[Field], schema: &Schema) {
+            let mut seen = std::collections::HashSet::new();
+            for field in fields {
+                assert!(
+                    seen.insert(&*field.name),
+                    "duplicate field name {:?} in {schema:?}",
+                    field.name
+                );
+                assert_unique_field_names(&field.schema);
+            }
+        }
         match schema {
+            Schema::AttrRecord { fields } => unique(fields, schema),
             Schema::KeyedMap { fields, defaults } => {
-                let mut seen = std::collections::HashSet::new();
-                for field in fields.iter() {
-                    assert!(
-                        seen.insert(&*field.name),
-                        "duplicate field name {:?} in {schema:?}",
-                        field.name
-                    );
-                    assert_unique_field_names(&field.schema);
-                }
+                unique(fields, schema);
                 for clause in defaults.iter() {
                     assert_unique_field_names(&clause.key);
                     assert_unique_field_names(&clause.value);

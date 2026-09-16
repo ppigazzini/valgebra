@@ -81,3 +81,68 @@ def test_the_soak_bounds_memory_per_batch() -> None:
 def test_the_soak_still_has_a_time_budget() -> None:
     """The flags above are additions, not a replacement for the budget."""
     assert re.search(r"-max_total_time=\d+", _soak_step())
+
+
+def test_the_generator_draws_every_node_the_ir_has() -> None:
+    """A fuzzer explores the shapes it can build and no others.
+
+    The generator is the target's universe, so a variant it never emits is one
+    no soak has ever reached however long it runs -- and the laws it checks are
+    laws about the fragment it draws rather than about the IR. Held to the
+    `Schema` enum, which is where a node is added.
+
+    Three variants are emitted through a name other than their own -- the top
+    through its constant, and the two container kinds through the constructors
+    that build them -- so each is listed with what reaches it. The top carries a
+    *spelling* beside the set, and one arm covers both because a fuzz target
+    reads verdicts rather than spellings. Anything else absent is a gap.
+    """
+    ir = (ROOT / "crates" / "valgebra-core" / "src" / "ir.rs").read_text(
+        encoding="utf-8"
+    )
+    body = ir[ir.index("pub enum Schema") :]
+    body = body[: body.index("\n}")]
+    variants = set(re.findall(r"^    ([A-Z]\w+)", body, re.MULTILINE))
+    assert len(variants) >= 15, sorted(variants)
+
+    generator = (ROOT / "fuzz" / "src" / "lib.rs").read_text(encoding="utf-8")
+    # The constructors count as well as the bare variants: a sequence is built
+    # through `Schema::set` and `Schema::frozen_set`, which name no variant.
+    emitted = set(re.findall(r"Schema::(\w+)", generator))
+    #: Variants the generator reaches through a constructor rather than by name,
+    #: each with the constructor that builds it.
+    through = {
+        "Anything": ("ANYTHING",),
+        "Coll": ("set", "frozen_set"),
+        "Seq": ("Seq",),
+    }
+    for variant, names in through.items():
+        if any(name in emitted for name in names):
+            emitted.add(variant)
+
+    missing = sorted(variants - emitted)
+    assert not missing, (
+        f"the fuzz generator emits no {missing}. A variant it cannot build is "
+        "one no soak reaches, so every law the target checks is a law about "
+        "the fragment it draws."
+    )
+
+
+def test_the_generator_draws_a_reference_wider_than_its_table() -> None:
+    """Both a reference that resolves and one that does not are reached.
+
+    A `Ref` is an index into the definitions table the target carries, and the
+    two cases are decided differently: one unfolds, and one becomes the
+    polarity's cut, which is what a decider meets after a pruned build. Drawing
+    the index from the table's own width would reach only the first.
+    """
+    generator = (ROOT / "fuzz" / "src" / "lib.rs").read_text(encoding="utf-8")
+    assert "Schema::Ref(" in generator
+    table = re.search(r"let n = count\(u, (\d+)\)\?;\s*\n\s*let mut defs", generator)
+    assert table is not None, "the target builds no definitions table"
+    index = re.search(r"Schema::Ref\(DefIx::new\(usize::from\(.*?% (\d+)\)", generator)
+    assert index is not None, "the reference index is not drawn from a bound"
+    assert int(index.group(1)) > int(table.group(1)), (
+        "the reference index is drawn no wider than the table is built, so "
+        "every reference resolves and the cut is never reached"
+    )
