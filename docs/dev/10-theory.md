@@ -229,19 +229,29 @@ tree is a partial version of it. What the citation buys today is the knowledge
 that the relation is decidable in EXPTIME, and that is a statement about the
 relation rather than a budget an implementation can be held to.
 
-**A goal memo is not the missing piece.**
+**A goal memo is not the missing piece, on every shape but one.**
 Interning is in the tree — `crates/valgebra-core/src/ir/intern.rs` shares the
 nodes of two schemas built alike — and it is the identity a table over goals
-would need for its key, which is why it read as half of one. Counted over the
-three decision workloads and over a record of thirty-two fields sharing one
-interned inner schema, the goals a query *repeats* are **zero**: the trail
-absorbs recursion and the per-rule caches absorb the shape where one goal is
-asked once per field ([02-decision.md](02-decision.md#the-budget-and-what-exhausting-it-means)).
-So there is no speed-up behind the work budget waiting to be collected, and the
-interning earns its place for what it already does — a cheap key for the
+would need for its key, which is why it read as half of one. The goals a query
+*repeats* are **counted** rather than argued: `decision::goal_tests` records
+each goal where the recursion is asked it, which is past the caches that answer
+a repeat without asking, and reports how many asks were of a pair already asked.
+
+Over the older workloads' shapes, and over a record of thirty-two fields sharing
+one inner schema, the count is **zero**: the trail absorbs recursion and the
+per-rule caches absorb the shape where one goal is asked once per field
+([02-decision.md](02-decision.md#the-budget-and-what-exhausting-it-means)).
+
+Over the relation matrix it is **not**. A meet against a union repeats **four**
+goals per query — twice in that corpus, eight over it — because the union
+distribution asks the meet of each branch and the meet rule asks the class atom
+against the same thing once per member, with no cache between the two rules.
+A shape where one goal is reached by two rules with no cache between them is
+what reopens this question, and the matrix carries two of them.
+So the interning earns its place for what it already does — a cheap key for the
 mutation sweep's diff, and a pointer-identity short-circuit on the trail's
-comparisons. What would reopen the question is a shape where one goal is reached
-by two rules with no cache between them, and none is in hand.
+comparisons — and a table over goals would buy a saving on that one shape,
+which is a measurement away rather than a guess.
 
 **The descriptor**, the representation the two Castagna papers above give and
 Elixir's `Module.Types.Descr` implements, is **[LOAD-BEARING]** in
