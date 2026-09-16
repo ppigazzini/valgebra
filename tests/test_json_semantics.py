@@ -296,3 +296,32 @@ def test_a_byte_order_mark_is_not_part_of_a_document() -> None:
 
     # And stripping it is what a caller does, which then validates.
     assert schema.is_valid_json(("﻿" + document).lstrip("﻿"))
+
+
+def test_the_code_says_which_depth_bound_a_document_reached() -> None:
+    """Two bounds sit on a deep document, and they are ordered.
+
+    The walk's is the tighter: a document nested past it is still a document,
+    so the parser reads it and the walk reports `recursion_limit`. Past the
+    parser's, there is no value to walk and the code is `json_invalid`.
+
+    The order is what makes the codes mean different things. Reversed, every
+    over-deep document would be a parse failure and a caller could not tell a
+    document too deep for this library from one that is not JSON.
+    """
+    deep = recursive(lambda s: union(int, [s]))
+
+    def code_at(levels: int) -> str:
+        document = "[" * levels + "]" * levels
+        with pytest.raises(ValidationError) as caught:
+            deep.validate_json(document)
+        return str(caught.value.code)
+
+    # Inside the parser's reach and past the walk's: the walk answers.
+    assert code_at(150) == "recursion_limit"
+    # Past the parser's: there is no value, so the parser answers.
+    assert code_at(2000) == "json_invalid"
+
+    # And the boolean reading refuses either way, without saying which.
+    assert not deep.is_valid_json("[" * 150 + "]" * 150)
+    assert not deep.is_valid_json("[" * 2000 + "]" * 2000)

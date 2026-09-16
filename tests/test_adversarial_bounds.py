@@ -525,3 +525,77 @@ def test_a_marker_type_past_the_cache_bound_is_still_read() -> None:
         schema = Validator(Annotated[int, marker])
         assert schema.is_valid(n), "the bound its type carries admits its own value"
         assert not schema.is_valid(n - 1), "and refuses the one below it"
+
+
+def test_a_lying_class_attribute_does_not_admit_a_value_to_a_builtin_kind() -> None:
+    """A kind is read from the value's real type, not from what it claims.
+
+    `isinstance` consults `__class__`, and a property can answer that with any
+    type at all: an object declaring itself an `int` passes
+    `isinstance(value, int)` while holding none of an integer's storage. A
+    schema over a builtin kind that believed it would admit a value with
+    nothing an integer's operations could read.
+
+    `isinstance` reads the real type first and consults `__class__` only when
+    that fails, which is what makes the second row below the sharper of the
+    two: a genuine `int` subclass claiming to be a `str` is admitted to `int`
+    by its type *and* to `str` by its claim. Python says it is both, which no
+    value is. Reading the real type gives one answer to each kind.
+    """
+
+    class Impostor:
+        @property
+        def __class__(self) -> type:  # type: ignore[override]
+            return int
+
+    class Disclaiming(int):
+        @property
+        def __class__(self) -> type:  # type: ignore[override]
+            return str
+
+    impostor = Impostor()
+    assert isinstance(impostor, int)  # Python believes it
+    assert not Validator(int).is_valid(impostor)
+
+    # A genuine subclass that claims another kind is admitted to both by
+    # Python: to `int` by its real type, and to `str` by its claim.
+    disclaiming = Disclaiming(1)
+    assert isinstance(disclaiming, int)
+    assert isinstance(disclaiming, str)
+    # It is an integer and it is not a string, and a schema says exactly that.
+    assert Validator(int).is_valid(disclaiming)
+    assert not Validator(str).is_valid(disclaiming)
+    # Which is what keeps the two kinds disjoint: believing the claim would
+    # put one value in both, and `int & str` is proved empty.
+    assert Validator(intersection(int, str)).is_empty()
+
+    # A container is read the same way: a claim is not storage.
+    class ListImpostor:
+        @property
+        def __class__(self) -> type:  # type: ignore[override]
+            return list
+
+    assert not Validator(list[int]).is_valid(ListImpostor())
+
+
+def test_a_user_class_is_whatever_python_says_it_is() -> None:
+    """Membership of a user class *is* `isinstance`, so a lie there is honoured.
+
+    The boundary the row above sits on. A builtin kind has storage this library
+    can read and a claim it can check against; a user class has neither, and
+    `isinstance` is the definition of belonging to one rather than a reading of
+    it. Overriding `__class__` is a documented way to write a proxy, and a
+    proxy that says it is a `Target` is one every other consumer treats as one.
+    """
+
+    class Target:
+        pass
+
+    class Proxy:
+        @property
+        def __class__(self) -> type:  # type: ignore[override]
+            return Target
+
+    proxy = Proxy()
+    assert isinstance(proxy, Target)
+    assert Validator(Target).is_valid(proxy)

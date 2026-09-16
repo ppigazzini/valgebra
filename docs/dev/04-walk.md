@@ -14,6 +14,17 @@ It runs over a `Value`, which is either a borrowed Python object or a borrowed
 parsed JSON value. That is what keeps the object path and the in-place JSON path
 membership-equivalent by construction rather than by a test that compares them.
 
+**Only `is_valid_json` takes the in-place path.** `validate_json` and `load`
+parse the document into Python objects and then run the *object* walk over them,
+because both hand back something a caller reads — `load` the value itself, and
+`validate_json` a report whose `value` summaries are reprs of Python objects. So
+a `Value::Json` is never explained: the explaining arms of the JSON walk are
+unreachable by construction, and a document reaches the same codes with the same
+`loc` a Python value reaches, which is what
+[08-error-model.md](../08-error-model.md) promises. The in-place path exists for
+the question that needs no objects at all, and that is the one that answers a
+`bool`.
+
 `WalkMode` names what the walk is for:
 
 | Mode | Reports |

@@ -156,6 +156,22 @@ in place of a fully formal proof.
 The soundness is relative to a small, explicit trust base:
 
 - `isinstance` and the PyO3 conversions report Python's own membership faithfully.
+
+  **A builtin kind is not read through `isinstance`, and `__class__` is not in
+  the trust base for one.** `isinstance` consults a value's `__class__`, which a
+  property can answer with any type at all, so an object declaring itself an
+  `int` passes `isinstance(value, int)` while holding none of an integer's
+  storage. A schema over a builtin kind reads the value's real type instead.
+
+  The sharper case is a genuine `int` subclass that declares itself a `str`.
+  `isinstance` reads the real type first and the claim second, so Python admits
+  that value to **both** kinds — which no value is, and which would put one
+  value in a meet this library proves empty. Reading the real type gives one
+  answer to each kind.
+
+  Where a schema names a *user* class, membership is `isinstance` by definition
+  and a lying `__class__` is honoured: overriding it is how a proxy is written,
+  and a proxy every other consumer treats as a `Target` is one here too.
 - **What a value answers is a function of the value.** Membership asks a value
   questions through Python — `isinstance`, `__eq__`, a rich comparison, `__len__`,
   `%`, a predicate — and reads the answers as facts about it. A method that
