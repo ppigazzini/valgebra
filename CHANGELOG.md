@@ -26,10 +26,24 @@ answer of its own, or a repair to a change not yet released.
 - fix: a bound at the end of the carrier keeps the integers past it
 - fix: a literal counts as one value where its constant is one
 - fix: a string kind holds the characters no pattern matches
+- fix: an annotation builds the schema it names, or is refused
 
 -->
 
 ### Fixed
+
+- **An annotation builds the schema it names, or is refused.** Four forms were
+  read as a different schema, with no message saying so. `typing.Tuple[()]` is
+  the empty tuple and built every tuple, admitting `(1,)`, because a bare legacy
+  alias and an empty parametrisation are told apart by whether a type-argument
+  list is present rather than by whether it is empty. A marker standing for the
+  constraints it yields -- the grouping protocol `annotated_types` documents,
+  which `Interval` and `Len` are written against -- was read by attribute alone,
+  so a marker of your own left the schema admitting exactly what it excludes.
+  `{"a": int, "a?": str}` names one field twice and built a record admitting
+  nothing; it is refused. `Literal[int]` names no constant and built the `int`
+  schema; it is refused. And a `Regex` marker carrying something that is not
+  text names what it carries rather than reporting every one as bytes.
 
 - **A string kind holds the characters no pattern matches.** A `str` is a
   sequence of code points and a lone surrogate is one of them: `"\ud800"` is one

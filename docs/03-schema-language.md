@@ -313,6 +313,20 @@ assert Validator({"page??": int}).is_valid({"page?": 1})
 assert Validator({"page??": int}).is_valid({})  # still optional
 ```
 
+A field is named once. `{"a": int, "a?": str}` is two dict keys and one field
+name, which asks the key to be required and optional at once, so it is refused
+rather than built into a record admitting nothing:
+
+```python
+from valgebra import Validator
+
+try:
+    Validator({"a": int, "a?": str})
+    raise AssertionError("expected a rejection")
+except ValueError as error:
+    assert "declared twice" in str(error)
+```
+
 A **required** key ending in `?` has no dict-literal spelling: every trailing
 `?` is the marker, so there is no string that reads back as one. Write it as a
 `TypedDict` through the functional syntax, where the key is taken literally and

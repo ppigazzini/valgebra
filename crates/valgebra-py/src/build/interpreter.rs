@@ -44,7 +44,18 @@ fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
              \x20       raise AttributeError(name)\n\
              class Timezone:\n\
              \x20   pass\n\
-             Timezone.__module__ = 'annotated_types'\n",
+             Timezone.__module__ = 'annotated_types'\n\
+             class grouped:\n\
+             \x20   __is_annotated_types_grouped_metadata__ = True\n\
+             \x20   def __init__(self, *items): self.items = items\n\
+             \x20   def __iter__(self): return iter(self.items)\n\
+             class endless:\n\
+             \x20   __is_annotated_types_grouped_metadata__ = True\n\
+             \x20   def __iter__(self): return iter([self])\n\
+             def nest(depth):\n\
+             \x20   marker = at.Ge(0)\n\
+             \x20   for _ in range(depth): marker = grouped(marker)\n\
+             \x20   return marker\n",
         )?,
         Some(&namespace),
         None,
@@ -75,6 +86,22 @@ fn each_spelling_builds_its_own_schema() {
             // The scalars and the two bounds, which are the leaves every
             // other row is built out of.
             ("int", "int"),
+            // A marker standing for the constraints it yields, which is the
+            // protocol `annotated_types` documents and the shape `Interval` and
+            // `Len` are written in. Read by attribute alone it is metadata this
+            // frontend does not recognise, which leaves the base admitting
+            // everything the marker excludes.
+            (
+                "typing.Annotated[int, grouped(at.Ge(0), at.Le(10))]",
+                "Annotated[int, Ge(0), Le(10)]",
+            ),
+            // A group of groups bottoms out, and the depth it is followed to is
+            // counted rather than assumed.
+            (
+                "typing.Annotated[int, grouped(grouped(at.Ge(0)))]",
+                "Annotated[int, Ge(0)]",
+            ),
+            ("typing.Annotated[int, nest(7)]", "Annotated[int, Ge(0)]"),
             ("bool", "bool"),
             ("float", "float"),
             ("str", "str"),
@@ -194,6 +221,14 @@ fn each_refusal_says_what_it_refuses() {
             ("[..., int]", "only as the last element"),
             ("tuple[*list[int]]", "only a tuple can be unpacked"),
             ("typing.Annotated[int, Timezone()]", "does not check"),
+            // A grouping that never bottoms out, and one nested past the bound:
+            // following either to the end is a stack this library does not have.
+            // A name and the same name with a trailing `?` are one field
+            // written twice, which asks the record to hold two disjoint types
+            // under one key and to have it both required and absent.
+            ("{'a': int, 'a?': str}", "declared twice"),
+            ("typing.Annotated[int, nest(9)]", "nested too deeply"),
+            ("typing.Annotated[int, endless()]", "nested too deeply"),
         ] {
             let error = match built(py, expression) {
                 Err(error) => error.to_string(),

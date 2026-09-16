@@ -505,10 +505,70 @@ impl<'py> Probes<'py> {
     }
 }
 
+/// How deep a marker may group other markers before the frontend refuses.
+///
+/// A grouped marker answers with the constraints it stands for, and one of
+/// those may be grouped in turn. The vocabulary's own nest one deep at most; a
+/// marker that answers with itself nests forever, and following it is a stack
+/// this library does not have. The bound is a refusal rather than a truncation
+/// for the reason every other refusal here is: a marker read in part leaves a
+/// schema admitting what the rest of it excludes.
+const MAX_GROUPING_DEPTH: u32 = 8;
+
 pub(super) fn parse_constraint(
     marker: &Bound<'_, PyAny>,
     out: &mut Vec<Constraint>,
     lits: &mut Pool,
+) -> PyResult<()> {
+    parse_constraint_within(marker, out, lits, 0)
+}
+
+/// Whether this marker stands for the constraints it yields.
+///
+/// `annotated_types` marks one with an attribute, and reading the attribute is
+/// how the rest of this module reads a marker too: an embedded interpreter
+/// starts on the base prefix and sees no virtual environment, so importing the
+/// package to ask `isinstance` would make the answer depend on how the process
+/// was launched.
+fn groups_other_markers(marker: &Bound<'_, PyAny>) -> bool {
+    let py = marker.py();
+    marker
+        .getattr_opt(intern!(py, "__is_annotated_types_grouped_metadata__"))
+        .ok()
+        .flatten()
+        .is_some_and(|flag| flag.is_truthy().unwrap_or(false))
+}
+
+/// Read a marker that stands for the constraints it yields.
+///
+/// The comment the caller carries, in the one place that acts on it: a grouped
+/// marker is several constraints, each read the way a marker written on its own
+/// is, so a group of groups terminates at [`MAX_GROUPING_DEPTH`] rather than at
+/// the stack.
+fn parse_grouped(
+    marker: &Bound<'_, PyAny>,
+    out: &mut Vec<Constraint>,
+    lits: &mut Pool,
+    depth: u32,
+) -> PyResult<()> {
+    if depth >= MAX_GROUPING_DEPTH {
+        return Err(PyValueError::new_err(format!(
+            "{} groups markers nested too deeply: a marker stands for the \
+             constraints it yields, and following this one does not bottom out",
+            summarize(marker)
+        )));
+    }
+    for inner in marker.try_iter()? {
+        parse_constraint_within(&inner?, out, lits, depth + 1)?;
+    }
+    Ok(())
+}
+
+fn parse_constraint_within(
+    marker: &Bound<'_, PyAny>,
+    out: &mut Vec<Constraint>,
+    lits: &mut Pool,
+    depth: u32,
 ) -> PyResult<()> {
     // A class is metadata this frontend does not recognise, and the typing spec
     // says to ignore what a consumer does not recognise.
@@ -535,15 +595,22 @@ pub(super) fn parse_constraint(
     // time, not at first validation; the compiled regex is cached per validator.
     if let Some(attr) = probes.get(marker, Probe::Pattern)? {
         let Ok(pattern) = attr.extract::<String>() else {
-            // A `bytes` pattern: `re` compiles one against `bytes` values, and a
-            // pattern constraint here matches the text of a `str`. Reading the
-            // marker and dropping the pattern would leave a schema that admits
-            // every value of its base, which is the opposite of what a pattern
-            // is written for.
-            return Err(not_implemented(
-                "a bytes pattern cannot constrain a schema: a pattern is matched \
-                 against text, so write the pattern as a str",
-            ));
+            // A pattern this frontend cannot read as text. `re` compiles one
+            // against `bytes` values, and a pattern constraint here matches the
+            // text of a `str`; anything else carrying a `pattern` attribute is
+            // a marker whose pattern is not a pattern at all. Reading the marker
+            // and dropping it would leave a schema that admits every value of
+            // its base, which is the opposite of what a pattern is written for,
+            // so the refusal names what was found rather than a kind it guessed.
+            let what = if attr.is_instance_of::<PyBytes>() {
+                "a bytes pattern".to_owned()
+            } else {
+                format!("the pattern {}", summarize(&attr))
+            };
+            return Err(not_implemented(&format!(
+                "{what} cannot constrain a schema: a pattern is matched against \
+                 text, so write the pattern as a str",
+            )));
         };
         let pattern = with_inline_flags(marker, &probes, pattern)?;
         // Refused before the compile, because this engine compiles these and
@@ -643,6 +710,20 @@ pub(super) fn parse_constraint(
         && func.is_callable()
     {
         out.push(Constraint::Predicate(lits.intern_predicate(&func)));
+    } else if out.len() == before && groups_other_markers(marker) {
+        // A marker standing for several constraints answers with them, which is
+        // the protocol `annotated_types` documents and what a caller writes
+        // their own against. `Interval` and `Len` carry their bounds as
+        // attributes too, so the probes above have already read them and this
+        // arm is reached only by a marker whose constraints live nowhere else --
+        // which is why the question is asked here rather than before them. Read
+        // first, it cost an attribute lookup on every marker a schema carries,
+        // and a build of one annotated record spends that on each of them.
+        //
+        // Without the arm, a marker written this way is metadata the frontend
+        // does not recognise, which the typing spec says to ignore -- leaving a
+        // schema that admits everything the marker was written to exclude.
+        return parse_grouped(marker, out, lits, depth);
     } else if out.len() == before && is_unhandled_constraint(marker) {
         return Err(not_implemented(&format!(
             "{} is a constraint this frontend does not check; a schema carrying \

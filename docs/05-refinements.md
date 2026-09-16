@@ -285,7 +285,10 @@ when the validator is built, rather than rejecting every value at check time.
 
 The compound markers `Interval` and `Len` expand to the bounds they carry, so
 `Interval(ge=0, le=10)` contributes `Ge(0)` and `Le(10)`, and `Len(2, 4)`
-contributes `MinLen(2)` and `MaxLen(4)`:
+contributes `MinLen(2)` and `MaxLen(4)`. They are read through the grouping
+protocol `annotated_types` documents — a marker that stands for several
+constraints answers for them — so **a marker of your own written that way is
+read the same way**:
 
 ```python
 from typing import Annotated
@@ -298,6 +301,18 @@ assert Validator(Annotated[int, at.Interval(ge=0, le=10)]).is_valid(5)
 assert not Validator(Annotated[int, at.Interval(ge=0, le=10)]).is_valid(11)
 assert Validator(Annotated[str, at.Len(2, 4)]).is_valid("abc")
 assert not Validator(Annotated[str, at.Len(2, 4)]).is_valid("a")
+
+
+class Percent(at.GroupedMetadata):
+    """A marker of your own, standing for the two bounds it yields."""
+
+    def __iter__(self):
+        yield at.Ge(0)
+        yield at.Le(100)
+
+
+assert Validator(Annotated[int, Percent()]).is_valid(50)
+assert not Validator(Annotated[int, Percent()]).is_valid(101)
 
 assert Validator(Annotated[int, at.MultipleOf(3)]).is_valid(9)
 assert not Validator(Annotated[int, at.MultipleOf(3)]).is_valid(5)

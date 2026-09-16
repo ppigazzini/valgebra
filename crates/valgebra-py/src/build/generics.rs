@@ -8,8 +8,10 @@
 //! `typing` has no spelling for -- so they are read here. The section "What a
 //! parametrized form says" in `docs/dev/03-frontend.md` is this module.
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
+use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple, PyType};
+use rustc_hash::FxHashSet;
 use valgebra_core::{Field, MapClause, Schema, SeqShape};
 
 use super::classes::{field_name, is_truthy_attr};
@@ -117,6 +119,19 @@ pub(super) fn build_parametrized(
 /// `Literal[1.5]` means. The line is between a value with no interpretation but
 /// itself and one this library already reads as a schema.
 pub(super) fn refuse_unhashable_literal(arg: &Bound<'_, PyAny>) -> PyResult<()> {
+    // A *type* is the other thing `Literal` is handed that Python does not
+    // reject and this library already reads as a schema. `Literal[int]` names no
+    // constant -- the spec's arguments are values -- and reading it on built the
+    // `int` schema, so a schema meant to admit one value admitted every integer.
+    if arg.is_instance_of::<PyType>() {
+        return Err(not_implemented(&format!(
+            "{} is a type rather than a constant, and is not a Literal \
+             argument: the typing spec allows None, an enum member, or an int, \
+             bool, str or bytes value. Write the type on its own to admit its \
+             values, or a constant to admit one",
+            summarize(arg)
+        )));
+    }
     let (kind, instead) = if arg.is_instance_of::<PyList>() {
         (
             "a list",
@@ -264,11 +279,38 @@ pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Un
 /// nothing after it. An element following the tail is therefore refused: the set
 /// it names is one this algebra cannot spell, and reading it as anything else
 /// would admit a different one.
+/// Whether these type arguments spell `tuple[()]`.
+///
+/// No arguments on 3.11 and later; one argument that is the empty tuple on
+/// 3.10. `get_args` reports the two differently and `tuple[()]` means the same
+/// type on both, so the difference is read here instead of by every caller.
+fn spells_the_empty_tuple(args: &Bound<'_, PyTuple>) -> PyResult<bool> {
+    if args.is_empty() {
+        return Ok(true);
+    }
+    if args.len() != 1 {
+        return Ok(false);
+    }
+    let only = args.get_item(0)?;
+    match only.cast::<PyTuple>() {
+        Ok(tuple) => Ok(tuple.is_empty()),
+        Err(_) => Ok(false),
+    }
+}
+
 pub(super) fn build_tuple(
     args: &Bound<'_, PyTuple>,
     lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Schema> {
+    // `tuple[()]` is the empty tuple, and the runtimes spell it two ways: 3.11
+    // and later give no type arguments, 3.10 gives one argument that *is* the
+    // empty tuple. Both name one type, so the older spelling is read here rather
+    // than reaching the loop below, which would take it for a tuple literal and
+    // refuse it.
+    if spells_the_empty_tuple(args)? {
+        return Ok(Schema::tuple(SeqShape::fixed(Vec::new())));
+    }
     let mut prefix: Vec<Bound<'_, PyAny>> = Vec::with_capacity(args.len());
     let mut tail: Option<Bound<'_, PyAny>> = None;
     for arg in args.iter() {
@@ -381,11 +423,22 @@ pub(super) fn build_dict(
     // catch-all; the empty dict the empty closed record.
     let mut fields = Vec::new();
     let mut defaults = Vec::new();
+    // Whether any key was written with the optional suffix. Two keys of one
+    // dict are distinct strings, so two *fields* can share a name only where a
+    // `?` was stripped from one of them -- which is what makes the scan below
+    // conditional rather than a cost every record pays for a shape most of them
+    // cannot have.
+    let mut optional_seen = false;
     for (key, value) in dict.iter() {
         if let Ok(name) = key.cast::<PyString>() {
             let raw = field_name(name)?;
+            // The suffix is where the flag is raised, because stripping one is
+            // the only thing that makes two dict keys one field name.
             let (name, required) = match raw.strip_suffix('?') {
-                Some(stripped) => (stripped.into(), false),
+                Some(stripped) => {
+                    optional_seen = true;
+                    (stripped.into(), false)
+                }
                 None => (raw.into(), true),
             };
             fields.push(Field {
@@ -402,10 +455,76 @@ pub(super) fn build_dict(
             });
         }
     }
+    if optional_seen {
+        refuse_a_field_named_twice(&fields)?;
+    }
     Ok(Schema::keyed_map(fields, defaults))
+}
+
+/// Refuse a record that names one field twice.
+///
+/// `{"a": int, "a?": str}` is two dict keys and one field name, so the record it
+/// names asks the key to be required and optional at once and to hold two
+/// disjoint types. Building it gave a record admitting nothing, with no message
+/// saying why, and two spellings of it that compared unequal.
+///
+/// Asked once over the finished fields rather than of each name as it arrives:
+/// a record is written with as many keys as a caller likes, and asking each new
+/// name against every earlier one makes building one quadratic in its width.
+fn refuse_a_field_named_twice(fields: &[Field]) -> PyResult<()> {
+    let mut seen: FxHashSet<&str> =
+        FxHashSet::with_capacity_and_hasher(fields.len(), rustc_hash::FxBuildHasher);
+    for field in fields {
+        if !seen.insert(&field.name) {
+            return Err(PyValueError::new_err(format!(
+                "the key {:?} is declared twice in this record: a name and the \
+                 same name with a trailing `?` are one field, so write it once \
+                 with the type and the optionality it has",
+                field.name
+            )));
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn is_ellipsis(obj: &Bound<'_, PyAny>) -> bool {
     let py = obj.py();
     forms(py).is_ok_and(|forms| obj.is(forms.ellipsis.bind(py)))
+}
+
+#[cfg(all(test, feature = "interpreter-tests"))]
+mod empty_tuple_tests {
+    use super::spells_the_empty_tuple;
+    use pyo3::prelude::*;
+    use pyo3::types::{PyInt, PyTuple};
+
+    /// `tuple[()]` is the empty tuple type in both spellings `get_args` has.
+    ///
+    /// The interpreters disagree about the arguments: 3.11 and later report
+    /// none, 3.10 reports one argument that is the empty tuple. The second
+    /// shape cannot be produced by an annotation on the interpreter this
+    /// corpus runs, so it is built by hand -- a reading held only on the floor
+    /// interpreter is a reading no sweep here observes, and the 3.10 lane is a
+    /// long way to find out that the type became `tuple[anything, ...]`.
+    #[test]
+    fn the_empty_tuple_is_read_in_both_spellings_get_args_has() {
+        Python::attach(|py| {
+            let none: Vec<Bound<'_, PyAny>> = Vec::new();
+            let empty = PyTuple::new(py, none).expect("builds");
+            assert!(spells_the_empty_tuple(&empty).expect("reads"));
+
+            // The 3.10 shape: one argument, and it is the empty tuple.
+            let wrapped = PyTuple::new(py, [empty.clone()]).expect("builds");
+            assert!(spells_the_empty_tuple(&wrapped).expect("reads"));
+
+            // One argument that is a type is `tuple[int]`, which is a tuple of
+            // one element rather than of none.
+            let one = PyTuple::new(py, [PyInt::new(py, 1i64)]).expect("builds");
+            assert!(!spells_the_empty_tuple(&one).expect("reads"));
+
+            // Two arguments are two elements, whatever they are.
+            let two = PyTuple::new(py, [empty.clone(), empty]).expect("builds");
+            assert!(!spells_the_empty_tuple(&two).expect("reads"));
+        });
+    }
 }

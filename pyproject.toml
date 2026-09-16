@@ -184,6 +184,10 @@ ignore = [
 # to guard, so the rules that modernise those spellings would rewrite the check
 # into one that compares a form against itself. Which they did, once.
 "scripts/pypy_import_check.py" = ["INP001", "T201", "UP006", "UP007", "UP035", "UP045"]
+# The frontend form matrix builds the *legacy* typing spellings on purpose: a
+# bare `typing.List` and a parametrised `typing.Tuple[()]` are two forms this
+# library reads differently, and modernising them away deletes the rows.
+"tests/test_frontend_forms.py" = ["UP006", "UP035"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["valgebra"]

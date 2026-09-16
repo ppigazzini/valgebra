@@ -5,6 +5,7 @@ use std::cell::{Cell, RefCell};
 
 use pyo3::PyTypeInfo;
 use pyo3::exceptions::{PyNotImplementedError, PyValueError};
+use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
@@ -164,17 +165,6 @@ struct Forms {
     union: Py<PyAny>,
     optional: Py<PyAny>,
     union_type: Py<PyAny>,
-    /// `types.GenericAlias`, the runtime class of `list[int]` and of every
-    /// other PEP 585 parametrization.
-    ///
-    /// Looked up here rather than through `pyo3::types::PyGenericAlias`, whose
-    /// type object is the `CPython` C-API static `Py_GenericAliasType`. That
-    /// symbol is not part of the limited API and `PyPy`'s `cpyext` does not
-    /// export it, so naming it makes the extension fail to *load* there --
-    /// `undefined symbol`, at import, before any schema is built. Every other
-    /// form this cache holds is read the same way, from the module that
-    /// defines it, and those load everywhere.
-    generic_alias: Py<PyAny>,
     literal: Py<PyAny>,
     /// `typing.get_origin` and `typing.get_args`, the spec's own introspection,
     /// held as the callables they are.
@@ -225,7 +215,6 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             union: typing.getattr("Union")?.unbind(),
             optional: typing.getattr("Optional")?.unbind(),
             union_type: py.import("types")?.getattr("UnionType")?.unbind(),
-            generic_alias: py.import("types")?.getattr("GenericAlias")?.unbind(),
             literal: typing.getattr("Literal")?.unbind(),
             get_origin: typing.getattr("get_origin")?.unbind(),
             get_args: typing.getattr("get_args")?.unbind(),
@@ -310,12 +299,15 @@ pub(crate) fn build_schema(
         let args = args.cast::<PyTuple>()?;
         // A *bare* legacy alias -- `typing.List`, `typing.Tuple` -- is the class
         // it aliases, so it is compiled as that class rather than as a
-        // parametrization with no arguments. Both have no type arguments, which
-        // is why `typing.Tuple` came out as `tuple[()]`, the empty tuple, and
-        // `typing.List` was refused for wanting exactly one.
-        let parametrized = obj.is_instance(forms.generic_alias.bind(py))?;
-        if args.is_empty()
-            && !parametrized
+        // parametrization with no arguments.
+        //
+        // The two are told apart by whether the form carries a type argument
+        // list at all, rather than by whether that list is empty. A bare alias
+        // carries none; a parametrisation carries one even where it is empty,
+        // and `typing.Tuple[()]` is exactly that -- the empty tuple, a different
+        // type from every tuple. `get_args` answers `()` for both, so reading it
+        // made `typing.Tuple[()]` admit `(1,)`.
+        if !obj.hasattr(intern!(py, "__args__"))?
             && let Ok(class) = origin.cast::<PyType>()
         {
             return build_type_object(class, lits, defs);
