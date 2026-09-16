@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 
 use pyo3::prelude::*;
+use pyo3::types::PyString;
 use rustc_hash::FxHashMap;
 use valgebra_core::{CollKind, Constraint, DefIx, Field, MapClause, Schema, SeqKind, Spelling};
 
@@ -318,8 +319,25 @@ fn render_constraint(py: Python<'_>, constraint: &Constraint, pool: &[Py<PyAny>]
         Constraint::MaxLen(n) => format!("MaxLen({n})"),
         Constraint::MultipleOf(i) => format!("MultipleOf({})", pool_repr(py, pool, i.get())),
         Constraint::Predicate(_) => "Predicate(...)".to_owned(),
-        Constraint::Regex(pattern) => format!("Regex({pattern:?})"),
+        Constraint::Regex(pattern) => format!("Regex({})", python_repr(py, pattern)),
     }
+}
+
+/// A string spelled the way Python spells it.
+///
+/// Rust's `{:?}` is Rust's escaping: it writes `\u{7}` for a control character,
+/// which is a truncated escape to Python, and double quotes where Python's own
+/// repr picks single. A rendered schema claims to read back, and the marker it
+/// renders has a repr of its own, so the pattern inside it is spelled by the
+/// interpreter that will read it rather than by the language that printed it.
+///
+/// A `str`'s `__repr__` does not raise, so the fallback is unreachable; it is
+/// the Rust spelling rather than a placeholder, because a pattern a reader can
+/// see is worth more here than one they cannot.
+fn python_repr(py: Python<'_>, text: &str) -> String {
+    PyString::new(py, text)
+        .repr()
+        .map_or_else(|_| format!("{text:?}"), |repr| repr.to_string())
 }
 
 // Bounds-check the pool rather than indexing directly: a corrupt pool index

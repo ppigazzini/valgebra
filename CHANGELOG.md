@@ -36,10 +36,18 @@ answer of its own, or a repair to a change not yet released.
 - fix: a refinement with no constraint is decided as the base it names -- internal
 - fix: a constraint is put to the kind a literal's constant belongs to
 - fix: a render that gave up says so, rather than reading as another schema
+- fix: a pattern prints the way Python spells it
 
 -->
 
 ### Fixed
+
+- **A pattern prints the way Python spells it.** The `Regex` marker inside a
+  rendered schema carried the pattern in *Rust's* spelling: double quotes where
+  Python's own repr picks single, and `\u{7}` for a control character, which is
+  a truncated escape wherever Python reads it. A repr is an expression that
+  rebuilds the schema, and the marker beside it has a repr of its own, so the
+  two now agree character for character.
 
 - **A render that gave up says so.** A repr deeper than the renderer's own
   bound prints `<...>` where it stops. It printed `...`, which is valid Python

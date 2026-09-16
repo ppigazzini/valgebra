@@ -134,6 +134,13 @@ ROUNDTRIP_SCHEMAS = [
     # one they cannot evaluate.
     Annotated[str, Regex(r"[a-z]+")],
     Annotated[str, Regex(r"\\d+"), at.MinLen(2)],
+    # Patterns the two languages spell differently. A control character is
+    # `\u{7}` to Rust and `\x07` to Python, and the first is a syntax error in
+    # the second; a quote picks the quoting. The pattern is a string the render
+    # prints, so it has to be printed the way the reader's interpreter reads it.
+    Annotated[str, Regex("\x07+")],
+    Annotated[str, Regex("a'b")],
+    Annotated[str, Regex("\u00e9+")],
 ]
 
 
@@ -164,6 +171,22 @@ def test_a_render_that_is_not_an_expression_refuses_rather_than_rebuilding() -> 
     parsed = eval(repr(predicate), namespace)  # noqa: S307
     with pytest.raises(NotImplementedError):
         Validator(parsed)
+
+
+def test_a_pattern_prints_as_python_spells_it() -> None:
+    r"""The rendered marker is the marker's own repr, character for character.
+
+    A pattern is a string, and a rendered schema claims to read back. Rust's
+    debug spelling is not Python's -- it writes `\u{7}` where Python writes
+    `\x07`, and double quotes where Python's repr picks single -- so a repr
+    carrying a control character was a syntax error to the interpreter it was
+    printed for, and one carrying none still disagreed with the marker beside
+    it about how a string is written.
+    """
+    for pattern in ("[a-z]+", "\x07+", "a'b", "\u00e9+", '"'):
+        marker = Regex(pattern)
+        rendered = repr(Validator(Annotated[str, marker]))
+        assert rendered == f"Annotated[str, {marker!r}]", rendered
 
 
 def test_repr_of_class_and_recursive_forms() -> None:
