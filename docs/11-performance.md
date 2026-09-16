@@ -115,7 +115,15 @@ on. Build both and time the shapes you run:
 ```bash
 uv run maturin build --release --pgo -i .venv/bin/python --out profiled
 uv run maturin build --release       -i .venv/bin/python --out plain
+uv run --group bench python scripts/pgo_compare.py --record plain.json --label plain
+uv run --group bench python scripts/pgo_compare.py --record pgo.json --label pgo
+uv run --group bench python scripts/pgo_compare.py --compare plain.json pgo.json
 ```
+
+That script times the seven shapes the competitive gate judges, so the two
+tables speak of the same workloads. It refuses a reading from a debug build and
+refuses to compare two readings from different interpreters, because a ratio
+between builds cancels the machine and not the interpreter.
 
 Measured that way on one box, best of nine and repeated three times, the
 direction is not one way. A `list[int]` of ten thousand comes out ahead by about
@@ -131,6 +139,30 @@ winners share is one hot loop over one element type, which is what a profile can
 lay out straight. The record walk is the other shape: fifty key lookups, each
 dispatching on the field's own schema, so the profile has many warm paths and no
 hot one, and laying them out costs the branches it does not predict.
+
+**The reading the release matrix is decided on is taken where the release
+builds.** The `pgo compare` lane builds both wheels from one source, times every
+shape on each, and uploads the two readings, on both interpreters the bench jobs
+use -- a global lock changes what a per-element loop costs, and the shapes a
+profile serves best are the per-element ones:
+
+```bash
+gh workflow run CI -f pgo_compare=true
+```
+
+**The training workload is the lever**, not the flag: the profile is taken over
+`scripts/pgo_workload.py`, which `pyproject.toml`'s `pgo-command` names, and
+what that workload spends its time on is what the layout is arranged for. A
+change to it is measured on both sides of the comparison above, since a profile
+re-weighted toward one shape is a profile taken away from another.
+
+**What the matrix does with the reading.** `--pgo` ships on five targets, and
+that is a claim about those boxes rather than a default. Where the lane reads a
+gain on the shapes the release serves, the matrix keeps `pgo: true` and this
+page names the shapes it costs. Where it reads the record walk slower on both
+interpreters -- the shape most callers spend their time in -- `pgo: true` leaves
+the matrix and this page says so. Either way the decision is the reading's, and
+the reading is the lane's.
 
 That is one microarchitecture and one interpreter, and the release lane builds
 on five targets none of which is this one, so it is a reason to measure your own

@@ -21,6 +21,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a set lattice charges its product like the three beside it -- internal
 - fix: a dict has one entry for an int key and its boolean
 - fix: a set is at most as long as the values its element denotes
+- feat: what a profile buys is read per shape, on the box the release builds on -- internal
 
 -->
 

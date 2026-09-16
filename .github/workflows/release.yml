@@ -56,8 +56,11 @@ jobs:
         # record walk's is fixed at its field count. A caller for whom the
         # record walk is the shape that matters builds their own plain wheel,
         # and `docs/11-performance.md` carries the two commands and the numbers.
-        # No lane measures it where it is applied, which is why the figures are
-        # the page's and not this file's.
+        # The `pgo compare` lane in `ci.yml` reads it as close to where it is
+        # applied as a lane gets: both wheels from one source, every shape, on
+        # both bench interpreters, on dispatch. The figures stay on the page and
+        # not in this file, because a matrix entry carrying them would read as a
+        # setting rather than as the reading it is.
         # Recording a profile means *running* the instrumented build, so PGO
         # applies only where the build host executes its own output: the glibc
         # Linux (x86_64 and aarch64), macOS, and Windows x64 runners. Two

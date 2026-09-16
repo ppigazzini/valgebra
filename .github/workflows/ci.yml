@@ -16,6 +16,14 @@ on:
           where it is read, and this lane is where it is read.
         type: boolean
         default: false
+      pgo_compare:
+        description: >-
+          Time every shape on a profiled build and on a plain one, on both the
+          interpreters the bench jobs use, and upload the table. What a profile
+          buys is per shape and per machine, so the reading that decides the
+          release matrix is the one taken where the release builds.
+        type: boolean
+        default: false
 
 concurrency:
   # Keyed by event too, so a push to main does not share a group with the
@@ -679,6 +687,81 @@ jobs:
         with:
           name: perf-compare-recorded
           path: scripts/perf_compare.json
+          if-no-files-found: error
+
+  pgo-compare:
+    name: pgo compare (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Dispatch only. A profiled build is trained before it is compiled, so this
+    # lane builds the extension twice over and pays for it; a merge waits on
+    # nothing here.
+    #
+    # What a profile buys is a question per shape: it arranges what fat LTO left
+    # to arrange, so a shape whose cost is one hot loop over one element type is
+    # laid out straight, and a shape whose cost is fifty key lookups -- each
+    # dispatching on its field's own schema -- can be laid out worse. The
+    # release matrix builds `--pgo` on five targets and this box is none of
+    # them, so this lane is the reading closest to them, not a ranking of
+    # microarchitectures.
+    #
+    # Both interpreters the bench jobs use, because a global lock changes what a
+    # per-element loop costs, and the shapes that gain most are the per-element
+    # ones.
+    if: ${{ inputs.pgo_compare }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.14t"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
+          # llvm-tools merges the profile-guided-optimization profiles.
+          components: llvm-tools
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: pgo-compare-${{ matrix.python-version }}
+      - uses: $/.github/actions/setup-uv
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --locked --no-install-project --group bench
+      # Two wheels of the same source, differing in the profile alone: the
+      # training run is the lever, and `pyproject.toml`'s `pgo-command` is what
+      # it pulls.
+      - name: Build the plain and the profiled wheel
+        run: |
+          uv run --no-sync --group bench maturin build --release --out plain
+          uv run --no-sync --group bench maturin build --release --pgo --out profiled
+      # One environment, one wheel at a time: the two readings differ in the
+      # binary and in nothing else, which is what makes their ratio a statement
+      # about the profile.
+      - name: Time the plain build
+        run: |
+          uv pip install --no-deps --reinstall plain/*.whl
+          uv run --no-sync --group bench python scripts/pgo_compare.py \
+            --record plain.json --label plain
+      - name: Time the profiled build
+        run: |
+          uv pip install --no-deps --reinstall profiled/*.whl
+          uv run --no-sync --group bench python scripts/pgo_compare.py \
+            --record profiled.json --label pgo
+      - name: Say what the profile buys, per shape
+        run: |
+          uv run --no-sync --group bench python scripts/pgo_compare.py \
+            --compare plain.json profiled.json | tee -- "$GITHUB_STEP_SUMMARY"
+      # The lane cannot commit, so the readings leave as an artifact and a human
+      # puts what they decide on the page -- the same division the competitive
+      # recording keeps, and what makes the matrix a thing somebody chose.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pgo-compare-${{ matrix.python-version }}
+          path: |
+            plain.json
+            profiled.json
           if-no-files-found: error
 
   bench-free-threaded:
@@ -1606,6 +1689,7 @@ jobs:
         docs,
         bench,
         bench-free-threaded,
+        pgo-compare,
         wheel,
         fuzz-build,
         pypy,
@@ -1630,11 +1714,12 @@ jobs:
       # that only catches failure and cancellation. Each need is listed
       # explicitly so the gate cannot silently drift from the job set.
       #
-      # The scheduled jobs are read the same way with one value more allowed:
-      # a push skips them, and `skipped` is the answer that says so. Everything
-      # else is refused, **cancellation included** -- a job that reaches its
-      # timeout is reported cancelled rather than failed, so a cancellation
-      # nothing waits on leaves a red nightly reading green.
+      # The jobs a push does not run -- the scheduled ones, and the ones a
+      # dispatch input asks for -- are read the same way with one value more
+      # allowed: a push skips them, and `skipped` is the answer that says so.
+      # Everything else is refused, **cancellation included** -- a job that
+      # reaches its timeout is reported cancelled rather than failed, so a
+      # cancellation nothing waits on leaves a red nightly reading green.
       - name: Fail unless every required job succeeded
         if: >-
           needs.rust-lint.result != 'success' ||
@@ -1658,6 +1743,8 @@ jobs:
           needs.cargo-deny.result != 'success' ||
           needs.pip-audit.result != 'success' ||
           needs.zizmor.result != 'success' ||
+          (needs['pgo-compare'].result != 'success' &&
+           needs['pgo-compare'].result != 'skipped') ||
           (needs['nightly-fuzz'].result != 'success' &&
            needs['nightly-fuzz'].result != 'skipped') ||
           (needs['nightly-rust-laws'].result != 'success' &&

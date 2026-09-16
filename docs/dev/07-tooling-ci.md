@@ -369,7 +369,22 @@ compare a number about somewhere else. So the recording is made where it is
 read: run the CI workflow from the Actions tab with **`record_compare`**
 checked, take the `perf-compare-recorded` artifact, and commit
 `scripts/perf_compare.json` from it. The lane cannot commit, which is the point
--- a floor is a thing somebody chose.
+-- a floor is a thing somebody chose. A run that reads the profiled build
+against the plain one is the run to tick it on: both readings then come off one
+box, one image and one toolchain.
+
+**What a profile buys is read from the same lane, and it is per shape.**
+Profile-guided optimisation arranges what fat LTO left to arrange, so a shape
+whose cost is one hot loop over one element type is laid out straight and a
+shape whose cost is fifty key lookups -- each dispatching on its field's own
+schema -- can be laid out worse. A single figure for it would therefore be true
+of one shape and false of the next. Run the CI workflow with **`pgo_compare`**
+checked: the lane builds both wheels from one source, times every shape on each
+with `scripts/pgo_compare.py`, prints the table into the run summary, and
+uploads the two readings. It runs on both interpreters the bench jobs use,
+because the shapes a profile serves best are the per-element ones and a global
+lock is what those pay. The release matrix's `pgo: true` is decided on that
+reading, and `docs/11-performance.md` carries the decision with its reason.
 
 **The lane names the interpreter these are read on**, which is CPython 3.12,
 and it is written in `ci.yml` rather than left to the runner image: a ratio

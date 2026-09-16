@@ -108,7 +108,7 @@ def test_a_missing_benchmark_dependency_is_could_not_run(
     def no_pydantic() -> dict[str, object]:
         raise ImportError("No module named 'pydantic'")
 
-    monkeypatch.setattr(gate, "_shapes", no_pydantic)
+    monkeypatch.setattr(gate, "shapes", no_pydantic)
     assert gate.main() == gate.EXIT_CANNOT_RUN
 
 

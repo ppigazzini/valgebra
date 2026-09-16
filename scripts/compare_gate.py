@@ -171,7 +171,7 @@ def _reporting(
     return call
 
 
-def _shapes() -> dict[str, Shape]:
+def shapes() -> dict[str, Shape]:
     # Imported here, not at module scope: pydantic is a benchmark-only dependency
     # and valgebra is the built extension, so a module-level import would make
     # this file unimportable on every lane that has neither -- including the one
@@ -280,13 +280,13 @@ def _shapes() -> dict[str, Shape]:
     }
 
 
-def _per_call_ns(call: Callable[[object], object], data: object, number: int) -> float:
+def per_call_ns(call: Callable[[object], object], data: object, number: int) -> float:
     timer = timeit.Timer(lambda: call(data))
     best = min(timer.repeat(repeat=REPEATS, number=number))
     return best / number * 1e9
 
 
-def _gil_enabled() -> bool:
+def gil_enabled() -> bool:
     """Whether this interpreter runs under a global lock.
 
     The free-threaded build is a separate performance environment, not the same
@@ -312,7 +312,7 @@ def _prepare() -> tuple[dict[str, float], dict[str, Shape]] | None:
     try:
         recorded = json.loads(CEILING_FILE.read_text(encoding="utf-8"))
         ceilings = {name: float(v) for name, v in recorded["ceilings"].items()}
-        if not _gil_enabled():
+        if not gil_enabled():
             ceilings |= {
                 name: float(v)
                 for name, v in recorded.get("free_threaded_ceilings", {}).items()
@@ -321,13 +321,13 @@ def _prepare() -> tuple[dict[str, float], dict[str, Shape]] | None:
         print(f"compare_gate: cannot read the ceilings: {err}")
         return None
     try:
-        shapes = _shapes()
+        built = shapes()
     except ImportError as err:
         # No pydantic, or no built extension: there is nothing to compare
         # against.
         print(f"compare_gate: cannot build the comparison shapes: {err}")
         return None
-    return ceilings, shapes
+    return ceilings, built
 
 
 def warm_up(shapes: dict[str, Shape]) -> bool:
@@ -365,8 +365,8 @@ def main() -> int:
     measured: dict[str, float] = {}
     rows: list[tuple[str, float, float, float]] = []
     for name, shape in shapes.items():
-        vg = _per_call_ns(shape["valgebra"], shape["data"], shape["number"])
-        pyd = _per_call_ns(shape["pydantic"], shape["data"], shape["number"])
+        vg = per_call_ns(shape["valgebra"], shape["data"], shape["number"])
+        pyd = per_call_ns(shape["pydantic"], shape["data"], shape["number"])
         measured[name] = vg / pyd
         rows.append((name, vg, pyd, vg / pyd))
 
@@ -515,7 +515,7 @@ def environment() -> str:
         core = version("pydantic-core")
     except PackageNotFoundError:  # pragma: no cover - the prepare step refuses first
         core = "absent"
-    lock = "gil" if _gil_enabled() else "freethreaded"
+    lock = "gil" if gil_enabled() else "freethreaded"
     release = f"cpython{sys.version_info.major}.{sys.version_info.minor}"
     return f"{release}-{lock}-pydantic_core-{core}"
 
