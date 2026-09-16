@@ -247,6 +247,13 @@ The number is computed rather than written down. A cell with no test fails; a
 cell a test cannot reach is accepted with a reason, and a reason for a cell that
 *is* reached fails too, so an excuse cannot outlive the gap it excuses.
 
+The largest product is the public surface and the error codes together: seventy-
+odd cells, of which six are accepted with a reason — five codes no schema a
+caller can build reaches, and the exception's own class name. The ledger prints
+the figure rather than asserting it, and holds a floor instead, because the
+universe grows with the tree: a ledger pinning today's count would fail on the
+commit that adds a name rather than on the one that leaves it unreached.
+
 What a ledger cannot see is the half that matters most: naming a method is not
 asserting its documented outcome, and reaching a node is not checking every
 answer it gives. That is what the matrices beside them are for — the node matrix
@@ -281,3 +288,18 @@ sweep whose survivors all say "pytest covers this" measures the harness.
 **A coverage floor is read with its scope or it misleads.** The Python package
 floor covers the re-export package, which is a hundred-odd lines; the extension
 the Python suite exercises is Rust and is measured by the other two lanes.
+
+Those two measure the code that **ships**, and did not always. The core's
+property suites and the binding's four interpreter corpora are compiled into
+their crates because they reach private items, so a coverage report counts
+them — and a corpus is a table and a loop, so it runs by construction, arrives
+at full coverage, and lifts the figure for the code around it. Nearly half the
+lines the binding's figure was computed over were corpus. Both lanes exclude
+them now, and `tests/test_coverage_scope.py` holds that scope to the corpus
+files the tree has, in both directions.
+
+Each lane enforces a **region** floor beside its line floor. A line counts as
+covered when any part of it ran, so a branch with two arms on one line passes
+having taken one; a region does not, and on the shipped scope the binding reads
+several points lower in regions than in lines. The floor that notices an
+unreached arm is the region one.
