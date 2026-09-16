@@ -702,6 +702,23 @@ impl Schema {
             (_, Schema::Union(members)) => self
                 .below_a_union(other, members, cx, assumptions)
                 .or_else(|| self.unstructured(other, cx, assumptions)),
+            // A refinement carrying no constraint denotes exactly its base, so
+            // it is decided as its base on whichever side it sits.
+            //
+            // The constructors fold this away and the frontend never builds
+            // one, so the node arrives only from a term built by hand -- which
+            // the fuzz target does. Without these two arms the two spellings
+            // were decided differently: `Literal[1]` is below the complement of
+            // an empty sequence, and was not below the same complement wrapped
+            // in a constraint-free refinement, although the wrapper narrows
+            // nothing. A rule that reads the wrapper and not what it says is a
+            // rule about the spelling.
+            (Schema::Refine { base, constraints }, _) if constraints.is_empty() => {
+                base.is_subtype_rec(other, cx, assumptions)
+            }
+            (_, Schema::Refine { base, constraints }) if constraints.is_empty() => {
+                self.is_subtype_rec(base, cx, assumptions)
+            }
             // Unfold a recursive reference — after the lattice rules, so an
             // intersection or union meeting a reference decomposes first (which
             // lets a recursive member be compared against the reference rather

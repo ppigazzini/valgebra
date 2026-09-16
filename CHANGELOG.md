@@ -33,6 +33,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an arity refusal names the annotation it is about
 - fix: a form with no set is refused, and a class prints as its name
 - fix: a snapshot pins a code the walk writes, and every code is pinned -- internal
+- fix: a refinement with no constraint is decided as the base it names -- internal
 
 -->
 

@@ -74,6 +74,133 @@ fn every_set_is_below_the_universe_however_it_is_spelled() {
     }
 }
 
+/// A refinement carrying no constraint is decided as the base it names, on
+/// whichever side of the pair it sits.
+///
+/// Read through [`by_the_rules`] the two arms are invisible: the reading every
+/// pair without a rule gets already carries a *refinement supertype* back to
+/// its base for a refutation, and a refinement subtype already reaches its
+/// base's proofs through `left_reduces_below`. What each arm adds is
+/// the other half of that answer, and only the full relation shows it -- so
+/// the relation is what is asserted, and each row is a pair whose answer is
+/// `Unknown` without the arm.
+///
+/// The constructors fold such a node away and the frontend builds one for no
+/// annotation, so the node arrives only from a term built by hand -- which the
+/// fuzz target does, and that is where the two spellings were first seen
+/// deciding differently.
+#[test]
+fn a_refinement_with_no_constraint_is_decided_as_its_base_on_either_side() {
+    let rules = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.is_subtype_rec(
+            sup,
+            SubtypeCx {
+                oracle: &NoLeafRelations,
+                defs: &[],
+                budget: &budget,
+            },
+            &mut Vec::new(),
+        )
+    };
+    let bare = |base: Schema| Schema::Refine {
+        base: Arc::new(base),
+        constraints: Vec::new().into(),
+    };
+    let set_of = |element: Schema| Schema::Coll {
+        container: CollKind::Set,
+        element: Arc::new(element),
+    };
+    let list_of = |prefix: Vec<Schema>| Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape {
+            prefix: prefix.into(),
+            tail: None,
+        },
+    };
+
+    // The supertype side. The wrapper holds a complement, and a complement is
+    // the shape whose arm *proves*: an integer is outside the empty list, so
+    // it is inside the complement of one. Carried back to the base for a
+    // refutation alone, that proof is dropped and the pair reads unknown.
+    let not_the_empty_list = Schema::Complement(Arc::new(list_of(Vec::new())));
+    assert_eq!(
+        rules(&Schema::Int, &not_the_empty_list),
+        Relation::Holds,
+        "the premise: the complement decides this pair"
+    );
+    assert_eq!(
+        rules(&Schema::Int, &bare(not_the_empty_list.clone())),
+        Relation::Holds,
+        "and the wrapper narrows nothing, so it decides the same"
+    );
+
+    // The subtype side, where it is the refutations that are dropped: a
+    // refinement inherits its base's proofs and nothing else, so a base the
+    // rules refute leaves the pair unknown behind the wrapper. Two shapes,
+    // because the refutation has to come from a rule rather than from the
+    // disjointness reading -- which sees through the wrapper on its own and
+    // would answer for either arm.
+    for (sub, sup) in [
+        (set_of(Schema::Int), set_of(Schema::Str)),
+        (
+            list_of(vec![Schema::Int, Schema::Int]),
+            list_of(vec![Schema::Int]),
+        ),
+    ] {
+        assert_eq!(
+            rules(&sub, &sup),
+            Relation::Fails,
+            "the premise: {sub:?} is refuted below {sup:?}"
+        );
+        assert_eq!(
+            rules(&bare(sub.clone()), &sup),
+            Relation::Fails,
+            "and the wrapper narrows nothing, so it is refuted too"
+        );
+    }
+}
+
+/// A refinement with no constraint earns the regions of its base.
+///
+/// The same reading, in the fold beside the rules, and the one the two arms
+/// above take the work from: a pair whose supertype is a bare refinement is
+/// decided by those arms before the regions are asked, so every consequence of
+/// this arm is answered elsewhere and a mutation dropping it changes no
+/// verdict. The reading is therefore asserted directly. What it buys is the
+/// scalar shortcut -- a pair decided off two region sets rather than walked --
+/// and an `Unknown` here is a cost rather than a wrong answer.
+#[test]
+fn a_refinement_with_no_constraint_earns_the_regions_of_its_base() {
+    let bare = |base: Schema| Schema::Refine {
+        base: Arc::new(base),
+        constraints: Vec::new().into(),
+    };
+    for base in [Schema::Int, Schema::Str, Schema::ANYTHING] {
+        assert_ne!(
+            base.region_set(),
+            Regions::Unknown,
+            "the premise: {base:?} has regions to lend"
+        );
+        assert_eq!(
+            bare(base.clone()).region_set(),
+            base.region_set(),
+            "the wrapper narrows nothing, so it reads the same regions"
+        );
+    }
+    // The other half of the same arm: one that *does* narrow reads as unknown,
+    // because a narrowed region set read back through a complement would
+    // report an inhabited schema empty.
+    assert_eq!(
+        Schema::Refine {
+            base: Arc::new(Schema::Int),
+            constraints: vec![Constraint::Ge(OperandIx::new(0))].into(),
+        }
+        .region_set(),
+        Regions::Unknown
+    );
+}
+
 /// A union covers the universe whatever sits beside the pair that covers it,
 /// and in whatever order the members are written.
 ///
