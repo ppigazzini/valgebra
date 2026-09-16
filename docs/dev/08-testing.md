@@ -262,6 +262,14 @@ each promise the error model makes at each site that makes it. The ledger's job
 is narrower and nothing else does it: a name the tree grows and the suite never
 mentions, which is the state every one of them starts in.
 
+**The denotation oracle reads every case at the boundaries.** It pairs a drawn
+schema with an independent predicate and checks a drawn value, and a boundary
+reached only by the draw is one the suite reaches on some runs and not others:
+measured over six hundred draws, three of five boundary kinds never appeared. So
+each case is checked against a fixed spread as well -- `nan`, the infinities,
+`-0.0`, the ends of the integer carriers, a newline in text and in bytes -- and
+a disagreement about one of those is a failure rather than a flake.
+
 **The lattice laws draw their schemas rather than sampling a list.** A law held
 over a fixed spread of atoms and containers is a law about that spread. The
 strategy builds around a drawn element, so a refinement can sit inside a list,

@@ -73,7 +73,26 @@ _SCALAR_PRED: dict[object, Pred] = dict(_SCALARS)
 
 # Cross-type constants: a typed singleton matches same-type-and-equal, so these
 # stress the `1`/`True`/`1.0` distinction the walk must keep.
-_CONSTS = [0, 1, -1, "a", "", True, False, 3.5, b"x"]
+# Constants a literal is built from. The boundaries are here because a literal
+# is decided by *equality*, and equality is where these values stop behaving
+# like their neighbours: `nan` equals nothing including itself, `-0.0` equals
+# `0.0` and hashes with it, and the two integers sit at the ends of the carrier
+# a bound is lowered across.
+_CONSTS = [
+    0,
+    1,
+    -1,
+    "a",
+    "",
+    True,
+    False,
+    3.5,
+    b"x",
+    "\n",
+    2**53 + 1,
+    -(2**63),
+    2**63 - 1,
+]
 
 # Hashable scalar specs usable as dict keys and set elements.
 _HASHABLE: list[Spec] = [
@@ -290,6 +309,27 @@ def _values() -> st.SearchStrategy[object]:
         st.booleans(),
         st.integers(min_value=-5, max_value=5),
         st.sampled_from([0, 1, -1, 0.0, 1.0, 3.5]),
+        # The boundaries, which a drawn value reaches only by luck. Each is a
+        # value some operation reads differently from its neighbours: the two
+        # infinities bound every comparison, `nan` satisfies none, `-0.0` is
+        # `0.0`'s equal and its hash-mate, the integers sit at the ends of the
+        # carrier a bound is lowered across, and a newline is where a pattern's
+        # `.` and `$` part company.
+        st.sampled_from(
+            [
+                float("nan"),
+                float("inf"),
+                float("-inf"),
+                -0.0,
+                2**53 + 1,
+                -(2**63),
+                2**63 - 1,
+                2**70,
+                "\n",
+                "a\nb",
+                b"\n",
+            ]
+        ),
         st.text(max_size=3),
         st.binary(max_size=3),
         # Values that live only in these node kinds, so their accept paths are
@@ -352,14 +392,49 @@ def _cases(draw: st.DrawFn) -> tuple[Validator, Pred]:
     return intersection(spec, spec2), lambda x: pred(x) and pred2(x)
 
 
-@given(case=_cases(), value=_values())
-def test_walk_matches_denotation(case: tuple[Validator, Pred], value: object) -> None:
-    compiled, predicate = case
+#: The values every case is checked against, beside the drawn one.
+#:
+#: Each is a value some operation reads differently from its neighbours, and
+#: each is one a drawn value reaches only by luck: measured over six hundred
+#: draws, three of these five kinds never appeared. A boundary that depends on
+#: the draw is a boundary the suite reaches on some runs and not others, and a
+#: disagreement about `nan` is not a thing to learn from a flake.
+BOUNDARIES: list[object] = [
+    float("nan"),
+    float("inf"),
+    float("-inf"),
+    -0.0,
+    0.0,
+    2**53 + 1,
+    -(2**63),
+    2**63 - 1,
+    2**70,
+    "",
+    "\n",
+    "a\nb",
+    b"\n",
+    True,
+    False,
+    None,
+]
+
+
+def _agrees(compiled: Validator, predicate: Pred, value: object) -> None:
+    """Hold the walk to the denotation, in both of its readings."""
     expected = predicate(value)
-    assert compiled.is_valid(value) is expected
+    assert compiled.is_valid(value) is expected, repr(value)
     try:
         compiled.validate(value)
         raised = False
     except ValidationError:
         raised = True
-    assert raised is (not expected)
+    assert raised is (not expected), repr(value)
+
+
+@given(case=_cases(), value=_values())
+def test_walk_matches_denotation(case: tuple[Validator, Pred], value: object) -> None:
+    compiled, predicate = case
+    _agrees(compiled, predicate, value)
+    # And the boundaries, every case, whatever the draw gave.
+    for boundary in BOUNDARIES:
+        _agrees(compiled, predicate, boundary)
