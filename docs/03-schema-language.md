@@ -272,6 +272,32 @@ predicate one position inward, as `Annotated` metadata — see
 level there is no base for it to narrow, so the fallback applies and the schema
 denotes the single function object.
 
+### The forms that are refused rather than read as a literal
+
+The fallback is for an object with no other reading. A typing form the spec
+*does* give a meaning to is a different case: read as a literal it would denote
+the form object itself, which no value a caller has belongs to, so the schema
+would refuse everything without saying why. Each of these is refused at build
+with a message instead:
+
+| Form | Why it has no set |
+|---|---|
+| `Self` | names the enclosing class, which a schema is built without |
+| `LiteralString` | a property of where a string came from, which a value does not carry |
+| `TypeVar`, `ParamSpec`, `TypeVarTuple` | a variable stands for a type and is not one |
+| `Final`, `ClassVar` | a declaration about a name, not about a value |
+| `Unpack[X]` | binds element types into a `tuple[...]`, so it has no meaning alone |
+| a user `Generic[T]` parametrisation | the parameter is erased at runtime, so the type argument narrows nothing |
+| bare `Protocol`, and a `Protocol` without `@runtime_checkable` | membership is `isinstance`, which such a class refuses to answer |
+| a set or frozen set literal | `{int}` and `frozenset({int})` name containers, which are `set[T]` and `frozenset[T]` |
+| a tuple literal | `(A, B)` is `tuple[A, B]`; the list literal `[A, B]` is the fixed-length list |
+
+A qualifier is the exception that is read rather than refused:
+`Required[X]`, `NotRequired[X]` and `ReadOnly[X]` survive hint resolution
+because field metadata is kept, so the frontend unwraps them and compiles the
+type they qualify. Written outside a record they are unwrapped just the same,
+which makes `Validator(Required[int])` the same schema as `Validator(int)`.
+
 ## Unions and `Optional`
 
 `X | Y` and `Optional[X]` denote the union of the member sets:

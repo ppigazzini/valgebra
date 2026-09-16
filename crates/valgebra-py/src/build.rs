@@ -9,7 +9,8 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
-    PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyModule, PySet, PyString, PyTuple, PyType,
+    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyModule, PySet, PyString,
+    PyTuple, PyType,
 };
 use valgebra_core::{
     ClassIx, ConstIx, DefIx, DefShift, Guarded, OperandIx, PredIx, Schema, fresh_self_token,
@@ -345,6 +346,17 @@ pub(crate) fn build_schema(
     if obj.is_instance_of::<PySet>() {
         return Err(not_implemented(
             "a set literal is not a schema; write a set as set[T]",
+        ));
+    }
+    // And the frozen one for the same reason. Asked separately because a
+    // `frozenset` is not a `set`: the arm above does not see it, so it fell
+    // through to the constant below and was interned. `frozenset({int})` --
+    // which names a frozen set of integers -- became a schema admitting one
+    // frozen set holding the `int` *type object*, and no value a caller has.
+    if obj.is_instance_of::<PyFrozenSet>() {
+        return Err(not_implemented(
+            "a frozen set literal is not a schema; write a frozen set as \
+             frozenset[T]",
         ));
     }
     if let Ok(dict) = obj.cast::<PyDict>() {

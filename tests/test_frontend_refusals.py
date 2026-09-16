@@ -29,6 +29,7 @@ LEDGER: every frontend refusal message is matched by a test, or accepted
 from __future__ import annotations
 
 import ast
+import functools
 import re
 import warnings
 from pathlib import Path
@@ -62,14 +63,18 @@ _OPENS = re.compile(
 #: match without knowing the value.
 _HOLE = re.compile(r"\{[^{}]*\}")
 
-#: The shortest *inferred* pattern that counts as one.
+#: The shortest string that counts as a pattern about a refusal.
 #:
-#: A string spelled at `match=` is a pattern whatever its length, because the
-#: author put it there. A string read out of a table is inferred to be one, and
-#: the inference needs a floor: a suite's tables hold data too -- `"k"`, `"ab"`,
-#: `"le"` are keys and fragments from other files, and each matches some refusal
-#: by accident. Counted, they would hold a site nobody wrote a row for.
-MIN_INFERRED = 12
+#: A refusal is a sentence and a pattern about one is a phrase from it, so this
+#: is a floor on *what a pattern is*. It applies to a string spelled at `match=`
+#: as much as to one read out of a table, because a short one holds a sentence
+#: by accident either way: `match="set"` is satisfied by any refusal with the
+#: word in it, and the planted defect -- a message reworded to "this class does
+#: not name a set" -- went on reading as held while it was counted.
+#:
+#: Eight leaves every phrase the suite writes and drops every bare word it
+#: writes: `MultipleOf` and `contractive` are kept, `set` and `tuple` are not.
+MIN_PATTERN = 8
 
 #: Sites the suite does not read, each with the reason it does not.
 #:
@@ -123,6 +128,7 @@ def _literals(text: str, start: int) -> list[str]:
     return found
 
 
+@functools.cache
 def _sites() -> dict[str, str]:
     """Give every refusal the frontend writes, keyed by where it is written."""
     found: dict[str, str] = {}
@@ -136,6 +142,7 @@ def _sites() -> dict[str, str]:
     return found
 
 
+@functools.cache
 def _product_files() -> list[tuple[Path, ast.Module]]:
     """Give the product suite, parsed. A repository check is not part of it."""
     parsed = []
@@ -192,6 +199,7 @@ def _table_strings(tree: ast.Module) -> set[str]:
     }
 
 
+@functools.cache
 def _patterns() -> set[str]:
     """Give every pattern the product suite asks a refusal to satisfy.
 
@@ -205,10 +213,8 @@ def _patterns() -> set[str]:
         spelled, by_name = _match_arguments(tree)
         found |= spelled
         if by_name:
-            found |= {
-                row for row in _table_strings(tree) if len(row.strip()) >= MIN_INFERRED
-            }
-    return {pattern for pattern in found if pattern.strip()}
+            found |= _table_strings(tree)
+    return {pattern for pattern in found if len(pattern.strip()) >= MIN_PATTERN}
 
 
 def _matches(message: str, pattern: str) -> bool:
@@ -229,6 +235,14 @@ def _matches(message: str, pattern: str) -> bool:
         # A literal that is not a regex is a string the suite keeps for some
         # other purpose, and holds no refusal.
         return False
+    finally:
+        # Leave the module cache as it was found. `re` warns about a pattern
+        # once per *compilation*, and a compiled pattern is cached, so reading
+        # another file's literals here consumed the `FutureWarning` that
+        # `tests/test_regex_dialect.py` asserts Python emits for
+        # `[[:alpha:]]`. That test then failed in a full run and passed alone,
+        # which is the shape of a coupling nobody would look for here.
+        re.purge()
 
 
 def _too_broad(patterns: set[str]) -> set[str]:
@@ -254,6 +268,7 @@ def _too_broad(patterns: set[str]) -> set[str]:
     }
 
 
+@functools.cache
 def _evidence() -> set[str]:
     """Give the patterns that can hold a site: every one not over-broad."""
     patterns = _patterns()

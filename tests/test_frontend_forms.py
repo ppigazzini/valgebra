@@ -16,6 +16,8 @@ it.
 
 from __future__ import annotations
 
+import dataclasses
+import sys
 import typing
 from typing import Annotated, Literal
 
@@ -143,3 +145,242 @@ def test_a_pattern_that_is_not_text_says_what_it_is() -> None:
     with pytest.raises((TypeError, ValueError, NotImplementedError)) as caught:
         Validator(Annotated[str, Regex(123)])  # ty: ignore[invalid-argument-type]
     assert "bytes" not in str(caught.value)
+
+
+def test_a_frozenset_literal_is_refused_as_its_set_sibling_is() -> None:
+    """`frozenset({int})` names a container of ints, and is not one.
+
+    A set literal `{int}` is refused with a sentence naming `set[T]`. Its
+    frozen sibling fell past every arm to the constant fallthrough and was
+    interned: `Validator(frozenset({int}))` built `Literal[frozenset({<class
+    'int'>}))`, a schema admitting one frozen set of one type object and no
+    other value. The annotation names a frozen set of integers, so the reading
+    is not a narrower version of what was written -- it is a different set,
+    and the schema a caller gets refuses every value they have.
+    """
+    with pytest.raises(NotImplementedError, match="write a frozen set as"):
+        Validator(frozenset({int}))
+    # The empty one is the same mistake with nothing inside it.
+    with pytest.raises(NotImplementedError, match="write a frozen set as"):
+        Validator(frozenset())
+    # And the form it names builds, which is what the message points at.
+    assert Validator(frozenset[int]).is_valid(frozenset({1, 2}))
+
+
+def test_a_frozen_set_of_constants_is_still_a_value() -> None:
+    """A frozen set *of constants* is a value, and stays one.
+
+    The refusal above is about a frozen set holding types. One holding values
+    is an ordinary constant -- a `Literal` argument is exactly this -- so
+    refusing every frozen set would take a spelling the typing spec allows.
+    """
+    inside = Validator({"tags": frozenset[str]})
+    assert inside.is_valid({"tags": frozenset({"a"})})
+
+
+#: Forms the typing spec gives a meaning to, which no runtime value belongs to.
+#:
+#: Read as the fallback literal, each would denote the form object itself and
+#: the schema would refuse every value without saying why. `docs/03` lists them
+#: with the reason each has no set; this is the table that holds the page.
+NO_SET: list[tuple[str, object]] = [
+    ("a type variable", typing.TypeVar("T")),  # ty: ignore[invalid-legacy-type-variable]
+    ("a parameter specification", typing.ParamSpec("P")),  # ty: ignore[invalid-paramspec]
+    ("Final", typing.Final),
+    ("ClassVar", typing.ClassVar),
+    ("a tuple literal", (int, str)),
+    ("a set literal", {int}),
+    ("a frozen set literal", frozenset({int})),
+]
+
+if sys.version_info >= (3, 11):
+    # Two names the floor does not have. Read behind the guard rather than
+    # dropped, because both are forms a typed-Python author writes and the
+    # reading a schema would otherwise give them is the silent one.
+    NO_SET += [("Self", typing.Self), ("LiteralString", typing.LiteralString)]
+
+
+@pytest.mark.parametrize(
+    "form", [row[1] for row in NO_SET], ids=[row[0] for row in NO_SET]
+)
+def test_a_form_with_no_set_is_refused_rather_than_read_as_a_literal(
+    form: object,
+) -> None:
+    """Refused at build, with a sentence, rather than silently denoting itself.
+
+    The failure this pins is the quiet one: a schema that admits nothing and
+    says nothing, reached by a caller who wrote a form the spec has a meaning
+    for and this library does not.
+    """
+    with pytest.raises(NotImplementedError) as caught:
+        Validator(form)
+    assert len(str(caught.value)) > 40, caught.value
+
+
+def test_a_generic_parametrisation_of_a_user_class_is_refused() -> None:
+    """A user `Generic[T]` erases its parameter, so the argument narrows nothing.
+
+    Built as the class alone it would admit every instance whatever its
+    parameter, which is a wider set than the annotation names.
+    """
+    T = typing.TypeVar("T")
+
+    class Box(typing.Generic[T]):  # type: ignore[misc]
+        pass
+
+    with pytest.raises(NotImplementedError, match="unsupported typing form"):
+        Validator(Box[int])
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="Unpack arrives in 3.11")
+def test_an_unpack_outside_a_tuple_is_refused() -> None:
+    """`Unpack[X]` binds element types into a tuple, so it has none alone."""
+
+    class Fields(typing.TypedDict):
+        a: int
+
+    with pytest.raises(NotImplementedError, match="unsupported typing form"):
+        Validator(typing.Unpack[Fields])
+
+
+def test_a_bare_protocol_is_refused() -> None:
+    """Membership of a protocol is `isinstance`, which the bare form refuses."""
+    with pytest.raises(NotImplementedError, match="runtime_checkable"):
+        Validator(typing.Protocol)
+
+
+def test_a_qualifier_is_unwrapped_wherever_it_is_written() -> None:
+    """A field qualifier compiles the type it qualifies, inside a record or not.
+
+    It survives hint resolution because field metadata is kept, so the frontend
+    meets one at the top level too. Unwrapping is the reading in both places,
+    which is what makes the two schemas equal rather than merely alike.
+    """
+    for name in ("Required", "NotRequired"):
+        qualifier = getattr(typing, name, None)
+        if qualifier is None:  # pragma: no cover - both arrive in 3.11
+            continue
+        assert repr(Validator(qualifier[int])) == repr(Validator(int))
+        assert Validator(qualifier[int]).is_valid(1)
+        assert not Validator(qualifier[int]).is_valid("1")
+
+
+def test_a_union_of_one_member_is_that_member() -> None:
+    """`Union[int]` is `int`: typing collapses it before the frontend sees it.
+
+    Written through `getattr` because the linter rewrites the subscript into
+    `int`, which is the very collapse this asserts and would leave the row
+    asserting that `int` is `int`.
+    """
+    one = getattr(typing, "Union")[int]  # noqa: B009
+    assert repr(Validator(one)) == "int"
+
+
+def test_a_literal_of_an_int_subclass_denotes_the_value_it_was_given() -> None:
+    """`Literal[Sub(1)]` is the subclass instance, not the integer beside it.
+
+    The two are different sets -- neither admits the other's value -- and the
+    repr is Python's repr of the constant. A subclass that does not override
+    `__repr__` therefore renders `Literal[1]`, which reads back as the integer:
+    the rendering is faithful to the object and does not round-trip. That is
+    the general rule for a literal of an object whose repr is not its
+    constructor, and it is pinned here rather than left for a reader to
+    discover.
+    """
+
+    class Plain(int):
+        pass
+
+    class Shown(int):
+        def __repr__(self) -> str:
+            return f"Shown({int(self)})"
+
+    plain, integer = Validator(Literal[Plain(1)]), Validator(Literal[1])  # ty: ignore[invalid-type-form]
+    assert plain.is_valid(Plain(1))
+    assert not plain.is_valid(1)
+    assert not integer.is_valid(Plain(1))
+    # The repr of the subclass with no `__repr__` of its own reads back as the
+    # integer, which is a different set.
+    assert repr(plain) == "Literal[1]"
+    assert repr(integer) == "Literal[1]"
+    # One that spells itself renders so, and reads back as what it is.
+    assert repr(Validator(Literal[Shown(1)])) == "Literal[Shown(1)]"  # ty: ignore[invalid-type-form]
+
+
+def test_a_named_tuple_prints_as_its_name_like_every_other_class() -> None:
+    """`docs/03` says a class prints as its name, and a NamedTuple is one.
+
+    A dataclass and a plain class print `DC` and `Plain`; a `NamedTuple`
+    printed `intersection(tuple[int], NT)`. The schema is a meet either way --
+    an `isinstance` beside a deep check of the fields -- and the renderer named
+    the class for the dataclass shape only, because it looked for an attribute
+    record and a NamedTuple's fields are positions. Two class forms, two
+    renderings, and one rule on the page.
+    """
+
+    class Point(typing.NamedTuple):
+        x: int
+        y: str = "origin"
+
+    assert repr(Validator(Point)) == "Point"
+    # And the schema is the meet it was: the class *and* the field types.
+    assert Validator(Point).is_valid(Point(1, "a"))
+    assert not Validator(Point).is_valid((1, "a"))
+    assert not Validator(Point).is_valid(Point(1, 2))  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+
+
+def test_a_named_tuple_with_defaults_admits_the_value_the_default_builds() -> None:
+    """A default is supplied by the constructor, not a field that may be absent.
+
+    The tuple has every position whether the caller wrote it or not.
+    """
+
+    class Point(typing.NamedTuple):
+        x: int
+        y: str = "origin"
+
+    schema = Validator(Point)
+    assert schema.is_valid(Point(1))
+    assert schema.is_valid(Point(1, "given"))
+
+
+def test_a_dataclass_is_read_through_its_fields_however_it_is_declared() -> None:
+    """A declaration changes how a class is built, not what it holds.
+
+    `slots`, `frozen` and `KW_ONLY` each name the same set of values.
+    """
+
+    @dataclasses.dataclass(slots=True)
+    class Slotted:
+        a: int
+
+    @dataclasses.dataclass(frozen=True)
+    class Frozen:
+        a: int
+
+    assert Validator(Slotted).is_valid(Slotted(1))
+    assert not Validator(Slotted).is_valid(Frozen(1))
+    assert Validator(Frozen).is_valid(Frozen(1))
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="on 3.10 a string annotation of KW_ONLY does not resolve to a type",
+)
+def test_a_keyword_only_marker_is_a_declaration_rather_than_a_field() -> None:
+    """`KW_ONLY` says how the constructor takes its arguments, not what is held.
+
+    It carries no value on an instance, so a schema naming it as a field would
+    ask every value for an attribute none of them has.
+    """
+
+    @dataclasses.dataclass
+    class KeywordOnly:
+        a: int
+        _: dataclasses.KW_ONLY
+        b: str = "x"
+
+    schema = Validator(KeywordOnly)
+    assert schema.is_valid(KeywordOnly(1, b="y"))
+    assert not schema.is_valid(KeywordOnly(1, b=2))  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+    assert "_" not in repr(schema)

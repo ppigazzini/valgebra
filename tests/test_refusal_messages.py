@@ -25,6 +25,7 @@ with no suppression would be a row about an annotation nobody makes by mistake.
 from __future__ import annotations
 
 import re
+import sys
 import typing
 from typing import Annotated, Protocol, TypeVar
 
@@ -78,6 +79,14 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
         dict[str],  # ty: ignore[invalid-type-arguments]
         NotImplementedError,
         "needs a key type and a value type",
+    ),
+    # A repeat names the element before it, so a tuple that opens with one
+    # names nothing to repeat.
+    (
+        "a tuple that begins with a repeat",
+        tuple[..., int],  # ty: ignore[invalid-type-form]
+        NotImplementedError,
+        "cannot begin with one",
     ),
     (
         "a list takes one element type",
@@ -159,12 +168,15 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
     ),
     # `build/classes.rs`: a special form that is a class on some interpreters,
     # so it reaches the class path and is refused there rather than built into
-    # an instance check that accepts nothing.
+    # an instance check that accepts nothing. Where it is not a class it is
+    # refused one step earlier, on the value fallthrough, and the pattern reads
+    # both sentences because which one a caller meets is the interpreter's
+    # answer to `isinstance(typing.Union, type)` rather than this library's.
     (
         "a bare special form",
         typing.Union,
         NotImplementedError,
-        "is a typing special form",
+        "is a typing (special form|construct)",
     ),
     # A protocol decides membership by `isinstance`, which a protocol that is
     # not runtime-checkable refuses to answer.
@@ -175,6 +187,19 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
         "must be @runtime_checkable",
     ),
 ]
+
+if sys.version_info >= (3, 11):
+    # An unpack binds element types into a tuple, so what it names must have
+    # some: a list is homogeneous and binds none at runtime. Behind the guard
+    # because `Unpack` arrives one release above the floor.
+    REFUSALS.append(
+        (
+            "an unpack of something that is not a tuple",
+            tuple[typing.Unpack[list[int]]],  # ty: ignore[invalid-type-form]
+            NotImplementedError,
+            "only a tuple can be unpacked into a tuple schema",
+        )
+    )
 
 
 @pytest.mark.parametrize(

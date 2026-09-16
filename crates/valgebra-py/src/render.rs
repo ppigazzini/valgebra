@@ -202,10 +202,22 @@ fn render_meet(
     };
     let name = pool_class_name(py, pool, class.get());
     let mut parts = vec![name];
+    // The atom, and the deep check of what the class declares: both are what
+    // the name already says. The declaration is named where the fields have
+    // names and positional where they do not, and `object_class` answers only
+    // where there is exactly one of the two -- so dropping both kinds drops
+    // exactly the member it read the class out of. Keeping the positional one
+    // printed a `NamedTuple` as `intersection(Point, tuple[int, str])` beside a
+    // dataclass printing as `DC`.
     parts.extend(
         members
             .iter()
-            .filter(|m| !matches!(m, Schema::Instance(_) | Schema::AttrRecord { .. }))
+            .filter(|m| {
+                !matches!(
+                    m,
+                    Schema::Instance(_) | Schema::AttrRecord { .. } | Schema::Seq { .. }
+                )
+            })
             .map(r),
     );
     if parts.len() == 1 {

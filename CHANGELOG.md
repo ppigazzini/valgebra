@@ -31,10 +31,28 @@ answer of its own, or a repair to a change not yet released.
 - fix: a union summary names its branches and keeps what stopped the walk
 - fix: a walk reports what it found, at the edges a corpus reaches last
 - fix: an arity refusal names the annotation it is about
+- fix: a form with no set is refused, and a class prints as its name
 
 -->
 
 ### Fixed
+
+- **A frozen set literal is refused, as its set sibling is.** `{int}` is
+  refused with a sentence naming `set[T]`; `frozenset({int})` fell past every
+  arm to the literal fallback and compiled to a schema admitting one frozen set
+  holding the `int` type object, and no value a caller has. A `frozenset` is not
+  a `set`, so the arm that refuses the one never saw the other. Both are now
+  refused, each naming the parametrised form to write instead.
+
+- **A `NamedTuple` prints as its name, as every other class does.**
+  `repr(Validator(Point))` gave `intersection(tuple[int, str], Point)` where a
+  dataclass gives `DC` and a plain class gives `Plain`, and
+  `docs/03-schema-language.md` states one rule for all of them. The schema is a
+  meet either way -- an `isinstance` beside a deep check of what the class
+  declares -- and the reading that names the class looked only for a record of
+  *named* fields, which a `NamedTuple` does not have: its fields are positions.
+  A union naming such a branch said the same thing twice over for the same
+  reason, and now names the class.
 
 - **An arity refusal names the annotation it is about.** `list[int, str]`,
   `set[int, str]` and `frozenset[int, str]` were refused with "expected exactly

@@ -432,16 +432,16 @@ PLANTS = (
     ),
     Plant(
         "tests/test_frontend_refusals.py",
-        ("tests/test_refusal_messages.py",),
-        # The failure the ledger is for: a refusal reworded, or a row that
-        # stops reading its sentence, leaving the message held by the
-        # exception's type alone. Spelled as a row asking for the type,
-        # because that is what the weakened test looks like in review.
+        ("crates/valgebra-py/src/build/classes.rs",),
+        # The failure the ledger is for: a refusal reworded into a sentence no
+        # row reads. Planted in the Rust rather than in a row, because that is
+        # the direction the drift runs -- a message is edited and the tests
+        # keep passing on the exception's type.
         lambda tree: _edit(
             tree,
-            "tests/test_refusal_messages.py",
-            '"must be @runtime_checkable",',
-            '"NotImplementedError",',
+            "crates/valgebra-py/src/build/classes.rs",
+            '"a Protocol must be @runtime_checkable to be used as a schema"',
+            '"this class does not name a set"',
         ),
     ),
 )
