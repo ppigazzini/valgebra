@@ -23,10 +23,24 @@ answer of its own, or a repair to a change not yet released.
 - fix: a set is at most as long as the values its element denotes
 - feat: what a profile buys is read per shape, on the box the release builds on -- internal
 - fix: a container is read for what it holds, at every kind
+- fix: a bound at the end of the carrier keeps the integers past it
 
 -->
 
 ### Fixed
+
+- **An integer bound at the end of the carrier keeps the integers past it.** The
+  integer component spells a set as intervals, and the bounds a schema names are
+  64-bit while Python's integers are not. Complementing a half-line that begins
+  at the smallest such bound needs the integer just below it, which had nowhere
+  to go, so the complement came out empty: `Validator(int).relation_to(
+  Annotated[int, at.Ge(-2**63)])` answered `"subset"` while `-2**63 - 1` is an
+  `int` that bound refuses, and `intersection(int, complement(...)).is_empty()`
+  answered `True` over a difference holding that value. The answers are
+  `"not_subset"` and `False`, and `Le(2**63 - 1)` answers the same way at the
+  other end. A bound the carrier spells is decided as before, so
+  `Annotated[int, at.Ge(-2**63), at.Le(-2**63)]` is proved below
+  `at.MultipleOf(2)`.
 
 - **A container subclass does not talk its way into a schema.** A schema over a
   container denotes the values it *holds*, and a subclass may override `__len__`

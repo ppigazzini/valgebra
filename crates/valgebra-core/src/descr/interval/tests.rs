@@ -193,3 +193,56 @@ fn a_residue_class_at_the_bottom_of_the_range_keeps_its_members() {
         }
     }
 }
+
+/// A half-line beginning at the smallest bound a schema can name has a
+/// complement, and it is not the empty set.
+///
+/// The bounds a caller writes are `i64`, and the integers are not: `Ge(-2**63)`
+/// refuses `-2**63 - 1`, which is a Python integer. Naming a span's ends in the
+/// bounds' own width left that integer nowhere to go, so the complement of the
+/// half-line came out empty -- which reads as "every integer is at least
+/// `-2**63`" and proves an inclusion a value refutes. The ends are wider than
+/// the bounds for this, and one step of headroom is all the operations ask for.
+#[test]
+fn a_half_line_at_the_end_of_the_bounds_keeps_its_complement() {
+    let from_the_bottom = IntervalSet::between(Some(i64::MIN), None);
+    let below = from_the_bottom.complement();
+    assert!(!below.is_empty(), "the integers under the smallest bound");
+    assert!(
+        !below.holds(i64::MIN),
+        "and none of the bound's own half-line"
+    );
+    assert!(!below.holds(0));
+
+    let to_the_top = IntervalSet::between(None, Some(i64::MAX));
+    let above = to_the_top.complement();
+    assert!(!above.is_empty(), "the integers over the largest bound");
+    assert!(!above.holds(i64::MAX));
+
+    // The two halves still cover every integer between them, and neither is
+    // the whole line: a complement that vanished would make each of them one.
+    assert_eq!(
+        from_the_bottom.union(&below),
+        IntervalSet::all(),
+        "a set and its complement are the universe"
+    );
+    assert!(from_the_bottom.intersect(&below).is_empty());
+    assert_ne!(from_the_bottom, IntervalSet::all());
+    assert_ne!(to_the_top, IntervalSet::all());
+
+    // Complementing twice is the identity here as everywhere else, which is
+    // what says the headroom is enough for the operation to be closed.
+    assert_eq!(below.complement(), from_the_bottom);
+    assert_eq!(above.complement(), to_the_top);
+}
+
+/// A bounded span at either end is unaffected: it names a set the bounds spell.
+#[test]
+fn a_bounded_span_at_the_end_of_the_range_is_the_set_it_names() {
+    let least = IntervalSet::between(Some(i64::MIN), Some(i64::MIN));
+    assert_eq!(least, IntervalSet::just(i64::MIN));
+    assert!(least.holds(i64::MIN));
+    assert!(!least.complement().holds(i64::MIN));
+    // And the residue reading of it, which is what a step meets it through.
+    assert!(least.preimage(0, 2).holds(i64::MIN / 2));
+}

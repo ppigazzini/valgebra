@@ -19,10 +19,20 @@ use core::cmp::{max, min};
 /// Inclusive at both ends, because the elements are integers: a half-open end
 /// would be a second way to write the same set, and the point of the form is
 /// that there is one.
+///
+/// **The ends are wider than the bounds a schema can name.** A caller's bound
+/// arrives as an `i64`, and complementing a span needs the integer just outside
+/// it: the complement of `Ge(i64::MIN)` begins at `i64::MIN - 1`, which is a
+/// Python integer and not an `i64`. Naming the ends in the same width as the
+/// bounds left that gap unrepresentable, and the complement dropped it -- so
+/// `int` was decided below `Annotated[int, Ge(-2**63)]`, which `-2**63 - 1`
+/// refutes. One step of headroom on each side is all the operations need: a
+/// complement moves a boundary by one and moves it back, and a union or a meet
+/// only ever picks a boundary one of its operands already carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct Span {
-    lo: Option<i64>,
-    hi: Option<i64>,
+    lo: Option<i128>,
+    hi: Option<i128>,
 }
 
 impl Span {
@@ -32,7 +42,7 @@ impl Span {
         matches!((self.lo, self.hi), (Some(lo), Some(hi)) if lo > hi)
     }
 
-    fn holds(self, value: i64) -> bool {
+    fn holds(self, value: i128) -> bool {
         self.lo.is_none_or(|lo| lo <= value) && self.hi.is_none_or(|hi| value <= hi)
     }
 
@@ -50,9 +60,9 @@ impl Span {
     fn reaches(self, other: Span) -> bool {
         match (self.hi, other.lo) {
             (None, _) | (_, None) => true,
-            // No `lo` can exceed `i64::MAX`, so saturating at the top means the
-            // two do not meet -- which is the answer, rather than a wrap to the
-            // bottom of the range.
+            // No boundary a schema can name comes near the top of the widened
+            // range, so saturating there means the two do not meet -- which is
+            // the answer, rather than a wrap to the bottom of the range.
             (Some(hi), Some(lo)) => lo <= hi.saturating_add(1),
         }
     }
@@ -64,7 +74,7 @@ impl Span {
 /// only difference between the two cases: an unbounded lower end is negative
 /// infinity, so the bounded one wins; an unbounded upper end is positive
 /// infinity, likewise.
-fn bound(a: Option<i64>, b: Option<i64>, pick: fn(i64, i64) -> i64) -> Option<i64> {
+fn bound(a: Option<i128>, b: Option<i128>, pick: fn(i128, i128) -> i128) -> Option<i128> {
     match (a, b) {
         (Some(a), Some(b)) => Some(pick(a, b)),
         (Some(only), None) | (None, Some(only)) => Some(only),
@@ -96,7 +106,12 @@ impl IntervalSet {
     /// The integers from `lo` to `hi` inclusive, with `None` unbounded.
     #[must_use]
     pub fn between(lo: Option<i64>, hi: Option<i64>) -> IntervalSet {
-        let span = Span { lo, hi };
+        // The bounds a schema names are `i64`; the span holds them wider, so
+        // the complement of one has room for the integer just outside it.
+        let span = Span {
+            lo: lo.map(i128::from),
+            hi: hi.map(i128::from),
+        };
         if span.is_empty() {
             IntervalSet::empty()
         } else {
@@ -119,7 +134,7 @@ impl IntervalSet {
     /// Whether this set holds `value`.
     #[must_use]
     pub fn holds(&self, value: i64) -> bool {
-        self.spans.iter().any(|span| span.holds(value))
+        self.spans.iter().any(|span| span.holds(i128::from(value)))
     }
 
     /// The integers in either set.
@@ -162,12 +177,14 @@ impl IntervalSet {
         let mut spans = Vec::new();
         // Where the next gap starts: `None` until the first span is seen, which
         // is the unbounded run below it.
-        let mut gap_lo: Option<Option<i64>> = Some(None);
+        let mut gap_lo: Option<Option<i128>> = Some(None);
         for span in &self.spans {
-            // The gap ends just below this span. No integer sits below the
-            // bottom of the range, so a span starting there leaves no gap --
-            // which is what `checked_sub` returning `None` says, and what
-            // saturating would have turned into a gap holding that integer.
+            // The gap ends just below this span, and the widened ends are what
+            // give it somewhere to go: a span beginning at the smallest bound a
+            // schema can name leaves the gap below it, which holds the Python
+            // integers the carrier's own width cannot count. `checked_sub`
+            // still guards the end of the widened range, which no bound
+            // reaches.
             if let (Some(lo), Some(start)) = (span.lo, gap_lo)
                 && let Some(hi) = lo.checked_sub(1)
             {
@@ -177,8 +194,9 @@ impl IntervalSet {
                 });
             }
             gap_lo = match span.hi {
-                // Likewise at the top: a span reaching the last integer leaves
-                // no run above it, and neither does one unbounded above.
+                // Likewise at the top, and for the same reason: a run above a
+                // span is nameable wherever the span's end is a bound a schema
+                // wrote. One unbounded above leaves nothing.
                 Some(hi) => hi.checked_add(1).map(Some),
                 None => None,
             };
@@ -222,31 +240,23 @@ impl IntervalSet {
     /// down at the upper -- because a `k` outside the rounded range maps to an
     /// integer outside the span.
     #[must_use]
-    /// The subtraction is done in `i128` and the quotient converted back. A
-    /// span ending at `i64::MIN` minus a positive offset is not an `i64`, and a
-    /// saturating subtraction answers with a different residue class than the
-    /// one the span is in -- naming a set that holds values the schema does not
-    /// and misses values it does. The quotient always fits, since dividing by a
-    /// stride of at least one shrinks the magnitude.
+    /// The arithmetic stays in the span's own width. A span ending at the
+    /// smallest bound a schema can name, minus a positive offset, is not one of
+    /// those bounds -- and reading it as the nearest one answers with a
+    /// different residue class than the span is in, naming a set that holds
+    /// values the schema does not and misses values it does. Dividing by a
+    /// stride of at least one shrinks the magnitude, so the quotient stays where
+    /// the difference was.
     pub fn preimage(&self, offset: i64, stride: i64) -> IntervalSet {
         debug_assert!(stride > 0, "a stride is a positive step");
-        let shifted = |bound: i64| i128::from(bound) - i128::from(offset);
+        let shifted = |bound: i128| bound.saturating_sub(i128::from(offset));
         let stride = i128::from(stride);
-        // Restate the range rather than branch on it. The quotient is inside
-        // `i64` by the argument above, so a hand-written saturation would name
-        // two ends no argument reaches, reading as a choice the conversion
-        // never makes.
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "the clamp leaves a value inside the i64 range"
-        )]
-        let clamp = |wide: i128| wide.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64;
         let spans = self
             .spans
             .iter()
             .map(|span| Span {
-                lo: span.lo.map(|lo| clamp(div_ceil(shifted(lo), stride))),
-                hi: span.hi.map(|hi| clamp(div_floor(shifted(hi), stride))),
+                lo: span.lo.map(|lo| div_ceil(shifted(lo), stride)),
+                hi: span.hi.map(|hi| div_floor(shifted(hi), stride)),
             })
             .collect();
         IntervalSet { spans }.canonical()
