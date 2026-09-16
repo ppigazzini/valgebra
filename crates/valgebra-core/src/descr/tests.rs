@@ -1637,3 +1637,34 @@ fn a_set_reaches_the_kinds_it_holds_a_value_of() {
     assert!(not_int.reaches(Kind::Str));
     assert!(not_int.reaches(Kind::Dict));
 }
+
+/// A union of lines the allowance cannot expand is *unknown*, never inhabited.
+///
+/// The third component to be held to the third verdict. A negated union has to
+/// be turned positive before its emptiness can be read, and the expansion is a
+/// product: past the allowance there is no union left to read, and answering
+/// either way would be a claim standing on nothing. `Inhabited` says some value
+/// satisfies it with no witness; `Empty` is the one a caller may act on and is
+/// worse still.
+///
+/// The negated form has to be reached rather than written: complementing
+/// rebuilds a positive union wherever the product fits, so the shape only
+/// survives a complement taken with the allowance already spent -- which is
+/// what a caller holds after a build that ran out.
+#[test]
+fn a_negated_union_of_lines_the_allowance_cannot_expand_declines() {
+    let whole = Whole::Kind(Kind::Str);
+    let everything = Lines::everything(Component::top(Kind::Str));
+    let negated = budget::under(0, || everything.complement(whole));
+
+    // Expanded under an allowance that covers it, the verdict is decided: the
+    // complement of everything holds nothing.
+    assert_eq!(
+        budget::under(4096, || negated.emptiness(whole)),
+        Verdict::Empty
+    );
+
+    // Without one, the same union declines rather than guessing either way.
+    let starved = budget::under(0, || negated.emptiness(whole));
+    assert_eq!(starved, Verdict::Unknown, "starved gave {starved:?}");
+}

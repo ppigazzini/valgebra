@@ -1,7 +1,12 @@
 use super::{MAX_LINES, SetLattice};
+use crate::descr::Descr;
 use crate::descr::budget;
 use crate::descr::integers::IntSet;
+use crate::descr::values::Values;
+use crate::kind::Kind;
+use crate::verdict::Verdict;
 use proptest::prelude::*;
+use std::sync::Arc;
 
 /// A meet past the build's allowance refuses, and the same meet succeeds
 /// under one that covers it.
@@ -210,4 +215,65 @@ fn a_union_past_the_bound_refuses() {
             .expect("inside the bound");
     }
     assert!(wide.union(&SetLattice::of(IntSet::just(-1))).is_none());
+}
+
+/// A negated form the allowance cannot expand is *unknown*, never inhabited.
+///
+/// The three-valued verdict exists for exactly this: a lattice in negated form
+/// has to be turned positive before its emptiness can be read, and past the
+/// allowance there is no union to read. Answering `Inhabited` there would be
+/// the claim that some set satisfies it, standing on no witness -- and `Empty`
+/// would be worse, since a proof of emptiness is what a caller is allowed to
+/// act on. The arm returns the third answer, and nothing had asked it to.
+///
+/// The negated form itself has to be *reached*: complementing normalises back
+/// to a positive union wherever the product fits, so a complement taken with
+/// an allowance is not negated at all. One taken without an allowance is, and
+/// it is the shape a caller holds after a build that ran out.
+#[test]
+fn a_negated_set_the_allowance_cannot_expand_declines() {
+    let negated = budget::under(0, || SetLattice::of(IntSet::just(1)).complement());
+
+    // Expanded under an allowance that covers it, the verdict is decided.
+    let decided = budget::under(64, || negated.emptiness());
+    assert_ne!(decided, Verdict::Unknown, "the row needs a decidable pair");
+
+    // Without one, the same lattice declines rather than guessing either way.
+    let starved = budget::under(0, || negated.emptiness());
+    assert_eq!(starved, Verdict::Unknown, "starved gave {starved:?}");
+
+    // And the boolean reading is the safe direction: not *proved* empty.
+    assert!(!budget::under(0, || negated.is_empty()));
+}
+
+/// The value guard beside the elements declines where its own meet does.
+///
+/// A line's exclusions are answered by asking whether one covers the other,
+/// and that question is a difference whose emptiness may be unproved. Read as
+/// "does not cover", an unproved difference keeps the line -- and a line kept
+/// is a set reported inhabited on no evidence. The answer is `None`, which the
+/// caller turns into the third verdict rather than into a decision.
+///
+/// The guard here is the descriptor, which is the one the tree carries: a
+/// guard whose own meet cannot decline, as an interval cannot, never reaches
+/// the arm however the allowance is set.
+#[test]
+fn a_covering_question_the_allowance_cannot_settle_answers_neither_way() {
+    let ints = || Arc::new(Descr::of_kind(Kind::Int));
+    let words = || Arc::new(Descr::of_kind(Kind::Str));
+    let some = Values::Only(ints());
+    let other = Values::Only(words());
+
+    // The universe covers everything without asking anything, so it answers
+    // under any allowance at all: the row beside the one that declines.
+    assert_eq!(budget::under(0, || Values::Every.covers(&some)), Some(true));
+
+    // A guard against a guard is the difference, and starved it is unread.
+    let starved = budget::under(0, || other.covers(&some));
+    assert_eq!(starved, None, "starved gave {starved:?}");
+
+    // Given the allowance the same question is settled, which is what makes
+    // the decline a decline rather than the only answer this pair has.
+    assert_eq!(budget::under(4096, || other.covers(&some)), Some(false));
+    assert_eq!(budget::under(4096, || some.covers(&some)), Some(true));
 }

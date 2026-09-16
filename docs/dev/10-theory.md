@@ -266,11 +266,22 @@ a recursive schema is lowered by unfolding once and belongs to the rules; and
 anything past the three bounds a build is held to. Two properties hold of it
 that the structural IR does not have. Emptiness
 over the fragment it covers is a decision rather than a conservative answer,
-with a third verdict, `Unknown`, where an atom is not a set. And equality is
-semantic: the scalar components and the word automata compare as sets, so
-admitting the same values *is* being equal there — the integer set by lifting
-two tables to the period they share, since its spelling is not canonical and
-its *order* reads the spelling (`descr/integers.rs`). The set, record and
+with a third verdict, `Unknown`, where an atom is not a set or where a build ran
+out of its allowance before the question could be answered. **[LOAD-BEARING]** —
+the third verdict is what lets a bounded procedure stay *sound*: a negated form
+has to be expanded before its emptiness can be read, and past the allowance
+there is no union left to read. Either decision there would stand on nothing,
+and the one a caller may act on is the proof of emptiness, so answering that one
+wrongly is the expensive direction.
+
+HELD-BY: a_negated_set_the_allowance_cannot_expand_declines,
+a_negated_union_of_lines_the_allowance_cannot_expand_declines,
+a_covering_question_the_allowance_cannot_settle_answers_neither_way
+
+And equality is semantic: the scalar components and the word automata compare as
+sets, so admitting the same values *is* being equal there — the integer set by
+lifting two tables to the period they share, since its spelling is not canonical
+and its *order* reads the spelling (`descr/integers.rs`). The set, record and
 sequence components are not canonical either way, and equality on them is
 emptiness of both differences — which is the same question, asked twice.
 
