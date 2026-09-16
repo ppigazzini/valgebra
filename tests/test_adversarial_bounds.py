@@ -359,6 +359,28 @@ def test_no_whole_schema_transform_escapes_the_node_bound(transform: str) -> Non
         )
 
 
+def test_a_schema_of_exactly_the_node_ceiling_builds() -> None:
+    """The ceiling is a limit, not the first refused size.
+
+    The refusal reads "past the limit", and a schema *at* the limit is not past
+    it. Read one off, the message contradicts itself -- "spans 100000 nodes,
+    past the limit of 100000" -- and a caller sizing against the published
+    number is refused at the size the number told them was allowed.
+
+    Sized from the bound rather than written out: a record is two nodes, a
+    union node is one, and `int` is one, so `n` records beside an `int` span
+    `2n + 2`. The count is the whole point, so it is derived from
+    `MAX_SCHEMA_NODES` and moves with it.
+    """
+    records = (MAX_SCHEMA_NODES - 2) // 2
+    at_the_ceiling = [Validator({f"f{i}": int}) for i in range(records)]
+    union(*at_the_ceiling, Validator(int))
+
+    # One record further is two nodes past it, and refused by name.
+    with pytest.raises(ValueError, match="too large"):
+        union(*at_the_ceiling, Validator({"last": int}), Validator(int))
+
+
 def test_a_pattern_whose_determinisation_explodes_answers_in_bounded_time() -> None:
     """A subtype question must not be a way to exhaust the process's memory.
 

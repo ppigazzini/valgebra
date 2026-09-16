@@ -1,5 +1,6 @@
 import dataclasses
 import enum
+import sys
 from typing import Annotated, Any, Literal
 
 import annotated_types as at
@@ -142,6 +143,36 @@ ROUNDTRIP_SCHEMAS = [
     Annotated[str, Regex("a'b")],
     Annotated[str, Regex("\u00e9+")],
 ]
+
+
+def test_a_top_keeps_the_spelling_of_the_operand_on_its_left() -> None:
+    """`Any` and `anything` are one set, and the join keeps one of the two names.
+
+    The spelling is not part of the set -- two schemas differing only in it are
+    equal, and compare and hash alike -- so the only thing that can be wrong
+    about it is which one a reader is shown. The top absorbs, and it keeps the
+    name of the member it absorbed first, which through an operator is the
+    operand on the left. Read in the other direction, `a | b` would print `b`'s
+    name for a set the reader wrote `a` for.
+    """
+    written_any = Validator(Any)
+    written_top = Validator(object)
+
+    assert repr(written_any | object) == "Any"
+    assert repr(object | written_any) == "anything"
+    assert repr(written_top | Any) == "anything"
+    # `Any` on the *left* of the operator needs an interpreter whose `Any`
+    # defers to the other operand. Before 3.11 it is a `_SpecialForm` whose
+    # `__or__` raises rather than returning `NotImplemented`, so `__ror__` is
+    # never reached and no schema can answer the operator at all. That is a
+    # property of the interpreter's `Any` and not of this join, which the row
+    # above states with the operands every supported interpreter can spell.
+    if sys.version_info >= (3, 11):
+        assert repr(Any | written_top) == "Any"
+
+    # And the two are one schema whichever way round, which is what makes the
+    # spelling the only thing the order decides here.
+    assert written_any | object == object | written_any
 
 
 def test_a_render_that_is_not_an_expression_refuses_rather_than_rebuilding() -> None:
@@ -449,3 +480,15 @@ def test_a_union_renders_its_literals_after_the_sets_they_sit_beside() -> None:
     assert repr(written_after) == "int | Literal[1] | Literal[2] | Literal[3]"
     assert repr(written_among) == repr(written_after)
     assert written_among == written_after
+
+    # And where the run is not the last thing in the union. Every member that
+    # sorts after a `Literal` -- every container, every combinator, every class
+    # -- sits behind the run, so the run has an end as well as a beginning and
+    # the ordering has to find it. With the literals last there is nothing after
+    # them to find, which is a union the reordering cannot be wrong about.
+    assert (
+        repr(Validator(union(2, 1, list[int]))) == "Literal[1] | Literal[2] | list[int]"
+    )
+    assert repr(Validator(union(2, 1, list[int]))) == repr(
+        Validator(union(1, 2, list[int]))
+    )
