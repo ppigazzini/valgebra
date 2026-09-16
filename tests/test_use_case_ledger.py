@@ -89,6 +89,7 @@ _error_codes = _LEDGER.error_codes
 _product_sources = _LEDGER.product_sources
 _names_reached = _LEDGER.names_reached
 _universe = _LEDGER.universe
+_markers = _LEDGER.markers
 ACCEPTED: dict[str, str] = _LEDGER.accepted()
 
 
@@ -116,7 +117,7 @@ def test_the_product_suite_is_what_is_searched() -> None:
 @pytest.mark.parametrize("cell", sorted(_universe()))
 def test_every_use_case_is_named_by_the_suite_or_accepted(cell: str) -> None:
     """A name the tree grows and the suite never mentions fails here."""
-    reached = cell in _names_reached({cell}, _product_sources())
+    reached = cell in _names_reached({cell}, _product_sources()) | _markers()
     accepted = cell in ACCEPTED
     assert reached or accepted, (
         f"{cell} is a use case no product test names, and has no accepted reason"
@@ -141,7 +142,7 @@ def test_the_count_is_reported() -> None:
     rather than on the one that leaves it unreached.
     """
     universe = _universe()
-    reached = _names_reached(universe, _product_sources())
+    reached = _names_reached(universe, _product_sources()) | _markers()
     assert reached | set(ACCEPTED) >= universe
     covered = len(reached) / len(universe)
     assert covered > 0.85, f"{len(reached)} of {len(universe)} use cases named"
@@ -255,4 +256,65 @@ def test_the_snapshot_corpus_pins_codes_the_walk_can_write() -> None:
         f"the core's snapshot corpus pins codes the walk never writes: "
         f"{unknown}. Each row's code is a string the corpus chose, so a code "
         "that was renamed, or never existed, renders and passes."
+    )
+
+
+def _codes_named_in(name: str) -> set[str]:
+    """Give the codes a test file asserts, read as the quoted strings it holds."""
+    text = (ROOT / "tests" / name).read_text(encoding="utf-8")
+    return {
+        code
+        for code in re.findall(r"""["']([a-z]+(?:_[a-z]+)+)["']""", text)
+        if code in _reachable_codes()
+    }
+
+
+def test_no_code_is_evidenced_by_the_fail_fast_helper_alone() -> None:
+    """A code asserted only under `fail_fast` says nothing about the other mode.
+
+    `tests/test_error_codes.py` pins the code and the path for each node kind
+    through a helper that always passes `fail_fast=True`. That is one cell of
+    four: a report has two modes and two entry paths, and a code that differed
+    between them would pass there. The error matrix is what drives all four,
+    so every code that file names has to be a code the matrix drives -- and a
+    code named there and nowhere else is exactly the gap this refuses.
+    """
+    rows, elsewhere = _matrix_rows()
+    driven = rows | set(elsewhere)
+    named = _codes_named_in("test_error_codes.py")
+    assert len(named) >= 20, sorted(named)
+    alone = sorted(named - driven)
+    assert not alone, (
+        f"codes asserted in test_error_codes.py and driven by no matrix row: "
+        f"{alone}. Each is held under `fail_fast` alone, so nothing says what "
+        "the aggregating mode or the JSON path reports for it."
+    )
+
+
+def test_a_cell_is_covered_by_code_rather_than_by_prose() -> None:
+    """A name mentioned in a paragraph is not a test doing anything with it.
+
+    The suite writes a great deal of prose, and a cell whose name appeared only
+    in a docstring would read as covered. None does, and this is what keeps it
+    so: the search runs over the code with the comments and docstrings cut, and
+    reading it with them in must find no cell the tighter reading misses.
+    """
+    universe = _universe()
+    with_prose = _names_reached(universe, _LEDGER.product_sources(prose=True))
+    code_only = _names_reached(universe, _product_sources())
+    only_mentioned = sorted(with_prose - code_only - _markers())
+    assert not only_mentioned, (
+        f"cells named only in prose: {only_mentioned}. A paragraph about a "
+        "name is not a test that reaches it; write the row, or claim the cell "
+        "with a `# USE-CASE:` marker if the test cannot spell the name."
+    )
+
+
+def test_every_marker_names_a_cell_that_exists() -> None:
+    """A marker left behind by a rename claims a cell nothing has."""
+    stale = sorted(_markers() - _universe())
+    assert not stale, (
+        f"`# USE-CASE:` markers naming no cell: {stale}. A marker is "
+        "bookkeeping a reader keeps true, so one that stopped being true fails "
+        "here rather than sitting in the file."
     )

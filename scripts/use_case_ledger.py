@@ -108,15 +108,71 @@ def error_codes() -> set[str]:
     return codes
 
 
-def product_sources() -> str:
-    """Every product test file's text, as one blob to search."""
+#: The nodes a docstring can be the first statement of.
+_CARRIES_A_DOCSTRING = (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+
+
+def _without_prose(text: str) -> str:
+    """Give the code with every docstring and comment cut.
+
+    A cell is covered by a test *doing* something with it, and this suite
+    writes a great deal of prose: a name mentioned in a paragraph about why
+    something is hard would otherwise read as coverage. No cell is covered that
+    way today, and cutting the prose is what keeps it so rather than a note
+    saying somebody checked. Unparsing drops the comments on its own.
+    """
+    tree = ast.parse(text)
+    for node in ast.walk(tree):
+        if not isinstance(node, _CARRIES_A_DOCSTRING):
+            continue
+        first = node.body[0] if node.body else None
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            node.body = node.body[1:] or [ast.Pass()]
+    return ast.unparse(tree)
+
+
+def product_sources(*, prose: bool = False) -> str:
+    """Give every product test file's code, as one blob to search.
+
+    Comments and docstrings are cut unless `prose` is set; `_without_prose`
+    says why.
+    """
     blobs = []
     for path in sorted((ROOT / "tests").rglob("*.py")):
         text = path.read_text(encoding="utf-8")
         if "pytestmark = pytest.mark.repository" in text:
             continue
-        blobs.append(text)
+        if prose:
+            blobs.append(text)
+            continue
+        try:
+            blobs.append(_without_prose(text))
+        except SyntaxError:  # pragma: no cover - the suite parses
+            blobs.append(text)
     return "\n".join(blobs)
+
+
+def markers() -> set[str]:
+    """Give every cell a test claims with a `# USE-CASE:` marker.
+
+    The channel for a cell whose name a test cannot spell -- one reached
+    through a fixture, or through a spelling the search does not see. Rare by
+    design: the search is the primary direction, because a marker is
+    bookkeeping a reader has to keep true and a name in the code is not. What
+    the ledger holds is that a marker names a cell that exists, so one left
+    behind by a rename fails rather than sitting there.
+    """
+    found: set[str] = set()
+    for path in sorted((ROOT / "tests").rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        if "pytestmark = pytest.mark.repository" in text:
+            continue
+        found.update(re.findall(r"#\s*USE-CASE:\s*(\S+)", text))
+    return found
 
 
 def names_reached(cells: set[str], suite: str) -> set[str]:
@@ -153,7 +209,7 @@ def accepted() -> dict[str, str]:
 
 def main() -> int:
     every = universe()
-    reached = names_reached(every, product_sources())
+    reached = names_reached(every, product_sources()) | markers()
     recorded = accepted()
     empty = {cell: recorded.get(cell, "") for cell in sorted(every - reached)}
     universe_size = len(every)

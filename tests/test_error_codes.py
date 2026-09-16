@@ -3,6 +3,14 @@
 The explain walk (`validate`) reports a machine-readable code and a path per
 failure. This pins the code and the location for each node kind, so the error
 contract is locked and the reporting branches are exercised.
+
+Read through `_first`, which always stops at the first violation. That is one
+cell of four: a report has two modes and two entry paths, and a code behaving
+differently in the aggregating mode or over a parsed document would pass every
+row here. `tests/test_error_matrix.py` is what drives all four, and
+`tests/test_use_case_ledger.py` holds this file to it -- a code named here and
+driven by no matrix row fails there, so nothing is evidenced by the helper
+below alone.
 """
 
 from __future__ import annotations

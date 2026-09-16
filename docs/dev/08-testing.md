@@ -247,6 +247,13 @@ The number is computed rather than written down. A cell with no test fails; a
 cell a test cannot reach is accepted with a reason, and a reason for a cell that
 *is* reached fails too, so an excuse cannot outlive the gap it excuses.
 
+A cell is covered when a test *does* something with it, not when a paragraph
+mentions it: the search runs over the code with the comments and docstrings cut,
+and reading it with them in must find no cell the tighter reading misses. A test
+that cannot spell a cell's name claims it with a `# USE-CASE:` marker instead,
+and a marker naming no cell fails -- rare by design, because a marker is
+bookkeeping a reader keeps true and a name in the code is not.
+
 The largest product is the public surface and the error codes together: seventy-
 odd cells, of which six are accepted with a reason — five codes no schema a
 caller can build reaches, and the exception's own class name. The ledger prints
