@@ -4050,3 +4050,68 @@ fn an_inhabited_difference_over_a_cut_reference_refutes_nothing() {
         "the empty list is a list of ints and is shorter than two"
     );
 }
+
+/// A set of one literal is counted by the oracle, not by the node.
+///
+/// A set holds each member once, so `MinLen(n)` over an element asks it for `n`
+/// values that differ -- and how many a `Literal` denotes is the oracle's
+/// answer. `Literal[c]` is the values of `c`'s type equal to `c`, which is one
+/// where that type's equality is the one the oracle reads, more than one where
+/// `__eq__` answers for its siblings, and none where the constant equals
+/// nothing. Counting every literal as one proved a set of two of them empty
+/// while a two-member set validated against it, and proved a set of one
+/// *inhabited* where the constant denotes no value at all.
+///
+/// The question asked is the one the oracle already answers for a pair, put to
+/// the constant against itself: `Some(false)` is "a value, and equality here is
+/// one I read", `Some(true)` is the empty singleton, and a decline leaves the
+/// count unread.
+#[test]
+fn a_set_of_literals_is_counted_by_what_the_oracle_reads() {
+    /// Constant zero is an ordinary value; constant one equals nothing, as
+    /// `nan` does; constant two is of a type whose equality this cannot read.
+    struct Counted;
+
+    impl Constants for Counted {}
+
+    impl LeafRelations for Counted {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            None
+        }
+        fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {
+            match (left.get(), right.get()) {
+                (0, 0) => Some(false),
+                (1, 1) => Some(true),
+                _ => None,
+            }
+        }
+    }
+
+    let set_of = |constant: usize, least: usize| {
+        Schema::refine(
+            Schema::set(Schema::Literal(ConstIx::new(constant))),
+            vec![Constraint::MinLen(least)],
+        )
+    };
+
+    // One value, so one member: a bound of one is met and a bound of two is not.
+    assert_eq!(set_of(0, 1).verdict_under(&Counted), Verdict::Inhabited);
+    assert_eq!(set_of(0, 2).verdict_under(&Counted), Verdict::Empty);
+
+    // A constant equal to nothing denotes no value, so even one member is too
+    // many -- and reading it as one would report this inhabited, which is a
+    // refutation standing on a value that does not exist.
+    assert_eq!(set_of(1, 1).verdict_under(&Counted), Verdict::Empty);
+
+    // A constant the oracle cannot read leaves the count unread, in both
+    // directions: neither bound is decided.
+    assert_eq!(set_of(2, 1).verdict_under(&Counted), Verdict::Unknown);
+    assert_eq!(set_of(2, 2).verdict_under(&Counted), Verdict::Unknown);
+
+    // And a bound of zero is met by the empty set, whatever the element says.
+    let none_at_all = Schema::refine(
+        Schema::set(Schema::Literal(ConstIx::new(1))),
+        vec![Constraint::MaxLen(3)],
+    );
+    assert_eq!(none_at_all.verdict_under(&Counted), Verdict::Inhabited);
+}

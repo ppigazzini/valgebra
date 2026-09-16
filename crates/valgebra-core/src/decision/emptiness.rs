@@ -533,7 +533,7 @@ fn refinement_verdict(
             Some(element) if repeats_a_member(base) => {
                 element.verdict_rec(oracle, defs, visiting, budget)
             }
-            Some(element) => distinct_members(element, shortest(constraints.iter())),
+            Some(element) => distinct_members(element, shortest(constraints.iter()), oracle),
             None => Verdict::Unknown,
         },
     }
@@ -609,8 +609,8 @@ fn repeats_a_member(base: &Schema) -> bool {
 /// the two do not reach the bound, the answer is a decline -- a union may name
 /// one value twice, so its members' counts sum to an upper bound and the
 /// largest of them is a lower one, and neither is the count.
-fn distinct_members(element: &Schema, wanted: usize) -> Verdict {
-    let (least, most) = value_count_bounds(element);
+fn distinct_members(element: &Schema, wanted: usize, oracle: &dyn LeafRelations) -> Verdict {
+    let (least, most) = value_count_bounds(element, oracle);
     if most < wanted {
         return Verdict::Empty;
     }
@@ -626,24 +626,38 @@ fn distinct_members(element: &Schema, wanted: usize) -> Verdict {
 /// read in one direction each: the upper bound proves a set empty, the lower
 /// one proves it inhabited, and a schema this cannot count reports `(0, MAX)`,
 /// which proves neither.
-fn value_count_bounds(schema: &Schema) -> (usize, usize) {
+fn value_count_bounds(schema: &Schema, oracle: &dyn LeafRelations) -> (usize, usize) {
     match schema {
         Schema::Anything(_) | Schema::Int | Schema::Float | Schema::Str | Schema::Bytes => {
             (usize::MAX, usize::MAX)
         }
         Schema::Nothing => (0, 0),
-        Schema::NoneType | Schema::Literal(_) => (1, 1),
+        Schema::NoneType => (1, 1),
+        // A literal is one value only where its constant's type carries the
+        // equality this oracle can read. `Literal[c]` denotes `{x | type(x) is
+        // type(c) and x == c}`, so a constant whose `__eq__` answers `True` for
+        // its siblings denotes more than one value and a constant equal to
+        // nothing -- `nan` -- denotes none. The question that separates the
+        // three is the one the oracle already answers for a pair, asked of the
+        // constant against itself: `Some(false)` is "it is a value, and equality
+        // here is one I can read", `Some(true)` is the empty singleton, and a
+        // decline leaves the count unread.
+        Schema::Literal(index) => match oracle.literals_disjoint(*index, *index) {
+            Some(false) => (1, 1),
+            Some(true) => (0, 0),
+            None => (0, usize::MAX),
+        },
         Schema::Bool => (2, 2),
         // Every collection of an inhabited element is a value, and the empty
         // one is a value whatever the element is -- so one at least, and no
         // upper bound this reads.
         Schema::Coll { .. } => (1, usize::MAX),
-        Schema::Union(members) => members.iter().map(value_count_bounds).fold(
-            (0, 0),
-            |(least, most), (member_least, member_most)| {
+        Schema::Union(members) => members
+            .iter()
+            .map(|member| value_count_bounds(member, oracle))
+            .fold((0, 0), |(least, most), (member_least, member_most)| {
                 (least.max(member_least), most.saturating_add(member_most))
-            },
-        ),
+            }),
         _ => (0, usize::MAX),
     }
 }

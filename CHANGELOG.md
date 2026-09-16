@@ -24,10 +24,24 @@ answer of its own, or a repair to a change not yet released.
 - feat: what a profile buys is read per shape, on the box the release builds on -- internal
 - fix: a container is read for what it holds, at every kind
 - fix: a bound at the end of the carrier keeps the integers past it
+- fix: a literal counts as one value where its constant is one
 
 -->
 
 ### Fixed
+
+- **A literal counts as one value only where its constant is one.**
+  `Literal[c]` denotes the values of `c`'s type equal to `c`, which is one value
+  where that type's equality is Python's own or compares by identity, more than
+  one where `__eq__` answers `True` for its siblings, and none where the
+  constant does not equal itself. Counting every literal as one decided
+  `Annotated[set[Literal[E.A]], at.MinLen(2)]` empty for an enumeration whose
+  `__eq__` lies, while `{E.A, E.B}` validates against it, and reported
+  `"not_subset"` for `Annotated[set[Literal[float("nan")]], at.MinLen(1)]`
+  against `int`, which asserts a value the schema has none of. The count asks the
+  oracle, so an unreadable constant leaves the bound unread and the relation
+  undecided. `set[None]`, `set[bool]` and an ordinary enumeration are counted as
+  before.
 
 - **An integer bound at the end of the carrier keeps the integers past it.** The
   integer component spells a set as intervals, and the bounds a schema names are
