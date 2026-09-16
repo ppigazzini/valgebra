@@ -3299,3 +3299,94 @@ fn the_two_readings_agree_at_the_walks_depth_bound() {
         assert!(!holds(py, &schema, &nested(MAX_WALK_DEPTH + 1), &[], &defs));
     });
 }
+
+/// A set subclass is walked over the members it holds, not the ones it yields.
+///
+/// A set has no positions, so it is read through an iterator -- and an iterator
+/// is a slot a subclass may override. One that does was walked through its own
+/// `__iter__`, so `set[int]` admitted a value whose storage held a `str`: an
+/// accept with no value under it, which is the one direction the contract
+/// forbids. The base type's slot is asked instead, and the rows below are the
+/// answers that reading has to give.
+#[test]
+fn a_set_subclass_is_walked_over_the_members_it_holds() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new(
+                "class LyingIter(set):\n\
+                 \x20   def __iter__(self):\n\
+                 \x20       return iter([1, 2, 3])\n\
+                 class LyingLen(set):\n\
+                 \x20   def __len__(self):\n\
+                 \x20       return 9\n\
+                 class Quiet(set):\n\
+                 \x20   pass\n",
+            )
+            .expect("no interior nul")
+            .as_c_str(),
+            std::ffi::CString::new("lying_set.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("lying_set")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+        let build = |name: &str, members: Vec<&str>| {
+            module
+                .getattr(name)
+                .expect("the class")
+                .call1((PySet::new(py, members).expect("a set builds"),))
+                .expect("the subclass builds")
+        };
+
+        let ints = Schema::set(Schema::Int);
+        let strs = Schema::set(Schema::Str);
+
+        // The iterator says three integers; the storage holds one string, and
+        // the storage is the value.
+        let lying = build("LyingIter", vec!["a"]);
+        case(py, &ints, &lying, false);
+        case(py, &strs, &lying, true);
+
+        // A length bound counts the storage for the same reason.
+        let one = build("LyingLen", vec!["a"]);
+        let at_least_three = Schema::refine(Schema::set(Schema::Str), vec![Constraint::MinLen(3)]);
+        let at_most_one = Schema::refine(Schema::set(Schema::Str), vec![Constraint::MaxLen(1)]);
+        case(py, &at_least_three, &one, false);
+        case(py, &at_most_one, &one, true);
+
+        // A subclass overriding neither slot is read where it lies, which is
+        // what keeps the common subclass costing what a set costs.
+        let quiet = build("Quiet", vec!["a"]);
+        case(py, &strs, &quiet, true);
+        case(py, &ints, &quiet, false);
+    });
+}
+
+/// A list wide enough to be read from a snapshot decides what the in-place
+/// scan decides, and reports a list that moved under the reading.
+///
+/// Past a width the scalar walk copies the list and reads the copy borrowed,
+/// which is a second implementation of the same answer: it must accept what
+/// the scan accepts, refuse what it refuses, and compare the count again
+/// afterwards so a value that resized while it was read is reported rather
+/// than answered for. The width is what selects it, so the rows are wide.
+#[test]
+fn a_wide_list_of_scalars_is_decided_the_same_read_from_a_copy() {
+    Python::attach(|py| {
+        let schema = Schema::list(SeqShape::homogeneous(Schema::Int));
+        // Wider than the copy's floor, so this is the snapshot reading rather
+        // than the scan the narrow rows above take.
+        let wide = PyList::new(py, (0..64i64).collect::<Vec<_>>()).expect("builds");
+        assert!(decide(py, &schema, &wide.clone().into_any(), &[], &[]));
+
+        // One element of another kind, and the answer is the scan's.
+        let spoiled = PyList::new(py, (0..64i64).collect::<Vec<_>>()).expect("builds");
+        spoiled
+            .set_item(40, PyString::new(py, "x"))
+            .expect("set_item");
+        assert!(!decide(py, &schema, &spoiled.into_any(), &[], &[]));
+    });
+}

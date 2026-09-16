@@ -33,7 +33,7 @@ use pyo3::exceptions::{PyException, PyMemoryError, PyRecursionError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyList, PyTuple, PyType};
+use pyo3::types::{PyBytes, PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple, PyType};
 use valgebra_core::{
     ClassIx, CollKind, ConstIx, DefIx, OperandIx, PathSegment, PredIx, Schema, Violation,
 };
@@ -81,30 +81,121 @@ impl<'a, 'ctx> Frame<'a, 'ctx> {
     }
 }
 
-/// `list.__len__` and `tuple.__len__`, the base types' own slots.
-static BASE_LENGTHS: PyOnceLock<(Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
-
-/// Which builtin sequence a length question is about.
+/// Every base container's own `__len__`, and the two bases' own `__iter__`,
+/// resolved once per process.
 ///
-/// The three helpers below each ask the same question of one of two containers,
-/// and a `bool` cannot name which: `held_len(value, true)` reads as a length
-/// that *is* held, which is what the function does either way. The domain has
-/// two members and both have names, so it is an enum and the call sites say the
-/// name -- the rule this library applies to a Python value it is handed, turned
-/// on its own arguments.
+/// Two tables rather than one keyed by which slot is wanted: a caller asks for
+/// a length or for the elements, never for "whichever of the two", and folding
+/// them into one reading put a match on the per-element path of every walk that
+/// meets a subclass.
+static BASE_LENGTHS: PyOnceLock<Slots> = PyOnceLock::new();
+static BASE_ITERS: PyOnceLock<Slots> = PyOnceLock::new();
+
+/// Which builtin container a storage question is about.
+///
+/// The helpers below each ask the same question of one of these, and a `bool`
+/// cannot name which: `held_len(value, true)` reads as a length that *is* held,
+/// which is what the function does either way. Every member has a name, so it is
+/// an enum and the call sites say the name -- the rule this library applies to a
+/// Python value it is handed, turned on its own arguments.
+///
+/// Every container whose contents the walk reads is a member, because the
+/// argument below is about all of them alike: a `set` subclass whose `__iter__`
+/// yields values its storage does not hold was a member of `set[int]` while
+/// holding a `str`, and a `str` subclass whose `__len__` answers nine over one
+/// character satisfied `MinLen(3)` over text nothing counts that way.
 #[derive(Clone, Copy)]
 pub(super) enum Base {
     List,
     Tuple,
+    Str,
+    Bytes,
+    Set,
+    FrozenSet,
+    Dict,
 }
 
-/// How many items a `list` or `tuple` *subclass* holds.
+impl Base {
+    /// The type this base names.
+    fn type_object(self, py: Python<'_>) -> Bound<'_, PyType> {
+        match self {
+            Base::List => py.get_type::<PyList>(),
+            Base::Tuple => py.get_type::<PyTuple>(),
+            Base::Str => py.get_type::<PyString>(),
+            Base::Bytes => py.get_type::<PyBytes>(),
+            Base::Set => py.get_type::<PySet>(),
+            Base::FrozenSet => py.get_type::<PyFrozenSet>(),
+            Base::Dict => py.get_type::<PyDict>(),
+        }
+    }
+}
+
+/// One attribute of every base, held by name.
 ///
-/// The walk counts what the value holds, and for these two containers that is
-/// the storage rather than the answer `__len__` gives -- a subclass may
-/// override it and say anything, and [`scalar::stored_len`] has refused to
-/// believe it since a length marker and the shape beside it described two
-/// different sets.
+/// By name rather than by position, so reading one is a field select rather
+/// than a bounds-checked load through a heap pointer: this sits on the path of
+/// every walk that meets a container subclass, and the answer is a table entry
+/// rather than a decision.
+struct Slots {
+    list: Py<PyAny>,
+    tuple: Py<PyAny>,
+    string: Py<PyAny>,
+    bytes: Py<PyAny>,
+    set: Py<PyAny>,
+    frozen_set: Py<PyAny>,
+    dict: Py<PyAny>,
+}
+
+impl Slots {
+    /// Resolve `name` on every base, once per process.
+    fn of(py: Python<'_>, name: &Bound<'_, PyString>) -> PyResult<Slots> {
+        let on = |base: Base| base.type_object(py).getattr(name).map(Bound::unbind);
+        Ok(Slots {
+            list: on(Base::List)?,
+            tuple: on(Base::Tuple)?,
+            string: on(Base::Str)?,
+            bytes: on(Base::Bytes)?,
+            set: on(Base::Set)?,
+            frozen_set: on(Base::FrozenSet)?,
+            dict: on(Base::Dict)?,
+        })
+    }
+
+    fn get(&self, base: Base) -> &Py<PyAny> {
+        match base {
+            Base::List => &self.list,
+            Base::Tuple => &self.tuple,
+            Base::Str => &self.string,
+            Base::Bytes => &self.bytes,
+            Base::Set => &self.set,
+            Base::FrozenSet => &self.frozen_set,
+            Base::Dict => &self.dict,
+        }
+    }
+}
+
+/// The base type's own `__len__`.
+fn base_length(py: Python<'_>, base: Base) -> PyResult<&'static Py<PyAny>> {
+    let name = intern!(py, "__len__");
+    Ok(BASE_LENGTHS
+        .get_or_try_init(py, || Slots::of(py, name))?
+        .get(base))
+}
+
+/// The base type's own `__iter__`.
+fn base_iter(py: Python<'_>, base: Base) -> PyResult<&'static Py<PyAny>> {
+    let name = intern!(py, "__iter__");
+    Ok(BASE_ITERS
+        .get_or_try_init(py, || Slots::of(py, name))?
+        .get(base))
+}
+
+/// How many items a container *subclass* holds.
+///
+/// The walk counts what the value holds, which is the storage rather than the
+/// answer `__len__` gives -- a subclass may override it and say anything, and
+/// [`scalar::stored_len`] has refused to believe it since a length marker and
+/// the shape beside it described two different sets.
 ///
 /// The C accessor is not the way to read the storage either. `PyTuple_Size`
 /// reads it on `CPython`; `PyPy`'s `cpyext` implements it *through the object's
@@ -120,26 +211,23 @@ pub(super) enum Base {
 /// the same thing on every interpreter.
 ///
 /// Only a subclass that **overrides** `__len__` pays for it. One that inherits
-/// the base's slot is read where it lies: see [`reads_its_storage`].
+/// the base's slot is read where it lies: see [`reads_its_length`].
 fn held_len(value: &Bound<'_, PyAny>, base: Base) -> PyResult<usize> {
     let py = value.py();
-    let slot = base_length(py, base)?;
-    slot.bind(py).call1((value,))?.extract()
+    base_length(py, base)?.bind(py).call1((value,))?.extract()
 }
 
-/// The base type's own `__len__`, resolved once per process.
-fn base_length(py: Python<'_>, base: Base) -> PyResult<&'static Py<PyAny>> {
-    let (list_len, tuple_len) = BASE_LENGTHS.get_or_try_init(py, || {
-        let slot = |ty: &Bound<'_, PyType>| ty.getattr(intern!(py, "__len__")).map(Bound::unbind);
-        Ok::<_, PyErr>((
-            slot(&py.get_type::<PyList>())?,
-            slot(&py.get_type::<PyTuple>())?,
-        ))
-    })?;
-    Ok(match base {
-        Base::Tuple => tuple_len,
-        Base::List => list_len,
-    })
+/// The items a container *subclass* holds, over the base type's own `__iter__`.
+///
+/// The set kinds are read through an iterator rather than by position, so this
+/// is where their storage is reached: a subclass overriding `__iter__` yields
+/// whatever it likes, and a walk believing it decides membership of a set that
+/// is not the value. The iterator the base slot returns is the builtin one, so
+/// mutation during the scan still raises where [`sequence::scan_set`] expects
+/// it to.
+fn held_iter<'py>(value: &Bound<'py, PyAny>, base: Base) -> PyResult<Bound<'py, PyAny>> {
+    let py = value.py();
+    base_iter(py, base)?.bind(py).call1((value,))
 }
 
 /// Whether this value's type reports the length of its own storage.
@@ -163,18 +251,43 @@ fn base_length(py: Python<'_>, base: Base) -> PyResult<&'static Py<PyAny>> {
 /// mutable object, a bound, and a free-threading argument for nothing.
 ///
 /// A wrong answer here is safe in one direction only, and this errs that way: a
-/// type that cannot be read at all is treated as a liar and copied.
-fn reads_its_storage(value: &Bound<'_, PyAny>, base: Base) -> bool {
+/// type that cannot be read at all is treated as a liar and read through the
+/// base.
+#[inline]
+fn reads_its_length(value: &Bound<'_, PyAny>, base: Base) -> bool {
     let py = value.py();
-    let Ok(slot_of_base) = base_length(py, base) else {
+    let name = intern!(py, "__len__");
+    let Ok(slots) = BASE_LENGTHS.get_or_try_init(py, || Slots::of(py, name)) else {
         return false;
     };
+    carries(value, name, slots.get(base))
+}
+
+/// Whether this value's type yields the elements of its own storage.
+///
+/// [`reads_its_length`]'s question, one slot over, and it is the one the set
+/// kinds turn on: they are read through an iterator rather than by position.
+fn reads_its_elements(value: &Bound<'_, PyAny>, base: Base) -> bool {
+    let py = value.py();
+    let name = intern!(py, "__iter__");
+    let Ok(slots) = BASE_ITERS.get_or_try_init(py, || Slots::of(py, name)) else {
+        return false;
+    };
+    carries(value, name, slots.get(base))
+}
+
+/// Whether the value's type carries `name` as the base's own slot.
+fn carries(
+    value: &Bound<'_, PyAny>,
+    name: &Bound<'_, PyString>,
+    of_base: &'static Py<PyAny>,
+) -> bool {
     value
         .get_type()
-        .getattr_opt(intern!(py, "__len__"))
+        .getattr_opt(name)
         .ok()
         .flatten()
-        .is_some_and(|slot| slot.is(slot_of_base.bind(py)))
+        .is_some_and(|found| found.is(of_base.bind(value.py())))
 }
 
 fn stop(ctx: Ctx<'_>) -> bool {

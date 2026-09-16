@@ -180,6 +180,23 @@ exactly a tuple" instead copied every `NamedTuple`: on CPython 3.14 that was
 100 ns against the 57 a plain tuple takes, which is what the repair above cost
 before this one was found.
 
+**Every container the walk reads answers this way, and for one reason.** A
+schema over a container denotes what the value *holds*, so the reading of it
+cannot be a method the value chooses: a `str`, `bytes`, `list`, `tuple`, `set`,
+`frozenset` or `dict` subclass that overrides `__len__` is counted through its
+base type's slot, and a `set` or `frozenset` subclass that overrides `__iter__`
+is walked through its base type's iterator. Believing an override admits a value
+whose storage the schema excludes — `set[int]` held a subclass whose storage
+carried a `str`, and `MinLen(3)` held one character — which is an accept no value
+supports. The exactness test comes first at every one of them, so an exact
+container and an inheriting subclass keep the reading their storage already
+gives.
+
+The two slots are asked of the base type rather than through a C accessor for
+the reason the tuple paragraph gives, and the iterator the base returns is the
+builtin one, so a set that changes size during the scan still raises where the
+scan expects it to.
+
 The cost is one length read per element, which is a pointer dereference: the
 `large_array` shape of the comparative gate moved 0.881 to 0.886 against
 pydantic-core when the sequence guard landed.

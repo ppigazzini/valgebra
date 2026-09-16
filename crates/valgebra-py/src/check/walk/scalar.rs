@@ -12,12 +12,12 @@
 //! test holds the two statements together.
 
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyString, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
 use valgebra_core::{ConstIx, Constraint, OperandIx, Schema, Violation};
 
 use super::{
     Base, Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at,
-    reads_its_storage, record_fatal, stop,
+    reads_its_length, record_fatal, stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::index::compile_pattern;
@@ -233,39 +233,88 @@ pub(super) fn check_refine(
     ok
 }
 
+/// A builtin container the walk counts, with the tests that recognise one.
+///
+/// Two tests rather than one, and the first is what keeps the common reading
+/// cheap: an exact container overrides nothing, so its own `__len__` *is* the
+/// base's and asking its type for the slot buys a dictionary lookup per length
+/// bound and learns nothing.
+struct Sized {
+    base: Base,
+    is_exact: fn(&Bound<'_, PyAny>) -> bool,
+    is_kind: fn(&Bound<'_, PyAny>) -> bool,
+}
+
+/// Every container whose length is the count of what it holds, most common
+/// first: a length bound meets a string more often than a frozenset.
+const SIZED: [Sized; 7] = [
+    Sized {
+        base: Base::Str,
+        is_exact: |value| value.is_exact_instance_of::<PyString>(),
+        is_kind: |value| value.is_instance_of::<PyString>(),
+    },
+    Sized {
+        base: Base::List,
+        is_exact: |value| value.is_exact_instance_of::<PyList>(),
+        is_kind: |value| value.is_instance_of::<PyList>(),
+    },
+    Sized {
+        base: Base::Dict,
+        is_exact: |value| value.is_exact_instance_of::<PyDict>(),
+        is_kind: |value| value.is_instance_of::<PyDict>(),
+    },
+    Sized {
+        base: Base::Tuple,
+        is_exact: |value| value.is_exact_instance_of::<PyTuple>(),
+        is_kind: |value| value.is_instance_of::<PyTuple>(),
+    },
+    Sized {
+        base: Base::Bytes,
+        is_exact: |value| value.is_exact_instance_of::<PyBytes>(),
+        is_kind: |value| value.is_instance_of::<PyBytes>(),
+    },
+    Sized {
+        base: Base::Set,
+        is_exact: |value| value.is_exact_instance_of::<PySet>(),
+        is_kind: |value| value.is_instance_of::<PySet>(),
+    },
+    Sized {
+        base: Base::FrozenSet,
+        is_exact: |value| value.is_exact_instance_of::<PyFrozenSet>(),
+        is_kind: |value| value.is_instance_of::<PyFrozenSet>(),
+    },
+];
+
 /// The length of a value, read the way the rest of the walk reads it.
 ///
-/// A `list` and a `tuple` answer with the items they *hold*, because that is
-/// what a sequence schema counts when it walks them. Everything else answers
-/// `__len__`, which is what a `str`, `bytes`, `set` and `dict` are read through
-/// anyway.
-///
-/// **One value has one length.** A `list` subclass may override `__len__` and
-/// say anything; before this, `MinLen(5)` believed it and the sequence shape
-/// beside it counted the storage, so the two constraints described different
-/// sets and a value could satisfy each in a different sense. A length that two
-/// parts of one schema disagree about is not a property of the value, and a set
-/// defined by one is not a set.
+/// **One value has one length.** A container subclass may override `__len__`
+/// and say anything; before this, `MinLen(5)` believed it and the shape beside
+/// it counted the storage, so the two constraints described different sets and a
+/// value could satisfy each in a different sense. A length that two parts of one
+/// schema disagree about is not a property of the value, and a set defined by
+/// one is not a set.
 ///
 /// **And a length has one source.** The C accessor is not it: `PyTuple_Size`
 /// reads the storage on `CPython` and goes through the object's own `__len__`
 /// on `PyPy`'s `cpyext`, which is the overridden answer again under another
-/// name. An exact list or tuple overrides nothing and is asked directly; a
-/// subclass is asked of the base type's slot, through [`held_len`].
+/// name. An exact container overrides nothing and is asked directly; a subclass
+/// that overrides is asked of the base type's slot, through [`held_len`].
+///
+/// An object that is none of these -- one with a `__len__` and no builtin
+/// container behind it -- answers for itself, because there is no storage to
+/// read past it and `__len__` is the whole of what it holds.
 fn stored_len(value: &Bound<'_, PyAny>) -> PyResult<usize> {
-    if let Ok(list) = value.cast::<PyList>() {
-        return if list.is_exact_instance_of::<PyList>() || reads_its_storage(value, Base::List) {
-            Ok(list.len())
-        } else {
-            held_len(value, Base::List)
-        };
-    }
-    if let Ok(tuple) = value.cast::<PyTuple>() {
-        return if tuple.is_exact_instance_of::<PyTuple>() || reads_its_storage(value, Base::Tuple) {
-            Ok(tuple.len())
-        } else {
-            held_len(value, Base::Tuple)
-        };
+    for sized in &SIZED {
+        if (sized.is_exact)(value) {
+            return value.len();
+        }
+        if (sized.is_kind)(value) {
+            return if reads_its_length(value, sized.base) {
+                value.len()
+            } else {
+                held_len(value, sized.base)
+            };
+        }
     }
     value.len()
 }

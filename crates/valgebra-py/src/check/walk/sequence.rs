@@ -11,12 +11,12 @@ use std::ops::ControlFlow;
 use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::sync::critical_section::with_critical_section;
-use pyo3::types::{PyFrozenSet, PyList, PySet, PyTuple};
+use pyo3::types::{PyFrozenSet, PyIterator, PyList, PySet, PyTuple};
 use valgebra_core::{PathSegment, Schema, SeqKind, SeqShape, Violation};
 
 use super::{
-    Base, Frame, Scan, held_len, homogeneous_scalar, is_fatal, member, mutated, reads_its_storage,
-    record_fatal, scalar_admits, scalar_of, stop,
+    Base, Frame, Scan, held_iter, held_len, homogeneous_scalar, is_fatal, member, mutated,
+    reads_its_elements, reads_its_length, record_fatal, scalar_admits, scalar_of, stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::violation::{summarize_value, type_fail};
@@ -267,10 +267,9 @@ fn tuple_matches(
     // A tuple whose length is its storage's is read where it lies: an exact
     // one, and a subclass that inherits `tuple.__len__` rather than overriding
     // it -- which is every `NamedTuple`. Only a subclass that answers the
-    // accessor for itself is copied; see `storage_of` and `reads_its_storage`.
+    // accessor for itself is copied; see `storage_of` and `reads_its_length`.
     let copied;
-    let tuple = if tuple.is_exact_instance_of::<PyTuple>() || reads_its_storage(tuple, Base::Tuple)
-    {
+    let tuple = if tuple.is_exact_instance_of::<PyTuple>() || reads_its_length(tuple, Base::Tuple) {
         tuple
     } else {
         let Some(storage) = storage_of(tuple) else {
@@ -393,7 +392,7 @@ pub(super) fn scan_set<'py>(
     mut visit: impl FnMut(&Bound<'py, PyAny>) -> ControlFlow<()>,
 ) -> Scan {
     with_critical_section(set, || {
-        let Ok(iter) = set.try_iter() else {
+        let Ok(iter) = storage_iter(set) else {
             return Scan::Unreadable;
         };
         for item in iter {
@@ -414,6 +413,57 @@ pub(super) fn scan_set<'py>(
         Scan::Complete
     })
 }
+
+/// The members a set-like value *holds*, whatever its type says it yields.
+///
+/// A set is read through an iterator rather than by position, so this is where
+/// its storage is reached. A subclass overriding `__iter__` yields whatever it
+/// likes, and a walk believing it decides membership of a set that is not the
+/// value: `set[int]` admitted a subclass holding a `str` because its iterator
+/// answered with integers.
+///
+/// Exactness first, then the slot, which is the rule [`super::stored_len`]
+/// applies to a length: an exact set overrides nothing, and a subclass that
+/// inherits the slot is read where it lies. The iterator the base returns is the
+/// builtin one, so mutation during the scan still raises where the caller below
+/// expects it to.
+fn storage_iter<'py>(set: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyIterator>> {
+    for held in &HELD {
+        if (held.is_exact)(set) {
+            return set.try_iter();
+        }
+        if (held.is_kind)(set) {
+            return if reads_its_elements(set, held.base) {
+                set.try_iter()
+            } else {
+                held_iter(set, held.base)?.try_iter()
+            };
+        }
+    }
+    set.try_iter()
+}
+
+/// A set-like kind, its exact test and its base, in the order `storage_iter`
+/// asks them. The shape [`super::scalar::stored_len`] reads a length through,
+/// one slot over: a frozenset is not a set, so each is asked for itself.
+struct Held {
+    is_exact: fn(&Bound<'_, PyAny>) -> bool,
+    is_kind: fn(&Bound<'_, PyAny>) -> bool,
+    base: Base,
+}
+
+const HELD: [Held; 2] = [
+    Held {
+        is_exact: |value| value.is_exact_instance_of::<PySet>(),
+        is_kind: |value| value.is_instance_of::<PySet>(),
+        base: Base::Set,
+    },
+    Held {
+        is_exact: |value| value.is_exact_instance_of::<PyFrozenSet>(),
+        is_kind: |value| value.is_instance_of::<PyFrozenSet>(),
+        base: Base::FrozenSet,
+    },
+];
 
 /// A set-like container the walk reads: what its type failure reports, and the
 /// test that recognises it.

@@ -22,10 +22,24 @@ answer of its own, or a repair to a change not yet released.
 - fix: a dict has one entry for an int key and its boolean
 - fix: a set is at most as long as the values its element denotes
 - feat: what a profile buys is read per shape, on the box the release builds on -- internal
+- fix: a container is read for what it holds, at every kind
 
 -->
 
 ### Fixed
+
+- **A container subclass does not talk its way into a schema.** A schema over a
+  container denotes the values it *holds*, and a subclass may override `__len__`
+  or `__iter__` and answer anything. The override was believed, so
+  `Validator(set[int]).is_valid(s)` was `True` for a `set` subclass whose
+  `__iter__` yields integers over storage holding `"a"`, and
+  `Annotated[str, MinLen(3)]` admitted a `str` subclass reporting nine over one
+  character. Both answer `False` now, on `is_valid` and `validate` alike. Every
+  container the walk reads answers this way: `str`, `bytes`, `list`, `tuple`,
+  `set`, `frozenset` and `dict` are counted through their base type's `__len__`,
+  and `set` and `frozenset` are walked through its `__iter__`. A subclass that
+  overrides neither is read where it lies, so a `NamedTuple` and an ordinary
+  container subclass pay nothing.
 
 - **A set is at most as long as the values its element denotes.** A sequence
   takes any length by repeating one element and a set does not: it holds each
