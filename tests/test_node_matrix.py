@@ -8,7 +8,9 @@ capability reachable for one container but not the other -- the asymmetry class
 of hole -- fails here rather than shipping silently.
 """
 
+import json
 import re
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from types import GenericAlias
@@ -18,6 +20,7 @@ import annotated_types as at
 import pytest
 
 from valgebra import (
+    ValidationError,
     Validator,
     complement,
     intersection,
@@ -150,6 +153,141 @@ def test_node_admits_its_denotation(label: str) -> None:
         assert compiled.is_valid(value), f"{label} should admit {value!r}"
     for value in non_members:
         assert not compiled.is_valid(value), f"{label} should reject {value!r}"
+
+
+# --- The same table, through every entry point. --------------------------------
+#
+# The rows above ask `is_valid`, which is one of six ways a caller asks. A defect
+# reachable through only one of them is invisible to a suite that asks through
+# one: the explaining walk takes a level where the fast one did not, the JSON
+# path parses before it walks, and `ensure` and `load` answer with the value
+# rather than with a verdict. So each row runs through all of them and they are
+# held to one answer -- which is what `docs/dev/04-walk.md` puts first.
+
+
+def _object_path(compiled: Validator, value: object) -> dict[str, bool]:
+    """Membership as each object entry point reports it."""
+    answers = {"is_valid": compiled.is_valid(value), "in": value in compiled}
+    answers.update(
+        _verdicts(
+            (
+                ("validate", lambda: compiled.validate(value)),
+                (
+                    "validate_fail_fast",
+                    lambda: compiled.validate(value, fail_fast=True),
+                ),
+                ("ensure", lambda: compiled.ensure(value)),
+            )
+        )
+    )
+    return answers
+
+
+def _verdicts(calls: Iterable[tuple[str, Callable[[], object]]]) -> dict[str, bool]:
+    """Run each call, reporting whether it accepted rather than what it raised.
+
+    One place rather than one per entry point: the loop is what a linter reads
+    as a cost and what a reader reads as the rule -- an entry point accepts or
+    raises, and nothing else is an answer.
+    """
+    return {name: _accepts(call) for name, call in calls}
+
+
+def _accepts(call: Callable[[], object]) -> bool:
+    """Whether this entry point accepted, rather than what it raised."""
+    try:
+        call()
+    except ValidationError:
+        return False
+    return True
+
+
+def _round_trips(value: object) -> str | None:
+    """Give the JSON document naming this value, where one names it.
+
+    A tuple writes as an array and reads back as a list, a set writes as
+    nothing at all, and a float may not survive its own text. Where the
+    document does not name the value the two paths are being asked about two
+    values, so the row is not a disagreement and is not compared.
+    """
+    try:
+        text = json.dumps(value)
+    except (TypeError, ValueError):
+        return None
+    back = json.loads(text)
+    if type(back) is not type(value) or back != value:
+        return None
+    return text
+
+
+def _json_path(compiled: Validator, text: str) -> dict[str, bool]:
+    """Membership as each JSON entry point reports it."""
+    answers = {
+        "is_valid_json": compiled.is_valid_json(text),
+        "is_valid_json_bytes": compiled.is_valid_json(text.encode()),
+    }
+    answers.update(
+        _verdicts(
+            (
+                ("validate_json", lambda: compiled.validate_json(text)),
+                (
+                    "validate_json_fail_fast",
+                    lambda: compiled.validate_json(text, fail_fast=True),
+                ),
+                ("load", lambda: compiled.load(text)),
+                ("load_bytes", lambda: compiled.load(text.encode())),
+            )
+        )
+    )
+    return answers
+
+
+@pytest.mark.parametrize("label", list(_MEMBERSHIP))
+def test_every_entry_point_gives_one_answer(label: str) -> None:
+    """Every way of asking reports the membership the denotation gives."""
+    compiled = Validator(_NODES[label])
+    members, non_members = _MEMBERSHIP[label]
+    for expected, values in ((True, members), (False, non_members)):
+        for value in values:
+            answers = _object_path(compiled, value)
+            assert set(answers.values()) == {expected}, (label, value, answers)
+            text = _round_trips(value)
+            if text is None:
+                continue
+            answers = _json_path(compiled, text)
+            assert set(answers.values()) == {expected}, (label, text, answers)
+
+
+def test_the_json_comparison_reaches_the_nodes_it_can() -> None:
+    """A row skipped for every value would compare nothing at all.
+
+    The guard on the comparison above is a `continue`, which is the shape that
+    passes by checking nothing. This says how much of the table it does reach.
+    """
+    reached = {
+        label
+        for label, (members, non_members) in _MEMBERSHIP.items()
+        if any(_round_trips(value) is not None for value in [*members, *non_members])
+    }
+    assert len(reached) >= 12, sorted(reached)
+    for label in ("Int", "Str", "Seq:list-homogeneous", "KeyedMap:record", "Union"):
+        assert label in reached
+
+
+def test_ensure_hands_back_the_object_it_was_given() -> None:
+    """The one entry point that answers with the value rather than a verdict."""
+    value = [1, 2]
+    assert Validator(list[int]).ensure(value) is value
+    with pytest.raises(ValidationError):
+        Validator(list[int]).ensure(["a"])
+
+
+def test_load_hands_back_the_parsed_value() -> None:
+    """And the one that answers with what the document named."""
+    assert Validator(list[int]).load("[1, 2]") == [1, 2]
+    assert Validator(list[int]).load(b"[1, 2]") == [1, 2]
+    with pytest.raises(ValidationError):
+        Validator(list[int]).load('["a"]')
 
 
 def test_membership_table_covers_every_node() -> None:

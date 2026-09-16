@@ -581,7 +581,10 @@ def test_a_multiple_is_a_remainder_of_zero() -> None:
     """`MultipleOf` is `value % operand == 0`, which is what the node denotes.
 
     Reading the remainder's truthiness instead asks a different question of any
-    type whose `__bool__` and `__eq__` disagree.
+    type whose `__bool__` and `__eq__` disagree. A step whose remainder equals no
+    zero names a schema no value belongs to, and the frontend refuses it rather
+    than compiling a validator that refuses everything: `timedelta(6) %
+    timedelta(2)` is `timedelta(0)`, which is falsy and is not the integer zero.
     """
     multiples = Validator(Annotated[int, at.MultipleOf(3)])
     assert multiples.is_valid(9)
@@ -591,8 +594,6 @@ def test_a_multiple_is_a_remainder_of_zero() -> None:
     assert not Validator(Annotated[float, at.MultipleOf(0.1)]).is_valid(0.3)
 
     span = datetime.timedelta
-    remainder = span(seconds=6) % span(seconds=2)
-    admitted = Validator(Annotated[span, at.MultipleOf(span(seconds=2))]).is_valid(
-        span(seconds=6)
-    )
-    assert admitted == (remainder == 0)
+    assert (span(seconds=6) % span(seconds=2) == 0) is False
+    with pytest.raises(ValueError, match=r"number"):
+        Validator(Annotated[span, at.MultipleOf(span(seconds=2))])

@@ -649,9 +649,27 @@ pub(super) fn keyed_map_explain(
                 "missing".to_owned(),
             )),
             Ok(None) => {}
-            Err(_) => frame
-                .out
-                .push(type_mismatch("dict_type", "dict", value, frame.path, ctx)),
+            // A lookup that raises is a key that will not say whether it is
+            // this field -- the comparison-raises rule makes the value a
+            // non-member, and the value is a dict all the same. Reporting it as
+            // the wrong type sends a reader to the wrong place; a required field
+            // the dict cannot be shown to hold is reported missing, as an absent
+            // one is. A fatal signal from the comparison is carried out instead.
+            Err(err) => {
+                if is_fatal(&err, dict.py()) {
+                    record_fatal(err, ctx);
+                    return;
+                }
+                if field.required {
+                    frame.out.push(located(
+                        frame.path,
+                        Arc::clone(&field.name),
+                        "missing_key",
+                        format!("required key {:?}", field.name),
+                        "missing".to_owned(),
+                    ));
+                }
+            }
         }
         if ctx.mode.stops_at_first() && !frame.out.is_empty() {
             return;

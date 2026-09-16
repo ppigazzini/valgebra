@@ -279,9 +279,15 @@ means, and dropping the marker instead would admit every value of the base. A
 bound that is empty because the *order* says so — `Gt(inf)` on a float — is kept,
 because emptiness is then an answer rather than the absence of one.
 
-`MultipleOf(n)` requires a nonzero divisor: no value is a multiple of zero, so
-`MultipleOf(0)` is an unsatisfiable constraint and is rejected with a `ValueError`
-when the validator is built, rather than rejecting every value at check time.
+`MultipleOf(n)` requires a nonzero **number**: no value is a multiple of zero,
+so `MultipleOf(0)` is an unsatisfiable constraint, and a step that is not a
+number is unsatisfiable for the same reason one step further on. The constraint
+is `value % n == 0`, and a remainder that is not a number equals no zero —
+`timedelta(6) % timedelta(2)` is `timedelta(0)`, which is not the integer `0` —
+so such a step names a schema no value belongs to. Both are rejected with a
+`ValueError` when the validator is built, rather than rejecting every value at
+check time. `int`, `float`, `Decimal` and `Fraction` steps all divide as they
+read.
 
 The compound markers `Interval` and `Len` expand to the bounds they carry, so
 `Interval(ge=0, le=10)` contributes `Ge(0)` and `Le(10)`, and `Len(2, 4)`

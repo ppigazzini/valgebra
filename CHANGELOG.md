@@ -29,10 +29,21 @@ answer of its own, or a repair to a change not yet released.
 - fix: an annotation builds the schema it names, or is refused
 - fix: a report keeps the promises the error model makes
 - fix: a union summary names its branches and keeps what stopped the walk
+- fix: a walk reports what it found, at the edges a corpus reaches last
 
 -->
 
 ### Fixed
+
+- **A walk reports what it found, at the edges a corpus reaches last.** A dict
+  holding a key whose `__eq__` raises was reported as not being a dict, which
+  sends a reader to the wrong value: it is a dict, it is not a member by the
+  comparison-raises rule, and the field it cannot be shown to hold is reported
+  missing. And `MultipleOf` over a step that is not a number is refused at build
+  rather than compiled: the constraint is `value % n == 0`, a `timedelta`
+  remainder equals no integer zero, and the validator that came out refused
+  every value without saying why. `int`, `float`, `Decimal` and `Fraction` steps
+  are unchanged.
 
 - **A union summary names its branches, and keeps what stopped the walk.** The
   summary names each branch "as each would name itself alone", and two branch

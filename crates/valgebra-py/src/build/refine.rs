@@ -13,6 +13,10 @@ use pyo3::types::{PyBytes, PyDict, PyString, PyTuple, PyType};
 use valgebra_core::{Constraint, OperandIx, Schema};
 
 use super::{Pool, build_schema, not_implemented};
+
+/// `numbers.Number`, the register a remainder's comparison follows, resolved
+/// once per process.
+static NUMBER: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 use crate::errors::summarize;
 
 /// Refuse an order bound against `nan`, which orders nothing.
@@ -515,6 +519,31 @@ impl<'py> Probes<'py> {
 /// schema admitting what the rest of it excludes.
 const MAX_GROUPING_DEPTH: u32 = 8;
 
+/// Refuse a `MultipleOf` operand that is not a number.
+///
+/// The node denotes `value % n == 0`, and that comparison is against the integer
+/// zero. A `timedelta` remainder is a `timedelta`, which equals no integer -- so
+/// a step written as a duration names a schema no value belongs to, and
+/// compiling it gives a validator that refuses every value without saying why.
+/// That is the same case `MultipleOf(0)` is refused for, one type over.
+///
+/// `numbers.Number` is the question, because it is the register the remainder's
+/// comparison follows: `Decimal` and `Fraction` are in it and divide as a caller
+/// expects, and a type that is not is one whose remainder has no zero to equal.
+fn refuse_unnumbered_step(operand: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = operand.py();
+    let number = NUMBER.import(py, "numbers", "Number")?;
+    if operand.is_instance(number)? {
+        return Ok(());
+    }
+    Err(PyValueError::new_err(format!(
+        "MultipleOf({}) is not a valid constraint: a multiple is `value % n == 0`, \
+         and the remainder of a value that is not a number equals no zero, so no \
+         value would belong. Write the step as a number",
+        summarize(operand)
+    )))
+}
+
 pub(super) fn parse_constraint(
     marker: &Bound<'_, PyAny>,
     out: &mut Vec<Constraint>,
@@ -694,6 +723,7 @@ fn parse_constraint_within(
                  zero. Use a nonzero divisor.",
             ));
         }
+        refuse_unnumbered_step(&multiple)?;
         out.push(Constraint::MultipleOf(lits.intern_operand(&multiple)));
     }
     // Predicate escape hatch: a callable marker, or `annotated_types.Predicate`,
