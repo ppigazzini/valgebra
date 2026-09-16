@@ -301,7 +301,7 @@ fn stop(ctx: Ctx<'_>) -> bool {
 /// exceptions, so the `PyException` test alone misses them, yet they mean "the
 /// interpreter cannot continue", not "this value is not a member". Any other
 /// exception is an ordinary failed comparison and folds to a non-member.
-fn is_fatal(err: &PyErr, py: Python<'_>) -> bool {
+pub(super) fn is_fatal(err: &PyErr, py: Python<'_>) -> bool {
     !err.is_instance_of::<PyException>(py)
         || err.is_instance_of::<PyMemoryError>(py)
         || err.is_instance_of::<PyRecursionError>(py)
@@ -309,7 +309,7 @@ fn is_fatal(err: &PyErr, py: Python<'_>) -> bool {
 
 /// Record the first fatal signal so the walk unwinds (every later `member` call
 /// returns at once) and the entry point re-raises it.
-fn record_fatal(err: PyErr, ctx: Ctx<'_>) {
+pub(super) fn record_fatal(err: PyErr, ctx: Ctx<'_>) {
     let mut slot = ctx.fatal.borrow_mut();
     if slot.is_none() {
         *slot = Some(err);
@@ -413,7 +413,7 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
                 code: "recursion_limit",
                 path: frame.path.clone(),
                 expected: format!("at most {MAX_WALK_DEPTH} levels of nesting"),
-                value_summary: summarize_value(value),
+                value_summary: summarize_value(value, ctx),
             });
         }
         return false;
@@ -428,7 +428,7 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
                     code: "unresolved_recursion",
                     path: frame.path.clone(),
                     expected: "a resolved recursive value".to_owned(),
-                    value_summary: summarize_value(value),
+                    value_summary: summarize_value(value, ctx),
                 });
             }
             false
@@ -511,7 +511,7 @@ fn mutated(value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
             code: MUTATED_CODE,
             path: frame.path.clone(),
             expected: MUTATED_EXPECTED.to_owned(),
-            value_summary: summarize_value(value),
+            value_summary: summarize_value(value, ctx),
         });
     }
     false
@@ -662,9 +662,10 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
     // before failing -- is reported, rather than every branch. "Furthest" is the
     // greatest path depth past the union's own location. Where no branch makes
     // progress (`int | str` against a float, say) a single union error stands
-    // for all of them. Violations are aggregated regardless of fail_fast so the
-    // deepest progress is visible; this runs only where a value is being
-    // explained.
+    // for all of them. Every branch is walked whole whatever the mode, since
+    // the depth each reached is what chooses between them and a walk stopped
+    // early has not measured it; the mode then decides how much of the chosen
+    // branch is reported. This runs only where a value is being explained.
     let base_depth = frame.path.len();
     let probe = Ctx {
         mode: WalkMode::Explain,
@@ -708,7 +709,19 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
         }
     }
     match best {
-        Some((progress, branch)) if progress > 0 => frame.out.extend(branch),
+        // The branch is walked whole whatever the mode, because the *closest*
+        // one is chosen by how far each descended and a walk stopped early has
+        // not measured that. What the mode decides is how much of the chosen
+        // branch is reported: `fail_fast` promises one violation, and the one
+        // it keeps is the one the aggregate would lead with.
+        Some((progress, branch)) if progress > 0 => {
+            let reported = if ctx.mode.stops_at_first() {
+                1
+            } else {
+                branch.len()
+            };
+            frame.out.extend(branch.into_iter().take(reported));
+        }
         _ => {
             let mut labels = BranchLabels::new();
             for member in members {
@@ -718,7 +731,7 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
                 code: "union_error",
                 path: frame.path.clone(),
                 expected: labels.render(),
-                value_summary: summarize_value(value),
+                value_summary: summarize_value(value, ctx),
             });
         }
     }
@@ -780,7 +793,7 @@ fn check_complement(inner: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_,
                 code: "unexpected_match",
                 path: frame.path.clone(),
                 expected: format!("not {}", inner.expected()),
-                value_summary: summarize_value(value),
+                value_summary: summarize_value(value, ctx),
             });
         }
         return false;
@@ -804,6 +817,7 @@ fn check_instance(index: ClassIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '
             &class_label(class),
             value,
             frame.path,
+            ctx,
         ));
     }
     ok
@@ -827,7 +841,7 @@ fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> boo
                     code: "recursion_loop",
                     path: frame.path.clone(),
                     expected: "a finite (non-cyclic) value".to_owned(),
-                    value_summary: summarize_value(value),
+                    value_summary: summarize_value(value, ctx),
                 });
             }
             return false;
@@ -838,7 +852,7 @@ fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> boo
                     code: "recursion_limit",
                     path: frame.path.clone(),
                     expected: format!("at most {MAX_RECURSION_DEPTH} levels of recursion"),
-                    value_summary: summarize_value(value),
+                    value_summary: summarize_value(value, ctx),
                 });
             }
             return false;

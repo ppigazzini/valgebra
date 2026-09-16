@@ -19,7 +19,7 @@ pub(crate) fn class_label(class: &Bound<'_, PyAny>) -> String {
 }
 
 /// The characters of a value a summary keeps.
-const SUMMARY_CHARS: usize = 80;
+pub(crate) const SUMMARY_CHARS: usize = 80;
 
 /// A bounded renderer for containers, built once per interpreter.
 ///
@@ -72,16 +72,24 @@ fn bounded_repr(py: Python<'_>) -> Option<&Py<PyAny>> {
 /// A scalar keeps the direct path: its repr is its size, there is nothing to
 /// bound, and it is the common case in an error message.
 pub(crate) fn summarize(value: &Bound<'_, PyAny>) -> String {
+    try_summarize(value).unwrap_or_else(|_| "<unrepresentable>".to_owned())
+}
+
+/// [`summarize`], handing back the error a `__repr__` raised.
+///
+/// The walk needs the error rather than the fallback text: a `__repr__` raising
+/// `KeyboardInterrupt` is the interpreter unwinding, and folding it into
+/// `<unrepresentable>` reports a non-member where the contract says the signal
+/// propagates. Every caller outside the walk has no signal to carry and takes
+/// the fallback.
+pub(crate) fn try_summarize(value: &Bound<'_, PyAny>) -> PyResult<String> {
     if !value.is_instance_of::<PyList>()
         && !value.is_instance_of::<PyTuple>()
         && !value.is_instance_of::<PyDict>()
         && !value.is_instance_of::<PySet>()
         && !value.is_instance_of::<PyFrozenSet>()
     {
-        return match value.repr() {
-            Ok(repr) => shorten(repr.to_string(), SUMMARY_CHARS),
-            Err(_) => "<unrepresentable>".to_owned(),
-        };
+        return Ok(shorten(value.repr()?.to_string(), SUMMARY_CHARS));
     }
     let rendered = bounded_repr(value.py())
         .and_then(|repr| {
@@ -91,14 +99,11 @@ pub(crate) fn summarize(value: &Bound<'_, PyAny>) -> String {
         })
         .and_then(|text| text.extract::<String>().ok());
     match rendered {
-        Some(text) => shorten(text, SUMMARY_CHARS),
+        Some(text) => Ok(shorten(text, SUMMARY_CHARS)),
         // `reprlib` is a standard-library module and the call is total, so this
         // is unreachable in practice; falling back to the plain repr keeps the
         // message right rather than trading correctness for the bound.
-        None => match value.repr() {
-            Ok(repr) => shorten(repr.to_string(), SUMMARY_CHARS),
-            Err(_) => "<unrepresentable>".to_owned(),
-        },
+        None => Ok(shorten(value.repr()?.to_string(), SUMMARY_CHARS)),
     }
 }
 

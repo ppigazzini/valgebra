@@ -7,16 +7,22 @@ use pyo3::types::{PyInt, PyString};
 use valgebra_core::{PathSegment, Schema, Violation};
 
 use crate::check::ctx::Ctx;
-use crate::errors::summarize;
+use crate::check::walk::{is_fatal, record_fatal};
+use crate::errors::{summarize, try_summarize};
 use crate::input::Value;
 
 /// A type/value mismatch for a leaf schema.
-pub(crate) fn mismatch(schema: &Schema, value: &Value<'_, '_>, path: &[PathSegment]) -> Violation {
+pub(crate) fn mismatch(
+    schema: &Schema,
+    value: &Value<'_, '_>,
+    path: &[PathSegment],
+    ctx: Ctx<'_>,
+) -> Violation {
     Violation {
         code: schema.error_code(),
         path: path.to_vec(),
         expected: schema.expected().to_owned(),
-        value_summary: summarize_value(value),
+        value_summary: summarize_value(value, ctx),
     }
 }
 
@@ -30,7 +36,7 @@ pub(crate) fn type_fail(
     out: &mut Vec<Violation>,
 ) -> bool {
     if ctx.mode.explains() {
-        out.push(type_mismatch(code, expected, value, path));
+        out.push(type_mismatch(code, expected, value, path, ctx));
     }
     false
 }
@@ -40,16 +46,17 @@ pub(crate) fn type_mismatch(
     expected: &str,
     value: &Value<'_, '_>,
     path: &[PathSegment],
+    ctx: Ctx<'_>,
 ) -> Violation {
     Violation {
         code,
         path: path.to_vec(),
         expected: expected.to_owned(),
-        value_summary: summarize_value(value),
+        value_summary: summarize_value(value, ctx),
     }
 }
 
-/// Build a violation whose path is `path` extended by one key segment.
+/// Build a violation whose path is `path` extended by one field name.
 pub(crate) fn located(
     path: &[PathSegment],
     key: Arc<str>,
@@ -57,8 +64,23 @@ pub(crate) fn located(
     expected: String,
     value_summary: String,
 ) -> Violation {
+    at_key(path, PathSegment::Key(key), code, expected, value_summary)
+}
+
+/// Build a violation whose path is `path` extended by one segment.
+///
+/// The general form of [`located`], for a key that is not a field name: an
+/// undeclared key is whatever the value carried, and [`key_segment`] is what
+/// says how a path names one.
+pub(crate) fn at_key(
+    path: &[PathSegment],
+    key: PathSegment,
+    code: &'static str,
+    expected: String,
+    value_summary: String,
+) -> Violation {
     let mut full = path.to_vec();
-    full.push(PathSegment::Key(key));
+    full.push(key);
     Violation {
         code,
         path: full,
@@ -68,10 +90,23 @@ pub(crate) fn located(
 }
 
 /// A short repr-style summary of a value, materializing a JSON value first.
-pub(crate) fn summarize_value(value: &Value<'_, '_>) -> String {
-    match value.to_python() {
-        Ok(obj) => summarize(&obj),
-        Err(_) => "<unrepresentable>".to_owned(),
+pub(crate) fn summarize_value(value: &Value<'_, '_>, ctx: Ctx<'_>) -> String {
+    let Ok(obj) = value.to_python() else {
+        return "<unrepresentable>".to_owned();
+    };
+    match try_summarize(&obj) {
+        Ok(text) => text,
+        Err(err) => {
+            // A `__repr__` that raises an ordinary exception is a value that
+            // cannot render, and the message says so. One that raises a fatal
+            // signal is the interpreter unwinding, and the walk carries it out
+            // rather than folding it into a summary -- which is the rule at
+            // every other site a value answers a question.
+            if is_fatal(&err, obj.py()) {
+                record_fatal(err, ctx);
+            }
+            "<unrepresentable>".to_owned()
+        }
     }
 }
 

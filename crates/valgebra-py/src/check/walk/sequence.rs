@@ -247,7 +247,7 @@ fn seq_length_fail(
             code: len_code,
             path: frame.path.clone(),
             expected,
-            value_summary: summarize_value(value),
+            value_summary: summarize_value(value, ctx),
         });
     }
     false

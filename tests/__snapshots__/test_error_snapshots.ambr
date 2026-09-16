@@ -45,11 +45,11 @@
       dict({
         'code': 'extra_forbidden',
         'expected': 'no unexpected key',
-        'message': 'at b: expected no unexpected key, got "b" [extra_forbidden]',
+        'message': "at b: expected no unexpected key, got 'b' [extra_forbidden]",
         'path': tuple(
           'b',
         ),
-        'value': '"b"',
+        'value': "'b'",
       }),
     ]),
     'generic_union': list([

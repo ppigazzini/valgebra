@@ -22,7 +22,7 @@ use super::{
 use crate::check::ctx::Ctx;
 use crate::check::index::compile_pattern;
 use crate::check::violation::{mismatch, summarize_value};
-use crate::errors::summarize;
+use crate::errors::{SUMMARY_CHARS, shorten, summarize};
 use crate::input::Value;
 
 /// A schema whose membership is decided by the value alone.
@@ -140,7 +140,9 @@ pub(super) fn admit(
 #[cold]
 #[inline(never)]
 fn record_mismatch(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) {
-    frame.out.push(mismatch(schema, value, frame.path));
+    frame
+        .out
+        .push(mismatch(schema, value, frame.path, frame.ctx));
 }
 
 pub(super) fn check_literal(
@@ -164,7 +166,7 @@ pub(super) fn check_literal(
             code: "literal_error",
             path: frame.path.clone(),
             expected: format!("the literal {}", summarize(literal)),
-            value_summary: summarize_value(value),
+            value_summary: summarize_value(value, ctx),
         });
     }
     ok
@@ -457,7 +459,13 @@ fn check_constraint<'py>(
                     record_fatal(err, ctx);
                     return false;
                 }
-                Err(err) => (false, "predicate_error", Expected::Raised(err.to_string())),
+                // Bounded like every other value a message carries: a predicate
+                // raising a megabyte of text is a message nobody reads.
+                Err(err) => (
+                    false,
+                    "predicate_error",
+                    Expected::Raised(shorten(err.to_string(), SUMMARY_CHARS)),
+                ),
             }
         }
         Constraint::Regex(pattern) => {

@@ -1671,9 +1671,13 @@ fn a_union_explains_the_branch_that_descended_furthest() {
         assert_eq!(out[0].location(), "x");
 
         // The probe aggregates a branch's violations even when the caller
-        // asked to stop at the first, so the whole of the closest branch is
-        // reported. A branch with two failing fields is what distinguishes
-        // that from a probe that inherited the caller's mode.
+        // asked to stop at the first, because the closest branch is chosen by
+        // how far each descended and a walk stopped early has not measured
+        // that. What the caller's mode decides is how much of the chosen branch
+        // is *reported*: `fail_fast` is one violation, which is what the error
+        // model promises at every site. A branch with two failing fields is
+        // what tells the two halves apart -- the probe walks both, and one is
+        // reported.
         let wide = Schema::record(
             vec![field("p", Schema::Int, true), field("q", Schema::Int, true)],
             Openness::Closed,
@@ -1688,6 +1692,12 @@ fn a_union_explains_the_branch_that_descended_furthest() {
         let wide_value = wide_value.into_any();
         assert_eq!(
             run_mode(py, &union_wide, &wide_value, WalkMode::ExplainFailFast),
+            (false, 1)
+        );
+        // And the aggregating mode beside it reports both, which is what says
+        // the probe reached them.
+        assert_eq!(
+            run_mode(py, &union_wide, &wide_value, WalkMode::Explain),
             (false, 2)
         );
 
@@ -3388,5 +3398,39 @@ fn a_wide_list_of_scalars_is_decided_the_same_read_from_a_copy() {
             .set_item(40, PyString::new(py, "x"))
             .expect("set_item");
         assert!(!decide(py, &schema, &spoiled.into_any(), &[], &[]));
+    });
+}
+
+/// A key a clause does not cover reports both halves of the mismatch, whatever
+/// the record has already found.
+///
+/// A homogeneous mapping is two schemas, and an entry outside it can be
+/// outside either: reporting only the key leaves a reader with a key that
+/// looks right. The failure this pins is the report going quiet once anything
+/// else has failed -- a declared field's mismatch is not a reason to stop
+/// describing the entries beside it.
+#[test]
+fn a_clause_reports_the_value_it_refused_beside_a_field_that_already_failed() {
+    Python::attach(|py| {
+        let schema = Schema::keyed_map(
+            vec![field("a", Schema::Int, true)],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        );
+        let value = PyDict::new(py);
+        value.set_item("a", PyString::new(py, "no")).expect("set");
+        value.set_item("b", PyString::new(py, "nope")).expect("set");
+        let value = value.into_any();
+
+        let (ok, violations) = explain(py, &schema, &value, &[], &[]);
+        assert!(!ok);
+        // The declared field, then the undeclared entry's value: the key `b`
+        // is a string and belongs, so what is left to say is about `"nope"`.
+        assert_eq!(violations.len(), 2, "{violations:?}");
+        assert_eq!(violations[0].location(), "a");
+        assert_eq!(violations[1].location(), "b");
+        assert_eq!(violations[1].code, "int_type");
     });
 }

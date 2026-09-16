@@ -20,7 +20,7 @@ use valgebra_core::{Field, MapClause, PathSegment, Schema};
 use super::{Frame, Scan, fast, is_fatal, member, mutated, record_fatal, stop};
 use crate::check::ctx::Ctx;
 use crate::check::index::RecordPlan;
-use crate::check::violation::{key_segment, located, type_mismatch};
+use crate::check::violation::{at_key, key_segment, located, summarize_value, type_mismatch};
 use crate::input::Value;
 
 /// Visit a dict's entries, refusing rather than panicking when the dict changes
@@ -607,13 +607,13 @@ pub(super) fn keyed_map_explain(
         // unreachable, but keep the false-implies-a-violation invariant.
         frame
             .out
-            .push(type_mismatch("dict_type", "dict", value, frame.path));
+            .push(type_mismatch("dict_type", "dict", value, frame.path, ctx));
         return;
     };
     let Ok(dict) = v.cast::<PyDict>() else {
         frame
             .out
-            .push(type_mismatch("dict_type", "dict", value, frame.path));
+            .push(type_mismatch("dict_type", "dict", value, frame.path, ctx));
         return;
     };
     // The interned keys, in field order. Asking the dict by Rust text decodes a
@@ -651,7 +651,7 @@ pub(super) fn keyed_map_explain(
             Ok(None) => {}
             Err(_) => frame
                 .out
-                .push(type_mismatch("dict_type", "dict", value, frame.path)),
+                .push(type_mismatch("dict_type", "dict", value, frame.path, ctx)),
         }
         if ctx.mode.stops_at_first() && !frame.out.is_empty() {
             return;
@@ -682,22 +682,26 @@ pub(super) fn keyed_map_explain(
         }
         if let Some(clause) = defaults.first() {
             // A clause exists but did not cover this key: surface the key and
-            // value violations against it (the homogeneous-mapping error).
+            // value violations against it (the homogeneous-mapping error). The
+            // two are two failures, so a mode that stops at the first reports
+            // the key alone.
             frame.path.push(key_segment(key));
             member(&clause.key, &Value::Py(key), frame);
-            member(&clause.value, &Value::Py(val), frame);
+            if !ctx.mode.stops_at_first() || frame.out.is_empty() {
+                member(&clause.value, &Value::Py(val), frame);
+            }
             frame.path.pop();
         } else {
-            // A closed record: the key is not allowed.
-            let key_text = key
-                .str()
-                .map_or_else(|_| String::new(), |text| text.to_string());
-            frame.out.push(located(
+            // A closed record: the key is not allowed. It is named the way every
+            // other key in a path is -- an integer key as an integer -- so a
+            // caller walking the path back down reaches the entry rather than
+            // one spelled like it.
+            frame.out.push(at_key(
                 frame.path,
-                Arc::from(key_text.as_str()),
+                key_segment(key),
                 "extra_forbidden",
                 "no unexpected key".to_owned(),
-                format!("{key_text:?}"),
+                summarize_value(&Value::Py(key), ctx),
             ));
         }
         if ctx.mode.stops_at_first() && !frame.out.is_empty() {

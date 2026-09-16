@@ -27,10 +27,26 @@ answer of its own, or a repair to a change not yet released.
 - fix: a literal counts as one value where its constant is one
 - fix: a string kind holds the characters no pattern matches
 - fix: an annotation builds the schema it names, or is refused
+- fix: a report keeps the promises the error model makes
 
 -->
 
 ### Fixed
+
+- **A report keeps the promises the error model makes.** `fail_fast=True` stops
+  at the first failure, and two sites reported two: a union aggregated the whole
+  of its closest branch, and a mapping clause reported the key and the value
+  together. Both report one, on the object path and the JSON path alike; the
+  branch is still walked whole, because which branch is closest is measured by
+  how far each descended. An undeclared **integer** key is named in the path as
+  an integer, so `err.path[-1]` indexes back down to the entry -- one reading of
+  a record gave the string of its digits and the other the integer, for the same
+  value. A predicate's raised error is summarised like every other value a
+  message carries rather than copied whole. An undeclared key's value reads as a
+  Python repr, as every other value does. And a `__repr__` raising a fatal
+  signal while a message is built propagates it rather than folding it into
+  `<unrepresentable>`, which is the rule at every other site a value answers a
+  question.
 
 - **An annotation builds the schema it names, or is refused.** Four forms were
   read as a different schema, with no message saying so. `typing.Tuple[()]` is

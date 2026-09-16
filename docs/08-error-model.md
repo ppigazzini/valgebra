@@ -145,6 +145,12 @@ When no branch makes any progress past the union's own location — for example
 is no closer branch, so a single `union_error` is the honest report. A
 `complement` likewise reports one failure at its location.
 
+Every branch is walked whole even under `fail_fast`, because *which* branch is
+closest is decided by how far each one descended and a walk stopped early has
+not measured that. What `fail_fast` decides is how much of the chosen branch is
+reported, and there it means what it means everywhere else: one failure, the one
+the aggregate leads with.
+
 The closest-branch search is a bounded, best-effort heuristic: it runs only when
 a value has already failed the union, and it inspects at most the first 64
 branches. A union wider than that still reports correctly — the membership
