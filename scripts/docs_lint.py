@@ -464,6 +464,58 @@ def check_index(relative: str) -> list[str]:
     return problems
 
 
+#: The spellings a count takes in prose, by tens and by units.
+_TENS = (
+    "",
+    "",
+    "twenty",
+    "thirty",
+    "forty",
+    "fifty",
+    "sixty",
+    "seventy",
+    "eighty",
+    "ninety",
+)
+_UNITS = (
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+    "nineteen",
+)
+
+
+def _spell(count: int) -> str:
+    """Spell a count under a hundred, the way the prose spells it.
+
+    Derived rather than tabulated. A table of spellings is a universe, and a
+    universe that stops short is a detector that reports nothing past its end:
+    the table this replaces ran out at twenty-four while the tree held
+    twenty-seven ledgers, so a page could say any number above the ceiling and
+    every wrong spelling read as absent.
+    """
+    if count < len(_UNITS):
+        return _UNITS[count]
+    tens, units = divmod(count, 10)
+    return _TENS[tens] if units == 0 else f"{_TENS[tens]}-{_UNITS[units]}"
+
+
 def check_ledger_table() -> list[str]:
     """Hold the table of ledgers to the ledgers, in both directions.
 
@@ -500,31 +552,13 @@ def check_ledger_table() -> list[str]:
         for name in sorted(listed)
         if not (tests / name).exists()
     ]
-    # The count is prose beside the table, so it rots on its own schedule.
-    spelled = {
-        4: "four",
-        5: "five",
-        6: "six",
-        7: "seven",
-        8: "eight",
-        9: "nine",
-        10: "ten",
-        11: "eleven",
-        12: "twelve",
-        13: "thirteen",
-        14: "fourteen",
-        15: "fifteen",
-        16: "sixteen",
-        17: "seventeen",
-        18: "eighteen",
-        19: "nineteen",
-        20: "twenty",
-        21: "twenty-one",
-        22: "twenty-two",
-        23: "twenty-three",
-        24: "twenty-four",
-    }
-    want = spelled.get(len(declared))
+    # The count is prose beside the table, so it rots on its own schedule. The
+    # spellings run from four, as they always have: these pages say "the two
+    # ledgers that read the tree" about a named pair, and a number that small is
+    # never the table's. Every count above is generated rather than tabulated --
+    # see `_spell`, and the ceiling that used to end the table.
+    spelled = {count: _spell(count) for count in range(4, 100)}
+    want = _spell(len(declared))
     counted = (
         page,
         ROOT / "docs" / "dev" / "13-glossary.md",

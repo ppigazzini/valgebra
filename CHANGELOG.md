@@ -37,6 +37,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a constraint is put to the kind a literal's constant belongs to
 - fix: a render that gave up says so, rather than reading as another schema
 - fix: a pattern prints the way Python spells it
+- fix: a ledger count is spelled from the number the tree has -- internal
 
 -->
 
