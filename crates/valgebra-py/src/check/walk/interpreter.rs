@@ -3434,3 +3434,173 @@ fn a_clause_reports_the_value_it_refused_beside_a_field_that_already_failed() {
         assert_eq!(violations[1].code, "int_type");
     });
 }
+
+/// A branch's name follows a definition a bounded number of times, and says
+/// the node's own kind past the bound.
+///
+/// A union that matched nothing names its branches, and a branch built by
+/// `recursive` is a reference whose kind is the word `value`. Following the
+/// definition gives a reader the set rather than the word, and following it
+/// without a bound gives a definition naming another one a walk that does not
+/// end. The bound is what makes both true at once, so it is pinned from both
+/// sides: a chain shorter than it is followed to the end, and a chain one link
+/// longer stops and names the reference.
+#[test]
+fn a_branch_label_follows_a_definition_to_a_bounded_depth() {
+    Python::attach(|py| {
+        // Two chains of references in one table. The first is one link longer
+        // than the bound follows, the second one link shorter.
+        let defs = vec![
+            Schema::Ref(DefIx::new(1)),
+            Schema::Ref(DefIx::new(2)),
+            Schema::Ref(DefIx::new(3)),
+            Schema::Ref(DefIx::new(4)),
+            Schema::Int,
+            Schema::Ref(DefIx::new(6)),
+            Schema::Ref(DefIx::new(7)),
+            Schema::Ref(DefIx::new(8)),
+            Schema::Str,
+        ];
+        let schema =
+            Schema::Union(vec![Schema::Ref(DefIx::new(0)), Schema::Ref(DefIx::new(5))].into());
+        // A float belongs to neither end, and neither branch descends into it,
+        // so the report is the summary that names them.
+        let value = PyFloat::new(py, 1.5).into_any();
+        let (ok, violations) = explain(py, &schema, &value, &[], &defs);
+        assert!(!ok);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "union_error");
+        // The long chain stops at the reference it reached the bound on; the
+        // short one arrives at the set and names it.
+        assert_eq!(violations[0].expected, "one of: value, str");
+    });
+}
+
+/// A union reports the branch whose *walk* stopped, rather than folding it
+/// into "this value matched no branch".
+///
+/// A branch that raised inside a predicate has not said the value is outside
+/// its set -- it has said the question was not answered -- and it fails at the
+/// union's own location, which is where the summary would swallow it. The
+/// sentence that says what to do about it is the only one the report has.
+#[test]
+fn a_union_reports_a_branch_whose_walk_stopped_rather_than_a_summary() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new("def raises(x):\n\x20   raise ValueError('no')\n")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("raiser.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("raiser")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+        let pool = vec![module.getattr("raises").expect("raises").unbind()];
+        let raising = Schema::Refine {
+            base: Arc::new(Schema::ANYTHING),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        };
+        let schema = Schema::Union(vec![raising, Schema::Int].into());
+        // Neither branch descends: the predicate raises where it stands, and
+        // the integer branch refuses the value itself.
+        let value = PyString::new(py, "s").into_any();
+        let (ok, violations) = explain(py, &schema, &value, &pool, &[]);
+        assert!(!ok);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "predicate_error");
+    });
+}
+
+/// The probe walks a branch whole where the caller asked to stop at the first
+/// violation, because how far a branch descended is what chooses between them.
+///
+/// A branch that fails shallowly and again deep inside is the case that tells
+/// the two apart: measured whole it is the closest branch, measured to its
+/// first violation it is the furthest from being one. Inheriting the caller's
+/// mode reports the other branch, which is a reader sent to the wrong field.
+#[test]
+fn the_probe_measures_a_whole_branch_where_the_caller_stops_at_the_first() {
+    Python::attach(|py| {
+        let inner = PyDict::new(py);
+        inner.set_item("d", 1i64).expect("set");
+        let middle = PyDict::new(py);
+        middle.set_item("c", &inner).expect("set");
+        let value = PyDict::new(py);
+        value.set_item("a", 1i64).expect("set");
+        value.set_item("b", &middle).expect("set");
+        let value = value.into_any();
+
+        // The near branch fails at `a` and again three levels down at `b.c.d`.
+        let near = Schema::record(
+            vec![
+                field("a", Schema::Str, true),
+                field(
+                    "b",
+                    Schema::record(
+                        vec![field(
+                            "c",
+                            Schema::record(vec![field("d", Schema::Str, true)], Openness::Closed),
+                            true,
+                        )],
+                        Openness::Closed,
+                    ),
+                    true,
+                ),
+            ],
+            Openness::Closed,
+        );
+        // The far branch fails once, two levels down: further than the near
+        // branch's *first* failure, nearer than its last.
+        let far = Schema::record(
+            vec![
+                field("a", Schema::Int, true),
+                field(
+                    "b",
+                    Schema::record(vec![field("c", Schema::Str, true)], Openness::Closed),
+                    true,
+                ),
+            ],
+            Openness::Closed,
+        );
+        let schema = Schema::Union(vec![near, far].into());
+
+        // Aggregating, the near branch is chosen and both its failures are
+        // reported.
+        let (ok, violations) = explain(py, &schema, &value, &[], &[]);
+        assert!(!ok);
+        assert_eq!(violations.len(), 2);
+        assert_eq!(violations[0].location(), "a");
+        assert_eq!(violations[1].location(), "b.c.d");
+
+        // Stopping at the first, the same branch is chosen -- the probe
+        // measured it whole -- and one of its failures is reported.
+        let index = build_index(py, &schema, &[], &[]);
+        let state = WalkState::new();
+        let mut out = Vec::new();
+        let ctx = Ctx {
+            pool: &[],
+            defs: &[],
+            records: &index.records,
+            attrs: &index.attrs,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
+            mode: WalkMode::ExplainFailFast,
+        };
+        let ok = member(
+            &schema,
+            &Value::Py(&value),
+            &mut Frame::new(&mut Vec::new(), &mut out, ctx),
+        );
+        assert!(!ok);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].location(), "a");
+    });
+}

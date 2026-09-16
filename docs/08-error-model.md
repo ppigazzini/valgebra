@@ -151,6 +151,13 @@ not measured that. What `fail_fast` decides is how much of the chosen branch is
 reported, and there it means what it means everywhere else: one failure, the one
 the aggregate leads with.
 
+A branch the walk could not answer for keeps its own report rather than the
+summary. `recursion_limit`, `recursion_loop`, `mutated_during_validation` and
+`predicate_error` each say the *walk* stopped rather than that the value is
+outside a set, and each of them fails at the union's own location — so the
+progress rule would count it as no progress and the summary would drop the one
+sentence saying what to do about it.
+
 The closest-branch search is a bounded, best-effort heuristic: it runs only when
 a value has already failed the union, and it inspects at most the first 64
 branches. A union wider than that still reports correctly — the membership

@@ -579,14 +579,43 @@ impl BranchLabels {
 ///
 /// A nested union contributes its members rather than itself, because
 /// `Literal[...]` builds one: without this, a single-constant `Literal` names
-/// itself `union`.
+/// itself `union`. A reference contributes the definition's, for the same
+/// reason: `recursive(...)` is a `Ref`, and its bare kind is the word `value`.
+///
+/// `unfolded` bounds the references followed, so a definition naming another
+/// names a depth of them rather than running forever. The bound is small
+/// because a label is prose: past it the node's own kind is the honest answer.
 fn push_branch_label(schema: &Schema, ctx: Ctx<'_>, py: Python<'_>, out: &mut BranchLabels) {
+    push_branch_label_within(schema, ctx, py, out, 0);
+}
+
+/// How many references a branch label follows before naming the node's kind.
+const MAX_LABEL_UNFOLDS: u32 = 4;
+
+fn push_branch_label_within(
+    schema: &Schema,
+    ctx: Ctx<'_>,
+    py: Python<'_>,
+    out: &mut BranchLabels,
+    unfolded: u32,
+) {
     match schema {
         Schema::Union(members) => {
             for member in members.iter() {
-                push_branch_label(member, ctx, py, out);
+                push_branch_label_within(member, ctx, py, out, unfolded);
             }
         }
+        // What a complement excludes, which is what it says when it is the only
+        // thing that failed: `not str` rather than the word `complement`.
+        Schema::Complement(inner) => out.push(format!("not {}", inner.expected())),
+        // The definition's own branches. A reference is the node `recursive`
+        // builds, and its kind alone tells a reader nothing about what it admits.
+        Schema::Ref(id) => match ctx.defs.get(id.get()) {
+            Some(body) if unfolded < MAX_LABEL_UNFOLDS => {
+                push_branch_label_within(body, ctx, py, out, unfolded + 1);
+            }
+            _ => out.push(schema.expected().to_owned()),
+        },
         Schema::Literal(index) => {
             let label = const_at(ctx, *index, py).map_or_else(
                 || schema.expected().to_owned(),
@@ -604,7 +633,7 @@ fn push_branch_label(schema: &Schema, ctx: Ctx<'_>, py: Python<'_>, out: &mut Br
         },
         // A refinement's type is its base, matching `Schema::expected`; the
         // constraints report themselves when one of them is what failed.
-        Schema::Refine { base, .. } => push_branch_label(base, ctx, py, out),
+        Schema::Refine { base, .. } => push_branch_label_within(base, ctx, py, out, unfolded),
         other => out.push(other.expected().to_owned()),
     }
 }
@@ -613,6 +642,20 @@ fn push_branch_label(schema: &Schema, ctx: Ctx<'_>, py: Python<'_>, out: &mut Br
 /// cannot be read.
 fn class_name(index: ClassIx, schema: &Schema, ctx: Ctx<'_>, py: Python<'_>) -> String {
     class_at(ctx, index, py).map_or_else(|| schema.expected().to_owned(), |c| class_label(c))
+}
+
+/// Whether this code says the *walk* stopped rather than that a value is outside
+/// a set.
+///
+/// A union summary stands in for branches that did not match, and each of these
+/// is something else: the walk ran out of levels, the value contains itself, it
+/// moved while it was read, or a predicate raised. Folding one into "this value
+/// matched no branch" drops the only sentence that says what to do about it.
+fn walk_declined(code: &str) -> bool {
+    matches!(
+        code,
+        "recursion_limit" | "recursion_loop" | "mutated_during_validation" | "predicate_error"
+    )
 }
 
 fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
@@ -672,6 +715,12 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
         ..ctx
     };
     let mut best: Option<(usize, Vec<Violation>)> = None;
+    // The first branch the walk could not answer for, kept aside. A branch that
+    // ran out of levels, found the value inside itself, or raised inside a
+    // predicate has not said "this value is not a member" -- it has said the
+    // walk stopped -- and its failure sits at the union's own location, so the
+    // progress rule below would fold it into a summary and drop the reason.
+    let mut declined: Option<Vec<Violation>> = None;
     for (position, branch_schema) in members.iter().enumerate() {
         if position >= CLOSEST_BRANCH_PROBE_LIMIT {
             // Past the probe's width the branch is asked the cheap question
@@ -700,6 +749,9 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
             .max()
             .unwrap_or(base_depth)
             .saturating_sub(base_depth);
+        if declined.is_none() && branch.iter().any(|v| walk_declined(v.code)) {
+            declined = Some(branch.clone());
+        }
         // Strictly greater keeps the earliest branch on a tie.
         let replace = best
             .as_ref()
@@ -707,6 +759,15 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
         if replace {
             best = Some((progress, branch));
         }
+    }
+    if let Some(branch) = declined.filter(|_| best.as_ref().is_none_or(|(p, _)| *p == 0)) {
+        let reported = if ctx.mode.stops_at_first() {
+            1
+        } else {
+            branch.len()
+        };
+        frame.out.extend(branch.into_iter().take(reported));
+        return false;
     }
     match best {
         // The branch is walked whole whatever the mode, because the *closest*

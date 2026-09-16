@@ -28,10 +28,23 @@ answer of its own, or a repair to a change not yet released.
 - fix: a string kind holds the characters no pattern matches
 - fix: an annotation builds the schema it names, or is refused
 - fix: a report keeps the promises the error model makes
+- fix: a union summary names its branches and keeps what stopped the walk
 
 -->
 
 ### Fixed
+
+- **A union summary names its branches, and keeps what stopped the walk.** The
+  summary names each branch "as each would name itself alone", and two branch
+  kinds had no name of their own: a `complement` read as the word `complement`
+  where alone it says `not str`, and a `recursive` branch as the word `value`
+  where alone it names what it admits. Both name themselves. And a branch whose
+  failure is `recursion_limit`, `recursion_loop`, `mutated_during_validation` or
+  `predicate_error` keeps that report: each says the walk stopped rather than
+  that the value is outside a set, each fails at the union's own location, and
+  the summary counted that as no progress -- so a value nested past the walk's
+  ceiling, or holding itself, came back as "matched no branch" with the reason
+  dropped.
 
 - **A report keeps the promises the error model makes.** `fail_fast=True` stops
   at the first failure, and two sites reported two: a union aggregated the whole
