@@ -431,6 +431,20 @@ PLANTS = (
         _cite_an_orphan,
     ),
     Plant(
+        "tests/test_coverage_scope.py",
+        (".github/workflows/ci.yml",),
+        # The failure the ledger is for: a corpus counted as shipped code,
+        # which lifts the figure for the code around it. Planted by dropping
+        # the exclusion, because that is how it arrives -- a new corpus is
+        # written and nobody adds it to the pattern.
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "|/interpreter\\.rs$'",
+            "'",
+        ),
+    ),
+    Plant(
         "tests/test_frontend_refusals.py",
         ("crates/valgebra-py/src/build/classes.rs",),
         # The failure the ledger is for: a refusal reworded into a sentence no
