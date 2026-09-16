@@ -759,6 +759,15 @@ impl Validator {
     /// value, so `open` and `close` are idempotent projections rather than
     /// inverses.
     ///
+    /// **These two read the schema, not the set it denotes.** Every relation on
+    /// this surface answers about the set, so two spellings of one set give one
+    /// answer; these rewrite the records the schema is written out of, and two
+    /// spellings can open into two different sets. `{"a?": int}` and
+    /// `union({}, {"a": int})` admit the same dicts, and opening the first keeps
+    /// `a` an integer while opening the second admits every dict -- because the
+    /// branch declaring no field opens to every dict on its own. Apply them to
+    /// the record you mean rather than to a union of spellings of it.
+    ///
     /// Returns:
     ///     A validator whose every record admits keys beyond those declared.
     ///
@@ -774,7 +783,12 @@ impl Validator {
     /// throughout, including inside recursive definitions.
     ///
     /// Returns a new validator; this one is unchanged. Closing drops a record's
-    /// catch-all clause, typed or not, so it admits only its declared keys.
+    /// catch-all clause, typed or not, so it admits only its declared keys. A
+    /// *mapping* declares no field, so there is no record to close and
+    /// `Validator(dict[str, int]).close()` is the mapping it was asked of.
+    ///
+    /// Reads the schema rather than the set, for the reason
+    /// [`open`](Self::open) gives.
     ///
     /// Returns:
     ///     A validator whose every record admits only its declared keys.
