@@ -10,7 +10,7 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBytes, PyDict, PyString, PyTuple, PyType};
-use valgebra_core::{Constraint, OperandIx, Schema};
+use valgebra_core::{Constraint, Kind, OperandIx, Schema};
 
 use super::{Pool, build_schema, not_implemented};
 
@@ -18,6 +18,7 @@ use super::{Pool, build_schema, not_implemented};
 /// once per process.
 static NUMBER: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 use crate::errors::summarize;
+use crate::oracle::kind_of;
 
 /// Refuse an order bound against `nan`, which orders nothing.
 ///
@@ -197,11 +198,64 @@ pub(super) fn carries_order(base: &Schema, operand: &Bound<'_, PyAny>) -> Carrie
 /// `Annotated[int, MinLen(1)]` compiles to a schema that admits nothing at all
 /// and says nothing about why. That is a schema nobody writes on purpose, so it
 /// is refused where it is written rather than at the first value that meets it.
+/// The base with each literal read as the kind its constant belongs to.
+///
+/// A constraint is refused where the base's values cannot be asked it, and the
+/// check reads the base's *node*. A literal's node says only "a literal": the
+/// kind is the constant's, and the constant lives in the pool. So
+/// `Annotated[int, MinLen(1)]` was refused and `Annotated[Literal[1],
+/// MinLen(1)]` -- the same schema one value narrower -- compiled, to a schema
+/// admitting no value and reporting itself inhabited. A set that exists
+/// according to the library and holds nothing according to the walk.
+///
+/// Rewritten rather than special-cased at each check, because the checks fold
+/// over unions and refinements: a union of integer literals has to answer the
+/// way a union of integers does, and it does so by being one here.
+///
+/// A constant of no kind the partition names -- an enum member, an instance --
+/// is left as it is, and the checks read it as they always did: unknown, which
+/// refuses nothing.
+fn kinded(base: &Schema, lits: &Pool) -> Schema {
+    match base {
+        Schema::Literal(index) => Python::attach(|py| {
+            let Some(value) = lits.items().get(index.get()) else {
+                return base.clone();
+            };
+            match kind_of(value.bind(py)) {
+                Some(Kind::Bool) => Schema::Bool,
+                Some(Kind::Int) => Schema::Int,
+                Some(Kind::Float) => Schema::Float,
+                Some(Kind::Str) => Schema::Str,
+                Some(Kind::Bytes) => Schema::Bytes,
+                // Every other answer, `NoneType` included. The frontend reads
+                // `Literal[None]` as the `None` node rather than as a literal,
+                // so no constant here is one; a constant of a kind the
+                // partition does not name -- an enum member, an instance -- is
+                // left as it is, and the checks read it as unknown, which
+                // refuses nothing.
+                _ => base.clone(),
+            }
+        }),
+        // A union, and only a union. `carries_through` answers `Maybe` for an
+        // intersection, a complement and a reference without reading what is
+        // inside, so rewriting there is work no check can see -- and a
+        // refinement never arrives as a base, because the frontend folds nested
+        // markers onto the base they narrow rather than nesting the nodes. A
+        // shape that did arrive falls through here and is read as unknown,
+        // which refuses nothing.
+        Schema::Union(members) => Schema::Union(members.iter().map(|m| kinded(m, lits)).collect()),
+        _ => base.clone(),
+    }
+}
+
 pub(super) fn check_constraint_fits(
     base: &Schema,
     constraint: &Constraint,
     lits: &Pool,
 ) -> PyResult<()> {
+    // The base with its literals read as their kinds, which is what the checks
+    // below are about: a constraint is put to the *values* of the base.
+    let base = &kinded(base, lits);
     let operand = |index: OperandIx| lits.items().get(index.get());
     let (answer, what) = match constraint {
         Constraint::MinLen(_) | Constraint::MaxLen(_) => (carries_length(base), "length"),

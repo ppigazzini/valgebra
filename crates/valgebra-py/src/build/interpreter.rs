@@ -86,6 +86,17 @@ fn each_spelling_builds_its_own_schema() {
             // The scalars and the two bounds, which are the leaves every
             // other row is built out of.
             ("int", "int"),
+            // A literal whose constant *can* be asked the constraint narrows
+            // exactly as its kind does, so the refusals above are about the
+            // kind rather than about the form.
+            (
+                "typing.Annotated[typing.Literal['ab'], at.MinLen(1)]",
+                "Annotated[Literal['ab'], MinLen(1)]",
+            ),
+            (
+                "typing.Annotated[typing.Literal[4], at.Ge(0)]",
+                "Annotated[Literal[4], Ge(0)]",
+            ),
             // A marker standing for the constraints it yields, which is the
             // protocol `annotated_types` documents and the shape `Interval` and
             // `Len` are written in. Read by attribute alone it is metadata this
@@ -223,6 +234,43 @@ fn each_refusal_says_what_it_refuses() {
             ("typing.Annotated[int, Timezone()]", "does not check"),
             // A grouping that never bottoms out, and one nested past the bound:
             // following either to the end is a stack this library does not have.
+            // A constraint put to a literal is put to the values of the kind
+            // its constant belongs to. The bare-kind rows are refused already,
+            // and a literal is a value *of* a kind, so the two spellings are
+            // the same question: one row per kind a constant can have, because
+            // each is a separate reading of the constant.
+            (
+                "typing.Annotated[typing.Literal[1], at.MinLen(1)]",
+                "have no length",
+            ),
+            (
+                "typing.Annotated[typing.Literal[True], at.MinLen(1)]",
+                "have no length",
+            ),
+            (
+                "typing.Annotated[typing.Literal[1.5], at.MinLen(1)]",
+                "have no length",
+            ),
+            (
+                "typing.Annotated[typing.Literal['a'], at.Ge(0)]",
+                "have no order",
+            ),
+            (
+                "typing.Annotated[typing.Literal[b'a'], at.Ge(0)]",
+                "have no order",
+            ),
+            // A union of them is the same question asked of each member, which
+            // is the fold the rewrite has to survive.
+            (
+                "typing.Annotated[typing.Literal[1, 2], at.MinLen(1)]",
+                "have no length",
+            ),
+            // And a refinement of a refinement, which is the other fold: the
+            // inner base is where the literal sits.
+            (
+                "typing.Annotated[typing.Annotated[typing.Literal[1], at.Ge(0)], at.MinLen(1)]",
+                "have no length",
+            ),
             // A name and the same name with a trailing `?` are one field
             // written twice, which asks the record to hold two disjoint types
             // under one key and to have it both required and absent.

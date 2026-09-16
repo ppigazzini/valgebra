@@ -384,3 +384,67 @@ def test_a_keyword_only_marker_is_a_declaration_rather_than_a_field() -> None:
     assert schema.is_valid(KeywordOnly(1, b="y"))
     assert not schema.is_valid(KeywordOnly(1, b=2))  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     assert "_" not in repr(schema)
+
+
+#: A constraint over a literal whose constant cannot be asked it.
+#:
+#: The bare-kind rows beside them are already refused, and a literal is a value
+#: *of* a kind -- so the two spellings are the same question and must get the
+#: same answer.
+LITERAL_MISFITS: list[tuple[str, object]] = [
+    ("a length over an integer literal", Annotated[Literal[1], at.MinLen(1)]),
+    ("a length over a boolean literal", Annotated[Literal[True], at.MaxLen(1)]),
+    ("a length over a float literal", Annotated[Literal[1.5], at.MinLen(1)]),  # ty: ignore[invalid-type-form]
+    ("an order over a string literal", Annotated[Literal["a"], at.Ge(0)]),
+    ("an order over a bytes literal", Annotated[Literal[b"a"], at.Ge(0)]),
+    ("a pattern over an integer literal", Annotated[Literal[1], Regex("a+")]),
+    ("a divisor over a string literal", Annotated[Literal["a"], at.MultipleOf(2)]),
+    # A union of them is the same question asked of each member: no member can
+    # answer, so the union cannot either.
+    (
+        "a length over a union of integer literals",
+        Annotated[Literal[1, 2], at.MinLen(1)],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "form", [row[1] for row in LITERAL_MISFITS], ids=[row[0] for row in LITERAL_MISFITS]
+)
+def test_a_constraint_a_literal_cannot_answer_is_refused(form: object) -> None:
+    """A literal is a value of a kind, and is asked what that kind can answer.
+
+    `Annotated[int, MinLen(1)]` is refused because reading a length off an
+    integer raises and the walk reads a raise as a non-member -- so the schema
+    would admit nothing and say nothing about why. `Annotated[Literal[1],
+    MinLen(1)]` is the same schema one value narrower, and it compiled: it
+    admitted no value and reported itself *inhabited*, which is a set that
+    exists according to the library and holds nothing according to the walk.
+
+    The kind is the constant's, read from the pool where the constant lives.
+    """
+    with pytest.raises(NotImplementedError, match="values have no"):
+        Validator(form)
+
+
+def test_a_constraint_a_literal_can_answer_still_builds() -> None:
+    """The refusal is about the kind, not about the form.
+
+    A literal whose constant *can* be asked the constraint narrows exactly as
+    its kind does: to the constant where it satisfies the bound, and to the
+    empty set where it does not. Refusing every constrained literal would take
+    a spelling that means something.
+    """
+    ok = Validator(Annotated[Literal["ab"], at.MinLen(1)])
+    assert ok.is_valid("ab")
+    assert not ok.is_valid("a")
+
+    # The bound the constant misses is the empty set, and says so.
+    missed = Validator(Annotated[Literal["ab"], at.MinLen(5)])
+    assert missed.is_empty()
+    assert not missed.is_valid("ab")
+
+    # And the other families, each over a constant of the kind that answers it.
+    assert Validator(Annotated[Literal[4], at.Ge(0)]).is_valid(4)
+    assert Validator(Annotated[Literal[4], at.MultipleOf(2)]).is_valid(4)
+    assert Validator(Annotated[Literal["ab"], Regex("a.")]).is_valid("ab")

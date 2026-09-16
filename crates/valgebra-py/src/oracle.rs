@@ -219,6 +219,37 @@ impl PoolRelations<'_, '_> {
     }
 }
 
+/// The kind a constant belongs to, or `None` where the partition does not name
+/// one.
+///
+/// A literal pins `type(x)` exactly, so its kind is its constant's type. Exact
+/// types only: a subclass of `int` is not `Kind::Int`'s extension, and any
+/// other type is a kind the partition does not name. Both decline, which leaves
+/// every reading of this conservative rather than wrong.
+///
+/// Two callers, and they ask the same question for different reasons. The
+/// oracle asks it to tell two literals apart; the frontend asks it to know
+/// whether a constraint can be put to a literal's values at all, since
+/// `Annotated[Literal[1], MinLen(1)]` is `Annotated[int, MinLen(1)]` one value
+/// narrower and has to be refused for the same reason. One reading, so the two
+/// cannot come to different answers about what a constant is.
+pub(crate) fn kind_of(value: &Bound<'_, PyAny>) -> Option<Kind> {
+    if value.is_none() {
+        return Some(Kind::NoneType);
+    }
+    let py = value.py();
+    let ty = value.get_type();
+    [
+        (Kind::Bool, PyBool::type_object(py)),
+        (Kind::Int, PyInt::type_object(py)),
+        (Kind::Float, PyFloat::type_object(py)),
+        (Kind::Str, PyString::type_object(py)),
+        (Kind::Bytes, PyBytes::type_object(py)),
+    ]
+    .into_iter()
+    .find_map(|(tag, exact)| ty.is(&exact).then_some(tag))
+}
+
 /// The builtin type whose direct values have `kind`.
 ///
 /// The inverse of the table [`layout_of`] scans, and the two are the same fact
@@ -537,24 +568,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
     }
 
     fn literal_kind(&self, constant: ConstIx) -> Option<Kind> {
-        // A literal pins `type(x)` exactly, so its kind is its constant's type.
-        // Exact types only: a subclass of `int` is not `Kind::Int`'s extension,
-        // and any other type is a kind the partition does not name. Both decline,
-        // which leaves disjointness conservative rather than wrong.
-        let value = self.literals.get(constant.get())?.bind(self.py);
-        if value.is_none() {
-            return Some(Kind::NoneType);
-        }
-        let ty = value.get_type();
-        [
-            (Kind::Bool, PyBool::type_object(self.py)),
-            (Kind::Int, PyInt::type_object(self.py)),
-            (Kind::Float, PyFloat::type_object(self.py)),
-            (Kind::Str, PyString::type_object(self.py)),
-            (Kind::Bytes, PyBytes::type_object(self.py)),
-        ]
-        .into_iter()
-        .find_map(|(tag, exact)| ty.is(&exact).then_some(tag))
+        kind_of(self.literals.get(constant.get())?.bind(self.py))
     }
 
     fn literals_disjoint(&self, left: ConstIx, right: ConstIx) -> Option<bool> {

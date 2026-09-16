@@ -34,10 +34,23 @@ answer of its own, or a repair to a change not yet released.
 - fix: a form with no set is refused, and a class prints as its name
 - fix: a snapshot pins a code the walk writes, and every code is pinned -- internal
 - fix: a refinement with no constraint is decided as the base it names -- internal
+- fix: a constraint is put to the kind a literal's constant belongs to
 
 -->
 
 ### Fixed
+
+- **A constraint is put to the kind a literal's constant belongs to.**
+  `Annotated[int, MinLen(1)]` is refused, because reading a length off an
+  integer raises and the walk reads a raise as a non-member, so the schema would
+  admit nothing and say nothing about why. `Annotated[Literal[1], MinLen(1)]` is
+  the same schema one value narrower and compiled: it admitted no value and
+  reported itself *inhabited*, a set that exists according to the library and
+  holds nothing according to the walk. Every constraint family is affected --
+  a length or a pattern over a number, an order or a divisor over text -- and
+  each is refused with the sentence its bare kind gets. A literal whose constant
+  *can* be asked the constraint narrows exactly as its kind does, so
+  `Annotated[Literal["ab"], MinLen(1)]` is unchanged.
 
 - **A frozen set literal is refused, as its set sibling is.** `{int}` is
   refused with a sentence naming `set[T]`; `frozenset({int})` fell past every
