@@ -460,3 +460,88 @@ def test_every_code_renders_the_same_way(snapshot: object) -> None:
             "message": _ADDRESS.sub("0xADDRESS", str(entry["message"])),
         }
     assert rendered == snapshot
+
+
+def test_ensure_refuses_by_raising_rather_than_by_answering() -> None:
+    """`ensure` gives the value back, so its refusal is the only answer it has.
+
+    Every call in the documentation is on a member, which is the shape that
+    hides what a non-member does: `ensure` has no `False` to return, so a value
+    outside the set has to leave by the exception -- carrying the same code and
+    path the other entry points carry, because it is the same walk.
+    """
+    schema = Validator({"a": int})
+    assert schema.ensure({"a": 1}) == {"a": 1}
+    with pytest.raises(ValidationError) as caught:
+        schema.ensure({"a": "x"})
+    assert caught.value.code == "int_type"
+    assert caught.value.path == ("a",)
+    # And the object that comes back is the one handed in, not a copy of it.
+    value = {"a": 1}
+    assert schema.ensure(value) is value
+
+
+def test_load_stops_at_the_first_failure_when_asked_to() -> None:
+    """`load` parses and validates, and takes the same `fail_fast` as the rest.
+
+    It is the one entry point whose keyword was never passed in a test, so
+    nothing said whether the parse path honours it or quietly aggregates.
+    """
+    schema = Validator({"a": int, "b": int})
+    document = '{"a": "x", "b": "y"}'
+    with pytest.raises(ValidationError) as every:
+        schema.load(document)
+    assert len(every.value.errors) == 2
+
+    with pytest.raises(ValidationError) as first:
+        schema.load(document, fail_fast=True)
+    assert len(first.value.errors) == 1
+    assert first.value.code == "int_type"
+    assert first.value.path == ("a",)
+
+    # Accepting, it hands back the parsed value rather than the text.
+    assert schema.load('{"a": 1, "b": 2}') == {"a": 1, "b": 2}
+
+
+def test_a_document_given_as_bytes_refuses_the_same_way_as_text() -> None:
+    """A document is read from either spelling, and refuses alike.
+
+    The bytes form was exercised only on success, so nothing said the failure
+    path carries the same code -- and that path decodes before it walks.
+    """
+    schema = Validator({"a": int})
+    good, bad = b'{"a": 1}', b'{"a": "x"}'
+    assert schema.is_valid_json(good)
+    assert not schema.is_valid_json(bad)
+    with pytest.raises(ValidationError) as caught:
+        schema.validate_json(bad)
+    assert caught.value.code == "int_type"
+    assert caught.value.path == ("a",)
+    # And a document that is not JSON at all, in bytes, is the parse failure.
+    with pytest.raises(ValidationError) as broken:
+        schema.validate_json(b"{ not json")
+    assert broken.value.code == "json_invalid"
+
+
+def test_a_fatal_signal_leaves_by_every_json_entry_point() -> None:
+    """A signal that must not be folded into a verdict is not folded on any path.
+
+    The object path is covered by `tests/test_fatal_signals.py`. The JSON
+    entries parse first and then walk, so each has its own way out -- and a
+    signal caught there would come back as "this document is not a member",
+    which is the reading the whole rule exists to prevent.
+    """
+
+    def interrupted(_: object) -> bool:
+        raise KeyboardInterrupt
+
+    schema = Validator(Annotated[int, at.Predicate(interrupted)])
+    for entry in (
+        lambda: schema.is_valid_json("1"),
+        lambda: schema.validate_json("1"),
+        lambda: schema.load("1"),
+        lambda: schema.is_valid_json(b"1"),
+        lambda: schema.validate_json(b"1", fail_fast=True),
+    ):
+        with pytest.raises(KeyboardInterrupt):
+            entry()

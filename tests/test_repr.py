@@ -6,6 +6,8 @@ import annotated_types as at
 import pytest
 
 from valgebra import (
+    MAX_SCHEMA_DEPTH,
+    Regex,
     Validator,
     anything,
     complement,
@@ -72,6 +74,10 @@ _ROUNDTRIP_NS = {
     "Lt": at.Lt,
     "MinLen": at.MinLen,
     "MaxLen": at.MaxLen,
+    # The package's own marker, which a pattern refinement renders as a call
+    # to. It is not `annotated_types`', so a caller reading the repr of one
+    # reaches for this name and not a third party's.
+    "Regex": Regex,
     "anything": anything,
     "nothing": nothing,
     "union": union,
@@ -117,6 +123,12 @@ ROUNDTRIP_SCHEMAS = [
     recursive(lambda t: int | list[t]),  # ty: ignore[invalid-type-form]
     Validator({"name": str}).open(),
     recursive(lambda t: {"value": int, "left?": t}),
+    # The package's own marker. It renders as a call and the call rebuilds it,
+    # so it belongs in this list rather than beside the two exclusions -- and
+    # the namespace below has to carry the name, or a repr a caller reads is
+    # one they cannot evaluate.
+    Annotated[str, Regex(r"[a-z]+")],
+    Annotated[str, Regex(r"\\d+"), at.MinLen(2)],
 ]
 
 
@@ -203,3 +215,74 @@ def test_a_nullary_combinator_reprs_as_its_identity(
 def test_a_nullary_combinator_denotes_its_identity() -> None:
     assert not union().is_valid(1)
     assert intersection().is_valid(1)
+
+
+def test_the_binders_a_nested_fixpoint_names_are_distinct() -> None:
+    """Each `recursive` in a repr binds a name of its own, and re-parses.
+
+    A fixpoint's back edge renders as the lambda's own parameter, so nested
+    ones need names that do not collide: two `X`es would make the inner one
+    shadow the outer, and the rendered expression would build a schema where
+    the outer back edge points at the inner fixpoint. Three letters, then a
+    numbered spelling, which is what keeps the supply from running out.
+    """
+
+    def nest(depth: int) -> Validator:
+        if depth == 0:
+            return Validator(int)
+        return recursive(lambda inner, d=depth: {"v": nest(d - 1), "s?": inner})
+
+    three = repr(nest(3))
+    assert "lambda X:" in three
+    assert "lambda Y:" in three
+    assert "lambda Z:" in three
+    # Past the letters the names are numbered rather than repeated.
+    four = repr(nest(4))
+    assert "lambda T3:" in four
+    assert four.count("lambda X:") == 1
+
+    # And each re-parses to the schema it came from, which is the property the
+    # distinct names exist for.
+    for depth in (1, 2, 3, 4):
+        schema = nest(depth)
+        rebuilt = Validator(eval(repr(schema), dict(_ROUNDTRIP_NS)))  # noqa: S307
+        assert rebuilt == schema, repr(schema)
+
+
+def test_no_schema_a_caller_can_build_renders_the_truncation_mark() -> None:
+    """The renderer's depth bound is past the one a schema can be built at.
+
+    `docs/16-api.md` names `...` as what a repr deeper than the renderer's own
+    bound shows. A caller cannot reach it: the frontend refuses to compile a
+    schema nested past `MAX_SCHEMA_DEPTH` first, so the two bounds are ordered
+    and the truncating arm is unreachable through any annotation. Asserted at
+    the deepest schema that compiles, so a change to either bound that reversed
+    the order fails here rather than making a repr silently lossy.
+    """
+    deepest: object = int
+    for _ in range(MAX_SCHEMA_DEPTH - 1):
+        deepest = list[deepest]  # type: ignore[valid-type]
+    rendered = repr(Validator(deepest))
+    assert "..." not in rendered
+    assert rendered.startswith("list[")
+
+    # One past what compiles is a refusal rather than a truncated rendering.
+    with pytest.raises(ValueError, match="too deep"):
+        Validator(list[deepest])  # type: ignore[valid-type]
+
+
+def test_a_union_renders_its_literals_after_the_sets_they_sit_beside() -> None:
+    """A union of a kind and some of its values renders in the lattice's order.
+
+    The members are not kept as written -- a schema is built in the normal
+    form, so two spellings of one union are one schema and print alike. What a
+    reader sees is the sets first and the literals after, whatever order the
+    call used, and each literal on its own rather than gathered into one
+    `Literal[...]`: they are separate members of the union, and the rendering
+    says so.
+    """
+    written_after = union(int, 1, 2, 3)
+    written_among = union(1, 2, int, 3)
+    assert repr(written_after) == "int | Literal[1] | Literal[2] | Literal[3]"
+    assert repr(written_among) == repr(written_after)
+    assert written_among == written_after

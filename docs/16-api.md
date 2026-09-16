@@ -57,7 +57,11 @@ call it is, an open record as the catch-all entry it carries, the nullary produc
 as `tuple[()]` — so it can be pasted into a session and read back. Two things it
 cannot render as an expression: a class, which is an object rather than syntax
 and appears as its name, and a schema past the renderer's own depth bound, which
-truncates with `...`. Do not parse it: it is for a person to read, and
+truncates with `...`. That second one is out of reach: the renderer's bound sits
+past `MAX_SCHEMA_DEPTH`, so a schema deep enough to truncate is one the frontend
+refuses to compile first, and no validator a caller holds renders the mark. The
+two bounds are ordered on purpose and a test holds them that way. Do not parse
+it: it is for a person to read, and
 [inspection](09-inspection.md) says how to ask a schema questions instead.
 
 ## Lattice bounds
