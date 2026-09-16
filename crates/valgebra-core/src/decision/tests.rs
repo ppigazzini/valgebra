@@ -2101,6 +2101,69 @@ fn a_required_key_the_subject_does_not_declare_refutes_the_inclusion() {
     assert_eq!(relation(&empty_subject, &complete), Relation::Holds);
 }
 
+/// A subject's clause answers for an optional field of the supertype only where
+/// its key can spell that name.
+///
+/// The field is one the subject does not declare, so a value of the subject
+/// carries the key only through a clause -- and a clause keyed by another kind
+/// never produces a string name. Reading such a clause's value type anyway
+/// refutes on a value the subject does not have; declining to read a clause
+/// whose key *is* a string loses the refutation on a value it does. The three
+/// answers are the three readings of the key, so each is asked of the rules
+/// alone: the set representation is a second decider, and a pair it rescues
+/// says nothing about the rule under test.
+#[test]
+fn a_clause_answers_for_an_optional_field_only_where_its_key_admits_the_name() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &Kinded, &[], &budget)
+    };
+    // A record declaring `a?: str` beside a clause that covers the subject's,
+    // so every conjunct but the field's own reading proves.
+    let optional_beside = |key: Schema| {
+        Schema::keyed_map_within(
+            vec![Field {
+                name: "a".into(),
+                schema: Schema::Str,
+                required: false,
+            }],
+            vec![MapClause {
+                key,
+                value: Schema::Int,
+            }]
+            .into(),
+        )
+    };
+    let mapping = |key: Schema| {
+        Schema::mapping(MapClause {
+            key,
+            value: Schema::Int,
+        })
+    };
+
+    // A `str`-keyed clause spells the name, so its value type answers for the
+    // field: the subject admits `{"a": 1}`, which the supertype rejects.
+    assert_eq!(
+        relation(&mapping(Schema::Str), &optional_beside(Schema::Str)),
+        Relation::Fails
+    );
+    // An `int`-keyed clause never spells a string, so it says nothing about the
+    // field and the inclusion is proved.
+    assert_eq!(
+        relation(&mapping(Schema::Int), &optional_beside(Schema::Int)),
+        Relation::Holds
+    );
+    // A literal of the string kind names one string, which may be this one: a
+    // proof carries and a refutation does not, so the pair declines.
+    assert_eq!(
+        relation(
+            &mapping(Schema::Literal(ConstIx::new(1))),
+            &optional_beside(Schema::ANYTHING)
+        ),
+        Relation::Unknown
+    );
+}
+
 /// An arm that answers for a shape and then declines hands the pair on.
 ///
 /// A decline is not an answer: a pair the arm could not settle has had no rule,

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use super::record::{keyed_map_matches_json, scan_dict};
 use super::sequence::scan_list;
 use super::*;
+use crate::check::ctx::MAX_WALK_DEPTH;
 use crate::check::index::ValidatorIndex;
 use crate::check::{WalkMode, WalkState, build_index};
 use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyModule, PyString, PyTuple};
@@ -12,7 +13,7 @@ use std::ops::ControlFlow;
 use jiter::JsonValue;
 use pyo3::types::{PyFrozenSet, PySet};
 use valgebra_core::SeqShape;
-use valgebra_core::{Constraint, Field, MapClause, Openness, PathSegment};
+use valgebra_core::{Constraint, DefIx, Field, MapClause, Openness, PathSegment};
 
 /// Decide membership of a Python value against a schema, through the real
 /// walk, in the mode a validator's `is_valid` uses.
@@ -3142,5 +3143,159 @@ fn a_tuple_subclass_that_overrides_nothing_is_read_where_it_lies() {
             &[],
             &[]
         ));
+    });
+}
+
+/// A record resolves a key the way the dict it reads does.
+///
+/// The declared names are interned and an exact `str` is compared by text. A
+/// subclass carries the field's text and may still be a key of its own: a dict
+/// reaches an entry by hash and then by equality, so a subclass that hashes
+/// elsewhere, or that equals nothing, is not the field it spells. Reading it as
+/// that field would admit a value the dict does not carry under the name.
+#[test]
+fn a_record_resolves_a_key_the_way_the_dict_does() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new(
+                "class Plain(str):\n\
+                 \x20   __slots__ = ()\n\
+                 class OtherHash(str):\n\
+                 \x20   __slots__ = ()\n\
+                 \x20   def __hash__(self):\n\
+                 \x20       return 0\n\
+                 class NeverEqual(str):\n\
+                 \x20   __slots__ = ()\n\
+                 \x20   __hash__ = str.__hash__\n\
+                 \x20   def __eq__(self, other):\n\
+                 \x20       return False\n",
+            )
+            .expect("no interior nul")
+            .as_c_str(),
+            std::ffi::CString::new("keys.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("keys")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+
+        // An open record: a key the field lookup does not find falls to the
+        // scan, which is where a key is read as the name it spells. A closed
+        // record answers by count before the scan and never asks.
+        let record = Schema::keyed_map(
+            vec![Field {
+                name: "a".into(),
+                schema: Schema::Int,
+                required: false,
+            }],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Str,
+            }],
+        );
+        let keyed = |class: &str| {
+            let key = module
+                .getattr(class)
+                .expect("the class")
+                .call1((PyString::new(py, "a"),))
+                .expect("the subclass builds");
+            let value = PyDict::new(py);
+            value
+                .set_item(key, PyInt::new(py, 1i64))
+                .expect("a fresh dict takes a key");
+            value.into_any()
+        };
+
+        // A faithful subclass is the field, and the field admits the integer
+        // the clause would refuse.
+        case(py, &record, &keyed("Plain"), true);
+        // A key that hashes elsewhere is a key of its own: the field does not
+        // govern it, the clause does, and the clause takes strings.
+        case(py, &record, &keyed("OtherHash"), false);
+        // The same for a key that equals nothing: the hash reaches the bucket
+        // and the comparison refuses the entry.
+        case(py, &record, &keyed("NeverEqual"), false);
+    });
+}
+
+/// The scalar shortcut is for a shape whose every element is the same scalar.
+///
+/// A prefix fixes what its positions hold, so a shape carrying one is not that
+/// shape: taking the shortcut over it would read the prefix positions against
+/// the *tail's* element and refuse a value the shape admits.
+#[test]
+fn a_prefix_is_not_read_against_the_tail_it_precedes() {
+    Python::attach(|py| {
+        let prefixed = Schema::list(SeqShape::prefix_tail([Schema::Str], Schema::Int));
+        let text = |s: &str| PyString::new(py, s).into_any();
+        let int = |n: i64| PyInt::new(py, n).into_any();
+        macro_rules! list {
+            ($($item:expr),* $(,)?) => {
+                PyList::new(py, [$($item),*]).expect("a list builds").into_any()
+            };
+        }
+
+        // The prefix holds a string and the tail repeats ints.
+        case(py, &prefixed, &list![text("a")], true);
+        case(py, &prefixed, &list![text("a"), int(1), int(2)], true);
+        // A value the shortcut would admit and the shape does not: every
+        // element is an int, and the first position is not a string.
+        case(py, &prefixed, &list![int(1), int(2)], false);
+        // And one the shortcut would refuse and the shape admits is the row
+        // above it: a string in the prefix, past the tail's element kind.
+        case(py, &prefixed, &list![text("a"), text("b")], false);
+    });
+}
+
+/// The scalar shortcut and the explaining walk agree at every depth.
+///
+/// The shortcut reads a homogeneous list of a scalar kind without opening a
+/// level and the explaining walk opens one per element, so the level an element
+/// sits at is taken in one reading and skipped in the other unless the shortcut
+/// takes it too. At the walk's ceiling that is the difference between an answer
+/// and a refusal, and the two readings are one answer or the library has two.
+///
+/// A fixpoint is what drives a walk that deep -- the schema depth bound stops a
+/// spelled one long before -- and its branches carry the scalar-tailed list the
+/// shortcut is for.
+#[test]
+fn the_two_readings_agree_at_the_walks_depth_bound() {
+    Python::attach(|py| {
+        // `mu X. [X, ...] & MinLen(1) | [int, ...] & MinLen(1)`
+        let non_empty = |element: Schema| {
+            Schema::refine(
+                Schema::list(SeqShape::homogeneous(element)),
+                vec![Constraint::MinLen(1)],
+            )
+        };
+        let defs = [Schema::Union(
+            vec![
+                non_empty(Schema::Ref(DefIx::new(0))),
+                non_empty(Schema::Int),
+            ]
+            .into(),
+        )];
+        let schema = Schema::Ref(DefIx::new(0));
+        let nested = |levels: usize| {
+            let mut value = PyInt::new(py, 1i64).into_any();
+            for _ in 0..levels {
+                value = PyList::new(py, [value]).expect("a list builds").into_any();
+            }
+            value
+        };
+
+        // `decide` holds the two readings to one answer, which is the property
+        // under test; the value of that answer is the row beside it.
+        for levels in [1, 8, 127, 128, 129, MAX_WALK_DEPTH + 1] {
+            decide(py, &schema, &nested(levels), &[], &defs);
+        }
+        assert!(holds(py, &schema, &nested(1), &[], &defs));
+        assert!(holds(py, &schema, &nested(8), &[], &defs));
+        // Past the ceiling there is no level to open, and the answer is a
+        // refusal rather than a reading taken without one.
+        assert!(!holds(py, &schema, &nested(MAX_WALK_DEPTH + 1), &[], &defs));
     });
 }

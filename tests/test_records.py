@@ -138,3 +138,51 @@ def test_is_valid_agrees_with_validate_on_records(value: object) -> None:
     except ValidationError:
         slow = False
     assert fast is slow
+
+
+class _PlainName(str):
+    """A `str` subclass that hashes and compares as its text does."""
+
+    __slots__ = ()
+
+
+class _OtherHash(str):
+    """A `str` subclass whose hash is not its text's, so no dict finds it there."""
+
+    __slots__ = ()
+
+    def __hash__(self) -> int:
+        return 0
+
+
+class _NeverEqual(str):
+    """A `str` subclass that equals nothing, so a dict lookup on it misses."""
+
+    __slots__ = ()
+
+    def __eq__(self, other: object) -> bool:
+        return False
+
+    __hash__ = str.__hash__  # type: ignore[assignment]
+
+
+def test_a_record_resolves_a_key_the_way_the_dict_does() -> None:
+    """A subclass is the field's key exactly when a dict would find it there.
+
+    The walk interns the declared names and compares by text, which is what the
+    exact `str` case is. A subclass carries the field's text and may still be a
+    different key: `dict.__getitem__` reaches an entry by hash and then by
+    equality, so a subclass that hashes elsewhere or equals nothing is a key of
+    its own. Reading it as the field it spells would admit a value the dict
+    itself does not carry under that name.
+    """
+    user = Validator({"name": str})
+    assert user.is_valid({_PlainName("name"): "Ada"})
+    assert not user.is_valid({_OtherHash("name"): "Ada"})
+    assert not user.is_valid({_NeverEqual("name"): "Ada"})
+    # The same answer through the explaining walk, which is a second reader of
+    # the same key.
+    for key in (_OtherHash("name"), _NeverEqual("name")):
+        with pytest.raises(ValidationError):
+            user.validate({key: "Ada"})
+    assert {_PlainName("name"): "Ada"} in user
