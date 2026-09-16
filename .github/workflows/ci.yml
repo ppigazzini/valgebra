@@ -542,6 +542,13 @@ jobs:
       # for the rules; restating them here is how this comment went stale once
       # already. It cannot tell you a sentence is false.
       - run: uv run --no-sync python scripts/docs_lint.py
+      # The use-case count, printed rather than asserted: the universe grows
+      # with the tree, so a lane pinning the number would fail on the commit
+      # that adds a name rather than on the one that leaves it unreached. What
+      # this step *does* fail on is the recorded empty cells drifting from the
+      # tree's -- a cell nothing names and nothing excuses, or an excuse for a
+      # cell a test now names.
+      - run: uv run --no-sync python scripts/use_case_ledger.py
       - run: uv run --group docs mkdocs build --strict
 
   bench:

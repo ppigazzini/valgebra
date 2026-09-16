@@ -1,0 +1,11 @@
+{
+  "_comment": "Use cases the product suite does not name, each with the reason it does not. Derived by scripts/use_case_ledger.py and held to the tree in both directions by tests/test_use_case_ledger.py. A reason is a sentence about the cell, not a note that nobody got to it.",
+  "empty": {
+    "anything_code": "`Schema::Anything` is the top, which admits every value, so the walk has no failure to report against one and the arm is the table's fallback",
+    "intersection_error": "a meet reports its failing member rather than itself, so the arm is reached only through a node with no members -- which the constructors fold to the top before a walk sees it",
+    "object_type": "an attribute record is a meet with the class it came from, so a value of the wrong type is refused by `instance_type` first and the arm stands for a bare attribute record, which the frontend does not build",
+    "recursion": "a reference reports through the definition it names, so the walk carries the definition's own code rather than this one",
+    "unresolved_recursion": "the marker a builder leaves behind, resolved before a validator is returned: a compiled schema holds none",
+    "validation_error": "the exception's own type name, carried where a report is built from no violation at all: a caller who constructs one by hand. It is the class rather than a code a walk chooses"
+  }
+}

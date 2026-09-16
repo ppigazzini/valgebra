@@ -31,10 +31,16 @@ LEDGER: every public name and every error code is named by the suite, or accepte
 from __future__ import annotations
 
 import ast
+import importlib.util
 import re
+import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from types import ModuleType
 
 pytestmark = pytest.mark.repository
 
@@ -53,128 +59,37 @@ _EMITTERS = (
 
 #: Cells the product suite does not name, each with the reason it does not.
 #:
-#: A reason is a sentence about the cell, not a note that nobody got to it. Two
+#: Read from `scripts/use_case_ledger.json` rather than written here, so the
+#: count a lane prints and the set this file enforces come from one place. A
+#: reason is a sentence about the cell, not a note that nobody got to it. Two
 #: kinds qualify: a name that is not a use case at all, and a code the walk
 #: cannot reach from any schema a caller can build.
-ACCEPTED: dict[str, str] = {
-    "anything_code": (
-        "`Schema::Anything` is the top, which admits every value, so the walk has "
-        "no failure to report against one and the arm is the table's fallback"
-    ),
-    "intersection_error": (
-        "a meet reports its failing member rather than itself, so the arm is "
-        "reached only through a node with no members -- which the constructors "
-        "fold to the top before a walk sees it"
-    ),
-    "object_type": (
-        "an attribute record is a meet with the class it came from, so a value of "
-        "the wrong type is refused by `instance_type` first and the arm stands for "
-        "a bare attribute record, which the frontend does not build"
-    ),
-    "recursion": (
-        "a reference reports through the definition it names, so the walk carries "
-        "the definition's own code rather than this one"
-    ),
-    "validation_error": (
-        "the exception's own type name, carried where a report is built from no "
-        "violation at all: a caller who constructs one by hand. It is the class "
-        "rather than a code a walk chooses"
-    ),
-    "unresolved_recursion": (
-        "the marker a builder leaves behind, resolved before a validator is "
-        "returned: a compiled schema holds none"
-    ),
-}
+LEDGER = ROOT / "scripts" / "use_case_ledger.py"
 
 
-def _public_surface() -> set[str]:
-    """Every name a caller reaches, read from the stub the package ships."""
-    tree = ast.parse(STUB.read_text(encoding="utf-8"))
-    names: set[str] = set()
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef):
-            for member in node.body:
-                if isinstance(member, ast.FunctionDef) and not member.name.startswith(
-                    "__"
-                ):
-                    names.add(f"{node.name}.{member.name}")
-                if isinstance(member, ast.AnnAssign) and isinstance(
-                    member.target, ast.Name
-                ):
-                    names.add(f"{node.name}.{member.target.id}")
-        elif isinstance(node, ast.FunctionDef):
-            names.add(node.name)
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            names.add(node.target.id)
-    # The package re-exports a marker of its own, which the stub does not carry.
-    exported = ast.parse(PACKAGE.read_text(encoding="utf-8"))
-    for node in ast.walk(exported):
-        if isinstance(node, ast.ImportFrom) and node.module == "_markers":
-            names.update(alias.name for alias in node.names)
-    return {name for name in names if not name.startswith("__")}
+def _derivation() -> ModuleType:
+    """Load the script that derives the universe and reports the count.
 
-
-def _error_codes() -> set[str]:
-    """Every code the walk can put in a report, read from the Rust.
-
-    Two sources, because a code arrives two ways. The node kinds come from the
-    table in the IR, which is what a leaf reports for its own kind. The rest are
-    written at the site that reports them, and are recognised by shape: a code is
-    snake_case with at least one underscore, which is what separates one from the
-    words beside it (`"dict"`, `"list"`) that name a kind in a message.
+    One reading, loaded rather than copied: the lane prints a figure and this
+    file enforces the set behind it, and two derivations would let them come to
+    different answers about what a cell is.
     """
-    codes: set[str] = set()
-    source = IR.read_text(encoding="utf-8")
-    body = source[source.index("fn error_code") :]
-    body = body[: body.index("\n    }")]
-    codes.update(re.findall(r'"([a-z_]+)"', body))
-    for path in _EMITTERS:
-        for found in path.rglob("*.rs") if path.is_dir() else [path]:
-            if found.name.endswith("interpreter.rs") or found.name.endswith("tests.rs"):
-                continue
-            text = found.read_text(encoding="utf-8")
-            codes.update(re.findall(r'"([a-z]+(?:_[a-z]+)+)"', text))
-    # `anything` is the top's label in the same table, and has no failure. It is
-    # carried under a name of its own so the reason reads as being about a code.
-    codes.discard("anything")
-    codes.add("anything_code")
-    return codes
+    spec = importlib.util.spec_from_file_location("use_case_ledger", LEDGER)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
-def _product_sources() -> str:
-    """Every product test file's text, as one blob to search."""
-    blobs = []
-    for path in sorted((ROOT / "tests").rglob("*.py")):
-        text = path.read_text(encoding="utf-8")
-        if "pytestmark = pytest.mark.repository" in text:
-            continue
-        blobs.append(text)
-    return "\n".join(blobs)
-
-
-def _names_reached(cells: set[str], suite: str) -> set[str]:
-    """Give the cells the suite mentions, each looked for the way it is written.
-
-    A **code** is a string a test compares against, so it is looked for quoted:
-    the bare word appears in prose about recursion without any test asserting the
-    code. A **name** is called or imported, so the word itself is the evidence.
-    """
-    codes = _error_codes()
-    reached = set()
-    for cell in cells:
-        needle = cell.split(".")[-1]
-        pattern = (
-            rf"[\"']{re.escape(needle)}[\"']"
-            if cell in codes
-            else rf"\b{re.escape(needle)}\b"
-        )
-        if re.search(pattern, suite):
-            reached.add(cell)
-    return reached
-
-
-def _universe() -> set[str]:
-    return _public_surface() | _error_codes()
+_LEDGER = _derivation()
+_public_surface = _LEDGER.public_surface
+_error_codes = _LEDGER.error_codes
+_product_sources = _LEDGER.product_sources
+_names_reached = _LEDGER.names_reached
+_universe = _LEDGER.universe
+ACCEPTED: dict[str, str] = _LEDGER.accepted()
 
 
 def test_the_universe_is_read_from_the_tree() -> None:
