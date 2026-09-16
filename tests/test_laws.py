@@ -11,8 +11,9 @@ against membership separately in the subtyping suite.
 """
 
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
+import annotated_types as at
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
@@ -23,6 +24,7 @@ from valgebra import (
     complement,
     intersection,
     nothing,
+    recursive,
     union,
 )
 
@@ -79,9 +81,94 @@ VALUES = [
     {},
     (1, "a"),
     (1, 2, 3),
+    # The boundaries, which a drawn value reaches only by luck. Each is a value
+    # some operation reads differently from its neighbours: `nan` equals
+    # nothing including itself, the infinities bound every comparison, `-0.0`
+    # equals `0.0` and hashes with it, the two integers sit at the ends of the
+    # carriers a lowering uses, and a newline is where a pattern's `.` and `$`
+    # part company.
+    float("nan"),
+    float("inf"),
+    float("-inf"),
+    -0.0,
+    2**53 + 1,
+    -(2**63),
+    2**63 - 1,
+    2**70,
+    "\n",
+    "a\nb",
 ]
 
-schemas = st.sampled_from(ATOM_SCHEMAS)
+
+class Point:
+    """One class, so a law is checked over a node the frontend builds by name.
+
+    An atom whose membership is `isinstance` rather than a kind reading, which
+    is a different arm of every operation the laws exercise.
+    """
+
+    __slots__ = ()
+
+
+#: The markers a refinement is drawn with. Each narrows a base the law then
+#: combines, so the laws reach `Refine` nodes rather than atoms alone -- and a
+#: refinement is where a meet has to compare *constraints* rather than kinds.
+_REFINEMENTS = [
+    Annotated[int, at.Ge(0)],
+    Annotated[int, at.Lt(3)],
+    Annotated[int, at.MultipleOf(2)],
+    Annotated[str, at.MinLen(1)],
+    Annotated[str, at.MaxLen(2)],
+]
+
+
+def _fixpoints() -> st.SearchStrategy[object]:
+    """Schemas with a back edge, which no sampled atom has.
+
+    A fixpoint is the one node the descriptor cannot hold, so every law over
+    one is decided by the rules -- a path the atom list never reached.
+    """
+    return st.sampled_from(
+        [
+            recursive(lambda t: int | list[t]),  # ty: ignore[invalid-type-form]
+            recursive(lambda t: {"v": int, "n?": t}),
+            recursive(lambda t: union(None, tuple[int, t])),  # ty: ignore[invalid-type-form]
+        ]
+    )
+
+
+def _schemas() -> st.SearchStrategy[object]:
+    """Every shape a law is checked over, drawn rather than listed.
+
+    The list of atoms was the whole universe, so a law held over scalars and
+    containers and was never asked about a refinement, a class or a fixpoint.
+    Each of those reaches arms the others do not: a refinement compares
+    constraints, a class compares by `isinstance`, and a fixpoint is decided by
+    the rules because the descriptor cannot hold a cycle.
+
+    Containers are built *around* a drawn schema rather than sampled whole, so
+    the element is one of those shapes too and the recursion reaches a
+    refinement inside a list.
+    """
+    leaves = st.one_of(
+        st.sampled_from(ATOM_SCHEMAS),
+        st.sampled_from(_REFINEMENTS),
+        st.just(Point),
+        _fixpoints(),
+    )
+    return st.recursive(
+        leaves,
+        lambda inner: st.one_of(
+            inner.map(lambda element: list[element]),
+            inner.map(lambda element: dict[str, element]),
+            inner.map(lambda element: {"a": element}),
+            inner.map(lambda element: tuple[element, ...]),
+        ),
+        max_leaves=3,
+    )
+
+
+schemas = _schemas()
 
 # Hashable leaves for set members and dict keys.
 _hashable = st.one_of(

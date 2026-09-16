@@ -262,6 +262,16 @@ each promise the error model makes at each site that makes it. The ledger's job
 is narrower and nothing else does it: a name the tree grows and the suite never
 mentions, which is the state every one of them starts in.
 
+**The lattice laws draw their schemas rather than sampling a list.** A law held
+over a fixed spread of atoms and containers is a law about that spread. The
+strategy builds around a drawn element, so a refinement can sit inside a list,
+and it reaches three shapes the list never had: a refinement, whose meet
+compares constraints rather than kinds; a class, whose membership is
+`isinstance`; and a fixpoint, which the descriptor cannot hold, so every law
+over one is decided by the rules. The witness spread carries the boundaries a
+drawn value reaches only by luck — `nan`, the infinities, `-0.0`, the ends of
+the integer carriers, and a newline.
+
 ## What is not tested here, deliberately
 
 **Denotation preservation is not re-checked in the fuzz targets.** They assert
