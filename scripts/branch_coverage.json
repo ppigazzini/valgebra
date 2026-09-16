@@ -1,0 +1,4 @@
+{
+  "_comment": "The branch-coverage floor for the core's shipped scope. Recorded by scripts/branch_coverage.py --update after a measurement, held by that script without it, and only ever moved up. A line is covered when any part of it ran and a region when its span did; this is the figure that counts the arms.",
+  "floor": 84.98
+}

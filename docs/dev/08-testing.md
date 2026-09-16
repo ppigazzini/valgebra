@@ -323,6 +323,15 @@ lines the binding's figure was computed over were corpus. Both lanes exclude
 them now, and `tests/test_coverage_scope.py` holds that scope to the corpus
 files the tree has, in both directions.
 
+And a nightly lane counts the **arms**. A region is a span the compiler emits,
+and a two-armed branch inside one span contributes one region — so the core reads
+98% of lines, 97% of regions and 90% of branches on the same files. Eight points
+of arms sit under a floor both other figures pass. `cargo llvm-cov` has no
+`--fail-under-branches`, so the number is recorded in
+`scripts/branch_coverage.json` and ratcheted the way the mutation baseline
+ratchets survivors: measured, compared, and moved up with the measurement and
+never ahead of it.
+
 Each lane enforces a **region** floor beside its line floor. A line counts as
 covered when any part of it ran, so a branch with two arms on one line passes
 having taken one; a region does not, and on the shipped scope the binding reads

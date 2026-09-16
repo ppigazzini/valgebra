@@ -26,6 +26,7 @@ LEDGER: every coverage lane names its scope, and the scope is the tree's
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -158,3 +159,47 @@ def test_a_floor_is_a_number_the_lane_can_reach(lane: str) -> None:
     assert len(floors) == 2, f"{lane}: {floors}"
     for floor in floors:
         assert 50 <= floor <= 100, f"{lane}: {floor} is not a percentage"
+
+
+def test_a_lane_records_the_branch_number() -> None:
+    """A region floor still passes a branch arm nobody reached.
+
+    A region is a span the compiler emits, and a two-armed branch inside one
+    contributes regions for both arms only where the arms are separate spans.
+    Measured on the core, the shipped scope reads 98% of lines, 97% of regions
+    and 90% of branches -- so eight points of arms sit under a floor that both
+    other figures pass.
+
+    `cargo llvm-cov` has no `--fail-under-branches`, so the number is recorded
+    and ratcheted the way the mutation baseline records survivors: a lane
+    measures it, `scripts/branch_coverage.py` compares it against the recorded
+    floor, and the floor only ever moves up with the measurement.
+    """
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    measuring = {
+        name: [
+            step["run"]
+            for step in job.get("steps", [])
+            if isinstance(step.get("run"), str)
+        ]
+        for name, job in workflow["jobs"].items()
+        if any(
+            isinstance(step.get("run"), str) and "--branch" in step["run"]
+            for step in job.get("steps", [])
+        )
+    }
+    assert measuring, (
+        "no lane measures branch coverage, so the arms a region floor passes "
+        "are counted by nothing"
+    )
+    # The measurement and the ratchet are separate steps, and they have to be
+    # in one job: a figure measured where nothing reads it is printed rather
+    # than held.
+    assert any(
+        any("branch_coverage.py" in text for text in steps)
+        for steps in measuring.values()
+    ), "a lane measures branches and no step in it ratchets the number"
+    floor = ROOT / "scripts" / "branch_coverage.json"
+    assert floor.exists(), f"{floor.name} records no floor"
+    recorded = json.loads(floor.read_text(encoding="utf-8"))["floor"]
+    assert 50 <= recorded <= 100, recorded

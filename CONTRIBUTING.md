@@ -108,6 +108,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | Python types | `pyproject.toml` | `uv run ty check` |
 | documentation claims | every tracked `*.md` | `uv run python scripts/docs_lint.py` |
 | the use cases the tree has, and how many the suite names | the type stub and the codes the walk writes | `uv run python scripts/use_case_ledger.py` |
+| the branch arms the core's tests reach | an instrumented run on the pinned nightly | `uv run python scripts/branch_coverage.py branches.json` |
 | when a `typing` or `enum` name, or a stdlib module, arrived | `tests/floor_names.json` | `uv run python scripts/floor_names.py --check` |
 | doc examples run | `docs/` | `uv run python scripts/run_doc_examples.py` |
 | the rendered site builds | `mkdocs.yml` | `uv run --group docs mkdocs build --strict` |

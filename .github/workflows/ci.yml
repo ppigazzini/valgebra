@@ -1209,6 +1209,55 @@ jobs:
           path: crates/*/proptest-regressions/**
           if-no-files-found: ignore
 
+  nightly-branch-coverage:
+    name: nightly branch coverage
+    # The arms a line or region floor passes. A line counts as covered when any
+    # part of it ran and a region when its span did, so a two-armed branch
+    # inside one span passes both having taken one arm. The branch figure counts
+    # the arms, and on the core's shipped scope it reads several points below
+    # either of the others.
+    #
+    # Nightly rather than on the merge path: `--branch` needs the nightly
+    # toolchain, which the merge gate does not otherwise install, and the
+    # measurement is a full instrumented rebuild.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          # The same nightly the fuzz build pins, so the two cannot drift apart
+          # and a reader has one date to check.
+          toolchain: ${{ env.FUZZ_NIGHTLY }}
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        with:
+          tool: cargo-llvm-cov@0.9.1
+      - uses: $/.github/actions/setup-uv
+        with:
+          # The ratchet below is a script reading a JSON report, so any
+          # supported release runs it. Pinned to the floor because that is the
+          # one every lane here can assume is installed, and a lane that lets
+          # the image choose is a lane whose answer moves with the image.
+          python-version: "3.10"
+      # The same scope the merge gate's line and region floors read, so the
+      # three figures are about one set of files. `tests/test_coverage_scope.py`
+      # holds that scope to the corpus files the tree has.
+      - name: Measure the branches the core's tests reach
+        run: >
+          cargo +${{ env.FUZZ_NIGHTLY }} llvm-cov --branch --locked
+          -p valgebra-core --json --output-path branches.json
+          --ignore-filename-regex 'valgebra-py|/(laws|index_laws)\.rs$'
+      # `cargo llvm-cov` has no `--fail-under-branches`, so the number is
+      # ratcheted the way the mutation baseline ratchets survivors: recorded,
+      # compared, and moved up with the measurement and never ahead of it.
+      - name: Hold the figure to its recorded floor
+        run: uv run --no-sync python scripts/branch_coverage.py branches.json
+
   nightly-libfuzzer:
     name: nightly libfuzzer
     # Coverage-guided fuzzing of the core algebra and decision procedures with
@@ -1736,6 +1785,7 @@ jobs:
         nightly-mutants-ratchet,
         nightly-mutants-walk,
         nightly-floor-names,
+        nightly-branch-coverage,
       ]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1789,6 +1839,8 @@ jobs:
           (needs['nightly-mutants-walk'].result != 'success' &&
            needs['nightly-mutants-walk'].result != 'skipped') ||
           (needs['nightly-floor-names'].result != 'success' &&
-           needs['nightly-floor-names'].result != 'skipped')
+           needs['nightly-floor-names'].result != 'skipped') ||
+          (needs['nightly-branch-coverage'].result != 'success' &&
+           needs['nightly-branch-coverage'].result != 'skipped')
         run: exit 1
       - run: echo "All required jobs passed."
