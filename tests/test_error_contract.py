@@ -177,3 +177,68 @@ def test_an_ordinary_exception_from_a_repr_is_folded_into_the_summary() -> None:
     errors = _errors(int, Awkward())
     assert errors[0]["code"] == "int_type"
     assert errors[0]["value"] == "<unrepresentable>"
+
+
+def test_a_long_value_is_cut_at_the_summary_bound_and_says_it_was() -> None:
+    """A summary is bounded, and the cut is visible in what comes back.
+
+    The bound is what keeps one bad value from putting a megabyte in a report,
+    and the `...` is what stops a reader taking the cut text for the value. The
+    number is pinned rather than described: a summary that grew would make a
+    report of a thousand failures a different size, and nothing else would say.
+    """
+    long = "x" * 500
+    with pytest.raises(ValidationError) as caught:
+        Validator(int).validate(long)
+    summary = str(caught.value.errors[0]["value"])
+    assert summary.endswith("...")
+    # Eighty characters of the repr, then the three that say it was cut.
+    assert len(summary) == 83, summary
+    assert summary.startswith("'xxx")
+
+    # A value shorter than the bound is given whole, with no ellipsis.
+    with pytest.raises(ValidationError) as short:
+        Validator(int).validate("xyz")
+    assert short.value.errors[0]["value"] == "'xyz'"
+
+
+def test_a_parse_failure_carries_the_parser_s_own_diagnostic() -> None:
+    """`json_invalid` reports where the document stopped being JSON.
+
+    The `value` is the parser's sentence rather than a summary of a Python
+    value, because at that point there is no value: the document never became
+    one. It names a line and a column, which is what a caller needs to find the
+    character, and it is the one `value` in the model that is not a repr.
+    """
+    with pytest.raises(ValidationError) as caught:
+        Validator(int).validate_json("{ not json")
+    entry = caught.value.errors[0]
+    assert entry["code"] == "json_invalid"
+    assert entry["path"] == ()
+    diagnostic = str(entry["value"])
+    assert "line 1" in diagnostic, diagnostic
+    assert "column" in diagnostic, diagnostic
+    assert str(entry["expected"]) == "valid JSON"
+
+
+def test_an_aggregated_report_has_no_cap_on_what_it_carries() -> None:
+    """Every failure is reported: aggregation is bounded by the value, not a cap.
+
+    A caller aggregating over a wide value gets one entry per failure, however
+    many that is. The alternative -- a cap -- would make `errors` a sample, and
+    a caller counting it or looking for a particular path would be reading a
+    truncated list with nothing saying so. The cost is the caller's to bound,
+    by passing `fail_fast=True` or by validating in pieces.
+
+    Pinned at a size that would be a surprise, because the absence of a cap is
+    a promise a future change could take away quietly.
+    """
+    wide = list(range(2000))
+    with pytest.raises(ValidationError) as caught:
+        Validator(list[str]).validate(wide)
+    assert len(caught.value.errors) == len(wide)
+    # And the same value under `fail_fast` is the one entry the model promises.
+    with pytest.raises(ValidationError) as first:
+        Validator(list[str]).validate(wide, fail_fast=True)
+    assert len(first.value.errors) == 1
+    assert first.value.path == (0,)

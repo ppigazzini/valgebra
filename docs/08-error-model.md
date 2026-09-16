@@ -82,6 +82,15 @@ except ValidationError as err:
     assert [e["path"] for e in err.errors] == [("a",), ("b",), ("c",)]
 ```
 
+**There is no cap on how many failures come back.** A list of twenty thousand
+values of the wrong type reports twenty thousand entries, and `str()` of that
+exception is about a megabyte. That is deliberate: a cap would make `errors` a
+sample, and a caller counting entries or looking for a particular path would be
+reading a truncated list with nothing saying it was truncated. Bounding the cost
+is the caller's, and there are two ways to do it — pass `fail_fast=True`, or
+validate the value in pieces. Each individual `value` *is* bounded, at eighty
+characters of its repr followed by `...`.
+
 Pass `fail_fast=True` to stop at the first failure instead:
 
 ```python

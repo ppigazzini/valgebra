@@ -553,6 +553,9 @@
     "ast": {
       "since": "3.10"
     },
+    "base64": {
+      "since": "3.10"
+    },
     "collections": {
       "since": "3.10"
     },
