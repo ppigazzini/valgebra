@@ -54,14 +54,21 @@ is immutable, so the copy shares the pool rather than duplicating it.
 `repr` is a **rendering**, not a serialization. What it gives back is an
 expression that builds the same schema — a recursive schema as the `recursive`
 call it is, an open record as the catch-all entry it carries, the nullary product
-as `tuple[()]` — so it can be pasted into a session and read back. Two things it
-cannot render as an expression: a class, which is an object rather than syntax
-and appears as its name, and a schema past the renderer's own depth bound, which
-truncates with `...`. That second one is out of reach: the renderer's bound sits
-past `MAX_SCHEMA_DEPTH`, so a schema deep enough to truncate is one the frontend
-refuses to compile first, and no validator a caller holds renders the mark. The
-two bounds are ordered on purpose and a test holds them that way. Do not parse
-it: it is for a person to read, and
+as `tuple[()]` — so it can be pasted into a session and read back. Four things
+it cannot render as an expression, and none of them reads back quietly: a
+**class**, which is an object rather than syntax and appears as its name; a
+**predicate**, which is a function and appears as `Predicate(...)`, and which
+the frontend refuses where it is built; a **constant too long to print**, which
+is cut mid-string and is a syntax error where it is parsed; and a **schema past
+the renderer's own depth bound**, which gives up and prints `<...>`. The bound
+is within reach: no *single* annotation
+can be written deep enough, since the frontend refuses past `MAX_SCHEMA_DEPTH`
+and the renderer's bound sits above it, but a chain of recursive definitions
+composes — the render descends into each in turn, so a hundred shallow links
+reach a depth one annotation cannot. The mark is deliberately not an ellipsis:
+`...` reads as a schema inside a subscript, so a truncated render would parse
+and hand back a *different* validator with nothing to say it had been cut. Do
+not parse a repr: it is for a person to read, and
 [inspection](09-inspection.md) says how to ask a schema questions instead.
 
 ## Lattice bounds

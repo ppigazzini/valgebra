@@ -733,8 +733,11 @@ assert repr(opened) == "{'name': str, anything: anything}"
 assert Validator({"name": str, anything: anything}) == opened
 ```
 
-It is a **rendering**, not a serialization. Two forms cannot be written as an
-expression and do not read back: a class, which is an object rather than syntax
-and prints as its name, and a schema deeper than the renderer's own bound, which
-truncates with `...`. Do not parse a repr to recover structure — see
+It is a **rendering**, not a serialization. Four forms cannot be written as an
+expression and do not read back: a class, which prints as its name; a predicate,
+which prints as `Predicate(...)`; a constant too long to print, which is cut;
+and a schema deeper than the renderer's own bound, which gives up and prints
+`<...>` — a mark chosen to be a syntax error, so a render that lost something
+cannot be read back as a schema that kept it. [The API page](16-api.md) has each
+with the reason. Do not parse a repr to recover structure — see
 [inspection](09-inspection.md) for asking a schema questions instead.

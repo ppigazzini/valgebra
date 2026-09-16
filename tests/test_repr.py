@@ -17,6 +17,11 @@ from valgebra import (
     union,
 )
 
+#: What the renderer prints where it gives up: past its depth bound, and for the
+#: transient self-reference a compiled validator never holds. Spelled here so the
+#: tests below read it from one place, as `docs/16-api.md` names it in one place.
+TRUNCATED = "<...>"
+
 
 @pytest.mark.parametrize(
     ("schema", "expected"),
@@ -130,6 +135,35 @@ ROUNDTRIP_SCHEMAS = [
     Annotated[str, Regex(r"[a-z]+")],
     Annotated[str, Regex(r"\\d+"), at.MinLen(2)],
 ]
+
+
+def test_a_render_that_is_not_an_expression_refuses_rather_than_rebuilding() -> None:
+    """The three renders that cannot be read back are each refused, not quiet.
+
+    Everything else `repr` gives back is an expression that builds the same
+    schema, so a form that is *not* one has to fail where it is read rather than
+    build something else. The pages list these three beside the class name --
+    which is not an expression either, and is the one that names its subject
+    rather than failing.
+
+    Each fails in its own place: a cut constant and a given-up render are syntax
+    errors where they are parsed, and a predicate parses to a call the frontend
+    refuses where the schema is built.
+    """
+    long_constant = Validator(Literal["x" * 500])  # ty: ignore[invalid-type-form]
+    with pytest.raises(SyntaxError):
+        eval(repr(long_constant), dict(_ROUNDTRIP_NS))  # noqa: S307
+
+    shape = "a sequence in a union"
+    given_up = Validator(_chain(shape, _CHAIN_SHAPES[shape][1]))
+    with pytest.raises(SyntaxError):
+        eval(repr(given_up), dict(_ROUNDTRIP_NS))  # noqa: S307
+
+    predicate = Validator(Annotated[int, at.Predicate(lambda value: value > 0)])
+    namespace = dict(_ROUNDTRIP_NS) | {"Predicate": at.Predicate}
+    parsed = eval(repr(predicate), namespace)  # noqa: S307
+    with pytest.raises(NotImplementedError):
+        Validator(parsed)
 
 
 def test_repr_of_class_and_recursive_forms() -> None:
@@ -249,26 +283,132 @@ def test_the_binders_a_nested_fixpoint_names_are_distinct() -> None:
         assert rebuilt == schema, repr(schema)
 
 
-def test_no_schema_a_caller_can_build_renders_the_truncation_mark() -> None:
-    """The renderer's depth bound is past the one a schema can be built at.
+def test_plain_nesting_never_reaches_the_renderer_s_bound() -> None:
+    """One annotation's nesting is bounded below the renderer's own bound.
 
-    `docs/16-api.md` names `...` as what a repr deeper than the renderer's own
-    bound shows. A caller cannot reach it: the frontend refuses to compile a
-    schema nested past `MAX_SCHEMA_DEPTH` first, so the two bounds are ordered
-    and the truncating arm is unreachable through any annotation. Asserted at
-    the deepest schema that compiles, so a change to either bound that reversed
-    the order fails here rather than making a repr silently lossy.
+    The frontend refuses to compile a schema nested past `MAX_SCHEMA_DEPTH`, and
+    the renderer's bound sits above it, so no *single* annotation can be written
+    deep enough to truncate. Asserted at the deepest schema that compiles, so a
+    change to either bound that reversed the order fails here.
+
+    This is a fact about one annotation's depth and nothing more. A chain of
+    definitions composes to a render deeper than either bound, which is what the
+    test below is about.
     """
     deepest: object = int
     for _ in range(MAX_SCHEMA_DEPTH - 1):
         deepest = list[deepest]  # type: ignore[valid-type]
     rendered = repr(Validator(deepest))
-    assert "..." not in rendered
+    assert TRUNCATED not in rendered
     assert rendered.startswith("list[")
 
     # One past what compiles is a refusal rather than a truncated rendering.
     with pytest.raises(ValueError, match="too deep"):
         Validator(list[deepest])  # type: ignore[valid-type]
+
+
+#: Each link shape of a chain of definitions, and the chain length at which its
+#: render first gives up.
+#:
+#: The renderer's bound counts *levels*, and a link is worth as many levels as
+#: its body has nodes -- so the length that reaches the bound is a property of
+#: the shape, and every shape is listed with its own. The numbers are the edge
+#: rather than a comfortable length either side of it: a bound is only tested at
+#: the step across it, and either half alone passes for a bound one off.
+#:
+#: The shapes are chosen to reach the bound through *different* render arms --
+#: a union beside a sequence, a meet under a complement, a keyed mapping -- so
+#: an arm that stopped counting its own level shows up as a number that moved.
+_CHAIN_SHAPES = {
+    "a sequence in a union": (
+        lambda inner: recursive(
+            lambda body, i=inner: list[body] | i  # ty: ignore[invalid-type-form]
+        ),
+        100,
+    ),
+    "a meet under a complement": (
+        lambda inner: recursive(
+            lambda body, i=inner: intersection(
+                list[body],  # ty: ignore[invalid-type-form]
+                complement(i),
+            )
+        ),
+        67,
+    ),
+    "a keyed mapping": (
+        lambda inner: recursive(lambda body, i=inner: {"a": body, "b": i}),
+        101,
+    ),
+}
+
+
+def _chain(shape: str, links: int) -> object:
+    """Build a chain of `links` definitions of this shape, innermost `int`."""
+    link, _ = _CHAIN_SHAPES[shape]
+    schema: object = int
+    for _ in range(links):
+        schema = link(schema)
+    return schema
+
+
+@pytest.mark.parametrize("shape", sorted(_CHAIN_SHAPES))
+def test_a_chain_one_link_short_of_the_bound_renders_whole(shape: str) -> None:
+    """The longest chain that fits renders whole, and re-parses.
+
+    A single annotation cannot reach the renderer's bound -- the frontend
+    refuses past `MAX_SCHEMA_DEPTH`, which is lower -- but a chain composes:
+    the render descends into each definition in turn, so a hundred shallow
+    links reach a depth no one annotation can be written to. The bound is
+    therefore a behaviour rather than dead code, and this is the side of it
+    where nothing is lost.
+    """
+    schema = _chain(shape, _CHAIN_SHAPES[shape][1] - 1)
+    rendered = repr(Validator(schema))
+    assert TRUNCATED not in rendered
+    rebuilt = Validator(eval(rendered, dict(_ROUNDTRIP_NS)))  # noqa: S307
+    assert rebuilt == Validator(schema)
+
+
+@pytest.mark.parametrize("shape", sorted(_CHAIN_SHAPES))
+def test_one_link_further_truncates_and_says_so(shape: str) -> None:
+    """Past the bound the render gives up, and the mark is not valid Python.
+
+    Every other render re-parses to the schema it came from. A truncated one
+    cannot -- what is past the bound is not in the string -- so the mark has to
+    be something no reader, and no `eval`, mistakes for a schema. An ellipsis is
+    valid Python inside a subscript, so `list[...]` parsed, built and handed
+    back a validator that was *not* the one printed: a lossy render with nothing
+    to say it was lossy.
+    """
+    rendered = repr(Validator(_chain(shape, _CHAIN_SHAPES[shape][1])))
+    assert TRUNCATED in rendered
+    with pytest.raises(SyntaxError):
+        eval(rendered, dict(_ROUNDTRIP_NS))  # noqa: S307
+
+
+def test_past_the_bound_a_longer_chain_renders_the_same() -> None:
+    """The bound is what makes the render finite, so past it nothing grows.
+
+    A render that kept descending would reach the native stack; the whole
+    reason the mark exists is that the walk stops. Two chains of different
+    lengths, both past the bound, print the same string -- which is also what a
+    depth that stops counting would break, since nothing would ever stop.
+    """
+    fits = _CHAIN_SHAPES["a sequence in a union"][1] - 1
+    near = repr(Validator(_chain("a sequence in a union", fits + 3)))
+    far = repr(Validator(_chain("a sequence in a union", fits + 21)))
+    assert TRUNCATED in near
+    assert near == far
+
+    # Where it stops, spelled out. The bound counts levels rather than links,
+    # and a link is two of them, so the render gives up part-way through one:
+    # past the last whole link two more print their `recursive(` header and
+    # nothing under it. A bound one level off prints one header fewer, which is
+    # the whole difference between reading the bound as "past" and as "at" --
+    # and a truncated render that is merely *a* truncated render tells those
+    # two apart not at all.
+    assert near.count("recursive(") == fits + 2
+    assert near.count(TRUNCATED) == 2
 
 
 def test_a_union_renders_its_literals_after_the_sets_they_sit_beside() -> None:

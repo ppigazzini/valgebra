@@ -35,10 +35,22 @@ answer of its own, or a repair to a change not yet released.
 - fix: a snapshot pins a code the walk writes, and every code is pinned -- internal
 - fix: a refinement with no constraint is decided as the base it names -- internal
 - fix: a constraint is put to the kind a literal's constant belongs to
+- fix: a render that gave up says so, rather than reading as another schema
 
 -->
 
 ### Fixed
+
+- **A render that gave up says so.** A repr deeper than the renderer's own
+  bound prints `<...>` where it stops. It printed `...`, which is valid Python
+  inside a subscript: `eval` on such a repr parsed it, built a validator, and
+  handed back one that was *not* the schema printed -- a lossy rendering with
+  nothing in it to say so. The mark is a syntax error wherever it lands, so a
+  truncated render cannot be read back as a whole one. The bound is reachable:
+  no single annotation can be written deep enough, but a chain of recursive
+  definitions composes, and the documentation saying otherwise is corrected.
+  `tuple[T, ...]` is unaffected -- that ellipsis is the annotation's own
+  spelling.
 
 - **A constraint is put to the kind a literal's constant belongs to.**
   `Annotated[int, MinLen(1)]` is refused, because reading a length off an

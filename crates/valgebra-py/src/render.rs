@@ -8,24 +8,44 @@ use valgebra_core::{CollKind, Constraint, DefIx, Field, MapClause, Schema, SeqKi
 
 use crate::errors::{class_label, summarize};
 
-/// The deepest render recursion before the walk stops and prints `...`. A cycle
+/// The deepest render recursion before the walk stops and gives up. A cycle
 /// guard already bounds a single recursive definition, but a chain of *distinct*
 /// definitions, or a legitimately deep tree, recurses one native stack frame per
 /// level with a string allocation each, the heaviest per-level frame in the
-/// crate. This counter is the render path's own stack-safety guarantee: the
-/// construction bounds keep real schemas well under it, and a chain past it
-/// prints an ellipsis rather than overflowing the stack. It sits above the
-/// schema-depth bound (a legal tree renders in full) and far enough below the
-/// smallest platform thread stack to hold on it.
+/// crate. This counter is the render path's own stack-safety guarantee: a chain
+/// past it prints [`GAVE_UP`] rather than overflowing the stack. It sits above
+/// the schema-depth bound, so a legal *tree* renders in full, and far enough
+/// below the smallest platform thread stack to hold on it.
+///
+/// A chain of definitions reaches it: `MAX_DEFINITIONS` links of a few levels
+/// each is more levels than this, and `tests/test_repr.py` asserts the step
+/// across for three shapes of link.
 const MAX_RENDER_DEPTH: usize = 200;
+
+/// What the renderer prints where it has no expression to give: past
+/// [`MAX_RENDER_DEPTH`], for a `Ref` naming no definition, and for the
+/// transient self-reference a compiled validator never holds.
+///
+/// Not an ellipsis. Every other render re-parses to the schema it came from,
+/// and `...` is valid Python inside a subscript, so a truncated one parsed and
+/// built a *different* validator with nothing to say it had been truncated.
+/// This form is a syntax error wherever it lands, which is what makes a lossy
+/// render announce itself. `tuple[T, ...]` is unrelated: that ellipsis is the
+/// annotation's own spelling and rebuilds exactly.
+const GAVE_UP: &str = "<...>";
 
 /// Render a schema back to the annotation/combinator expression that produces
 /// it. A recursive `Ref` renders as the `recursive` call that builds it, with
 /// the back edge as the lambda's own parameter, so the printed form is finite
 /// *and* rebuilds the schema. `depth` is the current recursion level; past
-/// [`MAX_RENDER_DEPTH`] the walk prints `...`, which is the one form that does
-/// not rebuild -- a pathological definition chain would otherwise overflow the
+/// [`MAX_RENDER_DEPTH`] the walk prints [`GAVE_UP`], which is the one form that
+/// does not rebuild -- a chain of definitions would otherwise overflow the
 /// native stack, and a truncated render says so by being unreadable as Python.
+///
+/// The bound is reachable. A single annotation cannot be written deep enough --
+/// the frontend refuses past `MAX_SCHEMA_DEPTH`, which is lower -- but a chain
+/// of definitions composes: the render descends into each in turn, so a hundred
+/// shallow links reach a depth no one annotation can.
 pub(crate) fn render(
     py: Python<'_>,
     schema: &Schema,
@@ -35,7 +55,7 @@ pub(crate) fn render(
     depth: usize,
 ) -> String {
     if depth > MAX_RENDER_DEPTH {
-        return "...".to_owned();
+        return GAVE_UP.to_owned();
     }
     let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
     match schema {
@@ -113,7 +133,7 @@ pub(crate) fn render(
             }
             let name = binder(active.borrow().len());
             active.borrow_mut().insert(*id, name.clone());
-            let body = defs.get(id.get()).map_or_else(|| "...".to_owned(), &r);
+            let body = defs.get(id.get()).map_or_else(|| GAVE_UP.to_owned(), &r);
             active.borrow_mut().remove(id);
             format!("recursive(lambda {name}: {body})")
         }
@@ -121,7 +141,7 @@ pub(crate) fn render(
         // built. A compiled validator holds no such node, so nothing a caller
         // can print reaches this; it renders as an ellipsis because there is no
         // definition to name yet.
-        Schema::SelfRef(_) => "...".to_owned(),
+        Schema::SelfRef(_) => GAVE_UP.to_owned(),
     }
 }
 
