@@ -528,11 +528,16 @@ fn closing_an_opened_record_is_not_closing_the_record() {
     assert_eq!(free.with_records_open(Openness::Closed), free);
     // Closing it *after* opening it is the empty closed record, which is the
     // price of `close` being a function of the set rather than of the term.
-    assert_eq!(
-        free.with_records_open(Openness::Open)
-            .with_records_open(Openness::Closed),
-        empty_closed
-    );
+    let round_trip = free
+        .with_records_open(Openness::Open)
+        .with_records_open(Openness::Closed);
+    assert_eq!(round_trip, empty_closed);
+
+    // And the same asked of the *sets*, since two terms being unequal is not
+    // yet a claim that they admit different values -- which is the whole of
+    // what makes this a loss rather than a respelling.
+    assert!(!free.is_equivalent(&empty_closed));
+    assert!(round_trip.is_equivalent(&empty_closed));
 }
 
 // THEORY: no-negative-clause-component
