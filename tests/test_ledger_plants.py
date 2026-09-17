@@ -476,6 +476,21 @@ PLANTS = (
         ),
     ),
     Plant(
+        # The failure the ledger is for: a spelling the page teaches and the
+        # suite never writes. The tests pick their own forms, so a row added to
+        # a table is a promise nothing checks -- and the quiet half is that a
+        # form the frontend stops reading is read as a literal, which denotes
+        # the annotation object and admits nothing a caller has.
+        "tests/test_form_ledger.py",
+        ("docs/03-schema-language.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/03-schema-language.md",
+            "| `bool` | `{True, False}` |\n",
+            "| `bool` | `{True, False}` |\n| `complex` | every `complex` instance |\n",
+        ),
+    ),
+    Plant(
         # The failure the ledger is for: a node added to the algebra and asked
         # against nothing. The relation suites each pick the pairs they are
         # about, so a variant nobody wrote a pair for is a variant whose whole
