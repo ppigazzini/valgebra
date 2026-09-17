@@ -272,7 +272,15 @@ jobs:
             --fail-under-lines 95 --fail-under-regions 92
 
   python:
-    name: python ${{ matrix.python-version }} (${{ matrix.os }})
+    # The trailing arm is not decoration: one leg of nine checks out the whole
+    # history (below), and the checks that read it skip on the other eight. Nine
+    # results with the same shape of name give a reader no way to tell which one
+    # ran them, so the leg that does says so. The condition is the checkout's,
+    # spelled once more here and held to it by `tests/test_changelog_ledger.py`.
+    name: >-
+      python ${{ matrix.python-version }} (${{ matrix.os }})${{
+      (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10') &&
+      ', full history' || '' }}
     # 3.15 is an early-warning prerelease lane. 3.14t (free-threaded) is a
     # supported lane: the extension declares `gil_used = false`, imports without
     # re-enabling the GIL, and the concurrency test exercises true parallel

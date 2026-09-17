@@ -545,6 +545,18 @@ somebody reported it. `test_every_supported_interpreter_runs_on_every_event` in
 `tests/test_required_jobs.py` holds the list in both directions, and holds its
 first entry to the floor `requires-python` claims.
 
+**One leg carries the history, and its name says so.** `actions/checkout`
+takes one commit and no tags, and the two checks that read `git log` back to
+the last release tag -- the changelog roll, and the reachability of every
+commit a page cites -- stand down where they cannot read. Eight of the nine
+legs are that clone. The floor leg takes `fetch-depth: 0` so those run
+somewhere, and it is *named* for it, because nine results with the same shape
+of name is a checks list nobody can read the difference off: the one that
+matters is the one that is not skipping. `tests/test_changelog_ledger.py`
+holds the depth and the name to the **same** condition, since a name that
+advertises a history the leg no longer takes answers the reader's question
+wrongly, which is worse than not answering it.
+
 **PyPy builds, links, and runs the suite.** The release matrix publishes four
 PyPy 3.11 wheels, and a push that does not link against PyPy cannot see what
 breaks there: `cpyext` carries the limited API and not every static type object

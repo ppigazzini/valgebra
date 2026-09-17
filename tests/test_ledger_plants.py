@@ -295,6 +295,21 @@ PLANTS = (
             RUNNER_ONLY_STEP,
         ),
     ),
+    # The other half of the same claim, and the half a reader acts on: the leg
+    # that takes the history says so in its name. Pointed at a leg that does not
+    # take it, the name is still there and still specific -- and it now names
+    # the one result of nine that skipped everything it advertises. A ledger
+    # that holds the depth and not the name leaves that state green.
+    Plant(
+        "tests/test_changelog_ledger.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            "\n      (matrix.os == 'ubuntu-latest'",
+            "\n      (matrix.os == 'macos-latest'",
+        ),
+    ),
     Plant(
         # The same ledger, the other direction it grew: a job the gate cannot
         # reach carries its reason by *name*, and a rename leaves the reason

@@ -204,6 +204,23 @@ def test_the_roll_is_not_empty_while_the_surface_moves() -> None:
         assert _roll(), "the surface moved this release and the roll is empty"
 
 
+def _workflow() -> dict:
+    return yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    )
+
+
+def _checkout_depth() -> str:
+    """Read what the python lane asks `actions/checkout` for, as written."""
+    checkouts = [
+        step
+        for step in _workflow()["jobs"]["python"]["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    ]
+    assert len(checkouts) == 1, "the python lane checks out once"
+    return str(checkouts[0].get("with", {}).get("fetch-depth", ""))
+
+
 def test_the_workflow_runs_this_ledger_with_full_history() -> None:
     """One lane reads the whole history, or this ledger runs nowhere.
 
@@ -212,16 +229,7 @@ def test_the_workflow_runs_this_ledger_with_full_history() -> None:
     stop, one level up. So the lane that carries the project's own audit checks
     out with `fetch-depth: 0`, and this holds it there.
     """
-    workflow = yaml.safe_load(
-        (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    )
-    checkouts = [
-        step
-        for step in workflow["jobs"]["python"]["steps"]
-        if str(step.get("uses", "")).startswith("actions/checkout@")
-    ]
-    assert len(checkouts) == 1, "the python lane checks out once"
-    depth = str(checkouts[0].get("with", {}).get("fetch-depth", ""))
+    depth = _checkout_depth()
 
     # The expression is read for what it *yields*, not matched as text: a
     # rewording that keeps the full history is fine, and a `'1'` in both arms is
@@ -230,6 +238,44 @@ def test_the_workflow_runs_this_ledger_with_full_history() -> None:
     assert _expression(depth, floor) == "0", (
         f"the python lane takes fetch-depth {_expression(depth, floor)!r} on its "
         f"floor leg, so the changelog ledger skips in every lane that runs it"
+    )
+
+
+def test_the_leg_that_takes_the_history_says_so_in_its_name() -> None:
+    """The leg that reads the history is the leg whose name says it has one.
+
+    The check above puts the history on one leg of nine. That one leg is why
+    this ledger and `tests/test_cited_commits.py` report anything at all, and
+    from outside it is invisible: eight legs skip those checks, one runs them,
+    and the checks list shows nine results with the same shape of name. A
+    reader cannot tell which of the nine they are reading, and neither can the
+    next person to move the depth somewhere else.
+
+    So the leg says so in its name, and it says so under the *same* condition
+    that gives it the depth. Two conditions that mean the same thing today is
+    the arrangement this exists to refuse: a name that advertises the history
+    on a leg that no longer takes it is worse than no name at all, because it
+    answers the question a reader asked and answers it wrongly.
+    """
+    name = str(_workflow()["jobs"]["python"]["name"])
+    marker = _only_ternary(name, "the python lane's name")
+    depth = _only_ternary(_checkout_depth(), "the python lane's fetch-depth")
+
+    assert _equalities(marker) == _equalities(depth), (
+        f"the name is leg-specific on {sorted(_equalities(marker))} and the "
+        f"history is on {sorted(_equalities(depth))}, so one of the nine legs "
+        f"says it has a history it does not have"
+    )
+
+    floor = {"matrix.os": "ubuntu-latest", "matrix.python-version": FLOOR}
+    other = {"matrix.os": "ubuntu-latest", "matrix.python-version": "3.14"}
+    said = _expression(marker.group(0), floor)
+    assert "history" in said, (
+        f"the floor leg is named {said!r}, which does not say it carries the "
+        f"history the other eight legs lack"
+    )
+    assert _expression(marker.group(0), other) == "", (
+        f"a leg with no history is named {_expression(marker.group(0), other)!r}"
     )
 
 
@@ -261,3 +307,25 @@ def _expression(text: str, context: dict[str, str]) -> str:
     assert tests, f"no equality test in {match['cond']!r}"
     holds = all(context.get(lhs) == rhs for lhs, rhs in tests)
     return match["then"] if holds else match["other"]
+
+
+def _only_ternary(text: str, what: str) -> re.Match[str]:
+    """Find the one leg-specific arm in an interpolated string.
+
+    A name is a template with several `${{ }}` spans in it, only one of which
+    chooses by leg. Two of them would be two conditions to keep in step, which
+    is the state the caller is asking about, so finding two fails here rather
+    than picking one.
+    """
+    found = list(_TERNARY.finditer(text))
+    assert len(found) == 1, (
+        f"{what} carries {len(found)} leg-specific arm(s), and this reads one: {text!r}"
+    )
+    return found[0]
+
+
+def _equalities(match: re.Match[str]) -> frozenset[tuple[str, str]]:
+    """Read the `lhs == 'rhs'` tests an arm's condition is built from."""
+    tests = _TEST.findall(match["cond"])
+    assert tests, f"no equality test in {match['cond']!r}"
+    return frozenset(tests)
