@@ -928,6 +928,24 @@ jobs:
     # still explores, and a baseline failure carries the seed that found it.
     env:
       PROPTEST_RNG_SEED: ${{ github.run_id }}
+      # And its shrinking is bounded, because a sweep reads no counterexample.
+      # A mutant's verdict is whether the tests fail, never on what input, and
+      # proptest shrinks a failure for as long as it takes -- `max_shrink_time`
+      # carries no limit by default. Every *caught* mutant pays that, and it is
+      # the variable part of what one costs: on the mutant this ratchet read as
+      # a survivor, 42s of test time against 13s with the bound, and stable
+      # rather than swinging by an order of magnitude.
+      #
+      # What makes it a wrong verdict rather than a slow one: a mutant's budget
+      # is the baseline's test time times a multiplier, and the baseline has no
+      # failure to shrink. An unbounded shrink is spent against a budget
+      # measured without one, so a mutant the tests caught reports as a
+      # timeout -- and `scripts/mutation_gate.py` reads a timeout as a
+      # survivor, being a run that returned no verdict.
+      #
+      # A second finishes most of them, so a baseline failure carries a shrunk
+      # case beside the seed above.
+      PROPTEST_MAX_SHRINK_TIME: "1000"
     strategy:
       fail-fast: false
       matrix:
@@ -1029,6 +1047,24 @@ jobs:
     # still explores, and a baseline failure carries the seed that found it.
     env:
       PROPTEST_RNG_SEED: ${{ github.run_id }}
+      # And its shrinking is bounded, because a sweep reads no counterexample.
+      # A mutant's verdict is whether the tests fail, never on what input, and
+      # proptest shrinks a failure for as long as it takes -- `max_shrink_time`
+      # carries no limit by default. Every *caught* mutant pays that, and it is
+      # the variable part of what one costs: on the mutant this ratchet read as
+      # a survivor, 42s of test time against 13s with the bound, and stable
+      # rather than swinging by an order of magnitude.
+      #
+      # What makes it a wrong verdict rather than a slow one: a mutant's budget
+      # is the baseline's test time times a multiplier, and the baseline has no
+      # failure to shrink. An unbounded shrink is spent against a budget
+      # measured without one, so a mutant the tests caught reports as a
+      # timeout -- and `scripts/mutation_gate.py` reads a timeout as a
+      # survivor, being a run that returned no verdict.
+      #
+      # A second finishes most of them, so a baseline failure carries a shrunk
+      # case beside the seed above.
+      PROPTEST_MAX_SHRINK_TIME: "1000"
     strategy:
       fail-fast: false
       matrix:
@@ -1405,6 +1441,24 @@ jobs:
     # still explores, and a baseline failure carries the seed that found it.
     env:
       PROPTEST_RNG_SEED: ${{ github.run_id }}
+      # And its shrinking is bounded, because a sweep reads no counterexample.
+      # A mutant's verdict is whether the tests fail, never on what input, and
+      # proptest shrinks a failure for as long as it takes -- `max_shrink_time`
+      # carries no limit by default. Every *caught* mutant pays that, and it is
+      # the variable part of what one costs: on the mutant this ratchet read as
+      # a survivor, 42s of test time against 13s with the bound, and stable
+      # rather than swinging by an order of magnitude.
+      #
+      # What makes it a wrong verdict rather than a slow one: a mutant's budget
+      # is the baseline's test time times a multiplier, and the baseline has no
+      # failure to shrink. An unbounded shrink is spent against a budget
+      # measured without one, so a mutant the tests caught reports as a
+      # timeout -- and `scripts/mutation_gate.py` reads a timeout as a
+      # survivor, being a run that returned no verdict.
+      #
+      # A second finishes most of them, so a baseline failure carries a shrunk
+      # case beside the seed above.
+      PROPTEST_MAX_SHRINK_TIME: "1000"
     strategy:
       fail-fast: false
       matrix:
@@ -1576,6 +1630,24 @@ jobs:
     # `mutants-diff-core` for why the two runs have to share one.
     env:
       PROPTEST_RNG_SEED: ${{ github.run_id }}
+      # And its shrinking is bounded, because a sweep reads no counterexample.
+      # A mutant's verdict is whether the tests fail, never on what input, and
+      # proptest shrinks a failure for as long as it takes -- `max_shrink_time`
+      # carries no limit by default. Every *caught* mutant pays that, and it is
+      # the variable part of what one costs: on the mutant this ratchet read as
+      # a survivor, 42s of test time against 13s with the bound, and stable
+      # rather than swinging by an order of magnitude.
+      #
+      # What makes it a wrong verdict rather than a slow one: a mutant's budget
+      # is the baseline's test time times a multiplier, and the baseline has no
+      # failure to shrink. An unbounded shrink is spent against a budget
+      # measured without one, so a mutant the tests caught reports as a
+      # timeout -- and `scripts/mutation_gate.py` reads a timeout as a
+      # survivor, being a run that returned no verdict.
+      #
+      # A second finishes most of them, so a baseline failure carries a shrunk
+      # case beside the seed above.
+      PROPTEST_MAX_SHRINK_TIME: "1000"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
