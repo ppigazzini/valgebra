@@ -251,18 +251,27 @@ a row when a reader remembers to.
 So the universe is **derived from the tree**, in products, and each product has a
 ledger that holds it in both directions:
 
-| Product | Derived from | Held by |
-|---|---|---|
-| every schema node, in every walk mode | the `Schema` enum in `ir.rs` | `tests/test_node_matrix.py` |
-| every public name a caller reaches | the type stub the package ships | `tests/test_use_case_ledger.py` |
-| every error code a report can carry | the walk that writes them | `tests/test_use_case_ledger.py` |
-| every result, obligation and deviation the design rests on | `10-theory.md`'s tags, with the debt it admits recorded | `tests/test_theory_ledger.py` |
-| every refusal the frontend writes | the error constructors in `build*.rs` | `tests/test_frontend_refusals.py` |
-| every code a report can carry, in both modes and on both paths | the same walk | `tests/test_error_matrix.py`, held by `tests/test_use_case_ledger.py` |
+| Product | Derived from | Covered means | Held by |
+|---|---|---|---|
+| every schema node, in every walk mode | the `Schema` enum in `ir.rs` | the node is driven through each entry point and the answer asserted | `tests/test_node_matrix.py` |
+| every public name a caller reaches | the type stub the package ships | the product suite *names* the cell, read from the syntax tree with the prose cut | `tests/test_use_case_ledger.py` |
+| every error code a report can carry | the walk that writes them | the same: the suite names the code | `tests/test_use_case_ledger.py` |
+| every result, obligation and deviation the design rests on | `10-theory.md`'s tags, with the debt it admits recorded | a `HELD-BY:` names a test that fails when the sentence is false | `tests/test_theory_ledger.py` |
+| every refusal the frontend writes | the error constructors in `build*.rs` | a test matches the message the constructor writes | `tests/test_frontend_refusals.py` |
+| every code a report can carry, in both modes and on both paths | the same walk | the code is driven at that mode and on that path | `tests/test_error_matrix.py`, held by `tests/test_use_case_ledger.py` |
+| every ordered pair of schema variants | the `Schema` enum in `ir.rs`, one representative each | the pair is proved, refuted with a value the walk checks, or declined with a reason | `tests/test_relation_ledger.py` |
+| every form the schema-language pages tabulate | the tables in `03-schema-language.md` and `05-refinements.md` | the form is accepted with its `repr` and a member, or refused with the refusals ledger's pattern | `tests/test_form_ledger.py` |
+| every outcome a method's docstring names | the binding's `Raises:` blocks | the call sits inside a `pytest.raises` for it, read from the syntax tree | `tests/test_surface_outcomes.py` |
 
 The number is computed rather than written down. A cell with no test fails; a
 cell a test cannot reach is accepted with a reason, and a reason for a cell that
-*is* reached fails too, so an excuse cannot outlive the gap it excuses.
+*is* reached fails too, so an excuse cannot outlive the gap it excuses. The
+"covered" column is the third direction, and the reason each row needs its own
+words: reaching a node is not asserting its answer, naming a method is not
+driving its documented failure, and a pair of variants is covered by a
+*witness* or by a reason, never by silence. A table that said only "a test
+touches it" would report nine products as one claim and be wrong about eight of
+them.
 
 A cell is covered when a test *does* something with it, not when a paragraph
 mentions it: the search runs over the code with the comments and docstrings cut,
@@ -271,12 +280,29 @@ that cannot spell a cell's name claims it with a `# USE-CASE:` marker instead,
 and a marker naming no cell fails -- rare by design, because a marker is
 bookkeeping a reader keeps true and a name in the code is not.
 
-The largest product is the public surface and the error codes together: seventy-
-odd cells, of which six are accepted with a reason — five codes no schema a
-caller can build reaches, and the exception's own class name. The ledger prints
-the figure rather than asserting it, and holds a floor instead, because the
-universe grows with the tree: a ledger pinning today's count would fail on the
-commit that adds a name rather than on the one that leaves it unreached.
+The largest is the public surface and the error codes together, and the lane
+prints them **apart**, because one figure over two products hides which of the
+two is growing:
+
+| Product | Cells | Empty, with a reason |
+|---|---|---|
+| every public name a caller reaches | 30 | 0 |
+| every error code a report can carry | 42 | 6 |
+
+Every empty cell is a **code**, and splitting the figure is what makes that
+readable: five are arms no schema a caller can build reaches, and the sixth is
+`validation_error`, the exception's type name carried where a report is built
+from no violation at all -- a code the walk can write, however much the name
+reads like a class. The public surface has none: every name the stub ships is
+named by the suite, so a single total would have reported a gap against the
+product that does not have one. `scripts/use_case_ledger.py` prints those figures
+and `tests/test_use_case_ledger.py` holds this table to them, so the page is
+what fails on the commit that adds a name -- where the older wording,
+"seventy-odd cells", could not fail at all, being an approximation of two
+numbers added together. What the *ledger* holds is still a floor rather than a
+count: the universe grows with the tree, and a test pinning today's total would
+fail on the commit that adds a name rather than on the one that leaves it
+unreached.
 
 **The outcomes a method documents are a product of their own.**
 `tests/test_surface_outcomes.py` reads the binding's `Raises:` blocks — every

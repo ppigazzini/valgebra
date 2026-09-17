@@ -32,6 +32,8 @@ written down with a reason, and a reason for a cell that *is* reached fails too,
 so an excuse cannot outlive the gap it excuses.
 
 LEDGER: every outcome the binding's docstrings name is asserted by a test
+
+PRODUCT: every outcome a method's docstring names
 """
 
 from __future__ import annotations

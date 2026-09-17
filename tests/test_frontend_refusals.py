@@ -24,6 +24,8 @@ written down with a reason, and a reason for a site that *is* read fails too, so
 an excuse cannot outlive the gap it excuses.
 
 LEDGER: every frontend refusal message is matched by a test, or accepted
+
+PRODUCT: every refusal the frontend writes
 """
 
 from __future__ import annotations

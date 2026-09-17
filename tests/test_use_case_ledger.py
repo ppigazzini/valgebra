@@ -26,6 +26,9 @@ written down with a reason, and a reason for a cell that *is* reached fails too,
 so an excuse cannot outlive the gap it excuses.
 
 LEDGER: every public name and every error code is named by the suite, or accepted
+
+PRODUCT: every public name a caller reaches
+PRODUCT: every error code a report can carry
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -317,4 +321,108 @@ def test_every_marker_names_a_cell_that_exists() -> None:
         f"`# USE-CASE:` markers naming no cell: {stale}. A marker is "
         "bookkeeping a reader keeps true, so one that stopped being true fails "
         "here rather than sitting in the file."
+    )
+
+
+#: The testing page's per-product figures, as a row this reads back: the
+#: product, the cells it has, and the cells that are empty with a reason.
+_FIGURE = re.compile(
+    r"^\| (?P<product>every [^|]+?) \| (?P<cells>\d+) \| (?P<empty>\d+) \|$",
+    re.MULTILINE,
+)
+
+#: What the page calls each of the two products this file derives.
+_SURFACE = "every public name a caller reaches"
+_CODES = "every error code a report can carry"
+
+
+def test_the_page_carries_the_figure_each_product_has() -> None:
+    """The page states each product's size, and the tree is what it states.
+
+    "Seventy-odd cells" was the page's word for two products added together,
+    and it was wrong in both directions at once: it hid which of the two was
+    growing, and it aged without ever failing, because an approximation cannot
+    be out by one. The lane prints the two figures apart and the page carries
+    them, so the reader who wants to know how large the public surface is does
+    not have to run anything -- and the day a name is added, the page is what
+    fails rather than a reader's memory of it.
+    """
+    page = (ROOT / "docs" / "dev" / "08-testing.md").read_text(encoding="utf-8")
+    figures = {
+        match["product"]: (int(match["cells"]), int(match["empty"]))
+        for match in _FIGURE.finditer(page)
+    }
+    assert set(figures) == {_SURFACE, _CODES}, (
+        f"the testing page carries figures for {sorted(figures)}, and this file "
+        f"derives {sorted((_SURFACE, _CODES))}"
+    )
+
+    surface, codes = _public_surface(), _error_codes()
+    empty = set(ACCEPTED)
+    for product, cells, unreached in (
+        (_SURFACE, surface, empty & surface),
+        (_CODES, codes, empty & codes),
+    ):
+        assert figures[product] == (len(cells), len(unreached)), (
+            f"the page says {product} has {figures[product]} cells and empty "
+            f"cells; the tree has {(len(cells), len(unreached))}"
+        )
+
+    # The detector: two products whose empty cells do not add up to the list
+    # are two products that between them do not cover it, and the split above
+    # would then be checking a partition of something else.
+    assert (empty & surface) | (empty & codes) == empty, sorted(empty)
+
+
+#: A line the lane prints for one product: its label and its three figures.
+_PRINTED = re.compile(
+    r"^(?P<label>[a-z ]+): (?P<cells>\d+) cells, (?P<named>\d+) named, "
+    r"(?P<empty>\d+) empty",
+    re.MULTILINE,
+)
+
+
+def test_the_lane_prints_a_figure_for_each_product() -> None:
+    """A figure over two products is a figure neither of them has.
+
+    The lane's output is where a reader learns the number without running a
+    test, and one total answered for the public surface and the error codes
+    together: a name added to the stub and a code retired from the walk cancel
+    in it, and the same 72 reads as "nothing moved". The two are separate
+    universes with separate derivations, so they are printed apart, and the
+    page's table is held to what is printed rather than to a second reading.
+    """
+    printed = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        [sys.executable, str(LEDGER)],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    ).stdout
+    figures = {
+        match["label"]: (int(match["cells"]), int(match["named"]), int(match["empty"]))
+        for match in _PRINTED.finditer(printed)
+    }
+    assert set(figures) >= {"public surface", "error codes"}, printed
+
+    surface, codes = _public_surface(), _error_codes()
+    empty = set(ACCEPTED)
+    assert figures["public surface"][0] == len(surface), printed
+    assert figures["public surface"][2] == len(empty & surface), printed
+    assert figures["error codes"][0] == len(codes), printed
+    assert figures["error codes"][2] == len(empty & codes), printed
+
+    # And the page is the printed figure rather than a second reading of the
+    # tree that happens to agree with it today.
+    page = (ROOT / "docs" / "dev" / "08-testing.md").read_text(encoding="utf-8")
+    stated = {
+        match["product"]: (int(match["cells"]), int(match["empty"]))
+        for match in _FIGURE.finditer(page)
+    }
+    assert stated[_SURFACE] == (
+        figures["public surface"][0],
+        figures["public surface"][2],
+    ), printed
+    assert stated[_CODES] == (figures["error codes"][0], figures["error codes"][2]), (
+        printed
     )

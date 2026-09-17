@@ -378,3 +378,77 @@ def test_a_page_spelling_the_right_ledger_count_passes(
     monkeypatch.setattr(lint, "ROOT", tmp_path)
     _synthetic_ledgers(tmp_path, 28, "Twenty-eight")
     assert lint.check_ledger_table() == []
+
+
+def _synthetic_products(root: Path, marked: list[str], listed: list[str]) -> None:
+    """Write product-marked tests and a products table naming `listed`.
+
+    The two lists are given apart because the rule is two directions, and a
+    corpus where they always agree can only drive one of them.
+    """
+    tests = root / "tests"
+    tests.mkdir(parents=True, exist_ok=True)
+    # Spelled from its pieces, as the ledger corpus above is: written out, this
+    # file would declare itself a product and the rule would want a row for it.
+    marker = "PRODUCT" + ":"
+    for name in marked:
+        (tests / name).write_text(f'"""A product.\n\n{marker} something\n"""\n')
+    for name in listed:
+        (tests / name).touch()
+    page = root / "docs" / "dev" / "08-testing.md"
+    page.parent.mkdir(parents=True, exist_ok=True)
+    rows = "\n".join(
+        f"| every thing {index} | the tree | a test drives it | `tests/{name}` |"
+        for index, name in enumerate(listed)
+    )
+    page.write_text(
+        "# Testing\n\n| Product | Derived from | Covered means | Held by |\n"
+        f"|---|---|---|---|\n{rows}\n\nAnd prose after it.\n"
+    )
+
+
+def test_a_product_with_no_row_in_the_products_table_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The direction the page rots in: a product is added and the table is not."""
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    _synthetic_products(tmp_path, ["test_one.py", "test_two.py"], ["test_one.py"])
+    problems = lint.check_product_table()
+    assert problems, "a product outside the table passed"
+    assert any("test_two.py" in problem for problem in problems), problems
+
+
+def test_a_products_table_row_naming_no_product_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """And the other: a row outlives the product, or never named one."""
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    _synthetic_products(tmp_path, ["test_one.py"], ["test_one.py", "test_three.py"])
+    problems = lint.check_product_table()
+    assert problems, "a row naming no product passed"
+    assert any("test_three.py" in problem for problem in problems), problems
+
+
+def test_a_products_table_that_matches_the_tree_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    _synthetic_products(tmp_path, ["test_one.py"], ["test_one.py"])
+    assert lint.check_product_table() == []
+
+
+def test_a_products_table_the_page_does_not_have_is_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rule that reads no table must not pass for having read nothing.
+
+    This is the shape `check_ledger_table` grew its own detector for: a parse
+    that finds an empty universe answers "no problems", which reads exactly
+    like a page that is right.
+    """
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    _synthetic_products(tmp_path, ["test_one.py"], ["test_one.py"])
+    page = tmp_path / "docs" / "dev" / "08-testing.md"
+    page.write_text("# Testing\n\nNo table at all.\n")
+    problems = lint.check_product_table()
+    assert problems, "a page with no products table passed"

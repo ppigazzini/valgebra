@@ -28,6 +28,8 @@ no row fails. That is what keeps the table and the frontend one description
 rather than two.
 
 LEDGER: every form the schema-language pages tabulate is driven by a test
+
+PRODUCT: every form the schema-language pages tabulate
 """
 
 from __future__ import annotations

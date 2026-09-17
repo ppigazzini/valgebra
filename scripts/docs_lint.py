@@ -44,6 +44,10 @@ other:
 
 * **The developer set's index.** A page in ``docs/dev/`` that no row of its
   ``README.md`` names fails, and a row naming a page that does not exist fails.
+* **The table of products.** A test carrying a ``PRODUCT:`` marker with no row
+  in the products table of ``docs/dev/08-testing.md`` fails, and a row naming a
+  test that declares no product fails. The ledger rule below is satisfied by a
+  mention anywhere on the page; this one is about the table a reader counts.
 * **The table of ledgers.** A test carrying a ``LEDGER:`` marker with no row in
   ``docs/dev/08-testing.md`` fails, a row naming a test that does not exist
   fails, and a spelled count beside either the table or the glossary entry that
@@ -588,6 +592,64 @@ def check_ledger_table() -> list[str]:
     return problems
 
 
+#: Where the products table begins. The header is the anchor rather than a
+#: heading, because a heading is prose a rewrite moves and a header is the
+#: table's own first row.
+PRODUCTS_HEADER = "| Product | Derived from | Covered means | Held by |"
+
+
+def check_product_table() -> list[str]:
+    """Hold the table of products to the products, in both directions.
+
+    A **product** is a universe derived from the tree -- every schema node,
+    every public name, every ordered pair of variants -- and the testing page's
+    table is what says which ones there are and, per row, what "covered" means
+    for that one. `check_ledger_table` asks only that a ledger be named
+    *somewhere* on the page, and a paragraph satisfies that: three products
+    added in one pass were described in prose and in the ledger table, and the
+    products table went on listing six. A reader counting products counts the
+    table.
+
+    So a file declaring itself a product with a ``PRODUCT:`` marker has a row,
+    and a row names a file that declares itself one. The marker is explicit for
+    the reason the ledger marker is: a universe inferred from a sentence omits
+    whichever file worded it differently.
+    """
+    page = ROOT / "docs" / "dev" / "08-testing.md"
+    tests = ROOT / "tests"
+    if not page.exists() or not tests.is_dir():
+        return []
+    text = page.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    if PRODUCTS_HEADER not in lines:
+        # The detector. A parse that finds no table reports no problems, which
+        # reads exactly like a page whose table is right.
+        return [f"docs/dev/08-testing.md: no products table ({PRODUCTS_HEADER})"]
+    start = lines.index(PRODUCTS_HEADER)
+    rows = []
+    for line in lines[start + 1 :]:
+        if not line.startswith("|"):
+            break
+        rows.append(line)
+    table = "\n".join(rows)
+    listed = set(re.findall(r"`tests/(test_\w+\.py)`", table))
+    declared = {
+        path.name
+        for path in sorted(tests.glob("test_*.py"))
+        if "PRODUCT:" in path.read_text(encoding="utf-8")
+    }
+    problems = [
+        f"docs/dev/08-testing.md: tests/{name} is a product with no row"
+        for name in sorted(declared - listed)
+    ]
+    problems += [
+        f"docs/dev/08-testing.md: the products table names tests/{name}, "
+        f"which declares no product"
+        for name in sorted(listed - declared)
+    ]
+    return problems
+
+
 BOUND = re.compile(
     r"^(?:pub(?:\([a-z()]+\))? )?const ([A-Z][A-Z0-9_]*): "
     r"(?:usize|u8|u16|u32|u64|i32|i64) = (.+);$",
@@ -830,6 +892,7 @@ def main() -> int:
     ]
     failures += check_index("docs/dev") + check_index("docs")
     failures += check_ledger_table()
+    failures += check_product_table()
     failures += check_bounds_ledger()
     failures += check_llms_manifest()
 

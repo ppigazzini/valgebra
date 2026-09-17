@@ -207,17 +207,40 @@ def accepted() -> dict[str, str]:
     return dict(json.loads(RECORD.read_text(encoding="utf-8"))["empty"])
 
 
+def report(label: str, cells: set[str], reached: set[str], empty: set[str]) -> None:
+    """Print one product's figures: its size, what the suite names, what is empty.
+
+    A product with no cell at all would divide by zero on the way to a ratio,
+    and it is a derivation that read nothing rather than a product that is
+    fully covered -- so it says so instead.
+    """
+    named, unreached = cells & reached, cells & empty
+    if not cells:
+        print(f"{label}: 0 cells, which is a derivation that read nothing")
+        return
+    print(
+        f"{label}: {len(cells)} cells, {len(named)} named, "
+        f"{len(unreached)} empty with a reason, "
+        f"{100 * len(named) / len(cells):.1f}% covered"
+    )
+
+
 def main() -> int:
     every = universe()
     reached = names_reached(every, product_sources()) | markers()
     recorded = accepted()
     empty = {cell: recorded.get(cell, "") for cell in sorted(every - reached)}
-    universe_size = len(every)
 
-    print(f"use cases: {universe_size}")
-    print(f"named by the suite: {len(reached)}")
-    print(f"empty, each with a reason: {len(empty)}")
-    print(f"covered: {100 * len(reached) / universe_size:.1f}%")
+    # Per product, and then the total. One figure over both universes is a
+    # figure neither of them has: a name added to the stub and a code retired
+    # from the walk cancel in it, and the sum reads as "nothing moved". The
+    # labels are the testing page's products, which holds this to that table.
+    for label, cells in (
+        ("public surface", public_surface()),
+        ("error codes", error_codes()),
+        ("use cases", every),
+    ):
+        report(label, cells, reached, set(empty))
 
     if "--update" in sys.argv[1:]:
         RECORD.write_text(

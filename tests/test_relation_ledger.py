@@ -39,6 +39,8 @@ costs is inclusion, and what it does not cost is membership: the walk asks
 `isinstance` itself rather than against a verdict written down beside it.
 
 LEDGER: every ordered pair of schema variants is decided or declined with a reason
+
+PRODUCT: every ordered pair of schema variants
 """
 
 from __future__ import annotations

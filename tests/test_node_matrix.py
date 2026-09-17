@@ -6,6 +6,8 @@ terminates), and its rendered form is stable under simplification. The
 sequence-regex shapes are checked under both the list and tuple containers, so a
 capability reachable for one container but not the other -- the asymmetry class
 of hole -- fails here rather than shipping silently.
+
+PRODUCT: every schema node, in every walk mode
 """
 
 import json

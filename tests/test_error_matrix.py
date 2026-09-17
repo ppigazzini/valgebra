@@ -24,6 +24,8 @@ holds this file's tables to that list in both directions: a code added to the
 walk arrives here without a row and fails there. The derivation lives there
 rather than here because it reads the Rust, and this file runs against an
 installed wheel.
+
+PRODUCT: every code a report can carry, in both modes and on both paths
 """
 
 from __future__ import annotations

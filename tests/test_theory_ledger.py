@@ -27,6 +27,8 @@ the reviewer's, and the `HELD-BY:` line is where the reviewer's answer is
 written down instead of being re-derived.
 
 LEDGER: every theory result, obligation and deviation names a test, held or owed
+
+PRODUCT: every result, obligation and deviation the design rests on
 """
 
 from __future__ import annotations
