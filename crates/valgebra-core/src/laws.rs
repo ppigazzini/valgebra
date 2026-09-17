@@ -3859,6 +3859,17 @@ fn unique_by_name(fields: Vec<Field>) -> Vec<Field> {
         .collect()
 }
 
+/// Whether no `complement` stands anywhere in the term.
+///
+/// The projections rewrite the record they reach, and a negation between that
+/// record and the top of the term reverses which way the whole schema moves.
+/// Two laws read the direction, so the fragment each is asked over is named
+/// here rather than built into a second generator: the answer is about this
+/// term, and a reader of the law can see which terms it is about.
+fn under_no_complement(schema: &Schema) -> bool {
+    !matches!(schema, Schema::Complement(_)) && schema.children().all(under_no_complement)
+}
+
 fn decidable_schema() -> impl Strategy<Value = Schema> {
     let leaf = prop_oneof![
         Just(Schema::ANYTHING),
@@ -4066,6 +4077,154 @@ proptest! {
                     "{:?} is a member of a schema decided empty", value
                 );
             }
+        }
+    }
+
+    // THEORY: open-and-close-read-the-region
+    /// Equal sets close to equal sets, whatever the term is written out of.
+    ///
+    /// This is what puts `close` in the algebra rather than beside it: an
+    /// operator on *sets* must send two spellings of one set to one set, and
+    /// openness is the default of the key-type region no clause claims -- a
+    /// region, which is a set of keys rather than a way of writing one.
+    ///
+    /// `open` has no such law and is not missing one. `test_projection_laws.py`
+    /// carries the pair that separates them (`{"a?": int}` against
+    /// `{} | {"a": int}`, which open into two sets), so the silence here is
+    /// deliberate.
+    ///
+    /// The respelling is **absorption**, `a | (a & b)`, and the choice is the
+    /// whole worth of the law: `a | (a & a)` reads like a respelling and is
+    /// not one, because the constructors fold the meet to `a` and the union to
+    /// `a` and the law then compares a term with itself. A law that cannot
+    /// fail passes for the same reason a true one does.
+    #[test]
+    fn closing_is_a_function_of_the_set_however_it_is_spelled(
+        a in decidable_schema(),
+        b in decidable_schema(),
+    ) {
+        let pool = const_pool();
+        // Asked of the drawn term *and* of its opened form. Closing is the
+        // identity on every term this generator draws directly -- a record it
+        // builds is closed already, or carries a typed clause that is not the
+        // one an openness moves -- so a law asked only of those compares two
+        // terms neither of which the operator touched.
+        let opened = a.with_records_open(Openness::Open);
+        for spelling in [&a, &opened] {
+            let respelled =
+                Schema::union([spelling.clone(), Schema::meet([spelling.clone(), b.clone()])]);
+            let universe = boundary_values(&[spelling, &b, &respelled]);
+            for value in &universe {
+                prop_assert_eq!(
+                    member_full(&respelled, value, &pool),
+                    member_full(spelling, value, &pool),
+                    "absorption is a different set at {:?}", value
+                );
+            }
+
+            let closed = spelling.with_records_open(Openness::Closed);
+            let respelled_closed = respelled.with_records_open(Openness::Closed);
+            for value in &universe {
+                prop_assert_eq!(
+                    member_full(&closed, value, &pool),
+                    member_full(&respelled_closed, value, &pool),
+                    "two spellings of one set closed to two sets, parting at {:?}", value
+                );
+            }
+
+            // And the pair the draw gives directly, which reaches spellings no
+            // rewrite of one term produces: two terms decided equal must close
+            // to one set as well.
+            //
+            // Decided, not sampled. Agreement over a finite spread of values is
+            // not equality of sets, and this law read it as one: it drew
+            // `union({str => anything})` against `{str => anything}`, found no
+            // value in hand to part their *openings*, and then held their
+            // closings to each other -- which is a claim about two different
+            // sets. The relation is a proof, and soundness is held next door.
+            if spelling.is_subtype_of(&b) && b.is_subtype_of(spelling) {
+                let other = b.with_records_open(Openness::Closed);
+                for value in &universe {
+                    prop_assert_eq!(
+                        member_full(&closed, value, &pool),
+                        member_full(&other, value, &pool),
+                        "two equal sets closed to two sets, parting at {:?}", value
+                    );
+                }
+            }
+        }
+    }
+
+    // THEORY: open-and-close-read-the-region
+    /// `open` only widens, `close` only narrows, and closing an opened term is
+    /// **at most** closing the term.
+    ///
+    /// At most, and not equal, which is the shape this law read as until a
+    /// generator drew the term that parts them. `{"a"?: anything}` and `{}` are
+    /// two sets and both open to every dict, so `open` is not injective and
+    /// nothing `close` does can recover which of the two it was handed. The
+    /// equality holds wherever the opened term keeps its declared names; a name
+    /// a full catch-all makes redundant is dropped, because two spellings of
+    /// one set must close to one set, and
+    /// `an_optional_field_a_catch_all_already_says_is_dropped` carries the
+    /// value that shows it.
+    ///
+    /// Asked of a term with no complement in it, and the law below is the other
+    /// half: under a negation the two operators swap, so "open admits more" is
+    /// a claim about the record the transform rewrites and about the whole
+    /// schema only where nothing negates it in between.
+    #[test]
+    fn opening_widens_closing_narrows_and_the_round_trip_is_at_most_closing(
+        schema in decidable_schema(),
+    ) {
+        prop_assume!(under_no_complement(&schema));
+        let pool = const_pool();
+        let opened = schema.with_records_open(Openness::Open);
+        let closed = schema.with_records_open(Openness::Closed);
+        let round_trip = opened.with_records_open(Openness::Closed);
+        for value in &boundary_values(&[&schema, &opened, &closed]) {
+            prop_assert!(
+                !member_full(&schema, value, &pool) || member_full(&opened, value, &pool),
+                "opening dropped {:?}", value
+            );
+            prop_assert!(
+                !member_full(&closed, value, &pool) || member_full(&schema, value, &pool),
+                "closing admitted {:?}, which the term does not", value
+            );
+            prop_assert!(
+                !member_full(&round_trip, value, &pool) || member_full(&closed, value, &pool),
+                "closing an opened term admitted {:?}, which closing it does not",
+                value
+            );
+        }
+    }
+
+    // THEORY: open-and-close-read-the-region
+    /// Under a negation the two operators swap, and the swap is exact.
+    ///
+    /// `open` rewrites the record it reaches whatever stands above it, so a
+    /// complement over a widened set is a narrowed one. A caller reads the
+    /// name and expects the schema to admit more; inside a `complement` it
+    /// admits less, and nothing about the call site says so. The law is here
+    /// so the direction is a property of the tree rather than a paragraph.
+    #[test]
+    fn opening_under_a_complement_narrows_and_closing_widens(
+        schema in decidable_schema(),
+    ) {
+        prop_assume!(under_no_complement(&schema));
+        let pool = const_pool();
+        let negated = schema.clone().complement();
+        let opened = negated.with_records_open(Openness::Open);
+        let closed = negated.with_records_open(Openness::Closed);
+        for value in &boundary_values(&[&schema, &negated]) {
+            prop_assert!(
+                !member_full(&opened, value, &pool) || member_full(&negated, value, &pool),
+                "opening under a complement admitted {:?}", value
+            );
+            prop_assert!(
+                !member_full(&negated, value, &pool) || member_full(&closed, value, &pool),
+                "closing under a complement dropped {:?}", value
+            );
         }
     }
 

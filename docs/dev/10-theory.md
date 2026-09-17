@@ -506,7 +506,7 @@ declaring no field frees every key on its own, so `{"a?": int}` and
 `{} | {"a": int}` -- one set, two spellings -- open into two.
 **[OBLIGATION: open-and-close-read-the-region]**
 
-HELD-BY: opening_a_mapping_frees_the_region_no_clause_claims, with_records_open_keeps_the_region_a_mapping_claims, opening_a_record_that_claims_a_region_leaves_one_clause, test_a_clause_is_read_the_same_with_or_without_a_field_beside_it, test_closing_is_a_function_of_the_set, test_closing_is_a_function_of_the_set_however_it_is_spelled, test_opening_is_not_a_function_of_the_set
+HELD-BY: opening_a_mapping_frees_the_region_no_clause_claims, with_records_open_keeps_the_region_a_mapping_claims, opening_a_record_that_claims_a_region_leaves_one_clause, test_a_clause_is_read_the_same_with_or_without_a_field_beside_it, test_closing_is_a_function_of_the_set, test_closing_is_a_function_of_the_set_however_it_is_spelled, test_opening_is_not_a_function_of_the_set, closing_is_a_function_of_the_set_however_it_is_spelled, opening_widens_closing_narrows_and_the_round_trip_is_at_most_closing, opening_under_a_complement_narrows_and_closing_widens, closing_an_opened_record_is_not_closing_the_record, test_closing_an_opened_schema_is_not_closing_it
 
 **The IR is exactly as expressive as its producers.** Every variant the enum
 has is one the frontend or the fuzzer builds, and a variant no producer reaches

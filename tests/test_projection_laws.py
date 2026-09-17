@@ -201,3 +201,40 @@ def test_a_projection_returns_a_new_validator(spelling: object) -> None:
     assert repr(original) == before
     assert opened is not original
     assert closed is not original
+
+
+# THEORY: open-and-close-read-the-region
+def test_closing_an_opened_schema_is_not_closing_it() -> None:
+    """The two values where the round trip is strict, and what each is about.
+
+    `close` after `open` reads as a round trip and is not one, because `open`
+    is not injective: it normalises, and both normalisations are forced.
+
+    A declared name admitting everything says exactly what the catch-all an
+    opening writes already says, so it goes -- and it has to, or `{"a?":
+    anything}` and `{}`, which are one set once opened, would close to two.
+    Two clauses carrying one value are one clause over the union of their keys,
+    so opening `dict[str, anything]` gives a single clause over every key --
+    and that has to be so too, since the long spelling is keyed by a complement
+    and the set representation declines that shape.
+
+    Neither is recoverable, which is why `tests/test_laws.py` holds the
+    direction and not the equality.
+    """
+    # A declared name a full catch-all already says.
+    record = Validator({"a?": object})
+    assert record.close().is_valid({"a": 1})
+    assert record.open().is_valid({"a": 1})
+    assert not record.open().close().is_valid({"a": 1})
+    assert record.open().close() == Validator({})
+
+    # Two clauses carrying one value, folded into one over every key.
+    mapping = Validator(dict[str, object])
+    assert mapping.close().is_valid({"a": 1})
+    assert repr(mapping.open()) == "dict[anything, anything]"
+    assert not mapping.open().close().is_valid({"a": 1})
+
+    # And the shape the round trip does hold of, so the strictness above reads
+    # as the exception it is rather than as the rule.
+    typed = Validator(dict[str, int])
+    assert typed.open().close() == typed

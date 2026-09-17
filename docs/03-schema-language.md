@@ -393,7 +393,9 @@ only the key-types beside it.
 
 They apply at any depth, including inside a recursive definition. They are
 projections rather than inverses: applying either twice changes nothing the
-second time, and `close` after `open` returns exactly the regions `open` freed.
+second time, and `close` after `open` is **at most** `close` -- it returns the
+regions `open` freed wherever opening leaves the term's own names and clauses
+standing, which is everywhere but the two shapes below.
 
 ```python
 from valgebra import Validator
@@ -416,6 +418,33 @@ assert beside_a_field.close().is_equivalent(beside_a_field)
 assert beside_a_field.open().is_valid({"name": "Ada", 7: "free"})
 assert not beside_a_field.open().is_valid({"name": "Ada", "count": "not an int"})
 ```
+
+Where it is not a round trip, the reason is that `open` **normalises**, and
+both normalisations are forced. A declared name admitting everything says what
+the catch-all an opening writes already says, so it goes -- and it has to, or
+`{"a?": anything}` and `{}`, one set once opened, would close to two. Two
+clauses carrying one value are one clause over the union of their keys, so
+opening `dict[str, anything]` gives a single clause over every key -- and that
+has to be so too, since the long spelling is keyed by a complement, a shape
+[the set representation declines](15-decidability.md). Neither is recoverable,
+so closing afterwards lands on the smaller term:
+
+```python
+from valgebra import Validator
+
+record = Validator({"a?": object})
+assert record.close().is_valid({"a": 1})  # closing it alone keeps the name
+assert record.open().is_valid({"a": 1})
+assert not record.open().close().is_valid({"a": 1})  # the name is gone
+assert record.open().close() == Validator({})
+
+mapping = Validator(dict[str, object])
+assert repr(mapping.open()) == "dict[anything, anything]"  # two clauses, folded
+assert not mapping.open().close().is_valid({"a": 1})
+```
+
+`dict[str, int]` above is the ordinary case: its clause carries a value that is
+not the top, nothing folds, and the round trip is exact.
 
 To free some key-types and constrain others without `open`, write the
 permissive clause yourself as the `complement` of the keys you constrained —

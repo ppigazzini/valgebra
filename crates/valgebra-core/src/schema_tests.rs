@@ -498,6 +498,43 @@ fn with_records_open_flips_every_record_in_the_tree() {
     assert!(!record_is_open(homogeneous_elem(&closed)));
 }
 
+// THEORY: open-and-close-read-the-region
+/// `close` after `open` is **not** `close`, and the projections say so.
+///
+/// Two closed records, `{"a"?: anything}` and `{}`, are two sets: the first
+/// admits a dict carrying `a`, the second admits the empty dict alone. Both
+/// open to every dict, because an optional name admitting everything says what
+/// the catch-all an opening writes already says -- so `open` is not injective
+/// there, and no operator on sets can recover which of the two it was handed.
+///
+/// The round trip holds wherever the opened term keeps its declared names,
+/// which is everywhere but here, so a page promising it outright promises more
+/// than the operators give. The value below is the one a law over drawn terms
+/// finds, and it is the whole of the exception.
+#[test]
+fn closing_an_opened_record_is_not_closing_the_record() {
+    let optional = |schema| {
+        vec![Field {
+            name: "a".into(),
+            schema,
+            required: false,
+        }]
+    };
+    let free = Schema::record(optional(Schema::ANYTHING), Openness::Closed);
+    let empty_closed = Schema::record(Vec::new(), Openness::Closed);
+    assert_ne!(free, empty_closed);
+
+    // Closing it is the identity: it is closed, and closing moves one region.
+    assert_eq!(free.with_records_open(Openness::Closed), free);
+    // Closing it *after* opening it is the empty closed record, which is the
+    // price of `close` being a function of the set rather than of the term.
+    assert_eq!(
+        free.with_records_open(Openness::Open)
+            .with_records_open(Openness::Closed),
+        empty_closed
+    );
+}
+
 // THEORY: no-negative-clause-component
 /// Opening reads the labels on the semantic `dom`, which is what makes it a
 /// function on sets.

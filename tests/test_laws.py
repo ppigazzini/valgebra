@@ -38,6 +38,11 @@ pytestmark = pytest.mark.filterwarnings(
 # container and sequence forms make the laws (and the simplifier) recurse into a
 # Seq/Coll/Mapping node, not just scalars.
 ATOM_SCHEMAS = [
+    # The top. Drawn rather than left out, because an optional field holding it
+    # is the one shape where `open` is not injective -- `{"a?": anything}` and
+    # `{}` are two sets that open to one -- and a universe without it holds the
+    # round-trip law below by never asking it the question.
+    object,
     int,
     float,
     str,
@@ -216,22 +221,34 @@ def equivalent(left: Validator, right: Validator, extra: list[object]) -> bool:
 
 
 # THEORY: open-and-close-read-the-region
-@given(a=schemas, vals=value_lists)
+@given(a=schemas, b=schemas, vals=value_lists)
 def test_closing_is_a_function_of_the_set_however_it_is_spelled(
-    a: object, vals: list[object]
+    a: object, b: object, vals: list[object]
 ) -> None:
     """Equal sets close to equal sets, which is what puts `close` in the algebra.
 
     Openness is the default of the key-type region no clause claims, and a
-    region is a set of keys rather than a way of writing one. The respelling is
-    a union with a redundant branch, because that is the shape the one declared
-    exception lives in: `open` parts there and `close` does not, so drawing it
-    is what makes this law's silence about `open` deliberate.
+    region is a set of keys rather than a way of writing one. This law's
+    silence about `open` is deliberate: `open` parts on a pair `close` does
+    not, and `tests/test_projection_laws.py` carries it.
 
-    `tests/test_projection_laws.py` carries the pair that separates the two.
+    The respelling is **absorption**, `a | (a & b)`, for a second drawn `b`.
+    `a | (a & a)` reads like a respelling and is not one: the constructors fold
+    the meet to `a` and the union to `a`, so the law compares a term with
+    itself and passes for the reason a true law does.
+
+    Asked of the opened term as well, because `close` is the identity on most
+    of what is drawn -- a record with no clause is closed already -- and a law
+    about an operator wants terms the operator moves.
     """
-    respelled = union(a, intersection(a, a))
-    assert equivalent(Validator(a).close(), Validator(respelled).close(), vals)
+    for spelling in (a, Validator(a).open()):
+        respelled = union(spelling, intersection(spelling, b))
+        assert equivalent(Validator(spelling), Validator(respelled), vals), (
+            "absorption is a different set"
+        )
+        assert equivalent(
+            Validator(spelling).close(), Validator(respelled).close(), vals
+        )
 
 
 @given(a=schemas, vals=value_lists)
@@ -260,17 +277,27 @@ def test_closing_refuses_what_the_schema_refuses(a: object, vals: list[object]) 
 
 
 @given(a=schemas, vals=value_lists)
-def test_closing_an_opened_schema_returns_the_regions_it_freed(
+def test_closing_an_opened_schema_is_at_most_closing_it(
     a: object, vals: list[object]
 ) -> None:
-    """`close` after `open` is `close`, because the two move one region.
+    """`close` after `open` is **at most** `close`, and not equal to it.
 
-    Opening sets the default of the region no clause claims to the top and
-    closing sets it to nothing, so the pair is idempotent on that region and
-    touches no other -- which is the round trip a caller reads them as.
+    The pair moves one region -- the keys no clause claims -- and leaves every
+    claimed one alone, which reads as a round trip and is not one: `open` is
+    not injective. `{"a?": anything}` and `{}` are two sets that open to the
+    same one, and `dict[str, anything]` opens to a single clause over every
+    key, because two clauses carrying the same value are one clause. Neither
+    normalisation is optional -- without them `open` and `close` would map
+    equal sets to unequal ones -- and neither is recoverable.
+
+    So the direction is what holds, and `tests/test_projection_laws.py` carries
+    the values where the inclusion is strict.
     """
     schema = Validator(a)
-    assert equivalent(schema.open().close(), schema.close(), vals)
+    round_trip, closed = schema.open().close(), schema.close()
+    for value in [*VALUES, *vals]:
+        if round_trip.is_valid(value):
+            assert closed.is_valid(value), value
 
 
 # THEORY: lattice-theory
