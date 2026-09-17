@@ -1720,6 +1720,138 @@ jobs:
         run: |
           python3 scripts/mutation_gate.py --baseline walk --out walk-mutants/mutants.out
 
+  nightly-mutants-pytest:
+    name: nightly mutation sweep (pytest) ${{ matrix.shard }}
+    # The other half of the binding's mutation scope. Seven files of
+    # `valgebra-py` are reached only through the shipped extension -- the entry
+    # points, the exception, the report the walk hands back, the render -- so the
+    # sweep beside this one excludes them: `cargo test` never loads the
+    # extension, and every mutant of those files would survive while saying
+    # nothing about the tests.
+    #
+    # This is the sweep that observes them. `.cargo/mutants-pytest.toml` examines
+    # exactly that set, and the test command is
+    # `crates/valgebra-py/tests/pytest_sweep.rs`, which rebuilds the extension
+    # from the mutated copy and runs the Python suite against it. A mutant one of
+    # those files carries is caught here or nowhere.
+    #
+    # Scheduled and manual only. The cost is a rebuild and a suite run per
+    # mutant -- about a minute each against the seconds an ordinary mutant takes
+    # -- which is a price a merge must never pay.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # Six shards of a sweep whose mutants cost a minute apiece on two cores;
+    # twice the reading, as the core sweep's ceiling is twice its slowest shard.
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        with:
+          tool: cargo-mutants@27.1.0
+      # The interpreter the verdict is about, pinned as the walk sweep pins it:
+      # a mutant 3.14 reports as a survivor is one 3.12 kills, because the two
+      # answer a C accessor differently.
+      - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.12"
+      - name: Name where the sweep's environments live, and warm the cache
+        # Outside the checkout: a sweep runs from a *copy* of the tree, so a
+        # path inside one names a different directory per mutant and a `.venv`
+        # the copy carries is one the mutant's own build would write into.
+        #
+        # The wrapper builds one environment *per worker* beside this path and
+        # reuses it for every mutant that worker runs -- two workers rebuilding
+        # the extension into one environment race, and the race ends the sweep.
+        # Resolving the lock file here is what makes each of those cheap: uv's
+        # download cache is warm by the time the first mutant asks.
+        run: |
+          echo "VALGEBRA_SWEEP_VENV=$RUNNER_TEMP/sweep-venv" >> "$GITHUB_ENV"
+          UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/sweep-venv" \
+            uv sync --locked --no-install-project
+      - name: Sweep the files the Python suite is the only caller of
+        run: |
+          # The baseline build links pyo3 against the same interpreter the
+          # suite runs, so a mutant's verdict and the suite's are about one
+          # Python. The workers' own environments are built from the same lock
+          # file, so this one answers for all of them.
+          export PYO3_PYTHON="$VALGEBRA_SWEEP_VENV/bin/python"
+          libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
+          export LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}"
+          set +e
+          # Round-robin, as the core sweep shards: a consecutive slice puts one
+          # expensive file in one shard, and here every mutant costs a suite run
+          # so an unbalanced shard is the one that hits the ceiling.
+          cargo mutants --config .cargo/mutants-pytest.toml \
+            --package valgebra-py --features pytest-sweep \
+            -j 2 --timeout-multiplier 20 \
+            --shard "${{ matrix.shard }}/6" --sharding round-robin \
+            --output pytest-mutants
+          status=$?
+          set -e
+          # The same exit-code policy as the sweeps beside this one: missed
+          # mutants and timeouts are the ratchet's business, a usage error or a
+          # broken baseline is not.
+          case "$status" in
+            0 | 2 | 3) ;;
+            *) exit "$status" ;;
+          esac
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pytest-mutants-${{ matrix.shard }}
+          path: pytest-mutants/mutants.out
+          retention-days: 7
+
+  nightly-mutants-pytest-ratchet:
+    name: nightly mutation report (pytest)
+    # Ratchet the suite's survivors, merged from the shards that partition them.
+    # Runs even where a shard failed, so a broken shard is reported by that
+    # shard rather than hidden behind a ratchet that never ran.
+    needs: nightly-mutants-pytest
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: pytest-mutants-*
+          path: shards
+      - name: Merge the shards into one sweep
+        env:
+          # The sweep's shard matrix, held to it by tests/test_required_jobs.py.
+          SHARDS: "6"
+        run: |
+          # A whole sweep, or none -- the argument the core sweep's merge
+          # carries: the ratchet's expiry direction reads a mutant's absence as
+          # proof the tests killed it, so a shard that died before uploading
+          # would report a clean sweep over mutants nobody ran.
+          found=$(find shards -mindepth 1 -maxdepth 1 -type d -name 'pytest-mutants-*' | wc -l)
+          if [ "$found" -ne "$SHARDS" ]; then
+            echo "::error::the sweep has $found of $SHARDS shards; the ratchet needs all of them"
+            exit 2
+          fi
+          mkdir -p pytest-mutants/mutants.out
+          for name in caught missed timeout unviable; do
+            find shards -name "$name.txt" -exec cat {} + > "pytest-mutants/mutants.out/$name.txt"
+          done
+          wc -l pytest-mutants/mutants.out/*.txt
+      - name: Ratchet the suite's survivors against the baseline
+        run: |
+          python3 scripts/mutation_gate.py --baseline pytest \
+            --out pytest-mutants/mutants.out
+
   fuzz-build:
     name: fuzz build
     # Compile-only check that the libFuzzer targets still build against the
@@ -1856,6 +1988,8 @@ jobs:
         nightly-mutants,
         nightly-mutants-ratchet,
         nightly-mutants-walk,
+        nightly-mutants-pytest,
+        nightly-mutants-pytest-ratchet,
         nightly-floor-names,
         nightly-branch-coverage,
       ]
@@ -1910,6 +2044,10 @@ jobs:
            needs['nightly-mutants-ratchet'].result != 'skipped') ||
           (needs['nightly-mutants-walk'].result != 'success' &&
            needs['nightly-mutants-walk'].result != 'skipped') ||
+          (needs['nightly-mutants-pytest'].result != 'success' &&
+           needs['nightly-mutants-pytest'].result != 'skipped') ||
+          (needs['nightly-mutants-pytest-ratchet'].result != 'success' &&
+           needs['nightly-mutants-pytest-ratchet'].result != 'skipped') ||
           (needs['nightly-floor-names'].result != 'success' &&
            needs['nightly-floor-names'].result != 'skipped') ||
           (needs['nightly-branch-coverage'].result != 'success' &&

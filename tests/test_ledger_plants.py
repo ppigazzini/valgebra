@@ -476,6 +476,21 @@ PLANTS = (
         ),
     ),
     Plant(
+        # A file excused from the ordinary sweep because the Python suite covers
+        # it, and examined by no sweep that runs the Python suite. The exclusion
+        # still reads as coverage and the file is measured by nothing, which is
+        # the exact state the second configuration exists to make impossible --
+        # and which nothing else in the tree would notice.
+        "tests/test_pytest_sweep_scope.py",
+        (".cargo/mutants-pytest.toml",),
+        lambda tree: _edit(
+            tree,
+            ".cargo/mutants-pytest.toml",
+            '    "crates/valgebra-py/src/render.rs",\n',
+            "",
+        ),
+    ),
+    Plant(
         # The other end of the theory ledger: a claim renamed on the page,
         # which leaves every marker naming it pointing at nothing while still
         # reading like a pointer. The `HELD-BY:` direction does not see it --

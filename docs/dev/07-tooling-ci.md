@@ -413,10 +413,11 @@ path and measuring nothing.
 
 ### The mutation ratchets
 
-Two sweeps, each with its own committed baseline: the core crate, and the
+Three sweeps, each with its own committed baseline: the core crate, the
 binding's soundness surfaces — the membership walk with the context it carries
 and the precompute it reads, the `Value` both input paths run over, the
-frontend's four files, equality, and the oracle. `scripts/mutation_gate.py` fails in
+frontend's four files, equality, and the oracle, and the files the shipped
+extension is the only caller of. `scripts/mutation_gate.py` fails in
 **three** directions — a survivor the baseline does not accept, an accepted
 entry that no mutant answers to, and an accepted entry naming a file the tree
 does not track. The second keeps the accepted set honest: an accepted hole the
@@ -454,6 +455,43 @@ workflow's skip list to each other in both directions. A mutant whose
 experiment cannot finish is a rig fault, not a detection -- and a mutant the
 skipped tests would hang on is still caught by the rest of the suite, which is
 what the bound's own tests are for.
+
+**The third sweep runs the Python suite per mutant.** Seven files of the
+binding are reached only through the shipped extension, and `cargo test` never
+loads it, so an ordinary sweep reads every mutant of them as a survivor while
+measuring nothing. `.cargo/mutants-pytest.toml` examines exactly those files
+with a test command that does load it: behind the `pytest-sweep` feature,
+`crates/valgebra-py/tests/pytest_sweep.rs` rebuilds the extension from the
+mutated copy and runs the suite against it.
+
+The environments live **outside** the tree, because a sweep runs from a copy: a
+path inside one names a different directory per mutant, and the copy's own build
+would write into it. `VALGEBRA_SWEEP_VENV` says where, and the wrapper fails
+rather than skipping where the variable is unset -- a sweep that lost it would
+report every mutant caught while running no suite, which is the reading this
+whole configuration exists to end.
+
+**One environment per worker.** `-j 2` runs two workers in two copies of the
+tree, and two workers building the extension into one environment write the same
+files at the same moment: `File exists`, and the run ends a third of the way
+through with no verdict. The wrapper keys the environment on the checkout's own
+directory name, which a sweep makes unique per worker, and builds it from the
+lock file the first time that worker asks. Resolving the lock once up front is
+what makes each of those cheap.
+
+```bash
+export VALGEBRA_SWEEP_VENV="$PWD/../sweep-venv"
+UV_PROJECT_ENVIRONMENT="$VALGEBRA_SWEEP_VENV" uv sync --locked --no-install-project
+export PYO3_PYTHON="$VALGEBRA_SWEEP_VENV/bin/python"
+export LD_LIBRARY_PATH="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"
+cargo mutants --config .cargo/mutants-pytest.toml --package valgebra-py \
+  --features pytest-sweep -j 2 --timeout-multiplier 20 --output pytest-sweep
+python scripts/mutation_gate.py --baseline pytest --out pytest-sweep/mutants.out
+```
+
+Budget an hour a shard: a mutant costs a rebuild and a suite run, about a
+minute each, against the seconds an ordinary mutant takes. The lane shards it
+six ways and is scheduled only.
 
 **The walk sweep links one interpreter.** `cargo test` for the binding embeds
 the interpreter `ci.yml` names for that lane (CPython 3.12), and a survivor's

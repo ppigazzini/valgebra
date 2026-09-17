@@ -1,0 +1,42 @@
+# The sweep whose test command loads the shipped extension.
+#
+# Seven files of `valgebra-py` are reached only through it -- the entry points,
+# the exception, the report the walk hands back, the render -- so `cargo test`
+# never calls them and every mutant of them survives a sweep run the ordinary
+# way. They were excluded by name in `.cargo/mutants.toml`, each with the reason
+# "reached only through pytest, which this harness cannot observe". This is the
+# configuration that observes it: `crates/valgebra-py/tests/pytest_sweep.rs`
+# rebuilds the extension from the mutated copy and runs the Python suite against
+# it, so a mutant those files carry is caught by the suite or by nothing.
+#
+# Run with `--features pytest-sweep` and `VALGEBRA_SWEEP_VENV` naming a prepared
+# environment; the test refuses rather than passing where the variable is unset,
+# because a sweep that lost it would report every mutant caught while measuring
+# nothing. `docs/dev/07-tooling-ci.md` carries the whole invocation.
+#
+# The examples and the build script stay out for the reasons they always had:
+# neither is code a test can observe. `workload.rs` stays out because it is the
+# instruction gate's own instrument, which no caller reaches and no suite runs.
+exclude_globs = [
+    "crates/valgebra-py/examples/**",
+    "crates/valgebra-py/build.rs",
+    "crates/valgebra-py/src/workload.rs",
+]
+
+# Only the files the ordinary sweep cannot see. The rest are swept there, with a
+# corpus of their own, and sweeping them again at a suite run apiece would spend
+# hours re-proving what a second is already proving.
+examine_globs = [
+    "crates/valgebra-py/src/check.rs",
+    "crates/valgebra-py/src/exception.rs",
+    "crates/valgebra-py/src/validator.rs",
+    "crates/valgebra-py/src/check/violation.rs",
+    "crates/valgebra-py/src/errors.rs",
+    "crates/valgebra-py/src/lib.rs",
+    "crates/valgebra-py/src/render.rs",
+]
+
+# Every mutant pays a rebuild and a suite run, so the baseline is a minute and
+# the slow ones are several. The number the lanes pass on the command line, held
+# equal to it by `tests/test_mutation_scope.py`.
+timeout_multiplier = 20.0

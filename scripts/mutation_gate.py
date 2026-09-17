@@ -56,6 +56,11 @@ ROOT = Path(__file__).resolve().parent.parent
 BASELINES = {
     "core": ROOT / "scripts" / "mutation_baseline.json",
     "walk": ROOT / "scripts" / "mutation_baseline_walk.json",
+    # The files the shipped extension is the only caller of, swept with a test
+    # command that loads it. Its own set, for the reason the other two have
+    # theirs: a different command with a different harness, and neither can
+    # absorb the other's survivors.
+    "pytest": ROOT / "scripts" / "mutation_baseline_pytest.json",
 }
 
 # `path:LINE:COL: description` -> `path: description`

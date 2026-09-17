@@ -81,7 +81,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Thirty of them:
+for and misses the other. Thirty-one of them:
 
 | Ledger | Holds |
 |---|---|
@@ -111,6 +111,7 @@ for and misses the other. Thirty of them:
 | `tests/test_coverage_scope.py` | every coverage lane names its scope, and the scope is the tree's |
 | `tests/test_typed_consumer.py` | every public name is put through `assert_type` by the typed consumer |
 | `tests/test_frontend_refusals.py` | every frontend refusal message is matched by a test, or accepted with a reason |
+| `tests/test_pytest_sweep_scope.py` | every file the sweep excuses to pytest is examined under pytest |
 | `tests/test_relation_ledger.py` | every ordered pair of schema variants is decided or declined with a reason |
 | `tests/test_form_ledger.py` | every form the schema-language pages tabulate is driven by a test |
 | `tests/test_surface_outcomes.py` | every outcome the binding's docstrings name is asserted by a test |
@@ -119,7 +120,7 @@ for and misses the other. Thirty of them:
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are thirty.
+because a table nothing counts is the one that drifts: there are thirty-one.
 
 The last is a ledger over the rest, and it exists because reading a
 ledger cannot tell you whether it can fail. `test_local_gate.py` filtered its
@@ -317,12 +318,21 @@ relations true by construction and asserts the procedure decides each.
 
 ## The limit
 
-**Adequacy is measured on the Rust side only.** Both mutation sweeps run
-`cargo test`; the Python suite never executes under either, so a survivor is a
-gap in the Rust corpus and not necessarily in the tests as a whole. That is the
-reason a swept binding file carries a corpus of its own, and the reason the
-files that carry none are excluded by name rather than swept and baselined: a
-sweep whose survivors all say "pytest covers this" measures the harness.
+**Adequacy is measured per harness, and every file has one.** Two of the three
+sweeps run `cargo test`, so a survivor of either is a gap in the *Rust* corpus:
+that is the reason a swept binding file carries a corpus of its own. The seven
+files the extension is the only caller of carry none, and a `cargo test` sweep
+over them measures the harness rather than the tests -- every mutant survives,
+whatever the Python suite does.
+
+The third sweep is those seven files, with a test command that loads the
+extension. `crates/valgebra-py/tests/pytest_sweep.rs` rebuilds it from the
+mutated copy and runs the Python suite against it, so a mutant one of them
+carries is caught by that suite or by nothing, and the survivors are ratcheted
+against a baseline of their own. The excuse those files were excluded under is
+a number now: `tests/test_pytest_sweep_scope.py` holds the two configurations to
+a partition of the binding, so a file excused to the suite and examined nowhere
+fails.
 
 **A coverage floor is read with its scope or it misleads.** The Python package
 floor covers the re-export package, which is a hundred-odd lines; the extension

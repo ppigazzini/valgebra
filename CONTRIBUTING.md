@@ -119,16 +119,20 @@ file that owns the contract and the single command that reproduces its verdict.
 | membership held and decisions only widened | `scripts/metamorphic_reference.json` | `uv run python scripts/metamorphic_gate.py` |
 | core mutation adequacy | `scripts/mutation_baseline.json` | `cargo mutants --package valgebra-core -- -- --skip deep_subtype_into_bottom_terminates --skip subtyping_terminates_on_a_distributed_tower` |
 | walk mutation adequacy | `scripts/mutation_baseline_walk.json` | `cargo mutants --package valgebra-py --features interpreter-tests -- -- --skip recursion_deeper_than_the_bound_is_refused` |
-| a mutation verdict | either baseline | `python3 scripts/mutation_gate.py --baseline core` |
+| suite mutation adequacy | `scripts/mutation_baseline_pytest.json` | `cargo mutants --config .cargo/mutants-pytest.toml --package valgebra-py --features pytest-sweep` |
+| a mutation verdict | any baseline | `python3 scripts/mutation_gate.py --baseline core` |
 | supply chain (Rust) | `deny.toml` | `cargo deny check` |
 | supply chain (Python) | `uv.lock` | `uv run pip-audit` |
 | workflow security | `.github/workflows/`, `.github/actions/` | `uvx zizmor .github/workflows/ .github/actions/` |
 | the profile-guided build's training run | `scripts/pgo_workload.py`, `pyproject.toml` `pgo-command` | `uv run --group bench maturin build --release --pgo --out dist` |
 
-The two mutation rows take a skip list; `docs/dev/07-tooling-ci.md` says which
-and why. The binding row sweeps the crate minus the exclusions
-`.cargo/mutants.toml` names, which is a superset of what the lane's own step
-runs; that step's `--file` list lives in `.github/workflows/ci.yml` and is not
+The first two mutation rows take a skip list; `docs/dev/07-tooling-ci.md` says
+which and why. The third needs `VALGEBRA_SWEEP_VENV` naming a place outside the
+tree for its environments -- one per sweep worker, built from the lock file --
+and fails rather than skipping without one; that document carries the whole
+invocation. The binding row sweeps the crate minus
+the exclusions `.cargo/mutants.toml` names, which is a superset of what the
+lane's own step runs; that step's `--file` list lives in `.github/workflows/ci.yml` and is not
 copied here, because a list in two places drifts by one entry and reads exactly
 like one that has not. Commands that need an embedded interpreter need its library directory
 on the loader path — the binding-coverage job in `.github/workflows/ci.yml` shows
@@ -205,16 +209,18 @@ sampled at its ends. Which leg is allowed to fail without blocking is `ci.yml`'s
 `continue-on-error` and nothing else reads it.
 
 Scheduled lanes run the deep property suites, a libFuzzer soak over the
-core, and two mutation sweeps — the core crate, and the membership walk under an
-embedded interpreter — whose survivors are ratcheted against their own committed
-baselines: a survivor the baseline does not accept fails the lane, and so does a
+core, and three mutation sweeps — the core crate, the membership walk under an
+embedded interpreter, and the files the shipped extension is the only caller of,
+swept with the Python suite as the test command — whose survivors are ratcheted
+against their own committed baselines: a survivor the baseline does not accept fails the lane, and so does a
 baseline entry whose mutant the tests kill. The target is never zero —
 equivalent mutants exist and are undecidable — so an accepted survivor carries
 the argument for why no test can kill it.
-Every push also runs the same sweeps **restricted to the whole files the diff
+Every push also runs the first two **restricted to the whole files the diff
 touches**, which is bounded by the change rather than by the tree and so blocks
-merges; it checks the new-survivor direction alone, because a partial sweep never
-generates most of the baseline and the expiry direction is not its to judge.
+merges; the third costs a suite run per mutant and stays on the schedule. Each
+checks the new-survivor direction alone, because a partial sweep never generates
+most of the baseline and the expiry direction is not its to judge.
 Performance is gated two ways: a **deterministic cachegrind instruction count**
 over the core engine compared to a committed budget, and a **competitive ratio**
 of per-call time against pydantic-core across a shape matrix. Both are

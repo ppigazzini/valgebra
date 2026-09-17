@@ -229,6 +229,32 @@ def test_a_schema_at_the_depth_limit_still_works() -> None:
         Validator([deep])
 
 
+def test_the_definition_bound_admits_its_own_number_and_refuses_one_past() -> None:
+    """The bound is `more than MAX_DEFINITIONS`, at the number itself and past it.
+
+    A bound stated as a limit has two edges and only one of them is a refusal.
+    Nothing drove either: the suite built chains far past the number, where a
+    comparison off by one still refuses, so a bound reading `>=` -- which would
+    refuse the largest schema a caller is promised -- or `==` -- which would
+    admit everything above it -- passed unnoticed. Both edges are asked here.
+    """
+
+    def chain(links: int) -> object:
+        # Distinct recursive definitions, which is what the bound counts: each
+        # `recursive` call adds one, and nesting them keeps the depth small.
+        schema: object = recursive(lambda t: union(None, [t]))
+        for _ in range(links - 1):
+            inner = schema
+            schema = recursive(lambda t, inner=inner: union(inner, [t]))
+        return schema
+
+    # The number itself is the largest a caller is promised, and it builds.
+    assert Validator(chain(MAX_DEFINITIONS)).is_valid(None)
+    # One past it is refused, by the message that names the bound.
+    with pytest.raises(ValueError, match="too many recursive definitions"):
+        Validator(chain(MAX_DEFINITIONS + 1))
+
+
 def test_the_published_bounds_are_positive() -> None:
     # The bounds a caller sizes schemas against are exported and sane.
     assert MAX_SCHEMA_DEPTH > 0

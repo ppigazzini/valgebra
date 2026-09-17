@@ -21,12 +21,18 @@
 # running this by hand, or read a verdict that is about the interpreter --
 # `docs/dev/07-tooling-ci.md` carries the whole invocation.
 #
-# The files excluded below are reached only through pytest, which this harness
-# cannot observe, so their mutants would all "survive" and say nothing about the
-# tests. That claim is checked per file rather than assumed: a file excluded on
-# it and swept anyway reports survivors the Python suite was believed to cover,
-# and a file excluded on it wrongly hides them. Bringing one into the sweep
-# means writing it a Rust corpus first.
+# The files excluded below are reached only through pytest, which *this* harness
+# cannot observe: `cargo test` never loads the extension, so their mutants would
+# all "survive" and say nothing about the tests.
+#
+# Excluded here and measured elsewhere. `.cargo/mutants-pytest.toml` examines
+# exactly this set with a test command that builds the extension from the
+# mutated copy and runs the Python suite against it, so a mutant one of them
+# carries is caught by that suite or by nothing. The two configurations
+# partition the binding, and `tests/test_pytest_sweep_scope.py` holds the
+# partition in both directions: a file excused to pytest and examined nowhere
+# fails, and so does one swept twice. Bringing a file into *this* sweep means
+# writing it a Rust corpus first, and taking it out of that one.
 #
 # Each is excluded by name rather than by a crate-wide glob, so a new file joins
 # the sweep by default instead of silently inheriting an exclusion — and
@@ -46,6 +52,8 @@ exclude_globs = [
     # The annotation render, whose answers are the snapshot corpus in pytest.
     # Named on its own line rather than grouped with the workload below, because
     # a file sharing another's reason is a file whose own reason nobody checks.
+    # The survivors that corpus accepts are recorded in
+    # `scripts/mutation_baseline_pytest.json`, each with the argument for it.
     "crates/valgebra-py/src/render.rs",
     # The instruction gate's own workload: a measuring instrument no caller
     # reaches and no suite runs, so a mutant of it is a mutant nothing can
@@ -161,4 +169,8 @@ exclude_re = [
 ]
 
 # A few mutants run longer than the baseline; give generous headroom over it.
-timeout_multiplier = 5.0
+# The number the lanes pass on the command line, which wins over this file:
+# `tests/test_mutation_scope.py` holds the two equal, because a timeout counts as
+# a survivor and a local sweep judging at a tighter multiple reports survivors
+# about the machine rather than about the tests.
+timeout_multiplier = 20.0

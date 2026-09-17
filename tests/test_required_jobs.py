@@ -144,8 +144,36 @@ def test_the_gate_names_no_job_the_workflow_lacks() -> None:
     )
 
 
-def test_the_merge_counts_the_shards_the_sweep_is_cut_into() -> None:
-    """The merged sweep's shard count is the sweep's own matrix.
+def _merges(jobs: dict) -> dict[str, tuple[str, int]]:
+    """Every job that merges a sharded sweep, with the sweep and its count.
+
+    Derived from the step rather than listed, because a second sharded sweep is
+    exactly the kind of thing a hand-written pair list does not grow to cover --
+    and the pair that went unlisted would be the one whose guard was never
+    checked. A merge is recognised by its step name, and the sweep it merges by
+    the job it needs.
+    """
+    found = {}
+    for name, job in jobs.items():
+        merge = next(
+            (
+                step
+                for step in job["steps"]
+                if str(step.get("name", "")).startswith("Merge the shards")
+            ),
+            None,
+        )
+        if merge is None:
+            continue
+        needs = job["needs"]
+        needed = [needs] if isinstance(needs, str) else list(needs)
+        assert len(needed) == 1, f"{name} merges the shards of {needed}"
+        found[name] = (needed[0], int(merge["env"]["SHARDS"]))
+    return found
+
+
+def test_every_merge_counts_the_shards_its_sweep_is_cut_into() -> None:
+    """A merged sweep's shard count is the sweep's own matrix.
 
     The ratchet the merge feeds runs the expiry direction, which reads a
     mutant's absence as proof the tests killed it. A shard that dies before it
@@ -155,17 +183,14 @@ def test_the_merge_counts_the_shards_the_sweep_is_cut_into() -> None:
     the state it exists to refuse.
     """
     jobs = _workflow()["jobs"]
-    cut = len(jobs["nightly-mutants"]["strategy"]["matrix"]["shard"])
-    merge = next(
-        step
-        for step in jobs["nightly-mutants-ratchet"]["steps"]
-        if step.get("name", "").startswith("Merge the shards")
-    )
-    counted = int(merge["env"]["SHARDS"])
-    assert counted == cut, (
-        f"the merge counts {counted} shards and the sweep is cut into {cut}. "
-        "A merge that counts fewer accepts a sweep with a shard missing."
-    )
+    merges = _merges(jobs)
+    assert merges, "no job merges a sharded sweep; the step name has moved"
+    for merge, (sweep, counted) in sorted(merges.items()):
+        cut = len(jobs[sweep]["strategy"]["matrix"]["shard"])
+        assert counted == cut, (
+            f"{merge} counts {counted} shards and {sweep} is cut into {cut}. "
+            "A merge that counts fewer accepts a sweep with a shard missing."
+        )
 
 
 def test_both_binding_sweeps_read_the_same_files() -> None:

@@ -132,8 +132,13 @@ def _binding_sources() -> set[str]:
     declared `#[cfg(test)] mod tests;` in the file they test -- and mutating one
     says nothing about the product: it makes the harness wrong, not the code
     untested.
+
+    Cargo's own `tests/` directory is the same argument in the shape Cargo
+    gives it: every file there is an integration target, compiled beside the
+    library and never into it. The sweep wrapper that runs the Python suite
+    lives there, and a mutation of it would be a mutation of the instrument.
     """
-    test_only = _test_module_files()
+    test_only = _test_module_files() | _integration_targets()
     return {
         path
         for path in (
@@ -141,6 +146,21 @@ def _binding_sources() -> set[str]:
             for path in BINDING.rglob("*.rs")
         )
         if path not in test_only
+    }
+
+
+def _integration_targets() -> set[str]:
+    """Every `.rs` file Cargo compiles as an integration test of the binding.
+
+    Read from the directory Cargo reserves for them rather than from a naming
+    convention: `tests/` is where an integration target goes, and that is a fact
+    about the build rather than about what a file is called.
+    """
+    tests = BINDING / "tests"
+    if not tests.is_dir():
+        return set()
+    return {
+        str(path.relative_to(ROOT)).replace("\\", "/") for path in tests.rglob("*.rs")
     }
 
 
@@ -193,6 +213,26 @@ def test_every_binding_file_is_swept_or_excluded_by_name() -> None:
     )
 
 
+def test_an_integration_target_is_not_a_subject() -> None:
+    """The universe is the code that ships, and `tests/` is not it.
+
+    Asserted rather than left to the glob, because the exclusion list is the
+    other way to keep a harness out of the sweep -- and an exclusion carries a
+    reason a reader must maintain, for a file that was never a subject.
+    """
+    targets = _integration_targets()
+    assert targets, "the binding has no integration target; the wrapper has moved"
+    sources = _binding_sources()
+    assert not (targets & sources), (
+        f"integration targets read as subjects: {sorted(targets & sources)}"
+    )
+    # The other direction: dropping `tests/` must not have taken the crate's own
+    # sources with it, which would leave every claim below passing over nothing.
+    assert {path for path in sources if path.startswith("crates/valgebra-py/src/")}, (
+        "the universe holds none of the crate's sources"
+    )
+
+
 def test_no_exclusion_names_a_file_that_is_gone() -> None:
     sources = _binding_sources()
     stale = sorted(
@@ -209,6 +249,45 @@ def test_the_walk_is_not_excluded() -> None:
     for path in _swept():
         assert not any(_matches(g, path) for g in globs), f"{path} is excluded"
         assert (ROOT / path).exists(), f"{path} does not exist"
+
+
+def _configured_timeout(config: Path) -> float:
+    """Read `timeout_multiplier` from a sweep configuration."""
+    match = re.search(
+        r"^timeout_multiplier\s*=\s*([0-9.]+)",
+        config.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    assert match is not None, f"{config.name} sets no timeout_multiplier"
+    return float(match.group(1))
+
+
+def _lane_timeouts() -> set[float]:
+    """Every `--timeout-multiplier` the workflow's sweeps pass."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+    found = {float(value) for value in re.findall(r"--timeout-multiplier (\S+)", text)}
+    assert found, "no lane passes a timeout multiplier"
+    return found
+
+
+def test_the_configured_timeout_is_the_one_the_lanes_run_under() -> None:
+    """A local sweep judges a slow mutant the way the lane judges it.
+
+    Every lane passes `--timeout-multiplier` on the command line, which wins
+    over the configuration. A configuration holding a different number is one
+    that applies to local runs alone: a mutant the lane judges is reported
+    timed out here, and a timeout counts as a survivor, so the ratchet fails
+    over a machine rather than over the tests. One number, in one place, and
+    the lanes spell the same one.
+    """
+    lanes = _lane_timeouts()
+    assert len(lanes) == 1, f"the lanes pass different multipliers: {sorted(lanes)}"
+    lane = lanes.pop()
+    for config in (CONFIG, ROOT / ".cargo" / "mutants-pytest.toml"):
+        assert _configured_timeout(config) == lane, (
+            f"{config.name} sets {_configured_timeout(config)} and the lanes run "
+            f"at {lane}"
+        )
 
 
 def test_the_scope_carries_its_reason() -> None:

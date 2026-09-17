@@ -58,5 +58,12 @@ regex = "1.13"
 # extension module with no embedded interpreter.
 interpreter-tests = ["pyo3/auto-initialize"]
 
+# Builds the extension and runs the Python suite from `cargo test`, so a
+# mutation sweep can observe a suite it otherwise cannot: seven files of this
+# crate are reached only through the shipped extension, and `cargo test` never
+# loads one. Off by default, because the cost is a rebuild and a suite run per
+# test binary. `crates/valgebra-py/tests/pytest_sweep.rs` says what it needs.
+pytest-sweep = []
+
 [lints]
 workspace = true
