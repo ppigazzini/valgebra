@@ -949,21 +949,40 @@ impl Schema {
         // Both inclusion directions share one budget, so equivalence cannot spend
         // twice the ceiling, and its verdict does not depend on which direction
         // happened to allocate a fresh allowance first.
-        let budget = Cell::new(DECISION_BUDGET);
+        self.equivalence_relation(other, oracle, defs, &Cell::new(DECISION_BUDGET))
+            .holds()
+    }
+
+    /// The three-valued form of [`is_equivalent_under`], on the caller's budget.
+    ///
+    /// Equivalence is the meet of two inclusions, taken in the vocabulary both
+    /// of them answer in: mutual inclusion, and the conjunction's own short
+    /// circuit, rather than two booleans that have each forgotten whether they
+    /// were refuted or merely unproven. The public form is `holds()` of this,
+    /// which reads a decline as "not proven" -- the conservative answer.
+    ///
+    /// The budget is a parameter for the reason it is one on
+    /// [`subtype_relation`](Self::subtype_relation): a cell the function
+    /// allocates for itself is a path no test can drive at the one value that
+    /// matters, and "the budget declines, it never refutes" is a claim about
+    /// this path too.
+    pub(crate) fn equivalence_relation(
+        &self,
+        other: &Schema,
+        oracle: &dyn LeafRelations,
+        defs: &[Schema],
+        budget: &Cell<u32>,
+    ) -> Relation {
         let cx = SubtypeCx {
             oracle,
             defs,
-            budget: &budget,
+            budget,
         };
         let within = |sub: &Schema, sup: &Schema| {
             sub.is_subtype_rec(sup, cx, &mut Vec::new())
                 .or_else(|| sub.descriptor_contained_in(sup, oracle, defs))
         };
-        // Equivalence is the meet of two inclusions, taken in the vocabulary
-        // both of them answer in: mutual inclusion, and the conjunction's own
-        // short circuit, rather than two booleans that have each forgotten
-        // whether they were refuted or merely unproven.
-        within(self, other).and(|| within(other, self)).holds()
+        within(self, other).and(|| within(other, self))
     }
 }
 

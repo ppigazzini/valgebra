@@ -469,7 +469,7 @@ neither, on every path a subtyping query can take: through a product, through
 the disjointness reading, and through the shared cell an equivalence query
 carries across its two directions. **[OBLIGATION: the-budget-declines]**
 
-HELD-BY: the_budget_declines_on_every_subtyping_path, an_exhausted_budget_refuses_to_spend
+HELD-BY: the_budget_declines_on_every_subtyping_path, an_exhausted_budget_refuses_to_spend, a_budgeted_equivalence_query_decides_the_same_or_declines
 
 **The goals a query repeats are counted.** The decision not to memoise goals
 rests on a number: zero repeats over the workload shapes and the thirty-two
