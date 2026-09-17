@@ -48,7 +48,16 @@ LANES = {"rust-coverage": "valgebra-core", "binding-coverage": "valgebra-py"}
 #: module. Both are compiled into the crate rather than into a `tests/`
 #: directory -- a corpus needs the crate's private items -- which is why they
 #: reach a coverage report at all.
-CORPUS = re.compile(r"(?:^|/)(?:laws|index_laws|interpreter)\.rs$")
+#:
+#: A file whose name ends in `tests.rs` is the same thing one module down.
+#: `docs/dev/08-testing.md` states the rule that puts it there -- a test module
+#: longer than a screen lives in a sibling file -- and `test_module_placement.py`
+#: holds the tree to it, so the tree has twenty-odd of them and every one is
+#: compiled into the crate for the same reason a corpus is. Counted as shipped
+#: code they lift the figure for the code around them, which is the whole defect
+#: this ledger is about; a suite is measured by whether it *kills mutants*, not
+#: by how much of itself it executes.
+CORPUS = re.compile(r"(?:^|/)(?:laws|index_laws|interpreter)\.rs$|tests\.rs$")
 
 
 def _lane_scripts() -> dict[str, str]:
@@ -110,6 +119,8 @@ def test_the_tree_has_corpus_files_to_exclude() -> None:
     assert len(corpora) >= 5, sorted(corpora)
     assert any("laws.rs" in name for name in corpora)
     assert sum("interpreter.rs" in name for name in corpora) >= 4
+    # And the sibling test modules, which are the bulk of it.
+    assert sum(name.endswith("tests.rs") for name in corpora) >= 15, sorted(corpora)
 
 
 @pytest.mark.parametrize("lane", sorted(LANES))

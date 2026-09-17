@@ -471,7 +471,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/ci.yml",
-            "|/interpreter\\.rs$'",
+            "|/interpreter\\.rs$|tests\\.rs$'",
             "'",
         ),
     ),

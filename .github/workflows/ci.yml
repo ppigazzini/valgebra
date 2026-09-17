@@ -199,7 +199,7 @@ jobs:
       # this scope to the corpus files the tree has.
       - run: >
           cargo llvm-cov nextest --locked --workspace --summary-only
-          --ignore-filename-regex 'valgebra-py|/(laws|index_laws)\.rs$'
+          --ignore-filename-regex 'valgebra-py|/(laws|index_laws)\.rs$|tests\.rs$'
           --fail-under-lines 93 --fail-under-regions 92
 
   binding-coverage:
@@ -268,7 +268,7 @@ jobs:
           # files the tree has, in both directions.
           cargo llvm-cov report --summary-only \
             --ignore-filename-regex \
-            'valgebra-core|valgebra-py/src/workload\.rs|/interpreter\.rs$' \
+            'valgebra-core|valgebra-py/src/workload\.rs|/interpreter\.rs$|tests\.rs$' \
             --fail-under-lines 95 --fail-under-regions 92
 
   python:
@@ -1291,7 +1291,7 @@ jobs:
         run: >
           cargo +${{ env.FUZZ_NIGHTLY }} llvm-cov --branch --locked
           -p valgebra-core --json --output-path branches.json
-          --ignore-filename-regex 'valgebra-py|/(laws|index_laws)\.rs$'
+          --ignore-filename-regex 'valgebra-py|/(laws|index_laws)\.rs$|tests\.rs$'
       # `cargo llvm-cov` has no `--fail-under-branches`, so the number is
       # ratcheted the way the mutation baseline ratchets survivors: recorded,
       # compared, and moved up with the measurement and never ahead of it.

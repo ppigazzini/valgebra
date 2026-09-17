@@ -38,9 +38,20 @@ pytestmark = pytest.mark.repository
 ROOT = Path(__file__).resolve().parent.parent
 #: The coinductive procedure and the rules it is split into. The descriptor is
 #: not under this rule: it holds no hypothesis, so a cache there reverts nothing.
-PROCEDURE = (
-    ROOT / "crates" / "valgebra-core" / "src" / "decision.rs",
-    *(ROOT / "crates" / "valgebra-core" / "src" / "decision").glob("*.rs"),
+#:
+#: A sibling test module is not under it either, for the reason the blanking
+#: below exists: a table keyed by a goal is not a memo when a test owns it, and
+#: the goal counter that holds the repeat number is exactly that shape. It lives
+#: in `decision/goal_tests.rs`, whose whole file is test code -- gated at the
+#: `mod` that declares it rather than by a marker inside -- so there is no
+#: `#[cfg(test)]` in it for the scan to read.
+PROCEDURE = tuple(
+    path
+    for path in (
+        ROOT / "crates" / "valgebra-core" / "src" / "decision.rs",
+        *(ROOT / "crates" / "valgebra-core" / "src" / "decision").glob("*.rs"),
+    )
+    if not path.name.endswith("tests.rs")
 )
 
 #: A map declaration, however it is spelled. The key is what makes it a memo:

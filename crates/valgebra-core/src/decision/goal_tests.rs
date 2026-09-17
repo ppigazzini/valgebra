@@ -19,11 +19,85 @@
 
 use std::sync::Arc;
 
-use super::goals::{self, Counts};
+/// A test-side count of the goals one query asks twice.
+///
+/// [`DECISION_BUDGET`]'s own argument rests on a number -- over the decision
+/// workloads the goals a query *repeats* are zero, so the ceiling stands in for
+/// a termination argument and not for a memo -- and nothing read that number.
+/// This reads it. Compiled for this crate's own tests only, so the procedure a
+/// caller runs carries no counter and pays nothing for one.
+///
+/// A goal is the pair the recursion is asked about, and two are the same goal
+/// when the pair is equal. Equality rather than the interned address: a query
+/// builds goals of its own -- [`seq_splits_across_union`] makes a sequence per
+/// branch -- and those are temporaries, so an address freed and handed out
+/// again would read as a repeat that never happened. Equality also counts at
+/// least as many repeats as identity can, which is the safe direction for a
+/// claim that there are none.
+pub(crate) mod goals {
+    use std::cell::RefCell;
+
+    use rustc_hash::FxHashMap;
+
+    use crate::ir::Schema;
+
+    thread_local! {
+        /// The goals asked inside a [`counted`] call, and how often each was.
+        static ASKED: RefCell<Option<FxHashMap<(Schema, Schema), u32>>> =
+            const { RefCell::new(None) };
+    }
+
+    /// What one counted query asked.
+    ///
+    /// Both numbers, because either alone can be read wrong: `repeated` is the
+    /// claim, and `asked` is what says the recorder was wired to the procedure
+    /// at all. A count of zero repeats over a query that asked nothing is the
+    /// shape a silent recorder gives, and it reads exactly like a good answer.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(crate) struct Counts {
+        /// Goals the recursion was asked, counting a repeat once per ask.
+        pub(crate) asked: usize,
+        /// How many of those asks were of a pair already asked.
+        pub(crate) repeated: usize,
+    }
+
+    /// Run `query` with its goals counted, and give back what it asked.
+    ///
+    /// One count per thread: two at once would each be about part of the
+    /// other's query, and a number about part of a query is not the number the
+    /// argument needs.
+    pub(crate) fn counted<T>(query: impl FnOnce() -> T) -> (T, Counts) {
+        ASKED.with(|asked| {
+            let mut slot = asked.borrow_mut();
+            assert!(slot.is_none(), "a count is already running on this thread");
+            *slot = Some(FxHashMap::default());
+        });
+        let answer = query();
+        let table = ASKED
+            .with(|asked| asked.borrow_mut().take())
+            .expect("the table installed above is still there");
+        let counts = Counts {
+            asked: table.values().map(|times| *times as usize).sum(),
+            repeated: table.values().map(|times| (times - 1) as usize).sum(),
+        };
+        (answer, counts)
+    }
+
+    /// Record one goal, where a count is running.
+    pub(crate) fn record(subject: &Schema, other: &Schema) {
+        ASKED.with(|asked| {
+            if let Some(table) = asked.borrow_mut().as_mut() {
+                *table.entry((subject.clone(), other.clone())).or_insert(0) += 1;
+            }
+        });
+    }
+}
+
 use crate::{
     ClassIx, Constraint, DefIx, Field, Kind, LeafRelations, Openness, OperandIx, Relation, Schema,
     SeqShape,
 };
+use goals::Counts;
 
 /// Two classes that lay down no builtin layout, answered as the bindings answer
 /// a plain Python class. The matrix workload's oracle, for the matrix's pairs:

@@ -615,6 +615,16 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
 
 - **A line coverage floor cannot see a wrong answer.** It says a line ran, not
   that anything checked what it did. That is what the mutation sweeps are for.
+- **A per-file coverage figure is part measurement and part artifact.** A
+  `const` initialiser is a region llvm-cov instruments and the compiler
+  evaluates, so it is never executed at runtime and its span reaches back over
+  the doc comment above it and the blank line below. In a file that documents
+  its constants the deficit is large and no test can close it: `decision.rs`
+  reports 49.62% of lines, and of the 249 lines counted as unrun, **217 are
+  comments, blanks or attributes and 32 are code**. Read a file's number as a
+  ceiling on how much it can say, and read a *change* in it rather than its
+  level.
+
 - **A mutation score is a statement about one test command.** Neither sweep runs
   pytest, so a survivor in either is a gap in the *Rust-side* corpus.
 - **The walk sweep needs an embedded interpreter.** Without
