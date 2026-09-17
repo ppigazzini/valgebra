@@ -26,11 +26,24 @@ sound. Only the second is a gap, and separating them is the whole point --
 folded together, a conservative answer and a necessary one read alike, and the
 number that ought to fall reads as the number that cannot.
 
+A second list is held the same way at the end of the file, because it is the
+one decline that is a **fact** rather than an incompleteness. A class whose
+metaclass answers `__instancecheck__` or `__subclasscheck__` decides membership
+itself: `register` is a call a caller makes after the class is written, and a
+metaclass may answer differently on the next question. No snapshot of the class
+order predicts either, so the oracle declines every question about such a class
+-- and the hooks it reads before answering are read out of the binding, so a
+third one arrives here without a class that takes it over. What the decline
+costs is inclusion, and what it does not cost is membership: the walk asks
+`isinstance` and gets the class's own answer, which each row holds against
+`isinstance` itself rather than against a verdict written down beside it.
+
 LEDGER: every ordered pair of schema variants is decided or declined with a reason
 """
 
 from __future__ import annotations
 
+import abc
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,10 +64,16 @@ from valgebra import (
 
 ROOT = Path(__file__).resolve().parent.parent
 IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
+ORACLE = ROOT / "crates" / "valgebra-py" / "src" / "oracle.rs"
 
 #: The variants of `pub enum Schema`, read from the tree rather than restated.
 _ENUM = re.compile(r"^pub enum Schema \{$(.*?)^\}$", re.DOTALL | re.MULTILINE)
 _VARIANT = re.compile(r"^    ([A-Z][A-Za-z]*)[ ({,]", re.MULTILINE)
+
+#: The hooks `denotes_a_set` reads before the oracle will answer about a
+#: class. Read out of the binding rather than restated: a third hook added
+#: there arrives here without a row.
+_HOOK = re.compile(r'intern!\(self\.py, "(__\w+check__)"\)')
 
 
 class Plain:
@@ -427,3 +446,127 @@ def test_the_corpus_reaches_every_representative(
             assert members, f"no corpus value is a member of {name}"
         if name != "Anything":
             assert outside, f"every corpus value is a member of {name}"
+
+
+@dataclass(frozen=True)
+class Hooked:
+    """A class whose metaclass answers membership, and a value on each side.
+
+    Both sides, for the reason every other row here carries both: a schema
+    admitting everything agrees with `isinstance` on the member alone, and one
+    admitting nothing agrees on the outsider alone.
+    """
+
+    spec: Any
+    member: Any
+    outsider: Any
+    hook: str
+
+
+class _Discriminating(type):
+    """A metaclass that answers both hooks itself, for the integers."""
+
+    def __instancecheck__(cls, other: object) -> bool:
+        return isinstance(other, int)
+
+    def __subclasscheck__(cls, other: type) -> bool:
+        return issubclass(other, int)
+
+
+class _Hooked(metaclass=_Discriminating):
+    """A class whose membership its metaclass decides."""
+
+
+class _Registered(abc.ABC):  # noqa: B024 - the point is the registration
+    """An abstract base a kind is registered against after the fact."""
+
+
+_Registered.register(int)
+
+
+@runtime_checkable
+class _Runs(Protocol):
+    """A protocol with a method and no data member, which `isinstance` answers."""
+
+    def run(self) -> None: ...
+
+
+class _Runner:
+    """A value the protocol above admits, by having the method."""
+
+    def run(self) -> None:
+        """Do nothing; the protocol asks only that the name is there."""
+
+
+#: The ways a class takes over one of the hooks, one row each.
+#:
+#: The oracle declines every question about such a class, and that is not a gap
+#: it could close: `register` is a call a caller makes after the class is
+#: written, and a metaclass may answer differently on the next question it is
+#: asked. A snapshot of the class order predicts neither. What the decline costs
+#: is *inclusion*, and what it does not cost is membership -- the walk asks
+#: `isinstance` and gets the class's own answer -- so each row holds both.
+HOOKED: dict[str, Hooked] = {
+    "a metaclass of its own": Hooked(_Hooked, 1, "a", "__instancecheck__"),
+    "an abstract base with a registration": Hooked(
+        _Registered, 1, "a", "__subclasscheck__"
+    ),
+    "a runtime-checkable protocol": Hooked(_Runs, _Runner(), 1, "__instancecheck__"),
+}
+
+
+def _hooks() -> set[str]:
+    """Read the hooks the binding checks before it will answer about a class."""
+    text = ORACLE.read_text(encoding="utf-8")
+    start = text.index("fn denotes_a_set")
+    found = set(_HOOK.findall(text[start : text.index("\n    }", start)]))
+    # The parse is the detector, so it is shown to have read something.
+    assert len(found) >= 2, sorted(found)
+    return found
+
+
+def test_every_hook_the_binding_reads_has_a_row() -> None:
+    """A third hook added to the guard arrives here with no class that takes it."""
+    hooks = _hooks()
+    covered = {row.hook for row in HOOKED.values()}
+    missing = sorted(hooks - covered)
+    assert not missing, (
+        f"hooks the binding reads that no row drives: {missing}. Add a class "
+        "that takes the hook over, with the value each way."
+    )
+    stale = sorted(covered - hooks)
+    assert not stale, f"rows naming a hook the binding does not read: {stale}"
+
+
+@pytest.mark.parametrize(("shape", "row"), sorted(HOOKED.items()), ids=sorted(HOOKED))
+def test_a_class_that_answers_membership_itself_is_declined(
+    shape: str, row: Hooked
+) -> None:
+    """The relation declines both ways, rather than answering from the order.
+
+    This is the one decline of the product that is a *fact* rather than an
+    incompleteness, and it has to be driven rather than reasoned about: an
+    answer here would be the procedure predicting a call the caller has not
+    made yet.
+    """
+    compiled = Validator(row.spec)
+    assert compiled.relation_to(int) == "undecided", shape
+    assert Validator(int).relation_to(row.spec) == "undecided", shape
+
+
+@pytest.mark.parametrize(("shape", "row"), sorted(HOOKED.items()), ids=sorted(HOOKED))
+def test_the_walk_answers_where_the_relation_declines(shape: str, row: Hooked) -> None:
+    """A declined inclusion costs nothing on the value question.
+
+    The walk asks `isinstance`, so it gets the class's own answer and is exact
+    where the relation has nothing to say. Held against `isinstance` itself
+    rather than against a recorded verdict, because the class is the authority
+    and a recorded answer would be a second one.
+    """
+    compiled = Validator(row.spec)
+    for value in (row.member, row.outsider):
+        assert compiled.is_valid(value) == isinstance(value, row.spec), (
+            f"{shape}: the walk and the class disagree about {value!r}"
+        )
+    assert compiled.is_valid(row.member), shape
+    assert not compiled.is_valid(row.outsider), shape

@@ -547,6 +547,9 @@
     "__future__": {
       "since": "3.10"
     },
+    "abc": {
+      "since": "3.10"
+    },
     "argparse": {
       "since": "3.10"
     },
