@@ -386,6 +386,24 @@ lines the binding's figure was computed over were corpus. Both lanes exclude
 them now, and `tests/test_coverage_scope.py` holds that scope to the corpus
 files the tree has, in both directions.
 
+**A coverage figure read on a developer's box is not the lane's, and the
+difference can be one file.** `cargo llvm-cov` attributes a region to a source
+span, and which span it picks for a `const` initialiser or for an item inside a
+`#[cfg(test)]` module is the toolchain's business, not the tree's. On one
+machine `decision.rs` reads about half its regions covered, with seven hundred
+of them landing on doc-comment lines, blank lines and `use` items -- lines no
+program executes -- while the lane reads the same file at 99% and the same
+commit green.
+
+That six-point difference in a **total** is indistinguishable from a real hole
+of the same size, which is the reading the audit could not settle from either
+figure alone. What settles it is the per-file column: a file whose zero-count
+lines are comments has a mapping artefact, and a file whose zero-count lines are
+statements has untested code. So the rule is to compare *a file's* figure
+between the two runs and read the annotated report for that file, never to
+compare totals -- a total absorbs the artefact and the hole equally well, and
+says the same number for both.
+
 And a nightly lane counts the **arms**. A region is a span the compiler emits,
 and a two-armed branch inside one span contributes one region — so the core reads
 98% of lines, 97% of regions and 90% of branches on the same files. Eight points

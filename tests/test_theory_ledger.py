@@ -411,3 +411,144 @@ def test_every_held_test_carries_the_marker() -> None:
         + "\n".join(f"  {row}" for row in unmarked)
         + "\n\nPut `# THEORY: <id>` (or `// THEORY: <id>`) above the test."
     )
+
+
+#: The argument the tracked page restates. Not redistributed, and both halves of
+#: the path are spelled from their pieces: the internal area and the note's own
+#: name each dangle for every reader but the author, and `docs_lint` refuses
+#: either written out -- here as much as on a page.
+ARGUMENT = ROOT / ("__" + "DEV") / ("5-" + "THEORY.md")
+
+SOURCE = "SOURCE:"
+
+#: One entry of a `SOURCE:` line: the section of the argument, and a fragment of
+#: the sentence this page restates. Entries are separated by `;`, because a
+#: fragment carries commas and a claim may restate two paragraphs -- Nakano's
+#: modality is argued in two places and lands here as one sentence.
+_SOURCE_ENTRY = re.compile(r'§(\d+\.\d+[a-z]?) "([^"]{12,})"')
+
+#: Where the argument's results are tagged, and where its obligations are whole
+#: numbered sections rather than tagged paragraphs.
+_RESULT = re.compile(r"\*\*\[(?:USED|DEVIATION)")
+_SECTION = re.compile(r"^## (\d+\.\d+[a-z]?) ", re.MULTILINE)
+_RESULTS_FROM = "13."
+_OBLIGATIONS_FROM = "14."
+
+
+def _argument() -> dict[str, str]:
+    """Read the argument's numbered sections, or `{}` where it is absent."""
+    if not ARGUMENT.exists():
+        return {}
+    text = ARGUMENT.read_text(encoding="utf-8")
+    cuts = [(match.group(1), match.start()) for match in _SECTION.finditer(text)]
+    return {
+        number: text[start : cuts[index + 1][1] if index + 1 < len(cuts) else len(text)]
+        for index, (number, start) in enumerate(cuts)
+    }
+
+
+def _sources() -> list[tuple[str, str, str]]:
+    """Every `(claim id, section, fragment)` the page cites, read off the page."""
+    cited: list[tuple[str, str, str]] = []
+    claims = _claims()
+    by_position = {claim.text: claim for claim in claims}
+    last: Claim | None = None
+    for paragraph in _paragraphs():
+        if _TAG.search(paragraph):
+            last = by_position.get(paragraph)
+            continue
+        if not paragraph.startswith(SOURCE):
+            continue
+        assert last is not None, f"a SOURCE line before any claim: {paragraph!r}"
+        entries = _SOURCE_ENTRY.findall(paragraph.replace("\n", " "))
+        assert entries, (
+            f"a SOURCE line this ledger cannot read: {paragraph!r}. The form is "
+            f'`SOURCE: §13.3 "a fragment of the sentence"`, entries separated by `;`.'
+        )
+        cited += [(last.identifier, section, fragment) for section, fragment in entries]
+    return cited
+
+
+def test_every_source_line_is_one_this_ledger_can_read() -> None:
+    """The half of the citation a clone can check, which is where it runs.
+
+    The argument is not redistributed, so the two checks below stand down
+    everywhere but the author's box -- every runner included. A `SOURCE:` line
+    nobody can read would then be a line nobody reads: malformed on the page,
+    skipped in the lane, and caught only by whoever next opened the notes.
+
+    So the form is held here, where the page is all it takes: the line belongs
+    to a claim, and it names a section and quotes a sentence.
+    """
+    cited = _sources()
+    assert cited, "no claim on the page says where it comes from"
+    unknown = sorted(
+        {identifier for identifier, _, _ in cited}
+        - {claim.identifier for claim in _claims()}
+    )
+    assert not unknown, f"SOURCE lines attributed to no claim: {unknown}"
+
+
+def test_every_cited_source_is_a_section_the_argument_has() -> None:
+    """A claim that names where it comes from names somewhere that exists.
+
+    The page restates an argument kept out of the distribution, so a reader
+    holding both has no way to find the paragraph a sentence came from and a
+    reader holding one has no way to know a citation went stale. The fragment
+    is quoted rather than summarised for the same reason a citation carries a
+    page number: a section is a screenful, and the sentence is the claim.
+    """
+    sections = _argument()
+    if not sections:
+        pytest.skip("the argument is not redistributed, so a clone has none to read")
+    cited = _sources()
+    missing = sorted(
+        f"{identifier} cites §{section}, which the argument does not have"
+        for identifier, section, _ in cited
+        if section not in sections
+    )
+    stale = sorted(
+        f"{identifier} quotes {fragment!r}, which is not in §{section}"
+        for identifier, section, fragment in cited
+        if section in sections and fragment not in sections[section]
+    )
+    assert not missing + stale, "\n".join(missing + stale)
+
+
+def test_every_result_the_argument_carries_is_restated_here() -> None:
+    """The direction that keeps the argument from being the ledger.
+
+    A result added to the argument and not to this page is a claim the tree
+    rests on with no tagged paragraph, no `HELD-BY:` line and no test -- which
+    is the state every one of them started in, and the state this page exists
+    to end. The argument keeps the reasoning; what a reader acts on is here.
+
+    Its results are tagged paragraphs and its obligations are whole numbered
+    sections, so the universe is read both ways rather than by one pattern.
+    """
+    sections = _argument()
+    if not sections:
+        pytest.skip("the argument is not redistributed, so a clone has none to read")
+    claimed = {(section, fragment) for _, section, fragment in _sources()}
+
+    unrestated: list[str] = []
+    for number, body in sections.items():
+        if number.startswith(_RESULTS_FROM):
+            for paragraph in body.split("\n\n"):
+                if not _RESULT.search(paragraph):
+                    continue
+                if not any(
+                    section == number and fragment in paragraph
+                    for section, fragment in claimed
+                ):
+                    unrestated.append(f"§{number}: {' '.join(paragraph.split())[:90]}")
+        elif number.startswith(_OBLIGATIONS_FROM) and not any(
+            section == number for section, _ in claimed
+        ):
+            unrestated.append(f"§{number}: {body.splitlines()[0]}")
+
+    assert not unrestated, (
+        "results the argument carries and this page does not restate:\n"
+        + "\n".join(f"  {row}" for row in unrestated)
+        + "\n\nAdd the tagged paragraph here, with a SOURCE line naming it."
+    )

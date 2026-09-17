@@ -200,6 +200,21 @@ PLANTS = (
         ),
     ),
     Plant(
+        # The same ledger, on the citation half. The two checks that resolve a
+        # `SOURCE:` line against the argument stand down wherever the argument
+        # is not in the clone, which is every clone but the author's -- so the
+        # line's *form* is what a runner can hold, and a line nobody can read
+        # would otherwise be malformed on the page and skipped in the lane.
+        "tests/test_theory_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            'SOURCE: \u00a713.2 "**The laws hold by construction**"',
+            "SOURCE: the section on the lattice",
+        ),
+    ),
+    Plant(
         # An obligation added to the page with neither a `HELD-BY:` nor an
         # `OWED:` line: a sentence, which is the state every result starts in
         # and the one the ledger exists to refuse.
