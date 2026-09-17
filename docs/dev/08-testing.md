@@ -263,7 +263,8 @@ ledger that holds it in both directions:
 | every form the schema-language pages tabulate | the tables in `03-schema-language.md` and `05-refinements.md` | the form is accepted with its `repr` and a member, or refused with the refusals ledger's pattern | `tests/test_form_ledger.py` |
 | every outcome a method's docstring names | the binding's `Raises:` blocks | the call sits inside a `pytest.raises` for it, read from the syntax tree | `tests/test_surface_outcomes.py` |
 
-The number is computed rather than written down. A cell with no test fails; a
+The number is computed rather than written down, and where this page repeats
+one, a test holds the copy to the computation. A cell with no test fails; a
 cell a test cannot reach is accepted with a reason, and a reason for a cell that
 *is* reached fails too, so an excuse cannot outlive the gap it excuses. The
 "covered" column is the third direction, and the reason each row needs its own
