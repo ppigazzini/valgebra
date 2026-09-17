@@ -491,6 +491,22 @@ PLANTS = (
         ),
     ),
     Plant(
+        # A numbered result cited under no work: the page names a lemma and a
+        # reader has no way to say whose. The shelf direction cannot see it --
+        # every paper is still there and every row still resolves -- so only the
+        # attribution direction does.
+        "tests/test_citation_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            "# The theory\n",
+            "# The theory\n\n"
+            "A planted result cited as Theorem 9.9, above every work the page "
+            "names, so nothing says whose theorem it is.\n",
+        ),
+    ),
+    Plant(
         # The other end of the theory ledger: a claim renamed on the page,
         # which leaves every marker naming it pointing at nothing while still
         # reading like a pointer. The `HELD-BY:` direction does not see it --
