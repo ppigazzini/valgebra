@@ -637,7 +637,19 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
 - **`scripts/docs_lint.py` cannot tell you a sentence is false.**
   [12-writing.md](12-writing.md) names the classes it cannot reach.
 - **A fuzz run that finds nothing means "nothing failed inside that budget"**,
-  never "there is nothing to find". That is why it is not a merge gate.
+  never "there is nothing to find". That is why it is not a merge gate. The
+  budget carries a floor for the half of that a lane *can* tell apart: a soak
+  that ran is distinguishable from one that only ended, so the rate and the
+  duration the soak prints are read back and a run beneath the floor is a rig
+  fault rather than a clean sheet.
+
+    An out-of-memory artifact from this target is read the same way before it
+    is believed. libFuzzer's unnamed process ceiling fires against whichever
+    input happened to be running when the *process* crossed it, which is not a
+    claim about that input: the two artifacts from 2026-09-08 replay in 0 ms and
+    2 ms under the allocation bound, and are in `fuzz/seeds/decision/` as inputs
+    rather than in `fuzz/artifacts/` as findings. `-malloc_limit_mb` is the flag
+    that names a defect, because it fires on an allocation.
 - **A soundness property has nothing to say about a `False`.** A law shaped
   `if a.is_subtype_of(&b) { ..check.. }` never examines the answers that are
   wrong in the conservative direction, and those are the majority of them.

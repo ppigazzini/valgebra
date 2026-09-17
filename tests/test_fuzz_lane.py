@@ -83,6 +83,35 @@ def test_the_soak_still_has_a_time_budget() -> None:
     assert re.search(r"-max_total_time=\d+", _soak_step())
 
 
+def test_the_soak_has_a_floor_beneath_its_budget() -> None:
+    """A budget says when to stop; it does not say the run did anything.
+
+    `docs/dev/07-tooling-ci.md` already states the limit -- a run that finds
+    nothing means "nothing failed inside that budget", never "there is nothing
+    to find". What the budget alone cannot tell apart is a soak that explored
+    for six minutes from one whose target died on its first input: both end
+    quietly, both report no finding, and the lane is green either way.
+
+    So the budget carries a floor, read from the two numbers the soak itself
+    prints: the rate it managed and the seconds it lasted. Either alone has a
+    silent shape -- a run with no summary executed nothing, and one at zero
+    executions a second executed nothing however long it sat there -- and a run
+    beneath the floor is a **rig fault**, the reading a mutation timeout gets,
+    rather than a clean sheet.
+    """
+    step = _soak_step()
+    assert "MIN_SECONDS" in step, (
+        "the soak names a time budget and no floor, so a target that dies on "
+        "its first input reads exactly like one that explored for the whole "
+        "budget. Read what the soak printed and refuse a run beneath a floor."
+    )
+    assert "exec/s" in step, "the floor reads no rate, so a stalled run passes it"
+    assert "RIG FAULT" in step, (
+        "a run beneath the floor measured nothing, which is the glossary's rig "
+        "fault rather than a failure of the tests"
+    )
+
+
 def test_the_generator_draws_every_node_the_ir_has() -> None:
     """A fuzzer explores the shapes it can build and no others.
 
