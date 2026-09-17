@@ -305,6 +305,58 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
         "subset",
         [b"", b"a", b"\xff", "a", ""],
     ),
+    # -- the carriers decline where they cannot spell the bound --------------
+    # `docs/15-decidability.md` names four edges of the integer carrier. The
+    # carrier is `i64` and Python's integers are unbounded, so a bound outside
+    # the range is held as the widest set the carrier spells: the direction the
+    # widening proves comes back `subset`, and the one a value refutes declines
+    # rather than reporting a value the procedure never found.
+    (
+        "a bound past the carrier proves in the direction the widening gives",
+        Annotated[int, at.Ge(2**70 + 1)],
+        Annotated[int, at.Ge(2**70)],
+        "subset",
+        [0, 2**70, 2**70 + 1, 2**63, I64_MIN],
+    ),
+    (
+        "and declines in the direction a value would refute",
+        Annotated[int, at.Ge(2**70)],
+        Annotated[int, at.Ge(2**70 + 1)],
+        "undecided",
+        [0, 2**70, 2**70 + 1, 2**63],
+    ),
+    (
+        "a strict bound at the carrier's end is below the kind",
+        Annotated[int, at.Gt(2**63 - 1)],
+        int,
+        "subset",
+        [0, 2**63 - 1, 2**63, I64_MIN],
+    ),
+    (
+        "and the kind is not below it",
+        int,
+        Annotated[int, at.Gt(2**63 - 1)],
+        "undecided",
+        [0, 2**63 - 1, 2**63],
+    ),
+    # A modulus is materialised per residue up to a recorded period, so two
+    # moduli the representation builds decide and two above it decline. The
+    # control row is what makes the decline a property of the period rather
+    # than of the rule.
+    (
+        "a modulus the period holds is decided",
+        Annotated[int, at.MultipleOf(4)],
+        Annotated[int, at.MultipleOf(2)],
+        "subset",
+        [0, 2, 3, 4, 8],
+    ),
+    (
+        "and one above the period declines",
+        Annotated[int, at.MultipleOf(5000)],
+        Annotated[int, at.MultipleOf(2500)],
+        "undecided",
+        [0, 2500, 5000, 7500, 10000],
+    ),
     # -- the open world, inside a container ----------------------------------
     (
         "a meet of two unrelated classes has no value to refute with",
@@ -419,6 +471,31 @@ def _pair(row: tuple[str, Any, Any, str, list[Any]]) -> tuple[Validator, Validat
 
 
 IDS = [row[0] for row in ROWS]
+
+
+def test_every_edge_of_the_integer_carrier_has_a_row() -> None:
+    """The edges `docs/15-decidability.md` names are rows, not sentences.
+
+    Deviation 11 is a property of the *representation*: the carrier is `i64` and
+    Python's integers are unbounded, so a bound it cannot spell is held as the
+    widest set it can, and the relation declines in the direction a value would
+    refute. The page gives examples of that, and a page giving an example no
+    corpus drives is one a reader has to take on trust.
+
+    Held by presence rather than by re-asserting the answers, which the rows
+    beside them already do: what this catches is an edge dropped from the table,
+    which is how a decline stops being measured with nothing going red.
+    """
+    edges = {
+        "a bound past the carrier proves in the direction the widening gives",
+        "and declines in the direction a value would refute",
+        "a strict bound at the carrier's end is below the kind",
+        "and the kind is not below it",
+        "a modulus the period holds is decided",
+        "and one above the period declines",
+    }
+    missing = sorted(edges - set(IDS))
+    assert not missing, f"the carrier's edges have no row: {missing}"
 
 
 @pytest.mark.parametrize("row", ROWS, ids=IDS)

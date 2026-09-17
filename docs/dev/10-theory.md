@@ -588,7 +588,7 @@ cannot spell the bound: a step past the period bound, a bound past the
 carrier's end. A rounded carrier would be wrong in one direction, so it refuses.
 **[DEVIATION]**
 
-HELD-BY: a_step_past_the_period_bound_is_refused, test_a_recorded_refutation_has_its_witness, test_a_multiple_is_a_remainder_of_zero
+HELD-BY: a_step_past_the_period_bound_is_refused, test_every_edge_of_the_integer_carrier_has_a_row, test_the_relation_is_the_one_recorded, test_a_multiple_is_a_remainder_of_zero
 
 **A class is described by what the frontend can read of it.** A class laying
 down a layout the frontend cannot read is its `isinstance` test and its kind and
@@ -613,14 +613,6 @@ part of, so a law over it wants a strategy that builds a component per kind, and
 the tree has none. **[DEVIATION]**
 
 OWED: the_lattice_laws_hold_of_the_lines -- the operations take a `Whole` and a `Component` per kind, and no strategy builds them
-
-**The carrier's edges are named on the page and drawn by no test.** The page
-that states deviation 11 gives four examples of a declined bound -- a multiple
-against a multiple of half its size, two coprime moduli, a bound past `2**64`,
-a strict bound at `i64::MAX` -- and the corpus holds the carrier's two ends and
-the period bound. **[DEVIATION]**
-
-OWED: a_declined_bound_is_declined_at_every_edge_the_page_names -- the four examples are sentences on a page and rows in no matrix
 
 ## The limit
 

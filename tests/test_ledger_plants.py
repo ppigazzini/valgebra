@@ -380,8 +380,12 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "crates/valgebra-core/src/decision/budget_tests.rs",
-            "#[test]",
-            "// SWEEP-SKIP: planted, and no --skip names it\n#[test]",
+            # A named test rather than the bare attribute: the file carries more
+            # than one, and a plant anchored on a string the file may repeat is
+            # one that stops landing when a test is added beside it.
+            "#[test]\nfn an_exhausted_budget_refuses_to_spend",
+            "// SWEEP-SKIP: planted, and no --skip names it\n"
+            "#[test]\nfn an_exhausted_budget_refuses_to_spend",
         ),
     ),
     Plant(
