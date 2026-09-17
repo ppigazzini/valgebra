@@ -476,6 +476,22 @@ PLANTS = (
         ),
     ),
     Plant(
+        # The failure the ledger is for: a documented outcome the suite reaches
+        # and never pins. The call runs, so the sweep reports the arm covered
+        # and the coverage lane reports the line run -- and nothing holds the
+        # method to the answer its own docstring promises a caller.
+        "tests/test_surface_outcomes.py",
+        ("tests/test_skeleton.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_skeleton.py",
+            "    assert Validator(int).validate(3) is None\n"
+            "    assert Validator(int).validate(3, fail_fast=True) is None\n",
+            "    Validator(int).validate(3)\n"
+            "    Validator(int).validate(3, fail_fast=True)\n",
+        ),
+    ),
+    Plant(
         # The failure the ledger is for: a spelling the page teaches and the
         # suite never writes. The tests pick their own forms, so a row added to
         # a table is a promise nothing checks -- and the quiet half is that a
