@@ -157,6 +157,22 @@ def _defined_names() -> set[str]:
     return names
 
 
+def _homes_of(names: set[str]) -> set[str]:
+    """Give the files that define each of `names`, relative to the root.
+
+    Beside `_defined_names`, which answers whether a name exists at all. This
+    answers *where*, which is what says the ledger reaches the tree rather than
+    one module of it.
+    """
+    homes: set[str] = set()
+    for root, glob, pattern in _SOURCES:
+        for path in root.rglob(glob):
+            found = set(pattern.findall(path.read_text(encoding="utf-8")))
+            if found & names:
+                homes.add(path.relative_to(ROOT).as_posix())
+    return homes
+
+
 def _summarise(paragraph: str) -> str:
     """Give the first sentence of a claim, for a failure a reader can place."""
     return " ".join(paragraph.split())[:110]
@@ -310,10 +326,23 @@ def test_a_claim_is_held_by_more_than_its_own_restatement() -> None:
     """
     counts = [len(claim.names) for claim in _held()]
     assert min(counts) >= 2, "every held claim names at least two tests"
-    # And the names are not all in one file, which would make the ledger a
-    # statement about one module rather than about the tree.
     all_names = {name for claim in _held() for name in claim.names}
     assert len(all_names) >= 15, sorted(all_names)
+
+    # And the names are spread across the tree rather than gathered in one
+    # module: a ledger whose tests all sit in one file is a statement about
+    # that file, and these claims are about the whole of what the tree decides.
+    # Both languages, because the theory is implemented in both -- a page held
+    # only by the Python side would say nothing about the core, where the
+    # decision procedure and the set representation live.
+    homes = _homes_of(all_names)
+    assert len(homes) >= 15, sorted(homes)
+    for language in (".rs", ".py"):
+        written_in = sorted(home for home in homes if home.endswith(language))
+        assert len(written_in) >= 5, (
+            f"the held tests reach only {len(written_in)} {language} file(s): "
+            f"{written_in}"
+        )
 
 
 def _markers() -> dict[str, list[tuple[str, str]]]:
