@@ -222,6 +222,7 @@ def test_instance_and_literal_relations() -> None:
     assert Validator(_Dog).is_equivalent(_Dog)
 
 
+# THEORY: recursive-subtyping
 def test_recursive_subtyping_is_coinductive() -> None:
     # Two structurally identical recursive types are equivalent.
     assert _LINKED.is_subtype_of(_LINKED_TWIN)

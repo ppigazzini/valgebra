@@ -111,6 +111,7 @@ def _variants() -> set[str]:
     return found
 
 
+# THEORY: the-ir-matches-its-producers
 def test_every_variant_is_a_generator_a_representative_or_a_marker() -> None:
     claimed = GENERATORS | set(REPRESENTATIVES) | MARKERS
     missing = sorted(_variants() - claimed)
@@ -123,6 +124,7 @@ def test_every_variant_is_a_generator_a_representative_or_a_marker() -> None:
     )
 
 
+# THEORY: the-ir-matches-its-producers
 def test_no_column_names_a_variant_that_is_gone() -> None:
     claimed = GENERATORS | set(REPRESENTATIVES) | MARKERS
     stale = sorted(claimed - _variants())

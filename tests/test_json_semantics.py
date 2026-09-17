@@ -258,6 +258,7 @@ def _json_values() -> st.SearchStrategy[object]:
     )
 
 
+# THEORY: metamorphic-testing
 @given(spec=_json_schemas(), value=_json_values())
 def test_json_walk_matches_the_object_walk(spec: object, value: object) -> None:
     schema = Validator(spec)

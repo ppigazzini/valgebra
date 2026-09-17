@@ -110,6 +110,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: a-sequence-is-a-language, each-kind-is-closed
     /// The Boolean algebra, checked against the sequences.
     ///
     /// Against the sequences rather than by equality of the tables: the
@@ -141,6 +142,7 @@ proptest! {
         }
     }
 
+    // THEORY: a-sequence-is-a-language
     /// The complement laws, and De Morgan both ways.
     #[test]
     fn the_complement_laws_hold_of_the_sequences(a in language(), b in language()) {
@@ -174,6 +176,7 @@ proptest! {
         }
     }
 
+    // THEORY: a-sequence-is-a-language
     /// The edges leaving every state cover the letters, and the guarded
     /// ones are disjoint.
     ///
@@ -582,6 +585,7 @@ impl Guard for Opaque {
     }
 }
 
+// THEORY: a-sequence-is-a-language
 /// An accepting state reachable only through a letter that cannot say whether
 /// it holds a value leaves the language unproved, not inhabited.
 ///

@@ -14,6 +14,7 @@ fn at(label: &str, value: i64) -> Entry<i64> {
     }
 }
 
+// THEORY: the-key-partition-is-by-kind
 /// A wanted key is witnessed by a *labelled* key too, not by the part's
 /// default alone.
 ///
@@ -130,6 +131,7 @@ fn a_union_of_maps_holds_the_dicts_of_both() {
     assert!(!joined.holds(&[]));
 }
 
+// THEORY: records-maps-and-structs
 /// A meet is (12): the labels are shared and each side reads one it does not
 /// name off its own default.
 #[test]
@@ -201,6 +203,7 @@ fn a_constraint_about_the_labels_own_part_narrows_them() {
     assert!(!met.complement().holds(&[at("b", 2)]));
 }
 
+// THEORY: a-clause-is-a-region, clauses-are-quasi-k-step
 /// The key partition covers every key, the kindless one included.
 ///
 /// A part missing from the array would leave the keys of that kind governed
@@ -234,6 +237,7 @@ fn a_union_past_the_bound_refuses() {
     assert!(wide.union(&entry(-1)).is_none());
 }
 
+// THEORY: the-key-partition-is-by-kind
 /// A dict has one entry for `1` and for `True`, so an atom requiring both
 /// keys holds no dict.
 ///
@@ -396,6 +400,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: records-maps-and-structs, each-kind-is-closed
     /// The Boolean algebra, checked against the dicts.
     #[test]
     fn the_lattice_laws_hold_of_the_dicts(

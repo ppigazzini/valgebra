@@ -113,6 +113,7 @@ def _values() -> st.SearchStrategy[object]:
     )
 
 
+# THEORY: metamorphic-testing
 @given(spec=_schemas(), value=_values())
 def test_is_valid_agrees_with_validate(spec: object, value: object) -> None:
     v = Validator(spec)

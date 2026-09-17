@@ -70,6 +70,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: each-kind-is-closed
     /// The Boolean algebra, checked against the integers.
     #[test]
     fn the_lattice_laws_hold_of_the_integers(
@@ -268,6 +269,7 @@ fn a_degenerate_step_is_read_as_the_set_it_names() {
     assert_eq!(IntSet::multiple_of(i64::MIN), Some(IntSet::just(0)));
 }
 
+// THEORY: the-carriers-are-i64-and-f64
 /// A step past the bound has no representation, and the refusal says so
 /// rather than substituting a set that is wrong in one direction and,
 /// complemented, wrong in the other.

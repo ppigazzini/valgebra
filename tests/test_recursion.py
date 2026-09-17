@@ -93,6 +93,7 @@ def test_mutual_recursion_through_nested_builders() -> None:
     assert not schema.is_valid([1, "x"])
 
 
+# THEORY: guarded-recursion
 def test_non_contractive_body_is_rejected() -> None:
     with pytest.raises(ValueError, match="contractive"):
         recursive(lambda r: union(int, r))
@@ -358,6 +359,7 @@ def test_a_fixpoint_is_decided_against_the_kinds_its_body_admits() -> None:
     assert not json.is_valid((1,))
 
 
+# THEORY: two-fixpoints-one-procedure
 def test_the_unfolding_is_sound_in_both_directions() -> None:
     """The over- and under-approximation must each stay on its own side.
 

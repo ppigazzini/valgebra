@@ -64,6 +64,7 @@ def test_the_descriptor_modules_are_read_at_all() -> None:
     assert (DESCR / "mod.rs") in sources
 
 
+# THEORY: the-definition-imports-nothing
 def test_the_definition_imports_nothing_from_the_optimisation() -> None:
     offenders: list[str] = []
     for source in _descr_sources():
@@ -80,6 +81,7 @@ def test_the_definition_imports_nothing_from_the_optimisation() -> None:
     )
 
 
+# THEORY: the-definition-imports-nothing
 def test_the_term_imports_nothing_from_the_optimisation() -> None:
     """The constructors apply lattice laws, not decisions.
 
@@ -128,6 +130,7 @@ def test_the_frame_is_where_the_definition_can_reach_it() -> None:
         assert not _DECISION.search(source), f"{name} imports the optimisation"
 
 
+# THEORY: the-definition-imports-nothing
 def test_the_optimisation_may_still_depend_on_the_definition() -> None:
     """The reverse edge is a direction, not a separation.
 

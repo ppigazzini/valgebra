@@ -57,6 +57,7 @@ def test_a_literal_is_still_a_member_of_its_own_kind():
 # --- Products decompose (JACM Lemma 6.5), and the shapes that must NOT --------
 
 
+# THEORY: a-sequence-splits-across-a-union
 def test_a_product_splits_across_union_branches():
     assert Validator(tuple[int | str, int]).is_subtype_of(
         union(tuple[int, int], tuple[str, int])

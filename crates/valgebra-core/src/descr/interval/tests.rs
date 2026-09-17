@@ -44,6 +44,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: each-kind-is-closed
     /// The Boolean algebra, checked against the integers rather than against
     /// the two representations agreeing.
     #[test]

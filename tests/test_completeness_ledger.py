@@ -719,6 +719,7 @@ def _missed(why: str) -> pytest.MarkDecorator:
 _LEDGERED: list[object] = []
 
 
+# THEORY: an-exhaustible-procedure-is-searched, structural-rather-than-reduction
 @pytest.mark.parametrize(("operation", "left", "right"), _DECIDED + _LEDGERED)
 def test_decision_decides_true_relations(
     operation: str, left: object, right: object

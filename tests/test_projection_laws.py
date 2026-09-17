@@ -93,6 +93,7 @@ def test_the_projections_are_idempotent() -> None:
     assert record.open().close().is_equivalent(record)
 
 
+# THEORY: open-and-close-read-the-region
 def test_a_clause_is_read_the_same_with_or_without_a_field_beside_it() -> None:
     """One clause, one answer, whatever else the term declares.
 
@@ -122,6 +123,7 @@ def test_a_clause_is_read_the_same_with_or_without_a_field_beside_it() -> None:
 # --- Where the law does not hold ------------------------------------------
 
 
+# THEORY: open-and-close-read-the-region
 def test_opening_is_not_a_function_of_the_set() -> None:
     """Two terms denoting one set open into two, and a value says which.
 
@@ -147,6 +149,7 @@ def test_opening_is_not_a_function_of_the_set() -> None:
     assert other.open().relation_to(one.open()) == "not_subset"
 
 
+# THEORY: open-and-close-read-the-region
 def test_closing_is_a_function_of_the_set() -> None:
     """The pair the core's own rows name, and the one `close` used to part.
 

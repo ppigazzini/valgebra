@@ -15,6 +15,7 @@ import pytest
 from valgebra import ValidationError, Validator, anything, recursive, union
 
 
+# THEORY: a-clause-is-a-region, clauses-are-unordered
 def test_heterogeneous_mapping_by_key_schema() -> None:
     schema = Validator({str: int, int: str})  # str keys -> int, int keys -> str
     assert schema.is_valid({"a": 1, "b": 2})
@@ -34,6 +35,7 @@ def test_record_with_a_typed_catch_all() -> None:
     assert not schema.is_valid({"name": "Ada", 1: 1})  # a non-str key is uncovered
 
 
+# THEORY: clauses-are-unordered
 def test_named_field_takes_precedence_over_the_catch_all() -> None:
     # "id" is a named int field even though a str catch-all would also match it.
     schema = Validator({"id": int, str: str})
@@ -177,6 +179,7 @@ def test_that_key_is_the_one_form_repr_does_not_rebuild() -> None:
         assert Validator(eval(repr(made), environment)) == made  # noqa: S307
 
 
+# THEORY: clauses-are-unordered
 def test_a_parsed_object_is_covered_by_whichever_clause_can_read_its_keys() -> None:
     """A JSON object's undeclared keys are governed by the clauses that admit them.
 

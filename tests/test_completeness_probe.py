@@ -491,6 +491,7 @@ def test_a_refutation_names_a_value_outside(survey) -> None:
     )
 
 
+# THEORY: the-decision-has-three-answers
 def test_the_three_answers_agree_with_the_two(survey) -> None:
     """`relation_to` and `is_subtype_of` answer the same question."""
     for name_a, a in SCHEMAS:
@@ -572,6 +573,8 @@ def disagreements() -> list[str]:
     return _disagreements()
 
 
+# THEORY: semantic-subtyping, an-exhaustible-procedure-is-searched
+# THEORY: structural-rather-than-reduction
 def test_the_two_deciders_are_measured_against_each_other(
     disagreements: list[str],
 ) -> None:

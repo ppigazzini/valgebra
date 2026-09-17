@@ -130,6 +130,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: the-lines-are-checked-per-kind
     /// The Boolean algebra, checked against the values a union admits.
     ///
     /// The component the descriptor holds per kind is a set, and these are the
@@ -168,6 +169,7 @@ proptest! {
         }
     }
 
+    // THEORY: the-lines-are-checked-per-kind
     /// The complement laws, and De Morgan both ways.
     ///
     /// The complement is total -- the [`Guard`](crate::descr::Guard) contract
@@ -208,6 +210,7 @@ proptest! {
     }
 }
 
+// THEORY: the-lines-are-checked-per-kind
 /// A class the order cannot close leaves the kind's emptiness unknown.
 ///
 /// The third verdict is what keeps the component sound where the open world

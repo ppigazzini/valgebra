@@ -81,6 +81,7 @@ def test_eq_is_structural_and_reflexive() -> None:
     assert nan == nan  # noqa: PLR0124 -- the self-comparison is the point
 
 
+# THEORY: the-normal-form-is-not-canonical
 def test_eq_is_the_normal_form_and_not_the_set() -> None:
     # `==` is equality of the lattice normal form, which construction builds. Two
     # spellings that differ only by the order of a join, by a repeat, or by an

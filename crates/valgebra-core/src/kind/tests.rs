@@ -92,6 +92,7 @@ fn the_region_set_is_a_monoid_with_an_absorbing_element() {
     );
 }
 
+// THEORY: kinds-decompose-emptiness
 /// The six scalar regions and the non-scalar remainder partition the
 /// universe: they are pairwise disjoint and together cover it. Emptiness
 /// soundness rests on the cover — the meet of all six scalar complements must

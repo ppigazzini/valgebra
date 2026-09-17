@@ -112,6 +112,7 @@ def _memos(text: str) -> list[tuple[str, str]]:
     return found
 
 
+# THEORY: a-memo-is-revertible-or-absent
 def test_the_detector_finds_a_memo_and_reads_the_sentence() -> None:
     """The parse is the whole test, so it is shown to work on both answers.
 
@@ -156,6 +157,7 @@ def test_the_detector_finds_a_memo_and_reads_the_sentence() -> None:
     assert not _memos(counted), "a test-side counter is not a memo"
 
 
+# THEORY: a-memo-is-revertible-or-absent
 def test_a_memo_without_a_revert_condition_fails_placement() -> None:
     """A table over goals in the coinductive procedure says how it reverts.
 

@@ -145,6 +145,7 @@ _MEMBERSHIP: dict[str, tuple[list[object], list[object]]] = {
 }
 
 
+# THEORY: denotational-semantics
 @pytest.mark.parametrize("label", list(_MEMBERSHIP))
 def test_node_admits_its_denotation(label: str) -> None:
     compiled = Validator(_NODES[label])

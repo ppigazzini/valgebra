@@ -498,6 +498,7 @@ fn with_records_open_flips_every_record_in_the_tree() {
     assert!(!record_is_open(homogeneous_elem(&closed)));
 }
 
+// THEORY: no-negative-clause-component
 /// Opening reads the labels on the semantic `dom`, which is what makes it a
 /// function on sets.
 ///
@@ -610,6 +611,7 @@ fn the_two_readings_of_one_term_close_to_one_set() {
     );
 }
 
+// THEORY: open-and-close-read-the-region
 /// Openness is the default of the region no clause claims.
 ///
 /// A clause is a key-type region carrying its own default, so the operators
@@ -658,6 +660,7 @@ fn opening_a_mapping_frees_the_region_no_clause_claims() {
     ));
 }
 
+// THEORY: no-negative-clause-component
 /// What the constructors make canonical, and the one thing they do not.
 ///
 /// ICFP Definition 2.2: a record is a quasi-constant function, and `dom(r)` is
@@ -732,6 +735,7 @@ fn two_spellings_of_one_keyed_map_are_one_term() {
     );
 }
 
+// THEORY: open-and-close-read-the-region
 /// Opening a record that already claims a region leaves one clause, not two.
 ///
 /// A `TypedDict` builds exactly this: named fields, and `str => anything` for
@@ -806,6 +810,7 @@ fn with_records_open_refolds_a_pair_it_creates() {
     );
 }
 
+// THEORY: open-and-close-read-the-region
 #[test]
 fn with_records_open_keeps_the_region_a_mapping_claims() {
     // A clause's own region is not the operator's to touch: closing sends the
@@ -970,6 +975,7 @@ fn resolve_self_replaces_only_the_matching_token() {
     ));
 }
 
+// THEORY: guarded-recursion
 #[test]
 fn contractivity_requires_a_structural_guard() {
     assert!(
@@ -1231,6 +1237,7 @@ fn simplify_decides_the_complement_laws() {
     );
 }
 
+// THEORY: any-is-the-top-spelled
 /// Every relation answers the same for both spellings of the top, wherever
 /// the top sits in a schema.
 ///
@@ -1302,6 +1309,7 @@ fn no_relation_can_tell_the_two_spellings_apart() {
     }
 }
 
+// THEORY: any-is-the-top-spelled
 /// `Any` is the top, spelled, so the complement laws hold of it: it is the
 /// same node as `anything`, and a rule cannot tell the two apart because the
 /// spelling compares equal. What survives is the spelling itself, which

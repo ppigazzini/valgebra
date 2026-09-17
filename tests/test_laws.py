@@ -215,6 +215,7 @@ def equivalent(left: Validator, right: Validator, extra: list[object]) -> bool:
     return sample_agree
 
 
+# THEORY: open-and-close-read-the-region
 @given(a=schemas, vals=value_lists)
 def test_closing_is_a_function_of_the_set_however_it_is_spelled(
     a: object, vals: list[object]
@@ -272,6 +273,7 @@ def test_closing_an_opened_schema_returns_the_regions_it_freed(
     assert equivalent(schema.open().close(), schema.close(), vals)
 
 
+# THEORY: lattice-theory
 @given(a=schemas, b=schemas, vals=value_lists)
 def test_union_commutativity(a: object, b: object, vals: list[object]) -> None:
     assert equivalent(union(a, b), union(b, a), vals)
@@ -304,6 +306,7 @@ def test_idempotence(a: object, vals: list[object]) -> None:
     assert equivalent(intersection(a, a), Validator(a), vals)
 
 
+# THEORY: lattice-theory
 @given(a=schemas, b=schemas, vals=value_lists)
 def test_absorption(a: object, b: object, vals: list[object]) -> None:
     assert equivalent(union(a, intersection(a, b)), Validator(a), vals)
@@ -323,6 +326,7 @@ def test_double_negation(a: object, vals: list[object]) -> None:
     assert equivalent(complement(complement(a)), Validator(a), vals)
 
 
+# THEORY: property-testing
 @given(a=schemas, b=schemas, vals=value_lists)
 def test_de_morgan(a: object, b: object, vals: list[object]) -> None:
     assert equivalent(
@@ -351,6 +355,7 @@ def test_distributivity(a: object, b: object, c: object, vals: list[object]) -> 
     )
 
 
+# THEORY: property-testing, the-normal-form-is-not-canonical
 @given(a=schemas, b=schemas, c=schemas, vals=value_lists)
 def test_simplify_preserves_acceptance(
     a: object, b: object, c: object, vals: list[object]

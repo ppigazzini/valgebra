@@ -88,6 +88,7 @@ proptest! {
         prop_assert_eq!(a.cmp(&b), b.cmp(&a).reverse());
     }
 
+    // THEORY: each-kind-is-closed
     /// The Boolean algebra, checked against the floats.
     #[test]
     fn the_lattice_laws_hold_of_the_floats(

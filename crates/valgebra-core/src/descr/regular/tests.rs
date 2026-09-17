@@ -102,6 +102,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: each-kind-is-closed
     /// The Boolean algebra, checked by equality of the canonical forms.
     ///
     /// Equality *is* language equality here -- that is what the minimal,

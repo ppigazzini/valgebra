@@ -67,6 +67,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: lattice-theory, property-testing, each-kind-is-closed
     /// The Boolean algebra, checked against the sets rather than by equality
     /// of the forms, which a union of lines does not make canonical.
     #[test]
@@ -217,6 +218,7 @@ fn a_union_past_the_bound_refuses() {
     assert!(wide.union(&SetLattice::of(IntSet::just(-1))).is_none());
 }
 
+// THEORY: the-second-decider, the-decision-has-three-answers
 /// A negated form the allowance cannot expand is *unknown*, never inhabited.
 ///
 /// The three-valued verdict exists for exactly this: a lattice in negated form
@@ -246,6 +248,7 @@ fn a_negated_set_the_allowance_cannot_expand_declines() {
     assert!(!budget::under(0, || negated.is_empty()));
 }
 
+// THEORY: the-second-decider
 /// The value guard beside the elements declines where its own meet does.
 ///
 /// A line's exclusions are answered by asking whether one covers the other,

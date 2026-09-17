@@ -149,6 +149,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: each-kind-is-closed
     /// The Boolean algebra, checked against the values rather than by equality
     /// of the forms -- `Every` and a guard naming every integer are one set and
     /// two forms, which is the whole reason the top is carried beside.
@@ -175,6 +176,7 @@ proptest! {
         }
     }
 
+    // THEORY: each-kind-is-closed
     /// The complement laws, and De Morgan both ways.
     #[test]
     fn the_complement_laws_hold_of_the_values(a in values(), b in values()) {

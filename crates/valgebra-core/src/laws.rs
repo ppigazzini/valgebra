@@ -1507,6 +1507,7 @@ fn decides_refinement_bound_emptiness_with_an_ordering_oracle() {
     );
 }
 
+// THEORY: two-fixpoints-one-procedure
 #[test]
 fn detects_uninhabited_recursive_schemas() {
     let field = |name: &str, schema, required| Field {
@@ -1568,6 +1569,7 @@ fn decides_complement_subtyping_contravariantly() {
     );
 }
 
+// THEORY: recursive-subtyping, two-fixpoints-one-procedure
 #[test]
 fn decides_recursive_subtyping_coinductively() {
     let field = |name: &str, schema, required| Field {
@@ -1871,6 +1873,7 @@ proptest! {
         prop_assert_eq!(once.clone(), once.simplify());
     }
 
+    // THEORY: lattice-theory, property-testing, each-kind-is-closed
     /// The laws, as statements about the *sets* two schemas denote.
     ///
     /// The properties below them compare two simplified schemas for
@@ -3014,6 +3017,7 @@ fn bounded_widths(schemas: &[&Schema]) -> Vec<(SeqKind, usize)> {
     found
 }
 
+// THEORY: each-kind-is-closed
 /// The universe separates a pair at a position *inside* a shape.
 ///
 /// What this universe is for, asked at the depth its caps govern rather than
@@ -4028,6 +4032,7 @@ proptest! {
         }
     }
 
+    // THEORY: subtyping-is-inclusion
     /// A claimed subtype never admits a value its supertype rejects, over the
     /// same value-aware oracle.
     ///
@@ -4064,6 +4069,7 @@ proptest! {
         }
     }
 
+    // THEORY: recursive-subtyping, subtyping-is-inclusion
     /// A proof over a fixpoint has no witness against it either.
     ///
     /// The property above draws from a fragment with no reference in it, so
@@ -4123,6 +4129,7 @@ fn recursive_schema() -> impl Strategy<Value = Schema> {
 }
 
 proptest! {
+    // THEORY: subtyping-is-inclusion
     /// A refutation stands on a value, and the universe names it.
     ///
     /// `Fails` is the strongest answer either decider gives: it asserts that a
@@ -4153,6 +4160,7 @@ proptest! {
         }
     }
 
+    // THEORY: each-kind-is-closed
     /// An emptiness is refused by every value of the universe.
     ///
     /// The companion claim, on the same universe: `is_empty` asserts that *no*
@@ -4305,6 +4313,7 @@ proptest! {
         }
     }
 
+    // THEORY: semantic-subtyping
     /// The same claim where the two deciders can look something up.
     ///
     /// An oracle is the only place the core learns about Python -- a class's

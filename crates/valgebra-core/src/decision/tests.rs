@@ -201,6 +201,7 @@ fn a_refinement_with_no_constraint_earns_the_regions_of_its_base() {
     );
 }
 
+// THEORY: a-class-is-what-can-be-read
 /// The attribute record, asked against every other shape on its own.
 ///
 /// It is the node behind every dataclass, and the frontend never emits it
@@ -1111,6 +1112,7 @@ fn the_descriptor_proves_an_emptiness_the_rules_decline() {
     assert!(meet.is_empty(), "and the sets decide it");
 }
 
+// THEORY: a-sequence-splits-across-a-union
 /// A fixed-arity sequence is a product, and a product is decided against a
 /// union of products by the backtrack-free `Phi` -- so a value that lands in
 /// no single branch is still decided, which is the whole reason the rule
@@ -3548,6 +3550,7 @@ impl LeafRelations for Classes {
     }
 }
 
+// THEORY: a-class-is-what-can-be-read
 /// A class met with its attributes has a value when its fields do, and that
 /// value is what every refutation about a dataclass stands on.
 ///
@@ -4229,6 +4232,7 @@ fn a_complement_names_a_witness_from_the_kinds_its_inner_schema_is_not() {
     );
 }
 
+// THEORY: a-cut-reference-proves, the-decision-has-three-answers
 /// A difference over a cut reference proves an inclusion and refutes nothing.
 ///
 /// The descriptor holds no cycle, so a recursive schema reaches it unfolded
@@ -4570,6 +4574,7 @@ fn an_attribute_record_relates_through_the_objects_that_carry_it() {
     );
 }
 
+// THEORY: recursive-subtyping, the-trail-holds-terms, the-assumption-set-is-popped
 /// The trail a decision carries is left exactly as it was found.
 ///
 /// The coinductive rule is that a goal already under way is *assumed*: the pair
@@ -4626,6 +4631,7 @@ fn a_decision_leaves_the_trail_it_was_given() {
     }
 }
 
+// THEORY: recursive-subtyping, the-assumption-set-is-popped
 /// A trail that was not empty to begin with comes back as it was.
 ///
 /// The same property, asked where a caller has already assumed something: the
@@ -4653,6 +4659,7 @@ fn a_decision_leaves_an_assumption_it_did_not_make() {
     assert_eq!(trail, seeded, "the caller's assumptions did not survive");
 }
 
+// THEORY: recursive-subtyping, the-trail-holds-terms
 /// The assumption rule fires on the pair it was given and on no other.
 ///
 /// A goal on the trail is assumed to hold: that is the coinduction, and it is

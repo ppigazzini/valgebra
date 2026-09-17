@@ -212,6 +212,7 @@ fn nesting_built_twice(wrap: &dyn Fn(Arc<Schema>) -> Schema) -> (Arc<Schema>, Ar
     panic!("every leaf shares a slot with its own nesting");
 }
 
+// THEORY: a-node-built-alike-is-one-handle
 /// The substitution the table makes is invisible, so what a caller reads
 /// back is what it asked for -- and what a second caller asking for the
 /// same thing reads is the same allocation.
@@ -330,6 +331,7 @@ fn settled(make: impl Fn(usize) -> Schema) -> (usize, Schema) {
     panic!("a hundred thousand nodes of one family each land on a part");
 }
 
+// THEORY: a-node-built-alike-is-one-handle
 /// Every family is shared when it is built twice: the table answers for the
 /// whole node set and not for the variants somebody thought of.
 #[test]
@@ -501,6 +503,7 @@ fn the_table_does_not_keep_a_dropped_node_alive() {
     );
 }
 
+// THEORY: a-node-built-alike-is-one-handle
 /// Sharing is by construction, so a child built through the table is the
 /// same child in both parents and the parents are one node in turn.
 ///

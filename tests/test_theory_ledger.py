@@ -42,9 +42,19 @@ pytestmark = pytest.mark.repository
 ROOT = Path(__file__).resolve().parent.parent
 THEORY = ROOT / "docs" / "dev" / "10-theory.md"
 
-#: The tags a *claim* carries. The page's own paragraph explaining them writes
-#: the words without brackets, which is what keeps it out of the universe.
-CLAIMS = ("[LOAD-BEARING]", "[OBLIGATION]", "[DEVIATION]")
+#: The tags a *claim* carries, each with the id that names it. The page's own
+#: paragraph explaining them writes the words without brackets, which is what
+#: keeps it out of the universe.
+CLAIMS = ("LOAD-BEARING", "OBLIGATION", "DEVIATION")
+
+#: A tag as the page writes it: the kind, and the id a test names it by.
+_TAG = re.compile(r"\*\*\[(LOAD-BEARING|OBLIGATION|DEVIATION): ([a-z][a-z0-9-]*)\]\*\*")
+
+#: The marker a *test* carries to name the claim it holds, in either language.
+#: Read within this many lines above the definition, so it may sit above a doc
+#: comment, an attribute or a decorator rather than between them and the name.
+_MARKER = re.compile(r"(?://|#)\s*THEORY:\s*([a-z0-9-]+(?:\s*,\s*[a-z0-9-]+)*)")
+_BESIDE = 30
 HELD_BY = "HELD-BY:"
 OWED = "OWED:"
 
@@ -72,6 +82,7 @@ class Claim(NamedTuple):
 
     text: str
     tag: str
+    identifier: str
     names: list[str]
     owed: str | None
 
@@ -117,12 +128,19 @@ def _claims() -> list[Claim]:
             )
             found[-1] = last._replace(owed=" ".join(paragraph.split()))
             continue
-        tags = [tag for tag in CLAIMS if tag in paragraph]
+        tags = _TAG.findall(paragraph)
         if tags:
             assert len(tags) == 1, (
                 f"a paragraph carrying two tags: {_summarise(paragraph)}"
             )
-            found.append(Claim(paragraph, tags[0], [], None))
+            kind, identifier = tags[0]
+            found.append(Claim(paragraph, kind, identifier, [], None))
+            continue
+        bare = [tag for tag in CLAIMS if f"[{tag}]" in paragraph]
+        assert not bare, (
+            "a claim tagged without an id, which no test can name: "
+            + _summarise(paragraph)
+        )
     return found
 
 
@@ -153,11 +171,16 @@ def test_the_page_carries_tagged_claims() -> None:
     """
     claims = _claims()
     text = THEORY.read_text(encoding="utf-8")
-    assert sum(text.count(tag) for tag in CLAIMS) == len(claims)
+    assert len(_TAG.findall(text)) == len(claims)
     by_tag = {tag: sum(1 for claim in claims if claim.tag == tag) for tag in CLAIMS}
-    assert by_tag["[LOAD-BEARING]"] >= 8, by_tag
-    assert by_tag["[OBLIGATION]"] >= 4, by_tag
-    assert by_tag["[DEVIATION]"] >= 4, by_tag
+    assert by_tag["LOAD-BEARING"] >= 8, by_tag
+    assert by_tag["OBLIGATION"] >= 4, by_tag
+    assert by_tag["DEVIATION"] >= 4, by_tag
+
+    # And each id is its own, since a test names a claim by it.
+    identifiers = [claim.identifier for claim in claims]
+    repeated = sorted({name for name in identifiers if identifiers.count(name) > 1})
+    assert not repeated, f"claims sharing an id: {repeated}"
 
 
 def test_every_claim_names_a_test_held_or_owed() -> None:
@@ -291,3 +314,69 @@ def test_a_claim_is_held_by_more_than_its_own_restatement() -> None:
     # statement about one module rather than about the tree.
     all_names = {name for claim in _held() for name in claim.names}
     assert len(all_names) >= 15, sorted(all_names)
+
+
+def _markers() -> dict[str, list[tuple[str, str]]]:
+    """Every `THEORY:` marker in the tree: the id, the file, and the test below it.
+
+    Read by walking down from the marker to the next definition, which is the
+    direction the placement rule states: the marker sits above whatever preamble
+    the item carries -- a doc comment, an attribute, a decorator -- so what it
+    names is the first definition after it and never one before.
+    """
+    found: dict[str, list[tuple[str, str]]] = {}
+    for root, glob, pattern in _SOURCES:
+        for path in root.rglob(glob):
+            text = path.read_text(encoding="utf-8")
+            for marker in _MARKER.finditer(text):
+                below = pattern.search(text, marker.end())
+                name = below.group(1) if below else ""
+                for identifier in marker.group(1).replace(" ", "").split(","):
+                    found.setdefault(identifier, []).append(
+                        (str(path.relative_to(ROOT)), name)
+                    )
+    return found
+
+
+def test_every_marker_names_a_claim_the_page_carries() -> None:
+    """The reverse direction: a test that says what it holds is held to saying so.
+
+    A `HELD-BY:` line goes stale when its test is renamed, and
+    `test_every_named_test_exists` catches that. This catches the other end -- a
+    marker naming a claim the page has dropped or renamed, which would otherwise
+    point a reader at nothing and read as if it pointed somewhere.
+    """
+    markers = _markers()
+    # The scan is a detector, so it is shown to have read the tree.
+    assert len(markers) >= 20, sorted(markers)
+    identifiers = {claim.identifier for claim in _claims()}
+    unknown = sorted(set(markers) - identifiers)
+    assert not unknown, "markers naming a claim the page does not carry:\n" + "\n".join(
+        f"  {identifier} -- in {', '.join(path for path, _ in markers[identifier])}"
+        for identifier in unknown
+    )
+
+
+def test_every_held_test_carries_the_marker() -> None:
+    """And a test the page names says, at the test, which claim it is for.
+
+    Without it a reader at the test has no way back to the sentence it holds,
+    and a test edited until it no longer asserts the claim looks like any other
+    edit. The marker does not make that impossible -- nothing mechanical can --
+    but it puts the claim in front of whoever is editing.
+    """
+    markers = _markers()
+    marked: set[tuple[str, str]] = {
+        (identifier, name) for identifier, sites in markers.items() for _, name in sites
+    }
+    unmarked = sorted(
+        f"{name} ({claim.identifier})"
+        for claim in _held()
+        for name in claim.names
+        if (claim.identifier, name) not in marked
+    )
+    assert not unmarked, (
+        "tests the page says hold a claim and that do not name it:\n"
+        + "\n".join(f"  {row}" for row in unmarked)
+        + "\n\nPut `# THEORY: <id>` (or `// THEORY: <id>`) above the test."
+    )

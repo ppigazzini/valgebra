@@ -476,6 +476,20 @@ PLANTS = (
         ),
     ),
     Plant(
+        # The other end of the theory ledger: a claim renamed on the page,
+        # which leaves every marker naming it pointing at nothing while still
+        # reading like a pointer. The `HELD-BY:` direction does not see it --
+        # the tests it names all still exist -- so only the reverse one does.
+        "tests/test_theory_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            "**[OBLIGATION: the-budget-declines]**",
+            "**[OBLIGATION: the-budget-stops]**",
+        ),
+    ),
+    Plant(
         # The failure the ledger is for: a documented outcome the suite reaches
         # and never pins. The call runs, so the sweep reports the arm covered
         # and the coverage lane reports the line run -- and nothing holds the

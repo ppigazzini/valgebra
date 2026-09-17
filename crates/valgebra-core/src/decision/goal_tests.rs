@@ -146,6 +146,7 @@ fn tree_defs() -> Vec<Schema> {
     }]
 }
 
+// THEORY: repeated-goals-are-counted
 /// The counter is wired to the procedure, so a zero from it is a reading.
 ///
 /// The control every count below needs. A recorder attached to nothing reports
@@ -202,6 +203,7 @@ fn a_tuple_whose_positions_share_a_schema_repeats_no_goal() {
     assert_ne!(verdict, Relation::Holds);
 }
 
+// THEORY: repeated-goals-are-counted
 /// The width the page names, so the number it states is the number here.
 #[test]
 fn a_record_of_thirty_two_fields_sharing_one_schema_repeats_no_goal() {
@@ -213,6 +215,7 @@ fn a_record_of_thirty_two_fields_sharing_one_schema_repeats_no_goal() {
     assert_eq!(repeated(&narrow, &wide, &[]), 0);
 }
 
+// THEORY: repeated-goals-are-counted
 /// The matrix's own pairs, each counted on its own -- and two of them repeat.
 ///
 /// The structural readings' slow set, which the three older workloads do not

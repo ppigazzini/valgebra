@@ -1,6 +1,7 @@
 use super::{DECISION_BUDGET, spend};
 use std::cell::Cell;
 
+// THEORY: the-budget-declines
 /// The work ceiling one decision query may spend. An exhausted budget must
 /// answer `false`, because that is the whole signal a budgeted decision has
 /// for stopping and reporting the conservative answer.
@@ -32,6 +33,7 @@ fn an_exhausted_budget_refuses_to_spend() {
     assert_eq!(shipped.get(), DECISION_BUDGET - 1);
 }
 
+// THEORY: the-budget-declines
 /// An exhausted budget declines on every subtyping path, and refutes on none.
 ///
 /// The contract's only observable: a `Fails` is a value of the subject outside

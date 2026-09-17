@@ -431,6 +431,7 @@ def _agrees(compiled: Validator, predicate: Pred, value: object) -> None:
     assert raised is (not expected), repr(value)
 
 
+# THEORY: denotational-semantics
 @given(case=_cases(), value=_values())
 def test_walk_matches_denotation(case: tuple[Validator, Pred], value: object) -> None:
     compiled, predicate = case

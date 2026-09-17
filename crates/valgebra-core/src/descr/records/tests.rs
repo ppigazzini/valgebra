@@ -139,6 +139,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: each-kind-is-closed
     /// The Boolean algebra, checked against the objects rather than by
     /// equality of the forms, which a union of atoms does not make
     /// canonical.

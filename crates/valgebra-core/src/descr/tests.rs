@@ -290,6 +290,7 @@ fn a_prefix_pins_the_length_and_a_tail_does_not() {
     assert!(many.admits(Value::sequence(TWO, Kind::Tuple)));
 }
 
+// THEORY: kinds-decompose-emptiness
 /// The kind is what separates a list from a tuple, not the language: the
 /// same shape under two kinds is two components, and they do not meet.
 #[test]
@@ -342,6 +343,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: lattice-theory, property-testing, each-kind-is-closed
     /// The lattice laws, over descriptors that hold sets.
     #[test]
     fn the_lattice_laws_hold_of_the_sets(
@@ -1052,6 +1054,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: the-descriptor
     /// The Boolean algebra, checked by equality of the canonical forms.
     ///
     /// One component per kind, each canonical for its representation, so
@@ -1089,6 +1092,7 @@ proptest! {
         }
     }
 
+    // THEORY: the-descriptor
     /// The complement laws, and the two the structural procedure declines.
     #[test]
     fn the_complement_laws_hold_of_the_descriptors(a in descr(), b in descr()) {
@@ -1117,6 +1121,7 @@ proptest! {
         }
     }
 
+    // THEORY: the-descriptor
     /// An empty descriptor admits no value, and one that admits a value of
     /// the universe is not empty.
     #[test]
@@ -1137,6 +1142,7 @@ proptest! {
     }
 }
 
+// THEORY: kinds-decompose-emptiness
 /// The kind list is the partition, so it must hold every kind exactly once.
 ///
 /// A `match` over `Kind` is exhaustive and this array is not, so the list is
@@ -1264,6 +1270,7 @@ fn a_label_of_a_union_is_the_union_of_the_labels() {
     assert!(outside.is_empty(), "{outside:?}");
 }
 
+// THEORY: records-maps-and-structs, a-clause-is-a-region, clauses-are-quasi-k-step
 /// The key partition is read per part: a map that says what its `str` keys
 /// map to says nothing about its `int` keys.
 ///
@@ -1638,6 +1645,7 @@ fn a_set_reaches_the_kinds_it_holds_a_value_of() {
     assert!(not_int.reaches(Kind::Dict));
 }
 
+// THEORY: the-second-decider
 /// A union of lines the allowance cannot expand is *unknown*, never inhabited.
 ///
 /// The third component to be held to the third verdict. A negated union has to

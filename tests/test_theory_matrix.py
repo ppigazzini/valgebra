@@ -473,6 +473,7 @@ def _pair(row: tuple[str, Any, Any, str, list[Any]]) -> tuple[Validator, Validat
 IDS = [row[0] for row in ROWS]
 
 
+# THEORY: the-carriers-are-i64-and-f64
 def test_every_edge_of_the_integer_carrier_has_a_row() -> None:
     """The edges `docs/15-decidability.md` names are rows, not sentences.
 
@@ -498,6 +499,7 @@ def test_every_edge_of_the_integer_carrier_has_a_row() -> None:
     assert not missing, f"the carrier's edges have no row: {missing}"
 
 
+# THEORY: subtyping-is-inclusion
 @pytest.mark.parametrize("row", ROWS, ids=IDS)
 def test_no_proof_is_refuted_by_a_value(
     row: tuple[str, Any, Any, str, list[Any]],
@@ -518,6 +520,7 @@ def test_no_proof_is_refuted_by_a_value(
         )
 
 
+# THEORY: subtyping-is-inclusion
 @pytest.mark.parametrize("row", ROWS, ids=IDS)
 def test_a_claimed_refutation_stands_on_a_value(
     row: tuple[str, Any, Any, str, list[Any]],
@@ -557,6 +560,7 @@ def test_a_recorded_refutation_has_its_witness(
     )
 
 
+# THEORY: the-carriers-are-i64-and-f64
 @pytest.mark.parametrize("row", ROWS, ids=IDS)
 def test_the_relation_is_the_one_recorded(
     row: tuple[str, Any, Any, str, list[Any]],
@@ -654,6 +658,7 @@ def test_a_record_resolves_a_key_the_way_the_dict_does() -> None:
         assert not record.is_valid({"b": 1})
 
 
+# THEORY: the-carriers-are-i64-and-f64
 def test_a_multiple_is_a_remainder_of_zero() -> None:
     """`MultipleOf` is `value % operand == 0`, which is what the node denotes.
 
