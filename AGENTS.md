@@ -89,6 +89,14 @@ them, and every step is either run or named with the reason it cannot be. The
 difference is not academic: a local clone carries tags and a checkout does not,
 so a check reading `git describe` answers one way here and another on a runner.
 
+It also builds the **floor** interpreter `ci.yml` names, beside the one you
+invoked it with, and runs the product suite there -- the suite is written on
+the newest release the tree supports and read on the oldest, so a typing member
+the floor does not have fails at collection and takes every job on that
+interpreter with it. That is a `uv venv` and a second build the first time, and
+cached after; `uv` not being on `PATH` names it in the closing line rather than
+failing the run.
+
 
 ## Layout
 

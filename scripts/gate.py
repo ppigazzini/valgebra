@@ -52,7 +52,7 @@ from typing import TYPE_CHECKING
 import yaml
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
 #: A step to run: its job, its name, its command, and the job's own `env`.
 Step = tuple[str, str, str, dict[str, str]]
@@ -308,6 +308,91 @@ DEEP_HISTORY_STEPS = (
 )
 
 
+def floor_interpreter() -> str:
+    """Read the oldest interpreter the python matrix runs.
+
+    The floor is `ci.yml`'s to name, and it is read here rather than written
+    down: a second copy of the number stops moving when the floor moves, and it
+    stops in the direction that keeps passing -- the gate would go on building
+    an interpreter nothing supports and reporting the suite green on it.
+    `tests/test_local_gate.py` refuses the literal anywhere in this file.
+    """
+    matrix = workflow()["jobs"]["python"]["strategy"]["matrix"]
+    versions = [str(version) for version in matrix["python-version"]]
+    if not versions:
+        message = "the python lane names no interpreter"
+        raise RuntimeError(message)
+    return versions[0]
+
+
+def floor_environment() -> dict[str, str]:
+    """Compose the environment the floor steps run in: a second one, throughout.
+
+    Every name here points somewhere the caller's own interpreter does not.
+    That is the whole content of this function, and it is what the reverted
+    experiment got wrong in the other direction: a `uv` command handed the
+    caller's `.venv` *wrote* it, uninstalling what the developer had built. A
+    second release needs a second environment by definition, so the way to get
+    that failure back is to leave one of these names off.
+
+    The build directory is separate for the same reason one step down: the two
+    interpreters link different libraries, so one `target/` shared between them
+    rebuilds `pyo3` and everything under it on every alternation.
+    """
+    floor = floor_interpreter()
+    venv = ROOT / "target" / f"gate-floor-{floor}"
+    interpreter = venv / ("Scripts" if os.name == "nt" else "bin") / "python"
+    return {
+        **runner_environment(),
+        "CI": "1",
+        "UV_PROJECT_ENVIRONMENT": str(venv),
+        "VIRTUAL_ENV": str(venv),
+        # The extension is compiled against the floor's headers, not the
+        # caller's. Left to `interpreter_env`, this would be the caller's
+        # interpreter and the build would link the wrong ABI.
+        "PYO3_PYTHON": str(interpreter),
+        "CARGO_TARGET_DIR": str(ROOT / "target" / f"gate-cargo-{floor}"),
+        # What the lane hands its own pytest step, so the suite draws the same
+        # number of cases here as it does there.
+        "HYPOTHESIS_PROFILE": "ci",
+    }
+
+
+def floor_steps() -> tuple[tuple[str, str, str], ...]:
+    """Build the floor interpreter beside the caller's, and run the suite on it.
+
+    The matrix runs seven releases; a developer runs one. Every difference
+    between two of them is one this gate cannot see, and the floor is the end
+    of the range where those land: the suite is written on the newest release
+    the tree supports and read on the oldest, so a member that release does not
+    have fails at *collection* and takes every job on that interpreter with it.
+    Three did, in one push, from a green local run.
+
+    The **product** suite alone. The repository checks read the tree, the
+    workflow and the scripts; none of that answers differently by release, and
+    running them twice would double the slowest half of the gate to re-derive
+    the same verdict.
+    """
+    floor = floor_interpreter()
+    venv = floor_environment()["UV_PROJECT_ENVIRONMENT"]
+    return (
+        (
+            f"python {floor}",
+            "The floor interpreter, and the extension built into it",
+            (
+                f"uv venv --python {shlex.quote(floor)} {shlex.quote(venv)} "
+                "&& uv sync --locked --no-install-project "
+                "&& uv run --no-sync maturin develop --uv"
+            ),
+        ),
+        (
+            f"python {floor}",
+            "The product suite, on the floor interpreter",
+            "uv run --no-sync pytest -q -p no:cacheprovider -m 'not repository'",
+        ),
+    )
+
+
 def deep_clone(into: Path) -> Path:
     """Clone `HEAD` with its whole history and its tags, and with no committer.
 
@@ -511,14 +596,35 @@ def step_environment(environment: dict[str, str], outputs: Path) -> dict[str, st
     }
 
 
-def run_step(name: str, command: str, cwd: Path, environment: dict[str, str]) -> bool:
+def whole_environment(environment: dict[str, str], outputs: Path) -> dict[str, str]:
+    """Take the environment as given, and only name the files a step may write.
+
+    `step_environment` composes a *step's* `env:` over the runner's and then
+    wins on four names of its own -- which is right for a step read out of the
+    workflow and wrong for the floor, whose whole point is that two of those
+    four names point somewhere else.
+    """
+    return {
+        **environment,
+        "GITHUB_OUTPUT": str(outputs / "github_output"),
+        "GITHUB_STEP_SUMMARY": str(outputs / "step_summary"),
+    }
+
+
+def run_step(
+    name: str,
+    command: str,
+    cwd: Path,
+    environment: dict[str, str],
+    compose: Callable[[dict[str, str], Path], dict[str, str]] = step_environment,
+) -> bool:
     print(f"\n=== {name}")
     with tempfile.TemporaryDirectory() as outputs:
         result = subprocess.run(
             ["bash", "-euo", "pipefail", "-c", command],
             cwd=cwd,
             check=False,
-            env=step_environment(environment, Path(outputs)),
+            env=compose(environment, Path(outputs)),
         )
     if result.returncode != 0:
         print(f"FAILED: {name} (exit {result.returncode})")
@@ -561,8 +667,13 @@ def main() -> int:
         return EXIT_CANNOT_RUN
 
     plan, unresolved = build_plan(spec, jobs)
+    # A second interpreter is `uv`'s to fetch, and one job asked for by name is
+    # not the matrix. Decided here so `--list` says the same thing the run does.
+    floor_runs = not args.job and shutil.which("uv") is not None
     if args.list:
         show_plan(spec, jobs, plan, unresolved)
+        for job, name, _ in floor_steps() if floor_runs else ():
+            print(f"run   {job}: {name}")
         return EXIT_OK
 
     if args.here:
@@ -596,6 +707,21 @@ def main() -> int:
                 for job, name, command in DEEP_HISTORY_STEPS
                 if not run_step(f"{job}: {name}", command, deep, NO_IDENTITY)
             ]
+        # And the release the suite is read on rather than written on. This runs
+        # in the same tree as the plan: what makes it a second lane is the
+        # environment, not the checkout.
+        if floor_runs:
+            failures += [
+                f"{job}: {name}"
+                for job, name, command in floor_steps()
+                if not run_step(
+                    f"{job}: {name}",
+                    command,
+                    tree,
+                    floor_environment(),
+                    whole_environment,
+                )
+            ]
     finally:
         if holder is not None:
             shutil.rmtree(holder, ignore_errors=True)
@@ -605,11 +731,13 @@ def main() -> int:
         print(f"gate: {len(failures)} step(s) failed: {', '.join(failures)}")
         return EXIT_FAIL
     deep_steps = 0 if args.here else len(DEEP_HISTORY_STEPS)
+    floor_count = len(floor_steps()) if floor_runs else 0
     print(
-        f"gate: {len(plan) + deep_steps} step(s) passed in a clone shaped like the "
-        "runner's, and in a clone that keeps the history and has no committer."
+        f"gate: {len(plan) + deep_steps + floor_count} step(s) passed in a clone "
+        "shaped like the runner's, in a clone that keeps the history and has no "
+        "committer, and on the floor interpreter."
     )
-    report_what_was_not_run(here=args.here)
+    report_what_was_not_run(here=args.here, floor=floor_runs)
     return EXIT_OK
 
 
@@ -623,8 +751,9 @@ def main() -> int:
 #: merge-gate job to being planned, excused step by step, or named here.
 UNREACHED = {
     "python": (
-        "runs on the caller's interpreter alone; the matrix is 3.10 through "
-        "3.15 and free-threaded, and an answer differs by release"
+        "the floor is built and the product suite runs on it; what is left "
+        "unread is every release between the floor and the caller's, the "
+        "prerelease, and the free-threaded build"
     ),
     "bench": "cachegrind and a base built beside the head",
     "bench-free-threaded": "the optimized wheel, and a second interpreter",
@@ -639,7 +768,7 @@ UNREACHED = {
 }
 
 
-def report_what_was_not_run(*, here: bool) -> None:
+def report_what_was_not_run(*, here: bool, floor: bool) -> None:
     """Say what a green gate did not check, because a green gate is read as more.
 
     The audit's standing rule is that a slice names the lanes this gate cannot
@@ -656,6 +785,11 @@ def report_what_was_not_run(*, here: bool) -> None:
         print(f"  - {job}: {why}")
     if here:
         print("  - python (fetch-depth: 0): --here skips the history checks")
+    if not floor:
+        print(
+            f"  - python {floor_interpreter()}: `uv` is not on PATH, or one job "
+            f"was asked for by name, so the floor interpreter was not built"
+        )
 
 
 if __name__ == "__main__":

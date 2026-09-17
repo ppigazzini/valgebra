@@ -295,6 +295,21 @@ PLANTS = (
             RUNNER_ONLY_STEP,
         ),
     ),
+    # The same ledger again, on the half of the gate that is not a workflow
+    # step: the floor interpreter it builds. Written down rather than read, the
+    # number is right today and wrong the morning the floor moves -- and wrong
+    # in the direction that keeps passing, since the gate goes on building a
+    # release nothing supports and reporting the suite green on it.
+    Plant(
+        "tests/test_local_gate.py",
+        ("scripts/gate.py",),
+        lambda tree: _edit(
+            tree,
+            "scripts/gate.py",
+            "    return versions[0]",
+            '    return "3.10"',
+        ),
+    ),
     # The other half of the same claim, and the half a reader acts on: the leg
     # that takes the history says so in its name. Pointed at a leg that does not
     # take it, the name is still there and still specific -- and it now names

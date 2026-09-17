@@ -400,3 +400,83 @@ def test_a_job_named_unreached_is_one_the_workflow_has() -> None:
     assert all(reason.strip() for reason in gate.UNREACHED.values()), (
         "a job named with no reason is a job nobody can act on"
     )
+
+
+def _matrix_interpreters() -> list[str]:
+    """Read the interpreters the python lane runs, floor first."""
+    matrix = gate.workflow()["jobs"]["python"]["strategy"]["matrix"]
+    versions = [str(version) for version in matrix["python-version"]]
+    assert versions, "the python lane names no interpreter"
+    return versions
+
+
+def test_the_gate_builds_the_floor_interpreter_the_matrix_names() -> None:
+    """The floor the gate builds is the floor the workflow runs, or it is a guess.
+
+    The matrix runs seven interpreters and the gate runs one: the caller's. A
+    difference between two releases is therefore a difference this gate cannot
+    see, and the floor is the end of that range where the difference actually
+    lands -- `typing.Self`, `LiteralString` and `Unpack` are 3.11, and each of
+    them reddened nine jobs from a green local run.
+
+    So the gate builds the floor beside the caller's interpreter. Which release
+    that is belongs to `ci.yml`, not here: a second copy of "3.10" is a number
+    that goes stale the day the floor moves, silently, in the one direction
+    where a stale floor tests *less* than it claims. Held by refusing the
+    literal anywhere in the gate.
+    """
+    floor = _matrix_interpreters()[0]
+    assert gate.floor_interpreter() == floor
+
+    source = GATE.read_text(encoding="utf-8")
+    assert floor not in source, (
+        f"`scripts/gate.py` spells the floor interpreter {floor!r} itself. It is "
+        f"in `ci.yml`, and a copy of it here is a copy that stops moving when "
+        f"the floor does"
+    )
+
+
+def test_the_floor_interpreter_runs_the_product_suite() -> None:
+    """Building the floor is not the claim; running the suite on it is.
+
+    An extension that builds and imports on the floor is an extension the floor
+    can load, which is the smaller half. The half that has gone red is the
+    suite: a test module that names a typing member the floor does not have
+    fails at collection, and every job on that interpreter goes with it.
+    """
+    commands = [command for _, _, command in gate.floor_steps()]
+    assert commands, "the gate builds no floor interpreter"
+
+    built = [command for command in commands if "uv venv" in command]
+    assert built, f"no step builds the floor interpreter: {commands}"
+    assert gate.floor_interpreter() in built[0], (
+        f"the floor environment is built without naming the floor: {built[0]!r}"
+    )
+
+    ran = [command for command in commands if "pytest" in command]
+    assert ran, f"the floor interpreter is built and nothing runs on it: {commands}"
+    assert "not repository" in ran[0], (
+        f"the floor runs {ran[0]!r}, which is not the product suite -- the "
+        f"repository checks read the tree and answer the same on any release"
+    )
+
+
+def test_the_floor_build_does_not_write_the_callers_environment() -> None:
+    """The floor is built beside the caller's, never into it.
+
+    This is the reverted experiment, in the one place it would be tempting
+    again: lending the caller's `.venv` to a step in the clone uninstalled the
+    extension and the bench group from the tree the developer was working in.
+    A second interpreter needs a second environment by definition, so the only
+    way to get that failure back is to point this one at the first.
+    """
+    environment = gate.floor_environment()
+    venv = Path(environment["UV_PROJECT_ENVIRONMENT"])
+    assert venv != ROOT / ".venv", "the floor build would overwrite the caller's venv"
+    assert not venv.is_relative_to(ROOT / ".venv")
+
+    # And the Rust side of the same point: the floor links a different libpython,
+    # so sharing one build directory with the caller's interpreter rebuilds
+    # `pyo3` both ways on every run.
+    shared = gate.step_environment({}, ROOT)["CARGO_TARGET_DIR"]
+    assert environment["CARGO_TARGET_DIR"] != shared

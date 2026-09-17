@@ -31,8 +31,22 @@ reads every `run:` step of every job the `ci` aggregator waits for out of the
 workflow, and runs them in a fresh **shallow clone of `HEAD` with no tags** --
 which is what `actions/checkout` produces and what a developer's clone is not.
 A step that needs a runner (a PGO wheel, valgrind, a mutation sweep, a second
-interpreter) is named with the reason instead, and `tests/test_local_gate.py`
+operating system) is named with the reason instead, and `tests/test_local_gate.py`
 holds that list to the workflow in both directions.
+
+**The floor interpreter is built beside the caller's, and the suite runs on
+it.** The matrix runs seven releases and a developer runs one, so every
+difference between two of them is a difference the gate could not see -- and
+they are not rare: three typing members the floor does not carry passed a green
+local run and reddened nine jobs. The floor is the end of the range where that
+lands, because the suite is written on the newest release the tree supports and
+read on the oldest. So the gate makes a second environment on the floor
+`ci.yml` names, builds the extension into it, and runs the **product** suite
+there; the repository checks read the tree and answer the same on any release,
+so they run once. Which release the floor is stays in `ci.yml`: the gate reads
+it, and `tests/test_local_gate.py` refuses a second copy of the number here,
+because a stale floor is the one kind of stale that tests less than it claims
+while staying green.
 
 **What the clone models, the environment does not.** A step gets the caller's
 environment plus the job's and the step's own `env:`, and the runner's own
@@ -54,6 +68,7 @@ reproduces; the count is the table's rather than this sentence's:
 | the terminal's own variables | yes, `runner_environment` | `FORCE_COLOR` turned `pip-audit` red against a clean dependency tree |
 | the machine's git identity | yes, `deep_clone` and `NO_IDENTITY` | a checkout configures no `user.name`, this repository has one in its own `.git/config`, and a ledger that plants a commit with `git commit-tree` passed here and failed there |
 | the interpreter the lane names | partly: `PYO3_PYTHON` follows the caller's, and the gate's closing line says so | the mutation and cachegrind lanes name CPython 3.12 in `ci.yml`; a local sweep on 3.14 read two mutants as survivors that the lane kills, which is half an hour spent on a difference that was the interpreter |
+| the *release* of the interpreter, not only the caller's | yes, at the floor: the gate builds it beside the caller's and runs the product suite on it | `typing.Self`, `LiteralString` and `Unpack` are 3.11 members; a test module naming them collected here on 3.14, failed to collect on the floor, and took nine jobs red with it |
 | the operating system and architecture | no | a macOS or Windows leg fails where Linux does not, and nothing local sees it |
 | the pinned tool versions | no | `uvx pip-audit==2.10.1` and `uvx zizmor==1.30.1` are the lane's; a local `uvx` takes the latest |
 | the build of the interpreter, not only its version | no: a rule answers it instead | `sys.stdlib_module_names` is the build's, not the release's -- this box's 3.12 lists the Windows-only `_wmi` and a runner's does not, so a table of every name reported a difference between two builds as a moved row. The floor table records the modules this tree imports, which are portable by construction |
@@ -61,9 +76,12 @@ reproduces; the count is the table's rather than this sentence's:
 | secrets, tokens and the event payload | no, and the steps that need one are excused by name | the merge base comes from the event, so `--against` runs only in the lane |
 | what a gate **counts**, against what it claims to | no: a scope is a claim in prose, and no check reads it | the binding coverage floor counted the instruction gate's own workloads, which no suite runs, and the lane went red at 94.50% over a change that added none of its own uncovered lines; the build shape counted the harness formatting fifty names, and three quarters of what it reported was that |
 
-The first four are closed. The fifth is a row rather than a fix because the
-gate runs the caller's toolchain by design, and the gate's own closing line now
-names it; the sixth is answered by a rule rather than by the gate; the rest are
+The first four are closed. Named rather than numbered from here, since the
+table grows: *the interpreter the lane names* is a row rather than a fix
+because the gate runs the caller's toolchain by design, and the gate's own
+closing line now names it; *the release of the interpreter* is closed at the
+floor, which is the end of the range a difference lands at; *the build of the
+interpreter* is answered by a rule rather than by the gate; the rest are
 differences a local gate cannot remove, and naming them is what keeps a green
 local run from being read as a promise it never made.
 
