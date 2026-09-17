@@ -593,9 +593,15 @@ HELD-BY: a_step_past_the_period_bound_is_refused, test_every_edge_of_the_integer
 **A class is described by what the frontend can read of it.** A class laying
 down a layout the frontend cannot read is its `isinstance` test and its kind and
 nothing else, so every relation about the structure its instances have is a
-question no rule can answer. **[DEVIATION]**
+question no rule can answer. The record half carries no class for the same
+reason the halves are split -- each is then a set the rules already know -- and
+it is decided against another record, by width and by depth, and against the
+lattice bounds. Against every other node it **declines** in both directions: a
+subclass of any kind may carry an attribute, so without an oracle that
+enumerates a kind's values there is no witness either way, and a refutation
+would report a value nobody has. **[DEVIATION]**
 
-OWED: an_attribute_record_relates_to_every_other_node -- the attribute record is tested in Rust only inside a meet, and no relation row asks it against another node on its own
+HELD-BY: an_attribute_record_relates_to_every_other_node, a_class_met_with_its_attributes_has_a_value_when_its_fields_do
 
 Two departures are closed and kept here so they are not rediscovered: the
 gradual atom, which is the top spelled rather than a node beside `Int`

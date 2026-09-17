@@ -201,6 +201,109 @@ fn a_refinement_with_no_constraint_earns_the_regions_of_its_base() {
     );
 }
 
+/// The attribute record, asked against every other shape on its own.
+///
+/// It is the node behind every dataclass, and the frontend never emits it
+/// alone: `build_object` writes `Instance(C) ∧ AttrRecord`, so every row that
+/// reached it reached it inside a meet. A node tested only inside a meet is a
+/// node whose own arms are held by whatever the *other* member decided, which
+/// is the shape of a rule that confirms itself.
+///
+/// Splitting the class from the record was done so each half is a set the rules
+/// already know. This asks the record half what it knows: a proof, a refutation
+/// standing on a value, or a decline -- one of the three per pair, and the
+/// decline named rather than left as a row nobody wrote.
+#[test]
+fn an_attribute_record_relates_to_every_other_node() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let attrs = |fields: Vec<(&str, Schema, bool)>| {
+        Schema::attr_record(
+            fields
+                .into_iter()
+                .map(|(name, schema, required)| Field {
+                    name: name.into(),
+                    schema,
+                    required,
+                })
+                .collect(),
+        )
+    };
+    let empty = attrs(vec![]);
+    let x_int = attrs(vec![("x", Schema::Int, true)]);
+    let x_bool = attrs(vec![("x", Schema::Bool, true)]);
+    let x_int_y_str = attrs(vec![("x", Schema::Int, true), ("y", Schema::Str, true)]);
+    let x_optional = attrs(vec![("x", Schema::Int, false)]);
+
+    // Widening by the record's own order: more attributes is a smaller set, and
+    // an attribute narrowed is narrower. Both are proofs the arm must give.
+    assert_eq!(relation(&x_int_y_str, &x_int), Relation::Holds);
+    assert_eq!(relation(&x_int, &empty), Relation::Holds);
+    assert_eq!(relation(&x_bool, &x_int), Relation::Holds, "bool is an int");
+    // A required attribute is below the same attribute made optional, and not
+    // the other way: the optional one admits an object carrying no `x`.
+    assert_eq!(relation(&x_int, &x_optional), Relation::Holds);
+    assert_eq!(relation(&x_optional, &x_int), Relation::Fails);
+    // And the reverse of each widening is refuted rather than declined.
+    assert_eq!(relation(&x_int, &x_int_y_str), Relation::Fails);
+    assert_eq!(relation(&empty, &x_int), Relation::Fails);
+    assert_eq!(relation(&x_int, &x_bool), Relation::Fails);
+
+    // The lattice bounds, which every node owes.
+    assert_eq!(relation(&x_int, &Schema::ANYTHING), Relation::Holds);
+    assert_eq!(relation(&Schema::Nothing, &x_int), Relation::Holds);
+    assert_eq!(relation(&x_int, &Schema::Nothing), Relation::Fails);
+    // A record with an uninhabited required attribute is the empty set, so it
+    // is below everything -- decided by emptiness rather than by the shape.
+    let impossible = attrs(vec![("x", Schema::Nothing, true)]);
+    assert_eq!(relation(&impossible, &Schema::Str), Relation::Holds);
+
+    // And against every other kind of node it **declines**, in both
+    // directions. That is the answer rather than a gap: the record carries no
+    // class, so it denotes every value holding these attributes whatever the
+    // value is -- and a subclass of any kind may hold them. Without an oracle
+    // that can enumerate a kind's values there is no witness either way, and a
+    // refutation would be reporting a value nobody has.
+    //
+    // Named here so the decline is a row rather than a pair nobody wrote. A
+    // rule that begins deciding one of these is a change this test sees.
+    let others = [
+        Schema::Int,
+        Schema::Str,
+        Schema::NoneType,
+        Schema::list(SeqShape::homogeneous(Schema::Int)),
+        Schema::set(Schema::Int),
+        Schema::record(Vec::new(), Openness::Closed),
+        Schema::mapping(MapClause {
+            key: Schema::Str,
+            value: Schema::Int,
+        }),
+        Schema::Complement(Arc::new(Schema::Int)),
+    ];
+    for other in &others {
+        assert_eq!(
+            relation(&x_int, other),
+            Relation::Unknown,
+            "an object against {other:?} has no witness either way"
+        );
+        assert_eq!(
+            relation(other, &x_int),
+            Relation::Unknown,
+            "nor {other:?} against an object"
+        );
+    }
+
+    // The one shape that does decide through a complement: a record below
+    // another is outside that other's complement, which is the contravariant
+    // arm reading the proof above rather than the oracle.
+    assert_eq!(
+        relation(&x_int_y_str, &Schema::Complement(Arc::new(empty.clone()))),
+        Relation::Fails,
+    );
+}
+
 /// A union covers the universe whatever sits beside the pair that covers it,
 /// and in whatever order the members are written.
 ///
