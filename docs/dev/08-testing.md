@@ -95,7 +95,7 @@ for and misses the other. Thirty-two of them:
 | `tests/test_completeness_ledger.py` | every relation the procedure must decide is decided; every relation it declines is still declined |
 | `tests/test_suite_partition.py` | every test file is a product test or a marked repository check |
 | `tests/test_metamorphic_gate.py` | every relation the metamorphic gate holds can be driven to fail |
-| `tests/test_required_jobs.py` | the merge gate requires every job the workflow defines, and a push runs the ends of the interpreter range |
+| `tests/test_required_jobs.py` | the merge gate requires every job the workflow defines, and every supported interpreter runs on every event |
 | `tests/test_changelog_ledger.py` | every `feat`/`fix` commit since the last release is on the changelog roll |
 | `tests/test_closure_ledger.py` | every schema variant is a generator, a representative, or a marker |
 | `tests/test_local_gate.py` | every merge-gate step is planned by the local gate or excused by name |
@@ -122,6 +122,18 @@ Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
 because a table nothing counts is the one that drifts: there are thirty-two.
+
+**Which interpreter reads them.** A ledger is a repository check: it reads the
+tree, the workflow and the scripts, none of which answers differently by
+release. So every leg of the python matrix runs the whole list, and the reading
+is the same nine times -- with two exceptions that can be read only once.
+`test_changelog_ledger.py` and `test_cited_commits.py` measure from the last
+release tag, and `actions/checkout` takes one commit and no tags; the **floor**
+leg takes the whole history so those run somewhere, and its name says so, since
+otherwise the one result that did not skip is indistinguishable from the eight
+that did. `scripts/gate.py` builds that same floor beside the caller's
+interpreter before a push -- and runs the *product* suite on it, not this list,
+for the reason the first sentence gives.
 
 The last is a ledger over the rest, and it exists because reading a
 ledger cannot tell you whether it can fail. `test_local_gate.py` filtered its
