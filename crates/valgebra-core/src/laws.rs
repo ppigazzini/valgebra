@@ -3861,16 +3861,40 @@ fn unique_by_name(fields: Vec<Field>) -> Vec<Field> {
 
 /// Whether no `complement` stands anywhere in the term.
 ///
-/// The projections rewrite the record they reach, and a negation between that
-/// record and the top of the term reverses which way the whole schema moves.
-/// Two laws read the direction, so the fragment each is asked over is named
-/// here rather than built into a second generator: the answer is about this
-/// term, and a reader of the law can see which terms it is about.
+/// The two laws that read the direction draw from `positive_schema`, so this is
+/// their detector rather than their filter: it says the fragment is the one
+/// they are about, and it fails if that stops being true.
 fn under_no_complement(schema: &Schema) -> bool {
     !matches!(schema, Schema::Complement(_)) && schema.children().all(under_no_complement)
 }
 
+/// Whether a drawn term may carry a `complement`.
+///
+/// The projections rewrite the record they reach, and a negation between that
+/// record and the top of the term reverses which way the whole schema moves.
+/// Two laws are about the positive fragment and **draw** it rather than
+/// filtering for it: `prop_assume!` spends a case on every rejected draw and
+/// proptest stops a test that rejects more than a thousand, so at the nightly's
+/// case count a filter fails the lane instead of stating the law.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Negation {
+    Allowed,
+    Absent,
+}
+
+/// Every decidable shape, a negated one among them.
 fn decidable_schema() -> impl Strategy<Value = Schema> {
+    schema_fragment(Negation::Allowed)
+}
+
+/// The same fragment with no `complement` anywhere in it.
+fn positive_schema() -> impl Strategy<Value = Schema> {
+    schema_fragment(Negation::Absent)
+}
+
+fn schema_fragment(negation: Negation) -> impl Strategy<Value = Schema> {
+    // `Copy`, and moved rather than borrowed: `prop_recursive` takes a closure
+    // that outlives this frame.
     let leaf = prop_oneof![
         Just(Schema::ANYTHING),
         Just(Schema::Nothing),
@@ -3883,7 +3907,7 @@ fn decidable_schema() -> impl Strategy<Value = Schema> {
         Just(Schema::Bytes),
         (0usize..POOL_LEN).prop_map(|i| Schema::Literal(ConstIx::new(i))),
     ];
-    leaf.prop_recursive(3, 48, 4, |inner| {
+    leaf.prop_recursive(3, 48, 4, move |inner| {
         let field =
             (0usize..2, inner.clone(), proptest::bool::ANY).prop_map(|(n, schema, req)| Field {
                 name: ["a", "b"][n].into(),
@@ -3904,7 +3928,7 @@ fn decidable_schema() -> impl Strategy<Value = Schema> {
                 }]
                 .into(),
             });
-        prop_oneof![
+        let positive = prop_oneof![
             inner.clone().prop_map(Schema::set),
             inner.clone().prop_map(Schema::frozen_set),
             inner.clone().prop_map(|s| Schema::Seq {
@@ -3943,8 +3967,17 @@ fn decidable_schema() -> impl Strategy<Value = Schema> {
             proptest::collection::vec(inner.clone(), 1..3).prop_map(|m| Schema::Union(m.into())),
             proptest::collection::vec(inner.clone(), 1..3)
                 .prop_map(|m| Schema::Intersection(m.into())),
-            inner.prop_map(|s| Schema::Complement(Arc::new(s))),
-        ]
+        ];
+        match negation {
+            Negation::Absent => positive.boxed(),
+            // One arm in thirteen, which is the weight it carries where the
+            // thirteen are spelled out as alternatives of one another.
+            Negation::Allowed => prop_oneof![
+                12 => positive,
+                1 => inner.prop_map(|s| Schema::Complement(Arc::new(s))),
+            ]
+            .boxed(),
+        }
     })
 }
 
@@ -4169,15 +4202,17 @@ proptest! {
     /// `an_optional_field_a_catch_all_already_says_is_dropped` carries the
     /// value that shows it.
     ///
-    /// Asked of a term with no complement in it, and the law below is the other
-    /// half: under a negation the two operators swap, so "open admits more" is
-    /// a claim about the record the transform rewrites and about the whole
-    /// schema only where nothing negates it in between.
+    /// Drawn from the fragment with no complement in it, and the law below is
+    /// the other half: under a negation the two operators swap, so "open admits
+    /// more" is a claim about the record the transform rewrites and about the
+    /// whole schema only where nothing negates it in between.
     #[test]
     fn opening_widens_closing_narrows_and_the_round_trip_is_at_most_closing(
-        schema in decidable_schema(),
+        schema in positive_schema(),
     ) {
-        prop_assume!(under_no_complement(&schema));
+        // The detector: a fragment that started carrying a negation would make
+        // both directions below read the other way round, and read green.
+        prop_assert!(under_no_complement(&schema));
         let pool = const_pool();
         let opened = schema.with_records_open(Openness::Open);
         let closed = schema.with_records_open(Openness::Closed);
@@ -4209,9 +4244,10 @@ proptest! {
     /// so the direction is a property of the tree rather than a paragraph.
     #[test]
     fn opening_under_a_complement_narrows_and_closing_widens(
-        schema in decidable_schema(),
+        schema in positive_schema(),
     ) {
-        prop_assume!(under_no_complement(&schema));
+        // As above: the negation this law is about is the one it writes.
+        prop_assert!(under_no_complement(&schema));
         let pool = const_pool();
         let negated = schema.clone().complement();
         let opened = negated.with_records_open(Openness::Open);
