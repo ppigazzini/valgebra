@@ -351,6 +351,36 @@ the shape. What is left below is what the descriptor cannot hold.
   bodies only agree after two steps — and there the coinductive rule is the
   whole of the answer.
 
+    A fixpoint as the **supertype** costs one thing more, and what it costs is a
+    *refutation* rather than an inclusion. `a ≤ b` is `a ∧ ¬b = ∅`, so the
+    supertype is where a schema stands under a complement, and a reference
+    there is lowered to the bottom. The difference then contains the value that
+    refutes the inclusion without being proved to contain it, so the answer is
+    "not proven" where a value says plainly that it is false:
+
+    ```python
+    from valgebra import Validator, complement, recursive, union
+
+    chain = recursive(lambda t: union(None, {"next": t}))
+    assert not Validator(chain).is_valid("a")  # the walk is exact
+    assert Validator(complement(int)).is_valid("a")
+    # and the relation declines rather than refuting
+    assert Validator(complement(int)).relation_to(chain) == "undecided"
+    ```
+
+- **An attribute record, on either side.** A `Protocol` with a data member, and
+  a class with declared attributes, ask whether a *value* carries a name. That
+  is a question about the object rather than about its kind: any instance of any
+  class may have the attribute set on it, and which classes exist is the open
+  world above. So a relation with such a schema on either side is left to the
+  rules, which decline it, and the descriptor holds a kind as a set of values
+  with nothing finer to say — `int ≤ HasX` and `HasX ≤ int` both come back "not
+  proven", and a value decides each.
+
+  `tests/test_relation_ledger.py` asks every ordered pair of schema nodes and
+  separates the declines a value decides, which are these, from the ones nothing
+  does, which are the open world's. Only the first list can fall.
+
 - **A length bound over a set or a dict, in the sets.** A length is not a word's alone, and
   two of the kinds that have one state it: a word's length is a pattern over
   its alphabet, and a *sequence's* is "any element, that many times", which the

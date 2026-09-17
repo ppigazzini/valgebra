@@ -476,6 +476,23 @@ PLANTS = (
         ),
     ),
     Plant(
+        # The failure the ledger is for: a node added to the algebra and asked
+        # against nothing. The relation suites each pick the pairs they are
+        # about, so a variant nobody wrote a pair for is a variant whose whole
+        # column is whatever the procedure happens to answer -- which is the
+        # state the product of the node set with itself exists to refuse.
+        "tests/test_relation_ledger.py",
+        ("crates/valgebra-core/src/ir.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/ir.rs",
+            "pub enum Schema {\n",
+            "pub enum Schema {\n"
+            "    /// A node this ledger has no pair for.\n"
+            "    Planted,\n",
+        ),
+    ),
+    Plant(
         "tests/test_frontend_refusals.py",
         ("crates/valgebra-py/src/build/classes.rs",),
         # The failure the ledger is for: a refusal reworded into a sentence no
