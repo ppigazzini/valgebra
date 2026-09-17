@@ -279,6 +279,17 @@ Three collisions, and both senses are live:
   Python predicates are a documented slow path, never a silent fallback.
 - No schema combinator or annotation form lands without its denotation written
   in the same change and its algebra laws covered by property tests.
+- **A lane broken by a commit is repaired by amending that commit**, so the
+  history carries no commit that was known to be red. The floor is the last
+  release tag: a commit at or below it is repaired by a commit *above* it
+  instead.
+
+    Below the tag the cost is not the rewrite, it is what the rewrite leaves.
+    A tag keeps resolving after the commit under it is replayed, `git show`
+    keeps printing it, and no diff of the tree is different — the change is to
+    reachability, which nothing reads. `tests/test_cited_commits.py` reads it:
+    every `v*` tag is held to being an ancestor of the branch, beside the
+    commits the tracked files cite.
 
 See [AGENTS.md](AGENTS.md) for the full rules and the rationale behind them.
 

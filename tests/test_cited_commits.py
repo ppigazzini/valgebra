@@ -18,6 +18,14 @@ The check runs only where the whole history is in the clone: a shallow checkout
 carries the tip and cannot answer reachability, and answering "unreachable"
 there would be a property of the clone rather than of the tree.
 
+A **release tag** is the same claim by another name, and the one a rewrite
+costs most. `v0.0.11` says a release was cut at a commit, the changelog roll is
+measured from it, and a rebase below it leaves the tag pointing at a commit no
+branch reaches -- so the tag still resolves, `git show` still prints it, and
+nothing in a diff of the tree is different. It happened here: two tags were
+orphaned by an amend two hundred commits down, and what noticed was a ledger
+failing on the *changelog*, three steps away from the cause.
+
 LEDGER: every commit a tracked file cites is an ancestor of this branch
 """
 
@@ -136,3 +144,69 @@ def test_the_check_would_see_an_orphan() -> None:
     assert _git("merge-base", "--is-ancestor", orphan, "HEAD").returncode, (
         "a commit no ref reaches read as an ancestor, so the check above cannot fail"
     )
+
+
+def _orphaned(refs: dict[str, str]) -> list[str]:
+    """Give the named commits this branch does not reach.
+
+    Takes the pairs rather than reading them, so the row below can ask it about
+    a commit built for the purpose: a plant that tagged the real repository
+    would leave a ref behind, and one that only asserted the predicate would be
+    asking about nothing.
+    """
+    return sorted(
+        f"{name} -> {commit[:12]}"
+        for name, commit in refs.items()
+        if _git("merge-base", "--is-ancestor", commit, "HEAD").returncode
+    )
+
+
+def _release_tags() -> dict[str, str]:
+    """Read every `v*` tag, with the commit it names.
+
+    Resolved through `^{commit}` because an annotated tag names a tag object,
+    and it is the commit underneath that a branch does or does not reach.
+    """
+    listed = _git("tag", "--list", "v*").stdout.split()
+    found: dict[str, str] = {}
+    for tag in listed:
+        resolved = _git("rev-parse", "--verify", "--quiet", f"{tag}^{{commit}}")
+        if not resolved.returncode:
+            found[tag] = resolved.stdout.strip()
+    return found
+
+
+@SHALLOW
+def test_every_release_tag_is_an_ancestor_of_this_branch() -> None:
+    """A rewrite below a tag orphans a release, and no diff of the tree shows it.
+
+    The tag keeps resolving and keeps printing, so every check that reads the
+    *content* of the tree passes. What changes is reachability, which only this
+    asks about.
+    """
+    tags = _release_tags()
+    # The scan is the detector: no tags is no claim, which would pass silently.
+    assert len(tags) >= 5, sorted(tags)
+    orphaned = _orphaned(tags)
+    assert not orphaned, (
+        "release tags this branch does not reach:\n  "
+        + "\n  ".join(orphaned)
+        + "\nA rewrite below a tag orphans the release it names. Reset to the "
+        "commit that carries them and land the change above the last one."
+    )
+
+
+@SHALLOW
+def test_the_check_would_see_an_orphaned_tag() -> None:
+    """The plant: a tag on a commit no branch reaches is refused.
+
+    Asked of a commit written for the row rather than of a tag written into the
+    repository, because a plant that left a ref behind would be a change to the
+    tree rather than a test of it.
+    """
+    tree = _git("write-tree").stdout.strip()
+    orphan = _git("commit-tree", tree, "-m", "an orphan, for this row").stdout.strip()
+    assert orphan, "the plant could not write a commit"
+    assert _orphaned({"v9.9.9": orphan}) == [f"v9.9.9 -> {orphan[:12]}"]
+    # And the same predicate says nothing about a tag the branch does reach.
+    assert not _orphaned({"HEAD": _git("rev-parse", "HEAD").stdout.strip()})
