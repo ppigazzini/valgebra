@@ -239,7 +239,7 @@ ledger that holds it in both directions:
 | every schema node, in every walk mode | the `Schema` enum in `ir.rs` | `tests/test_node_matrix.py` |
 | every public name a caller reaches | the type stub the package ships | `tests/test_use_case_ledger.py` |
 | every error code a report can carry | the walk that writes them | `tests/test_use_case_ledger.py` |
-| every load-bearing result the design rests on | `10-theory.md`'s tags | `tests/test_theory_ledger.py` |
+| every result, obligation and deviation the design rests on | `10-theory.md`'s tags, with the debt it admits recorded | `tests/test_theory_ledger.py` |
 | every refusal the frontend writes | the error constructors in `build*.rs` | `tests/test_frontend_refusals.py` |
 | every code a report can carry, in both modes and on both paths | the same walk | `tests/test_error_matrix.py`, held by `tests/test_use_case_ledger.py` |
 

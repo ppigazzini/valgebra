@@ -200,6 +200,20 @@ PLANTS = (
         ),
     ),
     Plant(
+        # An obligation added to the page with neither a `HELD-BY:` nor an
+        # `OWED:` line: a sentence, which is the state every result starts in
+        # and the one the ledger exists to refuse.
+        "tests/test_theory_ledger.py",
+        ("docs/dev/10-theory.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/dev/10-theory.md",
+            "### Obligations\n",
+            "### Obligations\n\n**A planted obligation nothing holds.** Every"
+            " arm returns before the budget is read. **[OBLIGATION]**\n",
+        ),
+    ),
+    Plant(
         "tests/test_closure_ledger.py",
         ("crates/valgebra-core/src/ir.rs",),
         lambda tree: _edit(

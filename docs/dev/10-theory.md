@@ -6,6 +6,17 @@ a claim that a specific line exists because of it, not a reading list.
 Each entry is tagged **LOAD-BEARING** (code here rests on it), **GUIDING**
 (shapes a decision without being an algorithm), or **PLANNED** (on the path, not
 built). A planned reference is an intention; it never implies the thing is built.
+Two more tags carry what the results *demand* rather than what they say:
+**OBLIGATION**, a shape the implementation must have for a result to do any
+work, and **DEVIATION**, a point where the tree departs from its source on
+purpose and names the cost.
+
+Every tagged paragraph is followed by a `HELD-BY:` line naming the tests that
+fail when the sentence is false, or an `OWED:` line naming the tests it is owed
+and why they do not exist yet. `tests/test_theory_ledger.py` holds both
+directions: a tagged sentence with neither line fails, a name that resolves to
+no test fails, an owed name that already resolves to one fails, and the count of
+`OWED:` lines is recorded there and may only fall.
 
 Some of this is decades old and stays, because a theorem does not expire.
 Stone's representation theorem and Nakano's guardedness modality are exactly the
@@ -357,6 +368,253 @@ The review also bounds what `docs/14-soundness.md` may rest on these suites: MRs
 are *necessary* properties, so even a complete set of them is not a test oracle.
 That page's trust base records it.
 
+## The results, row by row, and what holds each
+
+The rows above cite a paper at the line it explains. The rows here are the
+*results* the design rests on, stated as a sentence a test can be false against,
+one per result -- the ledger the page above is an index to. A result that is
+also a citation above is not repeated; what is here is every result, obligation
+and deviation that has a test of its own or is owed one.
+
+### Results
+
+**Subtyping is inclusion, in both directions.** `t1 <= t2` holds exactly when
+every value of `t1` is a value of `t2`, and `is_equivalent` is both directions.
+A proof from either decider admits no counterexample the walk can find, and a
+refutation from either stands on a value the walk refuses, over the structural
+fragment and over a recursive pair alike. **[LOAD-BEARING]**
+
+HELD-BY: subtyping_is_sound_over_the_structural_fragment, a_refutation_is_a_value, a_proof_over_a_fixpoint_has_no_witness_against_it, test_no_proof_is_refuted_by_a_value, test_a_claimed_refutation_stands_on_a_value
+
+**A cut reference proves and never refutes.** The descriptor decides `a <= b`
+by lowering the difference, and a recursive reference is cut to a bound: the
+top where the schema is used positively, the bottom under a complement. The
+widened difference contains the real one, so its emptiness proves the inclusion
+and its inhabitance proves nothing; a refutation comes only from a pair the
+lowering did not widen. **[LOAD-BEARING]**
+
+HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, the_descriptor_and_the_procedure_never_contradict_each_other
+
+**Kinds decompose emptiness.** Positives of mixed kind make a clause empty
+outright, negatives of another kind are dropped, and each kind is then an
+independent question -- which is what lets every kind carry its own
+representation and the whole be a product over them. `Kind` is the one
+partition both deciders read; `Region` is derived from it, never maintained
+beside it. **[LOAD-BEARING]**
+
+HELD-BY: the_same_shape_under_two_kinds_does_not_meet, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart
+
+**Two fixpoints, one procedure.** Emptiness reads a cycle back to a visiting
+reference as uninhabited -- the least fixpoint, no finite value reaches it --
+and subtyping reads a cycle back to an assumed goal as proved -- the greatest.
+The two are one procedure asked in two directions, and the unfolding is sound
+in both. **[LOAD-BEARING]**
+
+HELD-BY: detects_uninhabited_recursive_schemas, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively
+
+**A clause is a region with its own default.** A keyed map is a quasi-K-step
+function: named labels, and a default per key-type region rather than one
+default for everything unnamed. A key falls in exactly one region, and a
+mapping constrains one region and leaves the others as the openness says.
+**[LOAD-BEARING]**
+
+HELD-BY: every_key_falls_in_exactly_one_part, a_map_constrains_one_part_of_the_key_partition, test_heterogeneous_mapping_by_key_schema
+
+**A sequence is a regular language, and the automaton over it is well formed.**
+The symbolic automaton that decides sequence inclusion has, at every state,
+edges that are pairwise disjoint and cover the letters; a complement flips the
+accepting states and no value flips twice; the lattice laws hold of the
+languages it denotes. **[LOAD-BEARING]**
+
+HELD-BY: the_lattice_laws_hold_of_the_sequences, the_complement_laws_hold_of_the_sequences, the_edges_leaving_a_state_cover_the_letters, an_accepting_state_behind_an_undecided_letter_is_unproved
+
+**`Any` is the top, spelled.** `typing.Any` builds the top with a spelling that
+`repr` reads and nothing else does, so every law and every relation sees one
+set and the complement laws hold of it however it is spelled.
+**[LOAD-BEARING]**
+
+HELD-BY: the_complement_laws_hold_of_the_top_however_it_is_spelled, no_relation_can_tell_the_two_spellings_apart
+
+**Each kind's representation is closed under the three operations, and its top
+denotes what the table says.** Union, intersection and complement stay inside
+each kind's representation -- interval sets with a residue class per step for
+integers, intervals with the three special points held apart for floats, a
+minimal automaton per word kind, a symbolic automaton for sequences, a union of
+lines for sets, labelled fields with a default per key kind for dicts, a class
+lattice for instances -- and the lattice laws hold of each against membership.
+Each top is checked at the value that decides it: the ends of the integer
+carrier, `nan`, the newline, the empty container. **[LOAD-BEARING]**
+
+HELD-BY: the_lattice_laws_hold_of_the_integers, the_lattice_laws_hold_of_the_floats, the_lattice_laws_hold_of_the_languages, the_lattice_laws_hold_of_the_sequences, the_lattice_laws_hold_of_the_sets, the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_objects, an_emptiness_is_refused_by_every_boundary_value, the_universe_separates_a_pair_inside_a_shape
+
+**A node built alike is one handle.** Interning shares the nodes of two schemas
+built the same way, so the trail's comparisons short-circuit on pointer
+identity and the per-rule caches see one handle per DAG member. What it buys is
+that sharing and nothing about a relation. **[LOAD-BEARING]**
+
+HELD-BY: a_node_built_twice_is_one_node_in_every_family, sharing_a_child_shares_the_parent_over_it, a_list_built_twice_is_one_list_holding_what_was_built
+
+### Obligations
+
+**The decision has three answers.** `Relation` on the subtyping side and
+`Verdict` on the emptiness side each carry proof, refutation and neither, and
+the two-valued surface is a projection of them: a proof is a proof, a refutation
+stands on a value, and a decline is reported as itself rather than as either.
+**[OBLIGATION]**
+
+HELD-BY: test_the_three_answers_agree_with_the_two, an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_negated_set_the_allowance_cannot_expand_declines
+
+**The budget declines; it never refutes.** Exhausting the work budget answers
+neither, on every path a subtyping query can take: through a product, through
+the disjointness reading, and through the shared cell an equivalence query
+carries across its two directions. **[OBLIGATION]**
+
+OWED: the_budget_declines_on_every_subtyping_path -- the cell refuses to spend and emptiness declines, and no test drives a subtyping path to exhaustion and reads the third answer
+
+**The goals a query repeats are counted.** The decision not to memoise goals
+rests on a number: zero repeats over the workload shapes and the thirty-two
+field DAG, four per query where a meet meets a union, eight over the relation
+matrix. The number is held by a test-side counter compiled for the core's own
+tests, and a memo that changed it would fail the rows. **[OBLIGATION]**
+
+HELD-BY: the_matrix_repeats_a_goal_only_where_a_meet_meets_a_union, a_record_of_thirty_two_fields_sharing_one_schema_repeats_no_goal, the_counter_sees_the_goals_a_query_asks
+
+**A cache under coinduction is revertible or absent.** A memo added to the
+coinductive procedure must be persistent, so a failed disjunct can roll it
+back, or hold only results that rested on no open hypothesis; a memo that is
+neither turns a backtracked assumption into a cached falsehood.
+**[OBLIGATION]**
+
+OWED: a_memo_without_a_revert_condition_fails_placement -- there is no memo, and nothing fails when one arrives without the revert condition written beside it
+
+**An exhaustible procedure is searched, not enumerated.** Where the decision is
+structural rather than the emptiness reduction, a missing arm is a silent
+conservative answer, so the conservative set is *searched* against the second
+decider over a drawn universe and the recorded holes are held to a ledger.
+**[OBLIGATION]**
+
+HELD-BY: test_the_two_deciders_are_measured_against_each_other, test_decision_decides_true_relations
+
+**`open` and `close` are operations of the algebra.** Openness is the default
+of the key-type region no clause claims: `open` frees that region and `close`
+refuses it, and neither touches a region a clause claims, so a mapping opened
+keeps what a `str` key maps to and admits an `int` key with any value. Equal
+sets open to equal sets and close to equal sets, over drawn records and
+mappings. **[OBLIGATION]**
+
+OWED: a_mapping_opened_frees_the_region_no_clause_claims, equal_sets_open_and_close_to_equal_sets -- the transform leaves a keyed map with a clause and no field alone in both directions, five tests pin that, and the congruence law is asserted over one hand-picked pair
+
+**The IR is exactly as expressive as its producers.** Every variant the enum
+has is one the frontend or the fuzzer builds, and a variant no producer reaches
+is a surface the decision must be sound over for nothing.
+**[OBLIGATION]**
+
+HELD-BY: test_every_variant_is_a_generator_a_representative_or_a_marker, test_no_column_names_a_variant_that_is_gone
+
+**The definition imports nothing from the optimisation.** The partition and the
+answer types sit below both deciders; no descriptor module names the structural
+procedure, and the procedure still imports the lowering it asks when its rules
+decline, so the one permitted edge is seen to be used. **[OBLIGATION]**
+
+HELD-BY: test_the_definition_imports_nothing_from_the_optimisation, test_the_term_imports_nothing_from_the_optimisation, test_the_optimisation_may_still_depend_on_the_definition
+
+### Where this tree departs from its sources
+
+Each is a decision, and none is unsoundness: a `True` from any relation remains
+a proof. They are collected because a departure nobody writes down is one the
+next reader rediscovers as a bug.
+
+**The decision is structural, not the emptiness reduction applied uniformly.**
+The cost is a hole wherever an arm is missing, and the boundary is
+[15-decidability.md](../15-decidability.md); the holes are ledgered and the
+deciders are measured against each other. **[DEVIATION]**
+
+HELD-BY: test_decision_decides_true_relations, test_the_two_deciders_are_measured_against_each_other
+
+**Simplification stops at negation normal form, which is not canonical.**
+`simplify(a) == simplify(b)` is not an equivalence test, `==` is the form and
+not the set, and two spellings of one set can order differently -- which is why
+the laws are asserted over Boolean combinations and the deciders' agreement over
+a corpus that adds shapes. **[DEVIATION]**
+
+HELD-BY: test_eq_is_the_normal_form_and_not_the_set, test_simplify_preserves_acceptance
+
+**The IR's keyed map carries no negative component and is not canonicalised.**
+The descriptor has one -- `MapAtom::wanted` -- so a negated record has a
+representation there; what remains is the IR node, whose `dom` is the field
+list as written rather than the semantic domain the paper's operators read.
+**[DEVIATION]**
+
+OWED: two_spellings_of_one_keyed_map_are_one_term -- what the constructors make canonical is stated against nothing, and no test says two spellings the paper calls one term are one term
+
+**Clauses are unordered where the source orders them.** A key belongs when
+*some* clause admits it and its value, in the walk and in subtyping alike, and
+two clauses may claim one key. **[DEVIATION]**
+
+HELD-BY: test_heterogeneous_mapping_by_key_schema, test_a_parsed_object_is_covered_by_whichever_clause_can_read_its_keys, test_named_field_takes_precedence_over_the_catch_all
+
+**Clauses are quasi-K-step rather than quasi-constant.** A default per
+key-type region rather than one default for the rest; nothing against the
+literature, which introduces exactly this generalisation. **[DEVIATION]**
+
+HELD-BY: every_key_falls_in_exactly_one_part, a_map_constrains_one_part_of_the_key_partition
+
+**The trail holds terms, not addresses.** Assumption pairs are compared by
+structural equality in a linear scan, short-circuiting on pointer identity for
+interned subtrees; the longest trail any recursive shape in hand builds is two
+pairs. A decision leaves the trail as it was given. **[DEVIATION]**
+
+HELD-BY: a_decision_leaves_the_trail_it_was_given, an_assumption_is_read_as_the_pair_it_is
+
+**The assumption set is popped, not threaded.** Every relation proved on the
+way is discarded, so a goal reached twice by different paths is decided twice,
+and a decision leaves behind no assumption it did not make. **[DEVIATION]**
+
+HELD-BY: a_decision_leaves_an_assumption_it_did_not_make, a_decision_leaves_the_trail_it_was_given
+
+**The dict key partition is by kind.** `1` and `True` are one key to a dict and
+two labels to the partition, so an atom requiring both under distinct values
+holds no dict, and the descriptor reads it that way. **[DEVIATION]**
+
+HELD-BY: an_atom_requiring_a_key_and_its_boolean_holds_no_dict, a_labelled_key_witnesses_a_wanted_key
+
+**The integer and float carriers are `i64` and `f64`.** Membership is exact --
+the walk reads the Python object -- and a relation *declines* where the carrier
+cannot spell the bound: a step past the period bound, a bound past the
+carrier's end. A rounded carrier would be wrong in one direction, so it refuses.
+**[DEVIATION]**
+
+HELD-BY: a_step_past_the_period_bound_is_refused, test_a_recorded_refutation_has_its_witness, test_a_multiple_is_a_remainder_of_zero
+
+**A class is described by what the frontend can read of it.** A class laying
+down a layout the frontend cannot read is its `isinstance` test and its kind and
+nothing else, so every relation about the structure its instances have is a
+question no rule can answer. **[DEVIATION]**
+
+OWED: an_attribute_record_relates_to_every_other_node -- the attribute record is tested in Rust only inside a meet, and no relation row asks it against another node on its own
+
+Two departures are closed and kept here so they are not rediscovered: the
+gradual atom, which is the top spelled rather than a node beside `Int`
+([above](#gradual-typing)); and the necessary-property suite, which is named for
+what all six of its properties are and names the two that are also metamorphic
+relations.
+
+**Three components of the descriptor have no lattice law.** The word automata,
+the integer sets, the floats, the sequences, the sets, the dicts and the
+descriptors as a whole each have a property suite against membership; the
+`Lines` component and the `Values` component have unit tests and no law, and
+no test drives either to its `Unknown` answer. **[DEVIATION]**
+
+OWED: the_lattice_laws_hold_of_the_lines, the_lattice_laws_hold_of_the_values -- neither component has a test module of its own
+
+**The carrier's edges are named on the page and drawn by no test.** The page
+that states deviation 11 gives four examples of a declined bound -- a multiple
+against a multiple of half its size, two coprime moduli, a bound past `2**64`,
+a strict bound at `i64::MAX` -- and the corpus holds the carrier's two ends and
+the period bound. **[DEVIATION]**
+
+OWED: a_declined_bound_is_declined_at_every_edge_the_page_names -- the four examples are sentences on a page and rows in no matrix
+
 ## The limit
 
 **No result here is implemented whole.** What is implemented is named per
@@ -374,21 +632,8 @@ Where a page here says otherwise, the page is wrong.
 different and larger gap than any of the above: see [Three representations with
 no paper here](#three-representations-with-no-paper-here).
 
-### Where this tree departs from its sources
-
-Each row is a decision, and none is unsoundness: a `True` from any relation
-remains a proof. They are collected because a departure nobody writes down is
-one the next reader rediscovers as a bug.
-
-| # | The departure | What it costs |
-| --- | --- | --- |
-| 1 | The subtyping decision is structural, not the emptiness reduction applied uniformly | a hole wherever an arm is missing; the boundary is [15-decidability.md](../15-decidability.md) |
-| 2 | Simplification produces negation normal form and stops; NNF is not canonical | `simplify(a) == simplify(b)` is not an equivalence test, and two spellings of one set can order differently -- which is why the laws are asserted over Boolean combinations and the deciders' agreement over a corpus that adds shapes |
-| 3 | A keyed map carries no negative component and is not canonicalised | a negated record has no representation, and `open`/`close` read a spelling |
-| 4 | Clauses are unordered where the source orders them | a narrowing: a key belongs when *some* clause admits it |
-| 5 | Clauses are quasi-K-step rather than quasi-constant | nothing against the literature, which introduces exactly this generalisation |
-| 6 | The assumption trail is popped rather than threaded | every relation proved on the way is discarded, so a goal reached twice by different paths is decided twice |
-| 7 | A class is described by what the frontend can read of it | a class laying down a layout the frontend cannot read is its `isinstance` test and its kind, and nothing else; every relation about the structure its instances have is then a question no rule can answer |
+The departures are tagged rows in [the ledger above](#where-this-tree-departs-from-its-sources),
+each with the test that holds its cost or the milestone owing one.
 
 Tooling and toolchain facts are [11-references.md](11-references.md), not this
 page.

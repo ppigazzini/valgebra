@@ -22,7 +22,7 @@ it.
 | [07-tooling-ci.md](07-tooling-ci.md) | the gates, the lanes, the exit codes, and each instrument's blind spots |
 | [08-testing.md](08-testing.md) | the test layers, the two mutation sweeps, the twenty-seven ledgers, the completeness probe |
 | [09-releasing.md](09-releasing.md) | `.github/workflows/release.yml` and the version surfaces — the order a release is cut in |
-| [10-theory.md](10-theory.md) | the papers the design rests on, and which code each touches |
+| [10-theory.md](10-theory.md) | the papers the design rests on, which code each touches, and the ledger of every result, obligation and deviation with the test that holds it |
 | [11-references.md](11-references.md) | the reference implementations and the toolchain baseline |
 | [12-writing.md](12-writing.md) | how to write a page here, and a comment in the source |
 | [13-glossary.md](13-glossary.md) | the words this set uses without stopping to define them |
