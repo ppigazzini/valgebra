@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc dd00b55b00399790cd206516f005d663ebcdff3f086bfe6b36491b030269791c # shrinks to a = Lines { lines: [], negated: false }, b = Lines { lines: [], negated: false }
+cc 1e906f17cd76e8a175ce6940bc1139876b2b20dc09d7c5657217ec781da0c023 # shrinks to a = Lines { lines: [Line { structure: Integers(IntSet { modulus: 1, classes: [IntervalSet { spans: [Span { lo: Some(0), hi: Some(0) }] }] }), objects: RecordLattice { atoms: [Atom { fields: {}, is_a: {}, not_a: {} }], negated: false } }], negated: false }, b = Lines { lines: [Line { structure: Integers(IntSet { modulus: 1, classes: [IntervalSet { spans: [Span { lo: Some(1), hi: Some(1) }] }] }), objects: RecordLattice { atoms: [Atom { fields: {}, is_a: {}, not_a: {} }], negated: false } }], negated: false }, c = Lines { lines: [Line { structure: Integers(IntSet { modulus: 1, classes: [IntervalSet { spans: [Span { lo: Some(0), hi: Some(0) }] }] }), objects: RecordLattice { atoms: [Atom { fields: {}, is_a: {}, not_a: {} }], negated: false } }], negated: false }

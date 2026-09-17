@@ -609,16 +609,18 @@ gradual atom, which is the top spelled rather than a node beside `Int`
 what all six of its properties are and names the two that are also metamorphic
 relations.
 
-**One component of the descriptor has no lattice law.** The word automata, the
-integer sets, the floats, the sequences, the sets, the dicts, the value sets and
-the descriptors as a whole each have a property suite checked against
-membership. The `Lines` component -- a union of lines with a negation flag,
-which is how a kind holds its structure beside the objects it admits -- has unit
-tests and no law. Its operations each take a `Whole` naming the kind they are a
-part of, so a law over it wants a strategy that builds a component per kind, and
-the tree has none. **[DEVIATION]**
+**The descriptor's lattice laws are checked one kind at a time.** The word
+automata, the integer sets, the floats, the sequences, the sets, the dicts, the
+value sets and the descriptors as a whole each have a property suite checked
+against membership. The `Lines` component -- a union of lines with a negation
+flag, which is how a kind holds its structure beside the objects it admits --
+takes a `Whole` naming the kind at every operation, so a law over it is asked
+within one kind rather than across the eleven. `Int` is the kind it is asked in,
+because its structure is an exact set of values and membership there is decided;
+a law over a kind whose component is coarse would hold on a set with two
+elements. **[DEVIATION]**
 
-OWED: the_lattice_laws_hold_of_the_lines -- the operations take a `Whole` and a `Component` per kind, and no strategy builds them
+HELD-BY: the_lattice_laws_hold_of_the_lines, the_complement_laws_hold_of_the_lines, a_class_the_order_cannot_close_leaves_the_kind_unknown
 
 ## The limit
 

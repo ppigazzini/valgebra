@@ -383,3 +383,6 @@ fn tidy(mut lines: Vec<Line>) -> Option<Vec<Line>> {
     lines.dedup();
     (lines.len() <= MAX_LINES).then_some(lines)
 }
+
+#[cfg(test)]
+mod tests;
