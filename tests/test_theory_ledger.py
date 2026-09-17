@@ -58,7 +58,7 @@ _OWED_FORM = re.compile(
 #: can only fall: a claim added as owed rather than held is a decision this
 #: file makes visible, and one that lands its test lowers the figure here in
 #: the same commit.
-RECORDED_OWED = 4
+RECORDED_OWED = 3
 
 #: Where a named test may live. Rust tests are `fn name(`, Python `def name(`.
 _SOURCES = (

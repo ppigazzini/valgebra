@@ -485,7 +485,7 @@ back, or hold only results that rested on no open hypothesis; a memo that is
 neither turns a backtracked assumption into a cached falsehood.
 **[OBLIGATION]**
 
-OWED: a_memo_without_a_revert_condition_fails_placement -- there is no memo, and nothing fails when one arrives without the revert condition written beside it
+HELD-BY: test_a_memo_without_a_revert_condition_fails_placement, test_the_detector_finds_a_memo_and_reads_the_sentence
 
 **An exhaustible procedure is searched, not enumerated.** Where the decision is
 structural rather than the emptiness reduction, a missing arm is a silent
