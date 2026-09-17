@@ -335,6 +335,25 @@ def test_hostile_dict_keys_are_handled() -> None:
 _TRANSFORMS = ["open", "close", "simplify", "__copy__"]
 
 
+def test_opening_past_the_node_bound_refuses() -> None:
+    """Opening a validator near the ceiling raises rather than handing one back.
+
+    The row below reads a transform that *may* refuse or may stay within the
+    bound, and passes either way -- which is right for a transform whose result
+    depends on the shape, and holds nothing about the refusal itself. `open` at
+    this size does refuse, and the docstring promises the `ValueError`, so the
+    promise is asserted rather than tolerated.
+
+    A record is two nodes and a catch-all clause adds two more, so a union of
+    `MAX_SCHEMA_NODES // 3` records spans well under the ceiling closed and well
+    over it open.
+    """
+    records = MAX_SCHEMA_NODES // 3
+    within = union(*[Validator({f"f{i}": int}) for i in range(records)])
+    with pytest.raises(ValueError, match="too large"):
+        within.open()
+
+
 @pytest.mark.parametrize("transform", _TRANSFORMS)
 def test_no_whole_schema_transform_escapes_the_node_bound(transform: str) -> None:
     # A union of closed records, sized so the schema is within the node ceiling

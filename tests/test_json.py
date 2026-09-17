@@ -255,3 +255,22 @@ def test_load_round_trips_with_json_loads(spec: object, value: object) -> None:
     doc = json.dumps(value)
     if v.is_valid(json.loads(doc)):
         assert v.load(doc) == json.loads(doc)
+
+
+def test_a_json_entry_refuses_a_value_that_is_not_a_document() -> None:
+    """`str` or `bytes`, and anything else is a `TypeError` rather than a failure.
+
+    The three entries take a *document*, so a caller handing one an `int` has
+    made a type error and not written an invalid document -- and reading it as
+    the second would report a `ValidationError` about a document nobody wrote.
+    The distinction is the docstrings' own, and it was held for `validate_json`
+    and for neither of the others.
+    """
+    validator = Validator(int)
+    with pytest.raises(TypeError, match="str or bytes"):
+        validator.load(123)  # ty: ignore[invalid-argument-type]
+    with pytest.raises(TypeError, match="str or bytes"):
+        validator.validate_json(123)  # ty: ignore[invalid-argument-type]
+    # `is_valid_json` answers a question rather than raising one, so a value
+    # that is not a document is not a member.
+    assert validator.is_valid_json(123) is False  # ty: ignore[invalid-argument-type]

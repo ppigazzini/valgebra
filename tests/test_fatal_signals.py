@@ -124,3 +124,23 @@ def test_fatal_signal_in_a_predicate_propagates(signal: type[BaseException]) -> 
     validator = _predicate_raising(signal())
     with pytest.raises(signal):
         validator.is_valid(5)
+
+
+@pytest.mark.parametrize("signal", FATAL)
+def test_fatal_signal_propagates_through_the_json_entries(
+    signal: type[BaseException],
+) -> None:
+    """The JSON entries parse and then walk, so a fatal signal reaches them too.
+
+    `validate_json` and `load` run the object walk over the parsed document, and
+    `is_valid_json` runs the in-place one. All three promise a fatal interpreter
+    signal propagates rather than being read as a non-member, and the promise
+    was held on the object path alone.
+    """
+    validator = Validator(_class_raising(signal()))
+    with pytest.raises(signal):
+        validator.is_valid_json("1")
+    with pytest.raises(signal):
+        validator.validate_json("1")
+    with pytest.raises(signal):
+        validator.load("1")

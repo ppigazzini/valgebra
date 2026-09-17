@@ -261,6 +261,17 @@ the figure rather than asserting it, and holds a floor instead, because the
 universe grows with the tree: a ledger pinning today's count would fail on the
 commit that adds a name rather than on the one that leaves it unreached.
 
+**The outcomes a method documents are a product of their own.**
+`tests/test_surface_outcomes.py` reads the binding's `Raises:` blocks — every
+`(method, exception)` pair the doc comments promise — and holds each to a test
+that puts the call inside a `pytest.raises` for it, read from the syntax tree
+rather than from the text. That is the half the name ledger says it cannot see,
+for the one outcome a derivation can name: a documented failure nobody drives is
+how a page promises a `TypeError` while the suite calls the method only on
+values that succeed. `BaseException` is read as the top of the exception
+lattice, because a docstring saying it means whatever signal reaches the caller
+and the suite drives the concrete ones.
+
 What a ledger cannot see is the half that matters most: naming a method is not
 asserting its documented outcome, and reaching a node is not checking every
 answer it gives. That is what the matrices beside them are for — the node matrix
