@@ -292,6 +292,49 @@ def test_deeply_nested_json_is_rejected_cleanly() -> None:
     assert info.value.code == "json_invalid"
 
 
+def test_the_parser_and_the_walk_bound_a_document_in_that_order() -> None:
+    """Which bound a deep document reaches, and which one it reaches first.
+
+    `docs/10-limits.md` says the code names which bound was reached:
+    `recursion_limit` while the parser could still read the document,
+    `json_invalid` once it could not. That is a claim about the *order* of two
+    bounds in different crates -- the walk's unfolding bound and jiter's own
+    recursion limit -- and it holds only while the parser's is the wider of the
+    two. Neither is a number a caller imports, so nothing but this row would
+    notice the day one moved past the other and the page started describing a
+    sequence the tree does not have.
+
+    The walk's total-descent bound is a third number and is *not* reachable
+    through a document: the parser refuses first, which is why the page reads it
+    against the unfolding bound rather than against the descent one.
+    """
+    schema = Validator(recursive(lambda j: union(int, [j])))
+
+    def document(levels: int) -> str:
+        return "[" * levels + "1" + "]" * levels
+
+    def code(levels: int) -> str | None:
+        try:
+            schema.validate_json(document(levels))
+        except ValidationError as error:
+            return error.code
+        return None
+
+    # Inside the published unfolding bound, the document is a member. One
+    # short of it, for the reason the row above spells: the outermost array is
+    # itself an unfolding.
+    assert code(127) is None
+    # Past it and inside the parser's, the walk is what refuses.
+    assert code(128) == "recursion_limit"
+    assert code(200) == "recursion_limit"
+    # Past the parser's, the document stops being one before the walk sees it.
+    assert code(201) == "json_invalid"
+
+    # And the ordering that makes the sentence true: the parser reads further
+    # than the walk unfolds, so there is a band where the walk is the answer.
+    assert code(128) != code(201)
+
+
 def test_self_referential_value_is_caught_as_a_loop() -> None:
     schema = Validator(recursive(lambda j: union(int, [j])))
     cyclic: list[object] = []

@@ -57,11 +57,20 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   product of the two, not either one. A level costs well under a kilobyte of
   native stack, which puts the deepest walk inside the stack a platform gives a
   thread. This holds on both the object path and the JSON path; an over-deep JSON
-  document is rejected by the parser as `json_invalid`. The parser's own bound is
-  the wider of the two — a couple of hundred levels of arrays and objects — so a
-  document deep enough to exhaust the walk is still a document, and the code says
-  which bound was reached: `recursion_limit` while the parser could still read
-  it, `json_invalid` once it could not.
+  document is rejected by the parser as `json_invalid`.
+
+    The parser has a bound of its own — a couple of hundred levels of arrays and
+    objects — and it sits **between** the two: wider than the unfolding bound and
+    narrower than the descent one. A document therefore has three regions rather
+    than two. Inside the unfolding bound it is a member. Past it and inside the
+    parser's, the walk is what refuses, and the code is `recursion_limit`. Past
+    the parser's, the text stops being a document before the walk sees it, and
+    the code is `json_invalid`. The descent bound is not reachable through a
+    document at all, because the parser refuses first — it binds on the object
+    path, where there is no parser. `tests/test_adversarial_bounds.py` holds the
+    three regions and their order, which is what keeps this paragraph a
+    description of the tree rather than of two numbers that have since moved
+    past each other.
 - **Self-reference.** A value that contains itself is caught by an
   object-identity guard and fails with `recursion_loop` rather than looping
   forever.
