@@ -2967,9 +2967,51 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
             }
         }
     }
+    // And the widths a *length bound* separates, filled from the other schema's
+    // elements. A bound is told from the shape it narrows by a value of that
+    // shape at a width the bound refuses, and the elements have to come from
+    // the schema the value must be a member of: `list[set[Any]]` below
+    // `list[Any]` of at most two is refuted by a three-element list of sets,
+    // and neither the bound -- which builds its widths out of a fixed item --
+    // nor the subject -- which reaches two past its own prefix -- spells one.
+    for (container, len) in bounded_widths(schemas) {
+        for (_, theirs) in &shapes {
+            for element in theirs
+                .elements()
+                .flat_map(|element| candidates(element, out))
+                .take(CAP_PER_NODE / 4)
+            {
+                for width in len.saturating_sub(EDGE_SPAN)..=(len + EDGE_SPAN) {
+                    made.push(hold(container, vec![element.clone(); width]));
+                }
+            }
+        }
+    }
     made.truncate(CAP_PER_NODE * 4);
     out.extend(made.iter().cloned());
     made
+}
+
+/// Each length bound a sequence in `schemas` carries, with its container.
+///
+/// Read through the refinement, because a bound is a node above the shape it
+/// narrows and the shape is what a value of that width has to be built as.
+fn bounded_widths(schemas: &[&Schema]) -> Vec<(SeqKind, usize)> {
+    let mut found = Vec::new();
+    for schema in schemas {
+        let Schema::Refine { base, constraints } = schema else {
+            continue;
+        };
+        let Schema::Seq { container, .. } = base.as_ref() else {
+            continue;
+        };
+        for constraint in constraints.iter() {
+            if let Constraint::MinLen(len) | Constraint::MaxLen(len) = constraint {
+                found.push((*container, *len));
+            }
+        }
+    }
+    found
 }
 
 /// The universe separates a pair at a position *inside* a shape.
@@ -3027,6 +3069,105 @@ fn the_universe_separates_a_pair_inside_a_shape() {
             "no value of the universe refutes the pair excluding {excluded:?}"
         );
     }
+}
+
+/// A union contributes a value of *each* branch, not sixty-four of the first.
+///
+/// The pair: `list[float] | {"b": anything, str => nothing}` against the
+/// fixpoint `μt. int | list[¬t]`. The refutation is the record branch -- the
+/// map `{"b": 1}` is a member of the union and is neither an `int` nor a list,
+/// so it is outside the fixpoint -- and the sequence branch has no witness at
+/// all, because every list of floats the universe spells is a value of the
+/// fixpoint too.
+///
+/// The universe held sixty-four values of the union and not one map. A node's
+/// cap was read off the branches **concatenated**, so the sequence branch spent
+/// it before the record branch contributed anything, and the record's own
+/// edges -- which lead with exactly the witness -- never reached the universe.
+/// The record spent part of its own cap twice over the same map, which is the
+/// second half of the same cause.
+#[test]
+fn a_union_contributes_a_value_of_every_branch() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let a = union(
+        Schema::Seq {
+            container: SeqKind::List,
+            shape: SeqShape::homogeneous(Schema::Float),
+        },
+        Schema::keyed_map(
+            vec![Field {
+                name: "b".into(),
+                schema: Schema::ANYTHING,
+                required: true,
+            }],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Nothing,
+            }],
+        ),
+    );
+    let b = Schema::Ref(DefIx::new(1));
+    // The premise the law carries: a pair that is not refuted asserts nothing.
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
+}
+
+/// A length bound is separated by a value of the shape it narrows.
+///
+/// The pair: `list[set[Any]]` against `list[Any]` of at most two. It is refuted
+/// by a **three-element list of sets** -- a member of the subject, one element
+/// too long for the bound -- and nothing else separates them, because every
+/// shorter list of sets is a value of both.
+///
+/// Neither side built one. The bound makes its widths out of a fixed item, so
+/// the universe held three-element lists of *integers*, which are not members
+/// of the subject. The subject reaches two elements past its own prefix, which
+/// is what tells a tailed shape from a fixed one and is one short of what tells
+/// it from a bound of two. The value has to be crossed: the width from the
+/// bound, the element from the schema it must be a member of.
+#[test]
+fn a_length_bound_is_separated_by_the_shape_it_narrows() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let a = Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape::homogeneous(Schema::Coll {
+            container: CollKind::Set,
+            element: Arc::new(Schema::ANYTHING),
+        }),
+    };
+    let b = Schema::Refine {
+        base: Arc::new(Schema::Seq {
+            container: SeqKind::List,
+            shape: SeqShape::homogeneous(Schema::ANYTHING),
+        }),
+        constraints: vec![Constraint::MaxLen(2)].into(),
+    };
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
 }
 
 /// Every value of `len` items, in each container a length is read from.
@@ -3358,9 +3499,16 @@ fn edges_of(schema: &Schema, out: &mut Vec<Obj>) -> Vec<Obj> {
             mine.extend(record_edges(fields, defaults, out));
         }
         Schema::Union(members) | Schema::Intersection(members) => {
-            for member in members.iter() {
-                mine.extend(edges_of(member, out));
-            }
+            // Round-robin rather than concatenated, for the reason
+            // `boundary_values` reads its own sources that way: a cap taken off
+            // a concatenation is spent on whichever branch came first. A union
+            // of a sequence beside a record contributed sixty-four lists and no
+            // map, and the map was the only value that told the union from a
+            // fixpoint over lists -- so the refutation had no witness and the
+            // branch that held one had not been asked.
+            let branches: Vec<Vec<Obj>> =
+                members.iter().map(|member| edges_of(member, out)).collect();
+            mine.extend(interleaved(&branches));
         }
         // A complement is separated from its inner set by the inner set's own
         // values: one of them is in exactly one of the two.
