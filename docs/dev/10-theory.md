@@ -445,7 +445,7 @@ lattice for instances -- and the lattice laws hold of each against membership.
 Each top is checked at the value that decides it: the ends of the integer
 carrier, `nan`, the newline, the empty container. **[LOAD-BEARING]**
 
-HELD-BY: the_lattice_laws_hold_of_the_integers, the_lattice_laws_hold_of_the_floats, the_lattice_laws_hold_of_the_languages, the_lattice_laws_hold_of_the_sequences, the_lattice_laws_hold_of_the_sets, the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_objects, an_emptiness_is_refused_by_every_boundary_value, the_universe_separates_a_pair_inside_a_shape
+HELD-BY: the_lattice_laws_hold_of_the_integers, the_lattice_laws_hold_of_the_floats, the_lattice_laws_hold_of_the_languages, the_lattice_laws_hold_of_the_sequences, the_lattice_laws_hold_of_the_sets, the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_objects, the_lattice_laws_hold_of_the_values, the_complement_laws_hold_of_the_values, an_emptiness_is_refused_by_every_boundary_value, the_universe_separates_a_pair_inside_a_shape
 
 **A node built alike is one handle.** Interning shares the nodes of two schemas
 built the same way, so the trail's comparisons short-circuit on pointer
@@ -469,7 +469,7 @@ neither, on every path a subtyping query can take: through a product, through
 the disjointness reading, and through the shared cell an equivalence query
 carries across its two directions. **[OBLIGATION]**
 
-OWED: the_budget_declines_on_every_subtyping_path -- the cell refuses to spend and emptiness declines, and no test drives a subtyping path to exhaustion and reads the third answer
+HELD-BY: the_budget_declines_on_every_subtyping_path, an_exhausted_budget_refuses_to_spend
 
 **The goals a query repeats are counted.** The decision not to memoise goals
 rests on a number: zero repeats over the workload shapes and the thirty-two
@@ -603,13 +603,16 @@ gradual atom, which is the top spelled rather than a node beside `Int`
 what all six of its properties are and names the two that are also metamorphic
 relations.
 
-**Three components of the descriptor have no lattice law.** The word automata,
-the integer sets, the floats, the sequences, the sets, the dicts and the
-descriptors as a whole each have a property suite against membership; the
-`Lines` component and the `Values` component have unit tests and no law, and
-no test drives either to its `Unknown` answer. **[DEVIATION]**
+**One component of the descriptor has no lattice law.** The word automata, the
+integer sets, the floats, the sequences, the sets, the dicts, the value sets and
+the descriptors as a whole each have a property suite checked against
+membership. The `Lines` component -- a union of lines with a negation flag,
+which is how a kind holds its structure beside the objects it admits -- has unit
+tests and no law. Its operations each take a `Whole` naming the kind they are a
+part of, so a law over it wants a strategy that builds a component per kind, and
+the tree has none. **[DEVIATION]**
 
-OWED: the_lattice_laws_hold_of_the_lines, the_lattice_laws_hold_of_the_values -- neither component has a test module of its own
+OWED: the_lattice_laws_hold_of_the_lines -- the operations take a `Whole` and a `Component` per kind, and no strategy builds them
 
 **The carrier's edges are named on the page and drawn by no test.** The page
 that states deviation 11 gives four examples of a declined bound -- a multiple
