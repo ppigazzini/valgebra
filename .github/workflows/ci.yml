@@ -940,8 +940,10 @@ jobs:
       # is the baseline's test time times a multiplier, and the baseline has no
       # failure to shrink. An unbounded shrink is spent against a budget
       # measured without one, so a mutant the tests caught reports as a
-      # timeout -- and `scripts/mutation_gate.py` reads a timeout as a
-      # survivor, being a run that returned no verdict.
+      # timeout -- and a timeout returns no verdict, so
+      # `scripts/mutation_gate.py` stops on it as a rig fault rather than
+      # reading it as a survivor. Either way the lane is red and the cause is
+      # the shrink rather than the tests.
       #
       # A second finishes most of them, so a baseline failure carries a shrunk
       # case beside the seed above.
@@ -996,10 +998,10 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "core files: ${core:-none}"
       # `-j 2` matches the runner's cores. Oversubscribing turns a mutation
-      # caught in seconds into one that takes far longer, and the ratchet reads a
-      # timeout as a survivor -- so the multiplier below is what keeps a *slow*
-      # catch from reading as an escape. A mutation that removes termination
-      # still reaches it.
+      # caught in seconds into one that takes far longer, and the ratchet stops
+      # on a timeout as a rig fault -- so the multiplier below is what keeps a
+      # *slow* catch from reading as a run that could not measure. A mutation
+      # that removes termination still reaches it.
       - name: Sweep the core files the change touches
         if: steps.diff.outputs.core != ''
         env:
@@ -1059,8 +1061,10 @@ jobs:
       # is the baseline's test time times a multiplier, and the baseline has no
       # failure to shrink. An unbounded shrink is spent against a budget
       # measured without one, so a mutant the tests caught reports as a
-      # timeout -- and `scripts/mutation_gate.py` reads a timeout as a
-      # survivor, being a run that returned no verdict.
+      # timeout -- and a timeout returns no verdict, so
+      # `scripts/mutation_gate.py` stops on it as a rig fault rather than
+      # reading it as a survivor. Either way the lane is red and the cause is
+      # the shrink rather than the tests.
       #
       # A second finishes most of them, so a baseline failure carries a shrunk
       # case beside the seed above.
@@ -1453,8 +1457,10 @@ jobs:
       # is the baseline's test time times a multiplier, and the baseline has no
       # failure to shrink. An unbounded shrink is spent against a budget
       # measured without one, so a mutant the tests caught reports as a
-      # timeout -- and `scripts/mutation_gate.py` reads a timeout as a
-      # survivor, being a run that returned no verdict.
+      # timeout -- and a timeout returns no verdict, so
+      # `scripts/mutation_gate.py` stops on it as a rig fault rather than
+      # reading it as a survivor. Either way the lane is red and the cause is
+      # the shrink rather than the tests.
       #
       # A second finishes most of them, so a baseline failure carries a shrunk
       # case beside the seed above.
@@ -1642,8 +1648,10 @@ jobs:
       # is the baseline's test time times a multiplier, and the baseline has no
       # failure to shrink. An unbounded shrink is spent against a budget
       # measured without one, so a mutant the tests caught reports as a
-      # timeout -- and `scripts/mutation_gate.py` reads a timeout as a
-      # survivor, being a run that returned no verdict.
+      # timeout -- and a timeout returns no verdict, so
+      # `scripts/mutation_gate.py` stops on it as a rig fault rather than
+      # reading it as a survivor. Either way the lane is red and the cause is
+      # the shrink rather than the tests.
       #
       # A second finishes most of them, so a baseline failure carries a shrunk
       # case beside the seed above.

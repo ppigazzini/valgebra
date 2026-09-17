@@ -22,17 +22,21 @@ ROOT = Path(__file__).resolve().parent.parent
 GATE = ROOT / "scripts" / "mutation_gate.py"
 
 
-def _run(
+def _run(  # noqa: PLR0913 - a fixture per file the gate reads, named at each call
     work: Path,
     missed: list[str],
     baseline: list[str],
+    *,
     extra: list[str] | None = None,
     accepted: dict[str, str] | None = None,
+    timed_out: list[str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     out = work / "mutants.out"
     out.mkdir(parents=True, exist_ok=True)
     (out / "caught.txt").write_text("some/file.rs:1:1: caught mutant\n")
     (out / "missed.txt").write_text("".join(line + "\n" for line in missed))
+    if timed_out is not None:
+        (out / "timeout.txt").write_text("".join(line + "\n" for line in timed_out))
     (work / "scripts").mkdir(exist_ok=True)
     (work / "scripts" / "mutation_gate.py").write_text(GATE.read_text())
     recorded: dict[str, object] = {"survivors": baseline}
@@ -287,3 +291,48 @@ def test_an_accepted_survivor_for_a_tracked_file_passes(tmp_path: Path) -> None:
         baseline=["crates/x/src/b.rs: replace + with - in f"],
     )
     assert result.returncode == 0, result.stdout
+
+
+def test_a_timeout_is_a_rig_fault_rather_than_a_survivor(tmp_path: Path) -> None:
+    """A mutant whose experiment never finished is a claim about the runner.
+
+    `docs/dev/13-glossary.md` says a rig fault is "a run that produced no
+    verdict -- a timeout ... Neither a pass nor a failure, and reported as
+    itself", and `07-tooling-ci.md` says the same of a mutant whose experiment
+    cannot finish. The gate folded `timeout.txt` into the survivors, so an
+    overloaded runner read as a hole in the tests -- and the two are repaired in
+    opposite directions.
+    """
+    result = _run(tmp_path, [], [], timed_out=["some/file.rs:1:1: a slow mutant"])
+    assert result.returncode == 2, result.stdout + result.stderr
+    said = result.stdout + result.stderr
+    assert "rig fault" in said, said
+    assert "1 mutant" in said or "1 mutation" in said, said
+
+
+def test_a_timeout_is_not_recorded_as_an_accepted_survivor(tmp_path: Path) -> None:
+    """And `--update` must not bake one into the baseline.
+
+    That is the reading that outlives the run: a timeout accepted once is a
+    permanent excuse for a mutant nobody ever judged, and the ratchet then fails
+    the day the runner is fast enough to judge it.
+    """
+    result = _run(
+        tmp_path,
+        ["some/file.rs:1:1: a real survivor"],
+        [],
+        extra=["--update"],
+        timed_out=["some/file.rs:2:2: a slow mutant"],
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    recorded = json.loads((tmp_path / "scripts" / "mutation_baseline.json").read_text())
+    assert recorded["survivors"] == [], recorded
+
+
+def test_a_survivor_still_fails_the_ratchet_beside_a_clean_timeout_file(
+    tmp_path: Path,
+) -> None:
+    """An empty `timeout.txt` is not a fault, and the survivor direction holds."""
+    result = _run(tmp_path, ["some/file.rs:1:1: a real survivor"], [], timed_out=[])
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "NEW SURVIVOR" in result.stdout, result.stdout

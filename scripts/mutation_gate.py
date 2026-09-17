@@ -26,9 +26,14 @@ absent by construction and would otherwise read as a whole baseline gone stale.
 A full sweep must never use it: the expiry direction is what keeps the accepted
 set honest.
 
-Reads `mutants.out/missed.txt` (survivors) and `mutants.out/timeout.txt`
-(unjudged, treated as survivors) produced by a prior `cargo mutants` run; a
-different output directory is named with `--out`.
+Reads `mutants.out/missed.txt` (survivors) produced by a prior `cargo mutants`
+run; a different output directory is named with `--out`.
+`mutants.out/timeout.txt` is read too and is *not* a survivor: a mutant whose
+experiment never finished returned no verdict, which is a **rig fault** -- the
+glossary's word -- and it stops the run at exit 2 rather than being counted as a
+hole in the tests. The two are repaired in opposite directions, and folding them
+together lets `--update` write an overloaded runner into the baseline as a
+permanent excuse for a mutant nobody judged.
 
 Three outcomes, three exit codes, so a caller can dispatch on them:
 
@@ -81,14 +86,45 @@ def _read(out: Path, name: str) -> list[str]:
 
 
 def _measured(out: Path) -> set[str]:
-    return {
-        _identity(ln) for ln in _read(out, "missed.txt") + _read(out, "timeout.txt")
-    }
+    """Give the mutants the sweep judged to survive."""
+    return {_identity(ln) for ln in _read(out, "missed.txt")}
+
+
+def _unjudged(out: Path) -> list[str]:
+    """Give the mutants whose experiment never returned a verdict.
+
+    Read apart from the survivors, because they are a different claim. A
+    survivor says the tests do not catch a change; a timeout says the *run* did
+    not finish, which is about the runner and is repaired in the other
+    direction -- a budget, a seed, a bound on a shrink. Folded together, an
+    overloaded machine reads as a hole in the tests, and `--update` writes that
+    reading into the baseline as a permanent excuse for a mutant nobody judged.
+    """
+    return [_identity(ln) for ln in _read(out, "timeout.txt")]
 
 
 def _cannot_run(message: str) -> None:
     print(f"mutation_gate: {message}", file=sys.stderr)
     raise SystemExit(EXIT_CANNOT_RUN)
+
+
+def _refuse_a_rig_fault(out: Path) -> None:
+    """Stop where a mutant returned no verdict, before any ratchet is read.
+
+    Before, because every direction below is a comparison against the measured
+    set, and a set missing the mutants nobody judged is not the sweep's answer.
+    """
+    unjudged = _unjudged(out)
+    if not unjudged:
+        return
+    for mutant in unjudged:
+        print(f"RIG FAULT: {mutant}", file=sys.stderr)
+    _cannot_run(
+        f"{len(unjudged)} mutant(s) returned no verdict: a rig fault rather than "
+        "a result. Raise the timeout multiplier, bound what the tests shrink, or "
+        "give the sweep a machine that finishes them -- and read the ratchet "
+        "again once they are judged."
+    )
 
 
 def _require_run(out: Path) -> None:
@@ -199,6 +235,7 @@ def main() -> int:
     new_only = "--new-only" in args
     out = ROOT / _option(args, "--out", "mutants.out")
     _require_run(out)
+    _refuse_a_rig_fault(out)
     measured = _measured(out)
 
     if update:

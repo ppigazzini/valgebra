@@ -39,6 +39,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a pattern prints the way Python spells it
 - fix: a ledger count is spelled from the number the tree has -- internal
 - fix: a mapping opened frees the keys no clause claims
+- fix: a mutant that returned no verdict is a rig fault, not a survivor -- internal
 
 -->
 

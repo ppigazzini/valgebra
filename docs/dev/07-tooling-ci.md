@@ -456,6 +456,14 @@ experiment cannot finish is a rig fault, not a detection -- and a mutant the
 skipped tests would hang on is still caught by the rest of the suite, which is
 what the bound's own tests are for.
 
+`scripts/mutation_gate.py` reads that distinction rather than restating it. A
+line in `timeout.txt` stops the gate at exit 2, the code for a run that could
+not measure, with the mutant named; only `missed.txt` reaches the ratchet. The
+two are repaired in opposite directions -- a survivor wants a test, a timeout
+wants a budget, a seed or a bound on what the tests shrink -- and folding them
+together let `--update` write an overloaded runner into a baseline as a
+permanent excuse for a mutant nobody judged.
+
 **The third sweep runs the Python suite per mutant.** Seven files of the
 binding are reached only through the shipped extension, and `cargo test` never
 loads it, so an ordinary sweep reads every mutant of them as a survivor while
