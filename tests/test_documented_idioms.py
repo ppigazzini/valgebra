@@ -70,9 +70,11 @@ def test_the_limits_page_names_the_refinement() -> None:
 def test_a_map_can_constrain_some_keys_and_free_the_rest() -> None:
     """The permissive clause is the complement of the constrained keys.
 
-    `open` admits a clause matching *every* key, which subsumes a narrower one
-    and frees everything. Taking the complement instead leaves the two clauses
-    disjoint, so the disjunction never widens the keys that were constrained.
+    Which is what `open` writes: openness is the default of the region no clause
+    claims, so freeing the keys beside a `str: int` clause means a clause over
+    the complement of `str`. Writing it by hand is how a caller frees *some* of
+    what is left rather than all of it -- the two clauses stay disjoint, so the
+    disjunction never widens the keys that were constrained.
     """
     partly_open = Validator(
         {"name": str, str: int, complement(Validator(str)): anything}
@@ -83,9 +85,8 @@ def test_a_map_can_constrain_some_keys_and_free_the_rest() -> None:
     assert partly_open.is_valid({"name": "a", 7: object()})  # no clause claims it
     assert not partly_open.is_valid({"name": "a", "count": "not an int"})
 
-    # What `open` does instead, for contrast: every key becomes free.
-    fully_open = Validator({"name": str, str: int}).open()
-    assert fully_open.is_valid({"name": "a", "count": "not an int"})
+    # And `open` writes the same thing, because the region it frees is the same.
+    assert Validator({"name": str, str: int}).open().is_equivalent(partly_open)
 
 
 def test_the_schema_language_page_shows_the_idiom() -> None:

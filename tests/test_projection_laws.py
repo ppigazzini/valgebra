@@ -2,16 +2,17 @@
 
 Every other operation on this surface is a function of the *set* a schema
 denotes: two schemas admitting the same values are one schema to `is_subtype_of`,
-to `is_empty`, and to every fold a constructor applies. `open` and `close` are
-not. They rewrite the records a schema is written out of, so two terms denoting
-one set can open into two different sets -- and a caller who reads them as set
-operations gets an answer that depends on how the schema was spelled.
+to `is_empty`, and to every fold a constructor applies. `close` is one too.
+`open` is not, and the reason is one place: it descends into a union, and a
+branch declaring no field frees every key on its own, so `{"a?": int}` and
+`{} | {"a": int}` -- one set, two spellings -- open into two.
 
-That is a deliberate narrowing rather than a defect: the operators read a
-spelling because the node they rewrite carries the field list as written. What is
-owed is a test saying exactly where the law holds and exactly where it does not,
-with the value that separates the two sides -- so that a widening changes this
-file, and a reader who wants the law knows what to write instead.
+That is a deliberate narrowing rather than a defect, and it is the only one:
+what the operators read of a *keyed map* is the regions its clauses claim, which
+is a set of keys rather than a way of writing one. What they must not do is read
+an unrelated part of the term -- treat one clause differently according to
+whether a field sits beside it -- and the rows below hold that apart from the
+union case with the value that separates the two sides.
 """
 
 from __future__ import annotations
@@ -92,22 +93,30 @@ def test_the_projections_are_idempotent() -> None:
     assert record.open().close().is_equivalent(record)
 
 
-def test_closing_a_mapping_leaves_it_alone() -> None:
-    """A clause over every key is not a record's catch-all.
+def test_a_clause_is_read_the_same_with_or_without_a_field_beside_it() -> None:
+    """One clause, one answer, whatever else the term declares.
 
-    `close` drops a *record's* catch-all. A pure mapping declares no field, so
-    there is no record to close and the clause is the schema rather than an
-    addition to it. The theory's own operator would give the empty record here;
-    this one reads the term, and the difference is the deviation below.
+    Openness is the default of the key-type region no clause claims, so a clause
+    names a region the operators do not touch. A `str => int` clause claims the
+    `str` keys whether or not a field is declared beside it, and reading it one
+    way in a record and another in a mapping would be the term's *unrelated*
+    parts deciding one clause -- which is incoherence rather than the spelling
+    sensitivity the union case below declares.
     """
-    mapping = Validator(dict[str, int])
-    assert mapping.close().is_equivalent(mapping)
-    assert mapping.open().is_equivalent(mapping)
-    assert mapping.close().is_valid({"a": 1}) is True
-    # A record with a typed catch-all beside a field does close.
-    mixed = Validator({"a": int, str: int})
-    assert mixed.close().is_equivalent({"a": int})
-    assert mixed.close().is_valid({"a": 1, "b": 2}) is False
+    bare = Validator({str: int})
+    beside_a_field = Validator({"a": int, str: int})
+
+    for schema in (bare, beside_a_field):
+        # The claimed region is not the operators' to touch, either way.
+        assert schema.close().is_equivalent(schema), schema
+        assert schema.close().is_valid({"a": 1}) is True, schema
+
+    # And opening frees what the clause leaves over, in both -- a key no clause
+    # claims, which is any key that is not a `str`.
+    assert bare.open().is_valid({1: "anything at all"}) is True
+    assert beside_a_field.open().is_valid({"a": 1, 2: "free"}) is True
+    # while the region the clause claims still says what a `str` key maps to.
+    assert beside_a_field.open().is_valid({"a": 1, "b": "not an int"}) is False
 
 
 # --- Where the law does not hold ------------------------------------------
@@ -138,18 +147,26 @@ def test_opening_is_not_a_function_of_the_set() -> None:
     assert other.open().relation_to(one.open()) == "not_subset"
 
 
-def test_closing_is_not_a_function_of_the_set_either() -> None:
-    """The same, one projection over, with the pair the core's own rows name."""
-    free = Validator({"a?": Any})
+def test_closing_is_a_function_of_the_set() -> None:
+    """The pair the core's own rows name, and the one `close` used to part.
+
+    `{"a?": Any, ...}` and `dict[Any, Any]` admit every dict, by different
+    routes, and they are one term: a keyed map with no field and a catch-all
+    clause. Closing sends the region no clause claims to nothing, and `[top]`
+    claims every key whichever way the term was written -- so the two close to
+    one set. An operator picking a reading for that term would map one set to
+    two, which is what puts it outside the algebra.
+    """
+    free = Validator({"a?": Any}).open()
     every_dict = Validator(dict[Any, Any])
-    # Both admit every dict, by different routes.
     for value in ({}, {"a": 1}, {"b": "x"}, {"a": None, "b": 2}):
-        assert free.open().is_valid(value) is True
-        assert every_dict.is_valid(value) is True
-    # Closing keeps the declared field on one and the clause on the other.
-    assert free.close().is_valid({"b": "x"}) is False
-    assert every_dict.close().is_valid({"b": "x"}) is True
-    assert free.close().is_equivalent(every_dict.close()) is False
+        assert free.is_valid(value) is True, value
+        assert every_dict.is_valid(value) is True, value
+    assert free.is_equivalent(every_dict), "the same set, two routes"
+    assert free.close().is_equivalent(every_dict.close())
+    # And the set they close to is the one that admits the empty dict alone.
+    assert every_dict.close().is_valid({}) is True
+    assert every_dict.close().is_valid({"b": "x"}) is False
 
 
 def test_the_relations_are_functions_of_the_set() -> None:

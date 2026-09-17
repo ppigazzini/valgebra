@@ -38,10 +38,29 @@ answer of its own, or a repair to a change not yet released.
 - fix: a render that gave up says so, rather than reading as another schema
 - fix: a pattern prints the way Python spells it
 - fix: a ledger count is spelled from the number the tree has -- internal
+- fix: a mapping opened frees the keys no clause claims
 
 -->
 
 ### Fixed
+
+- **A mapping opened frees the keys no clause claims.**
+  `Validator(dict[str, int]).open().is_valid({1: "x"})` was `False` and is
+  `True`. Openness is the default of the key-type region a schema's clauses
+  leave over, so opening a mapping keeps what a `str` key maps to and frees
+  every other key-type, and closing it refuses them again. A record is the case
+  where the clauses claim nothing at all, which is why opening one frees every
+  key -- that is the special case, not the rule.
+
+    The same reading ends a clause being read two ways according to an
+    unrelated field: `Validator({"a": int, str: int}).close()` dropped the
+    `str: int` clause because a field was declared beside it, and keeps it now,
+    as `Validator({str: int}).close()` always did.
+
+    `open` on a mapping writes a clause keyed by a complement, which is a shape
+    the set representation declines, so relations about such a schema fall back
+    to the rules (`docs/15-decidability.md` records the decline). Membership is
+    unaffected. Opening a *record* is unchanged in both answer and decidability.
 
 - **A pattern prints the way Python spells it.** The `Regex` marker inside a
   rendered schema carried the pattern in *Rust's* spelling: double quotes where

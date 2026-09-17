@@ -383,36 +383,53 @@ assert not closed.is_valid({"name": "Ada", "extra": 1})
 assert closed.open().is_valid({"name": "Ada", "extra": 1})
 ```
 
-Both apply to every record that **declares at least one field**, at any depth,
-including inside a recursive definition. They are projections rather than
-inverses: `open` on such a record widens any typed catch-all it carries to admit
-every key, and `close` drops the catch-all, so applying either twice changes
-nothing the second time.
+**Openness is the default of the keys no clause claims.** A clause names a
+region of the key space — `str: int` claims the `str` keys — and the two
+transforms decide the keys the clauses leave over and nothing else. A record
+claims no region, which is why opening one frees every key and closing one
+refuses every key; that is the common case, not the general rule. A *mapping*
+claims one, so opening `dict[str, int]` keeps what a `str` key maps to and frees
+only the key-types beside it.
 
-Both transforms act on a **record**, and a mapping is not one: `dict[K, V]` keys
-a *type* rather than a name, so opening it would say something it does not, and
-only the schemas inside its clauses are visited. Having no named field is not
-what makes a schema a mapping — `{}` has none either, and it is the empty closed
-record. A clause and no field is.
+They apply at any depth, including inside a recursive definition. They are
+projections rather than inverses: applying either twice changes nothing the
+second time, and `close` after `open` returns exactly the regions `open` freed.
 
 ```python
 from valgebra import Validator
 
-assert repr(Validator({str: int}).open()) == "dict[str, int]"  # a mapping
+# A mapping: the region its clause claims is not the transform's to touch.
+mapping = Validator(dict[str, int])
+assert not mapping.is_valid({1: "x"})  # no clause claims an int key
+assert mapping.open().is_valid({1: "x"})  # opened, that region is free
+assert not mapping.open().is_valid({"a": "x"})  # and a str key still maps to int
+assert mapping.open().close() == mapping
 
-# `{}` is a record: closed, it admits the empty dict alone; opened, every dict.
+# `{}` declares no field and claims no region: closed it admits the empty dict
+# alone, opened it admits every dict.
 assert Validator({}).is_valid({}) and not Validator({}).is_valid({"x": 1})
 assert Validator({}).open().is_valid({"x": 1})
 
-# A typed catch-all beside a named field is widened with the record.
-assert repr(Validator({"name": str, str: int}).open()) == (
-    "{'name': str, anything: anything}"
-)
+# And a clause reads the same whether or not a field is declared beside it.
+beside_a_field = Validator({"name": str, str: int})
+assert beside_a_field.close().is_equivalent(beside_a_field)
+assert beside_a_field.open().is_valid({"name": "Ada", 7: "free"})
+assert not beside_a_field.open().is_valid({"name": "Ada", "count": "not an int"})
 ```
 
-So whether a typed catch-all is freed depends on whether the schema also
-declares a field. Write the key set you want rather than reaching for `open` on a
-mapping.
+To free some key-types and constrain others without `open`, write the
+permissive clause yourself as the `complement` of the keys you constrained —
+which is what `open` writes when the regions it frees are not the whole of what
+is left:
+
+```python
+from valgebra import Validator, anything, complement
+
+partly_open = Validator({"name": str, str: int, complement(Validator(str)): anything})
+assert partly_open.is_valid({"name": "a", "count": 1})
+assert partly_open.is_valid({"name": "a", 7: object()})  # no clause claims it
+assert not partly_open.is_valid({"name": "a", "count": "not an int"})
+```
 
 #### Under a `complement`, the direction reverses
 
@@ -527,12 +544,12 @@ something that looks decided and is not.
 ### Constraining some keys and freeing the rest
 
 Because the clauses are a disjunction, a clause that matches every key subsumes
-every narrower one. That is what [`open`](#records) does, and it is why opening
-a map with a typed catch-all frees the keys that catch-all was constraining.
+every narrower one. So freeing the keys beside a typed clause means a clause
+over the **complement** of the keys that one claims: disjoint clauses cannot
+widen each other, and the constrained keys stay constrained.
 
-To leave *only* the unclaimed keys free, give the permissive clause the
-**complement** of the keys the others claim. Disjoint clauses cannot widen each
-other:
+That is what [`open`](#records) writes. Written by hand it is how a caller frees
+*some* of what is left rather than all of it:
 
 ```python
 from valgebra import Validator, anything, complement
@@ -543,10 +560,14 @@ assert partly_open.is_valid({"name": "Ada", "age": 36})
 assert partly_open.is_valid({"name": "Ada", 7: object()})  # no clause claims it
 assert not partly_open.is_valid({"name": "Ada", "age": "old"})
 
-# `open` is the other thing: every key becomes free, the typed clause included.
-fully_open = Validator({"name": str, str: int}).open()
-assert fully_open.is_valid({"name": "Ada", "age": "old"})
+# And `open` frees the same region, so it writes the same schema.
+assert Validator({"name": str, str: int}).open().is_equivalent(partly_open)
 ```
+
+A schema written this way leaves the [decided
+fragment](15-decidability.md): a clause keyed by a complement is one the set
+representation declines, so relations about it fall back to the rules.
+Membership is unaffected — the walk reads the value.
 
 ## Classes
 

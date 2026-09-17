@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use super::{
     Clauses, Constraint, Constraints, DefIx, DefShift, Fields, MapClause, Members, Openness,
-    OperandIx, PoolShift, Remap, Schema, SeqShape, already_said, clauses_for, share_clauses,
+    OperandIx, PoolShift, Remap, Schema, SeqShape, already_said, clauses_over, share_clauses,
     share_fields, share_members, share_node, with_field_buffer, with_member_buffer,
 };
 
@@ -482,10 +482,13 @@ impl Schema {
     /// Return a copy with every record-shaped [`Schema::KeyedMap`] in the tree
     /// set to `open`.
     ///
-    /// This backs the `open`/`close` methods: `open` opens every record in a
-    /// subtree (undeclared keys allowed via an `anything` catch-all), `close`
-    /// closes them. A pure mapping keeps its clauses -- it is a map from a key
-    /// *type*, not a record, and opening it would say something it does not.
+    /// This backs the `open`/`close` methods. **Openness is the default of the
+    /// region no clause claims**: a clause is a key-type region carrying its own
+    /// default, so the operators rewrite that one region and leave every claimed
+    /// one alone. A record claims none, which is why opening it frees every key
+    /// and closing it refuses every key -- the record is the special case, not
+    /// the general one. A mapping claims one, so `dict[str, int]` opened still
+    /// says what a `str` key maps to and frees only the key-types beside it.
     ///
     /// **The labels are read on the semantic `dom` first**, which is what makes
     /// this a function on sets. Naming a key and giving it exactly what the
@@ -506,11 +509,12 @@ impl Schema {
     /// what the openness asks for is in the same position.
     fn records_opened(&self, open: Openness) -> Option<Schema> {
         match self {
-            // The one node this transform is about: a record replaces its
-            // catch-all. Having no field does not make one a mapping -- the empty
-            // *closed* record is a record, and the empty clause list is what says
-            // so; a mapping has a clause and no field.
-            Schema::KeyedMap { fields, defaults } if !fields.is_empty() || defaults.is_empty() => {
+            // The one node this transform is about: every keyed map rewrites
+            // the default of the region its clauses leave over. Having no field
+            // does not make one a mapping, and having one does not exempt it --
+            // what a clause claims is a region, and the operator is about the
+            // rest.
+            Schema::KeyedMap { fields, defaults } => {
                 // Sized from the field list rather than collected into a
                 // vector that grows. A filter cannot say in advance how many
                 // elements survive it, so `collect` starts a record's fields at
@@ -521,7 +525,7 @@ impl Schema {
                 // already says -- so the field list's own length is the right
                 // guess, and over-reserving by the one or two it drops costs a
                 // few unused slots and no allocation.
-                let wanted = clauses_for(open);
+                let wanted = clauses_over(defaults, open);
                 let dropping = fields.iter().any(|field| already_said(field, defaults));
                 let opened = mapped_fields(fields, &|schema| schema.records_opened(open));
                 if !dropping && opened.is_none() && *defaults == wanted {

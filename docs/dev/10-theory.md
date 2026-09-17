@@ -495,14 +495,18 @@ decider over a drawn universe and the recorded holes are held to a ledger.
 
 HELD-BY: test_the_two_deciders_are_measured_against_each_other, test_decision_decides_true_relations
 
-**`open` and `close` are operations of the algebra.** Openness is the default
-of the key-type region no clause claims: `open` frees that region and `close`
-refuses it, and neither touches a region a clause claims, so a mapping opened
-keeps what a `str` key maps to and admits an `int` key with any value. Equal
-sets open to equal sets and close to equal sets, over drawn records and
-mappings. **[OBLIGATION]**
+**`open` and `close` read the region no clause claims, and nothing else.**
+Openness is the default of the key-type region the clauses leave over: `open`
+frees that region and `close` refuses it, and neither touches a region a clause
+claims. So a mapping opened keeps what a `str` key maps to and admits an `int`
+key with any value, and one clause is read the same whether or not a field is
+declared beside it. `close` is therefore a function of the set. `open` is not,
+in one place and by construction: it descends into a union, and a branch
+declaring no field frees every key on its own, so `{"a?": int}` and
+`{} | {"a": int}` -- one set, two spellings -- open into two.
+**[OBLIGATION]**
 
-OWED: a_mapping_opened_frees_the_region_no_clause_claims, equal_sets_open_and_close_to_equal_sets -- the transform leaves a keyed map with a clause and no field alone in both directions, five tests pin that, and the congruence law is asserted over one hand-picked pair
+HELD-BY: opening_a_mapping_frees_the_region_no_clause_claims, with_records_open_keeps_the_region_a_mapping_claims, opening_a_record_that_claims_a_region_leaves_one_clause, test_a_clause_is_read_the_same_with_or_without_a_field_beside_it, test_closing_is_a_function_of_the_set, test_closing_is_a_function_of_the_set_however_it_is_spelled, test_opening_is_not_a_function_of_the_set
 
 **The IR is exactly as expressive as its producers.** Every variant the enum
 has is one the frontend or the fuzzer builds, and a variant no producer reaches

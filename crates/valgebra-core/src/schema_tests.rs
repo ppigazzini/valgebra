@@ -529,7 +529,9 @@ fn opening_drops_a_field_the_record_already_said() {
     assert_eq!(free.with_records_open(Openness::Closed), empty_closed);
 
     // A *typed* catch-all has not said what a free field says: it frees the
-    // keys of one type, and the field frees one key whatever its type.
+    // keys of one type, and the field frees one key whatever its type. Closing
+    // keeps both, and the field is what the guard above is about: the clause
+    // claims its own region and says nothing of the key the field names.
     let typed_catch_all = Schema::keyed_map(
         optional(Schema::ANYTHING),
         vec![MapClause {
@@ -537,9 +539,15 @@ fn opening_drops_a_field_the_record_already_said() {
             value: Schema::Int,
         }],
     );
-    assert_ne!(
+    assert_eq!(
         typed_catch_all.with_records_open(Openness::Closed),
-        empty_closed
+        Schema::keyed_map(
+            optional(Schema::ANYTHING),
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        )
     );
 
     // A field that says something is kept, whether by its type or by being
@@ -563,24 +571,22 @@ fn opening_drops_a_field_the_record_already_said() {
     );
 }
 
-/// What the term rewrite cannot do, pinned so it is not mistaken for done.
+/// One term has one reading, so the two neighbours close alike.
 ///
 /// `{"a?": anything, ...}` and `dict[anything, anything]` admit exactly the
-/// same dicts -- every one -- but the second **is** the term
+/// same dicts -- every one -- and the second **is** the term
 /// `KeyedMap { fields: [], defaults: [top] }`, which is also what an open
-/// record with no field is. The two readings are one term, so `close` has to
-/// pick: it keeps a mapping's clauses and drops a record's, and whichever it
-/// picks, one of the two neighbours closes to a different set.
+/// record with no field is. One term, and an operator that reads a spelling has
+/// to pick a reading for it -- keep a mapping's clauses, drop a record's -- so
+/// one of the two neighbours closes to a different set from the other.
 ///
-/// This is not a missing case. It is what makes `open`/`close` *term
-/// rewrites* rather than operations of the algebra: the term does not record
-/// whether its author wrote a record or a mapping, and a set does not carry
-/// the distinction to recover. A lawful `open` lives on the map atom, where
-/// `dom` is semantic and a label is a key rather than a name -- and whether
-/// this pair of methods survives to reach it is a question about the public
-/// surface, not about this transform.
+/// Reading openness as the default of the region no clause claims leaves
+/// nothing to pick. `[top]` claims every key, so it *is* the unclaimed region's
+/// default whichever way the term was written, and closing sends that region to
+/// bottom in both. Which is what makes these operations of the algebra rather
+/// than term rewrites: equal sets go to equal sets.
 #[test]
-fn closing_cannot_tell_an_open_record_from_a_mapping() {
+fn the_two_readings_of_one_term_close_to_one_set() {
     let free = Schema::record(
         vec![Field {
             name: "a".into(),
@@ -592,30 +598,102 @@ fn closing_cannot_tell_an_open_record_from_a_mapping() {
     let every_dict = Schema::mapping(MapClause::top());
     // One term, two readings.
     assert_eq!(Schema::record(Vec::new(), Openness::Open), every_dict);
-    // And they close apart, though they admit the same dicts.
-    assert_ne!(
+    // And one answer, because the reading the operators take is the same one.
+    assert_eq!(
         free.with_records_open(Openness::Closed),
         every_dict.with_records_open(Openness::Closed)
     );
+    assert_eq!(
+        every_dict.with_records_open(Openness::Closed),
+        Schema::record(Vec::new(), Openness::Closed),
+        "every key refused is the empty closed record"
+    );
 }
 
-/// A mapping keys a type rather than a name, so it is not a record to open.
+/// Openness is the default of the region no clause claims.
 ///
-/// Having no field is not what makes one a mapping: the empty *closed* record
-/// has none either, and opening it frees every key. A clause and no field is.
+/// A clause is a key-type region carrying its own default, so the operators
+/// decide the keys the clauses leave over and nothing else. A record claims no
+/// region, which is why opening one frees every key; a mapping claims one, so
+/// opening it keeps that region and frees the rest.
 #[test]
-fn opening_leaves_a_mapping_alone_and_opens_the_empty_record() {
-    let mapping = Schema::mapping(MapClause {
+fn opening_a_mapping_frees_the_region_no_clause_claims() {
+    let claimed = MapClause {
         key: Schema::Str,
         value: Schema::Int,
-    });
-    assert_eq!(mapping.with_records_open(Openness::Open), mapping);
+    };
+    let mapping = Schema::mapping(claimed.clone());
+
+    // Closed already: the `str` region is claimed and every other key-type is
+    // refused, which is what the operator would write.
     assert_eq!(mapping.with_records_open(Openness::Closed), mapping);
+
+    let Schema::KeyedMap { fields, defaults } = mapping.with_records_open(Openness::Open) else {
+        panic!("a mapping opened into a non-map");
+    };
+    assert!(fields.is_empty(), "opening declares no name");
+    assert_eq!(
+        defaults.to_vec(),
+        vec![
+            claimed,
+            MapClause {
+                key: Schema::Complement(Arc::new(Schema::Str)),
+                value: Schema::ANYTHING,
+            },
+        ],
+        "the claimed region is kept and the rest is freed"
+    );
+
+    // And the two are inverse, on a mapping as on a record.
+    assert_eq!(
+        mapping
+            .with_records_open(Openness::Open)
+            .with_records_open(Openness::Closed),
+        mapping
+    );
 
     let empty_closed = Schema::record(Vec::new(), Openness::Closed);
     assert!(record_is_open(
         &empty_closed.with_records_open(Openness::Open)
     ));
+}
+
+/// Opening a record that already claims a region leaves one clause, not two.
+///
+/// A `TypedDict` builds exactly this: named fields, and `str => anything` for
+/// the keys it does not name. Freeing the key-types that clause leaves over
+/// gives two clauses carrying one value between them, and two clauses with one
+/// value are one clause over the union of their keys -- which is the whole key
+/// space, so it is the catch-all a record opened has always had.
+///
+/// Spelling it as two costs the pair: a clause keyed by a complement is a shape
+/// the descriptor's map lowering declines, so the same set written the long way
+/// is decided one way and not the other. The merge is what keeps `open` inside
+/// the decided fragment.
+#[test]
+fn opening_a_record_that_claims_a_region_leaves_one_clause() {
+    let claimed = MapClause {
+        key: Schema::Str,
+        value: Schema::ANYTHING,
+    };
+    let typed_dict = Schema::KeyedMap {
+        fields: Arc::from([Field {
+            name: "a".into(),
+            schema: Schema::Int,
+            required: true,
+        }]),
+        defaults: vec![claimed].into(),
+    };
+
+    let Schema::KeyedMap { fields, defaults } = typed_dict.with_records_open(Openness::Open) else {
+        panic!("a record opened into a non-map");
+    };
+    assert_eq!(fields.len(), 1, "the named field is untouched");
+    assert_eq!(
+        defaults.to_vec(),
+        vec![MapClause::top()],
+        "one value over every key is one clause"
+    );
 }
 
 /// A transform leaves the tree in the shape the constructors guarantee.
@@ -655,11 +733,12 @@ fn with_records_open_refolds_a_pair_it_creates() {
 }
 
 #[test]
-fn with_records_open_leaves_a_pure_mapping_closed() {
-    // A KeyedMap with no declared fields is a mapping, not a record: opening
-    // it must not graft a catch-all clause. The `!fields.is_empty()` guard is
-    // what distinguishes the two, so an empty-field map keeps its own clauses
-    // and gains none.
+fn with_records_open_keeps_the_region_a_mapping_claims() {
+    // A clause's own region is not the operator's to touch: closing sends the
+    // key-types *no* clause claims to bottom, and the paper's own example keeps
+    // `String => Bool` through exactly that move. So a mapping closed is the
+    // mapping, and a guard that skips it on `!fields.is_empty()` reads "has a
+    // name" for "is a record".
     let mapping = Schema::KeyedMap {
         fields: Arc::from([]),
         defaults: vec![MapClause {
@@ -668,8 +747,8 @@ fn with_records_open_leaves_a_pure_mapping_closed() {
         }]
         .into(),
     };
-    let Schema::KeyedMap { fields, defaults } = mapping.with_records_open(Openness::Open) else {
-        panic!("a mapping opened into a non-map");
+    let Schema::KeyedMap { fields, defaults } = mapping.with_records_open(Openness::Closed) else {
+        panic!("a mapping closed into a non-map");
     };
     assert!(fields.is_empty());
     assert_eq!(

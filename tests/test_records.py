@@ -1,3 +1,5 @@
+from typing import TypedDict
+
 import pytest
 
 from valgebra import ValidationError, Validator, nothing
@@ -92,16 +94,60 @@ def test_open_is_a_function_on_sets() -> None:
     assert redundant.close().is_equivalent(empty.close())
 
 
-def test_open_leaves_a_mapping_alone() -> None:
-    """A mapping keys a *type*, not a name, so it is not a record to open.
+def test_opening_a_mapping_frees_the_keys_no_clause_claims() -> None:
+    """Openness is the default of the region no clause claims.
 
-    Having no field is not what makes one a mapping — the empty closed record has
-    none either. A clause and no field is.
+    A clause is a key-type region carrying its own default, so the two operators
+    decide the regions the clauses leave over and nothing else. The record case
+    is the special one, not the general: a record claims no region, so opening it
+    frees every key and closing it refuses every key, which is the whole of what
+    a catch-all says.
+
+    A mapping claims one. `dict[str, int]` says what a `str` key maps to and
+    leaves every other key-type unclaimed, so opening it has to keep the first
+    and free the second — the `str` region is not the operator's to touch.
     """
     mapping = Validator(dict[str, int])
-    assert mapping.open() == mapping
-    assert mapping.close() == mapping
-    assert not mapping.open().is_valid({"a": "x"})
+    opened = mapping.open()
+
+    # The region the clause claims reads the same through both operators.
+    for schema in (mapping, opened):
+        assert schema.is_valid({"a": 1}), schema
+        assert not schema.is_valid({"a": "x"}), schema
+
+    # The regions no clause claims: refused where it is closed, free where open.
+    assert not mapping.is_valid({1: "x"})
+    assert opened.is_valid({1: "x"})
+
+    # So the two are inverse on a mapping, as they are on a record.
+    assert opened.close() == mapping
+
+
+def test_opening_a_record_that_claims_a_region_leaves_one_clause() -> None:
+    """A `TypedDict` is a record with a clause, and opening it stays decidable.
+
+    `TypedDict` builds named fields beside `str: anything` for the keys it does
+    not name, so opening it frees the key-types that clause leaves over. Those
+    two clauses carry one value between them and cover every key, which is one
+    clause -- the catch-all a record opened has always had.
+
+    Writing it as two would cost the pair rather than the answer: a clause keyed
+    by a complement is a shape the set representation declines, so the same set
+    spelled the long way stops being decided. The merge is what keeps `open`
+    inside the fragment `docs/15-decidability.md` promises.
+    """
+
+    class Rec(TypedDict):
+        a: int
+
+    typed = Validator(Rec).open()
+    spelled = Validator({"a": int}).open()
+
+    assert repr(typed) == "{'a': int, anything: anything}"
+    assert typed.is_equivalent(spelled)
+    # The named field is untouched, and every other key is free.
+    assert typed.is_valid({"a": 1, "b": "free", 2: None})
+    assert not typed.is_valid({"a": "not an int"})
 
 
 def test_open_record_explains_a_failing_field() -> None:

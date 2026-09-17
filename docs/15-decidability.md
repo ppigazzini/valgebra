@@ -312,6 +312,34 @@ decline the **descriptor** is asked: it holds each kind as a set, so `a ≤ b` i
 `a ∧ ¬b = ∅` and the answer comes out of the sets rather than out of a rule about
 the shape. What is left below is what the descriptor cannot hold.
 
+- **A clause keyed by a complement.** The set representation partitions a
+  dict's keys **by kind** and gives each part its own default, so a clause whose
+  key is a kind or a literal lands in a part. A key written as a `complement`
+  spans every kind but one, which no single part holds, and the lowering
+  declines rather than spreading it — so a relation about such a map is left to
+  the rules, and a pair the rules do not decide comes back "not proven".
+
+    ```python
+    from valgebra import Validator, anything, complement
+
+    not_str = complement(Validator(str))
+    free_the_rest = Validator({str: int, not_str: anything})
+    # The walk is exact: membership never goes through the set representation.
+    assert free_the_rest.is_valid({"a": 1, 7: "anything at all"})
+    assert not free_the_rest.is_valid({"a": "not an int"})
+
+    # The relation declines. These two admit every dict, by different spellings.
+    long_way = Validator({str: anything, not_str: anything})
+    assert long_way.is_valid({7: "x"}) and Validator({object: object}).is_valid({7: "x"})
+    assert not long_way.is_equivalent({object: object})
+    ```
+
+    This is the shape `open` writes on a **mapping**: freeing the key-types a
+    clause leaves over means a clause over the complement of the ones it claims.
+    Opening a *record* stays decided, because the regions it frees and the ones
+    its clauses claim cover every key with one value between them, which is one
+    catch-all clause rather than two.
+
 - **Recursion, past one unfolding.** A reference is a cycle and a finite set
   representation has no room for one, so a recursive schema is lowered by
   unfolding its body **once** and putting a bound where the reference was — the

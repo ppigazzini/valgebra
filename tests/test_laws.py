@@ -161,7 +161,9 @@ def _schemas() -> st.SearchStrategy[object]:
         lambda inner: st.one_of(
             inner.map(lambda element: list[element]),
             inner.map(lambda element: dict[str, element]),
+            inner.map(lambda element: dict[int, element]),
             inner.map(lambda element: {"a": element}),
+            inner.map(lambda element: {"a?": element}),
             inner.map(lambda element: tuple[element, ...]),
         ),
         max_leaves=3,
@@ -211,6 +213,63 @@ def equivalent(left: Validator, right: Validator, extra: list[object]) -> bool:
     if left.is_equivalent(right):
         assert sample_agree, "is_equivalent claimed equality the values refute"
     return sample_agree
+
+
+@given(a=schemas, vals=value_lists)
+def test_closing_is_a_function_of_the_set_however_it_is_spelled(
+    a: object, vals: list[object]
+) -> None:
+    """Equal sets close to equal sets, which is what puts `close` in the algebra.
+
+    Openness is the default of the key-type region no clause claims, and a
+    region is a set of keys rather than a way of writing one. The respelling is
+    a union with a redundant branch, because that is the shape the one declared
+    exception lives in: `open` parts there and `close` does not, so drawing it
+    is what makes this law's silence about `open` deliberate.
+
+    `tests/test_projection_laws.py` carries the pair that separates the two.
+    """
+    respelled = union(a, intersection(a, a))
+    assert equivalent(Validator(a).close(), Validator(respelled).close(), vals)
+
+
+@given(a=schemas, vals=value_lists)
+def test_opening_admits_what_the_schema_admits(a: object, vals: list[object]) -> None:
+    """Opening frees keys and takes none away, so it only widens.
+
+    The direction is the whole of what "free the region no clause claims" means,
+    and it holds where the congruence law does not: a term is opened into a
+    superset of itself whatever it is written out of.
+    """
+    schema = Validator(a)
+    opened = schema.open()
+    for value in [*VALUES, *vals]:
+        if schema.is_valid(value):
+            assert opened.is_valid(value), value
+
+
+@given(a=schemas, vals=value_lists)
+def test_closing_refuses_what_the_schema_refuses(a: object, vals: list[object]) -> None:
+    """And closing narrows, so the two are a pair rather than one rewrite."""
+    schema = Validator(a)
+    closed = schema.close()
+    for value in [*VALUES, *vals]:
+        if closed.is_valid(value):
+            assert schema.is_valid(value), value
+
+
+@given(a=schemas, vals=value_lists)
+def test_closing_an_opened_schema_returns_the_regions_it_freed(
+    a: object, vals: list[object]
+) -> None:
+    """`close` after `open` is `close`, because the two move one region.
+
+    Opening sets the default of the region no clause claims to the top and
+    closing sets it to nothing, so the pair is idempotent on that region and
+    touches no other -- which is the round trip a caller reads them as.
+    """
+    schema = Validator(a)
+    assert equivalent(schema.open().close(), schema.close(), vals)
 
 
 @given(a=schemas, b=schemas, vals=value_lists)

@@ -438,6 +438,101 @@ fn clauses_for(open: Openness) -> Clauses {
     }
 }
 
+/// The region no clause of `defaults` claims, as a key schema.
+///
+/// The clauses denote a union of key-by-value rectangles, so the keys they
+/// speak for are the union of their key schemas and the rest is its complement.
+/// A record claims nothing, so its unclaimed region is the whole key space --
+/// which is why a bare catch-all is what openness reads as there.
+fn unclaimed_region(defaults: &[MapClause]) -> Schema {
+    Schema::union(defaults.iter().map(|clause| clause.key.clone())).complement()
+}
+
+/// Whether `clause` is the one carrying the default of the unclaimed region.
+///
+/// That is what `close` removes and `open` writes, and it is recognised rather
+/// than marked: the clause that frees exactly the keys the others leave over,
+/// for every value. Recognising it structurally keeps this file below the
+/// decision procedure, which is where the representation belongs.
+fn frees_the_unclaimed_region(clause: &MapClause, defaults: &[MapClause], index: usize) -> bool {
+    if clause.value != Schema::ANYTHING {
+        return false;
+    }
+    let others = defaults
+        .iter()
+        .enumerate()
+        .filter(|(at, _)| *at != index)
+        .map(|(_, other)| other.key.clone());
+    clause.key == Schema::union(others).complement()
+}
+
+/// The clause list an openness gives a node that already carries `defaults`.
+///
+/// **Openness is the default of the region no clause claims** (ICFP Definition
+/// 4.6): a clause is a key-type region with its own default, and these two
+/// operators are about the region the clauses leave over. Closing sends it to
+/// bottom -- the clause that frees it goes -- and opening sends it to the top,
+/// which is one clause admitting every value at every key the others do not
+/// claim. The claimed regions are untouched either way, so the paper's own
+/// closed `{|"a" = Int, String => Bool|}` keeps its `String => Bool`.
+fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
+    // A node with no clauses claims no key, so the unclaimed region is the
+    // whole key space and the answer is the shared list either way: the top
+    // clause, or none. That is a record, which is most of what is opened, and
+    // computing the region for it is a complement of an empty union.
+    if defaults.is_empty() {
+        return clauses_for(open);
+    }
+    let mut kept: Vec<MapClause> = defaults
+        .iter()
+        .enumerate()
+        .filter(|(at, clause)| !frees_the_unclaimed_region(clause, defaults, *at))
+        .map(|(_, clause)| clause.clone())
+        .collect();
+    if open == Openness::Open {
+        let region = unclaimed_region(&kept);
+        // A clause list already claiming every key leaves nothing to free, and
+        // an empty region would be a rectangle over no key at all.
+        if region != Schema::Nothing {
+            kept.push(MapClause {
+                key: region,
+                value: Schema::ANYTHING,
+            });
+        }
+        merge_by_value(&mut kept);
+    }
+    share_clauses(&mut kept)
+}
+
+/// Fold clauses carrying one value into one clause over the union of their keys.
+///
+/// The clauses denote a union of key-by-value rectangles, so two sharing a value
+/// are one rectangle over the join of their keys -- the same set, one clause
+/// shorter. Read after the unclaimed region is freed, because that is where the
+/// pair arises: a record declaring `str => anything` for the keys it does not
+/// name is what a `TypedDict` builds, and freeing the key-types beside it gives
+/// two clauses carrying `anything` between them.
+///
+/// It costs the pair rather than the answer to leave them apart. A clause keyed
+/// by a *complement* is a shape the set representation declines
+/// (`docs/15-decidability.md`), so the same set written the long way stops being
+/// decided -- and the long way is what opening a record would otherwise produce,
+/// which is the common case. Where the values differ there is nothing to fold
+/// and the complement stands, which is the mapping case the page records.
+fn merge_by_value(clauses: &mut Vec<MapClause>) {
+    let mut folded: Vec<MapClause> = Vec::with_capacity(clauses.len());
+    for clause in clauses.drain(..) {
+        // First occurrence keeps the position, so the claimed regions stay in
+        // the order the term wrote them and the freed one lands where it was
+        // pushed -- which is what makes the shared open list recognisable.
+        match folded.iter_mut().find(|kept| kept.value == clause.value) {
+            Some(kept) => kept.key = Schema::union([kept.key.clone(), clause.key]),
+            None => folded.push(clause),
+        }
+    }
+    *clauses = folded;
+}
+
 /// A field list, shared when it is empty and owned when it is not.
 fn share_fields(fields: &mut Vec<Field>) -> Fields {
     if fields.is_empty() {
