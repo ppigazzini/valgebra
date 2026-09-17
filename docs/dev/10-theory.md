@@ -549,7 +549,7 @@ representation there; what remains is the IR node, whose `dom` is the field
 list as written rather than the semantic domain the paper's operators read.
 **[DEVIATION]**
 
-OWED: two_spellings_of_one_keyed_map_are_one_term -- what the constructors make canonical is stated against nothing, and no test says two spellings the paper calls one term are one term
+HELD-BY: two_spellings_of_one_keyed_map_are_one_term, opening_drops_a_field_the_record_already_said
 
 **Clauses are unordered where the source orders them.** A key belongs when
 *some* clause admits it and its value, in the walk and in subtyping alike, and

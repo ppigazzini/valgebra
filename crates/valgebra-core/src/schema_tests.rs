@@ -658,6 +658,80 @@ fn opening_a_mapping_frees_the_region_no_clause_claims() {
     ));
 }
 
+/// What the constructors make canonical, and the one thing they do not.
+///
+/// ICFP Definition 2.2: a record is a quasi-constant function, and `dom(r)` is
+/// `{l | r(l) != z}` for the default `z` -- **semantic**, so a label written
+/// with the default as its type is not in the domain. A closed record gives
+/// every key it does not name nothing at all, so `{"a?": nothing}` names a key
+/// and says what the record already said: one domain, one record.
+///
+/// The constructors canonicalise the *order* -- the fields and the clauses are
+/// sorted, so two terms differing only in how they were written are one term --
+/// and they do not canonicalise the domain. That is deviation 3, and this is
+/// its extent rather than its cost: `==` is the written form, and the two
+/// spellings above are two terms and one set.
+///
+/// The domain is read where the paper's operators want it. `with_records_open`
+/// drops a field the default already gives before it rewrites anything, which
+/// is what keeps `open` a function of the set on this pair -- so the gap is in
+/// the constructor and not in the operator.
+#[test]
+fn two_spellings_of_one_keyed_map_are_one_term() {
+    let named = |name: &str, schema: Schema, required: bool| Field {
+        name: name.into(),
+        schema,
+        required,
+    };
+
+    // The order is canonical, both ways round.
+    assert_eq!(
+        Schema::record(
+            vec![named("a", Schema::Int, true), named("b", Schema::Str, true)],
+            Openness::Closed
+        ),
+        Schema::record(
+            vec![named("b", Schema::Str, true), named("a", Schema::Int, true)],
+            Openness::Closed
+        ),
+        "two field lists differing only in order are one term"
+    );
+    let str_to_int = MapClause {
+        key: Schema::Str,
+        value: Schema::Int,
+    };
+    let int_to_str = MapClause {
+        key: Schema::Int,
+        value: Schema::Str,
+    };
+    assert_eq!(
+        Schema::keyed_map(Vec::new(), vec![str_to_int.clone(), int_to_str.clone()]),
+        Schema::keyed_map(Vec::new(), vec![int_to_str, str_to_int]),
+        "and two clause lists differing only in order"
+    );
+
+    // The domain is not. A key named with what the closed record already gives
+    // every key it does not name is outside `dom`, and the two are two terms.
+    let empty = Schema::record(Vec::new(), Openness::Closed);
+    let redundant = Schema::record(vec![named("a", Schema::Nothing, false)], Openness::Closed);
+    assert_ne!(
+        empty, redundant,
+        "deviation 3: the constructor reads the field list as written"
+    );
+
+    // And the operators read it, which is what makes them functions of the set
+    // where `==` is not.
+    assert_eq!(
+        empty.with_records_open(Openness::Open),
+        redundant.with_records_open(Openness::Open),
+        "the domain is read before the rewrite"
+    );
+    assert_eq!(
+        empty.with_records_open(Openness::Closed),
+        redundant.with_records_open(Openness::Closed),
+    );
+}
+
 /// Opening a record that already claims a region leaves one clause, not two.
 ///
 /// A `TypedDict` builds exactly this: named fields, and `str => anything` for
