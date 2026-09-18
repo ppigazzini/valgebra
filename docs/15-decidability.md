@@ -473,6 +473,32 @@ the shape. What is left below is what the descriptor cannot hold.
   bound is a row of the architecture table in the repository, with the gate that
   measures it beside it.
 
+  **Where that bites is width.** A record whose fields each take two types is
+  the union of the records that fix every field, and the rules have no split
+  rule for a record, so the sets answer it. Three fields against their eight
+  corners is decided; four against their sixteen is refused, because the
+  difference reads more nodes than a lowering builds and costs more work than
+  one spends. The shape is the first an ordinary annotation reaches, so it is
+  the number to know:
+
+  ```python
+  from valgebra import Validator, union
+
+  pair = {"a": union(int, str), "b": union(int, str), "c": union(int, str)}
+  corners = union(
+      *[
+          {"a": a, "b": b, "c": c}
+          for a in (int, str)
+          for b in (int, str)
+          for c in (int, str)
+      ]
+  )
+  assert Validator(pair).relation_to(corners) == "subset"  # three fields
+  ```
+
+  A fourth field answers `undecided`, which is the conservative answer and not
+  a claim about the relation: it holds, and proving it takes a larger bound.
+
 - **A predicate.** Its satisfiability is undecidable (below), so neither
   representation reasons about one -- and that is a statement about the
   *predicate*, not about every pair carrying one. A refinement is a subset of

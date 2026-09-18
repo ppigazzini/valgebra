@@ -106,7 +106,15 @@ impl Constants for NoConstants {}
 /// a descriptor complements the guards inside it, so a chain of complements
 /// deepens the descriptor as well as the schema, and the operations recurse
 /// through that nesting: past roughly a hundred the stack goes rather than the
-/// clock. An annotation anyone writes is orders of magnitude inside this.
+/// clock.
+///
+/// **This is the bound an ordinary annotation reaches first**, and it reaches
+/// it by width. A record whose fields each take two types, against the union of
+/// the records that fix every field, reads 22 nodes at two fields, 45 at three
+/// and 96 at four -- so three fields decide and four are refused before they
+/// are answered. `tests/test_completeness_ledger.py` carries all three as rows,
+/// which is what makes these figures re-derivable: the row fails on the commit
+/// that moves the number either way.
 ///
 /// **This bound is debt.** It counts work rather than limiting what the
 /// representation can hold, and it is here for the reason the decision's own
@@ -231,12 +239,17 @@ impl Bounds {
 ///
 /// **The figure is what a record split across a union of records costs**, which
 /// is the widest shallow shape the sets are asked to decide. A two-field record
-/// against the four records that fix both keys spends under 2,048 units; the
-/// three-field record against its eight corners spends under 4,096. Both are
+/// against the four records that fix both keys spends 1,173 units; the
+/// three-field record against its eight corners spends 2,241. Both are
 /// relations a caller writes and the rules decline, so both are the sets' to
 /// answer, and a bound below them refuses an ordinary question. The blow-ups
 /// the number exists to stop are an order of magnitude further out, so the
 /// margin is real rather than nominal.
+///
+/// The field after that is outside on both counts: four fields against sixteen
+/// corners spend 9,965 units and read 96 nodes against a [`BUDGET`] of 64, so
+/// raising either bound alone leaves the refusal where it is. That is the width
+/// of the decided fragment, and `docs/15-decidability.md` states it as one.
 ///
 /// `tests/test_completeness_ledger.py` carries both shapes as rows, which is
 /// what makes this figure re-derivable: the row fails on the commit that

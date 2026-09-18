@@ -845,15 +845,52 @@ _DECIDED = [
 def _missed(why: str) -> pytest.MarkDecorator:
     """Mark a relation that holds and is not decided, with the limit that leaves it.
 
-    `_LEDGERED` is empty: every relation this ledger enumerates is decided. The
-    marker stays because the ledger fails in both directions -- a relation that
-    regresses to conservatism fails here, and it is this marker that records the
-    regression with the reason for it rather than deleting the row.
+    Strict, so the row fails on the day the relation decides: a miss that
+    closes leaves this list and the conservative half of the decidability page
+    in the same commit, rather than being noticed at an audit. The ledger runs
+    in both directions that way -- a decided relation regressing to
+    conservatism fails above, and a conservative one deciding fails here.
     """
     return pytest.mark.xfail(strict=True, reason=why)
 
 
-_LEDGERED: list[object] = []
+_LEDGERED: list[object] = [
+    # The width of the decided fragment. A record whose fields each take two
+    # types *is* the union of the records that fix every field, and the rows
+    # above decide that at two fields and at three. At four it is refused
+    # before it is answered: the difference reads 96 schema nodes against a
+    # budget of 64, and would spend 9,965 units of work against an allowance
+    # of 4,096 (`descr/lower.rs`). Both bounds are past, so raising either
+    # alone leaves the refusal where it is.
+    #
+    # The relation is true, and the refusal is sound -- a decline is "not
+    # proven" -- so what this row carries is the *number*: three fields decide
+    # and four do not, which is a sentence a caller can act on and a figure
+    # that fails here if either bound moves.
+    pytest.param(
+        "subtype",
+        {
+            "a": union(int, str),
+            "b": union(int, str),
+            "c": union(int, str),
+            "d": union(int, str),
+        },
+        union(
+            *[
+                {"a": a, "b": b, "c": c, "d": d}
+                for a in (int, str)
+                for b in (int, str)
+                for c in (int, str)
+                for d in (int, str)
+            ]
+        ),
+        id="map:four-field-record<=its-corners",
+        marks=_missed(
+            "the difference reads more schema nodes than a lowering builds, "
+            "and costs more work than one spends"
+        ),
+    ),
+]
 
 
 # THEORY: an-exhaustible-procedure-is-searched, structural-rather-than-reduction
