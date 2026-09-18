@@ -36,11 +36,15 @@ PRODUCT: every result, obligation and deviation the design rests on
 
 from __future__ import annotations
 
+import functools
 import re
 from pathlib import Path
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 pytestmark = pytest.mark.repository
 
@@ -132,11 +136,14 @@ class Claim(NamedTuple):
     owed: str | None
 
 
-def _paragraphs() -> list[str]:
-    return THEORY.read_text(encoding="utf-8").split("\n\n")
+@functools.cache
+def _paragraphs() -> tuple[str, ...]:
+    """Give the tracked page as the paragraphs the ledger reads it in."""
+    return tuple(THEORY.read_text(encoding="utf-8").split("\n\n"))
 
 
-def _claims() -> list[Claim]:
+@functools.cache
+def _claims() -> tuple[Claim, ...]:
     """Each tagged claim, with the tests it says hold it, or the ones it is owed.
 
     A `HELD-BY:` or `OWED:` belongs to the claim it follows, with the qualifying
@@ -186,18 +193,19 @@ def _claims() -> list[Claim]:
             "a claim tagged without an id, which no test can name: "
             + _summarise(paragraph)
         )
-    return found
+    return tuple(found)
 
 
 def _held() -> list[Claim]:
     return [claim for claim in _claims() if claim.names]
 
 
-def _must_be_held(claims: list[Claim]) -> list[Claim]:
+def _must_be_held(claims: Sequence[Claim]) -> list[Claim]:
     """Give the claims a holding line is asked of, which is not the context."""
     return [claim for claim in claims if claim.tag in CLAIMS]
 
 
+@functools.cache
 def _defined_names() -> set[str]:
     """Every function name the tree defines, in either language."""
     names: set[str] = set()
@@ -219,6 +227,7 @@ def _relative(path: Path) -> str:
     return path.relative_to(ROOT).as_posix()
 
 
+@functools.cache
 def _definitions() -> dict[str, set[str]]:
     """Give, for every function name the tree defines, the files defining it.
 
@@ -236,7 +245,8 @@ def _definitions() -> dict[str, set[str]]:
     return found
 
 
-def _resolve(entry: str) -> tuple[str, set[str]]:
+@functools.cache
+def _resolve(entry: str) -> tuple[str, frozenset[str]]:
     """Give the name an entry addresses and the files its qualifier leaves.
 
     An unqualified entry leaves every file defining the name; a qualified one
@@ -245,10 +255,10 @@ def _resolve(entry: str) -> tuple[str, set[str]]:
     qualifier.
     """
     where, name = _split(entry)
-    homes = _definitions().get(name, set())
+    homes = frozenset(_definitions().get(name, set()))
     if where is None:
         return name, homes
-    return name, {home for home in homes if home.endswith(where)}
+    return name, frozenset(home for home in homes if home.endswith(where))
 
 
 def _homes_of(names: set[str]) -> set[str]:
@@ -476,6 +486,7 @@ def test_a_claim_is_held_by_more_than_its_own_restatement() -> None:
         )
 
 
+@functools.cache
 def _markers() -> dict[str, list[tuple[str, str]]]:
     """Every `THEORY:` marker in the tree: the id, the file, and the test below it.
 
@@ -501,13 +512,14 @@ def test_the_readers_spell_a_path_the_same_way() -> None:
 
     `test_every_held_test_carries_the_marker` asks whether the marker naming a
     claim sits in the file the entry resolves to, which is a comparison of two
-    paths produced by two readers. Spelled `str(Path)` on one side and posix on
-    the other, they agree on every file on a posix machine and on no file on
-    Windows -- so the check passes where it is written and reports every held
-    name as unmarked in the lane that runs there.
+    paths produced by two readers. Spelled `str(Path)` on one side and
+    posix on the other, they agree on every file on a posix machine and on no
+    file on Windows -- so the check passes locally and reports every held name
+    as unmarked in the lane that runs there.
 
     Held as a subset rather than by looking for a separator, because the defect
-    is not "a backslash appeared": it is two readers naming one file two ways.
+    is not "a backslash appeared": it is two readers naming one file two ways,
+    and that is what a Windows run turns into a failure.
     """
     marked = {path for sites in _markers().values() for path, _ in sites}
     known = {home for homes in _definitions().values() for home in homes}
@@ -693,15 +705,24 @@ class Row(NamedTuple):
     identifier: str
 
 
-def _deviation_rows() -> list[Row]:
-    """Give every row of the argument's deviation table, with the id it names."""
+@functools.cache
+def _deviation_rows() -> tuple[Row, ...]:
+    """Give every row of the argument's deviation table, with the id it names.
+
+    Empty only where the argument is absent, which is every clone but the
+    author's. A table that is *there* and parses to nothing is the row pattern
+    having gone stale, and that reads exactly like a clone unless it is caught
+    here -- so the two are separated at the parse rather than at each caller.
+    """
     if not ARGUMENT.exists():
-        return []
+        return ()
     text = ARGUMENT.read_text(encoding="utf-8")
     heading = text.find("# 15. The deviations")
     if heading == -1:
-        return []
-    return [Row(*found) for found in _DEVIATION_ROW.findall(text[heading:])]
+        return ()
+    found = tuple(Row(*row) for row in _DEVIATION_ROW.findall(text[heading:]))
+    assert found, "the deviation table is present and no row parses"
+    return found
 
 
 def _flatten(text: str) -> str:
