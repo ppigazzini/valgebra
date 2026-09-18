@@ -187,3 +187,29 @@ def test_every_outcome_the_constructors_document_is_driven() -> None:
         recursive(lambda t: {t, 1})
     with pytest.raises(ValueError, match="contractive"):
         recursive(lambda t: union(t, int))
+
+
+def test_emptiness_has_a_third_answer_and_where_to_ask_for_it() -> None:
+    """`is_empty` answers in two, and the question it reduces to answers in three.
+
+    A relation reports which of proof, refutation and decline it reached;
+    `is_empty` gives a `bool`, so "proved inhabited" and "not proved empty"
+    arrive as one `False`. The two are different claims about a schema -- one
+    names a value, the other names a limit -- and a caller choosing whether to
+    trust a schema wants to tell them apart.
+
+    Emptiness is `s <= nothing`, so the third answer is a relation away, and
+    asking for it is the documented route rather than a trick: the reduction is
+    what the decidability page states and what the procedure runs.
+    """
+    predicate = Validator(Annotated[int, at.Predicate(lambda value: value > 0)])
+    # Nothing proves this schema empty, and nothing proves it inhabited either.
+    assert predicate.is_empty() is False
+    assert predicate.relation_to(nothing) == "undecided"
+
+    # The other two answers, which the same `False` would have flattened.
+    assert Validator(int).is_empty() is False
+    assert Validator(int).relation_to(nothing) == "not_subset"
+    crossing = Validator(Annotated[int, at.Gt(0), at.Lt(1)])
+    assert crossing.is_empty() is True
+    assert crossing.relation_to(nothing) == "subset"

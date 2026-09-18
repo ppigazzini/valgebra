@@ -18,6 +18,25 @@ This page states which queries valgebra decides completely, which stay
 conservative, and which are undecidable at runtime and so are rejected or treated
 opaquely by necessity.
 
+`is_empty` answers in two, and the question behind it answers in three. A
+`False` from `is_empty` covers both "a value is in this schema" and "no reading
+proves it holds none", which are different claims — one names a value, the
+other names a limit. Emptiness is `s <= nothing`, so `relation_to(nothing)`
+is where the third answer is:
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import Validator, nothing
+
+opaque = Validator(Annotated[int, at.Predicate(lambda value: value > 0)])
+assert opaque.is_empty() is False  # not proven empty
+assert opaque.relation_to(nothing) == "undecided"  # and not proven inhabited
+assert Validator(int).relation_to(nothing) == "not_subset"  # a value says so
+```
+
 ## Decided exactly
 
 Over this fragment, valgebra returns the exact set-theoretic answer: on every
