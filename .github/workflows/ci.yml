@@ -188,7 +188,12 @@ jobs:
       # crate because they reach its private items. They run by construction and
       # arrive at full coverage, so counting them measured the tests: 2,502 of
       # the 8,658 lines the figure was computed over were test code. Excluded,
-      # the core reads 98.03% of lines and 97.15% of regions.
+      # the core reads 98.75% of lines and 97.85% of regions -- measured with
+      # the command below, under nextest, against a cleaned profile in a target
+      # directory of its own, which is the only reading that is the lane's. The
+      # property suites draw, so two runs differ in the third digit; the figure
+      # is the lower of two and the floors clear it by three quarters of a
+      # point, which is the margin a drawn figure needs before a ratchet.
       #
       # Both floors sit about a point below the measurement, which is the
       # tolerance a figure carries between machines and no more: five points of
@@ -207,7 +212,7 @@ jobs:
       - run: >
           cargo llvm-cov nextest --locked --workspace --summary-only
           --ignore-filename-regex 'valgebra-py|/(laws|index_laws)\.rs$|tests\.rs$'
-          --fail-under-lines 97 --fail-under-regions 96
+          --fail-under-lines 98 --fail-under-regions 97
 
   binding-coverage:
     name: binding coverage

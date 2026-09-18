@@ -97,7 +97,7 @@ NEEDS_A_RUNNER = {
     (
         "cargo llvm-cov nextest --locked --workspace --summary-only "
         "--ignore-filename-regex 'valgebra-py|/(laws|index_laws)\\.rs$|tests\\.rs$' "
-        "--fail-under-lines 97 --fail-under-regions 96"
+        "--fail-under-lines 98 --fail-under-regions 97"
     ): "an instrumented rebuild under nextest",
     "uv sync --locked --no-install-project --group bench": (
         "the bench group, for steps this list already skips"
