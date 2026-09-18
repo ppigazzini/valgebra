@@ -58,7 +58,7 @@ equivalence against membership rather than asserting it.
 
 SOURCE: §13.2 "**The laws hold by construction**"
 
-HELD-BY: the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption
+HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption
 
 **Stone's representation theorem (1936).** Every Boolean algebra is isomorphic to
 an algebra of sets. **[GUIDING: stone-duality]** — the licence for treating the scalar fragment
@@ -363,7 +363,7 @@ spelling answers and the other declines. `a ∧ ¬(b ∨ c)` against `a ∧ ¬b 
 is the pair, De Morgan is why they are one set, and the tests below read what a
 caller is told rather than what a value is.
 
-HELD-BY: the_lattice_laws_hold_of_the_descriptors, the_complement_laws_hold_of_the_descriptors, emptiness_agrees_with_the_values, the_verdict_is_stable_under_de_morgan, a_meet_with_a_negated_union_answers_as_the_spelled_out_meet, test_the_verdict_is_stable_under_de_morgan
+HELD-BY: the_lattice_laws_hold_of_the_descriptors, the_complement_laws_hold_of_the_descriptors, emptiness_agrees_with_the_values, laws.rs::the_verdict_is_stable_under_de_morgan, a_meet_with_a_negated_union_answers_as_the_spelled_out_meet, test_the_verdict_is_stable_under_de_morgan
 
 It is built beside the structural procedure and is the second decider a caller
 reaches: the rules answer first and this answers where they decline
@@ -436,7 +436,7 @@ membership by a property suite rather than asserted
 
 SOURCE: §13.8 "**Property-based testing.**"
 
-HELD-BY: test_de_morgan, the_lattice_laws_hold_of_the_sets, test_simplify_preserves_acceptance
+HELD-BY: test_de_morgan, laws.rs::the_lattice_laws_hold_of_the_sets, test_simplify_preserves_acceptance
 
 **Chen, Cheung & Yiu, "Metamorphic Testing: A New Approach for Generating Next
 Test Cases" (1998)**, and **Chen et al., "Metamorphic Testing: A Review of
@@ -548,7 +548,7 @@ carrier, `nan`, the newline, the empty container. **[LOAD-BEARING: each-kind-is-
 
 SOURCE: §14.5 "Each kind's representation should be closed under complement"
 
-HELD-BY: the_lattice_laws_hold_of_the_integers, the_lattice_laws_hold_of_the_floats, the_lattice_laws_hold_of_the_languages, the_lattice_laws_hold_of_the_sequences, the_lattice_laws_hold_of_the_sets, the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_objects, the_lattice_laws_hold_of_the_values, the_complement_laws_hold_of_the_values, an_emptiness_is_refused_by_every_boundary_value, the_universe_separates_a_pair_inside_a_shape
+HELD-BY: descr/integers/tests.rs::the_lattice_laws_hold_of_the_integers, the_lattice_laws_hold_of_the_floats, the_lattice_laws_hold_of_the_languages, the_lattice_laws_hold_of_the_sequences, descr/sets/tests.rs::the_lattice_laws_hold_of_the_sets, the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_objects, the_lattice_laws_hold_of_the_values, the_complement_laws_hold_of_the_values, an_emptiness_is_refused_by_every_boundary_value, the_universe_separates_a_pair_inside_a_shape
 
 **A node built alike is one handle.** Interning shares the nodes of two schemas
 built the same way, so the trail's comparisons short-circuit on pointer

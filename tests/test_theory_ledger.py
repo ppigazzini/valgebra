@@ -19,6 +19,9 @@ do not exist yet, and this file holds the directions apart:
 * a name that resolves to no test fails, so a test renamed or deleted takes the
   claim's evidence with it rather than leaving a page asserting something
   nothing checks;
+* a name that resolves to *several* tests fails unless it says which, because a
+  name two files define is one that survives either being deleted -- so the
+  line carries the file as well, and each entry addresses one test;
 * the count of `OWED:` lines is recorded and may only shrink, so the debt the
   page admits is a number the tree holds rather than a sentence a reader skims.
 
@@ -98,6 +101,25 @@ _SOURCES = (
     (ROOT / "crates", "*.rs", re.compile(r"\bfn\s+(\w+)\s*[(<]")),
     (ROOT / "tests", "*.py", re.compile(r"^def\s+(\w+)\s*\(", re.MULTILINE)),
 )
+
+
+#: A `HELD-BY:` entry: a test name, optionally led by where the test lives.
+#: The qualifier is a suffix of the defining file's path
+#: (`descr/sets/tests.rs::the_lattice_laws_hold_of_the_sets`), which is enough
+#: to pick one definition out and short enough to read on a page.
+_ENTRY = re.compile(r"^(?:(\S+)::)?(\w+)$")
+
+
+def _split(entry: str) -> tuple[str | None, str]:
+    """Give where a `HELD-BY:` entry says its test lives, and what it is called."""
+    found = _ENTRY.match(entry)
+    assert found, f"a HELD-BY entry that is no test name: {entry!r}"
+    return found.group(1), found.group(2)
+
+
+def _name_of(entry: str) -> str:
+    """Give the test an entry names, with any qualifier dropped."""
+    return _split(entry)[1]
 
 
 class Claim(NamedTuple):
@@ -185,6 +207,50 @@ def _defined_names() -> set[str]:
     return names
 
 
+def _relative(path: Path) -> str:
+    """Give a source file's path as this ledger spells one, everywhere.
+
+    Posix, because these strings are *compared*: a `HELD-BY:` qualifier is
+    written with `/` on the page, and `str(Path)` gives a backslash on Windows,
+    so two readers spelling a path differently agree on no file there while
+    agreeing on every file here. One helper rather than a convention, because a
+    convention is what the two readers already had.
+    """
+    return path.relative_to(ROOT).as_posix()
+
+
+def _definitions() -> dict[str, set[str]]:
+    """Give, for every function name the tree defines, the files defining it.
+
+    Beside `_defined_names`, which answers whether a name exists at all, and
+    `_homes_of`, which answers where a *set* of names lives between them. This
+    answers the question one entry asks: which files define this one name, and
+    therefore whether naming it addresses a test or a namesake.
+    """
+    found: dict[str, set[str]] = {}
+    for root, glob, pattern in _SOURCES:
+        for path in root.rglob(glob):
+            where = _relative(path)
+            for name in pattern.findall(path.read_text(encoding="utf-8")):
+                found.setdefault(name, set()).add(where)
+    return found
+
+
+def _resolve(entry: str) -> tuple[str, set[str]]:
+    """Give the name an entry addresses and the files its qualifier leaves.
+
+    An unqualified entry leaves every file defining the name; a qualified one
+    leaves those whose path ends with the qualifier. The tests below read the
+    count: one file is an address, several are a namesake, none is a stale
+    qualifier.
+    """
+    where, name = _split(entry)
+    homes = _definitions().get(name, set())
+    if where is None:
+        return name, homes
+    return name, {home for home in homes if home.endswith(where)}
+
+
 def _homes_of(names: set[str]) -> set[str]:
     """Give the files that define each of `names`, relative to the root.
 
@@ -197,7 +263,7 @@ def _homes_of(names: set[str]) -> set[str]:
         for path in root.rglob(glob):
             found = set(pattern.findall(path.read_text(encoding="utf-8")))
             if found & names:
-                homes.add(path.relative_to(ROOT).as_posix())
+                homes.add(_relative(path))
     return homes
 
 
@@ -314,8 +380,39 @@ def test_an_owed_test_does_not_already_exist() -> None:
 def test_every_named_test_exists(claim: str, names: list[str]) -> None:
     """A name that resolves to no test is a claim with no evidence left."""
     defined = _defined_names()
-    missing = [name for name in names if name not in defined]
+    missing = [name for name in names if _name_of(name) not in defined]
     assert not missing, f"{_summarise(claim)}\nnames no test: {missing}"
+
+
+def test_every_named_test_addresses_one_definition() -> None:
+    """A name several files define is a name that outlives its own test.
+
+    The guarantee above is that deleting a test takes the claim's evidence
+    with it. A name two modules define does not carry it: one of them holds
+    the claim, the other happens to be called the same thing, and the line
+    resolves to whichever the scan reaches. Delete the holder and the page
+    goes on naming a test that exists.
+
+    So an ambiguous name says which file, and a qualified one is held to
+    resolving: a qualifier matching no definition is as stale as a name
+    matching none. The property names are the shape this catches -- one law,
+    written over the schemas, over the descriptor and over a single component,
+    is three tests with one name and three different subjects.
+    """
+    ambiguous: list[str] = []
+    for claim in _held():
+        for entry in claim.names:
+            _, homes = _resolve(entry)
+            if len(homes) == 1:
+                continue
+            where = ", ".join(sorted(homes)) if homes else "nothing"
+            ambiguous.append(f"{_summarise(claim.text)[:60]}\n    {entry} -> {where}")
+    assert not ambiguous, (
+        "HELD-BY entries that address more than one test, or none:\n"
+        + "\n".join(f"  {row}" for row in ambiguous)
+        + "\n\nWrite the file before the name, as "
+        "`descr/sets/tests.rs::the_lattice_laws_hold_of_the_sets`."
+    )
 
 
 def test_the_names_are_test_functions_rather_than_helpers() -> None:
@@ -344,7 +441,8 @@ def test_the_names_are_test_functions_rather_than_helpers() -> None:
     runnable = python_tests | rust_tests
     assert len(runnable) > 400, f"the test parse found only {len(runnable)}"
     for claim in _held():
-        for name in claim.names:
+        for entry in claim.names:
+            name = _name_of(entry)
             assert name in runnable, f"{_summarise(claim.text)}\n{name!r} is not a test"
 
 
@@ -359,7 +457,7 @@ def test_a_claim_is_held_by_more_than_its_own_restatement() -> None:
     """
     counts = [len(claim.names) for claim in _held()]
     assert min(counts) >= 2, "every held claim names at least two tests"
-    all_names = {name for claim in _held() for name in claim.names}
+    all_names = {_name_of(entry) for claim in _held() for entry in claim.names}
     assert len(all_names) >= 15, sorted(all_names)
 
     # And the names are spread across the tree rather than gathered in one
@@ -394,10 +492,32 @@ def _markers() -> dict[str, list[tuple[str, str]]]:
                 below = pattern.search(text, marker.end())
                 name = below.group(1) if below else ""
                 for identifier in marker.group(1).replace(" ", "").split(","):
-                    found.setdefault(identifier, []).append(
-                        (str(path.relative_to(ROOT)), name)
-                    )
+                    found.setdefault(identifier, []).append((_relative(path), name))
     return found
+
+
+def test_the_readers_spell_a_path_the_same_way() -> None:
+    """A marker's file and a definition's file are compared, so they are one string.
+
+    `test_every_held_test_carries_the_marker` asks whether the marker naming a
+    claim sits in the file the entry resolves to, which is a comparison of two
+    paths produced by two readers. Spelled `str(Path)` on one side and posix on
+    the other, they agree on every file on a posix machine and on no file on
+    Windows -- so the check passes where it is written and reports every held
+    name as unmarked in the lane that runs there.
+
+    Held as a subset rather than by looking for a separator, because the defect
+    is not "a backslash appeared": it is two readers naming one file two ways.
+    """
+    marked = {path for sites in _markers().values() for path, _ in sites}
+    known = {home for homes in _definitions().values() for home in homes}
+    assert marked, "the marker scan read nothing"
+    stray = sorted(marked - known)
+    assert not stray, (
+        f"marker files no definition reader names: {stray}. Both sides spell a "
+        "path through `_relative`, so a comparison between them is a "
+        "comparison of one string."
+    )
 
 
 def test_every_marker_names_a_claim_the_page_carries() -> None:
@@ -428,14 +548,19 @@ def test_every_held_test_carries_the_marker() -> None:
     but it puts the claim in front of whoever is editing.
     """
     markers = _markers()
-    marked: set[tuple[str, str]] = {
-        (identifier, name) for identifier, sites in markers.items() for _, name in sites
+    marked: set[tuple[str, str, str]] = {
+        (identifier, path, name)
+        for identifier, sites in markers.items()
+        for path, name in sites
     }
     unmarked = sorted(
-        f"{name} ({claim.identifier})"
+        f"{entry} ({claim.identifier})"
         for claim in _held()
-        for name in claim.names
-        if (claim.identifier, name) not in marked
+        for entry in claim.names
+        if not any(
+            (claim.identifier, home, _name_of(entry)) in marked
+            for home in _resolve(entry)[1]
+        )
     )
     assert not unmarked, (
         "tests the page says hold a claim and that do not name it:\n"
