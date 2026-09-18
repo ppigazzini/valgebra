@@ -234,11 +234,18 @@ ROWS: dict[str, Row] = {
         {complement(str): int},
         dict[int, int],
         "a part of the key partition for a key-type spanning every kind but one",
+        # The entry's own contrast: opening a *record* frees the regions its
+        # clauses do not claim, which is one catch-all clause rather than a
+        # complement, and the relation stays decided.
+        beside=(Validator({"a": int}).open(), dict, "subset"),
     ),
     "Recursion, past one unfolding.": Declines(
         complement(int),
         _CHAIN,
         "an unfolding of the supertype past one level before the reference is cut",
+        # What one unfolding does reach: the kinds a fixpoint admits. A value of
+        # another kind shares nothing with it, so it is below its complement.
+        beside=(bytes, complement(_CHAIN), "subset"),
     ),
     "An attribute record, on either side.": Declines(
         int,
