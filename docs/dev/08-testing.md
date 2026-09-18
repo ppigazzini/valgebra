@@ -412,6 +412,31 @@ a number now: `tests/test_pytest_sweep_scope.py` holds the two configurations to
 a partition of the binding, so a file excused to the suite and examined nowhere
 fails.
 
+**What a coverage figure leaves over, and why.** Reading the annotated report
+for the core's shipped scope leaves about seventy statement lines no test
+executes, and they are four kinds rather than a backlog:
+
+- a `debug_assert!(false, ...)` and the `return` beside it. Each states an
+  invariant a *constructed* value cannot break -- the guards leaving a state
+  cover the letters, two components of one kind meet -- so the arm is reachable
+  only from a table built by hand, and a test that built one would be asserting
+  about a value the tree cannot produce;
+- the arms past a width bound. A union too wide to rebuild is a shape the
+  representation refuses, and driving one means building it, which the same
+  bound refuses first. `budget::under` reaches some of them by shrinking the
+  allowance instead, which is how the map lattice's declining verdict is
+  driven, and the rest are the same arm one representation over;
+- the deprecated simplifier's folds, which go with it in the next minor;
+- an arm only the binding reaches. A label a report carries, a path segment a
+  key renders into: the core writes them and the Python suite reads them, so
+  the *line* runs on the other side of the boundary from the crate whose figure
+  this is.
+
+None of the four is closed by a test worth writing, and saying so is what
+separates them from the lines that were: a table over the node set closed a
+file's worth of them in one commit, and it closed them because they were
+reachable and nobody had asked.
+
 **Some arms only a free-threaded interpreter reaches, and no lane runs one.**
 The walk snapshots a container and compares the snapshot against what it read,
 because the container can move underneath the reading -- and under a global

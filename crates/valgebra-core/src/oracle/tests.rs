@@ -147,3 +147,43 @@ fn a_class_without_an_oracle_is_not_a_set() {
 
     assert!(denotes_a_set_within(&class, &Pure, &[]));
 }
+
+/// The default oracle answers no question, which is what makes it sound.
+///
+/// `NoLeafRelations` is the core's own, and every question it declines is one
+/// the rules have to stay conservative about. A default that answered would be
+/// a claim about values the core cannot see -- which class holds an instance,
+/// how two constants compare, whether one step divides another -- so the
+/// declining is the contract rather than an omission.
+///
+/// Held for each question, because a new one is added by writing a default and
+/// a body that answers it, and the body is the half a reviewer reads.
+#[test]
+fn the_default_oracle_declines_every_question() {
+    use crate::ir::{ClassIx, ConstIx};
+
+    let oracle = NoLeafRelations;
+    let one = OperandIx::new(0);
+    let two = OperandIx::new(1);
+
+    assert_eq!(oracle.leaf_subtype(&Schema::Int, &Schema::Int), None);
+    assert_eq!(oracle.compare(one, two), None);
+    assert_eq!(oracle.divides(one, two), None);
+    assert_eq!(oracle.no_int_between(one, true, two, true), None);
+    assert_eq!(oracle.atom_denotes_a_set(&Schema::Int), None);
+    assert_eq!(
+        oracle.literal_sets_disjoint(&[ConstIx::new(0)], &[ConstIx::new(1)]),
+        None
+    );
+    assert_eq!(
+        oracle.literals_disjoint(ConstIx::new(0), ConstIx::new(1)),
+        None
+    );
+    assert_eq!(oracle.literal_kind(ConstIx::new(0)), None);
+    assert_eq!(oracle.class_admits_kind(ClassIx::new(0), Kind::Int), None);
+    assert_eq!(
+        oracle.direct_instance_of_kind(ClassIx::new(0), Kind::Int),
+        None
+    );
+    assert_eq!(oracle.kind_derives_from(Kind::Int, ClassIx::new(0)), None);
+}

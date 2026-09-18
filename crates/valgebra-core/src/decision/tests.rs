@@ -1456,6 +1456,57 @@ impl LeafRelations for ByIndex {
     fn compare(&self, a: OperandIx, b: OperandIx) -> Option<core::cmp::Ordering> {
         Some(a.get().cmp(&b.get()))
     }
+    /// The index stands for the value, so one divides another when its number
+    /// does -- and index zero divides nothing, which is the pair the real
+    /// oracle refuses at the build rather than answering.
+    fn divides(&self, step: OperandIx, multiple: OperandIx) -> Option<bool> {
+        let (step, multiple) = (step.get(), multiple.get());
+        (step != 0).then(|| multiple.is_multiple_of(step))
+    }
+}
+
+/// A constraint of another kind entails nothing, in every family.
+///
+/// Each arm of the entailment reads the subtype's set for a constraint of the
+/// *same* family, and the arm that says "anything else, no" is the one a sweep
+/// finds hardest to reach: every family's fallback is the same two words, and
+/// every test about entailment gives it a constraint it can use.
+///
+/// The families are asked with a length bound, which no bound and no divisor
+/// compares to, and with a pattern, which nothing compares to at all.
+#[test]
+fn a_constraint_of_another_family_entails_nothing() {
+    let o = &ByIndex;
+    let foreign = [
+        Constraint::MinLen(3),
+        Constraint::Regex("a+".into()),
+        Constraint::Predicate(PredIx::new(1)),
+    ];
+    for wide in [
+        Constraint::Ge(OperandIx::new(1)),
+        Constraint::Gt(OperandIx::new(1)),
+        Constraint::Le(OperandIx::new(9)),
+        Constraint::Lt(OperandIx::new(9)),
+        Constraint::MultipleOf(OperandIx::new(2)),
+    ] {
+        assert!(
+            !constraint_entailed(&wide, &foreign, o),
+            "{wide:?} read a constraint of another family as entailing it"
+        );
+    }
+    // And a divisor entails one it divides, which is the arm the fallback sits
+    // beside: a rule that answered `false` throughout would pass the rows above
+    // and this is what tells the two apart.
+    assert!(constraint_entailed(
+        &Constraint::MultipleOf(OperandIx::new(2)),
+        &[Constraint::MultipleOf(OperandIx::new(4))],
+        o
+    ));
+    assert!(!constraint_entailed(
+        &Constraint::MultipleOf(OperandIx::new(4)),
+        &[Constraint::MultipleOf(OperandIx::new(2))],
+        o
+    ));
 }
 
 #[test]

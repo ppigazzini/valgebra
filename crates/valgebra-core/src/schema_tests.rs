@@ -1681,3 +1681,121 @@ fn a_map_keeps_a_clause_that_is_not_the_catch_all() {
     };
     assert_eq!(defaults.len(), 2);
 }
+
+/// Every variant names itself, and names the code a report carries for it.
+///
+/// `expected` is the word a failure message puts after "expected", and
+/// `error_code` is the string a caller branches on. Both are total over the
+/// node set and both are read by the binding, so the core's own suite never
+/// called either for most variants -- the labels were held by the Python side
+/// alone, where a wrong one reads as a message somebody will fix later.
+///
+/// Held here as a table over `every_variant`, which is the list the traversal
+/// and the functor are already held to: a variant added to the enum arrives
+/// with no label and no code, and this is where that shows.
+///
+/// The assertions are about *shape* rather than about the words, because the
+/// words belong to the message and the snapshots pin those. A label that is
+/// empty, or a code that is not the `snake_case` a caller matches on, is the
+/// failure a table of literals cannot have.
+#[test]
+fn every_variant_names_itself_and_the_code_a_report_carries() {
+    for schema in every_variant() {
+        let expected = schema.expected();
+        assert!(
+            !expected.is_empty()
+                && expected
+                    .chars()
+                    .all(|c| c.is_ascii_alphabetic() || c == ' '),
+            "{schema:?} is expected as {expected:?}, which is not a word a message can use"
+        );
+        let code = schema.error_code();
+        assert!(
+            !code.is_empty()
+                && code.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+                && !code.starts_with('_')
+                && !code.ends_with('_'),
+            "{schema:?} reports {code:?}, which is not a code a caller can match"
+        );
+    }
+
+    // The two spellings of each container kind are two labels and two codes:
+    // a list is never a tuple and a set is never a frozenset, so a caller
+    // branching on either is told which it had.
+    let list = Schema::list(SeqShape::homogeneous(Schema::Int));
+    let tuple = Schema::tuple(SeqShape::homogeneous(Schema::Int));
+    assert_ne!(list.expected(), tuple.expected());
+    assert_ne!(list.error_code(), tuple.error_code());
+    let set = Schema::set(Schema::Int);
+    let frozen = Schema::frozen_set(Schema::Int);
+    assert_ne!(set.expected(), frozen.expected());
+    assert_ne!(set.error_code(), frozen.error_code());
+}
+
+/// Openness reads a flag the same way round the two constructors do.
+///
+/// One line of arithmetic, and the one place a record's openness is built from
+/// a boolean rather than named: a flag read backwards would open every closed
+/// record and close every open one, which every other test would then agree
+/// about because they all read it through the same call.
+#[test]
+fn openness_from_a_flag_is_the_openness_the_flag_names() {
+    assert_eq!(Openness::from_flag(true), Openness::Open);
+    assert_eq!(Openness::from_flag(false), Openness::Closed);
+    // And the record built from each is the record the named constructor gives.
+    let named = |open| Schema::record(Vec::new(), open);
+    assert_eq!(
+        named(Openness::from_flag(true)),
+        named(Openness::Open),
+        "a flag and the name it stands for build one term"
+    );
+    assert_eq!(named(Openness::from_flag(false)), named(Openness::Closed));
+}
+
+/// Contractivity is a property of the whole definition table, not of one body.
+///
+/// A reference inside a *definition* the body names puts the occurrence behind
+/// a `Ref`, which a walk over the body alone reads as a leaf. The guard follows
+/// that edge, and the trail it keeps is what stops it following a cycle for
+/// ever -- so a mutually recursive pair with no constructor between them is
+/// unguarded, and the same pair with one is not.
+///
+/// The Python suite drives this through the frontend; the core's own suite did
+/// not, which left the descent through a definition unreached by the sweep that
+/// judges this crate.
+#[test]
+fn an_unguarded_occurrence_is_found_through_a_definition() {
+    let first = DefIx::new(0);
+    let second = DefIx::new(1);
+    // Asked of the *body*, which is what the frontend asks it of: a bare
+    // `Ref(target)` is the answer rather than the question, since a reference
+    // that is the target reaches it in no steps at all.
+    //
+    // `X = Y`, `Y = X`: two references and no constructor between them, so the
+    // occurrence of `X` reached from `X`'s body is unguarded.
+    let bare = vec![Schema::Ref(second), Schema::Ref(first)];
+    assert!(
+        bare[0].occurs_unguarded_under(first, Guarded::No, &bare),
+        "a cycle of references alone is not contractive"
+    );
+
+    // `X = [Y]`, `Y = X`: the constructor on the way round guards it.
+    let guarded = vec![
+        Schema::list(SeqShape::homogeneous(Schema::Ref(second))),
+        Schema::Ref(first),
+    ];
+    assert!(
+        !guarded[0].occurs_unguarded_under(first, Guarded::No, &guarded),
+        "a constructor anywhere on the cycle makes it contractive"
+    );
+
+    // And the trail is what keeps the walk finite: `Y = Y` names itself, so the
+    // descent meets a definition it is already inside and returns rather than
+    // following the edge again.
+    let selfish = vec![Schema::Ref(second), Schema::Ref(second)];
+    assert!(!selfish[0].occurs_unguarded_under(first, Guarded::No, &selfish));
+
+    // A reference naming no definition is a term the frontend never builds;
+    // the guard reads it as reaching nothing rather than as a panic.
+    assert!(!Schema::Ref(DefIx::new(9)).occurs_unguarded_under(first, Guarded::No, &bare));
+}
