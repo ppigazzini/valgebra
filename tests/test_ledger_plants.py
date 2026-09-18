@@ -269,6 +269,16 @@ PLANTS = (
         ),
     ),
     Plant(
+        "tests/test_doc_examples.py",
+        ("CONTRIBUTING.md",),
+        lambda tree: _write(
+            tree,
+            "CONTRIBUTING.md",
+            (tree / "CONTRIBUTING.md").read_text(encoding="utf-8")
+            + "\n```python\nraise SystemExit('an example no lane runs')\n```\n",
+        ),
+    ),
+    Plant(
         "tests/test_version_gates.py",
         ("crates/valgebra-py/src/build/interpreter.rs",),
         lambda tree: _edit(

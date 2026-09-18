@@ -164,12 +164,21 @@ strings, and arbitrary keys are a different labelling than the record model
 assumes.
 
 **Folding `A & ~A` to `nothing`, and `A | ~A` to the top, when `A` carries a
-`Predicate`.** Refused, and the test it fails is three lines:
+`Predicate`.** Refused, and the row it fails is this one:
 
 ```python
+import itertools
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import Validator, complement, intersection
+
 flip = itertools.count()
 predicate = Validator(Annotated[int, at.Predicate(lambda _: next(flip) % 2 == 0)])
-intersection(predicate, complement(predicate)).is_valid(1)  # True, on every other call
+meet = intersection(predicate, complement(predicate))
+assert not meet.is_valid(1)  # the two calls disagree, and the meet refuses
+assert meet.is_valid(1)  # the same expression, the same value, the other way
 ```
 
 The complement laws are laws about *sets*: `A ∩ ¬A = ∅` holds because a value is

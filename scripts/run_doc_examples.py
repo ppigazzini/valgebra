@@ -1,10 +1,16 @@
 """Execute every runnable Python example in the documentation.
 
 Each fenced ```python block in README.md, the changelog, and every page under
-docs/ is run as its own process, so module semantics (class definitions,
-get_type_hints) behave exactly as they would for a reader who copies the
-snippet. Blocks marked PLANNED (target APIs that do not run yet) are skipped.
-Exit non-zero if any example fails, so CI catches a stale or broken example.
+docs/ -- at any depth -- is run as its own process, so module semantics (class
+definitions, get_type_hints) behave exactly as they would for a reader who
+copies the snippet. A block marked PLANNED on a comment line (a target API that
+does not run yet) is skipped. Exit non-zero if any example fails, so CI catches
+a stale or broken example.
+
+At any depth because the list said one level for as long as the developer pages
+had no example, and then one arrived: an example a reader can copy from a page
+this project publishes, which nothing had run. `tests/test_doc_examples.py`
+holds the list to the tree's own pages in both directions.
 
 The changelog is here because an entry that shows what a release decides is an
 example a reader runs, and one that stopped being true is the entry a reader
@@ -26,9 +32,19 @@ ROOT = Path(__file__).resolve().parent.parent
 DOCS = [
     ROOT / "README.md",
     ROOT / "CHANGELOG.md",
-    *sorted((ROOT / "docs").glob("*.md")),
+    *sorted((ROOT / "docs").rglob("*.md")),
 ]
 BLOCK = re.compile(r"```python\n(.*?)```", re.DOTALL)
+#: A block this does not run, and the line that says so. Read as a comment
+#: rather than as a word anywhere in the block: a snippet that names the marker
+#: in a string or an identifier is a snippet, and skipping it would be a hole
+#: nobody wrote down.
+MARKER = re.compile(r"^[^\S\n]*#.*\bPLANNED\b|#[^\n]*\bPLANNED\b", re.MULTILINE)
+
+
+def planned(block: str) -> bool:
+    """Whether the block says, in a comment, that it is not meant to run."""
+    return MARKER.search(block) is not None
 
 
 def run_block(block: str, doc_name: str, index: int) -> bool:
@@ -57,7 +73,7 @@ def main() -> int:
     for doc in DOCS:
         text = doc.read_text(encoding="utf-8")
         for index, block in enumerate(BLOCK.findall(text), start=1):
-            if "PLANNED" in block:
+            if planned(block):
                 continue
             checked += 1
             if not run_block(block, doc.name, index):
