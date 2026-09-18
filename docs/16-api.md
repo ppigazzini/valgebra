@@ -19,8 +19,13 @@ from the top-level `valgebra` namespace.
 
 ::: valgebra.complement
 
-The whole-schema transforms `open` and `close` (a record's key set) are methods
-on the compiled validator (`Validator.open`/`close`), documented above. So is
+The whole-schema transforms `open` and `close` are methods on the compiled
+validator (`Validator.open`/`close`), documented above. What they move is the
+**key-type region no clause claims**: opening frees it and closing refuses it,
+and neither touches a region a clause already claims. A record claims none,
+which is why opening one admits every key; a `dict[str, int]` claims the `str`
+region, so opening it keeps `str` keys mapping to integers and frees the rest.
+So is
 `simplify`, which is **deprecated**: a schema is built in the lattice normal
 form, so the reduction it promised is the schema a caller already holds
 ([the algebra guide](04-algebra.md)). A fixed-length list is

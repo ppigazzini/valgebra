@@ -270,7 +270,13 @@ pub(crate) fn install_lazy_attributes(py: Python<'_>) -> PyResult<()> {
 
     return __getattr__, __reduce__
 ",
-        c"valgebra/_error_hooks.py",
+        // The name a traceback through one of these hooks prints, and a name
+        // that says what it is: there is no such file, and a reader who goes
+        // looking for `valgebra/_error_hooks.py` finds nothing. Angle brackets
+        // are Python's own convention for a code object with no file behind it
+        // -- `<string>`, `<stdin>` -- so a frame from here reads as compiled
+        // rather than as a module somebody deleted.
+        c"<valgebra error hooks>",
         c"valgebra._error_hooks",
     )?;
     let hooks = shim

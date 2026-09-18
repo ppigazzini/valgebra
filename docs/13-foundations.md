@@ -111,6 +111,14 @@ decides pairs no rule about shapes reaches, and it costs about two orders of
 magnitude more than a rule, which is why it is asked second and only where the
 rules decline.
 
+Each kind's representation is **bounded**: a union of dicts, objects or sets
+holds at most a fixed number of atoms, and a build spends a fixed allowance
+reaching one. Past either the sets refuse, and the refusal is an answer of its
+own -- "not proven" rather than "not true". That is why the conservative list
+on [the decidability page](15-decidability.md) has entries about size beside
+the entries about shape: a relation the sets would decide can still be one they
+decline to build, and the same relation decides under a larger bound.
+
 Both answer in three values: proved, refuted, or neither. A **refutation** is a
 claim about a value — some member of the subject that the other schema rejects —
 so it is believed only where the subject is known to hold one. That is the

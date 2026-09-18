@@ -43,6 +43,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a record is decided against the union of records it splits across
 - fix: an order bound is refused where the base and the bound do not compare
 - fix: a union branch sharing no value with the subject decides nothing
+- fix: a traceback through an error hook names a file a reader can place -- internal
 
 -->
 
