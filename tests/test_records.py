@@ -94,6 +94,7 @@ def test_open_is_a_function_on_sets() -> None:
     assert redundant.close().is_equivalent(empty.close())
 
 
+# THEORY: open-and-close-read-the-region
 def test_opening_a_mapping_frees_the_keys_no_clause_claims() -> None:
     """Openness is the default of the region no clause claims.
 

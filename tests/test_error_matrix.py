@@ -370,6 +370,7 @@ def test_a_code_a_document_can_carry_is_reported_from_one(code: str) -> None:
     assert error.path == case.path
 
 
+# THEORY: the-depth-bound-reports-itself
 def test_a_value_past_the_depth_bound_reports_the_bound() -> None:
     """A value nested deeper than the walk descends reports the bound.
 
@@ -385,6 +386,7 @@ def test_a_value_past_the_depth_bound_reports_the_bound() -> None:
     assert _from_json(deep, json.dumps(value)).code == "recursion_limit"
 
 
+# THEORY: a-cycle-is-caught-by-identity
 def test_a_value_containing_itself_reports_the_cycle() -> None:
     """A self-containing value is reported rather than walked forever."""
     deep = recursive(lambda s: union(int, [s]))

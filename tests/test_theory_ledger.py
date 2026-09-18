@@ -49,8 +49,21 @@ THEORY = ROOT / "docs" / "dev" / "10-theory.md"
 #: keeps it out of the universe.
 CLAIMS = ("LOAD-BEARING", "OBLIGATION", "DEVIATION")
 
+#: The tags that carry *context* rather than a claim: a result that shapes a
+#: decision without being an algorithm here, and one on the path and unbuilt.
+#:
+#: These take an id and no holding line. A guiding result is not a sentence the
+#: tree can be false against -- that is what separates it from a load-bearing
+#: one -- so asking it to name a test would put a test beside every citation
+#: and make the holding lines mean less, not more. What the id buys is that the
+#: page is uniformly addressable: a test *may* name one, the reverse direction
+#: reads it, and a tag cannot be added without one.
+CONTEXT = ("GUIDING", "PLANNED")
+
 #: A tag as the page writes it: the kind, and the id a test names it by.
-_TAG = re.compile(r"\*\*\[(LOAD-BEARING|OBLIGATION|DEVIATION): ([a-z][a-z0-9-]*)\]\*\*")
+_TAG = re.compile(
+    r"\*\*\[(" + "|".join((*CLAIMS, *CONTEXT)) + r"): ([a-z][a-z0-9-]*)\]\*\*"
+)
 
 #: The marker a *test* carries to name the claim it holds, in either language.
 #: Read within this many lines above the definition, so it may sit above a doc
@@ -138,7 +151,7 @@ def _claims() -> list[Claim]:
             kind, identifier = tags[0]
             found.append(Claim(paragraph, kind, identifier, [], None))
             continue
-        bare = [tag for tag in CLAIMS if f"[{tag}]" in paragraph]
+        bare = [tag for tag in (*CLAIMS, *CONTEXT) if f"[{tag}]" in paragraph]
         assert not bare, (
             "a claim tagged without an id, which no test can name: "
             + _summarise(paragraph)
@@ -148,6 +161,11 @@ def _claims() -> list[Claim]:
 
 def _held() -> list[Claim]:
     return [claim for claim in _claims() if claim.names]
+
+
+def _must_be_held(claims: list[Claim]) -> list[Claim]:
+    """Give the claims a holding line is asked of, which is not the context."""
+    return [claim for claim in claims if claim.tag in CLAIMS]
 
 
 def _defined_names() -> set[str]:
@@ -190,10 +208,14 @@ def test_the_page_carries_tagged_claims() -> None:
     claims = _claims()
     text = THEORY.read_text(encoding="utf-8")
     assert len(_TAG.findall(text)) == len(claims)
-    by_tag = {tag: sum(1 for claim in claims if claim.tag == tag) for tag in CLAIMS}
+    by_tag = {
+        tag: sum(1 for claim in claims if claim.tag == tag)
+        for tag in (*CLAIMS, *CONTEXT)
+    }
     assert by_tag["LOAD-BEARING"] >= 8, by_tag
     assert by_tag["OBLIGATION"] >= 4, by_tag
     assert by_tag["DEVIATION"] >= 4, by_tag
+    assert by_tag["GUIDING"] >= 4, by_tag
 
     # And each id is its own, since a test names a claim by it.
     identifiers = [claim.identifier for claim in claims]
@@ -209,7 +231,7 @@ def test_every_claim_names_a_test_held_or_owed() -> None:
     """
     unheld = [
         _summarise(claim.text)
-        for claim in _claims()
+        for claim in _must_be_held(_claims())
         if not claim.names and claim.owed is None
     ]
     assert not unheld, "claims with neither a HELD-BY nor an OWED line:\n" + "\n".join(
@@ -513,6 +535,53 @@ def test_every_cited_source_is_a_section_the_argument_has() -> None:
         if section in sections and fragment not in sections[section]
     )
     assert not missing + stale, "\n".join(missing + stale)
+
+
+#: A row of the argument's deviation table: its number and the id it is
+#: restated under, or `--` where the row is closed.
+_DEVIATION_ROW = re.compile(r"^\| (\d+) \|.*\| `([a-z0-9-]+|--)` \|$", re.MULTILINE)
+
+
+def _deviation_rows() -> list[tuple[str, str]]:
+    """Every row of the argument's deviation table, with the id it names."""
+    if not ARGUMENT.exists():
+        return []
+    text = ARGUMENT.read_text(encoding="utf-8")
+    heading = text.find("# 15. The deviations")
+    if heading == -1:
+        return []
+    return _DEVIATION_ROW.findall(text[heading:])
+
+
+def test_every_deviation_the_argument_tables_is_restated_here() -> None:
+    """The departures are a numbered table, and the table has an address column.
+
+    A deviation is the kind of claim that goes stale quietly: it is not a rule
+    the code enforces, it is a place the code *departs* from its source, so
+    nothing fails when one is closed and nothing fails when one is added. The
+    table and this page were kept in step by hand, and the two differed by four
+    rows when that was last read.
+
+    So each live row names the tagged paragraph restating it. A row with no id
+    fails, an id naming no tag fails, and a row whose id resolves to a tag of
+    another kind fails. A closed row carries `--`. The other direction is
+    deliberately loose: this page may carry deviations the table does not,
+    because a departure found in the code is a departure whether or not the
+    argument reached it first.
+    """
+    rows = _deviation_rows()
+    if not rows:
+        pytest.skip("the argument is not redistributed, so a clone has none to read")
+    assert len(rows) >= 9, f"the deviation table reads as {rows}"
+    deviations = {claim.identifier for claim in _claims() if claim.tag == "DEVIATION"}
+    unrestated = sorted(
+        f"row {number} names {identifier!r}, which is no deviation on this page"
+        for number, identifier in rows
+        if identifier != "--" and identifier not in deviations
+    )
+    assert not unrestated, "\n".join(unrestated)
+    live = [number for number, identifier in rows if identifier != "--"]
+    assert len(live) >= 8, f"only {len(live)} live rows, which reads as a table gone"
 
 
 def test_every_result_the_argument_carries_is_restated_here() -> None:

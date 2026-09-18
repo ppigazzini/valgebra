@@ -1570,6 +1570,7 @@ fn decides_complement_subtyping_contravariantly() {
 }
 
 // THEORY: recursive-subtyping, two-fixpoints-one-procedure
+// THEORY: recursive-subtyping, a-reference-denotes-its-definition
 #[test]
 fn decides_recursive_subtyping_coinductively() {
     let field = |name: &str, schema, required| Field {

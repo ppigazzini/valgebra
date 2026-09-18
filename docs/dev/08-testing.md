@@ -136,6 +136,16 @@ that did. `scripts/gate.py` builds that same floor beside the caller's
 interpreter before a push -- and runs the *product* suite on it, not this list,
 for the reason the first sentence gives.
 
+**And two directions no runner can read at all.** The theory ledger holds the
+tracked page to the maintainer's working notes, and the citation ledger holds a
+numbered result to the paper on the shelf; neither the notes nor the shelf is
+in the distribution, so both directions stand down in every clone but the
+author's. A check that stands down everywhere it runs is a check nobody runs,
+so `scripts/gate.py` runs those two in the working tree before a push, where
+what they read is present. What that buys is bounded and worth saying plainly:
+the page and the notes are held together on one machine, and a green matrix
+says nothing about them.
+
 The last is a ledger over the rest, and it exists because reading a
 ledger cannot tell you whether it can fail. `test_local_gate.py` filtered its
 steps with `not runnable(name) and name not in NEEDS_A_RUNNER`, which is `X and

@@ -60,7 +60,7 @@ SOURCE: §13.2 "**The laws hold by construction**"
 HELD-BY: the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption
 
 **Stone's representation theorem (1936).** Every Boolean algebra is isomorphic to
-an algebra of sets. **[GUIDING]** — the licence for treating the scalar fragment
+an algebra of sets. **[GUIDING: stone-duality]** — the licence for treating the scalar fragment
 as a bitset over disjoint regions, which is what makes emptiness and subtyping
 exact there ([02-decision.md](02-decision.md)).
 
@@ -95,18 +95,19 @@ is why [02-decision.md](02-decision.md) states soundness as the contract and
 treats completeness as a measured, growing property rather than a promise.
 
 **Castagna, "Programming with Union, Intersection, and Negation Types"**
-(arXiv:2111.03354, revised 2024). The modern synthesis. **[GUIDING]**
+(arXiv:2111.03354, revised 2024). The modern synthesis. **[GUIDING: the-modern-synthesis]**
 
 **Castagna, Duboc & Valim, "The Design Principles of the Elixir Type System"
 (2023).** The same algebra in a production language, with the engineering
-compromises stated. **[GUIDING]** — the closest thing to a peer implementation.
+compromises stated. **[GUIDING: a-peer-implementation]** — the closest thing to a peer
+implementation.
 
 ## Sequences as a regular language
 
 **Hosoya, Vouillon & Pierce, "Regular Expression Types for XML" (TOPLAS 2005).**
 Regular languages are closed under union, intersection and complement, so a
 sequence type is a first-class member of the algebra rather than an ad-hoc node.
-**[GUIDING]** — `SeqShape` is one node subsuming the homogeneous, fixed and
+**[GUIDING: sequences-as-a-regular-language]** — `SeqShape` is one node subsuming the homogeneous, fixed and
 prefix-plus-tail forms for exactly this reason
 ([01-schema-ir.md](01-schema-ir.md)).
 
@@ -180,7 +181,8 @@ fixpoint", quoted at Amadio & Cardelli §3.3.2 — is the metric account of
 recursive types, and its unique fixpoint lives among *infinite* trees, which the
 walk never admits. **Tarski's fixpoint theorem (1955)** gives a monotone map on a
 complete lattice a least fixpoint, and applies to the complement-free fragment,
-where the inductive set is that least fixpoint. Both are **[GUIDING]**.
+where the inductive set is that least fixpoint. Both are
+**[GUIDING: the-fixpoint-theorems-nearby]**.
 
 **Nakano, "A Modality for Recursion" (2000).** The guardedness modality: a
 recursion variable under a guard is productive. **[LOAD-BEARING: guarded-recursion]** for the
@@ -197,6 +199,38 @@ HELD-BY: contractivity_requires_a_structural_guard, test_non_contractive_body_is
 
 [01-schema-ir.md](01-schema-ir.md) records why the check's structural arms
 compute nothing.
+
+**A reference denotes the definition it names.** `Ref(i)` and `defs[i]` are one
+set, so a fixpoint and its own unfolding are equivalent in both directions and
+a caller who writes the body out by hand has written the same schema. That is
+the **equirecursive** reading, and it is a choice: the isorecursive one makes
+the two distinct types with a coercion between them, and every relation is then
+about which side of that coercion a value sits on. Pierce, *TAPL* ch. 20--21 is
+where the two are set beside each other; the definitions table is the same
+shape pydantic-core's `definition-ref` has. **[LOAD-BEARING: a-reference-denotes-its-definition]**
+
+HELD-BY: test_a_reference_denotes_the_definition_it_names, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively
+
+**A descent past the bound is an error, never a crash.** The walk unfolds to
+`MAX_RECURSION_DEPTH` and reports `recursion_limit` past it, which converts any
+unbounded descent -- a contractivity case the build check might miss, an exotic
+mutual cycle -- into an answer rather than a native stack overflow. The JSON
+path reaches the parser's own nesting bound first, which is the lower of the
+two, so a document that deep is refused as unreadable before the walk sees it;
+[10-limits.md](../10-limits.md) names both. The conventional default, 128,
+follows `serde_json`. **[LOAD-BEARING: the-depth-bound-reports-itself]**
+
+HELD-BY: test_every_entry_point_reports_the_bound_it_reaches, test_a_value_past_the_depth_bound_reports_the_bound
+
+**A value that contains itself is caught by identity.** The guard on the
+descent path is a set of `(id(value), ref)` pairs, so a value reachable from
+itself is refused with `recursion_loop` and a value that merely *repeats* is
+not: a list holding two equal sublists is an ordinary finite value, and a guard
+reading equality would refuse it. That is the coinductive reading observing a
+regular tree, and the inductive one -- the finite values membership accepts --
+is its dual. **[LOAD-BEARING: a-cycle-is-caught-by-identity]**
+
+HELD-BY: test_a_cycle_is_caught_by_identity_rather_than_by_equality, test_a_value_containing_itself_reports_the_cycle
 
 **Amadio & Cardelli, "Subtyping Recursive Types" (1993).** Subtyping between
 recursive types is decided coinductively over a **trail** of address pairs:
@@ -220,7 +254,7 @@ a_proof_over_a_fixpoint_has_no_witness_against_it
 **Frisch, Castagna & Benzaken, Definition 6.9.** Emptiness is proved
 coinductively too: a *simulation* is "a self-justifying set, that is a
 co-inductive proof of the fact that all its elements are equal to `0`".
-**[GUIDING]** — valgebra's emptiness recurses on the structure and reads a cycle
+**[GUIDING: emptiness-is-a-simulation]** — valgebra's emptiness recurses on the structure and reads a cycle
 back to a visiting reference as uninhabited, which is the inductive reading of
 the same fact over finite values.
 
@@ -232,7 +266,8 @@ refused by identity rather than followed ([04-walk.md](04-walk.md)).
 **Siek & Taha, "Gradual Typing for Functional Languages" (2006).** The dynamic
 type is an atom with its own rules, not the top of the lattice, because a static
 checker asks a second question of it — *consistency* at every site where a value
-crosses between typed and untyped code. **[GUIDING, and declined]** — a runtime
+crosses between typed and untyped code. **[GUIDING: the-dynamic-type-declined]**
+— a runtime
 validator asks one question, membership, and to it the dynamic type is the top.
 There is no `Dynamic` node: `typing.Any` builds `Schema::Anything` carrying a
 [`Spelling`](../../crates/valgebra-core/src/ir.rs) that `render` reads and
@@ -244,14 +279,26 @@ the question a validator has no site for.
 ## Refinement types
 
 **Jhala & Vazou, "Refinement Types: A Tutorial" (2021).** A refinement is a base
-set narrowed by predicates. **[GUIDING]** — `Schema::Refine` is the shape without
+set narrowed by predicates. **[GUIDING: refinement-types]** — `Schema::Refine` is the shape without
 the SMT machinery: bounds are compared through the oracle, and a user predicate
 is opaque.
+
+**A refinement is its base narrowed, and a predicate is opaque.** `Refine {
+base, constraints }` denotes `{x ∈ ⟦base⟧ | every constraint holds}`, so it is
+below its base whatever the constraints say -- a subset does not depend on
+*which* subset -- and the base is not below it, because that would need the
+predicate to hold of every value. A predicate is compared by the object
+carrying it: two refinements over one predicate are one set, and two over
+separately written predicates that agree everywhere are undecided, since
+deciding them means deciding whether two Python callables agree.
+**[LOAD-BEARING: a-refinement-narrows-its-base]**
+
+HELD-BY: test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker
 
 ## Decision procedures, for widening the decided fragment
 
 **Gesbert, Genevès & Layaïda, "A Logical Approach to Deciding Semantic
-Subtyping".** **[PLANNED]** — and planned means unstarted. The paper translates
+Subtyping".** **[PLANNED: the-exact-decision]** — and planned means unstarted. The paper translates
 the relation into a tree logic and decides satisfiability there, which is a
 *replacement* for `decision.rs` rather than a widening of it, so nothing in the
 tree is a partial version of it. What the citation buys today is the knowledge
@@ -528,7 +575,14 @@ HELD-BY: the_matrix_repeats_a_goal_only_where_a_meet_meets_a_union, a_record_of_
 coinductive procedure must be persistent, so a failed disjunct can roll it
 back, or hold only results that rested on no open hypothesis; a memo that is
 neither turns a backtracked assumption into a cached falsehood.
-**[OBLIGATION: a-memo-is-revertible-or-absent]**
+
+What holds it is a **placement** test, and what that test holds is a sentence
+rather than a property: a map keyed by a goal pair inside the procedure fails
+until the condition is written beside it, and nothing mechanical reads whether
+the sentence is true. The obligation is vacuous while there is no memo, which
+is exactly when a reader is least likely to remember it -- so the guard's job
+is to make writing the sentence a deliberate act a reviewer sees rather than
+an omission nobody does. **[OBLIGATION: a-memo-is-revertible-or-absent]**
 
 SOURCE: §14.3 "A cache under coinduction must be revertible"
 
@@ -557,7 +611,26 @@ declaring no field frees every key on its own, so `{"a?": int}` and
 
 SOURCE: §14.6 "Operators belong on the representation built for them"
 
-HELD-BY: opening_a_mapping_frees_the_region_no_clause_claims, with_records_open_keeps_the_region_a_mapping_claims, opening_a_record_that_claims_a_region_leaves_one_clause, test_a_clause_is_read_the_same_with_or_without_a_field_beside_it, test_closing_is_a_function_of_the_set, test_closing_is_a_function_of_the_set_however_it_is_spelled, test_opening_is_not_a_function_of_the_set, closing_is_a_function_of_the_set_however_it_is_spelled, opening_widens_closing_narrows_and_the_round_trip_is_at_most_closing, opening_under_a_complement_narrows_and_closing_widens, closing_an_opened_record_is_not_closing_the_record, test_closing_an_opened_schema_is_not_closing_it
+HELD-BY: test_opening_a_mapping_frees_the_keys_no_clause_claims, test_a_clause_is_read_the_same_with_or_without_a_field_beside_it, test_closing_is_a_function_of_the_set, test_closing_is_a_function_of_the_set_however_it_is_spelled, closing_is_a_function_of_the_set_however_it_is_spelled, opening_widens_closing_narrows_and_the_round_trip_is_at_most_closing, opening_under_a_complement_narrows_and_closing_widens, closing_an_opened_record_is_not_closing_the_record, test_closing_an_opened_schema_is_not_closing_it
+
+**`open` and `close` are term rewrites, and the cost is a spelling.** They read
+the clauses a term *writes* rather than the set it denotes, so two terms the
+algebra calls equal need not open alike: `{"a?": int}` and `{} | {"a": int}`
+admit the same dicts, and the branch declaring no field frees every key on its
+own. `close` is a function of the set all the same, which is what makes the
+asymmetry a property of `open` rather than of the pair. §13.4b licenses exactly
+this -- a spelling-sensitive operator is permitted provided it is declared --
+and what it forbids is one clause read two ways according to an unrelated
+field, which is incoherence rather than syntax-sensitivity.
+
+The rows below are about the **term**: what the rewrite writes, which is the
+thing a reader of `ir/transform.rs` checks against. The set the operators give
+is the obligation above, and its rows ask values.
+**[DEVIATION: open-and-close-are-term-rewrites]**
+
+SOURCE: §14.6 "Operators belong on the representation built for them"
+
+HELD-BY: opening_a_mapping_frees_the_region_no_clause_claims, with_records_open_keeps_the_region_a_mapping_claims, opening_a_record_that_claims_a_region_leaves_one_clause, the_two_readings_of_one_term_close_to_one_set, test_opening_is_not_a_function_of_the_set
 
 **The IR is exactly as expressive as its producers.** Every variant the enum
 has is one the frontend or the fuzzer builds, and a variant no producer reaches
@@ -566,7 +639,7 @@ is a surface the decision must be sound over for nothing.
 
 SOURCE: §14.7 "The IR should be exactly as expressive as its producers"
 
-HELD-BY: test_every_variant_is_a_generator_a_representative_or_a_marker, test_no_column_names_a_variant_that_is_gone
+HELD-BY: test_every_variant_is_a_generator_a_representative_or_a_marker, test_no_column_names_a_variant_that_is_gone, test_the_node_table_covers_every_ir_variant
 
 **The definition imports nothing from the optimisation.** The partition and the
 answer types sit below both deciders; no descriptor module names the structural

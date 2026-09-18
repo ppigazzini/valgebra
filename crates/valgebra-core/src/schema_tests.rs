@@ -614,6 +614,7 @@ fn opening_drops_a_field_the_record_already_said() {
     );
 }
 
+// THEORY: open-and-close-are-term-rewrites
 /// One term has one reading, so the two neighbours close alike.
 ///
 /// `{"a?": anything, ...}` and `dict[anything, anything]` admit exactly the
@@ -653,7 +654,7 @@ fn the_two_readings_of_one_term_close_to_one_set() {
     );
 }
 
-// THEORY: open-and-close-read-the-region
+// THEORY: open-and-close-are-term-rewrites
 /// Openness is the default of the region no clause claims.
 ///
 /// A clause is a key-type region carrying its own default, so the operators
@@ -777,7 +778,7 @@ fn two_spellings_of_one_keyed_map_are_one_term() {
     );
 }
 
-// THEORY: open-and-close-read-the-region
+// THEORY: open-and-close-are-term-rewrites
 /// Opening a record that already claims a region leaves one clause, not two.
 ///
 /// A `TypedDict` builds exactly this: named fields, and `str => anything` for
@@ -852,7 +853,7 @@ fn with_records_open_refolds_a_pair_it_creates() {
     );
 }
 
-// THEORY: open-and-close-read-the-region
+// THEORY: open-and-close-are-term-rewrites
 #[test]
 fn with_records_open_keeps_the_region_a_mapping_claims() {
     // A clause's own region is not the operator's to touch: closing sends the

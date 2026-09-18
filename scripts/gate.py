@@ -308,6 +308,30 @@ DEEP_HISTORY_STEPS = (
 )
 
 
+#: The ledgers that read the maintainer's working notes, which the distribution
+#: does not carry.
+#:
+#: Two directions of the theory ledger stand down where the notes are absent --
+#: whether every result the argument tags is restated on the tracked page, and
+#: whether every numbered citation names a work on the shelf -- and the notes
+#: are absent on every runner. So those two checks run where they can run, which
+#: is here, and a green matrix says nothing about them either way.
+#:
+#: Run in the caller's tree rather than in a clone: the notes are untracked, so
+#: a checkout of `HEAD` does not have them and the checks would stand down there
+#: exactly as they do on a runner.
+NOTES_STEPS = (
+    (
+        "local only (the working notes)",
+        "The ledgers that read the notes the distribution does not carry",
+        (
+            f"{shlex.quote(sys.executable)} -m pytest -q -p no:cacheprovider "
+            "tests/test_theory_ledger.py tests/test_citation_ledger.py"
+        ),
+    ),
+)
+
+
 def floor_interpreter() -> str:
     """Read the oldest interpreter the python matrix runs.
 
@@ -632,6 +656,36 @@ def run_step(
     return True
 
 
+def list_plan(
+    spec: dict,
+    jobs: list[str],
+    plan: list[Step],
+    unresolved: list[str],
+    *,
+    floor: bool,
+) -> None:
+    """Print every step a run would take, in the order the run takes them."""
+    show_plan(spec, jobs, plan, unresolved)
+    for job, name, _ in NOTES_STEPS:
+        print(f"run   {job}: {name}")
+    for job, name, _ in floor_steps() if floor else ():
+        print(f"run   {job}: {name}")
+
+
+def notes_failures() -> list[str]:
+    """Run the ledgers that read the notes, and give back what failed.
+
+    A function of its own so the one caller stays a list of lanes: the step
+    runs in the caller's tree rather than in a clone, which is the whole of
+    what makes it different from the lanes around it.
+    """
+    return [
+        f"{job}: {name}"
+        for job, name, command in NOTES_STEPS
+        if not run_step(f"{job}: {name}", command, ROOT, runner_environment())
+    ]
+
+
 def show_plan(
     spec: dict, jobs: list[str], plan: list[Step], unresolved: list[str]
 ) -> None:
@@ -671,9 +725,7 @@ def main() -> int:
     # not the matrix. Decided here so `--list` says the same thing the run does.
     floor_runs = not args.job and shutil.which("uv") is not None
     if args.list:
-        show_plan(spec, jobs, plan, unresolved)
-        for job, name, _ in floor_steps() if floor_runs else ():
-            print(f"run   {job}: {name}")
+        list_plan(spec, jobs, plan, unresolved, floor=floor_runs)
         return EXIT_OK
 
     if args.here:
@@ -707,6 +759,8 @@ def main() -> int:
                 for job, name, command in DEEP_HISTORY_STEPS
                 if not run_step(f"{job}: {name}", command, deep, NO_IDENTITY)
             ]
+        # The ledgers no runner can run, in the tree that has what they read.
+        failures += notes_failures()
         # And the release the suite is read on rather than written on. This runs
         # in the same tree as the plan: what makes it a second lane is the
         # environment, not the checkout.
@@ -732,10 +786,11 @@ def main() -> int:
         return EXIT_FAIL
     deep_steps = 0 if args.here else len(DEEP_HISTORY_STEPS)
     floor_count = len(floor_steps()) if floor_runs else 0
+    total = len(plan) + deep_steps + floor_count + len(NOTES_STEPS)
     print(
-        f"gate: {len(plan) + deep_steps + floor_count} step(s) passed in a clone "
-        "shaped like the runner's, in a clone that keeps the history and has no "
-        "committer, and on the floor interpreter."
+        f"gate: {total} step(s) passed in a clone shaped like the runner's, in a "
+        "clone that keeps the history and has no committer, on the floor "
+        "interpreter, and over the notes no runner carries."
     )
     report_what_was_not_run(here=args.here, floor=floor_runs)
     return EXIT_OK

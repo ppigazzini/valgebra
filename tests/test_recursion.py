@@ -1,3 +1,4 @@
+import json
 import sys
 import threading
 from collections.abc import Callable
@@ -359,7 +360,7 @@ def test_a_fixpoint_is_decided_against_the_kinds_its_body_admits() -> None:
     assert not json.is_valid((1,))
 
 
-# THEORY: two-fixpoints-one-procedure
+# THEORY: two-fixpoints-one-procedure, a-reference-denotes-its-definition
 def test_the_unfolding_is_sound_in_both_directions() -> None:
     """The over- and under-approximation must each stay on its own side.
 
@@ -384,3 +385,105 @@ def test_the_unfolding_is_sound_in_both_directions() -> None:
     assert not ints.is_valid("x")
     assert json.is_valid([[1]])
     assert ints.is_valid([[1]])
+
+
+# THEORY: a-reference-denotes-its-definition
+def test_a_reference_denotes_the_definition_it_names() -> None:
+    """A fixpoint and its own unfolding are one set, in both directions.
+
+    This is the *equirecursive* reading, and it is a choice: an isorecursive
+    one would make the two distinct types with a coercion between them, and
+    every relation here would then be about which side of that coercion a value
+    sat on. A reference denoting its definition is what lets a caller write the
+    body out by hand and get the same schema.
+
+    Both directions, because one alone is the weaker claim a widening would
+    also satisfy: unfolding to a superset proves the fixpoint below its body
+    and says nothing about the way back.
+    """
+    chain = recursive(lambda t: union(None, {"next": t}))
+    unfolded = union(None, {"next": chain})
+    assert chain.is_subtype_of(unfolded)
+    assert unfolded.is_subtype_of(chain)
+    assert chain.is_equivalent(unfolded)
+
+    # And the walk agrees, which is what makes the relation a claim about
+    # values rather than about two spellings the rules happen to fold alike.
+    for value in (None, {"next": None}, {"next": {"next": None}}):
+        assert chain.is_valid(value)
+        assert unfolded.is_valid(value)
+    for outside in ({"next": 1}, {"other": None}, 1):
+        assert not chain.is_valid(outside)
+        assert not unfolded.is_valid(outside)
+
+
+# THEORY: the-depth-bound-reports-itself
+def test_every_entry_point_reports_the_bound_it_reaches() -> None:
+    """A value deeper than the walk descends is refused, never a crash.
+
+    The two paths reach different bounds and each names its own. The object
+    walk unfolds to its depth limit and reports `recursion_limit`; the JSON
+    path hands the document to the parser first, and the parser's own nesting
+    bound is the lower of the two, so a document that deep is refused as
+    unreadable before the walk sees it.
+
+    Every entry point, because the bound is the one place where a missing
+    guard is a segmentation fault rather than a wrong answer: a path that
+    forgot it would take the interpreter down with it, and the suite would
+    report a crash rather than a failure.
+    """
+    schema = recursive(lambda t: union(int, [t]))
+    deep: list[object] = []
+    cursor = deep
+    for _ in range(400):
+        nested: list[object] = []
+        cursor.append(nested)
+        cursor = nested
+
+    # The object path: an answer from the two that give one, and the bound's
+    # own code from the two that raise.
+    assert schema.is_valid(deep) is False
+    for call in (schema.validate, schema.ensure):
+        with pytest.raises(ValidationError) as caught:
+            call(deep)
+        assert caught.value.errors[0]["code"] == "recursion_limit"
+
+    # The JSON path: the parser's bound, which is the lower one, and which the
+    # limits page names beside the walk's.
+    document = json.dumps(deep)
+    assert schema.is_valid_json(document) is False
+    for reads in (schema.validate_json, schema.load):
+        with pytest.raises(ValidationError) as caught:
+            reads(document)
+        assert caught.value.errors[0]["code"] == "json_invalid"
+
+
+# THEORY: a-cycle-is-caught-by-identity
+def test_a_cycle_is_caught_by_identity_rather_than_by_equality() -> None:
+    """The guard reads `id`, so two equal values are not one cycle.
+
+    A value that contains itself has no finite unfolding and is refused with
+    `recursion_loop`. What the guard must *not* do is refuse a value that
+    merely repeats: a list holding two equal sublists is an ordinary finite
+    value, and reading equality instead of identity would report it as a cycle
+    -- a refusal of a value every reading of the schema admits.
+
+    The two halves are the same guard from either side, and a guard keyed on
+    equality passes the first and fails the second.
+    """
+    schema = recursive(lambda t: union(int, [t]))
+
+    cyclic: list[object] = []
+    cyclic.append(cyclic)
+    assert schema.is_valid(cyclic) is False
+    with pytest.raises(ValidationError) as caught:
+        schema.validate(cyclic)
+    assert caught.value.errors[0]["code"] == "recursion_loop"
+
+    # Two sublists that are equal and are not the same object, twice over: a
+    # repeat at one level, and the same repeat one level down.
+    repeated = [[1], [1]]
+    assert repeated[0] == repeated[1]
+    assert repeated[0] is not repeated[1]
+    assert schema.is_valid(repeated)
+    assert schema.is_valid([repeated, repeated])

@@ -37,6 +37,7 @@ def test_length_bounds_on_a_list() -> None:
     assert not schema.is_valid([1])
 
 
+# THEORY: a-refinement-narrows-its-base
 def test_predicate_marker() -> None:
     even = Validator(Annotated[int, at.Predicate(lambda x: x % 2 == 0)])
     assert even.is_valid(4)
@@ -424,3 +425,42 @@ def test_a_marker_is_read_however_its_type_keeps_its_names() -> None:
     at_most = Validator(Annotated[int, upper])
     assert at_most.is_valid(9)
     assert not at_most.is_valid(10)
+
+
+# THEORY: a-refinement-narrows-its-base
+def test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque() -> None:
+    """A refinement is a subset of its base, and a predicate is a black box.
+
+    Both halves are the same sentence read in two directions. A refinement is
+    `{x in base | the constraints hold}`, so it is below its base whatever the
+    constraints say -- including a predicate nothing can reason about, since a
+    subset does not depend on *which* subset. And the base is not below the
+    refinement, because that would need the predicate to hold of every value,
+    which is the question a runtime validator declines rather than guesses at.
+
+    A predicate is compared by the object carrying it. Two refinements over one
+    predicate are one set and are decided so; two over separately written
+    predicates that happen to agree are undecided, because deciding them means
+    deciding whether two Python callables agree everywhere.
+    """
+    positive = at.Predicate(lambda value: value > 0)
+    refined = Validator(Annotated[int, positive])
+
+    assert refined.relation_to(int) == "subset"
+    assert refined.is_subtype_of(int)
+    # The other way is a question about the predicate, which is declined
+    # rather than answered: `undecided` is not `not_subset`, and the
+    # difference is what tells a caller the procedure did not look.
+    assert Validator(int).relation_to(refined) == "undecided"
+
+    # The same predicate object is the same set.
+    assert refined.relation_to(Annotated[int, positive]) == "subset"
+    assert refined.is_equivalent(Annotated[int, positive])
+    # A second predicate that agrees on every value is still a second callable.
+    twin = at.Predicate(lambda value: value > 0)
+    assert refined.relation_to(Annotated[int, twin]) == "undecided"
+
+    # And the narrowing is a set the walk reads, not only a relation.
+    assert refined.is_valid(1)
+    assert not refined.is_valid(0)
+    assert not refined.is_valid("a")

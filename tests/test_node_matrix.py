@@ -348,6 +348,7 @@ def _ir_variants() -> set[str]:
     return names
 
 
+# THEORY: the-ir-matches-its-producers
 def test_the_node_table_covers_every_ir_variant() -> None:
     variants = _ir_variants()
     # The parse itself is a detector, so it must be shown to have read something:

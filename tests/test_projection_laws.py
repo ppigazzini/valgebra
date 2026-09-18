@@ -123,7 +123,7 @@ def test_a_clause_is_read_the_same_with_or_without_a_field_beside_it() -> None:
 # --- Where the law does not hold ------------------------------------------
 
 
-# THEORY: open-and-close-read-the-region
+# THEORY: open-and-close-are-term-rewrites
 def test_opening_is_not_a_function_of_the_set() -> None:
     """Two terms denoting one set open into two, and a value says which.
 
