@@ -380,6 +380,37 @@ def test_a_page_spelling_the_right_ledger_count_passes(
     assert lint.check_ledger_table() == []
 
 
+def test_a_ledger_named_in_prose_alone_has_no_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mention is not a row, which is the rule this table is about.
+
+    The table is what a reader consults, and the check that holds it to the
+    tree searched the whole page for each name. A ledger the page discusses in
+    a paragraph -- which every ledger worth having is discussed in somewhere --
+    then satisfied the rule without appearing in the table at all, so the table
+    could fall arbitrarily far behind the tree while the lint stayed green.
+    This is the sibling of `test_lane_coverage.py`'s rule that a script named
+    in a comment is not a script anything runs.
+    """
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    _synthetic_ledgers(tmp_path, 4, "Four")
+    page = tmp_path / "docs" / "dev" / "08-testing.md"
+    marker = "LEDGER" + ":"
+    (tmp_path / "tests" / "test_ledger_prose.py").write_text(
+        f'"""A ledger.\n\n{marker} something\n"""\n'
+    )
+    page.write_text(
+        page.read_text().replace("Four of them:", "Five of them:")
+        + "\nThe fifth is `tests/test_ledger_prose.py`, discussed here only.\n"
+    )
+
+    problems = lint.check_ledger_table()
+    assert any("test_ledger_prose.py" in problem for problem in problems), (
+        f"a ledger named in prose passed as a row: {problems}"
+    )
+
+
 def _synthetic_products(root: Path, marked: list[str], listed: list[str]) -> None:
     """Write product-marked tests and a products table naming `listed`.
 

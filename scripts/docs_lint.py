@@ -545,10 +545,18 @@ def check_ledger_table() -> list[str]:
         if "LEDGER:" in path.read_text(encoding="utf-8")
     }
     text = page.read_text(encoding="utf-8")
+    # A *row*, not a mention. Every ledger worth having is discussed in a
+    # paragraph somewhere on this page, so a rule searching the whole text is
+    # satisfied by the discussion and the table can fall behind the tree
+    # without the lint noticing. A row is a table line, which is a line that
+    # starts with the column separator.
+    rows = "\n".join(
+        line for line in text.splitlines() if line.lstrip().startswith("|")
+    )
     problems = [
         f"docs/dev/08-testing.md: tests/{name} is a ledger with no row"
         for name in sorted(declared)
-        if name not in text
+        if name not in rows
     ]
     listed = set(re.findall(r"`tests/(test_\w+\.py)`", text))
     problems += [
