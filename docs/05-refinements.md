@@ -67,6 +67,31 @@ is one `is_subtype_of` pays for.
 | `Regex(p)` | the string fully matches the regex `p` | `string_pattern_mismatch` |
 | `Predicate(f)` | `f(value)` is truthy | `predicate_failed` |
 
+### Which base each marker can be asked of
+
+A marker narrows a base by asking its values a question, so the base has to be
+one the question can be put to. This is which:
+
+| Narrowing | The bases whose values answer it |
+| --- | --- |
+| `MinLen`, `MaxLen` | `str`, `bytes`, `list`, `tuple`, `set`, `frozenset`, `dict` — the kinds with a length |
+| `Regex` | `str` — the kind with text for a pattern to match |
+| `MultipleOf` | `bool`, `int`, `float` — the kinds with a number to divide |
+| `Ge`, `Gt`, `Le`, `Lt` | every kind whose values compare **with the bound**: the numbers against a number, `str` against `str`, `bytes` against `bytes`, a list against a list, a tuple against a tuple, a set or frozenset against a set. Not `None` and not `dict`, whose values compare with nothing |
+| `Predicate` | any base: the predicate is a black box and the value is handed to it whole |
+
+A bound is the row to read twice, because it is the only marker whose answer
+depends on **both** values. `Annotated[set[int], Ge(0)]` is refused although a
+set has an order of its own, because a set and an integer do not compare;
+`Annotated[set[int], Ge({1})]` is the same base narrowed by a bound its values
+can be asked about, and it admits the supersets of `{1}`.
+
+A marker put to a base outside its row is refused when the validator is built,
+for the reason above: the check would raise at every value, the walk reads a
+raise as a non-member, and the schema would admit nothing while reading like a
+narrowing. `tests/test_constraint_matrix.py` drives the whole of this table,
+cell by cell.
+
 `Interval` and `Len` expand to the bounds they carry (below), and `Not` wraps a
 predicate. A marker from `annotated_types` that is **not** in this table names a
 constraint valgebra does not check — `Timezone` and `Unit` are the two — and is

@@ -403,21 +403,53 @@ fn each_base_answers_the_constraints_its_values_can() {
             assert!(carries_division(&base) == answer, "divisor on {base:?}");
         }
         // order: the operand's group has to be the base's, because Python
-        // raises across the groups rather than ordering them.
+        // raises across the groups rather than ordering them. This is the one
+        // check that reads *two* values, so the table is a product: every
+        // orderable kind against an operand of its own group and against one of
+        // another, and the two kinds that order against nothing.
         let five = 5i64.into_pyobject(py).expect("an int");
         let word = PyString::new(py, "a");
         let raw = PyBytes::new(py, b"a");
+        let listed = PyList::new(py, [1i64]).expect("a list");
+        let fixed = PyTuple::new(py, [1i64]).expect("a tuple");
+        let members = PySet::new(py, [1i64]).expect("a set");
+        let frozen = PyFrozenSet::new(py, [1i64]).expect("a frozen set");
+        let tuple_seq = Schema::tuple(SeqShape::homogeneous(Schema::Int));
+        let set = Schema::set(Schema::Int);
+        let frozen_set = Schema::frozen_set(Schema::Int);
         for (base, operand, answer) in [
+            // The numbers order with any number, `bool` among them.
             (Schema::Int, five.as_any(), Carries::Yes),
             (Schema::Float, five.as_any(), Carries::Yes),
             (Schema::Bool, five.as_any(), Carries::Yes),
             (Schema::Str, five.as_any(), Carries::No),
             (Schema::Bytes, five.as_any(), Carries::No),
+            // Text with text, bytes with bytes, and neither with the other.
             (Schema::Str, word.as_any(), Carries::Yes),
             (Schema::Int, word.as_any(), Carries::No),
             (Schema::Bytes, raw.as_any(), Carries::Yes),
             (Schema::Str, raw.as_any(), Carries::No),
-            (seq.clone(), five.as_any(), Carries::Maybe),
+            (Schema::Bytes, word.as_any(), Carries::No),
+            // A sequence orders against a sequence of its own container: a list
+            // and a tuple are two kinds to Python's comparison as to this one.
+            (seq.clone(), listed.as_any(), Carries::Yes),
+            (seq.clone(), fixed.as_any(), Carries::No),
+            (seq.clone(), five.as_any(), Carries::No),
+            (tuple_seq.clone(), fixed.as_any(), Carries::Yes),
+            (tuple_seq.clone(), listed.as_any(), Carries::No),
+            // The two set kinds share one order, which is inclusion, so either
+            // spelling of the operand answers for either base.
+            (set.clone(), members.as_any(), Carries::Yes),
+            (set.clone(), frozen.as_any(), Carries::Yes),
+            (frozen_set.clone(), members.as_any(), Carries::Yes),
+            (set.clone(), five.as_any(), Carries::No),
+            // And the two that order against nothing at all: a dict has no
+            // comparison, and `None` compares with no value including itself.
+            (map.clone(), five.as_any(), Carries::No),
+            (map.clone(), word.as_any(), Carries::No),
+            (Schema::NoneType, five.as_any(), Carries::No),
+            // A class says nothing: it may define the comparison itself.
+            (Schema::ANY, five.as_any(), Carries::Maybe),
         ] {
             assert!(
                 carries_order(&base, operand) == answer,

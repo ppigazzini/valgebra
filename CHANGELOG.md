@@ -41,10 +41,20 @@ answer of its own, or a repair to a change not yet released.
 - fix: a mapping opened frees the keys no clause claims
 - fix: a mutant that returned no verdict is a rig fault, not a survivor -- internal
 - fix: a record is decided against the union of records it splits across
+- fix: an order bound is refused where the base and the bound do not compare
 
 -->
 
 ### Fixed
+
+- **An order bound is refused where the base and the bound do not compare.**
+  `Validator(Annotated[None, Ge(0)])`, and the same over a `dict` or a `set`,
+  built a schema that admitted no value at all and reported itself inhabited;
+  each raises `NotImplementedError` naming the order the base cannot be asked.
+  A bound is a question about two values, so the kind of the bound decides the
+  answer with the kind of the base: `Annotated[set[int], Ge(0)]` is refused and
+  `Annotated[set[int], Ge({1})]` admits the supersets of `{1}`. A list, a tuple
+  and a set take a bound of their own kind, which they already ordered against.
 
 - **A record is decided against the union of records it splits across.**
   `Validator({"a": int | str, "b": int | str}).is_subtype_of(...)` over the four

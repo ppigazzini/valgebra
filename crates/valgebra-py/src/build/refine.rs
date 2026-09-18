@@ -9,8 +9,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyBytes, PyDict, PyString, PyTuple, PyType};
-use valgebra_core::{Constraint, Kind, OperandIx, Schema};
+use pyo3::types::{PyBytes, PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple, PyType};
+use valgebra_core::{Constraint, Kind, OperandIx, Schema, SeqKind};
 
 use super::{Pool, build_schema, not_implemented};
 
@@ -169,9 +169,20 @@ pub(super) fn carries_division(base: &Schema) -> Carries {
 
 /// Whether the base's values are ordered against `operand`.
 ///
-/// Python orders numbers with numbers, text with text and bytes with bytes, and
-/// raises across those groups. A bound whose operand is in another group than the
-/// base compares nothing, so the refinement it builds admits nothing.
+/// Python orders numbers with numbers, text with text, bytes with bytes, lists
+/// with lists, tuples with tuples and sets with sets -- and raises across those
+/// groups. A bound whose operand is in another group than the base compares
+/// nothing, so the refinement it builds admits nothing.
+///
+/// Two kinds order against *no* group: `None`, which has no comparison at all,
+/// and `dict`, whose values are unordered however ordered their keys are. A
+/// bound over either names the empty set whatever the operand is, which is why
+/// they answer before the operand is read.
+///
+/// The question is about the **pair**. A base with an order of its own says
+/// nothing on its own: a set is ordered by inclusion and `{1} >= 0` raises all
+/// the same, so a rule reading only the base admits every mismatched bound and
+/// builds the schema that admits nothing.
 pub(super) fn carries_order(base: &Schema, operand: &Bound<'_, PyAny>) -> Carries {
     let by_group = |base: &Schema| carries_order(base, operand);
     if let Some(answer) = carries_through(base, &by_group) {
@@ -186,6 +197,19 @@ pub(super) fn carries_order(base: &Schema, operand: &Bound<'_, PyAny>) -> Carrie
         Schema::Bool | Schema::Int | Schema::Float => number,
         Schema::Str => operand.is_instance_of::<PyString>(),
         Schema::Bytes => operand.is_instance_of::<PyBytes>(),
+        // A sequence orders against a sequence of its own container: a list and
+        // a tuple are two kinds to Python's comparison as much as to this one.
+        Schema::Seq { container, .. } => match container {
+            SeqKind::List => operand.is_instance_of::<PyList>(),
+            SeqKind::Tuple => operand.is_instance_of::<PyTuple>(),
+        },
+        // Sets order by *inclusion*, and the two set kinds share that order:
+        // `frozenset({1}) <= {1}` is a question about membership, not about
+        // which of the two constructors built the operand.
+        Schema::Coll { .. } => {
+            operand.is_instance_of::<PySet>() || operand.is_instance_of::<PyFrozenSet>()
+        }
+        Schema::NoneType | Schema::KeyedMap { .. } => return Carries::No,
         _ => return Carries::Maybe,
     };
     if matches { Carries::Yes } else { Carries::No }

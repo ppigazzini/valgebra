@@ -597,6 +597,24 @@ PLANTS = (
         ),
     ),
     Plant(
+        # The failure the ledger is for: a constraint added to the algebra and
+        # put to no kind. A marker the frontend cannot ask of a base builds a
+        # schema admitting nothing and reporting itself inhabited, which is
+        # findable only by a caller who tries every value -- so the product of
+        # the markers with the kinds is what has to be driven, and a column
+        # nobody wrote a cell for is the state this refuses.
+        "tests/test_constraint_matrix.py",
+        ("crates/valgebra-core/src/ir.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/ir.rs",
+            "pub enum Constraint {\n",
+            "pub enum Constraint {\n"
+            "    /// A constraint this ledger has no cell for.\n"
+            "    Planted,\n",
+        ),
+    ),
+    Plant(
         # The failure the ledger is for: a node added to the algebra and asked
         # against nothing. The relation suites each pick the pairs they are
         # about, so a variant nobody wrote a pair for is a variant whose whole
