@@ -645,15 +645,22 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
 
 - **A line coverage floor cannot see a wrong answer.** It says a line ran, not
   that anything checked what it did. That is what the mutation sweeps are for.
-- **A per-file coverage figure is part measurement and part artifact.** A
-  `const` initialiser is a region llvm-cov instruments and the compiler
-  evaluates, so it is never executed at runtime and its span reaches back over
-  the doc comment above it and the blank line below. In a file that documents
-  its constants the deficit is large and no test can close it: `decision.rs`
-  reports 49.62% of lines, and of the 249 lines counted as unrun, **217 are
-  comments, blanks or attributes and 32 are code**. Read a file's number as a
-  ceiling on how much it can say, and read a *change* in it rather than its
-  level.
+- **A coverage figure read from a shared target directory is not a figure.**
+  `cargo llvm-cov` merges the profile against every instrumented object the
+  directory holds, and an object built from an earlier tree contributes a
+  mapping with zero counts for every function whose body has changed since. The
+  result reads as unexecuted code and is not: on one machine `decision.rs`
+  reported half its regions covered, with seven hundred of them landing on doc
+  comments, blank lines and `use` items, while a fresh `CARGO_TARGET_DIR` on the
+  same toolchain read the same file at 99.45% and the lane total at 97.34%.
+  The tell is the report's function list, which named four copies of the crate
+  in the shared run and two in the clean one.
+
+    So each lane cleans before it measures, and a figure taken by hand is taken
+    the same way. The binding lane has the same trap one layer down: `maturin
+    develop` into a directory that already holds the plain extension reuses it,
+    the suite then runs against a module with no coverage map, and the lane
+    reads twenty points low.
 
 - **A mutation score is a statement about one test command.** Neither sweep runs
   pytest, so a survivor in either is a gap in the *Rust-side* corpus.

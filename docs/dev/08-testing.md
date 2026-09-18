@@ -412,6 +412,17 @@ a number now: `tests/test_pytest_sweep_scope.py` holds the two configurations to
 a partition of the binding, so a file excused to the suite and examined nowhere
 fails.
 
+**Some arms only a free-threaded interpreter reaches, and no lane runs one.**
+The walk snapshots a container and compares the snapshot against what it read,
+because the container can move underneath the reading -- and under a global
+interpreter lock another thread cannot be the one that moves it. Six tests skip
+for that reason, the arms they would drive sit in the sequence and record walks,
+and the binding's coverage lane runs on a single-threaded release. So those
+arms are executed on the free-threaded leg of the python matrix and *measured*
+nowhere: the figure the lane prints is a figure about the interpreter it ran on.
+Naming that here is the honest reading, because the alternative -- a second
+instrumented build per push -- buys a number for arms the matrix already drives.
+
 **A coverage floor is read with its scope or it misleads.** The Python package
 floor covers the re-export package, which is a hundred-odd lines; the extension
 the Python suite exercises is Rust and is measured by the other two lanes.
@@ -442,6 +453,17 @@ statements has untested code. So the rule is to compare *a file's* figure
 between the two runs and read the annotated report for that file, never to
 compare totals -- a total absorbs the artefact and the hole equally well, and
 says the same number for both.
+
+**And one floor per file beside the scope-wide one.** A total absorbs a hole
+the size of a file: half of the decision procedure going unreached moves a
+scope-wide figure by about the width of the tolerance any figure carries
+between machines, so the two readings are indistinguishable in a total and only
+one of them is a defect. `scripts/branch_coverage.json` therefore records a
+region floor per file beside the branch figure, ratcheted the same way, and a
+file that loses its tests fails under its own name. Both directions: a floor
+for a file the measurement no longer carries fails too, since a scope that
+quietly stops measuring a file would otherwise read as a file that never
+regressed.
 
 And a nightly lane counts the **arms**. A region is a span the compiler emits,
 and a two-armed branch inside one span contributes one region — so the core reads

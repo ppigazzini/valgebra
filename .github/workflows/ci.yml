@@ -190,17 +190,24 @@ jobs:
       # the 8,658 lines the figure was computed over were test code. Excluded,
       # the core reads 98.03% of lines and 97.15% of regions.
       #
-      # Both floors sit five points below the measurement, so erosion fails the
-      # lane rather than eroding silently, and the gap is small enough that
-      # losing a file's worth of tests is caught. Ratchet up with the
-      # measurement, not ahead of it. The region floor is the one that notices a
-      # branch with an arm nobody reached: a line counts as covered having taken
-      # one of two, and a region does not. `tests/test_coverage_scope.py` holds
-      # this scope to the corpus files the tree has.
+      # Both floors sit about a point below the measurement, which is the
+      # tolerance a figure carries between machines and no more: five points of
+      # slack is a file's worth of tests lost without the lane noticing.
+      # Ratchet up with the measurement, not ahead of it. The region floor is
+      # the one that notices a branch with an arm nobody reached: a line counts
+      # as covered having taken one of two, and a region does not.
+      # `tests/test_coverage_scope.py` holds this scope to the corpus files the
+      # tree has.
+      #
+      # Cleaned first. `cargo llvm-cov` merges the profile against every
+      # instrumented object the target directory holds, and one built from an
+      # earlier tree contributes zero counts for every function whose body has
+      # changed -- which reads as unexecuted code and is not.
+      - run: cargo llvm-cov clean --workspace
       - run: >
           cargo llvm-cov nextest --locked --workspace --summary-only
           --ignore-filename-regex 'valgebra-py|/(laws|index_laws)\.rs$|tests\.rs$'
-          --fail-under-lines 93 --fail-under-regions 92
+          --fail-under-lines 97 --fail-under-regions 96
 
   binding-coverage:
     name: binding coverage
@@ -263,13 +270,15 @@ jobs:
           # lines and 93.61% of regions.
           #
           # The region floor is the one that notices a branch with an arm nobody
-          # reached, and it is three and a half points below the line figure
-          # here. `tests/test_coverage_scope.py` holds this scope to the corpus
-          # files the tree has, in both directions.
+          # reached, and it is three points below the line figure here. Both sit
+          # about a point under the measurement, which is the tolerance a figure
+          # carries between machines and no more.
+          # `tests/test_coverage_scope.py` holds this scope to the corpus files
+          # the tree has, in both directions.
           cargo llvm-cov report --summary-only \
             --ignore-filename-regex \
             'valgebra-core|valgebra-py/src/workload\.rs|/interpreter\.rs$|tests\.rs$' \
-            --fail-under-lines 95 --fail-under-regions 92
+            --fail-under-lines 96 --fail-under-regions 93
 
   python:
     # The trailing arm is not decoration: one leg of nine checks out the whole
@@ -1295,6 +1304,10 @@ jobs:
       # The same scope the merge gate's line and region floors read, so the
       # three figures are about one set of files. `tests/test_coverage_scope.py`
       # holds that scope to the corpus files the tree has.
+      # Cleaned first, for the reason the merge gate's coverage lane is: a
+      # profile merged against an object built from an earlier tree reads as
+      # unexecuted code and is not.
+      - run: cargo +${{ env.FUZZ_NIGHTLY }} llvm-cov clean --workspace
       - name: Measure the branches the core's tests reach
         run: >
           cargo +${{ env.FUZZ_NIGHTLY }} llvm-cov --branch --locked

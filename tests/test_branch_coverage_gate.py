@@ -34,8 +34,21 @@ EXIT_FAIL = 1
 EXIT_CANNOT_RUN = 2
 
 
-def _report(tmp_path: Path, count: int, covered: int) -> Path:
-    """Write a coverage report holding one file with these branch counts."""
+def _report(
+    tmp_path: Path,
+    count: int,
+    covered: int,
+    *,
+    regions: tuple[int, int] | None = None,
+) -> Path:
+    """Write a coverage report holding one file with these counts.
+
+    Regions as well as branches, because the record carries a floor per file
+    and reads the regions for it. They default to fully covered, so a test
+    about the scope-wide branch figure is not also a test about the per-file
+    one.
+    """
+    region_count, region_covered = regions or (count, count)
     path = tmp_path / "branches.json"
     path.write_text(
         json.dumps(
@@ -49,7 +62,11 @@ def _report(tmp_path: Path, count: int, covered: int) -> Path:
                                     "branches": {
                                         "count": count,
                                         "covered": covered,
-                                    }
+                                    },
+                                    "regions": {
+                                        "count": region_count,
+                                        "covered": region_covered,
+                                    },
                                 },
                             }
                         ]
@@ -71,6 +88,19 @@ def _run(args: Sequence[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _own_record(tmp_path: Path, floor: float, files: dict[str, float]) -> Path:
+    """Write a record of this test's own, for a report of this test's own.
+
+    The per-file floors are a *scope*: a synthesised report of one file against
+    the tree's thirty is a scope that changed rather than a figure that fell,
+    and the gate says so. So a test about the scope-wide figure supplies a
+    record naming the file its report carries.
+    """
+    path = tmp_path / "record.json"
+    path.write_text(json.dumps({"floor": floor, "files": files}), encoding="utf-8")
+    return path
+
+
 def test_a_figure_at_the_floor_passes(tmp_path: Path) -> None:
     """The recorded floor is the tree's, so the tree's own report passes."""
     floor = float(
@@ -81,7 +111,8 @@ def test_a_figure_at_the_floor_passes(tmp_path: Path) -> None:
     # One tenth of a point above the floor, rounded up, so the report is at or
     # above it whatever the recorded number's decimals are.
     report = _report(tmp_path, 10_000, int(floor * 100) + 1)
-    done = _run([str(report)])
+    record = _own_record(tmp_path, floor, {"ir.rs": 0.0})
+    done = _run([str(report), "--record", str(record)])
     assert done.returncode == EXIT_OK, done.stdout + done.stderr
     assert "at or above the floor" in done.stdout
 
@@ -92,6 +123,28 @@ def test_a_figure_below_the_floor_fails(tmp_path: Path) -> None:
     done = _run([str(report)])
     assert done.returncode == EXIT_FAIL, done.stdout + done.stderr
     assert "below the recorded floor" in done.stdout
+
+
+def test_a_file_below_its_own_floor_fails(tmp_path: Path) -> None:
+    """The refusal a total cannot make: one file's regions, gone.
+
+    The scope-wide figure here is comfortably above its floor -- every branch
+    covered -- and the file has lost two thirds of its regions. A gate reading
+    the total alone reports this tree green, which is what the per-file floors
+    are for.
+    """
+    report = _report(tmp_path, 1000, 1000, regions=(1000, 300))
+    record = _own_record(tmp_path, 0.0, {"ir.rs": 90.0})
+    done = _run([str(report), "--record", str(record)])
+    assert done.returncode == EXIT_FAIL, done.stdout + done.stderr
+    assert "below its floor" in done.stdout
+
+    # And the other direction: a floor for a file the measurement does not
+    # carry, which is a scope that quietly stopped measuring one.
+    stale = _own_record(tmp_path, 0.0, {"ir.rs": 0.0, "gone.rs": 0.0})
+    done = _run([str(report), "--record", str(stale)])
+    assert done.returncode == EXIT_FAIL, done.stdout + done.stderr
+    assert "does not carry" in done.stdout
 
 
 def test_a_report_that_cannot_be_read_is_not_a_pass(tmp_path: Path) -> None:

@@ -387,6 +387,51 @@ fn a_meet_with_a_negated_union_answers_as_the_spelled_out_meet() {
     );
 }
 
+/// A negated union too wide to expand answers *unknown*, never inhabited.
+///
+/// The polarity carries a complement the bound cannot rebuild into a union, and
+/// every reading of such a form has to say so rather than guess. Emptiness is
+/// the reading where guessing is expensive in one direction: a lattice reported
+/// empty is a lattice a difference is proved against, so an unexpanded negation
+/// read as "empty" would prove an inclusion out of a refusal to look.
+///
+/// Driven under an allowance small enough that the expansion refuses, which is
+/// the same thing the bound does on a wide union and is reachable without one.
+#[test]
+fn a_negation_the_bound_cannot_expand_answers_unknown() {
+    let closed = |name: &str, value: i64| {
+        MapLattice::record(
+            vec![(Label::str(name), IntSet::just(value), false)],
+            core::iter::empty(),
+        )
+        .expect("a one-field record")
+    };
+    let wide = closed("a", 1)
+        .union(&closed("b", 2))
+        .expect("two records join");
+
+    // Unbudgeted, the complement is a union and the verdict is a proof.
+    assert_eq!(wide.complement().emptiness(), Verdict::Inhabited);
+
+    // Under an allowance the expansion cannot pay for, the negation is carried
+    // and the reading declines.
+    budget::under(0, || {
+        let held = wide.complement();
+        assert_eq!(
+            held.emptiness(),
+            Verdict::Unknown,
+            "a negation nothing expanded is neither empty nor inhabited"
+        );
+        // And it still answers about a dict, because `holds` reads the polarity
+        // rather than the expansion.
+        assert!(
+            !held.holds(&[at("a", 1)]),
+            "a dict the union holds is outside"
+        );
+        assert!(held.holds(&[at("a", 2)]), "and one it does not is inside");
+    });
+}
+
 // --- The lattice laws, over the dicts --------------------------------------
 //
 // Every other component of the descriptor holds these as a property; this one

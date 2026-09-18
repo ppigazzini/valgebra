@@ -67,14 +67,20 @@ cargo clippy --all-targets --all-features -- -D warnings
 # The workspace links libpython: a virtual environment's interpreter is not on
 # the default loader path, and a test binary that cannot find it does not start.
 # `scripts/gate.py` sets the same two variables for the steps it runs.
-export PYO3_PYTHON="$(uv run python -c 'import sys; print(sys.executable)')"
-export LD_LIBRARY_PATH="$(uv run python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):${LD_LIBRARY_PATH:-}"
+export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
+export LD_LIBRARY_PATH="$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):${LD_LIBRARY_PATH:-}"
 cargo test
-maturin develop --uv                    # after any Rust change
-ruff check . && ruff format --check .
-ty check
-pytest
+uv run --no-sync maturin develop --uv   # after any Rust change
+uv run --no-sync ruff check . && uv run --no-sync ruff format --check .
+uv run --no-sync ty check
+uv run --no-sync pytest
 ```
+
+**`--no-sync` is not a nicety.** A bare `uv run` re-resolves the environment
+first, and that uninstalls the editable build `maturin develop` put there and
+replaces it with the wheel from the lock. Every command after it then tests a
+different module from the one just built, which reads as a change that did
+nothing. Sync deliberately -- `uv sync --locked` -- and build after it.
 
 Those are the fast ones, and they run in **your** clone. Before pushing, run the
 merge gate's own steps in a clone shaped like the runner's:
