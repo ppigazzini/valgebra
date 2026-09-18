@@ -361,23 +361,13 @@ the shape. What is left below is what the descriptor cannot hold.
     its clauses claim cover every key with one value between them, which is one
     catch-all clause rather than two.
 
-- **Recursion, past one unfolding.** A reference is a cycle and a finite set
-  representation has no room for one, so a recursive schema is lowered by
-  unfolding its body **once** and putting a bound where the reference was — the
-  top where the schema is used positively, the bottom under a complement, which
-  is what keeps a difference sound. That decides everything about the kinds a
-  fixpoint admits: `bytes` shares no value with a JSON value, and `bytes` is
-  below its complement. What one unfolding does not reach is a relation that
-  needs the body *twice* — a fixpoint below a differently-written fixpoint whose
-  bodies only agree after two steps — and there the coinductive rule is the
-  whole of the answer.
-
-    A fixpoint as the **supertype** costs one thing more, and what it costs is a
-    *refutation* rather than an inclusion. `a ≤ b` is `a ∧ ¬b = ∅`, so the
-    supertype is where a schema stands under a complement, and a reference
-    there is lowered to the bottom. The difference then contains the value that
-    refutes the inclusion without being proved to contain it, so the answer is
-    "not proven" where a value says plainly that it is false:
+- **Recursion, past one unfolding.** A fixpoint as the **supertype** costs a
+  *refutation* rather than an inclusion, and that is the sharper half. `a ≤ b`
+  is `a ∧ ¬b = ∅`, so the supertype is where a schema stands under a
+  complement, and a reference there is lowered to the bottom. The difference
+  then contains the value that refutes the inclusion without being proved to
+  contain it, so the answer is "not proven" where a value says plainly that it
+  is false:
 
     ```python
     from valgebra import Validator, complement, recursive, union
@@ -388,6 +378,34 @@ the shape. What is left below is what the descriptor cannot hold.
     # and the relation declines rather than refuting
     assert Validator(complement(int)).relation_to(chain) == "undecided"
     ```
+
+    What the **rules** reach is narrower than that and is reached: a branch of a
+    union the subject shares no value with is dropped before the rest is asked,
+    so a chain of records beside a `None` branch is refuted by the record branch
+    alone. The declines that remain are the ones where dropping a branch would
+    itself need a meet carrying a reference decided empty.
+
+    Branches are dropped where one of them **refutes**, which is the answer the
+    narrowing carries back from the branch it leaves. A union no branch of
+    which refutes narrows to a smaller union of declines, so the readings that
+    drop branches -- a meet per branch, on the path already headed for the set
+    representation -- are not spent on it, and the pair goes to that
+    representation instead. What that gives up is the union whose branches the
+    subject shares no value with and which none of them refutes: it is outside
+    the union and is answered `"undecided"`. Reaching for it on every union
+    costs the decision path 36% against 0.14% asked of the unions a branch
+    refutes, measured on the relation matrix.
+
+    The other half is the lowering. A reference is a cycle and a finite set
+    representation has no room for one, so a recursive schema is lowered by
+    unfolding its body **once** and putting a bound where the reference was —
+    the top where the schema is used positively, the bottom under a complement,
+    which is what keeps a difference sound. That decides everything about the
+    kinds a fixpoint admits: `bytes` shares no value with a JSON value, and
+    `bytes` is below its complement. What one unfolding does not reach is a
+    relation that needs the body *twice* — a fixpoint below a
+    differently-written fixpoint whose bodies only agree after two steps — and
+    there the coinductive rule is the whole of the answer.
 
 - **An attribute record, on either side.** A `Protocol` with a data member, and
   a class with declared attributes, ask whether a *value* carries a name. That

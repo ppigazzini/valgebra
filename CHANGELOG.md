@@ -42,10 +42,19 @@ answer of its own, or a repair to a change not yet released.
 - fix: a mutant that returned no verdict is a rig fault, not a survivor -- internal
 - fix: a record is decided against the union of records it splits across
 - fix: an order bound is refused where the base and the bound do not compare
+- fix: a union branch sharing no value with the subject decides nothing
 
 -->
 
 ### Fixed
+
+- **A union branch sharing no value with the subject decides nothing.**
+  `Validator(chain).relation_to(union(None, {"next": int}))` answered
+  `"undecided"` and answers `"not_subset"`, naming the link the supertype
+  refuses. A branch the subject cannot meet is dropped before the rest is
+  asked, so an inclusion refuted by one branch is refuted rather than left
+  open: the rules refute against a single supertype and have no arm that
+  refutes against a union.
 
 - **An order bound is refused where the base and the bound do not compare.**
   `Validator(Annotated[None, Ge(0)])`, and the same over a `dict` or a `set`,

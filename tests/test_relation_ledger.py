@@ -227,7 +227,6 @@ DECLINED_THOUGH_A_VALUE_DECIDES: dict[tuple[str, str], str] = {
     ("Seq", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
     ("Coll", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
     ("KeyedMap", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("KeyedMap", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,
     ("AttrRecord", "Nothing"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
     ("AttrRecord", "NoneType"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
     ("AttrRecord", "Bool"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,

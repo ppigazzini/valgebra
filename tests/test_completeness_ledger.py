@@ -61,6 +61,12 @@ from valgebra import (
 # A recursive schema, reused below to record a reflexivity hole.
 _RECURSIVE = recursive(lambda t: union(None, {"value": int, "next": t}))
 
+# A linked chain, and the same chain one optional field wider. The two are two
+# sets -- the wider admits a link carrying `v` -- and the value that says so
+# sits at the first link rather than past an unfolding.
+_CHAIN = recursive(lambda t: union(None, {"next": t}))
+_CHAIN_WITH_A_FIELD = recursive(lambda t: union(None, {"next": t, "v?": int}))
+
 
 class _Colour(enum.Enum):
     """An enumeration whose members compare by identity, which is the default."""
@@ -172,6 +178,13 @@ def _check(operation: str, left: object, right: object) -> None:
     compiled = Validator(left)
     if operation == "subtype":
         assert compiled.is_subtype_of(right)
+    elif operation == "refutes":
+        # A refutation is an answer a caller acts on as much as a proof is:
+        # `not_subset` names a value of the subject the supertype refuses, and
+        # `undecided` says the procedure did not look. A ledger that only ever
+        # asserted proofs would let every refutation decay into a decline
+        # without a row failing.
+        assert compiled.relation_to(right) == "not_subset"
     elif operation == "equivalent":
         assert compiled.is_equivalent(right)
     elif operation == "empty":
@@ -581,6 +594,28 @@ _DECIDED = [
         ),
         id="map:wider-record<=its-corners",
     ),
+    # A refutation the rules reach on one branch of a union and must not lose on
+    # the others. A branch the subject shares no value with decides nothing
+    # about the inclusion, so leaving it in the union leaves a decline where the
+    # remaining branch refutes -- and the value that refutes is one the walk
+    # reads, listed beside each row.
+    #
+    # Each needs no second unfolding: the witness sits at the first level, which
+    # is what separates these from the fixpoint pairs the descriptor declines.
+    pytest.param("refutes", _CHAIN_WITH_A_FIELD, _CHAIN, id="mu:wider-chain!<=chain"),
+    pytest.param(
+        "refutes",
+        union(None, {"next": _CHAIN_WITH_A_FIELD, "v?": int}),
+        _CHAIN,
+        id="mu:unfolded-wider-chain!<=chain",
+    ),
+    pytest.param(
+        "refutes",
+        _CHAIN,
+        union(None, {"next": int}),
+        id="mu:chain!<=none-or-int-next",
+    ),
+    pytest.param("refutes", _CHAIN, int, id="mu:chain!<=int"),
     # Inclusion in a complement, which is `A ∩ B = ∅` and nothing structural: a
     # complement offers no shape on the right to recurse into.
     pytest.param(
@@ -773,15 +808,41 @@ _DECIDED = [
 def _missed(why: str) -> pytest.MarkDecorator:
     """Mark a relation that holds and is not decided, with the limit that leaves it.
 
-    `_LEDGERED` is empty: every relation this ledger enumerates is decided. The
-    marker stays because the ledger fails in both directions -- a relation that
-    regresses to conservatism fails here, and it is this marker that records the
-    regression with the reason for it rather than deleting the row.
+    `_LEDGERED` carries the relations this ledger enumerates and the procedure
+    does not decide, each with the limit that leaves it. The mark is strict, so
+    closing one fails here and forces the row onto the decided list rather than
+    letting an improvement pass unnoticed -- and a relation that regresses to
+    conservatism fails the same way, in the other direction.
     """
     return pytest.mark.xfail(strict=True, reason=why)
 
 
-_LEDGERED: list[object] = []
+_LEDGERED: list[object] = [
+    # The refutation above, one level in. `{"a": chain, "b": int}` is outside
+    # both branches -- the first is closed and declares no `b`, the second gives
+    # `b` a `str` -- and the value that says so is a dict with a chain at `a` and
+    # an integer at `b`. Dropping the first branch needs the two records proved
+    # to share no value, which is a meet whose emptiness the rules decide only
+    # where they can read the fields: a field holding a fixpoint is a reference,
+    # and the meet's emptiness is then a question about the unfolding.
+    #
+    # The same shape with `int` at `a` is decided and sits on the list above,
+    # which is what makes this row about the fixpoint rather than about records.
+    pytest.param(
+        "refutes",
+        {"a": _CHAIN, "b": int},
+        union({"a": _CHAIN}, {"a": _CHAIN, "b": str}),
+        id="mu:record-with-a-fixpoint-field!<=its-siblings",
+        marks=_missed(
+            "a branch is dropped where the subject shares no value with it, and "
+            "the two records here share none -- but proving that asks whether a "
+            "meet carrying a reference in a field is empty, which the rules "
+            "leave open and no finite set representation holds. The route is "
+            "the record rule reading required-ness against the other side's "
+            "closedness without descending into the fields at all."
+        ),
+    ),
+]
 
 
 # THEORY: an-exhaustible-procedure-is-searched, structural-rather-than-reduction

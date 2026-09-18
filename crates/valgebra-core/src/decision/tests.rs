@@ -4749,6 +4749,61 @@ fn an_assumption_is_read_as_the_pair_it_is() {
     );
 }
 
+// THEORY: the-decision-has-three-answers
+/// A union narrowed to one branch carries that branch's refutation.
+///
+/// `A ⊆ X ∪ Y` with `A ∩ Y = ∅` is `A ⊆ X`, and the branch left over answers
+/// for the whole union in both directions. The refutation is the direction that
+/// needs the narrowing: the rules refute against a single supertype and carry
+/// no arm that refutes against a union, so a subject handed the branch it has
+/// left is refuted where the same subject handed a union of that one branch
+/// comes back undecided.
+///
+/// The branch that remains is one the subject *meets*, because a branch it
+/// shares no value with is dropped by the same pass and the two arms answer
+/// for different reasons. `{"a": int}` and `{"a": bool}` share every dict whose
+/// `a` is a bool, so neither drops the other, and the wider one is still not
+/// below the narrower.
+#[test]
+fn a_union_narrowed_to_one_branch_refutes_where_that_branch_does() {
+    let relation = |sub: &Schema, sup: &Schema| {
+        let budget = Cell::new(DECISION_BUDGET);
+        sub.subtype_relation(sup, &NoLeafRelations, &[], &budget)
+    };
+    let record = |ty: Schema| closed(vec![field("a", ty, true)]);
+    let subject = record(Schema::Int);
+
+    assert_eq!(
+        relation(&subject, &record(Schema::Bool)),
+        Relation::Fails,
+        "the branch alone refutes, which is what the narrowing has to keep"
+    );
+    assert_eq!(
+        relation(
+            &subject,
+            &Schema::union([record(Schema::Bool), Schema::NoneType])
+        ),
+        Relation::Fails,
+        "and the `None` branch shares no value with a record, so it drops out"
+    );
+    assert_eq!(
+        relation(
+            &subject,
+            &Schema::union([record(Schema::Str), Schema::NoneType])
+        ),
+        Relation::Fails,
+        "and a branch that refutes on the field's kind rather than its width"
+    );
+    assert_eq!(
+        relation(
+            &subject,
+            &Schema::union([record(Schema::Int), Schema::NoneType])
+        ),
+        Relation::Holds,
+        "a branch the subject meets is not dropped"
+    );
+}
+
 /// The width of the decided fragment is the allowance, and the difference is
 /// what spends it.
 ///
