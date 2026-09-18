@@ -41,10 +41,14 @@ RECORD = ROOT / "scripts" / "use_case_ledger.json"
 STUB = ROOT / "python" / "valgebra" / "_valgebra.pyi"
 PACKAGE = ROOT / "python" / "valgebra" / "__init__.py"
 IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
-#: Where a code is written: the walk that reports one, and the two entries that
-#: report a document the parser refused.
+#: Where a code is written: the walk that reports one -- its own module beside
+#: the directory of parts, since a module file sitting next to a directory of
+#: the same name is outside a scan that names only the directory -- and the
+#: three entries that report a document the parser refused, the call boundary
+#: and the report.
 _EMITTERS = (
     ROOT / "crates" / "valgebra-py" / "src" / "check",
+    ROOT / "crates" / "valgebra-py" / "src" / "check.rs",
     ROOT / "crates" / "valgebra-py" / "src" / "input.rs",
     ROOT / "crates" / "valgebra-py" / "src" / "validator.rs",
     ROOT / "crates" / "valgebra-py" / "src" / "errors.rs",

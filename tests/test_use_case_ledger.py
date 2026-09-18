@@ -52,15 +52,6 @@ ROOT = Path(__file__).resolve().parent.parent
 STUB = ROOT / "python" / "valgebra" / "_valgebra.pyi"
 PACKAGE = ROOT / "python" / "valgebra" / "__init__.py"
 IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
-#: Where a code is written: the walk that reports one, and the two entries that
-#: report a document the parser refused.
-_EMITTERS = (
-    ROOT / "crates" / "valgebra-py" / "src" / "check",
-    ROOT / "crates" / "valgebra-py" / "src" / "input.rs",
-    ROOT / "crates" / "valgebra-py" / "src" / "validator.rs",
-    ROOT / "crates" / "valgebra-py" / "src" / "errors.rs",
-)
-
 #: Cells the product suite does not name, each with the reason it does not.
 #:
 #: Read from `scripts/use_case_ledger.json` rather than written here, so the
