@@ -16,6 +16,15 @@ So the scope is written down here, in both directions:
   moves takes its exclusion with it rather than leaving a pattern matching
   nothing.
 
+A third scope is read here for the same reason, one measurement over. Coverage
+counts the lines a suite *reached*; it says nothing about what those suites
+assert. `tests/test_denotation.py` is the one that holds the walk to an
+independent statement of the denotation -- a predicate sharing none of the
+frontend -- and its reach is its generator. A refinement kind the generator
+never builds is an arm nothing independent reads, and a generator that never
+builds a shape reports no failure about it, so the kinds are read from
+`Constraint` in `ir.rs` and held to the leaves that file lists.
+
 And both lanes are held to enforcing a **region** floor beside the line floor.
 A line is covered when any part of it ran, so a line with two arms counts as
 covered having taken one; the region figure is the one that notices the arm
@@ -314,3 +323,72 @@ def test_no_coverage_lane_runs_a_free_threaded_interpreter() -> None:
             f"{name} names a free-threaded interpreter ({versions}), so the "
             "testing page's paragraph about arms no lane measures is stale"
         )
+
+
+# --- The denotation generator's scope, held to the algebra -------------------
+
+IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
+DENOTATION = ROOT / "tests" / "test_denotation.py"
+
+_CONSTRAINTS = re.compile(
+    r"^pub enum Constraint \{$(.*?)^\}$", re.DOTALL | re.MULTILINE
+)
+_VARIANT = re.compile(r"^    ([A-Z][A-Za-z]*)[ ({,]", re.MULTILINE)
+
+#: The leaves the denotation generator draws a refinement from, read as the
+#: kind each names. Read from the source rather than imported: a product test
+#: module is not this one's to import, and the list is written to be read --
+#: each entry leads with the kind's own name.
+_REFINED_LEAF = re.compile(r'^    \(\n        "([A-Z][A-Za-z]*)",$', re.MULTILINE)
+
+#: The one kind no independent predicate can be written for. A `Predicate`
+#: constraint runs arbitrary Python, so a predicate mirroring it would *be* it,
+#: and what the walk owes there is to call it and read the answer --
+#: `tests/test_refinements.py` drives that directly.
+UNORACLED = frozenset({"Predicate"})
+
+
+def _constraint_kinds() -> set[str]:
+    """Give the constraint kinds the algebra carries, read from the tree."""
+    body = _CONSTRAINTS.search(IR.read_text(encoding="utf-8"))
+    assert body, "ir.rs has no Constraint enum this ledger reads"
+    found = set(_VARIANT.findall(body.group(1)))
+    # The scan is the detector: an empty set would pass having read nothing.
+    assert len(found) >= 9, f"the scan found only {sorted(found)}"
+    return found
+
+
+def _oracled_kinds() -> set[str]:
+    """Give the kinds the denotation generator builds a leaf from."""
+    found = set(_REFINED_LEAF.findall(DENOTATION.read_text(encoding="utf-8")))
+    assert found, "the denotation generator lists no refinement leaf"
+    return found
+
+
+def test_every_constraint_kind_is_one_the_denotation_generator_builds() -> None:
+    """A kind no case builds is an arm nothing independent reads.
+
+    The suites that drive the refinement arms -- the constraint matrix, the
+    published boundary's rows -- assert answers a person wrote beside the code
+    that gives them. The denotation suite is the one that does not: its
+    predicate states the set again, from the pages, over values it did not
+    choose. A kind outside its generator has no such reading, and nothing says
+    so, because a generator that never builds a shape reports no failure about
+    it.
+    """
+    missing = sorted(_constraint_kinds() - UNORACLED - _oracled_kinds())
+    assert not missing, (
+        f"constraint kinds no denotation case is built from: {missing}. Add a "
+        "leaf to `_REFINED` in tests/test_denotation.py with the predicate "
+        "that states its denotation independently, or name it in `UNORACLED` "
+        "with the reason none can be written."
+    )
+
+
+def test_every_leaf_the_denotation_generator_lists_is_a_kind() -> None:
+    """The other direction: a leaf named for a kind the algebra dropped."""
+    unknown = sorted(_oracled_kinds() - _constraint_kinds())
+    assert not unknown, (
+        f"denotation leaves naming no constraint kind: {unknown}. A kind the "
+        "algebra drops takes its leaf with it."
+    )

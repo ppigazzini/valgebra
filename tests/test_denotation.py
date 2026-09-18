@@ -11,21 +11,31 @@ This is correctness against the denotation, not agreement between the two modes
 of the walk (``tests/test_equivalence.py``). The predicate shares none of the
 validator's frontend, so a build-time or walk bug that both modes would agree on
 is caught here.
+
+Which makes what the generator *reaches* part of the claim. A refinement kind no
+case is ever built from is an arm of the walk this file says nothing about, and
+it says nothing loudly: every draw passes. ``_REFINED`` below carries a leaf per
+constraint kind for that reason, and ``tests/test_coverage_scope.py`` holds the
+list to ``Constraint`` in ``ir.rs`` -- a kind the algebra gains and this
+generator does not fails there, which is where a check that reads the repository
+belongs.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import re
 from collections.abc import Callable, Sequence
 from functools import reduce
 from types import GenericAlias
-from typing import Annotated, Any, Literal, NoReturn
+from typing import Annotated, Any, Literal, NoReturn, TypeGuard
 
 import annotated_types as at
 from hypothesis import given
 from hypothesis import strategies as st
 
 from valgebra import (
+    Regex,
     ValidationError,
     Validator,
     complement,
@@ -121,6 +131,111 @@ def _ge_pred(k: int) -> Pred:
 def _minlen_pred(k: int) -> Pred:
     """Build the predicate for a string of length at least ``k``."""
     return lambda x: isinstance(x, str) and len(x) >= k
+
+
+def _has_text(value: object) -> TypeGuard[str]:
+    """Answer whether a ``str`` has text a pattern could match.
+
+    A pattern is matched against the *text* of a string, and a string carrying
+    a lone surrogate has none: the code point encodes no character, so no
+    pattern matches it however much the pattern admits
+    (``docs/15-decidability.md``). Stated here by asking Python to encode it,
+    which is the same question by a different route.
+
+    A type guard rather than a `bool`: what it answers is that the value is a
+    `str`, and the matcher below is handed the narrowed value.
+    """
+    if not isinstance(value, str):
+        return False
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+#: A refinement leaf per constraint kind, with the predicate stating its
+#: denotation independently of the frontend that builds it.
+#:
+#: Read by `test_every_constraint_kind_is_one_a_case_is_built_from`, which is
+#: why each carries the kind's name: the list is the generator's scope *and* the
+#: claim about what that scope covers, rather than two lists to keep in step.
+#:
+#: The bounds are drawn over both bases, because which side of a bound a value
+#: falls on is chosen by the base: `nan` is a `float` and is outside every
+#: interval, and `bool` is an `int` and is inside the ones that hold `0` and
+#: `1`. The patterns are ones Python's `re` and the engine agree on, since the
+#: predicate is only independent where the two dialects do not part.
+_REFINED: list[tuple[str, st.SearchStrategy[Spec]]] = [
+    (
+        "Ge",
+        st.integers(min_value=-5, max_value=5).map(
+            lambda k: (Annotated[int, at.Ge(k)], _ge_pred(k))
+        ),
+    ),
+    (
+        "Gt",
+        st.integers(min_value=-5, max_value=5).map(
+            lambda k: (
+                Annotated[int, at.Gt(k)],
+                lambda x, k=k: isinstance(x, int) and x > k,
+            )
+        ),
+    ),
+    (
+        "Le",
+        st.floats(min_value=-5, max_value=5).map(
+            lambda k: (
+                Annotated[float, at.Le(k)],
+                lambda x, k=k: isinstance(x, float) and x <= k,
+            )
+        ),
+    ),
+    (
+        "Lt",
+        st.floats(min_value=-5, max_value=5).map(
+            lambda k: (
+                Annotated[float, at.Lt(k)],
+                lambda x, k=k: isinstance(x, float) and x < k,
+            )
+        ),
+    ),
+    (
+        "MinLen",
+        st.integers(min_value=0, max_value=5).map(
+            lambda k: (Annotated[str, at.MinLen(k)], _minlen_pred(k))
+        ),
+    ),
+    (
+        "MaxLen",
+        st.integers(min_value=0, max_value=5).map(
+            lambda k: (
+                Annotated[bytes, at.MaxLen(k)],
+                lambda x, k=k: isinstance(x, bytes) and len(x) <= k,
+            )
+        ),
+    ),
+    (
+        "MultipleOf",
+        st.sampled_from([2, 3, 12, 2**70]).map(
+            lambda k: (
+                Annotated[int, at.MultipleOf(k)],
+                lambda x, k=k: isinstance(x, int) and x % k == 0,
+            )
+        ),
+    ),
+    (
+        "Regex",
+        st.sampled_from(["a", "a+", "[ab]*", "a?b"]).map(
+            lambda pattern: (
+                Annotated[str, Regex(pattern)],
+                lambda x, pattern=pattern: (
+                    _has_text(x) and re.fullmatch(pattern, x) is not None
+                ),
+            )
+        ),
+    ),
+]
 
 
 def _union_of(types: Sequence[type]) -> Spec:
@@ -236,12 +351,7 @@ def _leaf() -> st.SearchStrategy[Spec]:
         st.sampled_from(_SCALARS),
         st.sampled_from(_ATOMS),
         st.sampled_from(_CONSTS).map(_literal),
-        st.integers(min_value=-5, max_value=5).map(
-            lambda k: (Annotated[int, at.Ge(k)], _ge_pred(k))
-        ),
-        st.integers(min_value=0, max_value=5).map(
-            lambda k: (Annotated[str, at.MinLen(k)], _minlen_pred(k))
-        ),
+        *(strategy for _, strategy in _REFINED),
         st.lists(
             st.sampled_from([int, str, bytes, float, type(None)]),
             min_size=2,
@@ -412,6 +522,9 @@ BOUNDARIES: list[object] = [
     "",
     "\n",
     "a\nb",
+    # A lone surrogate: a `str` of one character with no text, so every kind
+    # holds it and no pattern matches it.
+    "\ud800",
     b"\n",
     True,
     False,
