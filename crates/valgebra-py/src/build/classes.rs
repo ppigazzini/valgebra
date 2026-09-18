@@ -114,7 +114,7 @@ pub(super) fn build_type_object(
         }
     }
     // TypedDict: a closed record whose required keys come from the class.
-    if ty.hasattr("__required_keys__")? {
+    if ty.hasattr(intern!(ty.py(), "__required_keys__"))? {
         return build_typed_dict(ty, lits, defs);
     }
     // Enum: an instance of the enumeration class (any of its members).
@@ -122,7 +122,9 @@ pub(super) fn build_type_object(
         return Ok(Schema::Instance(lits.intern_class(ty.as_any())));
     }
     // dataclass / NamedTuple: isinstance plus a deep check of each field.
-    if is_dataclass(ty)? || (ty.is_subclass_of::<PyTuple>()? && ty.hasattr("_fields")?) {
+    if is_dataclass(ty)?
+        || (ty.is_subclass_of::<PyTuple>()? && ty.hasattr(intern!(py, "_fields"))?)
+    {
         return build_object(ty, lits, defs);
     }
     // Protocol: a runtime-checkable protocol validates by isinstance.
@@ -202,7 +204,7 @@ pub(super) fn build_typed_dict(
 ) -> PyResult<Schema> {
     let hints = resolve_type_hints(ty)?;
     let hints = hints.cast::<PyDict>()?;
-    let required = ty.getattr("__required_keys__")?;
+    let required = ty.getattr(intern!(ty.py(), "__required_keys__"))?;
     let mut fields = Vec::with_capacity(hints.len());
     for (name, hint) in hints.iter() {
         fields.push(Field {
@@ -335,10 +337,10 @@ pub(super) fn declared_fields<'py>(ty: &Bound<'py, PyType>) -> PyResult<Vec<Boun
         return dataclasses
             .call_method1("fields", (ty,))?
             .try_iter()?
-            .map(|field| field?.getattr("name"))
+            .map(|field| field?.getattr(intern!(py, "name")))
             .collect();
     }
-    ty.getattr("_fields")?.try_iter()?.collect()
+    ty.getattr(intern!(py, "_fields"))?.try_iter()?.collect()
 }
 
 /// Build the schema of a class with declared attributes: the meet of its
@@ -417,7 +419,7 @@ pub(super) fn named_tuple_positions(
     lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Option<Schema>> {
-    if !(ty.is_subclass_of::<PyTuple>()? && ty.hasattr("_fields")?) {
+    if !(ty.is_subclass_of::<PyTuple>()? && ty.hasattr(intern!(ty.py(), "_fields"))?) {
         return Ok(None);
     }
     let mut positions = Vec::new();

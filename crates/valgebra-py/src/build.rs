@@ -70,7 +70,7 @@ fn build_alias(
 
     let token = fresh_self_token();
     OPEN_ALIASES.with_borrow_mut(|open| open.push((address, token, Cell::new(false))));
-    let body = build_schema(&obj.getattr("__value__")?, lits, defs);
+    let body = build_schema(&obj.getattr(intern!(obj.py(), "__value__"))?, lits, defs);
     let recursive = OPEN_ALIASES
         .with_borrow_mut(Vec::pop)
         .is_some_and(|(_, _, used)| used.get());
@@ -284,9 +284,14 @@ pub(crate) fn build_schema(
     }
 
     // Annotated[T, m1, ...]: the base type T with refinement metadata.
-    if obj.hasattr("__metadata__")? {
-        let base = obj.getattr("__origin__")?;
-        let metadata = obj.getattr("__metadata__")?;
+    //
+    // Asked once rather than twice, and asked with names the interpreter
+    // already holds. Spelled `hasattr` then `getattr`, this read the metadata
+    // twice and decoded three attribute names from UTF-8 and hashed them --
+    // per node, on a path every non-class form crosses, whether or not it is
+    // annotated at all.
+    if let Some(metadata) = obj.getattr_opt(intern!(py, "__metadata__"))? {
+        let base = obj.getattr(intern!(py, "__origin__"))?;
         return build_refine(&base, metadata.cast::<PyTuple>()?, lits, defs);
     }
 

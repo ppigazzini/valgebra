@@ -50,6 +50,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a ledger named in prose is not a ledger with a row -- internal
 - fix: an example on a page the docs publish is one the lane runs -- internal
 - fix: a failure code is a name in a table, not a string at a call site -- internal
+- perf: a schema is built through attribute names the interpreter already holds -- internal
 
 -->
 
