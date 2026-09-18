@@ -17,9 +17,11 @@ this either runs or refuses by name.
 
 An excused step may still carry a `STANDINS` row: the part of it a developer's
 machine can run, with what the substitute gives up written beside it. The
-binding's interpreter-backed Rust tests are the case it exists for -- the merge
-gate reaches them only inside an instrumented coverage rebuild, so excusing the
-rebuild left seventy-odd tests in no local step at all.
+binding's interpreter-backed Rust tests are the case it was written for -- the
+merge gate reached them only inside an instrumented coverage rebuild, so
+excusing the rebuild left seventy-odd tests in no local step at all. They have a
+lane of their own, so the list is empty; a stand-in for a step some lane runs
+outright is that command twice, which `tests/test_local_gate.py` refuses.
 
 What it is not is a CI replacement: the steps that need a PGO wheel, valgrind, a
 mutation sweep or a second operating system are named and skipped. Those are the
@@ -141,15 +143,12 @@ NEEDS_A_RUNNER = {
 #:
 #: Held to `NEEDS_A_RUNNER` in both directions by `tests/test_local_gate.py`: a
 #: stand-in for a step that is not excused is a step the gate should just run.
-STANDINS = {
-    "Measure binding coverage via the Python suite and Rust unit tests": (
-        "cargo test -p valgebra-py --features interpreter-tests",
-        (
-            "the instrumented rebuild and the coverage floor are the runner's; "
-            "the interpreter-backed tests inside it run here"
-        ),
-    ),
-}
+#: Empty today. The row it was written for stood in for the binding's
+#: interpreter-backed tests, which the merge gate reached only inside the
+#: coverage rebuild; they have a step of their own in the `python` lane, so this
+#: gate runs them as itself rather than as a substitute. A row here would be
+#: that command a second time.
+STANDINS: dict[str, tuple[str, str]] = {}
 
 #: A step that reaches the network, and the offline form this gate runs instead.
 #:

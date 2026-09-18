@@ -160,6 +160,34 @@ def test_every_stand_in_is_for_a_step_the_gate_excuses() -> None:
     assert not stale, f"stand-ins for steps the workflow no longer has: {stale}"
 
 
+def test_no_stand_in_repeats_a_step_the_gate_runs() -> None:
+    """A stand-in is the part of an excused step a developer can reach.
+
+    The other direction of the rule above, and the one a workflow change
+    causes rather than a deletion: the excused step stays excused, and a *new*
+    lane arrives that runs the very command the stand-in was written to
+    substitute for. The gate then pays for it twice, and the second failure
+    names a substitute rather than the step a reader would go looking for.
+
+    That is what happened when the binding's corpora gained a lane of their
+    own: they had been reachable here only through the coverage rebuild's
+    stand-in, and afterwards through both.
+    """
+    spec = gate.workflow()
+    plan, _ = gate.build_plan(spec, gate.required_jobs(spec))
+    scripts = [script for _, _, script, _ in plan]
+    repeated = sorted(
+        step
+        for step, (command, _) in gate.STANDINS.items()
+        if any(command in script for script in scripts)
+    )
+    assert not repeated, (
+        f"stand-ins whose command the gate also runs outright: {repeated}. "
+        "Drop the row; the step it stood in for is reached by a step of its "
+        "own, and running it twice buys the second nothing."
+    )
+
+
 def test_every_network_row_stands_for_a_step_the_gate_runs() -> None:
     """An offline substitute for a step the gate does not run stands for nothing.
 
