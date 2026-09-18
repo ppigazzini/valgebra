@@ -253,6 +253,7 @@ class _WeirdInt(int):
         "that no value satisfies both"
     ),
 )
+# TRUST: What a value answers is a function of the value.
 def test_a_bound_contradiction_is_not_reported_empty_over_a_lying_subclass() -> None:
     """The third atom that is not a set, and the one still open.
 

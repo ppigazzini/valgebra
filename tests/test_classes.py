@@ -557,6 +557,7 @@ def test_a_class_met_with_its_attributes_is_read_as_a_direct_instance() -> None:
     assert Validator(Counted).relation_to(Validator(str)) == "not_subset"
 
 
+# TRUST: A class whose metaclass leaves `isinstance` alone holds an object.
 def test_a_class_whose_metaclass_answers_isinstance_denotes_no_set() -> None:
     """`isinstance` a metaclass computes is not the class order, so nothing reads it.
 

@@ -39,6 +39,7 @@ def test_fail_fast_stops_at_the_first_failure() -> None:
     assert info.value.code == "int_type"
 
 
+# PROMISE: Determinism
 def test_aggregation_order_is_deterministic() -> None:
     schema = Validator({"items": [int], "name": str})
     with pytest.raises(ValidationError) as info:

@@ -459,6 +459,7 @@ def test_every_entry_point_reports_the_bound_it_reaches() -> None:
 
 
 # THEORY: a-cycle-is-caught-by-identity
+# TRUST: The values are the finite ones.
 def test_a_cycle_is_caught_by_identity_rather_than_by_equality() -> None:
     """The guard reads `id`, so two equal values are not one cycle.
 

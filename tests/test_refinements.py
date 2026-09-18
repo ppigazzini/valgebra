@@ -428,6 +428,7 @@ def test_a_marker_is_read_however_its_type_keeps_its_names() -> None:
 
 
 # THEORY: a-refinement-narrows-its-base
+# TRUST: Predicate refinements are opaque.
 def test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque() -> None:
     """A refinement is a subset of its base, and a predicate is a black box.
 

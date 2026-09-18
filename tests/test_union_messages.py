@@ -44,6 +44,7 @@ def _expected(spec: object, value: object) -> str:
         (int | str, 1.5, ["int", "str"]),
     ],
 )
+# PROMISE: What a union's `expected` says
 def test_a_union_names_what_its_branches_accept(
     spec: object, value: object, wanted: list[str]
 ) -> None:

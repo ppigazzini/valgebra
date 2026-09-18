@@ -64,6 +64,7 @@ def test_scalar_codes() -> None:
     assert _first(bytes, "x") == ("bytes_type", ())
 
 
+# PROMISE: Which spelling produces which code
 def test_bottom_and_literal_codes() -> None:
     assert _first(nothing, 1) == ("no_match", ())
     assert _first("active", "paused") == ("literal_error", ())

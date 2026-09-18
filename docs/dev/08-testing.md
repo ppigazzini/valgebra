@@ -81,7 +81,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Thirty-three of them:
+for and misses the other. Thirty-four of them:
 
 | Ledger | Holds |
 |---|---|
@@ -116,13 +116,14 @@ for and misses the other. Thirty-three of them:
 | `tests/test_form_ledger.py` | every form the schema-language pages tabulate is driven by a test |
 | `tests/test_surface_outcomes.py` | every outcome the binding's docstrings name is asserted by a test |
 | `tests/test_citation_ledger.py` | every numbered result the theory page cites names a work on the shelf |
+| `tests/test_boundary_ledger.py` | every entry of the published decidability boundary is driven by a test |
 | `tests/test_constraint_matrix.py` | every constraint is driven against every kind, narrowing it or refused |
 | `tests/test_ledger_plants.py` | every ledger fails on the defect it exists to catch |
 
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are thirty-three.
+because a table nothing counts is the one that drifts: there are thirty-four.
 
 **Which interpreter reads them.** A ledger is a repository check: it reads the
 tree, the workflow and the scripts, none of which answers differently by
@@ -272,6 +273,7 @@ ledger that holds it in both directions:
 | every code a report can carry, in both modes and on both paths | the same walk | the code is driven at that mode and on that path | `tests/test_error_matrix.py`, held by `tests/test_use_case_ledger.py` |
 | every ordered pair of schema variants | the `Schema` enum in `ir.rs`, one representative each | the pair is proved, refuted with a value the walk checks, or declined with a reason | `tests/test_relation_ledger.py` |
 | every form the schema-language pages tabulate | the tables in `03-schema-language.md` and `05-refinements.md` | the form is accepted with its `repr` and a member, or refused with the refusals ledger's pattern | `tests/test_form_ledger.py` |
+| every entry of the published decidability boundary | the three lists in `15-decidability.md` | a decided entry is driven to its answer, a conservative one to `undecided`, an undecidable one to its refusal or its atom | `tests/test_boundary_ledger.py` |
 | every constraint, against every kind a base's values have | `Constraint` in `ir.rs` and `Kind` in `kind.rs` | the constraint narrows the base, with a value it holds of and one it does not, or the build is refused with the words naming what the base cannot answer | `tests/test_constraint_matrix.py` |
 | every outcome a method's docstring names | the binding's `Raises:` blocks | the call sits inside a `pytest.raises` for it, read from the syntax tree | `tests/test_surface_outcomes.py` |
 

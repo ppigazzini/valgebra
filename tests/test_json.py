@@ -72,6 +72,7 @@ PAIRS = [
 
 
 @pytest.mark.parametrize(("label", "spec", "doc"), PAIRS, ids=[p[0] for p in PAIRS])
+# PROMISE: JSON output
 def test_json_path_agrees_with_object_path(label: str, spec: object, doc: str) -> None:
     v = Validator(spec)
     obj = json.loads(doc)

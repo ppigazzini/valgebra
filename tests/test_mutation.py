@@ -77,6 +77,8 @@ def _set_growing(target: set[int]) -> Validator:
     return Validator(set[Annotated[int, at.Predicate(grow)]])
 
 
+# PROMISE: When a value changes while it is checked
+# TRUST: The value holds still for the length of the call.
 def test_a_dict_grown_by_a_predicate_is_reported_not_a_panic() -> None:
     checked = {"a": 1, "b": 2}
     assert _record_growing(checked).is_valid(checked) is False

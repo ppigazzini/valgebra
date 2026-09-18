@@ -14,6 +14,7 @@ def test_literal_rejects_a_different_value() -> None:
     assert not Validator("red").is_valid("green")
 
 
+# TRUST: A literal is a singleton where its constant's equality is Python's own.
 def test_literal_is_a_typed_singleton() -> None:
     # Python's == conflates 1, True, and 1.0; a literal keeps them distinct by
     # also requiring the same type.

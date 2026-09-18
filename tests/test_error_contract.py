@@ -16,12 +16,16 @@ the sentence the page wrote the rule for.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import Annotated
 
 import annotated_types as at
 import pytest
 
 from valgebra import ValidationError, Validator, union
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def _errors(schema: object, value: object, *, fail_fast: bool = False) -> list[dict]:
@@ -51,6 +55,7 @@ _MANY_FAILURES: list[tuple[str, object, object]] = [
 @pytest.mark.parametrize(
     ("name", "schema", "value"), _MANY_FAILURES, ids=[row[0] for row in _MANY_FAILURES]
 )
+# PROMISE: Aggregation and fail-fast
 def test_fail_fast_reports_one_failure(
     name: str, schema: object, value: object
 ) -> None:
@@ -104,6 +109,7 @@ _KEYS: list[tuple[str, object, object, object]] = [
 @pytest.mark.parametrize(
     ("name", "schema", "value", "segment"), _KEYS, ids=[row[0] for row in _KEYS]
 )
+# PROMISE: The shape
 def test_a_path_names_the_key_it_points_at(
     name: str, schema: object, value: object, segment: object
 ) -> None:
@@ -129,6 +135,7 @@ def test_a_key_that_is_neither_a_string_nor_an_integer_is_named_by_its_repr() ->
     assert any(item["path"] == ("(1, 2)",) for item in errors), errors
 
 
+# PROMISE: When a comparison raises
 def test_a_predicate_that_raises_names_its_error_without_flooding_the_message() -> None:
     """A large error is summarised, as every other value in a message is."""
 
@@ -221,6 +228,7 @@ def test_a_parse_failure_carries_the_parser_s_own_diagnostic() -> None:
     assert str(entry["expected"]) == "valid JSON"
 
 
+# PROMISE: The model is built when it is asked for
 def test_an_aggregated_report_has_no_cap_on_what_it_carries() -> None:
     """Every failure is reported: aggregation is bounded by the value, not a cap.
 
@@ -242,3 +250,91 @@ def test_an_aggregated_report_has_no_cap_on_what_it_carries() -> None:
         Validator(list[str]).validate(wide, fail_fast=True)
     assert len(first.value.errors) == 1
     assert first.value.path == (0,)
+
+
+# --- The page's promises, held to the tests that drive them -----------------
+#
+# The two above are the ones short enough to quote. The page makes eleven more,
+# one per section, and a promise held by whichever test remembered it is a
+# promise nobody can find from the page -- which is how a section is rewritten
+# and the test that held its old wording goes on passing.
+#
+# So each section names the test that drives it, through a `# PROMISE:` marker
+# carrying the heading verbatim. Both directions: a section with no marker
+# fails, and a marker naming no section fails.
+
+#: A heading of the error-model page, which is how it separates its promises.
+_HEADING = re.compile(r"^## (.+)$", re.MULTILINE)
+
+#: The marker a test carries to name the promise it drives.
+_PROMISE = re.compile(r"^#\s*PROMISE:\s*(.+)$", re.MULTILINE)
+
+#: Sections that state how a message is *written* rather than what a report
+#: contains, each with why no test drives it.
+#:
+#: A style rule is held by the snapshots, which pin every message the walk
+#: writes -- but they pin the text rather than the rule, so a message rewritten
+#: to break the rule and re-recorded passes them. Naming that here is the
+#: honest reading: the rule is a reviewer's, and the snapshots are what stop it
+#: changing unnoticed.
+NOT_DRIVEN: dict[str, str] = {
+    "Message style guide": (
+        "a rule about how a sentence is written -- lower case, no trailing "
+        "period, the value named after what was wanted -- which no assertion "
+        "can read from a message. The snapshots pin every message the walk "
+        "writes, so a rewrite is visible in a diff; what they cannot do is "
+        "tell a rewrite that keeps the style from one that breaks it."
+    ),
+}
+
+
+def _promised() -> set[str]:
+    """Every promise the page separates with a heading."""
+    page = (ROOT / "docs" / "08-error-model.md").read_text(encoding="utf-8")
+    found = set(_HEADING.findall(page))
+    # The scan is the detector: no heading at all would pass both directions.
+    assert len(found) >= 10, sorted(found)
+    return found
+
+
+def _driven() -> set[str]:
+    """Every promise a test names, read from the product suite."""
+    found: set[str] = set()
+    for path in sorted((ROOT / "tests").rglob("test_*.py")):
+        found.update(
+            heading.strip()
+            for heading in _PROMISE.findall(path.read_text(encoding="utf-8"))
+        )
+    return found
+
+
+def test_every_promise_the_page_makes_is_driven_by_a_test() -> None:
+    """A section with no test naming it is a promise nothing holds."""
+    undriven = sorted(_promised() - _driven() - set(NOT_DRIVEN))
+    assert not undriven, (
+        f"sections of the error model no test names: {undriven}. Put "
+        "`# PROMISE: <heading>` above the test that drives it, or record it "
+        "with why no assertion can."
+    )
+
+
+def test_every_marker_names_a_promise_the_page_makes() -> None:
+    """The other direction: a marker left behind by a rewritten heading."""
+    promised = _promised()
+    unknown = sorted(_driven() - promised)
+    assert not unknown, (
+        f"markers naming no section of the error model: {unknown}. The heading "
+        "is carried verbatim, so a section reworded is one whose test is read "
+        "again rather than one that goes on passing."
+    )
+    stale = sorted(set(NOT_DRIVEN) - promised)
+    assert not stale, f"reasons for sections the page no longer has: {stale}"
+
+
+def test_every_undriven_promise_carries_its_reason() -> None:
+    """A section nothing drives says why, and the reason is about the section."""
+    for heading, reason in NOT_DRIVEN.items():
+        assert len(reason) > 60, f"{heading}: {reason!r}"
+        assert heading not in _driven(), (
+            f"{heading} is both marked and excused; drop the excuse"
+        )

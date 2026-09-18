@@ -82,6 +82,7 @@ def _build(spec: object) -> Validator | None:
 
 
 @given(spec=_schemas)
+# TRUST: The suites check necessary properties, which is weaker than an oracle.
 def test_subtyping_is_reflexive(spec: object) -> None:
     compiled = _build(spec)
     if compiled is not None:

@@ -48,6 +48,7 @@ def _nested(levels: int) -> object:
     return value
 
 
+# PROMISE: Unions report the closest branch
 def test_a_branch_names_itself_as_it_would_alone() -> None:
     """The page's own words, for the two branch kinds that had no name."""
     # A complement alone says what it excludes.

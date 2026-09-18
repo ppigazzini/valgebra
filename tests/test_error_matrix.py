@@ -312,6 +312,7 @@ def _codes_of(error: ValidationError) -> list[str]:
 
 
 @pytest.mark.parametrize("code", sorted(CASES))
+# PROMISE: The set of codes
 def test_a_code_is_reported_in_both_modes(code: str) -> None:
     """Stopping at the first violation and aggregating report the same code.
 

@@ -597,6 +597,23 @@ PLANTS = (
         ),
     ),
     Plant(
+        # The failure the ledger is for: an entry added to the published
+        # boundary and driven by nothing. The page is what a caller reads to
+        # learn what the relations decide, and it was maintained by hand
+        # against a procedure that moves -- so a promise it makes and the tree
+        # breaks, or a decline it states and the tree decides, reads the same
+        # as a page nobody has checked.
+        "tests/test_boundary_ledger.py",
+        ("docs/15-decidability.md",),
+        lambda tree: _edit(
+            tree,
+            "docs/15-decidability.md",
+            "- **Sets and frozensets.** By element inclusion.\n",
+            "- **Sets and frozensets.** By element inclusion.\n"
+            "- **A relation nobody drives.** Planted.\n",
+        ),
+    ),
+    Plant(
         # The failure the ledger is for: a constraint added to the algebra and
         # put to no kind. A marker the frontend cannot ask of a base builds a
         # schema admitting nothing and reporting itself inhabited, which is

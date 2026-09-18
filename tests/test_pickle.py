@@ -42,6 +42,7 @@ def test_the_exception_type_is_importable_at_the_module_it_names() -> None:
     assert getattr(module, ValidationError.__name__) is ValidationError
 
 
+# PROMISE: Crossing a process boundary
 def test_a_raised_error_survives_a_pickle_round_trip() -> None:
     error = _raised()
     restored = pickle.loads(  # noqa: S301 -- this test's own dumps, not input
