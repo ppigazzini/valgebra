@@ -19,6 +19,16 @@ coverage the sweep does not have.
 The list is a hole in the coverage claim, so each entry carries the reason it is
 there -- stated once in the config's own comment, which this checks is present.
 
+The scope is not the whole of the configuration. A sweep's *environment* decides
+whether its verdict is about the tests or about the rig: proptest shrinks a
+failure for as long as it takes, and a mutant's budget is the baseline's test
+time -- measured with no failure to shrink -- times a multiplier, so an
+unbounded shrink turns a caught mutant into a timeout and a timeout returns no
+verdict at all. The lanes bound it. A reader running a sweep by hand from the
+tooling page gets whatever that page's recipe sets, so the two are held equal
+here: a variable a lane needs and the page omits is a recipe that hands its
+reader a rig fault.
+
 LEDGER: every binding file is swept or excluded by name
 """
 
@@ -30,6 +40,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
@@ -332,4 +343,67 @@ def test_no_excused_mutant_has_outlived_its_subject() -> None:
     assert not stale, (
         f"exclusions matching no mutant: {stale}. "
         "Delete each with the argument beside it, or fix the pattern."
+    )
+
+
+# --- The sweep's environment, held between the lane and the recipe -----------
+
+WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+TOOLING = ROOT / "docs" / "dev" / "07-tooling-ci.md"
+
+#: A fenced block of the tooling page, with the language it is tagged.
+_FENCED = re.compile(r"^```(\w*)\n(.*?)^```", re.MULTILINE | re.DOTALL)
+
+
+def _sweep_jobs() -> dict[str, dict[str, str]]:
+    """Give each workflow job that runs a sweep, with the environment it sets."""
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    found: dict[str, dict[str, str]] = {}
+    for name, job in workflow["jobs"].items():
+        steps = job.get("steps") or []
+        if not any("cargo mutants" in (step.get("run") or "") for step in steps):
+            continue
+        found[name] = {key: str(value) for key, value in (job.get("env") or {}).items()}
+    return found
+
+
+def _recipes() -> list[str]:
+    """Give the tooling page's by-hand sweep recipes."""
+    blocks = [
+        body
+        for language, body in _FENCED.findall(TOOLING.read_text(encoding="utf-8"))
+        if language == "bash" and "cargo mutants" in body
+    ]
+    assert blocks, "the tooling page carries no sweep recipe"
+    return blocks
+
+
+def test_every_variable_a_sweep_lane_sets_is_one_the_recipe_sets() -> None:
+    """A recipe missing the lane's environment hands its reader a rig fault.
+
+    The variable that matters is the shrink bound, and what it buys is the
+    difference between a verdict and no verdict: unbounded, a mutant the tests
+    *caught* spends the whole budget shrinking a counterexample nobody reads,
+    reports as a timeout, and stops the gate as a run that could not measure.
+    The lane sets it and says why. A reader following the page by hand gets the
+    page's recipe, so the page's recipe carries what the lane carries.
+
+    Held by name rather than by value: a seed is the runner's to choose and a
+    local sweep chooses its own, but a sweep run without one at all explores the
+    same draw every time and reports a stable score that is about the draw.
+    """
+    lanes = _sweep_jobs()
+    assert len(lanes) >= 2, sorted(lanes)
+    recipes = _recipes()
+    wanted = {variable for environment in lanes.values() for variable in environment}
+    assert wanted, sorted(lanes)
+    unset = sorted(
+        variable
+        for variable in wanted
+        if not any(variable in recipe for recipe in recipes)
+    )
+    assert not unset, (
+        f"variables the sweep lanes set that no by-hand recipe does: {unset}. "
+        "A reader runs the page's recipe, so it carries what the lane carries "
+        "-- or the verdict it returns is about the rig."
     )

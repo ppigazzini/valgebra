@@ -454,10 +454,28 @@ tree. The lane pins 3.12, so a local sweep does too:
 ```bash
 export PYO3_PYTHON="$(uv python find 3.12)"
 export LD_LIBRARY_PATH="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"
+# Bound what a failing test shrinks, and draw a seed the run can report. Without
+# the first, a mutant the tests caught spends the whole budget shrinking a
+# counterexample nobody reads and returns a timeout instead of a verdict.
+export PROPTEST_MAX_SHRINK_TIME=1000
+export PROPTEST_RNG_SEED="${PROPTEST_RNG_SEED:-$RANDOM}"
 cargo mutants --package valgebra-py --file <the files the change touches> \
   --features interpreter-tests -j 4 --timeout-multiplier 20 \
   --output sweep -- -- --skip recursion_deeper_than_the_bound_is_refused
 python scripts/mutation_gate.py --baseline walk --new-only --out sweep/mutants.out
+```
+
+The core sweep is the same shape without an interpreter to point at, and its
+skips are the two termination proofs:
+
+```bash
+export PROPTEST_MAX_SHRINK_TIME=1000
+export PROPTEST_RNG_SEED="${PROPTEST_RNG_SEED:-$RANDOM}"
+cargo mutants --package valgebra-core --file <the files the change touches> \
+  -j 4 --timeout-multiplier 20 --output sweep \
+  -- -- --skip deep_subtype_into_bottom_terminates \
+  --skip subtyping_terminates_on_a_distributed_tower
+python scripts/mutation_gate.py --baseline core --new-only --out sweep/mutants.out
 ```
 
 The target is never zero. Equivalent mutants exist and are undecidable in
@@ -510,6 +528,8 @@ export VALGEBRA_SWEEP_VENV="$PWD/../sweep-venv"
 UV_PROJECT_ENVIRONMENT="$VALGEBRA_SWEEP_VENV" uv sync --locked --no-install-project
 export PYO3_PYTHON="$VALGEBRA_SWEEP_VENV/bin/python"
 export LD_LIBRARY_PATH="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):$LD_LIBRARY_PATH"
+export PROPTEST_MAX_SHRINK_TIME=1000
+export PROPTEST_RNG_SEED="${PROPTEST_RNG_SEED:-$RANDOM}"
 cargo mutants --config .cargo/mutants-pytest.toml --package valgebra-py \
   --features pytest-sweep -j 2 --timeout-multiplier 20 --output pytest-sweep
 python scripts/mutation_gate.py --baseline pytest --out pytest-sweep/mutants.out
