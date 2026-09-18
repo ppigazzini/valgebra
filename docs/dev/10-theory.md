@@ -6,10 +6,11 @@ a claim that a specific line exists because of it, not a reading list.
 Each entry is tagged **LOAD-BEARING** (code here rests on it), **GUIDING**
 (shapes a decision without being an algorithm), or **PLANNED** (on the path, not
 built). A planned reference is an intention; it never implies the thing is built.
-Two more tags carry what the results *demand* rather than what they say:
+Three more tags carry what the results *demand* rather than what they say:
 **OBLIGATION**, a shape the implementation must have for a result to do any
-work, and **DEVIATION**, a point where the tree departs from its source on
-purpose and names the cost.
+work; **DEVIATION**, a point where the tree departs from its source on purpose
+and names the cost; and **NOT-REACHED**, a thing this tree does not do, given
+only where a test fails on the day it starts doing it.
 
 Every tagged paragraph is followed by a `HELD-BY:` line naming the tests that
 fail when the sentence is false, or an `OWED:` line naming the tests it is owed
@@ -250,6 +251,22 @@ a_decision_leaves_the_trail_it_was_given,
 a_decision_leaves_an_assumption_it_did_not_make,
 an_assumption_is_read_as_the_pair_it_is,
 a_proof_over_a_fixpoint_has_no_witness_against_it
+
+**There is no arrow type, and the bootstrapping apparatus is not needed.**
+Semantic subtyping's central difficulty is circular: types cannot be
+interpreted as sets of values directly, because knowing which values inhabit a
+type needs the type system, which needs subtyping, which needs the
+interpretation -- and *arrows* are why. A `Callable[...]` here is an
+`isinstance` check whose argument and return types are not enforced, and the
+membership walk is structural and never consults `is_subtype_of`, so the naive
+interpretation is available and the whole apparatus -- the universal model, the
+extensional interpretation, the theorems that close the circle -- is machinery
+this project does not need and does not have. The consequence is a licence
+rather than a lack. **[NOT-REACHED: no-arrow-type]**
+
+SOURCE: §13.0 "**The circularity, and why valgebra escapes it.**"
+
+HELD-BY: test_every_variant_is_a_generator_a_representative_or_a_marker, test_no_column_names_a_variant_that_is_gone
 
 **Frisch, Castagna & Benzaken, Definition 6.9.** Emptiness is proved
 coinductively too: a *simulation* is "a self-justifying set, that is a

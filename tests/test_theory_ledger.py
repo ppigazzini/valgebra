@@ -47,8 +47,16 @@ THEORY = ROOT / "docs" / "dev" / "10-theory.md"
 #: The tags a *claim* carries, each with the id that names it. The page's own
 #: paragraph explaining them writes the words without brackets, which is what
 #: keeps it out of the universe.
-CLAIMS = ("LOAD-BEARING", "OBLIGATION", "DEVIATION")
+CLAIMS = ("LOAD-BEARING", "OBLIGATION", "DEVIATION", "NOT-REACHED")
 
+#: A `NOT-REACHED` tag is a claim like the other three, and the claim is a
+#: negative one: this tree does not do the thing, and something fails on the day
+#: it starts. That is a real test and a rare one -- the closure ledger is the
+#: model, since a variant added to the algebra fails it -- so the tag is given
+#: only where such a test exists. A result the tree merely does not implement,
+#: with nothing to notice if it did, stays `GUIDING`: pretending otherwise would
+#: put a holding line beside every citation and make the lines mean less.
+#:
 #: The tags that carry *context* rather than a claim: a result that shapes a
 #: decision without being an algorithm here, and one on the path and unbuilt.
 #:
@@ -216,6 +224,7 @@ def test_the_page_carries_tagged_claims() -> None:
     assert by_tag["OBLIGATION"] >= 4, by_tag
     assert by_tag["DEVIATION"] >= 4, by_tag
     assert by_tag["GUIDING"] >= 4, by_tag
+    assert by_tag["NOT-REACHED"] >= 1, by_tag
 
     # And each id is its own, since a test names a claim by it.
     identifiers = [claim.identifier for claim in claims]
