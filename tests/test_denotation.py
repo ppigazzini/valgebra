@@ -469,16 +469,37 @@ def _values() -> st.SearchStrategy[object]:
 def _recursive_case(leaf: Spec) -> tuple[Validator, Pred]:
     """Build a `recursive` schema `T = leaf | list[T]` and its predicate.
 
-    This is the only spelling that produces the `Ref`/`SelfRef` nodes: a fixpoint
-    whose body refers to itself under a structural `list`. The predicate mirrors
-    the fixpoint -- a value is a member iff it is a leaf value or a list whose
-    every element is itself a member.
+    A fixpoint whose body refers to itself under a structural `list`, which is
+    one of the two spellings producing the `Ref`/`SelfRef` nodes. The predicate
+    mirrors the fixpoint -- a value is a member iff it is a leaf value or a list
+    whose every element is itself a member.
     """
     leaf_spec, leaf_pred = leaf
     schema = recursive(lambda t: union(leaf_spec, GenericAlias(list, (t,))))
 
     def pred(x: object) -> bool:
         return leaf_pred(x) or (isinstance(x, list) and all(pred(e) for e in x))
+
+    return Validator(schema), pred
+
+
+def _chain_case(leaf: Spec) -> tuple[Validator, Pred]:
+    """Build a `recursive` schema `T = leaf | {"next": T}` and its predicate.
+
+    The other spelling, and the one the guard is argued over: the reference sits
+    under a *record field* rather than under a container, so each unfolding adds
+    a level of nesting rather than a level of iteration and a member is a finite
+    chain ending in a leaf value. A record body also makes the closed-record
+    reading part of the fixpoint -- a value carrying any other key is outside it
+    however well `next` reads.
+    """
+    leaf_spec, leaf_pred = leaf
+    schema = recursive(lambda t: union(leaf_spec, {"next": t}))
+
+    def pred(x: object) -> bool:
+        if leaf_pred(x):
+            return True
+        return isinstance(x, dict) and set(x) == {"next"} and pred(x["next"])
 
     return Validator(schema), pred
 
@@ -490,9 +511,13 @@ def _cases(draw: st.DrawFn) -> tuple[Validator, Pred]:
     The plain case compiles the spec directly; the wrapped cases exercise the
     top-level algebra: complement negates the predicate, intersection conjoins two.
     """
-    mode = draw(st.sampled_from(["plain", "complement", "intersection", "recursive"]))
+    mode = draw(
+        st.sampled_from(["plain", "complement", "intersection", "recursive", "chain"])
+    )
     if mode == "recursive":
         return _recursive_case(draw(st.sampled_from(_SCALARS)))
+    if mode == "chain":
+        return _chain_case(draw(st.sampled_from(_SCALARS)))
     spec, pred = draw(_specs())
     if mode == "plain":
         return Validator(spec), pred
@@ -525,6 +550,14 @@ BOUNDARIES: list[object] = [
     # A lone surrogate: a `str` of one character with no text, so every kind
     # holds it and no pattern matches it.
     "\ud800",
+    # One unfolding of a record-bodied fixpoint, and the same with a key the
+    # record does not declare. A drawn value reaches the first by luck and the
+    # second by none, and the pair is what separates "the field reads" from
+    # "the record is closed" -- a predicate holding only the first passes every
+    # draw.
+    {"next": None},
+    {"next": {"next": None}},
+    {"next": None, "extra": 1},
     b"\n",
     True,
     False,
