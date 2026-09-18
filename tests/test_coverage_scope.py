@@ -26,6 +26,7 @@ LEDGER: every coverage lane names its scope, and the scope is the tree's
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from pathlib import Path
@@ -214,3 +215,102 @@ def test_a_lane_records_the_branch_number() -> None:
     assert floor.exists(), f"{floor.name} records no floor"
     recorded = json.loads(floor.read_text(encoding="utf-8"))["floor"]
     assert 50 <= recorded <= 100, recorded
+
+
+#: How the testing page spells the count of tests the GIL stands down.
+_GIL_SKIPS = re.compile(
+    r"\*\*Some arms only a free-threaded interpreter reaches.*?"
+    r"(?P<count>\w+)\s+tests\s+skip\s+for\s+that\s+reason",
+    re.DOTALL,
+)
+
+#: The English numbers the page writes a small count in.
+_WRITTEN = {
+    "One": 1,
+    "Two": 2,
+    "Three": 3,
+    "Four": 4,
+    "Five": 5,
+    "Six": 6,
+    "Seven": 7,
+    "Eight": 8,
+}
+
+
+def _gil_skipped_tests() -> list[str]:
+    """Every test the global interpreter lock stands down, by name.
+
+    Read from the decorators rather than by running the suite: the reason
+    strings are what the page's paragraph is about, and a count taken from a
+    run would be a count of *items*, which the parametrised one multiplies.
+    Parsed rather than matched, because a reason spanning two lines is one
+    string to the interpreter and two to a regex.
+    """
+    found = []
+    for path in sorted((ROOT / "tests").glob("test_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            for decorator in node.decorator_list:
+                if not isinstance(decorator, ast.Call):
+                    continue
+                reasons = [
+                    keyword.value.value
+                    for keyword in decorator.keywords
+                    if keyword.arg == "reason"
+                    and isinstance(keyword.value, ast.Constant)
+                    and isinstance(keyword.value.value, str)
+                ]
+                if any("GIL" in reason for reason in reasons):
+                    found.append(f"{path.name}::{node.name}")
+    return found
+
+
+def test_the_page_counts_the_tests_the_gil_stands_down() -> None:
+    """The figure the free-threaded paragraph rests on is the tree's.
+
+    The paragraph argues that some arms are executed by the python matrix and
+    measured by no lane, and the tests that stand down under a lock are the
+    evidence for it. A count nothing reads is a count that drifts, and this one
+    had: the page said six where the tree skips three.
+
+    Here rather than beside the tests, because the claim is about what a
+    coverage lane measures -- which is this file's subject -- and because the
+    arms it names are the ones no floor in this file covers.
+    """
+    page = (ROOT / "docs" / "dev" / "08-testing.md").read_text(encoding="utf-8")
+    stated = _GIL_SKIPS.search(page)
+    assert stated, "the testing page states no count of the tests the GIL skips"
+
+    skipped = _gil_skipped_tests()
+    # The parse is the detector: no decorator found would agree with a page
+    # claiming none, having read nothing.
+    assert skipped, "no test names the GIL as its reason to stand down"
+    assert _WRITTEN[stated["count"]] == len(skipped), (
+        f"the page says {stated['count'].lower()} tests skip under the lock and "
+        f"the tree skips {len(skipped)}: {skipped}"
+    )
+
+
+def test_no_coverage_lane_runs_a_free_threaded_interpreter() -> None:
+    """The other half of the same paragraph: those arms are measured nowhere.
+
+    The claim is the reason the arms are accepted rather than driven, so it has
+    to fail the day it stops being true. A free-threaded leg added to either
+    coverage lane makes the paragraph wrong in the direction that matters -- it
+    would be claiming a hole the tree no longer has -- and a reader would have
+    no way to tell.
+    """
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    for name in LANES:
+        job = workflow["jobs"][name]
+        versions = [
+            step["with"]["python-version"]
+            for step in job["steps"]
+            if isinstance(step.get("with"), dict) and "python-version" in step["with"]
+        ]
+        assert not any("t" in str(version) for version in versions), (
+            f"{name} names a free-threaded interpreter ({versions}), so the "
+            "testing page's paragraph about arms no lane measures is stale"
+        )

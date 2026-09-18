@@ -440,8 +440,10 @@ reachable and nobody had asked.
 **Some arms only a free-threaded interpreter reaches, and no lane runs one.**
 The walk snapshots a container and compares the snapshot against what it read,
 because the container can move underneath the reading -- and under a global
-interpreter lock another thread cannot be the one that moves it. Six tests skip
-for that reason, the arms they would drive sit in the sequence and record walks,
+interpreter lock another thread cannot be the one that moves it. Three tests
+skip for that reason -- five items, since the one about a container written
+underneath a walk is parametrised over the shapes that can move -- the arms they
+would drive sit in the sequence and record walks,
 and the binding's coverage lane runs on a single-threaded release. So those
 arms are executed on the free-threaded leg of the python matrix and *measured*
 nowhere: the figure the lane prints is a figure about the interpreter it ran on.
