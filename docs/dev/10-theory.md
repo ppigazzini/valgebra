@@ -675,8 +675,10 @@ next reader rediscovers as a bug.
 
 **The decision is structural, not the emptiness reduction applied uniformly.**
 The cost is a hole wherever an arm is missing, and the boundary is
-[15-decidability.md](../15-decidability.md); the holes are ledgered and the
-deciders are measured against each other. **[DEVIATION: structural-rather-than-reduction]**
+[15-decidability.md](../15-decidability.md); what a missing arm costs is a
+decline the descriptor answers, so the completeness ledger enumerates no
+relation neither decides, and the two deciders are measured against each other
+over a corpus. **[DEVIATION: structural-rather-than-reduction]**
 
 SOURCE: §13.1 "`is_subtype_of` is not that reduction applied uniformly"
 

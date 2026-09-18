@@ -671,20 +671,42 @@ def test_every_cited_source_is_a_section_the_argument_has() -> None:
     assert not missing + stale, "\n".join(missing + stale)
 
 
-#: A row of the argument's deviation table: its number and the id it is
-#: restated under, or `--` where the row is closed.
-_DEVIATION_ROW = re.compile(r"^\| (\d+) \|.*\| `([a-z0-9-]+|--)` \|$", re.MULTILINE)
+#: A row of the argument's deviation table: its number, the cost it states,
+#: and the id it is restated under -- or `--` where the row is closed.
+_DEVIATION_ROW = re.compile(
+    r"^\| (\d+) \| .+? \| (.+) \| [^|]+ \| `([a-z0-9-]+|--)` \|$", re.MULTILINE
+)
+
+#: What a row quotes from the paragraph restating it. A fragment rather than
+#: the whole cost, for the reason a `SOURCE:` entry is one: the row is a
+#: summary and the paragraph is the argument, so what the two can be held equal
+#: on is a sentence they share. Twelve characters, because a shorter quote
+#: matches somewhere by accident.
+_RESTATED = re.compile(r'"([^"]{12,})"')
 
 
-def _deviation_rows() -> list[tuple[str, str]]:
-    """Every row of the argument's deviation table, with the id it names."""
+class Row(NamedTuple):
+    """One row of the argument's deviation table."""
+
+    number: str
+    cost: str
+    identifier: str
+
+
+def _deviation_rows() -> list[Row]:
+    """Give every row of the argument's deviation table, with the id it names."""
     if not ARGUMENT.exists():
         return []
     text = ARGUMENT.read_text(encoding="utf-8")
     heading = text.find("# 15. The deviations")
     if heading == -1:
         return []
-    return _DEVIATION_ROW.findall(text[heading:])
+    return [Row(*found) for found in _DEVIATION_ROW.findall(text[heading:])]
+
+
+def _flatten(text: str) -> str:
+    """Give a paragraph as one line, so a quote spanning a wrap still matches."""
+    return " ".join(text.split())
 
 
 def test_every_deviation_the_argument_tables_is_restated_here() -> None:
@@ -709,13 +731,64 @@ def test_every_deviation_the_argument_tables_is_restated_here() -> None:
     assert len(rows) >= 9, f"the deviation table reads as {rows}"
     deviations = {claim.identifier for claim in _claims() if claim.tag == "DEVIATION"}
     unrestated = sorted(
-        f"row {number} names {identifier!r}, which is no deviation on this page"
-        for number, identifier in rows
-        if identifier != "--" and identifier not in deviations
+        f"row {row.number} names {row.identifier!r}, which is no deviation on this page"
+        for row in rows
+        if row.identifier != "--" and row.identifier not in deviations
     )
     assert not unrestated, "\n".join(unrestated)
-    live = [number for number, identifier in rows if identifier != "--"]
+    live = [row.number for row in rows if row.identifier != "--"]
     assert len(live) >= 8, f"only {len(live)} live rows, which reads as a table gone"
+
+
+def test_every_deviation_row_quotes_the_paragraph_restating_it() -> None:
+    """A row and its restatement cannot say different things about one limit.
+
+    The row above ties a row to a *paragraph*. What it cannot tie is the row's
+    **cost** to what that paragraph says the cost is, and those are two pieces
+    of prose kept in step by hand -- the arrangement that lets a limit be
+    written in one and corrected in the other. A table reading "a relation
+    declines where the carrier cannot spell the bound" beside a page reading
+    "decided in the direction the carrier proves" is two answers to one
+    question, and a reader has no way to tell which is the tree's.
+
+    Prose cannot be compared to prose, so the row quotes the paragraph instead:
+    a fragment of the restatement, verbatim, the way a `SOURCE:` entry quotes
+    the argument. Rewriting either side without the other fails. That is the
+    whole of what a mechanical check reaches here, and it is the half that goes
+    wrong -- a correction lands on one page and the other keeps the claim.
+    """
+    rows = _deviation_rows()
+    if not rows:
+        pytest.skip("the argument is not redistributed, so a clone has none to read")
+    restatements = {
+        claim.identifier: _flatten(claim.text)
+        for claim in _claims()
+        if claim.tag == "DEVIATION"
+    }
+    adrift: list[str] = []
+    for row in rows:
+        if row.identifier == "--":
+            continue
+        paragraph = restatements[row.identifier]
+        quoted = _RESTATED.findall(row.cost)
+        if not quoted:
+            adrift.append(
+                f"row {row.number} ({row.identifier}) quotes nothing of the "
+                "paragraph restating it"
+            )
+            continue
+        adrift += [
+            f"row {row.number} ({row.identifier}) quotes {fragment!r}, which "
+            "the paragraph restating it does not say"
+            for fragment in quoted
+            if _flatten(fragment) not in paragraph
+        ]
+    assert not adrift, (
+        "deviation rows adrift from the page that restates them:\n"
+        + "\n".join(f"  {row}" for row in adrift)
+        + "\n\nQuote a fragment of the restating paragraph in the cost "
+        "column, so a rewrite of either side has to reach both."
+    )
 
 
 def test_every_result_the_argument_carries_is_restated_here() -> None:
