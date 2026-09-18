@@ -1382,6 +1382,23 @@ fn the_complement_laws_hold_of_the_top_however_it_is_spelled() {
         Schema::Union(vec![Schema::ANY, Schema::Int].into()).simplify(),
         Schema::Anything(Spelling::Any)
     ));
+
+    // The laws are about the *set*, and the fold above is one way to reach
+    // them: it rewrites the term. The decision is the other, and it reads a
+    // term the fold never touched, so the two together say the spelling is
+    // invisible to both halves of the tree rather than folded away before
+    // either looks. Built through the enum rather than through `meet`/`join`,
+    // which would fold on the way in and leave nothing to decide.
+    for top in [Schema::ANY, Schema::ANYTHING] {
+        assert!(Schema::Intersection(vec![top.clone(), not(top.clone())].into()).is_empty());
+        assert!(not(top.clone()).is_empty());
+        assert!(Schema::Int.is_subtype_of(&top));
+        assert!(top.is_subtype_of(&Schema::ANYTHING));
+        assert!(Schema::ANYTHING.is_subtype_of(&top));
+    }
+    // Across the two spellings, which is the pair a rule could tell apart.
+    assert!(Schema::Intersection(vec![Schema::ANY, not(Schema::ANYTHING)].into()).is_empty());
+    assert!(Schema::Intersection(vec![Schema::ANYTHING, not(Schema::ANY)].into()).is_empty());
 }
 
 #[test]
