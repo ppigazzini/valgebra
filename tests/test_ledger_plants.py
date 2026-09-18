@@ -269,6 +269,16 @@ PLANTS = (
         ),
     ),
     Plant(
+        "tests/test_feature_lanes.py",
+        ("crates/valgebra-py/Cargo.toml",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-py/Cargo.toml",
+            "pytest-sweep = []",
+            "pytest-sweep = []\nplanted-tests = []",
+        ),
+    ),
+    Plant(
         "tests/test_lane_coverage.py",
         ("scripts/planted_gate.py",),
         lambda tree: _write(

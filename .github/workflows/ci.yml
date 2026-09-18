@@ -354,6 +354,69 @@ jobs:
         run: uv sync --locked --no-install-project
       - name: Build the extension into the venv
         run: uv run maturin develop --uv
+      # The binding's four corpora drive live Python objects through the
+      # frontend, the walk and the oracle, and they are the tests `cargo test
+      # --workspace` cannot run: the feature that links an interpreter is off by
+      # default, so the cross-OS `rust test` lane stays Python-free. They run
+      # here, where an interpreter is already installed, and against every one
+      # of them -- a corpus of live objects is a corpus about a release, and the
+      # rows naming a `typing` member 3.11 added carry the release they need.
+      #
+      # The interpreter is the *base* one rather than the virtual environment's:
+      # an embedded interpreter has no environment to live in, it reads its
+      # standard library from `PYTHONHOME`, and pointing that at a venv gives it
+      # a prefix with no `lib/python3.x` under it. Linux only, because the
+      # loader variable and the library layout are the platform's, and this
+      # matrix's macOS and Windows legs exist for the shipped extension.
+      #
+      # Bounded, because an embedded interpreter can *hang* rather than fail:
+      # four rows that run a class definition through `py.run` stopped
+      # answering on the 3.15 prerelease and held the job to its own
+      # thirty-minute limit, and a job killed by that limit is **cancelled**
+      # rather than failed -- which the `continue-on-error` on that leg does
+      # not absorb, so the aggregate gate went red for the one lane that is
+      # meant to be an early warning. The same rows pass on 3.10 through
+      # 3.14t, and on that same prerelease build run by hand. With a bound, a
+      # hang is a failing step in five minutes: forgiven on the prerelease,
+      # red anywhere else, and never thirty minutes of a runner.
+      #
+      # The forgiveness is read from a variable the step is *given* rather
+      # than written into its body, so the body carries no matrix expression
+      # and a developer's gate runs the step as written -- where the variable
+      # is unset, the comparison is false and a failure is a failure, which is
+      # the answer a developer wants from their own machine.
+      #
+      # It is spelled here rather than left to the leg's
+      # `continue-on-error`, because the two forgive different things. That
+      # flag is about the *gate*: whether a red prerelease leg blocks the
+      # merge. This is about the *step*: on the one interpreter where the hang
+      # is known and reproduced by nobody outside this runner, a timeout is a
+      # warning printed and walked past, so the rest of the leg -- every other
+      # step after this one -- still runs and still reports. Without it the leg
+      # stops at the hang and the early warning stops warning about anything
+      # else.
+      - name: The binding's interpreter corpora
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        env:
+          PRERELEASE: ${{ matrix.python-version == '3.15' }}
+        run: |
+          base="$(uv run python -c 'import sys; print(sys.base_prefix)')"
+          PYO3_PYTHON="$base/bin/python3"
+          export PYO3_PYTHON
+          libdir="$("$PYO3_PYTHON" -c \
+            'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
+          status=0
+          PYTHONHOME="$base" LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}" \
+            timeout 300 cargo test -p valgebra-py --features interpreter-tests \
+            || status=$?
+          if [ "$status" -ne 0 ]; then
+            if [ "${PRERELEASE:-false}" = true ]; then
+              echo "::warning::the corpora exited $status on the prerelease" \
+                "interpreter; the same rows pass on every supported version"
+            else
+              exit "$status"
+            fi
+          fi
       # Coverage over the Python package surface is gated at 100% (configured in
       # pyproject.toml); the compiled extension's coverage is the separate
       # binding-coverage lane.

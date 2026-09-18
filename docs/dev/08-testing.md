@@ -81,7 +81,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Thirty-four of them:
+for and misses the other. Thirty-five of them:
 
 | Ledger | Holds |
 |---|---|
@@ -102,6 +102,7 @@ for and misses the other. Thirty-four of them:
 | `tests/test_commit_messages.py` | no commit message names the internal working area |
 | `tests/test_clock_ledger.py` | no test measures time except the three that argue for it |
 | `tests/test_lane_interpreters.py` | no lane installs an interpreter without naming it |
+| `tests/test_feature_lanes.py` | every crate feature runs in a test lane or is excused by name |
 | `tests/test_cited_commits.py` | every commit a tracked file cites is one a clone can reach |
 | `tests/test_fuzz_lane.py` | the fuzz soak names its allocation ceiling and forks its batches |
 | `tests/test_floor_names.py` | every typing and enum name read at import time, and every stdlib module imported, exists on the floor |
@@ -123,7 +124,7 @@ for and misses the other. Thirty-four of them:
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are thirty-four.
+because a table nothing counts is the one that drifts: there are thirty-five.
 
 **Which interpreter reads them.** A ledger is a repository check: it reads the
 tree, the workflow and the scripts, none of which answers differently by
@@ -198,6 +199,25 @@ by a naming convention.
 `cargo test` cannot reach the binding without an interpreter, so the files
 where a mistake changes what a schema means carry their own corpus under the
 `interpreter-tests` feature, which links an embedded Python.
+
+**Where they run.** Every `ubuntu-latest` leg of the `python` matrix runs them,
+against the interpreter that leg installs, and `tests/test_feature_lanes.py`
+holds the rule that puts them there: a feature a crate declares is passed to a
+`cargo test` by some lane that is not itself a measurement, or it is excused
+there by name. For one push none was. The only lane naming `interpreter-tests`
+was `binding coverage`, so a corpus row made stale by a change to the very check
+it describes reddened the lane whose job is to print a percentage -- while
+`cargo test --workspace` stayed green on three operating systems and said
+nothing.
+
+Running them against **every** supported interpreter rather than one is what a
+corpus of live objects is for: a `typing` member arrives in a release, and the
+floor is where the tree finds out. Four rows named `Never`, `Required`,
+`NotRequired` and the star-unpack inside a subscript, each of which reaches the
+language in 3.11, and on 3.10 the interpreter answers `AttributeError` or a
+`SyntaxError` the row does not expect. So a row states the release it needs and
+stands down below it, which is the `skipif` the Python suite writes one layer
+up.
 
 The **walk** carries a value corpus in `crates/valgebra-py/src/check/walk.rs`.
 Every case runs in **both** the fast and the explaining mode with the two
