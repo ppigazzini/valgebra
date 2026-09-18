@@ -162,6 +162,42 @@ def test_undecodable_json_string_agrees_across_entry_points() -> None:
         assert info.value.errors[0]["code"] == "json_invalid"
 
 
+# TRUST: The JSON parser (jiter) agrees with `json.loads` where both accept.
+def test_the_two_documents_the_grammar_refuses_and_the_module_accepts() -> None:
+    """What the trust base buys, and the two documents it does not cover.
+
+    The JSON path's denotation is the object path's because the parser builds
+    the value `json.loads` builds. That holds on every document both accept,
+    and the grammar is the stricter of the two: a non-standard float token and
+    an escape naming a lone surrogate are documents Python's module parses and
+    this parser refuses ([the JSON path](../docs/07-json.md)).
+
+    Refusing is the sound direction -- the JSON path admits a subset of what
+    the object path does, never a different value -- so each is reported as
+    `json_invalid` before a schema sees the document. Driving them is what
+    keeps the trust base honest about which documents it covers: an
+    implementation that started *accepting* one of these would be taking a
+    value the object path holds and the grammar does not name.
+    """
+    beyond_the_grammar = ["NaN", "Infinity", "-Infinity", r'"\ud800"']
+    for text in beyond_the_grammar:
+        # Python's own parser builds a value, and the object path holds it.
+        built = json.loads(text)
+        assert Validator(object).is_valid(built)
+        # The JSON path reports the document, rather than the value.
+        assert not Validator(object).is_valid_json(text)
+        with pytest.raises(ValidationError) as info:
+            Validator(object).validate_json(text)
+        assert info.value.code == "json_invalid"
+
+    # And within the grammar the two build the same value, which is the half
+    # of the assumption the suites lean on everywhere else.
+    for text in ('{"a": [1, 2.5, null, true]}', '"\u00e9"', "1e400", "-0.0"):
+        assert Validator(object).is_valid_json(text) is Validator(object).is_valid(
+            json.loads(text)
+        )
+
+
 def test_json_aggregates_every_failure_like_the_object_path() -> None:
     v = Validator({"a": int, "b": int, "c": int})
     doc = '{"a": "x", "b": "y", "c": "z"}'

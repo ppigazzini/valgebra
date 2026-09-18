@@ -174,6 +174,19 @@ PLANTS = (
         ),
     ),
     Plant(
+        # The attribute gone from a crate root: `unsafe` compiles again, every
+        # value answers exactly as it did, and the soundness page goes on
+        # resting on a property nothing enforces.
+        "tests/test_crate_attributes.py",
+        ("crates/valgebra-core/src/lib.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/lib.rs",
+            "#![forbid(unsafe_code)]",
+            "// the attribute, planted away",
+        ),
+    ),
+    Plant(
         # A public name the suite never mentions: the state every method starts
         # in, and the one a stub grows a line for without anyone noticing.
         "tests/test_use_case_ledger.py",

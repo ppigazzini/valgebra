@@ -637,6 +637,7 @@ def test_a_marker_type_past_the_cache_bound_is_still_read() -> None:
         assert not schema.is_valid(n - 1), "and refuses the one below it"
 
 
+# TRUST: `isinstance` and the PyO3 conversions report Python's own membership.
 def test_a_lying_class_attribute_does_not_admit_a_value_to_a_builtin_kind() -> None:
     """A kind is read from the value's real type, not from what it claims.
 

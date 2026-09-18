@@ -155,7 +155,9 @@ in place of a fully formal proof.
 
 The soundness is relative to a small, explicit trust base:
 
-- `isinstance` and the PyO3 conversions report Python's own membership faithfully.
+- **`isinstance` and the PyO3 conversions report Python's own membership.**
+  A value crosses the boundary as itself, and what Python answers about it is
+  read as a fact about the value rather than checked against a second reading.
 
   **A builtin kind is not read through `isinstance`, and `__class__` is not in
   the trust base for one.** `isinstance` consults a value's `__class__`, which a
@@ -205,10 +207,20 @@ The soundness is relative to a small, explicit trust base:
   class deriving from both. It moves no `True`: a proof is a proof, and the
   assumption is only ever read to believe a refutation.
   [The decidability page](15-decidability.md) states it with the rows it moves.
-- The JSON parser (jiter) yields the value `json.loads` would, so the JSON path's
-  denotation matches the object path's.
-- The crates contain no `unsafe`, so there is no memory-safety obligation beyond
-  the compiler's.
+- **The JSON parser (jiter) agrees with `json.loads` where both accept.** On a
+  document both parsers build a value from, they build the same value, which is
+  what makes the JSON path's denotation the object path's.
+
+  **The grammar is the stricter of the two, and the difference is named.** Two
+  documents Python's module parses are refused here: a non-standard float token
+  (`NaN`, `Infinity`, `-Infinity`) and an escape naming a lone surrogate. Each
+  is reported as `json_invalid` before a schema sees it, so the JSON path admits
+  a subset of what the object path does and never a different value
+  ([the JSON path](07-json.md) states both with the queries that show them).
+- **The crates contain no `unsafe`.** Both crate roots carry
+  `#![forbid(unsafe_code)]`, which makes an `unsafe` block below one a compile
+  error rather than a reviewer's job — so there is no memory-safety obligation
+  here beyond the compiler's.
 - **Predicate refinements are opaque.** A `Predicate` constraint runs arbitrary
   Python; valgebra checks that it returned truthy, and the soundness of *that*
   leaf is the caller's. Regex constraints are matched natively and match the

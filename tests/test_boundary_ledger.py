@@ -373,13 +373,19 @@ def test_every_entry_of_the_boundary_answers_as_the_page_says(title: str) -> Non
 # an assumption is the one kind of claim a passing suite says nothing about: it
 # holds wherever the suite looks, because the suite looks at values that satisfy
 # it. What a reader needs is the other half -- a value that violates it and what
-# the library then answers -- and the page had seven such sentences with no way
-# to reach the tests that show any of them.
+# the library then answers.
 #
 # So each assumption names a test through a `# TRUST:` marker carrying the
 # sentence verbatim. The strict expected failure is the model: it drives an
 # `int` subclass whose comparisons lie, pins the wrong answer that follows, and
 # fails the day the answer changes.
+#
+# The universe is the page's list, which means the *whole* of it. A scan keyed
+# on the bolded lead-in reads a bullet written without one as no assumption at
+# all, so the formatting decides what is held rather than the page -- and a
+# sentence the argument rests on drops out of the ledger by being typed
+# differently. Both halves are checked here: every top-level bullet leads with
+# the sentence it assumes, and the count of lead-ins is the count of bullets.
 
 SOUNDNESS = ROOT / "docs" / "14-soundness.md"
 
@@ -388,17 +394,55 @@ SOUNDNESS = ROOT / "docs" / "14-soundness.md"
 #: assumptions of their own, so the scan takes the top level alone.
 _ASSUMPTION = re.compile(r"^- \*\*(.+?)\*\*", re.MULTILINE)
 
+#: A top-level bullet of the same list, whatever it leads with. Beside
+#: `_ASSUMPTION`, which reads the ones written to be found: this reads the list
+#: itself, so the two counts can be held equal.
+_TOP_LEVEL = re.compile(r"^- (.+)$", re.MULTILINE)
+
 #: The marker a test carries to name the assumption it shows the cost of.
 _TRUST = re.compile(r"^#\s*TRUST:\s*(.+)$", re.MULTILINE)
 
 
+def _trust_base() -> str:
+    """Give the page's list of what the soundness argument takes on trust."""
+    text = SOUNDNESS.read_text(encoding="utf-8")
+    return text[text.index("## What this argument assumes") :]
+
+
+def _trust_bullets() -> list[str]:
+    """Every top-level bullet of the trust base, lead-in and all."""
+    found = _TOP_LEVEL.findall(_trust_base())
+    assert len(found) >= 6, found
+    return found
+
+
 def _assumed() -> set[str]:
     """Every assumption the soundness page's trust base states."""
-    text = SOUNDNESS.read_text(encoding="utf-8")
-    body = text[text.index("## What this argument assumes") :]
-    found = set(_ASSUMPTION.findall(body))
-    assert len(found) >= 6, sorted(found)
+    found = set(_ASSUMPTION.findall(_trust_base()))
+    assert len(found) == len(_trust_bullets()), sorted(found)
     return found
+
+
+def test_every_assumption_leads_with_the_sentence_it_assumes() -> None:
+    """A bullet with no bolded lead-in is a claim outside this ledger.
+
+    The scan above reads the trust base by its formatting, so a bullet typed
+    without a lead-in is not a smaller assumption: it is one the marker check
+    never asks about, and the count of assumptions becomes a count of how the
+    page is written. The lead-in is also what a `# TRUST:` marker carries
+    verbatim, so a bullet with none has nothing a test could name.
+    """
+    plain = [
+        " ".join(bullet.split())[:90]
+        for bullet in _trust_bullets()
+        if not bullet.startswith("**")
+    ]
+    assert not plain, (
+        "assumptions written without the bolded sentence they assume:\n"
+        + "\n".join(f"  {bullet}" for bullet in plain)
+        + "\n\nLead each bullet with `**<the sentence>**`, which is what a "
+        "`# TRUST:` marker names."
+    )
 
 
 def _shown() -> set[str]:
