@@ -21,6 +21,7 @@ use super::{Frame, Scan, fast, is_fatal, member, mutated, record_fatal, stop};
 use crate::check::ctx::Ctx;
 use crate::check::index::RecordPlan;
 use crate::check::violation::{at_key, key_segment, located, summarize_value, type_mismatch};
+use crate::codes::{DICT_TYPE, EXTRA_FORBIDDEN, MISSING_ATTRIBUTE, MISSING_KEY};
 use crate::input::Value;
 
 /// Visit a dict's entries, refusing rather than panicking when the dict changes
@@ -607,13 +608,13 @@ pub(super) fn keyed_map_explain(
         // unreachable, but keep the false-implies-a-violation invariant.
         frame
             .out
-            .push(type_mismatch("dict_type", "dict", value, frame.path, ctx));
+            .push(type_mismatch(DICT_TYPE, "dict", value, frame.path, ctx));
         return;
     };
     let Ok(dict) = v.cast::<PyDict>() else {
         frame
             .out
-            .push(type_mismatch("dict_type", "dict", value, frame.path, ctx));
+            .push(type_mismatch(DICT_TYPE, "dict", value, frame.path, ctx));
         return;
     };
     // The interned keys, in field order. Asking the dict by Rust text decodes a
@@ -644,7 +645,7 @@ pub(super) fn keyed_map_explain(
             Ok(None) if field.required => frame.out.push(located(
                 frame.path,
                 Arc::clone(&field.name),
-                "missing_key",
+                MISSING_KEY,
                 format!("required key {:?}", field.name),
                 "missing".to_owned(),
             )),
@@ -664,7 +665,7 @@ pub(super) fn keyed_map_explain(
                     frame.out.push(located(
                         frame.path,
                         Arc::clone(&field.name),
-                        "missing_key",
+                        MISSING_KEY,
                         format!("required key {:?}", field.name),
                         "missing".to_owned(),
                     ));
@@ -717,7 +718,7 @@ pub(super) fn keyed_map_explain(
             frame.out.push(at_key(
                 frame.path,
                 key_segment(key),
-                "extra_forbidden",
+                EXTRA_FORBIDDEN,
                 "no unexpected key".to_owned(),
                 summarize_value(&Value::Py(key), ctx),
             ));
@@ -780,7 +781,7 @@ pub(super) fn check_attr_record(
                     frame.out.push(located(
                         frame.path,
                         Arc::clone(&field.name),
-                        "missing_attribute",
+                        MISSING_ATTRIBUTE,
                         format!("attribute {:?}", field.name),
                         "missing".to_owned(),
                     ));

@@ -7,6 +7,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
 use valgebra_core::{PathSegment, Violation};
 
+use crate::codes::{JSON_INVALID, VALIDATION_ERROR};
 use crate::exception::ValidationError;
 
 /// The class name for an error label, falling back to its repr.
@@ -135,7 +136,7 @@ pub(crate) fn truncate(text: &str, max_chars: usize) -> String {
 /// a bare `ValueError`. The path is the root and there is no value to summarize.
 pub(crate) fn json_invalid_error(py: Python<'_>, description: &str) -> PyErr {
     let violation = Violation {
-        code: "json_invalid",
+        code: JSON_INVALID.as_str(),
         path: Vec::new(),
         expected: "valid JSON".to_owned(),
         value_summary: truncate(description, SUMMARY_CHARS),
@@ -179,7 +180,7 @@ impl Failures {
 /// The stand-in for a walk that reported a non-member with no violation, which
 /// is an invariant break rather than a state a caller can reach.
 static GENERIC: std::sync::LazyLock<Violation> = std::sync::LazyLock::new(|| Violation {
-    code: "validation_error",
+    code: VALIDATION_ERROR.as_str(),
     path: Vec::new(),
     expected: "a member of the schema's set".to_owned(),
     value_summary: String::new(),

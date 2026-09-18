@@ -1227,6 +1227,7 @@ jobs:
             --file crates/valgebra-py/src/build/dialect.rs \
             --file crates/valgebra-py/src/equality.rs \
             --file crates/valgebra-py/src/oracle.rs \
+            --file crates/valgebra-py/src/codes.rs \
             --features interpreter-tests -j 2 --timeout-multiplier 20 \
             --shard "${{ matrix.shard }}/3" \
             --output walk-diff-mutants \
@@ -1829,6 +1830,7 @@ jobs:
             --file crates/valgebra-py/src/build/dialect.rs \
             --file crates/valgebra-py/src/equality.rs \
             --file crates/valgebra-py/src/oracle.rs \
+            --file crates/valgebra-py/src/codes.rs \
             --features interpreter-tests -j 4 --timeout-multiplier 20 \
             --output walk-mutants \
             -- -- --skip recursion_deeper_than_the_bound_is_refused

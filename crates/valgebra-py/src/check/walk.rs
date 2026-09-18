@@ -40,6 +40,10 @@ use valgebra_core::{
 
 use crate::check::ctx::{Ctx, Entered, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, WalkMode};
 use crate::check::violation::{summarize_value, type_mismatch};
+use crate::codes::{
+    Code, INSTANCE_TYPE, MUTATED_DURING_VALIDATION, PREDICATE_ERROR, RECURSION_LIMIT,
+    RECURSION_LOOP, UNEXPECTED_MATCH, UNION_ERROR, UNRESOLVED_RECURSION,
+};
 use crate::errors::{class_label, summarize};
 use crate::input::Value;
 
@@ -410,7 +414,7 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
     let Some(_level) = ctx.descend() else {
         if ctx.mode.explains() {
             frame.out.push(Violation {
-                code: "recursion_limit",
+                code: RECURSION_LIMIT.as_str(),
                 path: frame.path.clone(),
                 expected: format!("at most {MAX_WALK_DEPTH} levels of nesting"),
                 value_summary: summarize_value(value, ctx),
@@ -425,7 +429,7 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
         Schema::SelfRef(_) => {
             if ctx.mode.explains() {
                 frame.out.push(Violation {
-                    code: "unresolved_recursion",
+                    code: UNRESOLVED_RECURSION.as_str(),
                     path: frame.path.clone(),
                     expected: "a resolved recursive value".to_owned(),
                     value_summary: summarize_value(value, ctx),
@@ -500,7 +504,7 @@ enum Scan {
 /// it — a container whose entries move while they are being read, and a value
 /// whose two readings disagree because something it runs is not a function of
 /// the value.
-const MUTATED_CODE: &str = "mutated_during_validation";
+const MUTATED_CODE: Code = MUTATED_DURING_VALIDATION;
 const MUTATED_EXPECTED: &str = "a value that does not change while it is checked";
 
 /// Record that a container changed under the walk, and report a non-member.
@@ -508,7 +512,7 @@ fn mutated(value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
     let ctx = frame.ctx;
     if ctx.mode.explains() {
         frame.out.push(Violation {
-            code: MUTATED_CODE,
+            code: MUTATED_CODE.as_str(),
             path: frame.path.clone(),
             expected: MUTATED_EXPECTED.to_owned(),
             value_summary: summarize_value(value, ctx),
@@ -652,10 +656,18 @@ fn class_name(index: ClassIx, schema: &Schema, ctx: Ctx<'_>, py: Python<'_>) -> 
 /// moved while it was read, or a predicate raised. Folding one into "this value
 /// matched no branch" drops the only sentence that says what to do about it.
 fn walk_declined(code: &str) -> bool {
-    matches!(
-        code,
-        "recursion_limit" | "recursion_loop" | "mutated_during_validation" | "predicate_error"
-    )
+    // A string rather than a [`Code`], because this reads one back *off* a
+    // violation the core owns, where a code is the text it carries. The names
+    // are the table's either way, which is what keeps the set here from
+    // drifting from the set reported.
+    [
+        RECURSION_LIMIT,
+        RECURSION_LOOP,
+        MUTATED_DURING_VALIDATION,
+        PREDICATE_ERROR,
+    ]
+    .iter()
+    .any(|declined| declined.as_str() == code)
 }
 
 fn check_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> bool {
@@ -789,7 +801,7 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
                 push_branch_label(member, ctx, value.py(), &mut labels);
             }
             frame.out.push(Violation {
-                code: "union_error",
+                code: UNION_ERROR.as_str(),
                 path: frame.path.clone(),
                 expected: labels.render(),
                 value_summary: summarize_value(value, ctx),
@@ -851,7 +863,7 @@ fn check_complement(inner: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'_,
     ) {
         if ctx.mode.explains() {
             frame.out.push(Violation {
-                code: "unexpected_match",
+                code: UNEXPECTED_MATCH.as_str(),
                 path: frame.path.clone(),
                 expected: format!("not {}", inner.expected()),
                 value_summary: summarize_value(value, ctx),
@@ -874,7 +886,7 @@ fn check_instance(index: ClassIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '
     );
     if !ok && ctx.mode.explains() {
         frame.out.push(type_mismatch(
-            "instance_type",
+            INSTANCE_TYPE,
             &class_label(class),
             value,
             frame.path,
@@ -899,7 +911,7 @@ fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> boo
         Entered::Cycle => {
             if ctx.mode.explains() {
                 frame.out.push(Violation {
-                    code: "recursion_loop",
+                    code: RECURSION_LOOP.as_str(),
                     path: frame.path.clone(),
                     expected: "a finite (non-cyclic) value".to_owned(),
                     value_summary: summarize_value(value, ctx),
@@ -910,7 +922,7 @@ fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> boo
         Entered::Full => {
             if ctx.mode.explains() {
                 frame.out.push(Violation {
-                    code: "recursion_limit",
+                    code: RECURSION_LIMIT.as_str(),
                     path: frame.path.clone(),
                     expected: format!("at most {MAX_RECURSION_DEPTH} levels of recursion"),
                     value_summary: summarize_value(value, ctx),

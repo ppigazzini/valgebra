@@ -20,6 +20,9 @@ use super::{
 };
 use crate::check::ctx::Ctx;
 use crate::check::violation::{summarize_value, type_fail};
+use crate::codes::{
+    Code, FROZEN_SET_TYPE, LIST_LENGTH, LIST_TYPE, SET_TYPE, TUPLE_LENGTH, TUPLE_TYPE,
+};
 use crate::input::Value;
 
 /// Membership for a sequence node: the value is a list or tuple whose elements
@@ -35,8 +38,8 @@ pub(super) fn check_seq(
 ) -> bool {
     let ctx = frame.ctx;
     let (kind_word, type_code, len_code) = match container {
-        SeqKind::List => ("list", "list_type", "list_length"),
-        SeqKind::Tuple => ("tuple", "tuple_type", "tuple_length"),
+        SeqKind::List => ("list", LIST_TYPE, LIST_LENGTH),
+        SeqKind::Tuple => ("tuple", TUPLE_TYPE, TUPLE_LENGTH),
     };
     let (prefix, tail) = (&shape.prefix[..], shape.tail.as_deref());
     match (container, value) {
@@ -229,7 +232,7 @@ fn seq_element(
 /// A sequence-length mismatch: terminal, since the positional match is then
 /// meaningless. A tailless shape wants an exact length; a tailed one a minimum.
 fn seq_length_fail(
-    len_code: &'static str,
+    len_code: Code,
     kind_word: &str,
     prefix: &[Schema],
     tail: Option<&Schema>,
@@ -244,7 +247,7 @@ fn seq_length_fail(
             format!("{kind_word} of length {}", prefix.len())
         };
         frame.out.push(Violation {
-            code: len_code,
+            code: len_code.as_str(),
             path: frame.path.clone(),
             expected,
             value_summary: summarize_value(value, ctx),
@@ -259,7 +262,7 @@ fn tuple_matches(
     tail: Option<&Schema>,
     tuple: &Bound<'_, PyTuple>,
     value: &Value<'_, '_>,
-    len_code: &'static str,
+    len_code: Code,
     kind_word: &'static str,
     frame: &mut Frame<'_, '_>,
 ) -> bool {
@@ -468,19 +471,19 @@ const HELD: [Held; 2] = [
 /// A set-like container the walk reads: what its type failure reports, and the
 /// test that recognises it.
 struct Collection {
-    code: &'static str,
+    code: Code,
     word: &'static str,
     is_kind: fn(&Bound<'_, PyAny>) -> bool,
 }
 
 const SET: Collection = Collection {
-    code: "set_type",
+    code: SET_TYPE,
     word: "set",
     is_kind: |value| value.is_instance_of::<PySet>(),
 };
 
 const FROZEN_SET: Collection = Collection {
-    code: "frozen_set_type",
+    code: FROZEN_SET_TYPE,
     word: "frozenset",
     is_kind: |value| value.is_instance_of::<PyFrozenSet>(),
 };

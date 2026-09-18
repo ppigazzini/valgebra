@@ -8,6 +8,7 @@ use valgebra_core::{PathSegment, Schema, Violation};
 
 use crate::check::ctx::Ctx;
 use crate::check::walk::{is_fatal, record_fatal};
+use crate::codes::Code;
 use crate::errors::{summarize, try_summarize};
 use crate::input::Value;
 
@@ -19,7 +20,7 @@ pub(crate) fn mismatch(
     ctx: Ctx<'_>,
 ) -> Violation {
     Violation {
-        code: schema.error_code(),
+        code: Code::of_schema(schema).as_str(),
         path: path.to_vec(),
         expected: schema.expected().to_owned(),
         value_summary: summarize_value(value, ctx),
@@ -28,7 +29,7 @@ pub(crate) fn mismatch(
 
 /// Record a structural type mismatch and report non-membership.
 pub(crate) fn type_fail(
-    code: &'static str,
+    code: Code,
     expected: &str,
     value: &Value<'_, '_>,
     path: &[PathSegment],
@@ -42,14 +43,14 @@ pub(crate) fn type_fail(
 }
 
 pub(crate) fn type_mismatch(
-    code: &'static str,
+    code: Code,
     expected: &str,
     value: &Value<'_, '_>,
     path: &[PathSegment],
     ctx: Ctx<'_>,
 ) -> Violation {
     Violation {
-        code,
+        code: code.as_str(),
         path: path.to_vec(),
         expected: expected.to_owned(),
         value_summary: summarize_value(value, ctx),
@@ -60,7 +61,7 @@ pub(crate) fn type_mismatch(
 pub(crate) fn located(
     path: &[PathSegment],
     key: Arc<str>,
-    code: &'static str,
+    code: Code,
     expected: String,
     value_summary: String,
 ) -> Violation {
@@ -75,14 +76,14 @@ pub(crate) fn located(
 pub(crate) fn at_key(
     path: &[PathSegment],
     key: PathSegment,
-    code: &'static str,
+    code: Code,
     expected: String,
     value_summary: String,
 ) -> Violation {
     let mut full = path.to_vec();
     full.push(key);
     Violation {
-        code,
+        code: code.as_str(),
         path: full,
         expected,
         value_summary,

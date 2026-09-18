@@ -278,7 +278,7 @@ fn a_changed_container_is_a_non_member_that_names_itself() {
         );
         assert!(!held, "a value that changed under the walk is a non-member");
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].code, MUTATED_CODE);
+        assert_eq!(out[0].code, MUTATED_CODE.as_str());
         assert_eq!(out[0].expected, MUTATED_EXPECTED);
 
         // Fast mode reports the same verdict and writes nothing: the

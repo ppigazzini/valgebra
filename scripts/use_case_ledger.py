@@ -41,18 +41,15 @@ RECORD = ROOT / "scripts" / "use_case_ledger.json"
 STUB = ROOT / "python" / "valgebra" / "_valgebra.pyi"
 PACKAGE = ROOT / "python" / "valgebra" / "__init__.py"
 IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
-#: Where a code is written: the walk that reports one -- its own module beside
-#: the directory of parts, since a module file sitting next to a directory of
-#: the same name is outside a scan that names only the directory -- and the
-#: three entries that report a document the parser refused, the call boundary
-#: and the report.
-_EMITTERS = (
-    ROOT / "crates" / "valgebra-py" / "src" / "check",
-    ROOT / "crates" / "valgebra-py" / "src" / "check.rs",
-    ROOT / "crates" / "valgebra-py" / "src" / "input.rs",
-    ROOT / "crates" / "valgebra-py" / "src" / "validator.rs",
-    ROOT / "crates" / "valgebra-py" / "src" / "errors.rs",
-)
+#: The binding's half of the vocabulary, declared rather than scanned for.
+#:
+#: The codes were recovered by reading four hand-picked files for snake-case
+#: strings, which is a guess from a path: it misses a code written in a file
+#: nobody thought to name, and invents a cell for any other string of that
+#: shape in one that was -- it had `not_subset`, an answer `relation_to` gives
+#: and no failure anybody reports. `tests/test_code_table.py` holds every name
+#: here to a site that writes it.
+CODE_TABLE = ROOT / "crates" / "valgebra-py" / "src" / "codes.rs"
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -99,12 +96,9 @@ def error_codes() -> set[str]:
     body = source[source.index("fn error_code") :]
     body = body[: body.index("\n    }")]
     codes.update(re.findall(r'"([a-z_]+)"', body))
-    for path in _EMITTERS:
-        for found in path.rglob("*.rs") if path.is_dir() else [path]:
-            if found.name.endswith("interpreter.rs") or found.name.endswith("tests.rs"):
-                continue
-            text = found.read_text(encoding="utf-8")
-            codes.update(re.findall(r'"([a-z]+(?:_[a-z]+)+)"', text))
+    declared = CODE_TABLE.read_text(encoding="utf-8")
+    named = r'const [A-Z][A-Z0-9_]*: Code = Code\("([a-z_]+)"\);'
+    codes.update(re.findall(named, declared))
     # `anything` is the top's label in the same table, and has no failure. It is
     # carried under a name of its own so the reason reads as being about a code.
     codes.discard("anything")

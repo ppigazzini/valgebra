@@ -22,6 +22,10 @@ use super::{
 use crate::check::ctx::Ctx;
 use crate::check::index::compile_pattern;
 use crate::check::violation::{mismatch, summarize_value};
+use crate::codes::{
+    Code, GREATER_THAN, GREATER_THAN_EQUAL, LESS_THAN, LESS_THAN_EQUAL, LITERAL_ERROR, MULTIPLE_OF,
+    PREDICATE_ERROR, PREDICATE_FAILED, STRING_PATTERN_MISMATCH, TOO_LONG, TOO_SHORT,
+};
 use crate::errors::{SUMMARY_CHARS, shorten, summarize};
 use crate::input::Value;
 
@@ -163,7 +167,7 @@ pub(super) fn check_literal(
     );
     if !ok && ctx.mode.explains() {
         frame.out.push(Violation {
-            code: "literal_error",
+            code: LITERAL_ERROR.as_str(),
             path: frame.path.clone(),
             expected: format!("the literal {}", summarize(literal)),
             value_summary: summarize_value(value, ctx),
@@ -368,9 +372,9 @@ fn order_bound<'py>(
     ctx: Ctx<'_>,
     py: Python<'py>,
     compare: impl Fn(&Bound<'py, PyAny>, &Bound<'py, PyAny>) -> PyResult<bool>,
-    code: &'static str,
+    code: Code,
     symbol: &'static str,
-) -> Option<(bool, &'static str, Expected<'py>)> {
+) -> Option<(bool, Code, Expected<'py>)> {
     let bound = operand_at(ctx, index, py)?;
     let ok = fold(compare(value, bound), py, ctx);
     // Cloned only here, where the violation payload owns what it will summarize.
@@ -388,49 +392,41 @@ fn check_constraint<'py>(
     frame: &mut Frame<'_, '_>,
 ) -> bool {
     let py = value.py();
-    let (ok, code, expected): (bool, &'static str, Expected<'py>) = match constraint {
+    let (ok, code, expected): (bool, Code, Expected<'py>) = match constraint {
         Constraint::Ge(i) => {
-            let Some(t) = order_bound(
-                value,
-                *i,
-                ctx,
-                py,
-                |v, b| v.ge(b),
-                "greater_than_equal",
-                ">=",
-            ) else {
-                return false;
-            };
-            t
-        }
-        Constraint::Gt(i) => {
-            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.gt(b), "greater_than", ">")
+            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.ge(b), GREATER_THAN_EQUAL, ">=")
             else {
                 return false;
             };
             t
         }
+        Constraint::Gt(i) => {
+            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.gt(b), GREATER_THAN, ">") else {
+                return false;
+            };
+            t
+        }
         Constraint::Le(i) => {
-            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.le(b), "less_than_equal", "<=")
+            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.le(b), LESS_THAN_EQUAL, "<=")
             else {
                 return false;
             };
             t
         }
         Constraint::Lt(i) => {
-            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.lt(b), "less_than", "<") else {
+            let Some(t) = order_bound(value, *i, ctx, py, |v, b| v.lt(b), LESS_THAN, "<") else {
                 return false;
             };
             t
         }
         Constraint::MinLen(n) => (
             fold(stored_len(value).map(|len| len >= *n), py, ctx),
-            "too_short",
+            TOO_SHORT,
             Expected::Length(">=", *n),
         ),
         Constraint::MaxLen(n) => (
             fold(stored_len(value).map(|len| len <= *n), py, ctx),
-            "too_long",
+            TOO_LONG,
             Expected::Length("<=", *n),
         ),
         Constraint::MultipleOf(i) => {
@@ -438,7 +434,7 @@ fn check_constraint<'py>(
                 return false;
             };
             let ok = fold(is_multiple_of(value, operand), py, ctx);
-            (ok, "multiple_of", Expected::Multiple(operand.clone()))
+            (ok, MULTIPLE_OF, Expected::Multiple(operand.clone()))
         }
         Constraint::Predicate(i) => {
             // Slow path: the user's Python callable runs at the boundary. A
@@ -450,7 +446,7 @@ fn check_constraint<'py>(
             match predicate_passes(value, predicate) {
                 Ok(passed) => (
                     passed,
-                    "predicate_failed",
+                    PREDICATE_FAILED,
                     Expected::Fixed("a passing predicate"),
                 ),
                 // A fatal signal raised inside the predicate is the interpreter
@@ -463,7 +459,7 @@ fn check_constraint<'py>(
                 // raising a megabyte of text is a message nobody reads.
                 Err(err) => (
                     false,
-                    "predicate_error",
+                    PREDICATE_ERROR,
                     Expected::Raised(shorten(err.to_string(), SUMMARY_CHARS)),
                 ),
             }
@@ -483,18 +479,14 @@ fn check_constraint<'py>(
                     Some(compiled) => compiled.is_match(text),
                     None => compile_pattern(pattern).is_ok_and(|re| re.is_match(text)),
                 });
-            (
-                matched,
-                "string_pattern_mismatch",
-                Expected::Pattern(pattern),
-            )
+            (matched, STRING_PATTERN_MISMATCH, Expected::Pattern(pattern))
         }
     };
     // The message is rendered here and nowhere else: a check that passes never
     // reads the operand it would have named.
     if !ok && ctx.mode.explains() {
         frame.out.push(Violation {
-            code,
+            code: code.as_str(),
             path: frame.path.clone(),
             expected: expected.render(),
             value_summary: summarize(value),

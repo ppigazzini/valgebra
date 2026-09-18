@@ -269,6 +269,16 @@ PLANTS = (
         ),
     ),
     Plant(
+        "tests/test_code_table.py",
+        ("crates/valgebra-py/src/check/walk/scalar.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-py/src/check/walk/scalar.rs",
+            "            code: LITERAL_ERROR.as_str(),",
+            '            code: "literal_error",',
+        ),
+    ),
+    Plant(
         "tests/test_doc_examples.py",
         ("CONTRIBUTING.md",),
         lambda tree: _write(

@@ -24,6 +24,23 @@ API.** They are pinned by snapshot tests, so a wording change is a reviewed diff
 rather than a silent break in someone's error handling. `docs/08-error-model.md`
 is the user-facing statement of the same thing.
 
+**A code is a name in a table.** Half the vocabulary is the core's: a leaf
+mismatch reports the node's own code, and `Schema::error_code` in
+`crates/valgebra-core/src/ir.rs` is the arm per node. The other half is the
+binding's -- a bound that failed, a key that is missing, a walk that ran out of
+levels -- and `crates/valgebra-py/src/codes.rs` declares each as a `Code`
+constant with what it means. Nothing else builds one: a violation takes a
+`Code`, so a site cannot invent a string, and `Code::of_schema` is the single
+crossing from the core's table to this one.
+
+Written out at the call sites, as they were, the set of codes could only be
+recovered by scanning files for strings that looked like codes -- which misses a
+code written in a file nobody thought to scan and invents a cell for any other
+snake-case string in one that was. `scripts/use_case_ledger.py` reads the two
+tables instead, and `tests/test_code_table.py` holds the arrangement in both
+directions: a name the table declares is one some site writes, and a violation
+built with a code spelled out fails.
+
 ## The path is segments, not a string
 
 `PathSegment` in `crates/valgebra-core/src/ir.rs` is one step of a location, and
