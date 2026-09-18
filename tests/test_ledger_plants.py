@@ -187,6 +187,20 @@ PLANTS = (
         ),
     ),
     Plant(
+        # The other half of the same ledger: the attribute stands and a file
+        # below it writes the keyword anyway. Behind a visibility, which is the
+        # shape a scan anchored on the line's opening reads past.
+        "tests/test_crate_attributes.py",
+        ("crates/valgebra-core/src/kind.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/kind.rs",
+            "    /// Whether a value can have both this kind and `other`.",
+            "    pub unsafe fn planted() {}\n\n"
+            "    /// Whether a value can have both this kind and `other`.",
+        ),
+    ),
+    Plant(
         # A public name the suite never mentions: the state every method starts
         # in, and the one a stub grows a line for without anyone noticing.
         "tests/test_use_case_ledger.py",
