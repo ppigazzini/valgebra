@@ -351,9 +351,16 @@ ROWS: list[tuple[str, Any, Any, str, list[Any]]] = [
         [0, 2, 3, 4, 8],
     ),
     (
-        "and one above the period declines",
+        "and one above it is decided by the steps themselves",
         Annotated[int, at.MultipleOf(5000)],
         Annotated[int, at.MultipleOf(2500)],
+        "subset",
+        [0, 2500, 5000, 7500, 10000],
+    ),
+    (
+        "while the refutation above the period wants a value and declines",
+        Annotated[int, at.MultipleOf(2500)],
+        Annotated[int, at.MultipleOf(5000)],
         "undecided",
         [0, 2500, 5000, 7500, 10000],
     ),
@@ -493,7 +500,8 @@ def test_every_edge_of_the_integer_carrier_has_a_row() -> None:
         "a strict bound at the carrier's end is below the kind",
         "and the kind is not below it",
         "a modulus the period holds is decided",
-        "and one above the period declines",
+        "and one above it is decided by the steps themselves",
+        "while the refutation above the period wants a value and declines",
     }
     missing = sorted(edges - set(IDS))
     assert not missing, f"the carrier's edges have no row: {missing}"

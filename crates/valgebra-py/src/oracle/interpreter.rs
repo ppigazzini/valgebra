@@ -348,6 +348,49 @@ fn the_integers_between_two_bounds_are_counted_where_both_are_integers() {
 }
 
 #[test]
+fn one_step_divides_another_by_the_operator_the_walk_uses() {
+    // `divides` settles an inclusion between two `MultipleOf` refinements
+    // between the two steps, so its answer is about the operands and not about
+    // any representation. Three answers, and each has a call site: `Some(true)`
+    // proves the inclusion, `Some(false)` leaves it unproven, and `None` is a
+    // pair `%` cannot be asked of at all.
+    Python::attach(|py| {
+        let values = vec![
+            2500i64.into_pyobject(py).unwrap().into_any().unbind(),
+            5000i64.into_pyobject(py).unwrap().into_any().unbind(),
+            7i64.into_pyobject(py).unwrap().into_any().unbind(),
+            0.125f64.into_pyobject(py).unwrap().into_any().unbind(),
+            0.25f64.into_pyobject(py).unwrap().into_any().unbind(),
+            "ab".into_pyobject(py).unwrap().into_any().unbind(),
+        ];
+        asking(py, values, |oracle| {
+            let divides = |s, m| oracle.divides(OperandIx::new(s), OperandIx::new(m));
+            // Every multiple of 5,000 is a multiple of 2,500, and the size of
+            // neither step enters into it.
+            assert_eq!(divides(0, 1), Some(true));
+            // And not the other way: 2,500 is a multiple of itself and not of
+            // 5,000, which is what makes the answer a claim rather than a
+            // symmetry.
+            assert_eq!(divides(1, 0), Some(false));
+            assert_eq!(divides(2, 0), Some(false));
+            // A step divides itself, which is the reflexive row every
+            // entailment rests on.
+            assert_eq!(divides(0, 0), Some(true));
+            // The operator is the operands', so a float step answers by float
+            // division rather than by a rule about integers.
+            assert_eq!(divides(3, 4), Some(true));
+            assert_eq!(divides(4, 3), Some(false));
+            // A pair `%` cannot be asked of declines rather than guessing: a
+            // string and a number raise, and the inclusion stays unproven.
+            assert_eq!(divides(0, 5), None);
+            assert_eq!(divides(5, 0), None);
+            // An index the pool does not hold is not a question at all.
+            assert_eq!(oracle.divides(OperandIx::new(0), OperandIx::new(99)), None);
+        });
+    });
+}
+
+#[test]
 fn an_enumeration_lists_its_members_up_to_the_bound() {
     // The enum reading is what turns a class into the union of the values it
     // lists, and `MAX_ENUM_MEMBERS` is where it stops: past the bound the

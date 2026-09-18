@@ -181,6 +181,11 @@ ROWS: dict[str, Row] = {
     "An enumeration against the union of its members": Decides(
         _Colour, Literal[_Colour.RED, _Colour.GREEN], "subset"
     ),
+    "Divisibility between two moduli": Decides(
+        Annotated[int, at.MultipleOf(5000)],
+        Annotated[int, at.MultipleOf(2500)],
+        "subset",
+    ),
     "Refinements.": Decides(
         Annotated[int, at.Ge(1)], Annotated[int, at.Ge(0)], "subset"
     ),
@@ -242,10 +247,13 @@ ROWS: dict[str, Row] = {
         Annotated[int, at.Ge(2**70 + 1)],
         "a carrier wider than the 64-bit intervals the integer component holds",
     ),
-    "A modulus above the periods the representation holds.": Declines(
-        Annotated[int, at.MultipleOf(5000)],
-        Annotated[int, at.MultipleOf(2500)],
-        "divisibility read as a relation between the steps, not a residue table",
+    "A meet of two moduli the representation cannot hold.": Declines(
+        intersection(
+            Annotated[int, at.MultipleOf(64)], Annotated[int, at.MultipleOf(81)]
+        ),
+        Annotated[int, at.MultipleOf(5184)],
+        "a residue representation whose period is the one two steps share, "
+        "rather than one materialised up to a recorded bound",
     ),
     "A schema too large to build.": Declines(
         _nested(3, {"x": union(int, str, bytes, float)}),

@@ -87,6 +87,13 @@ answers `"undecided"`.
 
   Each stays the `isinstance` atom it was, which is sound for every enumeration
   and merely less complete.
+- **Divisibility between two moduli**, where it holds. Every multiple of `a` is
+  a multiple of `b` exactly when `b` divides `a`, so the two steps settle the
+  inclusion between them and the size of either is beside the point:
+  `MultipleOf(5000)` is decided below `MultipleOf(2500)`. The question is
+  Python's `%`, asked of the two steps, so a divisor of any numeric type reads
+  as the kind it is. The *other* direction is a refutation and needs a value
+  rather than a rule, which is the conservative entry below.
 - **Refinements.** A refinement is a subtype of its base and of a refinement with
   looser bounds — a tighter numeric or length bound entails a looser one, not only
   a verbatim-contained constraint set; a bound conjunction that cannot be satisfied
@@ -440,12 +447,22 @@ the shape. What is left below is what the descriptor cannot hold.
   proves. Python's integers are unbounded and the carrier is not, which is a
   property of the representation rather than of the schema.
 
-- **A modulus above the periods the representation holds.** A `MultipleOf`
+- **A meet of two moduli the representation cannot hold.** A `MultipleOf`
   becomes a residue class, and a class is materialised per residue up to a
-  recorded period. `MultipleOf(4)` against `MultipleOf(2)` is `subset`; the same
-  question at `MultipleOf(5000)` against `MultipleOf(2500)` declines, because
-  neither period is one the integer component builds. A rounded period would be
-  wrong in one direction or the other, so it refuses instead.
+  recorded period. Two steps *meet* at the period they share, so `MultipleOf(64)`
+  with `MultipleOf(81)` is the multiples of 5,184 -- past the period although
+  both steps are well inside it -- and a relation that turns on that meet
+  declines. A rounded period would be wrong in one direction or the other, so it
+  refuses instead.
+
+    The **inclusion** between two moduli does not go that way and is decided
+    above: the steps settle it between them, whatever their size. What the
+    period still bounds is the *refutation*. `MultipleOf(2)` is decided **not**
+    below `MultipleOf(4)`, because the residues hold both and 2 is a multiple of
+    one and not the other; the same question at `MultipleOf(2500)` against
+    `MultipleOf(5000)` declines, because naming that value takes a
+    representation and a rule reading the two steps cannot produce one -- the
+    subject's own other constraints may exclude it.
 
 - **A schema too large to build.** The descriptor is bounded three ways: the
   nodes it will read, the nesting it will descend, and the work a build may

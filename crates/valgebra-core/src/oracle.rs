@@ -80,6 +80,28 @@ pub trait LeafRelations: Constants {
         None
     }
 
+    /// Whether the pool value at `step` divides the one at `multiple`, or `None`
+    /// when the core cannot ask or the two do not divide.
+    ///
+    /// The relation between two moduli, and the whole of it: every multiple of
+    /// `m` is a multiple of `s` exactly when `s` divides `m`. So the steps
+    /// settle an inclusion between two `MultipleOf` refinements between them,
+    /// and the size of either is beside the point -- which is what separates
+    /// this from the residue representation, whose period is bounded and whose
+    /// answer therefore is not about the schema.
+    ///
+    /// Asked of the *operands* rather than computed, for the reason
+    /// [`compare`](Self::compare) is: a step is whatever a caller wrote, and
+    /// `int`, `float`, `Decimal` and `Fraction` each divide by their own rules.
+    /// `%` is the operator the walk uses on a value, so it is the operator this
+    /// uses on a step, and the two agree by construction.
+    ///
+    /// The default decides nothing, so a core with no value oracle leaves every
+    /// divisibility question conservative.
+    fn divides(&self, _step: OperandIx, _multiple: OperandIx) -> Option<bool> {
+        None
+    }
+
     /// Whether an atom the core cannot read denotes a *set* -- the same values
     /// however often it is asked -- or `None` when the bindings cannot say.
     ///

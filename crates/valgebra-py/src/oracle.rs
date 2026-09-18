@@ -636,6 +636,31 @@ impl LeafRelations for PoolRelations<'_, '_> {
         left.compare(right).ok()
     }
 
+    fn divides(&self, step: OperandIx, multiple: OperandIx) -> Option<bool> {
+        // `m % s == 0`, asked of the two steps as the walk asks it of a value.
+        // A step is whatever a caller wrote, so the operator decides what
+        // dividing means: `int`, `float`, `Decimal` and `Fraction` each answer
+        // by their own rules, and a pair that cannot be divided at all raises a
+        // `TypeError` and leaves the question undecided.
+        //
+        // The remainder is compared against the *step's own* zero rather than
+        // against the integer `0`, because a remainder is of the operands' type
+        // and `Decimal("0") == 0` is true while `timedelta(0) == 0` is not. The
+        // constructor refuses a step whose remainder equals no zero, which is
+        // what makes this comparison the one the build already made.
+        let step = self.literals.get(step.get())?.bind(self.py);
+        let multiple = self.literals.get(multiple.get())?.bind(self.py);
+        let remainder = multiple.call_method1("__mod__", (step,)).ok()?;
+        if remainder.is(self.py.NotImplemented()) {
+            return None;
+        }
+        remainder
+            .call_method1("__eq__", (0i64,))
+            .ok()?
+            .is_truthy()
+            .ok()
+    }
+
     fn no_int_between(
         &self,
         lo: OperandIx,

@@ -148,10 +148,11 @@ pub(super) fn bounds_unsatisfiable<'a>(
 /// Whether a single supertype refinement constraint is *entailed* by the subtype's
 /// constraint set: every value satisfying all of `narrow` also satisfies `wide`.
 /// Order and length bounds entail by value (a tighter lower bound entails a looser
-/// one, dually for upper and length), decided through the ordering `oracle`; the
-/// remaining kinds (`MultipleOf`, `Predicate`, `Regex`) have no sound value
-/// entailment and require the constraint to appear verbatim, handled by the
-/// caller's syntactic-containment check. A bound the oracle cannot compare is not
+/// one, dually for upper and length), decided through the ordering `oracle`; a
+/// divisor entails a divisor it divides, decided through the same oracle; the
+/// remaining kinds (`Predicate`, `Regex`) have no sound value entailment and
+/// require the constraint to appear verbatim, handled by the caller's
+/// syntactic-containment check. A bound the oracle cannot compare is not
 /// entailed (conservative).
 pub(super) fn constraint_entailed(
     wide: &Constraint,
@@ -193,8 +194,17 @@ pub(super) fn constraint_entailed(
         Constraint::MaxLen(w) => narrow
             .iter()
             .any(|c| matches!(c, Constraint::MaxLen(n) if n <= w)),
+        // Every multiple of `n` is a multiple of `w` exactly when `w` divides
+        // `n`, so the two steps settle this between them and neither's size
+        // enters into it. The question goes to the oracle because a step is a
+        // value a caller wrote -- `int`, `float`, `Decimal`, `Fraction` -- and
+        // `%` is what the walk asks of a value.
+        Constraint::MultipleOf(w) => narrow.iter().any(|c| match c {
+            Constraint::MultipleOf(n) => oracle.divides(*w, *n) == Some(true),
+            _ => false,
+        }),
         // No sound value entailment without an exact match (handled by the caller).
-        Constraint::MultipleOf(_) | Constraint::Predicate(_) | Constraint::Regex(_) => false,
+        Constraint::Predicate(_) | Constraint::Regex(_) => false,
     }
 }
 

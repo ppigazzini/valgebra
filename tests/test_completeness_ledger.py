@@ -622,6 +622,37 @@ _DECIDED = [
         id="mu:record-with-a-fixpoint-field!<=its-siblings",
     ),
     pytest.param("refutes", _CHAIN, int, id="mu:chain!<=int"),
+    # Divisibility, which the steps decide between them: every multiple of `a`
+    # is a multiple of `b` exactly when `b` divides `a`. The rules read the two
+    # steps rather than the values they name, so the answer does not depend on
+    # how many residues a representation materialises -- which is what left the
+    # pair below undecided while `MultipleOf(4)` against `MultipleOf(2)` was
+    # decided, for no reason a caller could see.
+    pytest.param(
+        "subtype",
+        Annotated[int, at.MultipleOf(5000)],
+        Annotated[int, at.MultipleOf(2500)],
+        id="divides:5000<=2500",
+    ),
+    # The refutation is the residues' to make, and only where they fit: `2500`
+    # is a multiple of 2500 and not of 5000, and producing that value takes a
+    # representation rather than a rule -- the subject's own other constraints
+    # may exclude it. Small steps are refuted by the residue table below; past
+    # the period the pair declines, which the decidability page records.
+    pytest.param(
+        "refutes",
+        Annotated[int, at.MultipleOf(2)],
+        Annotated[int, at.MultipleOf(4)],
+        id="divides:2!<=4",
+    ),
+    # And the divisors a caller writes that are not integers: the question is
+    # Python's `%`, so a step reads as the kind it is.
+    pytest.param(
+        "subtype",
+        Annotated[float, at.MultipleOf(0.25)],
+        Annotated[float, at.MultipleOf(0.125)],
+        id="divides:0.25<=0.125",
+    ),
     # Inclusion in a complement, which is `A ∩ B = ∅` and nothing structural: a
     # complement offers no shape on the right to recurse into.
     pytest.param(

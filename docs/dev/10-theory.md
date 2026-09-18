@@ -720,6 +720,12 @@ HELD-BY: an_atom_requiring_a_key_and_its_boolean_holds_no_dict, a_labelled_key_w
 the walk reads the Python object -- and a relation *declines* where the carrier
 cannot spell the bound: a step past the period bound, a bound past the
 carrier's end. A rounded carrier would be wrong in one direction, so it refuses.
+
+What the period bounds is narrower than the whole question. Divisibility
+between two steps is settled by the **steps**, through the oracle's `%`, so an
+inclusion between two `MultipleOf` refinements is decided whatever their size;
+what wants the residues is the *refutation*, which needs a value, and the meet,
+whose period is the one the two steps share.
 **[DEVIATION: the-carriers-are-i64-and-f64]**
 
 HELD-BY: a_step_past_the_period_bound_is_refused, test_every_edge_of_the_integer_carrier_has_a_row, test_the_relation_is_the_one_recorded, test_a_multiple_is_a_remainder_of_zero

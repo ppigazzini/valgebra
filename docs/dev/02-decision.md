@@ -283,6 +283,11 @@ corpus of its own driving every question below
   of the question above;
 - `compare` — order two pooled refinement bounds;
 - `no_int_between` — does the open interval between two bounds admit no integer;
+- `divides` — does one pooled step divide another, which settles an inclusion
+  between two `MultipleOf` refinements between them: every multiple of `m` is a
+  multiple of `s` exactly when `s` divides `m`, whatever the size of either. The
+  operator is `%`, asked of the two steps as the walk asks it of a value, so a
+  divisor of any numeric type answers by its own rules;
 - `literal_kind` — which kind does this constant's value have, which is what
   puts a `Literal` on a kind's line at all;
 - `atom_denotes_a_set` — does this atom denote a set the order can read. A class
@@ -312,7 +317,7 @@ corpus of its own driving every question below
 site of a question reads one of the two answers as the conservative one, its
 `None` and that answer are indistinguishable, and a mutation replacing the
 default with it cannot be killed by any test. That is a property of the call
-sites rather than of the default, and it holds for exactly three of the ten:
+sites rather than of the default, and it holds for exactly three of the eleven:
 
 | question | its one reading | the unkillable default |
 |---|---|---|

@@ -103,10 +103,35 @@ def test_a_bound_past_the_carrier_declines() -> None:
 
 
 def test_a_step_past_the_period_bound_declines() -> None:
-    """A modulus the residue representation does not materialise is declined."""
+    """What the period still bounds, and what the two steps settle without it.
+
+    Divisibility between two steps is a question about the steps, so the
+    *inclusion* is decided whatever their size: every multiple of 5,000 is a
+    multiple of 2,500 because 2,500 divides 5,000, and no residue is
+    materialised to say so.
+
+    What the period bounds is the **refutation**, which needs a value rather
+    than a rule. `MultipleOf(2)` is refuted below `MultipleOf(4)` by the
+    residues holding both; the same question at the larger pair declines,
+    because naming the value takes a representation and the subject's own other
+    constraints may exclude it. And a *meet* of two steps is the period they
+    share, which is where the bound bites first.
+    """
     assert (
         Validator(Annotated[int, at.MultipleOf(5000)]).relation_to(
             Annotated[int, at.MultipleOf(2500)]
+        )
+        == "subset"
+    )
+    assert (
+        Validator(Annotated[int, at.MultipleOf(2)]).relation_to(
+            Annotated[int, at.MultipleOf(4)]
+        )
+        == "not_subset"
+    )
+    assert (
+        Validator(Annotated[int, at.MultipleOf(2500)]).relation_to(
+            Annotated[int, at.MultipleOf(5000)]
         )
         == "undecided"
     )
@@ -115,7 +140,7 @@ def test_a_step_past_the_period_bound_declines() -> None:
     meet = intersection(
         Annotated[int, at.MultipleOf(64)], Annotated[int, at.MultipleOf(81)]
     )
-    assert meet.relation_to(Annotated[int, at.MultipleOf(2)]) == "undecided"
+    assert meet.relation_to(Annotated[int, at.MultipleOf(5184)]) == "undecided"
     # And a step inside the bound is decided, in the direction that holds.
     assert (
         Validator(Annotated[int, at.MultipleOf(4)]).relation_to(

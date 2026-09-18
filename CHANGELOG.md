@@ -45,8 +45,20 @@ answer of its own, or a repair to a change not yet released.
 - fix: a union branch sharing no value with the subject decides nothing
 - fix: a traceback through an error hook names a file a reader can place -- internal
 - fix: a subject outside every branch of a union is refuted, not left open
+- feat: divisibility between two moduli is decided by the steps themselves
 
 -->
+
+### Added
+
+- **Divisibility between two moduli is decided by the steps themselves.**
+  `Validator(Annotated[int, MultipleOf(5000)]).is_subtype_of(Annotated[int,
+  MultipleOf(2500)])` was `False` and is `True`. Every multiple of `a` is a
+  multiple of `b` exactly when `b` divides `a`, so the two steps settle the
+  inclusion between them and the size of either is beside the point; the
+  question is `%`, asked of the steps, so a divisor of any numeric type answers
+  by its own rules. The refutation and the meet still want the residue
+  representation, and the decidability page says which is which.
 
 ### Fixed
 
