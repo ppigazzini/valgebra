@@ -82,6 +82,12 @@ fn built(py: Python<'_>, expression: &str) -> PyResult<String> {
 #[test]
 fn each_spelling_builds_its_own_schema() {
     Python::attach(|py| {
+        let check = |expression: &str, wanted: &str| {
+            let got = built(py, expression).unwrap_or_else(|error| {
+                panic!("{expression} did not build: {error}");
+            });
+            assert_eq!(got, wanted, "{expression}");
+        };
         for (expression, wanted) in [
             // The scalars and the two bounds, which are the leaves every
             // other row is built out of.
@@ -121,7 +127,6 @@ fn each_spelling_builds_its_own_schema() {
             ("type(None)", "None"),
             ("object", "anything"),
             ("typing.Any", "Any"),
-            ("typing.Never", "nothing"),
             // A bare container class is its kind, which is what the typing
             // spec assigns an unparameterised generic.
             ("list", "list[anything]"),
@@ -136,8 +141,6 @@ fn each_spelling_builds_its_own_schema() {
             // the unpacked spellings of the last two.
             ("tuple[int, str]", "tuple[int, str]"),
             ("tuple[int, ...]", "tuple[int, ...]"),
-            ("tuple[str, *tuple[int, ...]]", "tuple[str, int, ...]"),
-            ("tuple[str, *tuple[int, bool]]", "tuple[str, int, bool]"),
             ("tuple[()]", "tuple[()]"),
             // The list-literal spellings, which are this library's own and
             // the only place a prefix and a repeated tail are written
@@ -209,10 +212,28 @@ fn each_spelling_builds_its_own_schema() {
                 "Annotated[int, Ge(0), Le(9)]",
             ),
         ] {
-            let got = built(py, expression).unwrap_or_else(|error| {
-                panic!("{expression} did not build: {error}");
-            });
-            assert_eq!(got, wanted, "{expression}");
+            check(expression, wanted);
+        }
+        // And the rows naming something the language gained after the floor.
+        //
+        // A corpus reads *live* objects, so a row naming `typing.Never` is a
+        // row about an interpreter that has it: below 3.11 the name is an
+        // `AttributeError` and the row would be asserting about the release
+        // rather than about the frontend. The release rides on the row, so a
+        // reader sees which lane drives it, and every lane above the floor
+        // does. The Python suite spells the same condition one layer up, as
+        // `skipif(sys.version_info < (3, 11))`.
+        for (since, expression, wanted) in [
+            (11u8, "typing.Never", "nothing"),
+            // The two unpacked tuple spellings: a star inside a subscript is
+            // a syntax error before 3.11, so the row cannot even be written
+            // for that release to read.
+            (11, "tuple[str, *tuple[int, ...]]", "tuple[str, int, ...]"),
+            (11, "tuple[str, *tuple[int, bool]]", "tuple[str, int, bool]"),
+        ] {
+            if py.version_info() >= (3, since) {
+                check(expression, wanted);
+            }
         }
     });
 }
@@ -225,12 +246,21 @@ fn each_spelling_builds_its_own_schema() {
 #[test]
 fn each_refusal_says_what_it_refuses() {
     Python::attach(|py| {
+        let refuses = |expression: &str, wanted: &str| {
+            let error = match built(py, expression) {
+                Err(error) => error.to_string(),
+                Ok(schema) => panic!("{expression} built {schema} instead of refusing"),
+            };
+            assert!(
+                error.contains(wanted),
+                "{expression} refused with {error}, which does not name {wanted}"
+            );
+        };
         for (expression, wanted) in [
             ("typing.TypeVar('T')", "TypeVar"),
             ("list['Account']", "get_type_hints"),
             ("typing.Annotated[int, at.MinLen(1)]", "length"),
             ("[..., int]", "only as the last element"),
-            ("tuple[*list[int]]", "only a tuple can be unpacked"),
             ("typing.Annotated[int, Timezone()]", "does not check"),
             // A grouping that never bottoms out, and one nested past the bound:
             // following either to the end is a stack this library does not have.
@@ -278,14 +308,17 @@ fn each_refusal_says_what_it_refuses() {
             ("typing.Annotated[int, nest(9)]", "nested too deeply"),
             ("typing.Annotated[int, endless()]", "nested too deeply"),
         ] {
-            let error = match built(py, expression) {
-                Err(error) => error.to_string(),
-                Ok(schema) => panic!("{expression} built {schema} instead of refusing"),
-            };
-            assert!(
-                error.contains(wanted),
-                "{expression} refused with {error}, which does not name {wanted}"
-            );
+            refuses(expression, wanted);
+        }
+        // The star inside a subscript is a syntax error before 3.11, so below
+        // it the refusal a row reads is the *parser's* rather than this one's.
+        // The release rides on the row, as it does in the table above.
+        for (since, expression, wanted) in
+            [(11u8, "tuple[*list[int]]", "only a tuple can be unpacked")]
+        {
+            if py.version_info() >= (3, since) {
+                refuses(expression, wanted);
+            }
         }
     });
 }
@@ -857,8 +890,19 @@ fn a_typed_dict_says_which_other_keys_it_admits() {
 fn a_class_is_read_through_what_it_declares() {
     Python::attach(|py| {
         let namespace = namespace(py).expect("the corpus namespace builds");
+        // `NotRequired` reaches `typing` in 3.11, so the key it marks is
+        // declared where the interpreter has the marker to declare it with --
+        // the class is written the way a caller writes it, rather than built
+        // and then patched. Below 3.11 the record is the required half alone,
+        // which is the record that release gives a caller for this class.
+        let optional = py.version_info() >= (3, 11);
+        let note = if optional {
+            "\x20   note: typing.NotRequired[int]\n"
+        } else {
+            ""
+        };
         py.run(
-            &CString::new(
+            &CString::new(format!(
                 "import dataclasses, typing\n\
                  @dataclasses.dataclass\n\
                  class Point:\n\
@@ -866,8 +910,8 @@ fn a_class_is_read_through_what_it_declares() {
                  \x20   tag: typing.ClassVar[str] = 'p'\n\
                  class Row(typing.TypedDict):\n\
                  \x20   name: str\n\
-                 \x20   note: typing.NotRequired[int]\n",
-            )
+                 {note}"
+            ))
             .expect("a source with no interior nul"),
             Some(&namespace),
             None,
@@ -879,7 +923,14 @@ fn a_class_is_read_through_what_it_declares() {
             ("Point", "Point"),
             // A `TypedDict` is a record, open as the typing spec defines
             // one, and `NotRequired` marks the key rather than its type.
-            ("Row", "{'name': str, 'note?': int, str: anything}"),
+            (
+                "Row",
+                if optional {
+                    "{'name': str, 'note?': int, str: anything}"
+                } else {
+                    "{'name': str, str: anything}"
+                },
+            ),
         ] {
             let annotation = namespace
                 .get_item(name)
@@ -928,22 +979,33 @@ fn a_qualifier_states_required_ness_only_from_the_outside() {
             qualified_required(&hint).expect("the walk answers")
         };
         for (expression, wanted) in [
-            // Stated, and read.
-            ("typing.Required[int]", Some(true)),
-            ("typing.NotRequired[int]", Some(false)),
-            // Stated behind a qualifier that carries no answer of its own.
-            ("typing.Required[typing.Annotated[int, 1]]", Some(true)),
             // Not stated: nothing here is a field qualifier.
             ("int", None),
             ("list[int]", None),
             ("typing.Annotated[int, 1]", None),
+        ] {
+            assert_eq!(answer(expression), wanted, "{expression}");
+        }
+        // Every other row names a marker `typing` gained in 3.11, so each
+        // carries the release it needs: below it the name is an
+        // `AttributeError` and the row would be about the interpreter rather
+        // than about the walk. The rows themselves are what every lane above
+        // the floor drives.
+        for (since, expression, wanted) in [
+            // Stated, and read.
+            (11u8, "typing.Required[int]", Some(true)),
+            (11, "typing.NotRequired[int]", Some(false)),
+            // Stated behind a qualifier that carries no answer of its own.
+            (11, "typing.Required[typing.Annotated[int, 1]]", Some(true)),
             // The one the walk must not read through: `list` is not a field
             // qualifier, so the search ends at it and never sees the
             // `Required` it holds.
-            ("list[typing.Required[int]]", None),
-            ("dict[str, typing.NotRequired[int]]", None),
+            (11, "list[typing.Required[int]]", None),
+            (11, "dict[str, typing.NotRequired[int]]", None),
         ] {
-            assert_eq!(answer(expression), wanted, "{expression}");
+            if py.version_info() >= (3, since) {
+                assert_eq!(answer(expression), wanted, "{expression}");
+            }
         }
     });
 }

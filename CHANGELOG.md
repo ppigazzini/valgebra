@@ -46,6 +46,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a traceback through an error hook names a file a reader can place -- internal
 - fix: a subject outside every branch of a union is refuted, not left open
 - feat: divisibility between two moduli is decided by the steps themselves
+- fix: a corpus row naming a member a release lacks carries the release it needs -- internal
 
 -->
 

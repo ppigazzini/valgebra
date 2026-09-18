@@ -76,6 +76,21 @@ uv run ty check
 uv run pytest
 ```
 
+The binding's four corpora sit behind `--features interpreter-tests`, which
+links an **embedded** interpreter -- one with no virtual environment around it,
+reading its standard library from the prefix it was built for. Where the first
+`python3` on your path is a different release from the one `PYO3_PYTHON` names,
+that prefix is the wrong one and the test binary dies in `init_fs_encoding`
+before a test runs, saying only `No module named 'encodings'`. Naming the
+interpreter's own prefix for that one command is the fix, and it is scoped to
+the command because exporting it would send every later `uv run` to the same
+prefix and past the environment:
+
+```bash
+PYTHONHOME="$(uv run python -c 'import sys; print(sys.base_prefix)')" \
+  cargo test -p valgebra-py --features interpreter-tests
+```
+
 The fuzz crate is a **detached workspace** -- libFuzzer needs a nightly
 toolchain, and making it a member would put nightly on every stable gate's path
 -- so `cargo check --workspace` does not reach it and it needs its own line. A
@@ -100,7 +115,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | Rust behaviour | `crates/` | `cargo test` |
 | Rust documentation links | the doc comments in `crates/` | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` |
 | the extension links on PyPy | `crates/valgebra-py/src/` | `uv run --python pypy-3.11 python scripts/pypy_import_check.py` |
-| the walk's own corpus | `crates/valgebra-py/src/check/walk.rs` | `cargo test -p valgebra-py --features interpreter-tests` |
+| the binding's four corpora | `crates/valgebra-py/src/check/walk.rs`, `crates/valgebra-py/src/build.rs`, `crates/valgebra-py/src/build/interpreter.rs`, `crates/valgebra-py/src/oracle/interpreter.rs` | `cargo test -p valgebra-py --features interpreter-tests` |
 | the detached fuzz surface | `fuzz/Cargo.toml` | `cargo check --manifest-path fuzz/Cargo.toml --all-targets` |
 | fuzz harness laws | `fuzz/src/lib.rs` | `cargo +nightly test --manifest-path fuzz/Cargo.toml --lib` |
 | Python behaviour | `tests/` | `uv run pytest` |
