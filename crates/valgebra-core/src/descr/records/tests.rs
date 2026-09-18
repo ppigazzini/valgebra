@@ -382,3 +382,75 @@ fn a_union_past_the_bound_refuses() {
             .is_none()
     );
 }
+
+// THEORY: the-descriptor
+/// A complement is expanded where the expansion is one product, and carried
+/// under the flag past that.
+///
+/// Three widths, three claims. No atoms complements into the whole and the
+/// whole back into none, which is what keeps the cheap forms canonical: two
+/// descriptors holding the same objects compare equal rather than differing by
+/// the route each took. Two atoms is a product of two complements, a width the
+/// meet it is headed for would have pruned, so the atoms are carried as they
+/// are and the polarity says what they mean.
+#[test]
+fn a_complement_is_expanded_only_where_it_is_one_product() {
+    let none: RecordLattice<IntSet> = RecordLattice::empty();
+    let every: RecordLattice<IntSet> = RecordLattice::all();
+    assert_eq!(
+        none.complement(),
+        every,
+        "no atoms are the whole complemented"
+    );
+    assert_eq!(
+        every.complement(),
+        none,
+        "and the whole is none complemented"
+    );
+
+    let two = RecordLattice::attribute("x", IntSet::just(0), false)
+        .union(&RecordLattice::attribute("y", IntSet::just(1), false))
+        .expect("two atoms");
+    let carried = two.complement();
+    assert!(
+        carried.negated,
+        "two atoms are carried rather than expanded"
+    );
+    assert_eq!(carried.atoms, two.atoms, "with the atoms as they were");
+    assert!(
+        same(&carried.complement(), &two),
+        "and the flag complements back into the union it carries"
+    );
+}
+
+/// The bound reads the width of the union, never the number of pairs.
+///
+/// Twenty atoms met with twenty is four hundred pairs, and the pairs are where
+/// the count grows: it passes [`MAX_ATOMS`] long before the meet is done. The
+/// union they collapse to is twenty atoms wide, because an atom wanting two
+/// values of one attribute holds no object and a union carries no such atom.
+/// Refusing on the raw count would make the bound a question about the order
+/// the factors were multiplied in, which is a property of how a difference was
+/// written rather than of the objects it names.
+#[test]
+fn a_meet_is_bounded_by_the_width_of_its_union_and_not_by_its_pairs() {
+    let wide = (1..20i64)
+        .try_fold(
+            RecordLattice::attribute("x", IntSet::just(0), false),
+            |left, n| left.union(&RecordLattice::attribute("x", IntSet::just(n), false)),
+        )
+        .expect("twenty atoms");
+    let met = wide
+        .intersect(&wide)
+        .expect("four hundred pairs, one union");
+    assert!(
+        wide.atoms.len() * wide.atoms.len() > MAX_ATOMS,
+        "the row needs a pair count the bound would refuse"
+    );
+    assert_eq!(
+        met.atoms.len(),
+        wide.atoms.len(),
+        "and an answer no wider than either side"
+    );
+    assert!(same(&met, &wide), "a meet with itself holds what it held");
+}

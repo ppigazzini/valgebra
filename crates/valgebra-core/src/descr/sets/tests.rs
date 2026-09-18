@@ -280,3 +280,73 @@ fn a_covering_question_the_allowance_cannot_settle_answers_neither_way() {
     assert_eq!(budget::under(4096, || other.covers(&some)), Some(false));
     assert_eq!(budget::under(4096, || some.covers(&some)), Some(true));
 }
+
+// THEORY: the-descriptor
+/// A complement is expanded where the expansion is one product, and carried
+/// under the flag past that.
+///
+/// Three widths, three claims. No lines complements into every set and every
+/// set back into none, which is what keeps the cheap forms canonical: two
+/// descriptors holding the same sets compare equal rather than differing by the
+/// route each took. Two lines is a product of two complements, a width the meet
+/// it is headed for would have pruned, so the lines are carried as they are and
+/// the polarity says what they mean.
+#[test]
+fn a_complement_is_expanded_only_where_it_is_one_product() {
+    let none: SetLattice<IntSet> = SetLattice::empty();
+    let every: SetLattice<IntSet> = SetLattice::all();
+    assert_eq!(
+        none.complement(),
+        every,
+        "no lines are every set complemented"
+    );
+    assert_eq!(
+        every.complement(),
+        none,
+        "and every set is none complemented"
+    );
+
+    let two = SetLattice::of(IntSet::just(0))
+        .union(&SetLattice::of(IntSet::just(1)))
+        .expect("two lines");
+    let carried = two.complement();
+    assert!(
+        carried.negated,
+        "two lines are carried rather than expanded"
+    );
+    assert_eq!(carried.lines, two.lines, "with the lines as they were");
+    assert!(
+        same(&carried.complement(), &two),
+        "and the flag complements back into the union it carries"
+    );
+}
+
+/// The bound reads the width of the union, never the number of pairs.
+///
+/// Twenty lines met with twenty is four hundred pairs, and the pairs are where
+/// the count grows: it passes [`MAX_LINES`] long before the meet is done. The
+/// union they collapse to is narrower than that, because the meets of unlike
+/// lines are one line and a union holds it once. Refusing on the raw count
+/// would make the bound a question about the order the factors were multiplied
+/// in, which is a property of how a difference was written rather than of the
+/// sets it names.
+#[test]
+fn a_meet_is_bounded_by_the_width_of_its_union_and_not_by_its_pairs() {
+    let wide = (1..20i64)
+        .try_fold(SetLattice::of(IntSet::just(0)), |left, n| {
+            left.union(&SetLattice::of(IntSet::just(n)))
+        })
+        .expect("twenty lines");
+    let met = wide
+        .intersect(&wide)
+        .expect("four hundred pairs, one union");
+    assert!(
+        wide.lines.len() * wide.lines.len() > MAX_LINES,
+        "the row needs a pair count the bound would refuse"
+    );
+    assert!(
+        met.lines.len() <= wide.lines.len() + 1,
+        "and an answer the width of either side, plus the line the unlike meets share"
+    );
+    assert!(same(&met, &wide), "a meet with itself holds what it held");
+}

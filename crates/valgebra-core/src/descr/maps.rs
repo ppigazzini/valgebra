@@ -697,10 +697,20 @@ impl<G: Guard> MapLattice<G> {
     }
 
     /// The dicts in either, or `None` past [`MAX_ATOMS`].
+    ///
+    /// A negated side is joined through De Morgan rather than rebuilt: `A ∪ B`
+    /// is `¬(¬A ∩ ¬B)`, and the meet is the operation that can drop an atom
+    /// mid-way. Expanding the negation first asks [`MAX_ATOMS`] about a union
+    /// that is only an intermediate, and a refusal there refuses a join whose
+    /// answer fits.
     #[must_use]
     pub fn union(&self, other: &MapLattice<G>) -> Option<MapLattice<G>> {
-        let mut atoms = self.positive()?;
-        atoms.extend(other.positive()?);
+        if self.negated || other.negated {
+            let met = self.complement().intersect(&other.complement())?;
+            return Some(met.complement());
+        }
+        let mut atoms = self.atoms.clone();
+        atoms.extend(other.atoms.iter().cloned());
         Some(MapLattice {
             atoms: tidy(atoms)?,
             negated: false,
@@ -708,10 +718,36 @@ impl<G: Guard> MapLattice<G> {
     }
 
     /// The dicts in both, or `None` past [`MAX_ATOMS`] or where a guard refuses.
+    ///
+    /// A negated side is removed one atom at a time rather than rebuilt into a
+    /// union first. `¬⋁ᵢAᵢ` is `⋀ᵢ¬Aᵢ`, so both orders compute this set; what
+    /// they differ in is the widest intermediate they ask [`MAX_ATOMS`] about.
+    /// Rebuilding first multiplies every `¬Aᵢ` together with nothing to narrow
+    /// the product -- four two-field records pass the bound -- while meeting
+    /// each factor into what is already held drops the atoms holding no dict
+    /// before the next factor multiplies them.
+    ///
+    /// The set is the same either way, which is what makes this an order and
+    /// not a rule: a bound reached under one spelling of a difference and not
+    /// the other would make a relation's answer a property of how the caller
+    /// wrote it.
     #[must_use]
     pub fn intersect(&self, other: &MapLattice<G>) -> Option<MapLattice<G>> {
+        let mut atoms = match (self.negated, other.negated) {
+            (false, false) => product(&self.atoms, &other.atoms)?,
+            (false, true) => self.atoms.clone(),
+            (true, false) => other.atoms.clone(),
+            // Two negated sides leave nothing positive to start from, so the
+            // meet starts at every dict and both sides narrow it.
+            (true, true) => vec![MapAtom::top()],
+        };
+        for negated in [self, other].into_iter().filter(|side| side.negated) {
+            for atom in &negated.atoms {
+                atoms = product(&atoms, &atom.complement())?;
+            }
+        }
         Some(MapLattice {
-            atoms: product(&self.positive()?, &other.positive()?)?,
+            atoms,
             negated: false,
         })
     }
@@ -726,6 +762,16 @@ impl<G: Guard> MapLattice<G> {
             atoms: self.atoms.clone(),
             negated: !self.negated,
         };
+        // Expanded only where the expansion is one product, which is what
+        // keeps the cheap forms canonical -- complementing "every dict"
+        // gives back exactly "no dict" rather than a second spelling of it.
+        // Past that the negation is carried: rebuilding a wide union's
+        // complement here spends the build's allowance on an intermediate that
+        // the meet it is headed for would have pruned, and a meet against a
+        // negated side removes one atoms at a time instead.
+        if self.atoms.len() > 1 {
+            return flipped;
+        }
         match flipped.positive() {
             Some(atoms) => MapLattice {
                 atoms,
@@ -756,8 +802,18 @@ fn product<G: Guard>(left: &[MapAtom<G>], right: &[MapAtom<G>]) -> Option<Vec<Ma
     let mut atoms = Vec::new();
     for mine in left {
         for theirs in right {
-            if atoms.len() >= MAX_ATOMS || !budget::spend() {
+            if !budget::spend() {
                 return None;
+            }
+            if atoms.len() >= MAX_ATOMS {
+                // [`MAX_ATOMS`] bounds the *union*, and a union is only as wide
+                // as it is once the atoms holding no dict and the repeats are
+                // gone. Compacting here is what keeps the raw count from
+                // standing in for that width, and the bound itself is
+                // [`tidy`]'s: asked once, so a union as wide as the bound
+                // builds whichever order its factors were multiplied in,
+                // and one wider than it refuses whichever order they took.
+                atoms = tidy(atoms)?;
             }
             atoms.push(mine.meet(theirs)?);
         }

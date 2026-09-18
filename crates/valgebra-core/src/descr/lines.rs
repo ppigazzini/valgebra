@@ -247,6 +247,32 @@ impl Lines {
     /// A union concatenates and a meet multiplies, which is where the bound
     /// bites.
     pub(crate) fn combine(&self, other: &Lines, op: Op, whole: Whole) -> Option<Lines> {
+        // A meet against a negated side removes one of its lines at a time.
+        // `⋀ᵢ¬Lᵢ` is `¬⋁ᵢLᵢ`, so both orders compute the same values; what they
+        // differ in is the widest intermediate they ask [`MAX_LINES`] about.
+        // Expanding the negation first multiplies every `¬Lᵢ` together with
+        // nothing to narrow the product, which is a width the answer rarely
+        // has -- and a bound reached under one spelling of a difference and
+        // not another makes a relation's answer a property of how it was
+        // written.
+        if op == Op::Intersect && (self.negated || other.negated) {
+            let mut lines = match (self.negated, other.negated) {
+                (false, _) => self.lines.clone(),
+                (true, false) => other.lines.clone(),
+                // Two negated sides leave nothing positive to start from, so
+                // the meet starts at the whole kind and both sides narrow it.
+                (true, true) => vec![Line::everything(whole.component())],
+            };
+            for negated in [self, other].into_iter().filter(|side| side.negated) {
+                for line in &negated.lines {
+                    lines = product(&lines, &line.complement(whole))?;
+                }
+            }
+            return Some(Lines {
+                lines,
+                negated: false,
+            });
+        }
         let mine = self.positive(whole)?;
         let theirs = other.positive(whole)?;
         let lines = match op {
@@ -282,6 +308,17 @@ impl Lines {
             return Lines {
                 lines: self.lines.clone(),
                 negated: false,
+            };
+        }
+        // Expanded only where the expansion is one product, which is what
+        // keeps the cheap forms canonical -- complementing "no lines" gives
+        // back exactly the whole kind rather than a second spelling of it.
+        // Past that the negation is carried, and the meet it is headed for
+        // removes one line at a time instead.
+        if self.lines.len() > 1 {
+            return Lines {
+                lines: self.lines.clone(),
+                negated: true,
             };
         }
         match complement_lines(&self.lines, whole) {
@@ -321,8 +358,18 @@ fn product(left: &[Line], right: &[Line]) -> Option<Vec<Line>> {
     let mut lines = Vec::new();
     for mine in left {
         for theirs in right {
-            if lines.len() >= MAX_LINES || !budget::spend() {
+            if !budget::spend() {
                 return None;
+            }
+            if lines.len() >= MAX_LINES {
+                // [`MAX_LINES`] bounds the *union*, and a union is only as wide
+                // as it is once the lines proved empty and the repeats are
+                // gone. Compacting here is what keeps the raw count from
+                // standing in for that width, and the bound itself is
+                // [`tidy`]'s: asked once, so a union as wide as the bound
+                // builds whichever order its factors were multiplied in,
+                // and one wider than it refuses whichever order they took.
+                lines = tidy(lines)?;
             }
             lines.push(mine.combine(theirs, Op::Intersect)?);
         }

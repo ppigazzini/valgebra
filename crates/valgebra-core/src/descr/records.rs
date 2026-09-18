@@ -373,8 +373,15 @@ impl<G: Guard> RecordLattice<G> {
     /// The objects in either, or `None` past [`MAX_ATOMS`].
     #[must_use]
     pub fn union(&self, other: &RecordLattice<G>) -> Option<RecordLattice<G>> {
-        let mut atoms = self.positive()?;
-        atoms.extend(other.positive()?);
+        if self.negated || other.negated {
+            // De Morgan: `A ∪ B` is `¬(¬A ∩ ¬B)`, and the meet is the operation
+            // that can drop an atom mid-way. Expanding the negation first asks
+            // the bound about a union that is only an intermediate.
+            let met = self.complement().intersect(&other.complement())?;
+            return Some(met.complement());
+        }
+        let mut atoms = self.atoms.clone();
+        atoms.extend(other.atoms.iter().cloned());
         Some(RecordLattice {
             atoms: tidy(atoms)?,
             negated: false,
@@ -385,8 +392,21 @@ impl<G: Guard> RecordLattice<G> {
     /// refuses.
     #[must_use]
     pub fn intersect(&self, other: &RecordLattice<G>) -> Option<RecordLattice<G>> {
+        let mut atoms = match (self.negated, other.negated) {
+            (false, false) => product(&self.atoms, &other.atoms)?,
+            (false, true) => self.atoms.clone(),
+            (true, false) => other.atoms.clone(),
+            // Two negated sides leave nothing positive to start from, so the
+            // meet starts at every object and both sides narrow it.
+            (true, true) => vec![Atom::top()],
+        };
+        for negated in [self, other].into_iter().filter(|side| side.negated) {
+            for atom in &negated.atoms {
+                atoms = product(&atoms, &atom.complement())?;
+            }
+        }
         Some(RecordLattice {
-            atoms: product(&self.positive()?, &other.positive()?)?,
+            atoms,
             negated: false,
         })
     }
@@ -402,6 +422,16 @@ impl<G: Guard> RecordLattice<G> {
             atoms: self.atoms.clone(),
             negated: !self.negated,
         };
+        // Expanded only where the expansion is one product, which is what
+        // keeps the cheap forms canonical -- complementing "every object"
+        // gives back exactly "no object" rather than a second spelling of it.
+        // Past that the negation is carried: rebuilding a wide union's
+        // complement here spends the build's allowance on an intermediate that
+        // the meet it is headed for would have pruned, and a meet against a
+        // negated side removes one atoms at a time instead.
+        if self.atoms.len() > 1 {
+            return flipped;
+        }
         match flipped.positive() {
             Some(atoms) => RecordLattice {
                 atoms,
@@ -430,8 +460,18 @@ fn product<G: Guard>(left: &[Atom<G>], right: &[Atom<G>]) -> Option<Vec<Atom<G>>
     let mut atoms = Vec::new();
     for mine in left {
         for theirs in right {
-            if atoms.len() >= MAX_ATOMS || !budget::spend() {
+            if !budget::spend() {
                 return None;
+            }
+            if atoms.len() >= MAX_ATOMS {
+                // [`MAX_ATOMS`] bounds the *union*, and a union is only as wide
+                // as it is once the atoms holding no object and the repeats are
+                // gone. Compacting here is what keeps the raw count from
+                // standing in for that width, and the bound itself is
+                // [`tidy`]'s: asked once, so a union as wide as the bound
+                // builds whichever order its factors were multiplied in,
+                // and one wider than it refuses whichever order they took.
+                atoms = tidy(atoms)?;
             }
             atoms.push(mine.meet(theirs)?);
         }

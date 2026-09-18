@@ -225,11 +225,22 @@ impl Bounds {
 /// record nested eight deep spends 22,806, and a union of four records nested
 /// three deep minus a union of its siblings spends 170,597.
 ///
-/// On the shapes reachable today [`DEPTH`] refuses first, so this number is
-/// rarely what stops a build -- `lower_sibling_union_difference_held` in
-/// `benches/core.rs` is refused for nesting, not for work. It is the bound that
-/// remains when a shape is shallow and wide, which is the one nesting cannot
-/// catch, and it is kept for that.
+/// On the shapes reachable today [`DEPTH`] refuses first for anything deep, so
+/// this number stops a build only where a shape is shallow and wide -- which is
+/// the one nesting cannot catch, and what it is kept for.
+///
+/// **The figure is what a record split across a union of records costs**, which
+/// is the widest shallow shape the sets are asked to decide. A two-field record
+/// against the four records that fix both keys spends under 2,048 units; the
+/// three-field record against its eight corners spends under 4,096. Both are
+/// relations a caller writes and the rules decline, so both are the sets' to
+/// answer, and a bound below them refuses an ordinary question. The blow-ups
+/// the number exists to stop are an order of magnitude further out, so the
+/// margin is real rather than nominal.
+///
+/// `tests/test_completeness_ledger.py` carries both shapes as rows, which is
+/// what makes this figure re-derivable: the row fails on the commit that
+/// lowers it.
 ///
 /// **This bound is debt.** It counts work rather than limiting what the
 /// representation can hold, and it is here for the reason the decision's own
@@ -237,7 +248,7 @@ impl Bounds {
 /// Construction shares those subtrees where they are built alike
 /// (`ir/intern.rs`), which is what gives the memo that would replace this
 /// ceiling a cheap key; the memo is the half not written.
-pub const WORK: u64 = 1024;
+pub const WORK: u64 = 4096;
 
 /// The schema nesting this will descend before refusing.
 ///

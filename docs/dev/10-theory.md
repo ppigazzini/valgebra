@@ -292,7 +292,14 @@ representation closed under union, intersection and complement, so a relation is
 decided by emptiness of one combination rather than by whether a rule matched the
 shape a caller wrote.
 
-HELD-BY: the_lattice_laws_hold_of_the_descriptors, the_complement_laws_hold_of_the_descriptors, emptiness_agrees_with_the_values
+That last clause is the claim, and it is a claim about the **verdict** rather
+than about the values: two spellings of one set admit the same values whatever
+either decides, so a law read against membership holds of a pair where one
+spelling answers and the other declines. `a ∧ ¬(b ∨ c)` against `a ∧ ¬b ∧ ¬c`
+is the pair, De Morgan is why they are one set, and the tests below read what a
+caller is told rather than what a value is.
+
+HELD-BY: the_lattice_laws_hold_of_the_descriptors, the_complement_laws_hold_of_the_descriptors, emptiness_agrees_with_the_values, the_verdict_is_stable_under_de_morgan, a_meet_with_a_negated_union_answers_as_the_spelled_out_meet, test_the_verdict_is_stable_under_de_morgan
 
 It is built beside the structural procedure and is the second decider a caller
 reaches: the rules answer first and this answers where they decline

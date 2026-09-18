@@ -4748,3 +4748,65 @@ fn an_assumption_is_read_as_the_pair_it_is() {
         "the pair itself did not discharge the goal, so the rule never fired"
     );
 }
+
+/// The width of the decided fragment is the allowance, and the difference is
+/// what spends it.
+///
+/// A record whose fields each take several types *is* the union of the records
+/// that fix them, and the rules have no split rule for a record, so the sets
+/// answer -- by building `subject ∧ ¬corners` and reading whether it holds a
+/// value. Both widths below lower well inside the node and nesting bounds; what
+/// separates them is what the difference costs, which grows with the number of
+/// corners because a meet against a complemented union removes one part at a
+/// time and each removal multiplies.
+///
+/// Eight corners decides. Sixteen spends the whole allowance and declines --
+/// `Unknown` rather than `Fails`, which is the distinction this asks for: the
+/// relation holds, and a decline is "not proven within what a build may spend".
+/// Sixteen is where the fragment ends however the fields and the types divide
+/// them, which is the reading `tests/test_completeness_ledger.py` carries for
+/// four fields over two types and this one carries for two over four.
+#[test]
+fn a_difference_past_the_allowance_declines() {
+    let split = |types: &[Schema]| {
+        Schema::record(
+            ["a", "b"]
+                .into_iter()
+                .map(|name| field(name, Schema::union(types.to_vec()), true))
+                .collect(),
+            Openness::Closed,
+        )
+    };
+    let corners = |types: &[Schema]| {
+        Schema::union(
+            types
+                .iter()
+                .flat_map(|first| {
+                    types.iter().map(move |second| {
+                        Schema::record(
+                            vec![
+                                field("a", first.clone(), true),
+                                field("b", second.clone(), true),
+                            ],
+                            Openness::Closed,
+                        )
+                    })
+                })
+                .collect::<Vec<_>>(),
+        )
+    };
+    let relation = |types: &[Schema]| {
+        split(types).subtype_relation_under(&corners(types), &NoLeafRelations, &[])
+    };
+
+    assert_eq!(
+        relation(&[Schema::Int, Schema::Str, Schema::Bool]),
+        Relation::Holds,
+        "eight corners is inside what a build may spend"
+    );
+    assert_eq!(
+        relation(&[Schema::Int, Schema::Str, Schema::Bool, Schema::Bytes]),
+        Relation::Unknown,
+        "sixteen is past it, and what is past it declines rather than refutes"
+    );
+}

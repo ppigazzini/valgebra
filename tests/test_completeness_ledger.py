@@ -516,6 +516,71 @@ _DECIDED = [
     pytest.param(
         "subtype", {"x": int}, {str: object}, id="map:closed-record<=wide-mapping"
     ),
+    # A record whose fields each take two types, against the union of the four
+    # records that fix both. The union *is* the record, the way a fixed sequence
+    # is the union of the tuples it splits across, and the sets decide it: the
+    # rules have a split rule for a product and none for a record, so the
+    # descriptor answers by emptiness of the difference.
+    #
+    # Both spellings of that difference are rows, because they are one set and
+    # the answer is the set's: the complement of the whole union and the meet of
+    # the four complements are De Morgan's two sides, and a bound reached under
+    # one and not the other is the spelling deciding the relation.
+    pytest.param(
+        "subtype",
+        {"a": union(int, str), "b": union(int, str)},
+        union(
+            {"a": int, "b": int},
+            {"a": int, "b": str},
+            {"a": str, "b": int},
+            {"a": str, "b": str},
+        ),
+        id="map:record<=its-corners",
+    ),
+    pytest.param(
+        "empty",
+        intersection(
+            {"a": union(int, str), "b": union(int, str)},
+            complement(
+                union(
+                    {"a": int, "b": int},
+                    {"a": int, "b": str},
+                    {"a": str, "b": int},
+                    {"a": str, "b": str},
+                )
+            ),
+        ),
+        None,
+        id="empty:record-minus-a-union-of-its-corners",
+    ),
+    pytest.param(
+        "empty",
+        intersection(
+            {"a": union(int, str), "b": union(int, str)},
+            complement({"a": int, "b": int}),
+            complement({"a": int, "b": str}),
+            complement({"a": str, "b": int}),
+            complement({"a": str, "b": str}),
+        ),
+        None,
+        id="empty:record-minus-each-of-its-corners",
+    ),
+    # The same shape one field wider, which is what says the work allowance has
+    # a margin rather than a figure that happens to fit: the two-field split
+    # spends under half of it and this one under all of it.
+    pytest.param(
+        "subtype",
+        {"a": union(int, str), "b": union(int, str), "c": union(int, str)},
+        union(
+            *[
+                {"a": a, "b": b, "c": c}
+                for a in (int, str)
+                for b in (int, str)
+                for c in (int, str)
+            ]
+        ),
+        id="map:wider-record<=its-corners",
+    ),
     # Inclusion in a complement, which is `A ∩ B = ∅` and nothing structural: a
     # complement offers no shape on the right to recurse into.
     pytest.param(

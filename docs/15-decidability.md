@@ -131,6 +131,27 @@ answers `"undecided"`.
   or because the other side is closed and does not declare it. Only a required key
   can do this — a meet of two mappings, or of two optional fields, always contains
   the empty dict.
+
+    A record is decided against a **union of records it splits across** as well,
+    which is the same shape one kind over from the fixed sequence above:
+    `{"a": int | str, "b": int | str}` is below the four records that fix both
+    keys. No single branch contains it, so the rules decline and the sets
+    answer, by emptiness of the difference.
+
+- **A difference written as one complemented union.** `a ∧ ¬(b ∨ c)` and
+  `a ∧ ¬b ∧ ¬c` are one set, and both are decided where either is: no spelling
+  of a difference is the harder one by construction. That is worth stating
+  because the set representation is bounded — a union of dicts, objects or sets
+  holds at most a fixed number of atoms — and complementing a union of *n* parts
+  multiplies *n* complements together, which is a width the answer rarely has.
+  A meet against such a union removes one part at a time, so the width the bound
+  sees is the width of the answer rather than of the widest intermediate.
+
+    The bound is still there. A difference wide enough to reach it reaches it,
+    and which of two spellings gets there first depends on the order the parts
+    multiply, so a relation the sets decline under one spelling may be decided
+    under another. What no longer happens is one spelling being *systematically*
+    the one that declines.
 - **A length bound over a base that takes any length.** A string and a bytes
   take any, so a bound their lengths admit is met by a value: `Annotated[str,
   MinLen(1)]` is the non-empty string and is decided to have one. A container

@@ -150,6 +150,22 @@ SCHEMAS: list[tuple[str, Validator]] = [
     ("{a:int,...}", _v(_Rec).open()),
     ("{a:int,b:str}", _v(_Rec2)),
     ("{a:int}|{a:int,b:str}", union(_Rec, _Rec2)),
+    # A record whose fields each take two types, beside the union of the four
+    # records that fix both -- one set through two shapes, and the pair that
+    # separates a decider reading the set from one reading how it was written.
+    # The union spelled as a whole and the corners spelled apart are the two
+    # sides of De Morgan, and a search over values cannot tell them apart:
+    # neither the proof nor the decline admits a value the other refuses.
+    ("{a:int|str,b:int|str}", _v({"a": int | str, "b": int | str})),
+    (
+        "{a:int,b:int}|{a:int,b:str}|{a:str,b:int}|{a:str,b:str}",
+        union(
+            {"a": int, "b": int},
+            {"a": int, "b": str},
+            {"a": str, "b": int},
+            {"a": str, "b": str},
+        ),
+    ),
     ("int&Ge(0)", _v(Annotated[int, at.Ge(0)])),
     ("int&Ge(1)", _v(Annotated[int, at.Ge(1)])),
     ("str&Regex['a']", _v(Annotated[str, Regex("a")])),
@@ -295,6 +311,15 @@ _SHAPES: list[tuple[Any, Any]] = [
     ({"z": 1}, lambda value: {"z": value}),
     ({1: 1}, lambda value: {value: 1}),
     ({1: "a"}, lambda value: {value: "a"}),
+    # Two named keys at once, and the same dict carrying a third key no record
+    # names. A shape that fills one slot builds neither: a two-field record
+    # admits no dict with one key, and the value that separates an open record
+    # from a closed one is a dict with a key besides the ones declared. Without
+    # them a refutation about either is true and has no witness here, which
+    # reads as a suspected unsoundness rather than as a thin universe.
+    ({"a": 1, "b": "x"}, lambda value: {"a": value, "b": "x"}),
+    ({"a": 1, "b": 1}, lambda value: {"a": value, "b": 1}),
+    ({"a": 1, "b": "x", "z": 1}, lambda value: {"a": 1, "b": "x", "z": value}),
 ]
 
 

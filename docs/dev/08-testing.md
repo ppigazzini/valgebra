@@ -342,6 +342,21 @@ over one is decided by the rules. The witness spread carries the boundaries a
 drawn value reaches only by luck — `nan`, the infinities, `-0.0`, the ends of
 the integer carriers, and a newline.
 
+**And each case runs under the allowance a relation builds its difference
+under.** A law asks the descriptor operations directly, where a relation asks
+them through `decision`, and the operations hold no ceiling of their own: each
+lattice's width bound refuses a result too wide to represent and says nothing
+about how long reaching a narrow one may take. A law without an allowance
+therefore costs whatever its draw asks -- the set complement law spent 119
+seconds under the seed the nightly sweep drew on 2026-09-19 and 1.3 under the
+one before it. That is not slowness, it is a suite the sweep cannot be sized
+against: a mutant's timeout is a multiple of the baseline's test time, so a
+baseline that moves by two orders of magnitude between runs makes every verdict
+in the shard a property of the seed rather than of the mutation. The laws that
+read a refusal as a skip arm one per case (`descr/tests.rs`); the laws over
+`descr()` assert that their operations *succeed*, which is a claim about a
+fragment rather than about a build, and they do not.
+
 ## What is not tested here, deliberately
 
 **Denotation preservation is not re-checked in the fuzz targets.** They assert

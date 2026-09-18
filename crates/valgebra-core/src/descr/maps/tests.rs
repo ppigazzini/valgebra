@@ -326,6 +326,67 @@ fn unordered_pairs_yields_each_distinct_pair_once() {
     assert_eq!(unordered_pairs(&items[..2]).count(), 1);
 }
 
+// THEORY: the-descriptor
+/// A meet with a negated union answers what the same meet spelled out answers.
+///
+/// `R` names two keys and gives each two values; the four corners fix both
+/// keys. Their union *is* `R`, so `R` minus them holds no dict -- and the
+/// question is whether both spellings of "minus them" say so, because they are
+/// one set and a descriptor decides a set.
+///
+/// Complementing the union expands it whole: a product of four ten-atom
+/// complements, which passes [`MAX_ATOMS`] before the meet with `R` can drop a
+/// single atom. Meeting one factor at a time prunes first -- eight of `¬c₁`'s
+/// ten atoms want a key outside `a` and `b`, which a closed `R` has none of --
+/// so the width the bound sees is the width of the answer rather than the
+/// width of the widest intermediate.
+#[test]
+fn a_meet_with_a_negated_union_answers_as_the_spelled_out_meet() {
+    let two = IntSet::between(Some(1), Some(2));
+    let closed = |labels: Vec<(Label, IntSet, bool)>| {
+        MapLattice::record(labels, []).expect("a two-field record")
+    };
+    let corner = |a: i64, b: i64| {
+        closed(vec![
+            (Label::str("a"), IntSet::just(a), false),
+            (Label::str("b"), IntSet::just(b), false),
+        ])
+    };
+    let whole = closed(vec![
+        (Label::str("a"), two.clone(), false),
+        (Label::str("b"), two, false),
+    ]);
+    let corners = [corner(1, 1), corner(1, 2), corner(2, 1), corner(2, 2)];
+
+    // Spelled out: each corner removed in turn.
+    let stepwise = corners
+        .iter()
+        .try_fold(whole.clone(), |left, corner| {
+            left.intersect(&corner.complement())
+        })
+        .expect("a difference no wider than the record");
+    assert_eq!(
+        stepwise.emptiness(),
+        Verdict::Empty,
+        "the four corners are the record, so what is left holds no dict"
+    );
+
+    // The same set, written as one complemented union.
+    let joined = corners
+        .iter()
+        .skip(1)
+        .try_fold(corners[0].clone(), |left, corner| left.union(corner))
+        .expect("a union of four records");
+    let together = whole
+        .intersect(&joined.complement())
+        .expect("the same difference, spelled once");
+    assert_eq!(
+        together.emptiness(),
+        Verdict::Empty,
+        "and the spelling of the difference is not what decides it"
+    );
+}
+
 // --- The lattice laws, over the dicts --------------------------------------
 //
 // Every other component of the descriptor holds these as a property; this one
@@ -460,6 +521,58 @@ proptest! {
         }
     }
 
+    // THEORY: the-descriptor
+    /// One set written two ways is one set, and is decided once.
+    ///
+    /// `a ∧ ¬(b ∨ c)` and `a ∧ ¬b ∧ ¬c` are one set by De Morgan. The laws
+    /// above hold each spelling against the dicts *separately*; this holds the
+    /// two against each other, which is what the meet against a negated side
+    /// has to preserve now that it removes one factor at a time rather than
+    /// rebuilding the union first.
+    ///
+    /// Two claims, and the second is the one membership cannot make. The
+    /// dicts must agree, because the two are one set. And where both spellings
+    /// *build*, the verdict must agree too -- a decline and a proof admit the
+    /// same dicts, namely none, so a law read against values alone passes on a
+    /// pair where one spelling answers and the other does not.
+    ///
+    /// Where one spelling does not build, nothing is asserted, and that is not
+    /// a gap in the law. [`MAX_ATOMS`] bounds the *result*, the two spellings
+    /// reach it through different intermediates, and neither order is narrower
+    /// everywhere: a difference wide enough to reach the bound reaches it under
+    /// one spelling before the other, whichever way round the factors go. What
+    /// the meet guarantees is that no spelling is harder *by construction*,
+    /// which is what `a_meet_with_a_negated_union_answers_as_the_spelled_out_meet`
+    /// pins on the shape that showed it.
+    #[test]
+    fn the_verdict_is_stable_under_de_morgan(
+        a in lattice(),
+        b in lattice(),
+        c in lattice(),
+    ) {
+        // Where the union itself does not fit there is no second spelling to
+        // compare: the law is about the *difference* being written two ways,
+        // and `b ∪ c` is a term the caller writes before either difference.
+        let Some(joined) = b.union(&c) else {
+            return Ok(());
+        };
+        let stepwise = a
+            .intersect(&b.complement())
+            .and_then(|left| left.intersect(&c.complement()));
+        let together = a.intersect(&joined.complement());
+        if let (Some(stepwise), Some(together)) = (&stepwise, &together) {
+            prop_assert!(
+                same(stepwise, together),
+                "one set, two spellings, two sets"
+            );
+            prop_assert_eq!(
+                stepwise.emptiness(),
+                together.emptiness(),
+                "one set, two spellings, two verdicts"
+            );
+        }
+    }
+
     /// Emptiness is a claim about the dicts: a lattice proved empty holds
     /// none, and one proved inhabited is contradicted by no dict either.
     ///
@@ -477,4 +590,79 @@ proptest! {
             Verdict::Inhabited | Verdict::Unknown => {}
         }
     }
+}
+
+// THEORY: the-descriptor
+/// A complement is expanded where the expansion is one product, and carried
+/// under the flag past that.
+///
+/// Three widths, three claims. No atoms complements into every dict and every
+/// dict back into none, which is what keeps the cheap forms canonical: two
+/// descriptors holding the same dicts compare equal rather than differing by
+/// the route each took. Two atoms is a product of two complements, a width the
+/// meet it is headed for would have pruned, so the atoms are carried as they
+/// are and the polarity says what they mean.
+#[test]
+fn a_complement_is_expanded_only_where_it_is_one_product() {
+    let none: MapLattice<IntSet> = MapLattice::empty();
+    let every: MapLattice<IntSet> = MapLattice::all();
+    assert_eq!(
+        none.complement(),
+        every,
+        "no atoms are every dict complemented"
+    );
+    assert_eq!(
+        every.complement(),
+        none,
+        "and every dict is none complemented"
+    );
+
+    let keyed = |label: &str, value: i64| {
+        MapLattice::record([(Label::str(label), IntSet::just(value), false)], [])
+            .expect("a one-field record")
+    };
+    let two = keyed("a", 0).union(&keyed("b", 1)).expect("two atoms");
+    let carried = two.complement();
+    assert!(
+        carried.negated,
+        "two atoms are carried rather than expanded"
+    );
+    assert_eq!(carried.atoms, two.atoms, "with the atoms as they were");
+    assert!(
+        same(&carried.complement(), &two),
+        "and the flag complements back into the union it carries"
+    );
+}
+
+/// The bound reads the width of the union, never the number of pairs.
+///
+/// Twenty atoms met with twenty is four hundred pairs, and the pairs are where
+/// the count grows: it passes [`MAX_ATOMS`] long before the meet is done. The
+/// union they collapse to is twenty atoms wide, because an atom wanting two
+/// values under one key holds no dict and a union carries no such atom.
+/// Refusing on the raw count would make the bound a question about the order
+/// the factors were multiplied in, which is a property of how a difference was
+/// written rather than of the dicts it names.
+#[test]
+fn a_meet_is_bounded_by_the_width_of_its_union_and_not_by_its_pairs() {
+    let keyed = |value: i64| {
+        MapLattice::record([(Label::str("a"), IntSet::just(value), false)], [])
+            .expect("a one-field record")
+    };
+    let wide = (1..20i64)
+        .try_fold(keyed(0), |left, n| left.union(&keyed(n)))
+        .expect("twenty atoms");
+    let met = wide
+        .intersect(&wide)
+        .expect("four hundred pairs, one union");
+    assert!(
+        wide.atoms.len() * wide.atoms.len() > MAX_ATOMS,
+        "the row needs a pair count the bound would refuse"
+    );
+    assert_eq!(
+        met.atoms.len(),
+        wide.atoms.len(),
+        "and an answer no wider than either side"
+    );
+    assert!(same(&met, &wide), "a meet with itself holds what it held");
 }

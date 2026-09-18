@@ -17,7 +17,8 @@ mod records;
 
 use std::cell::Cell;
 
-use crate::descr::lower::{Constants, lower_unfolded};
+use crate::descr::budget;
+use crate::descr::lower::{Constants, WORK, lower_unfolded};
 use crate::ir::{Constraint, Polarity, Schema, SeqShape};
 use crate::kind::{Region, Regions};
 use crate::verdict::{Relation, Verdict};
@@ -146,6 +147,15 @@ impl Schema {
         // A side this reading cannot lower, and a difference it cannot build,
         // are declines rather than refutations: nothing about the inclusion is
         // known from a set that was never constructed.
+        //
+        // **The difference is a build of its own**, under the allowance the two
+        // lowerings each ran under. It is the dearest of the three: the sides
+        // are built from a schema the node bound has already measured, and the
+        // difference multiplies a complement against a meet, which is where the
+        // lattices spend. Nothing else bounds it -- each lattice's width bound
+        // refuses a wide *answer*, not a long search for a narrow one -- so
+        // without this the cheapest thing a caller can ask for is bounded and
+        // the dearest is not.
         let cut = !defs.is_empty() && (self.has_reference() || other.has_reference());
         let Some(mine) = lower_unfolded(self, defs, Polarity::Widen, pool) else {
             return Relation::Unknown;
@@ -156,15 +166,17 @@ impl Schema {
         let Some(theirs) = lower_unfolded(other, defs, Polarity::Narrow, pool) else {
             return Relation::Unknown;
         };
-        mine.intersect(&theirs.complement())
-            .map_or(Relation::Unknown, |difference| {
-                let emptiness = difference.emptiness();
-                if cut {
-                    Relation::proven(emptiness == Verdict::Empty)
-                } else {
-                    Relation::of_difference(emptiness)
-                }
-            })
+        budget::under(WORK, || {
+            mine.intersect(&theirs.complement())
+                .map(|difference| difference.emptiness())
+        })
+        .map_or(Relation::Unknown, |emptiness| {
+            if cut {
+                Relation::proven(emptiness == Verdict::Empty)
+            } else {
+                Relation::of_difference(emptiness)
+            }
+        })
     }
 
     /// The decision steps [`is_subtype_of`](Self::is_subtype_of) spends, by the

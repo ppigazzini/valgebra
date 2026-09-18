@@ -40,10 +40,31 @@ answer of its own, or a repair to a change not yet released.
 - fix: a ledger count is spelled from the number the tree has -- internal
 - fix: a mapping opened frees the keys no clause claims
 - fix: a mutant that returned no verdict is a rig fault, not a survivor -- internal
+- fix: a record is decided against the union of records it splits across
 
 -->
 
 ### Fixed
+
+- **A record is decided against the union of records it splits across.**
+  `Validator({"a": int | str, "b": int | str}).is_subtype_of(...)` over the four
+  records that fix both keys was `False` and is `True`, and
+  `relation_to` answers `"subset"` where it answered `"undecided"`. The four
+  records are that record, the way a fixed-length tuple is the union of the
+  tuples it splits across.
+
+    The same reading settles a difference written as one complemented union.
+    `a & ~(b | c)` and `a & ~b & ~c` are one set, and both are decided where
+    either is: a meet against a complemented union removes one part at a time
+    rather than expanding the whole complement first, so the width the set
+    representation's bound sees is the width of the answer rather than of the
+    widest intermediate. The work one build may spend rises with it, to the
+    figure a record of three fields against its eight corners costs.
+
+    That difference is built under the allowance, which is what puts a ceiling
+    on what asking costs: a record over sixteen corners spends the whole of it
+    and answers `"undecided"`, whichever way its fields and types divide them.
+    An `"undecided"` is "not proven", never a claim that the relation fails.
 
 - **A mapping opened frees the keys no clause claims.**
   `Validator(dict[str, int]).open().is_valid({1: "x"})` was `False` and is

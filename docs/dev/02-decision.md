@@ -132,6 +132,28 @@ a union too wide is complemented into one too *narrow*, so rounding is never the
 alternative to refusing. `descr/budget.rs` bounds the work spent reaching a
 result, which is a different quantity from the size of one.
 
+**The difference a relation asks for is a build of its own**, under that same
+allowance. It is the dearest of the three a relation makes -- the two sides come
+off a schema the node bound has already measured, and the difference multiplies
+a complement against a meet -- and it is the one nothing else holds: a width
+bound refuses an answer too wide to represent, and says nothing about how long
+reaching a narrow one may take. So the allowance is what sets the width of the
+fragment the sets decide, and `decision/tests.rs` carries the two record splits
+either side of it: a record over eight corners decides, one over sixteen
+declines, and a decline is "not proven within what a build may spend".
+
+**A ceiling reached by one spelling of a set and not another is a ceiling that
+decides relations.** The three lattices built from atoms -- maps, objects, sets
+-- carry a polarity, so a complement that does not fit as a union is held as the
+negation of one; the union is rebuilt when something meets it. Rebuilding it
+*first* is what passes the ceiling: `¬⋁ᵢAᵢ` is `⋀ᵢ¬Aᵢ`, and multiplying every
+`¬Aᵢ` together before anything narrows the product reaches the widest term the
+question has, which is rarely the answer's width. So a meet against a negated
+union removes one `Aᵢ` at a time from what it already holds. Both orders
+compute the same set -- the budget's own rule is that it may turn an answer
+into a refusal and never one answer into a different one -- and only one of
+them asks the ceiling about an intermediate nobody wanted.
+
 `descr/lower.rs` is the map from a term to a set, and the two live side by side
 rather than one replacing the other: the walk still decides membership, and the
 descriptor is what the algebra reasons in.

@@ -4466,6 +4466,51 @@ proptest! {
         }
     }
 
+    // THEORY: the-descriptor
+    /// Two spellings of one difference never give two different answers.
+    ///
+    /// `a ∧ ¬(b ∨ c)` and `a ∧ ¬b ∧ ¬c` are one set, by De Morgan. Every law
+    /// above that touches the pair reads them against *values*, where the two
+    /// are indistinguishable by construction; this reads the verdict, which is
+    /// what a caller asking whether the difference is empty receives.
+    ///
+    /// **Equality of the two verdicts is not the law, and the reason is worth
+    /// stating.** `Unknown` is a refusal, the two spellings reach the width
+    /// bound through different intermediates, and the constructors fold one of
+    /// them further -- `a ∧ ¬a ∧ ¬c` is `nothing` where `a ∧ ¬(a ∨ c)` is a
+    /// term the sets have to decide. So one spelling deciding where the other
+    /// declines is the bound and the folds, not a disagreement. What no
+    /// spelling may do is *contradict* another: one proving the difference
+    /// empty while another proves it inhabited would make at least one of them
+    /// a wrong answer, and both are answers a caller acts on.
+    ///
+    /// The shapes where one spelling is the harder one by construction are rows
+    /// of `tests/test_completeness_ledger.py` rather than draws, because a
+    /// decided relation is a claim about a named pair.
+    #[test]
+    fn the_verdict_is_stable_under_de_morgan(
+        a in decidable_schema(),
+        b in decidable_schema(),
+        c in decidable_schema(),
+    ) {
+        let joined = Schema::meet([
+            a.clone(),
+            Schema::union([b.clone(), c.clone()]).complement(),
+        ]);
+        let spelled = Schema::meet([a, b.complement(), c.complement()]);
+        prop_assert!(
+            !matches!(
+                (joined.verdict(), spelled.verdict()),
+                (Verdict::Empty, Verdict::Inhabited) | (Verdict::Inhabited, Verdict::Empty)
+            ),
+            "one set, two spellings, two answers: {:?} says {:?} and {:?} says {:?}",
+            joined,
+            joined.verdict(),
+            spelled,
+            spelled.verdict()
+        );
+    }
+
     /// Inclusion is transitive wherever the rules decide it.
     ///
     /// Inclusion is a preorder in the model -- it is set containment -- so two

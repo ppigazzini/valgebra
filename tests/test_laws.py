@@ -368,6 +368,35 @@ def test_de_morgan(a: object, b: object, vals: list[object]) -> None:
     )
 
 
+# THEORY: the-descriptor
+@given(a=schemas, b=schemas, c=schemas)
+def test_the_verdict_is_stable_under_de_morgan(a: object, b: object, c: object) -> None:
+    """Two spellings of one difference never give two different answers.
+
+    `test_de_morgan` above holds the two spellings to the same *values*, which
+    they agree on by construction -- the constructors build one normal form and
+    the walk reads it. What it cannot see is the answer a caller asking a
+    relation receives, because a decline and a proof admit the same values:
+    neither admits any.
+
+    So this asks the verdict, through `relation_to`, which reports the three
+    answers apart and takes `nothing` as the schema every empty difference is
+    below. Equality of the two is not the claim: `undecided` is a refusal, the
+    two spellings reach the set representation's width bound through different
+    intermediates, and the constructors fold one of them further. One spelling
+    deciding where the other declines is those two facts, not a disagreement.
+
+    What no spelling may do is contradict another. `subset` and `not_subset`
+    are both answers a caller acts on -- the first says the difference is
+    empty, the second names a value in it -- and one set cannot be both.
+    """
+    joined = intersection(a, complement(union(b, c))).relation_to(nothing)
+    spelled = intersection(a, complement(b), complement(c)).relation_to(nothing)
+    assert {joined, spelled} != {"subset", "not_subset"}, (
+        f"one set, two spellings, two answers: {joined} and {spelled}"
+    )
+
+
 @given(a=schemas, b=schemas, c=schemas, vals=value_lists)
 def test_distributivity(a: object, b: object, c: object, vals: list[object]) -> None:
     assert equivalent(

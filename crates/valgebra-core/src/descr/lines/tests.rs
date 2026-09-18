@@ -302,3 +302,99 @@ fn a_complement_past_the_bound_keeps_its_values_under_the_flag() {
         "and complementing it back is the union again"
     );
 }
+
+// THEORY: the-descriptor
+/// A meet against a negated side removes one line at a time, and answers where
+/// expanding the negation first would refuse.
+///
+/// The nine two-sided lines below complement past [`MAX_LINES`], so there is no
+/// union to meet against: a meet that asked the negated side for its lines
+/// first would hand the bound a width the answer never has. Removing one line
+/// at a time narrows as it goes -- a line wanting an integer the positive side
+/// does not hold is dropped before the next line is removed -- and `⋀ᵢ¬Lᵢ` is
+/// `¬⋁ᵢLᵢ`, so the two orders name one set and differ only in the widest
+/// intermediate they ask about.
+#[test]
+fn a_meet_against_a_negated_side_removes_one_line_at_a_time() {
+    let mut wide = Lines::bottom();
+    for n in 0..9i64 {
+        let line = Lines::objects(
+            &Component::Integers(IntSet::just(n)),
+            RecordLattice::instance_of(Class::laid_out(10 + u32::try_from(n).unwrap_or(0), 1)),
+        );
+        wide = wide
+            .combine(&line, Op::Union, WHOLE)
+            .expect("nine lines fit");
+    }
+    let flagged = wide.complement(WHOLE);
+    assert!(
+        flagged.negated,
+        "the row is about a side the bound could not expand"
+    );
+
+    let some = Lines::everything(Component::Integers(IntSet::just(1)));
+    let met = some
+        .combine(&flagged, Op::Intersect, WHOLE)
+        .expect("a meet against a negated side removes one line at a time");
+    for (n, class) in universe() {
+        assert_eq!(
+            holds(&met, n, class.as_ref()),
+            holds(&some, n, class.as_ref()) && !holds(&wide, n, class.as_ref()),
+            "the meet holds what both sides do, at {n}"
+        );
+    }
+}
+
+/// The bound reads the width of the union, never the number of pairs.
+///
+/// Twenty lines met with twenty is four hundred pairs, and the pairs are where
+/// the count grows: it reaches [`MAX_LINES`] long before the meet is done. The
+/// union they collapse to is twenty lines wide, because a line wanting two
+/// integers at once holds no value and a union carries no such line. Refusing
+/// on the raw count would make the bound a question about the order the factors
+/// were multiplied in, which is a property of how a difference was written
+/// rather than of the values it names.
+///
+/// The lines carry an object constraint apiece, because [`tidy`](super::tidy)
+/// merges lines that differ only in their structure: twenty lines of one kind's
+/// integers are one line, and a union of one is a union no product grows.
+#[test]
+fn a_meet_is_bounded_by_the_width_of_its_union_and_not_by_its_pairs() {
+    let line = |n: i64| {
+        Lines::objects(
+            &Component::Integers(IntSet::just(n)),
+            RecordLattice::instance_of(Class::laid_out(10 + u32::try_from(n).unwrap_or(0), 1)),
+        )
+    };
+    let mut wide = line(0);
+    for n in 1..20i64 {
+        wide = wide
+            .combine(&line(n), Op::Union, WHOLE)
+            .expect("twenty lines");
+    }
+    assert_eq!(wide.lines.len(), 20, "twenty lines, none of them merged");
+    assert!(
+        wide.lines.len() * wide.lines.len() > MAX_LINES,
+        "the row needs a pair count the bound would refuse"
+    );
+
+    let met = wide
+        .combine(&wide, Op::Intersect, WHOLE)
+        .expect("four hundred pairs, one union");
+    assert_eq!(
+        met.lines.len(),
+        wide.lines.len(),
+        "and an answer no wider than either side"
+    );
+    for n in 0..20i64 {
+        let class = Class::laid_out(10 + u32::try_from(n).unwrap_or(0), 1);
+        assert!(
+            holds(&met, n, Some(&class)),
+            "the meet holds the value its line {n} holds"
+        );
+        assert!(
+            !holds(&met, n + 1, Some(&class)),
+            "and none another line holds"
+        );
+    }
+}

@@ -335,6 +335,26 @@ fn a_kind_whose_values_are_not_sequences_refuses() {
     assert!(Descr::sequence(&[], None, Kind::Set).is_none());
 }
 
+/// The allowance every case below runs under.
+///
+/// A case here asks the descriptor operations directly, where a relation asks
+/// them through `decision` -- which builds its difference under this same
+/// figure. Nothing in the operations bounds a *search*: each lattice's width
+/// bound refuses an answer too wide to hold, and a question whose answer is
+/// narrow is not refused however long reaching it takes. So an unarmed case
+/// costs whatever its draw asks, which is not a quantity a suite can be sized
+/// against: this block's complement law spent 119 seconds under the seed the
+/// nightly sweep drew on 2026-09-19 and 1.3 under the one before it.
+///
+/// The laws below are written against refusal already -- every operation that
+/// can decline is read as a skip -- so what the allowance changes is which
+/// draws are skipped, and it can only add to them. The laws over `descr()`
+/// further down assert that their operations *succeed*, which is a claim about
+/// a fragment rather than about a build, and they are not armed.
+fn allowance() -> budget::Allowance {
+    budget::armed(crate::descr::lower::WORK)
+}
+
 proptest! {
     // The same bounds, for the same reasons.
     #![proptest_config(ProptestConfig {
@@ -351,6 +371,7 @@ proptest! {
         b in descr_with_sets(),
         c in descr_with_sets(),
     ) {
+        let _allowance = allowance();
         if let (Some(ab), Some(ba)) = (a.union(&b), b.union(&a)) {
             prop_assert!(agree_on_values(&ab, &ba), "join commutes");
         }
@@ -376,6 +397,7 @@ proptest! {
         a in descr_with_sets(),
         b in descr_with_sets(),
     ) {
+        let _allowance = allowance();
         let not_a = a.complement();
         if let Some(met) = a.intersect(&not_a) {
             prop_assert!(met.is_empty(), "a value is in one of the two");
@@ -415,6 +437,7 @@ proptest! {
     /// nothing and so cannot be contradicted.
     #[test]
     fn a_verdict_is_a_claim_about_the_values(a in descr_with_sets()) {
+        let _allowance = allowance();
         let admitted = universe().into_iter().filter(|v| a.admits(*v)).count();
         match a.emptiness() {
             Verdict::Empty => prop_assert_eq!(admitted, 0, "empty admits nothing"),
@@ -432,6 +455,7 @@ proptest! {
     /// not asked -- failing to prove it is not a proof that a value escapes.
     #[test]
     fn an_empty_difference_is_containment(a in descr_with_sets(), b in descr_with_sets()) {
+        let _allowance = allowance();
         let Some(difference) = a.intersect(&b.complement()) else {
             return Ok(());
         };
@@ -449,6 +473,7 @@ proptest! {
     /// with the sets in.
     #[test]
     fn a_complement_holds_every_set_the_descriptor_does_not(a in descr_with_sets()) {
+        let _allowance = allowance();
         let complement = a.complement();
         for value in universe() {
             prop_assert_ne!(a.admits(value), complement.admits(value));
