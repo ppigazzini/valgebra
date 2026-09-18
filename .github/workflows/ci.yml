@@ -271,8 +271,11 @@ jobs:
           # A corpus is a table and a loop: it runs by construction, arrives at
           # full coverage, and lifts the figure for the code around it. They are
           # 4,048 of the 8,668 lines this was computed over -- nearly half the
-          # number described the tests. Excluded, the binding reads 97.01% of
-          # lines and 93.61% of regions.
+          # number described the tests. Excluded, the binding reads 97.00% of
+          # lines and 93.77% of regions -- measured with the flow above, against
+          # a cleaned profile in a target directory of its own, which is the
+          # only reading that is the lane's. The suites draw, so a figure moves
+          # in its third digit between runs.
           #
           # The region floor is the one that notices a branch with an arm nobody
           # reached, and it is three points below the line figure here. Both sit
