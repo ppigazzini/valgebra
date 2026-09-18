@@ -44,10 +44,19 @@ answer of its own, or a repair to a change not yet released.
 - fix: an order bound is refused where the base and the bound do not compare
 - fix: a union branch sharing no value with the subject decides nothing
 - fix: a traceback through an error hook names a file a reader can place -- internal
+- fix: a subject outside every branch of a union is refuted, not left open
 
 -->
 
 ### Fixed
+
+- **A subject outside every branch of a union is refuted, not left open.**
+  `Validator({"a": chain, "b": int}).relation_to(union({"a": chain}, {"a":
+  chain, "b": str}))` answered `"undecided"` and answers `"not_subset"`. A
+  subject sharing no value with any branch is outside the union, so where it
+  holds a value that value refutes the inclusion; reading the case as "proved,
+  or not proven" kept the proof for an empty subject and dropped the refutation
+  for every other.
 
 - **A union branch sharing no value with the subject decides nothing.**
   `Validator(chain).relation_to(union(None, {"next": int}))` answered

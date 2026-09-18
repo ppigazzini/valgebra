@@ -4763,7 +4763,8 @@ fn an_assumption_is_read_as_the_pair_it_is() {
 /// shares no value with is dropped by the same pass and the two arms answer
 /// for different reasons. `{"a": int}` and `{"a": bool}` share every dict whose
 /// `a` is a bool, so neither drops the other, and the wider one is still not
-/// below the narrower.
+/// below the narrower. Beside it, the row where every branch goes: a subject
+/// outside all of them is outside the union, and refutes on any value it holds.
 #[test]
 fn a_union_narrowed_to_one_branch_refutes_where_that_branch_does() {
     let relation = |sub: &Schema, sup: &Schema| {
@@ -4793,6 +4794,14 @@ fn a_union_narrowed_to_one_branch_refutes_where_that_branch_does() {
         ),
         Relation::Fails,
         "and a branch that refutes on the field's kind rather than its width"
+    );
+    assert_eq!(
+        relation(
+            &Schema::Int,
+            &Schema::union([Schema::Str, Schema::NoneType])
+        ),
+        Relation::Fails,
+        "every branch dropped is a subject outside the union altogether"
     );
     assert_eq!(
         relation(

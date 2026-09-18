@@ -382,8 +382,9 @@ the shape. What is left below is what the descriptor cannot hold.
     What the **rules** reach is narrower than that and is reached: a branch of a
     union the subject shares no value with is dropped before the rest is asked,
     so a chain of records beside a `None` branch is refuted by the record branch
-    alone. The declines that remain are the ones where dropping a branch would
-    itself need a meet carrying a reference decided empty.
+    alone. Where *every* branch goes that way the subject is outside the whole
+    union, which is a refutation rather than a decline as long as the subject
+    holds a value at all.
 
     Branches are dropped where one of them **refutes**, which is the answer the
     narrowing carries back from the branch it leaves. A union no branch of

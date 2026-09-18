@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -480,3 +481,55 @@ def test_the_floor_build_does_not_write_the_callers_environment() -> None:
     # `pyo3` both ways on every run.
     shared = gate.step_environment({}, ROOT)["CARGO_TARGET_DIR"]
     assert environment["CARGO_TARGET_DIR"] != shared
+
+
+#: The gate runs the merge gate's own steps, and those are `runs-on:
+#: ubuntu-latest`; this drives one of them through a shell. A Windows checkout
+#: resolves `bash` to Git-Bash or to WSL, neither of which is the shell the step
+#: runs in, so a run there reports on the shell that answered rather than on the
+#: step. Every other lane asks it -- each Linux interpreter and macOS -- so the
+#: skip is the one platform the step never reaches.
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the gate's steps run on ubuntu-latest; Git-Bash is a different shell",
+)
+def test_the_floor_build_runs_a_second_time(tmp_path: Path) -> None:
+    """A gate run is repeatable, and the floor step is the one that was not.
+
+    The floor interpreter is built into a directory under `target/`, and the
+    page says it is "a `uv venv` and a second build the first time, and cached
+    after". Cached after is the claim; refusing to touch an existing
+    environment is what `uv venv` does by default, so every run after the first
+    failed at that step -- and it failed with an exit code and a hint, which a
+    reader takes for a broken toolchain rather than for a directory that is
+    already there.
+
+    Driven rather than read off the command: the flag's name is uv's, the
+    behaviour is what the step needs, and a test asserting the spelling would
+    pass on a flag that means something else.
+    """
+    creation = gate.floor_steps()[0][2].split("&&")[0].strip()
+    assert creation.startswith("uv venv"), creation
+
+    # Point the same command at a directory of this test's own, twice.
+    target = tmp_path / "floor"
+    rerun = creation.rsplit(" ", 1)[0] + " " + shlex.quote(str(target))
+    for attempt in (1, 2):
+        done = subprocess.run(  # noqa: S603 - the gate's own command, test-only
+            [  # noqa: S607 - bash is on the path of every machine this runs on
+                "bash",
+                "-euo",
+                "pipefail",
+                "-c",
+                rerun,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=ROOT,
+        )
+        assert done.returncode == 0, (
+            f"the floor environment could not be built on attempt {attempt}: "
+            f"{done.stdout}{done.stderr}"
+        )
+    assert (target / "pyvenv.cfg").is_file()

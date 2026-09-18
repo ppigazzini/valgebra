@@ -396,6 +396,10 @@ def floor_steps() -> tuple[tuple[str, str, str], ...]:
     workflow and the scripts; none of that answers differently by release, and
     running them twice would double the slowest half of the gate to re-derive
     the same verdict.
+
+    Repeatable. The environment is cached under a path carrying the release, so
+    a second run reuses it rather than refusing to touch it -- which is what
+    `uv venv` does by default, and what made every run after the first red.
     """
     floor = floor_interpreter()
     venv = floor_environment()["UV_PROJECT_ENVIRONMENT"]
@@ -404,7 +408,14 @@ def floor_steps() -> tuple[tuple[str, str, str], ...]:
             f"python {floor}",
             "The floor interpreter, and the extension built into it",
             (
-                f"uv venv --python {shlex.quote(floor)} {shlex.quote(venv)} "
+                # `--allow-existing` because the environment is *cached*: the
+                # path carries the release, so a floor that moves gets a
+                # directory of its own, and one that has not moved is the one
+                # built last time. Without it every run after the first failed
+                # here, with an exit code and a hint that read as a broken
+                # toolchain rather than as a directory already in place.
+                f"uv venv --allow-existing --python {shlex.quote(floor)} "
+                f"{shlex.quote(venv)} "
                 "&& uv sync --locked --no-install-project "
                 "&& uv run --no-sync maturin develop --uv"
             ),

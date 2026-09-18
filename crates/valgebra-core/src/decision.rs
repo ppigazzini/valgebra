@@ -672,10 +672,20 @@ impl Schema {
         let narrowed: Vec<Schema> = members.iter().filter(|m| meets(m)).cloned().collect();
         match &narrowed[..] {
             // Every branch dropped: the subject shares no value with the union
-            // at all, so it is below it only if it holds no value itself.
-            [] => Relation::proven(
-                self.verdict_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget) == Verdict::Empty,
-            ),
+            // at all. That is a *refutation* where the subject holds a value --
+            // the value is outside every branch, so it is outside the union --
+            // and a proof where it holds none, since the empty set is below
+            // everything. Reading it as "proved, or not proven" loses the
+            // refutation, which a caller acts on as much as the proof:
+            // `{"a": chain, "b": int}` shares no value with either of
+            // `{"a": chain}` and `{"a": chain, "b": str}`, and the dict its own
+            // two keys name is the value that says so.
+            [] => Relation::of_mismatch(self.verdict_rec(
+                cx.oracle,
+                cx.defs,
+                &mut Vec::new(),
+                cx.budget,
+            )),
             [only] => self.is_subtype_rec(only, cx, assumptions),
             _ => self.is_subtype_rec(&Schema::Union(narrowed.into()), cx, assumptions),
         }
