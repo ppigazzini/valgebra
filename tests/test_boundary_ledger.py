@@ -98,11 +98,19 @@ class Declines:
     `would_decide` is the route the page names -- the representation that would
     have to reach it -- and it is prose, because a decline is a statement about
     what has not been built. What is driven is the `"undecided"`.
+
+    `beside` is the other half of such an entry. A conservative entry usually
+    says which neighbouring question *is* decided: the direction the carrier
+    proves, the inclusion two steps settle between them, the length a word's
+    automaton counts. That sentence is a promise of the same page, and driving
+    only the decline leaves it stated and unheld -- so the entry carries the
+    pair and the answer the page gives it, and both run.
     """
 
     left: Any
     right: Any
     would_decide: str
+    beside: tuple[Any, Any, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -241,11 +249,22 @@ ROWS: dict[str, Row] = {
         Annotated[set[int], at.MinLen(1)],
         Annotated[set[int], at.MinLen(2)],
         "a length in the powerset lattice, which holds members rather than a count",
+        # The same bound over a sequence is a shape the automaton holds, so a
+        # length above the positions there are is decided empty.
+        beside=(Annotated[tuple[int, int], at.MinLen(3)], nothing, "subset"),
     ),
     "An integer bound outside the 64-bit range.": Declines(
         Annotated[int, at.Ge(2**70)],
         Annotated[int, at.Ge(2**70 + 1)],
         "a carrier wider than the 64-bit intervals the integer component holds",
+        # The direction the carrier proves: an inclusion between two bounds is
+        # settled by comparing the bounds, so the size of either is beside the
+        # point and only the refutation wants an interval.
+        beside=(
+            Annotated[int, at.Ge(2**70 + 1)],
+            Annotated[int, at.Ge(2**70)],
+            "subset",
+        ),
     ),
     "A meet of two moduli the representation cannot hold.": Declines(
         intersection(
@@ -254,6 +273,13 @@ ROWS: dict[str, Row] = {
         Annotated[int, at.MultipleOf(5184)],
         "a residue representation whose period is the one two steps share, "
         "rather than one materialised up to a recorded bound",
+        # The refutation the residues do reach, which is the one the entry
+        # contrasts the declining pair with.
+        beside=(
+            Annotated[int, at.MultipleOf(2)],
+            Annotated[int, at.MultipleOf(4)],
+            "not_subset",
+        ),
     ),
     "A schema too large to build.": Declines(
         _nested(3, {"x": union(int, str, bytes, float)}),
@@ -352,6 +378,14 @@ def test_every_entry_of_the_boundary_answers_as_the_page_says(title: str) -> Non
             "page, not a quiet improvement."
         )
         assert len(row.would_decide) > 30, title
+        if row.beside is not None:
+            left, right, decided = row.beside
+            beside = Validator(left).relation_to(right)
+            assert beside == decided, (
+                f"{title}: the page says the neighbouring relation is "
+                f"{decided!r} and the procedure answers {beside!r}. A "
+                "conservative entry naming a decided question is held to both."
+            )
         return
     if isinstance(row, Refuses):
         with pytest.raises((NotImplementedError, TypeError, ValueError)) as caught:
