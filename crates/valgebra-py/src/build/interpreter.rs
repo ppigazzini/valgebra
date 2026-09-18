@@ -13,6 +13,29 @@ use valgebra_core::{Constraint, MapClause, SeqShape};
 ///
 /// `at` holds the marker doubles, named for the vocabulary they stand in
 /// for so a row reads as the line a caller would write.
+/// The release a corpus row needs, as `3.n`.
+///
+/// A corpus reads *live* objects, so a row naming `typing.Required` or a star
+/// inside a subscript is a row about an interpreter that has them: below the
+/// release that added one, the name is an `AttributeError` and the syntax is a
+/// `SyntaxError`, and the row would be asserting about the release rather than
+/// about this crate. The release rides on the row, which is what lets a reader
+/// see which lane drives it -- and every lane above it does.
+///
+/// One spelling, because `tests/test_version_gates.py` holds each release to
+/// the lanes and reads this one: a comparison written out here would carry a
+/// release nothing holds. The Python suite writes the same condition as
+/// `skipif(sys.version_info < (3, n))`, and the ledger reads both.
+#[derive(Clone, Copy)]
+struct Since(u8);
+
+impl Since {
+    /// Whether the interpreter this links is at or above the release.
+    fn met(self, py: Python<'_>) -> bool {
+        py.version_info() >= (3, self.0)
+    }
+}
+
 fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let namespace = PyDict::new(py);
     for module in ["typing", "dataclasses", "enum", "re", "types"] {
@@ -82,12 +105,6 @@ fn built(py: Python<'_>, expression: &str) -> PyResult<String> {
 #[test]
 fn each_spelling_builds_its_own_schema() {
     Python::attach(|py| {
-        let check = |expression: &str, wanted: &str| {
-            let got = built(py, expression).unwrap_or_else(|error| {
-                panic!("{expression} did not build: {error}");
-            });
-            assert_eq!(got, wanted, "{expression}");
-        };
         for (expression, wanted) in [
             // The scalars and the two bounds, which are the leaves every
             // other row is built out of.
@@ -212,28 +229,46 @@ fn each_spelling_builds_its_own_schema() {
                 "Annotated[int, Ge(0), Le(9)]",
             ),
         ] {
-            check(expression, wanted);
+            let got = built(py, expression).unwrap_or_else(|error| {
+                panic!("{expression} did not build: {error}");
+            });
+            assert_eq!(got, wanted, "{expression}");
         }
-        // And the rows naming something the language gained after the floor.
-        //
-        // A corpus reads *live* objects, so a row naming `typing.Never` is a
-        // row about an interpreter that has it: below 3.11 the name is an
-        // `AttributeError` and the row would be asserting about the release
-        // rather than about the frontend. The release rides on the row, so a
-        // reader sees which lane drives it, and every lane above the floor
-        // does. The Python suite spells the same condition one layer up, as
-        // `skipif(sys.version_info < (3, 11))`.
+    });
+}
+
+/// The spellings a later release adds, each held where the release has it.
+///
+/// Apart from the table above because a row is read by whoever runs it, and
+/// these are read by fewer lanes: the release each needs rides on the row and
+/// [`Since`] says what that means. Together they are one table -- a spelling
+/// belongs to the frontend's dispatch whether or not the floor can write it.
+#[test]
+fn each_spelling_a_release_adds_builds_where_that_release_has_it() {
+    Python::attach(|py| {
         for (since, expression, wanted) in [
-            (11u8, "typing.Never", "nothing"),
+            (Since(11), "typing.Never", "nothing"),
             // The two unpacked tuple spellings: a star inside a subscript is
             // a syntax error before 3.11, so the row cannot even be written
             // for that release to read.
-            (11, "tuple[str, *tuple[int, ...]]", "tuple[str, int, ...]"),
-            (11, "tuple[str, *tuple[int, bool]]", "tuple[str, int, bool]"),
+            (
+                Since(11),
+                "tuple[str, *tuple[int, ...]]",
+                "tuple[str, int, ...]",
+            ),
+            (
+                Since(11),
+                "tuple[str, *tuple[int, bool]]",
+                "tuple[str, int, bool]",
+            ),
         ] {
-            if py.version_info() >= (3, since) {
-                check(expression, wanted);
+            if !since.met(py) {
+                continue;
             }
+            let got = built(py, expression).unwrap_or_else(|error| {
+                panic!("{expression} did not build: {error}");
+            });
+            assert_eq!(got, wanted, "{expression}");
         }
     });
 }
@@ -313,10 +348,12 @@ fn each_refusal_says_what_it_refuses() {
         // The star inside a subscript is a syntax error before 3.11, so below
         // it the refusal a row reads is the *parser's* rather than this one's.
         // The release rides on the row, as it does in the table above.
-        for (since, expression, wanted) in
-            [(11u8, "tuple[*list[int]]", "only a tuple can be unpacked")]
-        {
-            if py.version_info() >= (3, since) {
+        for (since, expression, wanted) in [(
+            Since(11),
+            "tuple[*list[int]]",
+            "only a tuple can be unpacked",
+        )] {
+            if since.met(py) {
                 refuses(expression, wanted);
             }
         }
@@ -333,7 +370,7 @@ fn each_refusal_says_what_it_refuses() {
 #[test]
 fn a_self_naming_alias_ties_its_own_fixpoint() {
     Python::attach(|py| {
-        if py.version_info() < (3, 12) {
+        if !Since(12).met(py) {
             return;
         }
         let namespace = PyDict::new(py);
@@ -895,7 +932,7 @@ fn a_class_is_read_through_what_it_declares() {
         // the class is written the way a caller writes it, rather than built
         // and then patched. Below 3.11 the record is the required half alone,
         // which is the record that release gives a caller for this class.
-        let optional = py.version_info() >= (3, 11);
+        let optional = Since(11).met(py);
         let note = if optional {
             "\x20   note: typing.NotRequired[int]\n"
         } else {
@@ -993,17 +1030,21 @@ fn a_qualifier_states_required_ness_only_from_the_outside() {
         // the floor drives.
         for (since, expression, wanted) in [
             // Stated, and read.
-            (11u8, "typing.Required[int]", Some(true)),
-            (11, "typing.NotRequired[int]", Some(false)),
+            (Since(11), "typing.Required[int]", Some(true)),
+            (Since(11), "typing.NotRequired[int]", Some(false)),
             // Stated behind a qualifier that carries no answer of its own.
-            (11, "typing.Required[typing.Annotated[int, 1]]", Some(true)),
+            (
+                Since(11),
+                "typing.Required[typing.Annotated[int, 1]]",
+                Some(true),
+            ),
             // The one the walk must not read through: `list` is not a field
             // qualifier, so the search ends at it and never sees the
             // `Required` it holds.
-            (11, "list[typing.Required[int]]", None),
-            (11, "dict[str, typing.NotRequired[int]]", None),
+            (Since(11), "list[typing.Required[int]]", None),
+            (Since(11), "dict[str, typing.NotRequired[int]]", None),
         ] {
-            if py.version_info() >= (3, since) {
+            if since.met(py) {
                 assert_eq!(answer(expression), wanted, "{expression}");
             }
         }

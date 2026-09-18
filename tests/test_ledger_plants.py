@@ -269,6 +269,16 @@ PLANTS = (
         ),
     ),
     Plant(
+        "tests/test_version_gates.py",
+        ("crates/valgebra-py/src/build/interpreter.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-py/src/build/interpreter.rs",
+            '(Since(11), "typing.Never", "nothing"),',
+            '(Since(99), "typing.Never", "nothing"),',
+        ),
+    ),
+    Plant(
         "tests/test_feature_lanes.py",
         ("crates/valgebra-py/Cargo.toml",),
         lambda tree: _edit(

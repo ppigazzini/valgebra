@@ -81,7 +81,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Thirty-five of them:
+for and misses the other. Thirty-six of them:
 
 | Ledger | Holds |
 |---|---|
@@ -103,6 +103,7 @@ for and misses the other. Thirty-five of them:
 | `tests/test_clock_ledger.py` | no test measures time except the three that argue for it |
 | `tests/test_lane_interpreters.py` | no lane installs an interpreter without naming it |
 | `tests/test_feature_lanes.py` | every crate feature runs in a test lane or is excused by name |
+| `tests/test_version_gates.py` | every release a version gate names has an enforced lane on each side |
 | `tests/test_cited_commits.py` | every commit a tracked file cites is one a clone can reach |
 | `tests/test_fuzz_lane.py` | the fuzz soak names its allocation ceiling and forks its batches |
 | `tests/test_floor_names.py` | every typing and enum name read at import time, and every stdlib module imported, exists on the floor |
@@ -124,7 +125,7 @@ for and misses the other. Thirty-five of them:
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are thirty-five.
+because a table nothing counts is the one that drifts: there are thirty-six.
 
 **Which interpreter reads them.** A ledger is a repository check: it reads the
 tree, the workflow and the scripts, none of which answers differently by
@@ -215,9 +216,19 @@ corpus of live objects is for: a `typing` member arrives in a release, and the
 floor is where the tree finds out. Four rows named `Never`, `Required`,
 `NotRequired` and the star-unpack inside a subscript, each of which reaches the
 language in 3.11, and on 3.10 the interpreter answers `AttributeError` or a
-`SyntaxError` the row does not expect. So a row states the release it needs and
-stands down below it, which is the `skipif` the Python suite writes one layer
-up.
+`SyntaxError` the row does not expect. So a row states the release it needs --
+`Since(11)`, which is the one spelling the corpora use for one -- and stands
+down below it, which is the `skipif` the Python suite writes one layer up.
+
+A release written onto a row is a claim about the lanes, and
+`tests/test_version_gates.py` holds it to them: each release a gate names has a
+lane below it, where the guard is taken, and an **enforced** lane at or above
+it, where the guarded code runs. A gate above every lane is code that runs
+nowhere and passes; one below the floor is a guard always taken; and a gate
+whose only interpreter above it is the prerelease leg is a gate nothing
+enforces, since that leg runs under `continue-on-error`. The same ledger refuses
+a corpus that compares `version_info` for itself, because a release spelled any
+other way is one it cannot read -- which would reopen the hole a file down.
 
 The **walk** carries a value corpus in `crates/valgebra-py/src/check/walk.rs`.
 Every case runs in **both** the fast and the explaining mode with the two
