@@ -175,6 +175,66 @@ def markers() -> set[str]:
     return found
 
 
+def assertions_in(text: str) -> str:
+    """Give the parts of one module that sit inside an assertion.
+
+    The test of every `assert`, and the body of every `with pytest.raises(...)`.
+    A name inside either is a name the suite is asking a question about; a name
+    outside both may be a call whose result nothing reads.
+
+    Taken as text rather than as a path so the narrowing can be put to a pair
+    of modules and shown to reject one of them. A detector nobody has seen
+    reject anything reports the same figure whether or not it works.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:  # pragma: no cover - the suite parses
+        return ""
+    kept: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assert):
+            kept.append(ast.unparse(node))
+        elif isinstance(node, ast.With) and _raises(node):
+            kept.extend(ast.unparse(statement) for statement in node.body)
+    return "\n".join(kept)
+
+
+def asserted_sources() -> str:
+    """Give the product suite's assertions, as one blob to search.
+
+    A cell is *named* when the suite spells it and *asserted* when the suite
+    says what it answers, and the two are different claims about coverage. The
+    first is what a search over the source can see, and it is satisfied by a
+    call whose result nothing reads -- `Validator(spec).ensure(value)` on a line
+    of its own names `ensure` and checks nothing about it.
+
+    Being inside an assertion is not a proof that the question asked is the
+    right one -- nothing mechanical reads that -- but it separates a call from
+    a claim, which is the half the mention count cannot see.
+    """
+    blobs: list[str] = []
+    for path in sorted((ROOT / "tests").rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        if "pytestmark = pytest.mark.repository" in text:
+            continue
+        blobs.append(assertions_in(text))
+    return "\n".join(blobs)
+
+
+def _raises(node: ast.With) -> bool:
+    """Whether a `with` block is a `pytest.raises`, however it is spelled."""
+    for item in node.items:
+        call = item.context_expr
+        if not isinstance(call, ast.Call):
+            continue
+        target = call.func
+        if isinstance(target, ast.Attribute) and target.attr == "raises":
+            return True
+        if isinstance(target, ast.Name) and target.id == "raises":
+            return True
+    return False
+
+
 def names_reached(cells: set[str], suite: str) -> set[str]:
     """Give the cells the suite mentions, each looked for the way it is written.
 
@@ -207,27 +267,44 @@ def accepted() -> dict[str, str]:
     return dict(json.loads(RECORD.read_text(encoding="utf-8"))["empty"])
 
 
-def report(label: str, cells: set[str], reached: set[str], empty: set[str]) -> None:
-    """Print one product's figures: its size, what the suite names, what is empty.
+def report(
+    label: str,
+    cells: set[str],
+    reached: set[str],
+    asserted: set[str],
+    empty: set[str],
+) -> None:
+    """Print one product's figures, with what is named apart from what is asked.
+
+    Three counts rather than one, because "covered" means two different things
+    here and folding them hides the weaker. **Named** is the suite spelling the
+    cell, which is what a search can see and is satisfied by a call nothing
+    reads. **Asserted** is the cell inside an `assert` or a `pytest.raises`,
+    which is the suite saying what it answers. The ratio is the second, because
+    a figure that counts mentions reports a suite as covering a name it never
+    asks a question about.
 
     A product with no cell at all would divide by zero on the way to a ratio,
     and it is a derivation that read nothing rather than a product that is
     fully covered -- so it says so instead.
     """
-    named, unreached = cells & reached, cells & empty
+    named, asked, unreached = cells & reached, cells & asserted, cells & empty
     if not cells:
         print(f"{label}: 0 cells, which is a derivation that read nothing")
         return
     print(
-        f"{label}: {len(cells)} cells, {len(named)} named, "
+        f"{label}: {len(cells)} cells, {len(named)} named, {len(asked)} asserted, "
         f"{len(unreached)} empty with a reason, "
-        f"{100 * len(named) / len(cells):.1f}% covered"
+        f"{100 * len(asked) / len(cells):.1f}% covered"
     )
 
 
 def main() -> int:
     every = universe()
     reached = names_reached(every, product_sources()) | markers()
+    # A marker is a claim that a test drives the cell, which is the stronger of
+    # the two readings, so it counts on both sides.
+    asserted = names_reached(every, asserted_sources()) | markers()
     recorded = accepted()
     empty = {cell: recorded.get(cell, "") for cell in sorted(every - reached)}
 
@@ -240,7 +317,7 @@ def main() -> int:
         ("error codes", error_codes()),
         ("use cases", every),
     ):
-        report(label, cells, reached, set(empty))
+        report(label, cells, reached, asserted, set(empty))
 
     if "--update" in sys.argv[1:]:
         RECORD.write_text(

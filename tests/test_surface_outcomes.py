@@ -120,6 +120,72 @@ def _returns() -> set[tuple[str, str]]:
     return found
 
 
+#: The type stub the package ships, which is the surface a caller reads.
+STUB = ROOT / "python" / "valgebra" / "_valgebra.pyi"
+
+#: A method the stub declares on a class, and a module-level function.
+_STUB_METHOD = re.compile(r"^    def (\w+)\(", re.MULTILINE)
+_STUB_FUNCTION = re.compile(r"^def (\w+)\(", re.MULTILINE)
+
+
+def _documented() -> set[str]:
+    """Every method the binding writes an `Args:`, `Returns:` or `Raises:` for."""
+    found: set[str] = set()
+    for path in sorted(BINDING.rglob("*.rs")):
+        text = path.read_text(encoding="utf-8")
+        for doc, function in _DOCUMENTED.findall(text):
+            if any(block in doc for block in _BLOCKS):
+                found.add(_AS_WRITTEN.get(function, function))
+    return found
+
+
+def _shipped() -> set[str]:
+    """Every public name the stub declares, as a caller writes it."""
+    text = STUB.read_text(encoding="utf-8")
+    names = set(_STUB_METHOD.findall(text)) | set(_STUB_FUNCTION.findall(text))
+    # A dunder is a protocol Python calls, not a name a caller writes, and the
+    # constructor is written as the class.
+    return {
+        "Validator" if name == "__new__" else name
+        for name in names
+        if not name.startswith("__") or name == "__new__"
+    }
+
+
+def test_the_documented_surface_is_the_shipped_one() -> None:
+    """The blocks and the stub describe one surface, in both directions.
+
+    The universe here is the binding's doc comments, and that is a choice with
+    a failure mode: a method documented and not shipped is an outcome nobody
+    can reach, and a method shipped and not documented is an outcome this
+    ledger has no cell for. Either way the count reads as complete over a
+    universe that is not the caller's.
+
+    So the two are held to each other. The stub is what the package ships and
+    what a checker reads; the doc comments are what the built module carries
+    and what `help()` prints. A name in one and not the other is a surface
+    described twice and agreed on once.
+    """
+    documented, shipped = _documented(), _shipped()
+    # The scans are detectors: either coming back empty would pass both
+    # directions having read nothing.
+    assert len(shipped) >= 15, sorted(shipped)
+    assert len(documented) >= 15, sorted(documented)
+
+    undocumented = sorted(shipped - documented)
+    assert not undocumented, (
+        f"names the package ships and the binding documents no block for: "
+        f"{undocumented}. A name with no block has no outcome this ledger can "
+        "count, so it reads as covered by having nothing to cover."
+    )
+    unshipped = sorted(documented - shipped)
+    assert not unshipped, (
+        f"methods the binding documents and the stub does not declare: "
+        f"{unshipped}. A documented outcome a caller cannot reach is a promise "
+        "about a surface that is not the shipped one."
+    )
+
+
 def _asserted() -> set[tuple[str, str]]:
     """Every `(call, exception)` the suite puts inside a `pytest.raises`."""
     found: set[tuple[str, str]] = set()

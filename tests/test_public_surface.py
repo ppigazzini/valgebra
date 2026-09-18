@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import copy
 import importlib
+import re
+from pathlib import Path
 
 import pytest
 
@@ -171,3 +173,68 @@ def test_the_whole_schema_rewrites_stay() -> None:
     # Equal records open to equal records, which is the law that makes them
     # functions on sets rather than rewrites of a spelling.
     assert Validator({"a?": nothing}).open() == Validator({}).open()
+
+
+#: The methods the stub marks positional-only, with a value each takes.
+#:
+#: Derived rather than listed would mean reading the stub for the `/` and then
+#: inventing an argument per parameter, and an invented argument is what decides
+#: whether the call reaches the refusal or fails earlier for a different reason.
+#: So the pairs are written and the *stub* is what says the list is complete.
+_POSITIONAL_ONLY = [
+    ("is_valid", "obj", 1),
+    ("validate", "obj", 1),
+    ("ensure", "obj", 1),
+    ("is_subtype_of", "other", int),
+    ("is_equivalent", "other", int),
+    ("relation_to", "other", int),
+    ("is_valid_json", "data", "1"),
+    ("validate_json", "data", "1"),
+    ("load", "data", "1"),
+]
+
+
+@pytest.mark.parametrize(("method", "parameter", "argument"), _POSITIONAL_ONLY)
+def test_a_positional_only_parameter_refuses_a_keyword(
+    method: str, parameter: str, argument: object
+) -> None:
+    """The `/` in the stub is a promise, and a promise nobody drives is prose.
+
+    A parameter's *name* is API surface the moment a caller can pass it by
+    keyword: renaming it then breaks code that reads. The stub marks these
+    positional-only precisely so the names stay free to change, and the
+    refusal is what makes that true rather than intended.
+    """
+    compiled = Validator(int)
+    with pytest.raises(TypeError, match="positional"):
+        getattr(compiled, method)(**{parameter: argument})
+
+
+def test_the_stub_marks_no_positional_only_parameter_this_file_misses() -> None:
+    """The list above is complete, and the stub is what says so.
+
+    Both directions: a method that gains a positional-only parameter arrives
+    here with no row, and a row naming a parameter the stub no longer marks
+    fails rather than driving a refusal that is not promised.
+    """
+    stub = (
+        Path(__file__).resolve().parent.parent / "python" / "valgebra" / "_valgebra.pyi"
+    ).read_text(encoding="utf-8")
+    marked: set[tuple[str, str]] = set()
+    for name, params in re.findall(r"^    def (\w+)\(([^)]*)\)", stub, re.MULTILINE):
+        # A dunder is a protocol Python calls by its own rules, and no caller
+        # writes `a.__or__(other=b)`: the promise is about the names a caller
+        # passes, which is the methods a caller writes.
+        if name.startswith("__"):
+            continue
+        head, sep, _ = params.partition("/")
+        if not sep:
+            continue
+        for part in head.split(","):
+            argument = part.strip().split(":")[0].strip()
+            if argument and argument != "self":
+                marked.add((name, argument))
+    assert len(marked) >= 8, sorted(marked)
+
+    listed = {(method, parameter) for method, parameter, _ in _POSITIONAL_ONLY}
+    assert listed == marked, sorted(listed ^ marked)

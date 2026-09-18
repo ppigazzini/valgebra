@@ -6,6 +6,7 @@ import annotated_types as at
 import pytest
 
 from valgebra import (
+    MAX_SCHEMA_NODES,
     Regex,
     ValidationError,
     Validator,
@@ -13,6 +14,7 @@ from valgebra import (
     complement,
     intersection,
     nothing,
+    recursive,
     union,
 )
 
@@ -134,3 +136,54 @@ def test_a_pattern_does_fold_against_its_own_complement() -> None:
     pattern = Validator(Annotated[str, Regex("a+")])
     assert intersection(pattern, complement(pattern)).is_empty()
     assert union(pattern, complement(pattern)).is_equivalent(anything)
+
+
+def test_every_outcome_the_constructors_document_is_driven() -> None:
+    """The four names a caller reaches most, each raise they promise driven.
+
+    `union`, `intersection`, `complement` and `recursive` are how a schema the
+    annotation syntax cannot spell is written, so their refusals are the ones a
+    caller meets first -- and the outcomes ledger had no cell for any of them
+    until the blocks naming them existed. Each row below is one of those cells.
+
+    The forms with no set are the schema-language page's own: a set literal and
+    a tuple literal, which read like schemas and denote the collection object
+    rather than a set of values.
+    """
+    # Written out rather than looped over the three: a cell is a `(name,
+    # outcome)` pair, and a loop drives the name the loop variable holds, which
+    # the ledger reading the syntax tree cannot see.
+    with pytest.raises(NotImplementedError, match="is not a schema"):
+        union({1, 2})
+    with pytest.raises(NotImplementedError, match="is not a schema"):
+        union((1, 2))
+    with pytest.raises(NotImplementedError, match="is not a schema"):
+        intersection({1, 2})
+    with pytest.raises(NotImplementedError, match="is not a schema"):
+        intersection((1, 2))
+    with pytest.raises(NotImplementedError, match="is not a schema"):
+        complement({1, 2})
+    with pytest.raises(NotImplementedError, match="is not a schema"):
+        complement((1, 2))
+
+    # A schema past the node ceiling, built the way a loop builds one. Each
+    # record is two nodes, so a union of two-fifths of the ceiling is within it
+    # and a join of two such unions over disjoint names is not.
+    span = MAX_SCHEMA_NODES * 2 // 5
+    left = union(*[Validator({f"a{i}": int}) for i in range(span)])
+    right = union(*[Validator({f"b{i}": int}) for i in range(span)])
+    with pytest.raises(ValueError, match="too large"):
+        union(left, right)
+    with pytest.raises(ValueError, match="too large"):
+        intersection(left, right)
+    with pytest.raises(ValueError, match="too large"):
+        complement(union(left, right))
+
+    # `recursive` takes a callable, reads its body as a schema, and refuses a
+    # body whose reference is not under a structural constructor.
+    with pytest.raises(TypeError):
+        recursive(3)  # ty: ignore[invalid-argument-type]
+    with pytest.raises(NotImplementedError, match="is not a schema"):
+        recursive(lambda t: {t, 1})
+    with pytest.raises(ValueError, match="contractive"):
+        recursive(lambda t: union(t, int))

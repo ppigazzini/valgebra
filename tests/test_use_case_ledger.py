@@ -91,6 +91,7 @@ _LEDGER = _derivation()
 _public_surface = _LEDGER.public_surface
 _error_codes = _LEDGER.error_codes
 _product_sources = _LEDGER.product_sources
+_asserted_sources = _LEDGER.asserted_sources
 _names_reached = _LEDGER.names_reached
 _universe = _LEDGER.universe
 _markers = _LEDGER.markers
@@ -314,6 +315,33 @@ def test_a_cell_is_covered_by_code_rather_than_by_prose() -> None:
     )
 
 
+def test_a_call_with_no_assertion_is_named_and_not_asserted() -> None:
+    """The narrower reading is a detector, so it is shown to reject something.
+
+    Named and asserted are equal over the tree today, which is the result the
+    page reports -- and a narrowing that accepted everything would report the
+    same number while measuring nothing. So the two readings are put to three
+    modules: one that calls a name and reads nothing, one that asserts about
+    it, and one that drives it to raise. The wider reading finds the cell in
+    all three; the narrower finds it only in the two that ask something.
+    """
+    calls_only = "def test_planted():\n    Validator(int).ensure(3)\n"
+    asserts = "def test_planted():\n    assert Validator(int).ensure(3) == 3\n"
+    raises = (
+        "def test_planted():\n"
+        "    with pytest.raises(ValidationError):\n"
+        "        Validator(int).ensure('a')\n"
+    )
+    cell = {"Validator.ensure"}
+
+    for source in (calls_only, asserts, raises):
+        assert _names_reached(cell, source) == cell
+
+    assert _names_reached(cell, _LEDGER.assertions_in(calls_only)) == set()
+    assert _names_reached(cell, _LEDGER.assertions_in(asserts)) == cell
+    assert _names_reached(cell, _LEDGER.assertions_in(raises)) == cell
+
+
 def test_every_marker_names_a_cell_that_exists() -> None:
     """A marker left behind by a rename claims a cell nothing has."""
     stale = sorted(_markers() - _universe())
@@ -327,7 +355,8 @@ def test_every_marker_names_a_cell_that_exists() -> None:
 #: The testing page's per-product figures, as a row this reads back: the
 #: product, the cells it has, and the cells that are empty with a reason.
 _FIGURE = re.compile(
-    r"^\| (?P<product>every [^|]+?) \| (?P<cells>\d+) \| (?P<empty>\d+) \|$",
+    r"^\| (?P<product>every [^|]+?) \| (?P<cells>\d+) \| (?P<named>\d+) \| "
+    r"(?P<asserted>\d+) \| (?P<empty>\d+) \|$",
     re.MULTILINE,
 )
 
@@ -352,6 +381,10 @@ def test_the_page_carries_the_figure_each_product_has() -> None:
         match["product"]: (int(match["cells"]), int(match["empty"]))
         for match in _FIGURE.finditer(page)
     }
+    asked = {
+        match["product"]: (int(match["named"]), int(match["asserted"]))
+        for match in _FIGURE.finditer(page)
+    }
     assert set(figures) == {_SURFACE, _CODES}, (
         f"the testing page carries figures for {sorted(figures)}, and this file "
         f"derives {sorted((_SURFACE, _CODES))}"
@@ -373,11 +406,26 @@ def test_the_page_carries_the_figure_each_product_has() -> None:
     # would then be checking a partition of something else.
     assert (empty & surface) | (empty & codes) == empty, sorted(empty)
 
+    # And the two readings the page prints apart: what the suite spells, and
+    # what it asks a question about. A cell asserted and not named would be a
+    # reading that found something the wider one missed, which is a broken
+    # narrowing rather than a finding.
+    for product, cells in ((_SURFACE, surface), (_CODES, codes)):
+        named, asserted = asked[product]
+        reached = _names_reached(cells, _product_sources()) | _markers()
+        asked_of = _names_reached(cells, _asserted_sources()) | _markers()
+        assert named == len(cells & reached), product
+        assert asserted == len(cells & asked_of), product
+        assert asserted <= named, (
+            f"{product}: {asserted} asserted of {named} named, which reads as "
+            "the narrower source finding what the wider one did not"
+        )
+
 
 #: A line the lane prints for one product: its label and its three figures.
 _PRINTED = re.compile(
     r"^(?P<label>[a-z ]+): (?P<cells>\d+) cells, (?P<named>\d+) named, "
-    r"(?P<empty>\d+) empty",
+    r"(?P<asserted>\d+) asserted, (?P<empty>\d+) empty",
     re.MULTILINE,
 )
 
@@ -400,7 +448,12 @@ def test_the_lane_prints_a_figure_for_each_product() -> None:
         cwd=ROOT,
     ).stdout
     figures = {
-        match["label"]: (int(match["cells"]), int(match["named"]), int(match["empty"]))
+        match["label"]: (
+            int(match["cells"]),
+            int(match["named"]),
+            int(match["asserted"]),
+            int(match["empty"]),
+        )
         for match in _PRINTED.finditer(printed)
     }
     assert set(figures) >= {"public surface", "error codes"}, printed
@@ -408,21 +461,21 @@ def test_the_lane_prints_a_figure_for_each_product() -> None:
     surface, codes = _public_surface(), _error_codes()
     empty = set(ACCEPTED)
     assert figures["public surface"][0] == len(surface), printed
-    assert figures["public surface"][2] == len(empty & surface), printed
+    assert figures["public surface"][3] == len(empty & surface), printed
     assert figures["error codes"][0] == len(codes), printed
-    assert figures["error codes"][2] == len(empty & codes), printed
+    assert figures["error codes"][3] == len(empty & codes), printed
 
     # And the page is the printed figure rather than a second reading of the
     # tree that happens to agree with it today.
     page = (ROOT / "docs" / "dev" / "08-testing.md").read_text(encoding="utf-8")
     stated = {
-        match["product"]: (int(match["cells"]), int(match["empty"]))
+        match["product"]: (
+            int(match["cells"]),
+            int(match["named"]),
+            int(match["asserted"]),
+            int(match["empty"]),
+        )
         for match in _FIGURE.finditer(page)
     }
-    assert stated[_SURFACE] == (
-        figures["public surface"][0],
-        figures["public surface"][2],
-    ), printed
-    assert stated[_CODES] == (figures["error codes"][0], figures["error codes"][2]), (
-        printed
-    )
+    assert stated[_SURFACE] == figures["public surface"], printed
+    assert stated[_CODES] == figures["error codes"], printed

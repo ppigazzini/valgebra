@@ -297,10 +297,19 @@ The largest is the public surface and the error codes together, and the lane
 prints them **apart**, because one figure over two products hides which of the
 two is growing:
 
-| Product | Cells | Empty, with a reason |
-|---|---|---|
-| every public name a caller reaches | 30 | 0 |
-| every error code a report can carry | 42 | 6 |
+| Product | Cells | Named | Asserted | Empty, with a reason |
+|---|---|---|---|---|
+| every public name a caller reaches | 30 | 30 | 30 | 0 |
+| every error code a report can carry | 42 | 36 | 36 | 6 |
+
+**Named and asserted are two different claims**, and the ratio the lane prints
+is the second. A cell is *named* when the suite spells it, which is what a
+search over the source can see and is satisfied by a call whose result nothing
+reads. It is *asserted* when it appears inside an `assert` or a
+`pytest.raises`, which is the suite saying what the cell answers. Reporting
+only the first counts a name the suite never asks a question about, which is
+the half a mention count cannot see; the two figures are equal today, and they
+are printed apart so the day they part is a day the page shows it.
 
 Every empty cell is a **code**, and splitting the figure is what makes that
 readable: five are arms no schema a caller can build reaches, and the sixth is

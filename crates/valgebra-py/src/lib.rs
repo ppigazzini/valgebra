@@ -43,6 +43,20 @@ use crate::build::{Pool, build_schema, combine};
 /// defined and returns its body. The placeholder's self-reference is resolved
 /// to a back edge, and a non-contractive body — one whose recursive reference
 /// is not under a structural constructor — is rejected.
+///
+/// Args:
+///     builder: Called with a placeholder validator, and returns the body of
+///         the fixpoint.
+///
+/// Returns:
+///     A `Validator` for the fixpoint the body defines.
+///
+/// Raises:
+///     `TypeError`: If `builder` is not callable.
+///     `NotImplementedError`: If the body uses a form with no set.
+///     `ValueError`: If the body is not contractive -- the recursive reference
+///         sits outside every structural constructor -- or the fixpoint
+///         crosses a size bound: depth, definitions, or nodes.
 #[pyfunction]
 #[pyo3(signature = (builder, /))]
 fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
@@ -88,6 +102,19 @@ fn recursive(builder: &Bound<'_, PyAny>) -> PyResult<Validator> {
 }
 
 /// The union of the given schemas: a value in at least one of their sets.
+///
+/// Args:
+///     *schemas: The schema specs or validators to join. No argument at all is
+///         the empty union, which is `nothing`.
+///
+/// Returns:
+///     A `Validator` for the joined schema.
+///
+/// Raises:
+///     `NotImplementedError`: If an argument uses a form with no set (a set or
+///         tuple literal, or a typing construct that is not a type).
+///     `ValueError`: If the joined schema crosses a size bound: depth,
+///         definitions, or nodes.
 #[pyfunction]
 #[pyo3(signature = (*schemas))]
 fn union(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
@@ -95,6 +122,19 @@ fn union(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
 }
 
 /// The intersection of the given schemas: a value in every one of their sets.
+///
+/// Args:
+///     *schemas: The schema specs or validators to meet. No argument at all is
+///         the empty intersection, which is `anything`.
+///
+/// Returns:
+///     A `Validator` for the met schema.
+///
+/// Raises:
+///     `NotImplementedError`: If an argument uses a form with no set (a set or
+///         tuple literal, or a typing construct that is not a type).
+///     `ValueError`: If the met schema crosses a size bound: depth, definitions,
+///         or nodes.
 #[pyfunction]
 #[pyo3(signature = (*schemas))]
 fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
@@ -110,6 +150,18 @@ fn intersection(schemas: &Bound<'_, PyTuple>) -> PyResult<Validator> {
 /// the complement. A filter of the form `complement(P)` over values whose own
 /// methods can raise should not rely on the complement alone to exclude them;
 /// intersect with a positive type that pins the shape instead.
+///
+/// Args:
+///     schema: The schema spec or validator to complement.
+///
+/// Returns:
+///     A `Validator` for every value outside the given schema.
+///
+/// Raises:
+///     `NotImplementedError`: If `schema` uses a form with no set (a set or
+///         tuple literal, or a typing construct that is not a type).
+///     `ValueError`: If the complemented schema crosses a size bound: depth,
+///         definitions, or nodes.
 #[pyfunction]
 #[pyo3(signature = (schema, /))]
 fn complement(schema: &Bound<'_, PyAny>) -> PyResult<Validator> {
