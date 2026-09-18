@@ -88,6 +88,11 @@ not parse a repr: it is for a person to read, and
   `True`. It is the identity of `union` and the absorbing element of
   `intersection`.
 
+`nothing` is also where the third answer about emptiness is asked for:
+`is_empty` is a predicate and reports the proof, while
+`relation_to(nothing)` reports which of proof, refutation and decline the
+procedure reached ([the boundary](15-decidability.md)).
+
 Both are ordinary validators: they compose with the combinators, compare with
 `is_subtype_of`, and are what the constructors fold to — `intersection(int,
 complement(int))` **is** `nothing` ([the algebra](04-algebra.md)). `Any` is the
@@ -105,6 +110,7 @@ assert nothing.is_subtype_of(int)
 assert intersection(int, anything).is_equivalent(int)
 assert union(int, nothing).is_equivalent(int)
 assert complement(anything).is_equivalent(nothing)
+assert Validator(int).relation_to(nothing) == "not_subset"  # a value says so
 ```
 
 ## What raises, and when

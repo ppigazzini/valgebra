@@ -38,7 +38,15 @@ from typing import Annotated, Any, Literal, Protocol, TypedDict, runtime_checkab
 import annotated_types as at
 import pytest
 
-from valgebra import Regex, Validator, complement, intersection, recursive, union
+from valgebra import (
+    Regex,
+    Validator,
+    complement,
+    intersection,
+    nothing,
+    recursive,
+    union,
+)
 
 
 class _Rec(TypedDict):
@@ -525,6 +533,39 @@ def test_the_three_answers_agree_with_the_two(survey) -> None:
             assert answer in {"subset", "not_subset", "undecided"}, answer
             assert a.is_subtype_of(b) == (answer == "subset"), (
                 f"{name_a} <= {name_b}: {answer} against {a.is_subtype_of(b)}"
+            )
+
+
+# THEORY: the-decision-has-three-answers
+def test_every_predicate_is_the_proof_answer_of_a_relation(survey) -> None:
+    """Each `is_*` is one answer of a relation, so the surface needs no fourth.
+
+    The relation reports which of proof, refutation and decline it reached, and
+    each predicate reports whether that was the proof -- which is what makes a
+    `bool` the right return for a question whose `True` is a guarantee. Held
+    over the whole corpus rather than argued, because a predicate that stopped
+    being the proof answer would be a second decision procedure wearing the
+    name of the first.
+
+    `is_empty` is the one worth spelling out: emptiness reduces to `s <= nothing`,
+    so the three answers about it are a relation away
+    ([the boundary](../docs/15-decidability.md)) and a caller wanting them asks
+    for them there. A method of its own would be a second spelling of one
+    question, which the surface rule refuses.
+    """
+    for name, schema in SCHEMAS:
+        answer = schema.relation_to(nothing)
+        assert answer in {"subset", "not_subset", "undecided"}, answer
+        assert schema.is_empty() == (answer == "subset"), (
+            f"{name} is_empty {schema.is_empty()} against relation {answer}"
+        )
+
+    for name_a, a in SCHEMAS:
+        for name_b, b in SCHEMAS:
+            both = a.is_subtype_of(b) and b.is_subtype_of(a)
+            assert a.is_equivalent(b) == both, (
+                f"{name_a} == {name_b}: equivalent {a.is_equivalent(b)} against "
+                f"mutual inclusion {both}"
             )
 
 

@@ -579,6 +579,14 @@ impl Validator {
     /// adversarial schema a `False` can mean "not proven empty within the bound"
     /// rather than "non-empty"; a real schema decides far inside the bound.
     ///
+    /// A `False` therefore carries two cases -- a value belongs, or nothing
+    /// proves none does -- and telling them apart is a relation away.
+    /// Emptiness is `s <= nothing`, so [`relation_to`](Self::relation_to)
+    /// against the bottom gives the three answers: `"subset"` where the schema
+    /// is proved empty, `"not_subset"` where a value says otherwise, and
+    /// `"undecided"` where no reading settles it. There is no second method
+    /// for that, because it would be a second spelling of one question.
+    ///
     /// Deciding a refinement's bounds orders the two operands, which runs their
     /// rich comparison, so this can call back into Python.
     ///
