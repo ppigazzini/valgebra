@@ -102,6 +102,49 @@ def test_a_bound_past_the_carrier_declines() -> None:
     assert Validator(wide).is_valid(2**70 - 1) is False
 
 
+# THEORY: the-carriers-are-i64-and-f64
+def test_a_bound_past_the_carrier_is_proved_by_the_order() -> None:
+    """What the carrier bounds is the refutation, not the comparison.
+
+    The row above declines, and reading it as "a bound past the carrier's end
+    declines" claims a limit wider than the one there is. An *inclusion*
+    between two bounds is a question about the bounds: every integer at or
+    above one is at or above a smaller one because the first is the larger,
+    and the oracle compares the two Python integers to say so. No interval is
+    materialised, so their size is not the question.
+
+    What wants the carrier is the **refutation**, which needs a value between
+    them -- and naming one takes a representation that can spell it. That is
+    the same narrowing the steps have, one operator over: divisibility decides
+    the inclusion through `%` and declines the refutation through the period.
+
+    A contradiction is decided the same way, because two bounds that cross
+    cross wherever they are written.
+    """
+    wide = Annotated[int, at.Ge(2**70)]
+    wider = Annotated[int, at.Ge(2**70 + 1)]
+    # The proof runs in the direction the order gives, at any size.
+    assert Validator(wider).relation_to(wide) == "subset"
+    assert Validator(wide).relation_to(Annotated[int, at.Ge(2**69)]) == "subset"
+    assert (
+        Validator(Annotated[int, at.Ge(I64_MAX + 1)]).relation_to(
+            Annotated[int, at.Ge(I64_MAX)]
+        )
+        == "subset"
+    )
+    assert (
+        Validator(Annotated[int, at.Le(2**70)]).relation_to(
+            Annotated[int, at.Le(2**71)]
+        )
+        == "subset"
+    )
+    # And the refutation is what declines, in either direction it is asked.
+    assert Validator(Annotated[int, at.Ge(0)]).relation_to(wide) == "undecided"
+    assert Validator(wide).relation_to(wider) == "undecided"
+    # A pair that cannot hold together holds nothing, however large the bounds.
+    assert Validator(Annotated[int, at.Gt(2**70), at.Lt(2**70 + 1)]).is_empty()
+
+
 def test_a_step_past_the_period_bound_declines() -> None:
     """What the period still bounds, and what the two steps settle without it.
 
