@@ -44,9 +44,9 @@ dev = [
     # workflow is YAML: parsing it with a regex is how a gate ends up disagreeing
     # with the lane it claims to reproduce.
     "pyyaml>=6.0.3",
-    "ruff>=0.16.7",
-    "syrupy>=6.0.0",
-    "ty>=0.0.80",
+    "ruff>=0.16.8",
+    "syrupy>=6.1.1",
+    "ty>=0.0.82",
 ]
 # The wall-clock harness and the external comparison points: the libraries the
 # benchmarks time valgebra against, and the same libraries the boundary suite
