@@ -13,47 +13,35 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: a sync rebuilds when a build input changes, not only when pyproject does -- internal
-- fix: every kind's representation is the set the schema denotes
-- fix: a word kind's universe is the words that kind can hold
-- fix: a refinement marker is immutable, and the manifest states the link
-- fix: a class-set operator is refused rather than read as another engine's
-- fix: a set lattice charges its product like the three beside it -- internal
-- fix: a dict has one entry for an int key and its boolean
-- fix: a set is at most as long as the values its element denotes
-- feat: what a profile buys is read per shape, on the box the release builds on -- internal
-- fix: a container is read for what it holds, at every kind
-- fix: a bound at the end of the carrier keeps the integers past it
-- fix: a literal counts as one value where its constant is one
-- fix: a string kind holds the characters no pattern matches
-- fix: an annotation builds the schema it names, or is refused
-- fix: a report keeps the promises the error model makes
-- fix: a union summary names its branches and keeps what stopped the walk
-- fix: a walk reports what it found, at the edges a corpus reaches last
-- fix: an arity refusal names the annotation it is about
-- fix: a form with no set is refused, and a class prints as its name
-- fix: a snapshot pins a code the walk writes, and every code is pinned -- internal
-- fix: a refinement with no constraint is decided as the base it names -- internal
-- fix: a constraint is put to the kind a literal's constant belongs to
-- fix: a render that gave up says so, rather than reading as another schema
-- fix: a pattern prints the way Python spells it
-- fix: a ledger count is spelled from the number the tree has -- internal
-- fix: a mapping opened frees the keys no clause claims
-- fix: a mutant that returned no verdict is a rig fault, not a survivor -- internal
-- fix: a record is decided against the union of records it splits across
-- fix: an order bound is refused where the base and the bound do not compare
-- fix: a union branch sharing no value with the subject decides nothing
-- fix: a traceback through an error hook names a file a reader can place -- internal
-- fix: a subject outside every branch of a union is refuted, not left open
-- feat: divisibility between two moduli is decided by the steps themselves
-- fix: a corpus row naming a member a release lacks carries the release it needs -- internal
-- fix: a ledger named in prose is not a ledger with a row -- internal
-- fix: an example on a page the docs publish is one the lane runs -- internal
-- fix: a failure code is a name in a table, not a string at a call site -- internal
-- perf: a schema is built through attribute names the interpreter already holds -- internal
-- perf: the readings that refute are asked in the order they cost -- internal
 
 -->
+
+## [0.0.12] - 2026-09-19
+
+A correctness release: thirty entries, and twenty-nine of them are fixes.
+
+The decision procedure decides more. A record whose fields each take several
+types is the union of the records that fix them; a subject sharing no value
+with any branch of a union is outside the union rather than undecided; a branch
+the subject cannot meet is dropped before the rest is asked; and divisibility
+between two moduli is settled by the steps themselves, which is the one
+addition.
+
+The frontend refuses what it cannot build, rather than building a schema that
+denotes the wrong set. Four annotation forms, a frozen set literal, a character
+class carrying an operator the engine reads differently, an arity, and an order
+bound whose base and bound do not compare: each raised nothing and admitted the
+wrong values, and each is a refusal naming what it is about.
+
+The walk says what it found. A union summary names its branches and keeps what
+stopped the walk, a report keeps the promises the error model makes, a
+refutation stands on a value, and a render that gave up says so.
+
+Behind several of them is the descriptor's own reading of a kind: a string kind
+holds the characters no pattern matches, a set is at most as long as the values
+its element denotes, a dict has one entry for `1` and for `True`, and an
+integer bound at the end of the carrier keeps the integers past it. Each was a
+set the representation named wrongly, so each was a relation answered wrongly.
 
 ### Added
 
@@ -1759,7 +1747,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.11...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.12...HEAD
+[0.0.12]: https://github.com/ppigazzini/valgebra/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/ppigazzini/valgebra/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/ppigazzini/valgebra/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/ppigazzini/valgebra/compare/v0.0.8...v0.0.9
