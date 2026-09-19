@@ -426,6 +426,16 @@ These are the readings that refute, each with the value it stands on:
   so the walk descends only into union branches and owes termination no argument
   about cycles.
 
+**They run in a cost order, and the order is free to choose.** Each answers
+`Fails` on its own and none of them proves, so a pair that two of them refute is
+refuted whichever ran first: what the order decides is which reading names the
+value, never whether one is named. What it does decide is what an *unrefuted*
+pair pays, since that pair is asked all of them -- so the three that are a
+discriminant test and an oracle call are asked before `disjoint_with`, which
+walks both subtrees. On the relation matrix's own slow set that ordering, with
+the literal-table reading entered only where both sides could be a table, is
+3.6% of the query (`scripts/perf_gate.py --decision-matrix`).
+
 Two of these carry the whole reason the fast path exists. `disjoint_with` and
 `outside_every_kind` answer from two nodes and an oracle call what the descriptor
 answers by building both sets and walking them — about two orders of magnitude

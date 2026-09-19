@@ -47,7 +47,16 @@ impl Schema {
         // Each table is read only where the one before it answered: a tuple of
         // the two builds both, and the second is wasted whenever the first says
         // this pair is not two tables of constants.
-        if let Some(left) = literal_constants(self)
+        //
+        // And neither is read until both sides are a shape that could *be* one.
+        // A table is a literal or a union of them, so every other node answers
+        // the question with a discriminant test -- while building the left
+        // table walks the left union's members, and a union of nothing but
+        // literals against a node that is not a table pays that walk to reach a
+        // reading the right side was never going to answer.
+        if matches!(self, Schema::Literal(_) | Schema::Union(_))
+            && matches!(other, Schema::Literal(_) | Schema::Union(_))
+            && let Some(left) = literal_constants(self)
             && let Some(right) = literal_constants(other)
             && let Some(answer) = oracle.literal_sets_disjoint(&left, &right)
         {

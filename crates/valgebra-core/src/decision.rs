@@ -1003,13 +1003,22 @@ impl Schema {
     /// Every arm above that answers for a shape and then *declines* ends here
     /// rather than ending the match, because a decline is not an answer: such a
     /// pair has had no rule, and this is what a pair with no rule is worth.
+    ///
+    /// **The four refutations are ordered by cost, which is free to choose.**
+    /// Each answers `Fails` on its own and none of them proves, so a pair any
+    /// two of them refute is refuted whichever ran first -- the order decides
+    /// which reading names the value, never whether one is named. What it does
+    /// decide is what an *unrefuted* pair pays, and that pair pays all four.
+    /// Three of them are a discriminant test and an oracle call;
+    /// `disjoint_with` walks both subtrees and reads the kind tags, so it is
+    /// asked last and the pairs the cheap three refute never reach it.
     fn unstructured(
         &self,
         other: &Schema,
         cx: SubtypeCx<'_>,
         assumptions: &mut Vec<(Schema, Schema)>,
     ) -> Relation {
-        if self.disjoint_with(other, cx.oracle) {
+        if self.shorter_than(other) {
             return Relation::Fails;
         }
         if self.spills_past(other, cx.oracle) {
@@ -1018,7 +1027,7 @@ impl Schema {
         if self.outside_the_class(other, cx.oracle) {
             return Relation::Fails;
         }
-        if self.shorter_than(other) {
+        if self.disjoint_with(other, cx.oracle) {
             return Relation::Fails;
         }
         match cx.oracle.leaf_subtype(self, other) {
