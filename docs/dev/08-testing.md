@@ -403,16 +403,31 @@ the integer carriers, and a newline.
 under.** A law asks the descriptor operations directly, where a relation asks
 them through `decision`, and the operations hold no ceiling of their own: each
 lattice's width bound refuses a result too wide to represent and says nothing
-about how long reaching a narrow one may take. A law without an allowance
-therefore costs whatever its draw asks -- the set complement law spent 119
-seconds under the seed the nightly sweep drew on 2026-09-19 and 1.3 under the
-one before it. That is not slowness, it is a suite the sweep cannot be sized
-against: a mutant's timeout is a multiple of the baseline's test time, so a
-baseline that moves by two orders of magnitude between runs makes every verdict
-in the shard a property of the seed rather than of the mutation. The laws that
-read a refusal as a skip arm one per case (`descr/tests.rs`); the laws over
-`descr()` assert that their operations *succeed*, which is a claim about a
-fragment rather than about a build, and they do not.
+about how long reaching a narrow one may take. So a law without an allowance
+costs whatever its draw asks, and a suite whose cost is a property of its draw
+is one the sweep cannot be sized against -- a mutant's timeout is a multiple of
+the baseline's test time, so a baseline free to move between runs makes every
+verdict in the shard a statement about the seed rather than about the mutation.
+Every law that reads a refusal as a skip arms one per case through
+`budget::law`, over whole descriptors in `descr/tests.rs` and over each lattice
+in its own `tests.rs`; the laws over `descr()` assert that their operations
+*succeed*, which is a claim about a fragment rather than about a build, and
+they do not.
+
+**A bounded shrink is the other half and does not stand in for it.** Each law
+block bounds `max_shrink_time` so a broken invariant cannot outlast a sweep,
+which is what a *failure* costs; the allowance is what a *passing case* costs.
+The two come apart under a mutation that deletes a pruning shortcut: every case
+grows dear and none of them breaks, so there is no failure to shrink, and a
+mutant the sweep cannot finish returns no verdict at all --
+`scripts/mutation_gate.py` reads that as a rig fault rather than as a survivor,
+which is the one outcome a sweep cannot ratchet. To see what an unarmed law
+costs under such a mutation, run one:
+
+```bash
+cargo mutants -p valgebra-core -j 2 --timeout-multiplier 20 \
+  -F 'MapLattice<G>::complement'
+```
 
 ## What is not tested here, deliberately
 

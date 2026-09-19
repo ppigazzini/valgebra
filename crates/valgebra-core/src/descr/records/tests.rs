@@ -133,7 +133,9 @@ fn lattice() -> impl Strategy<Value = RecordLattice<IntSet>> {
 
 proptest! {
     // A bounded shrink, so a broken invariant cannot turn a caught mutation
-    // into a run that outlasts a sweep.
+    // into a run that outlasts a sweep, and an allowance per case so a
+    // mutation that removes a pruning shortcut cannot either: see
+    // `budget::law`.
     #![proptest_config(ProptestConfig {
         max_shrink_time: 2_000,
         ..ProptestConfig::default()
@@ -149,6 +151,7 @@ proptest! {
         b in lattice(),
         c in lattice(),
     ) {
+        let _allowance = budget::law();
         if let (Some(ab), Some(ba)) = (a.union(&b), b.union(&a)) {
             prop_assert!(same(&ab, &ba), "join commutes");
         }
@@ -171,6 +174,7 @@ proptest! {
     /// The complement laws, and De Morgan both ways.
     #[test]
     fn the_complement_laws_hold_of_the_objects(a in lattice(), b in lattice()) {
+        let _allowance = budget::law();
         let not_a = a.complement();
         if let Some(met) = a.intersect(&not_a) {
             prop_assert!(met.is_empty(), "an object is in one of the two");
@@ -191,6 +195,7 @@ proptest! {
     /// Emptiness is a decision about the objects, not about the form.
     #[test]
     fn emptiness_agrees_with_the_objects(a in lattice()) {
+        let _allowance = budget::law();
         if a.is_empty() {
             prop_assert!(
                 objects().iter().all(|object| !holds(&a, object)),

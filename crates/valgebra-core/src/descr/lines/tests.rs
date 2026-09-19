@@ -1,4 +1,5 @@
 use super::{Lines, MAX_LINES};
+use crate::descr::budget;
 use crate::descr::classes::Class;
 use crate::descr::integers::IntSet;
 use crate::descr::records::RecordLattice;
@@ -124,7 +125,9 @@ fn lines() -> impl Strategy<Value = Lines> {
 
 proptest! {
     // A bounded shrink, so a broken invariant cannot turn a caught mutation
-    // into a run that outlasts a sweep.
+    // into a run that outlasts a sweep, and an allowance per case so a
+    // mutation that removes a pruning shortcut cannot either: see
+    // `budget::law`.
     #![proptest_config(ProptestConfig {
         max_shrink_time: 2_000,
         ..ProptestConfig::default()
@@ -142,6 +145,7 @@ proptest! {
     fn the_lattice_laws_hold_of_the_lines(
         a in lines(), b in lines(), c in lines()
     ) {
+        let _allowance = budget::law();
         if let (Some(ab), Some(ba)) =
             (a.combine(&b, Op::Union, WHOLE), b.combine(&a, Op::Union, WHOLE))
         {
@@ -179,6 +183,7 @@ proptest! {
     /// thing the lines would have.
     #[test]
     fn the_complement_laws_hold_of_the_lines(a in lines(), b in lines()) {
+        let _allowance = budget::law();
         let not_a = a.complement(WHOLE);
         if let Some(met) = a.combine(&not_a, Op::Intersect, WHOLE) {
             prop_assert!(

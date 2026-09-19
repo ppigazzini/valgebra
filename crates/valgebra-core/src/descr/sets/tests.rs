@@ -61,7 +61,9 @@ fn lattice() -> impl Strategy<Value = SetLattice<IntSet>> {
 
 proptest! {
     // A bounded shrink, so a broken invariant cannot turn a caught mutation
-    // into a run that outlasts a sweep.
+    // into a run that outlasts a sweep, and an allowance per case so a
+    // mutation that removes a pruning shortcut cannot either: see
+    // `budget::law`.
     #![proptest_config(ProptestConfig {
         max_shrink_time: 2_000,
         ..ProptestConfig::default()
@@ -72,6 +74,7 @@ proptest! {
     /// of the forms, which a union of lines does not make canonical.
     #[test]
     fn the_lattice_laws_hold_of_the_sets(a in lattice(), b in lattice(), c in lattice()) {
+        let _allowance = budget::law();
         let (join, meet) = (
             |x: &SetLattice<IntSet>, y: &SetLattice<IntSet>| x.union(y),
             |x: &SetLattice<IntSet>, y: &SetLattice<IntSet>| x.intersect(y),
@@ -98,6 +101,7 @@ proptest! {
     /// The complement laws, and De Morgan both ways.
     #[test]
     fn the_complement_laws_hold_of_the_sets(a in lattice(), b in lattice()) {
+        let _allowance = budget::law();
         let not_a = a.complement();
         {
             let not_a = &not_a;
@@ -123,6 +127,7 @@ proptest! {
     /// Emptiness is a decision about the sets, not about the form.
     #[test]
     fn emptiness_agrees_with_the_sets(a in lattice()) {
+        let _allowance = budget::law();
         if a.is_empty() {
             prop_assert!(
                 SETS.iter().all(|members| !a.holds(members)),
@@ -135,6 +140,7 @@ proptest! {
     /// operation the kind is closed under.
     #[test]
     fn a_meet_of_powersets_is_the_powerset_of_the_meet(a in -2i64..=2, b in -2i64..=2) {
+        let _allowance = budget::law();
         let (x, y) = (IntSet::between(Some(a), None), IntSet::between(None, Some(b)));
         let met = SetLattice::of(x.clone())
             .intersect(&SetLattice::of(y.clone()))

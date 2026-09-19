@@ -22,15 +22,13 @@
 //! values it admits, never by the shape it took.
 //!
 //! **Every reader of a descriptor operation is a build**, including the laws.
-//! That is not a courtesy to the meter: the operations have no ceiling of their
-//! own -- a union's width bound is a bound on the *result*, and it is read after
-//! the parts holding nothing and the repeats go, so it refuses a wide answer
-//! rather than a long search for a narrow one. The allowance is the only thing
-//! that says how long the search may be, and a law that ran without one
-//! measured an algebra no caller reaches: the set complement law over drawn
-//! descriptors spent 119 seconds on one draw against 1.3 on the next, which is
-//! a suite whose cost is a property of the seed. `descr/tests.rs` arms one per
-//! case, for the same figure `decision` builds a difference under.
+//! The operations carry no ceiling of their own: a union's width bound is a
+//! bound on the *result*, read once the parts holding nothing and the repeats
+//! are gone, so it refuses a wide answer and never a long search for a narrow
+//! one. This is what says how long a search may be. A reader without one costs
+//! whatever its inputs ask, which for a drawn input is a cost that is a
+//! property of the draw -- so the laws arm `law`, and `decision` builds its
+//! difference under the same figure.
 //!
 //! The allowance is per thread, and a build restores the one it found. Two
 //! threads building at once each spend their own, which is the only sharing
@@ -84,6 +82,26 @@ impl Drop for Allowance {
 /// instead and the case *is* the build.
 pub(crate) fn armed(units: u64) -> Allowance {
     LEFT.with(|left| Allowance(left.replace(units)))
+}
+
+/// Arm what a law's case may spend, which is what a relation's difference may.
+///
+/// **A bounded shrink is the other bound and does not stand in for this one.**
+/// A law block's `max_shrink_time` bounds what a *failing* case costs, so a
+/// broken invariant cannot outlast a sweep. This bounds what a *passing* case
+/// costs. The two come apart under a mutation that deletes a pruning shortcut:
+/// every case grows dear and none of them breaks, so there is no failure to
+/// shrink, and a mutant the sweep cannot finish returns no verdict at all --
+/// which `scripts/mutation_gate.py` reads as a rig fault rather than as a
+/// survivor.
+///
+/// Arm it in a law that reads a refusal as a skip, which is every law over a
+/// drawn descriptor or a drawn lattice: the allowance can only add to the draws
+/// such a law skips. A law asserting that its operations *succeed* claims
+/// something about a fragment rather than about a build, and is not armed.
+#[cfg(test)]
+pub(crate) fn law() -> Allowance {
+    armed(crate::descr::lower::WORK)
 }
 
 /// Run `build` with `units` of work, and restore the caller's allowance after.

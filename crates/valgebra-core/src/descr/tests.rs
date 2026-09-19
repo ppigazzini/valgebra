@@ -335,24 +335,13 @@ fn a_kind_whose_values_are_not_sequences_refuses() {
     assert!(Descr::sequence(&[], None, Kind::Set).is_none());
 }
 
-/// The allowance every case below runs under.
+/// The allowance every case below runs under; see [`budget::law`].
 ///
-/// A case here asks the descriptor operations directly, where a relation asks
-/// them through `decision` -- which builds its difference under this same
-/// figure. Nothing in the operations bounds a *search*: each lattice's width
-/// bound refuses an answer too wide to hold, and a question whose answer is
-/// narrow is not refused however long reaching it takes. So an unarmed case
-/// costs whatever its draw asks, which is not a quantity a suite can be sized
-/// against: this block's complement law spent 119 seconds under the seed the
-/// nightly sweep drew on 2026-09-19 and 1.3 under the one before it.
-///
-/// The laws below are written against refusal already -- every operation that
-/// can decline is read as a skip -- so what the allowance changes is which
-/// draws are skipped, and it can only add to them. The laws over `descr()`
-/// further down assert that their operations *succeed*, which is a claim about
-/// a fragment rather than about a build, and they are not armed.
+/// Armed here as well as at the four lattices' own laws, because a law over a
+/// whole descriptor reaches every one of them. The laws over `descr()` further
+/// down assert that their operations *succeed*, so they are not armed.
 fn allowance() -> budget::Allowance {
-    budget::armed(crate::descr::lower::WORK)
+    budget::law()
 }
 
 proptest! {

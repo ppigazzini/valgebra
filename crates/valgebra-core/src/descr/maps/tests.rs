@@ -500,7 +500,9 @@ fn lattice() -> impl Strategy<Value = MapLattice<IntSet>> {
 
 proptest! {
     // A bounded shrink, so a broken invariant cannot turn a caught mutation
-    // into a run that outlasts a sweep.
+    // into a run that outlasts a sweep, and an allowance per case so a
+    // mutation that removes a pruning shortcut cannot either: see
+    // `budget::law`.
     #![proptest_config(ProptestConfig {
         max_shrink_time: 2_000,
         ..ProptestConfig::default()
@@ -514,6 +516,7 @@ proptest! {
         b in lattice(),
         c in lattice(),
     ) {
+        let _allowance = budget::law();
         if let (Some(ab), Some(ba)) = (a.union(&b), b.union(&a)) {
             prop_assert!(same(&ab, &ba), "join commutes");
         }
@@ -546,6 +549,7 @@ proptest! {
     /// The complement laws, and De Morgan both ways.
     #[test]
     fn the_complement_laws_hold_of_the_dicts(a in lattice(), b in lattice()) {
+        let _allowance = budget::law();
         let not_a = a.complement();
         if let Some(met) = a.intersect(&not_a) {
             prop_assert!(
@@ -595,6 +599,7 @@ proptest! {
         b in lattice(),
         c in lattice(),
     ) {
+        let _allowance = budget::law();
         // Where the union itself does not fit there is no second spelling to
         // compare: the law is about the *difference* being written two ways,
         // and `b ∪ c` is a term the caller writes before either difference.
@@ -627,6 +632,7 @@ proptest! {
     /// decline.
     #[test]
     fn emptiness_agrees_with_the_dicts(a in lattice()) {
+        let _allowance = budget::law();
         match a.emptiness() {
             Verdict::Empty => prop_assert!(
                 dicts().iter().all(|d| !a.holds(d)),
