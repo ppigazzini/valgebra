@@ -432,9 +432,11 @@ refuted whichever ran first: what the order decides is which reading names the
 value, never whether one is named. What it does decide is what an *unrefuted*
 pair pays, since that pair is asked all of them -- so the three that are a
 discriminant test and an oracle call are asked before `disjoint_with`, which
-walks both subtrees. On the relation matrix's own slow set that ordering, with
-the literal-table reading entered only where both sides could be a table, is
-3.6% of the query (`scripts/perf_gate.py --decision-matrix`).
+walks both subtrees, and the literal-table reading inside that walk is entered
+only where both sides are a shape that could be a table. What either ordering
+is worth is a reading rather than a claim: `scripts/perf_gate.py
+--decision-matrix` is the shape that carries these pairs, and
+`scripts/perf_budget.json` owns the count it is held to.
 
 Two of these carry the whole reason the fast path exists. `disjoint_with` and
 `outside_every_kind` answer from two nodes and an oracle call what the descriptor
