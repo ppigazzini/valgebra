@@ -4369,7 +4369,7 @@ proptest! {
         }
     }
 
-    // THEORY: recursive-subtyping, subtyping-is-inclusion
+    // THEORY: recursive-subtyping, subtyping-is-inclusion, two-fixpoints-one-procedure
     /// A proof over a fixpoint has no witness against it either.
     ///
     /// The property above draws from a fragment with no reference in it, so
@@ -4460,7 +4460,7 @@ proptest! {
         }
     }
 
-    // THEORY: each-kind-is-closed
+    // THEORY: each-kind-is-closed, two-fixpoints-one-procedure
     /// An emptiness is refused by every value of the universe.
     ///
     /// The companion claim, on the same universe: `is_empty` asserts that *no*

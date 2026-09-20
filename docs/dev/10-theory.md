@@ -521,7 +521,7 @@ in both. **[LOAD-BEARING: two-fixpoints-one-procedure]**
 
 SOURCE: §13.4 "**Mixed induction and coinduction.**"
 
-HELD-BY: detects_uninhabited_recursive_schemas, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, the_fixpoint_laws_hold_over_drawn_definitions
+HELD-BY: detects_uninhabited_recursive_schemas, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, the_fixpoint_laws_hold_over_drawn_definitions, a_proof_over_a_fixpoint_has_no_witness_against_it, an_emptiness_is_refused_by_every_boundary_value
 
 **A clause is a region with its own default.** A keyed map is a quasi-K-step
 function: named labels, and a default per key-type region rather than one
