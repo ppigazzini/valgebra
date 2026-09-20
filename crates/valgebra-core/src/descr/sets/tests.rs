@@ -69,6 +69,31 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: the-second-decider
+    /// A starved verdict is the third answer or the decided one, over drawn
+    /// lattices.
+    ///
+    /// The unit beside this reaches the negated form by hand. This complements
+    /// whatever the lattice draws without an allowance, and asks the emptiness
+    /// of the result starved and decided: starved it may decline, and where it
+    /// answers it answers as the decided build does. The boolean reading is
+    /// the safe direction, so a starved proof of emptiness is a decided one.
+    #[test]
+    fn a_starved_verdict_is_the_third_answer_or_the_decided_one(a in lattice()) {
+        let negated = budget::under(0, || a.complement());
+        let decided = budget::under(4096, || negated.emptiness());
+        let starved = budget::under(0, || negated.emptiness());
+        prop_assert!(
+            starved == Verdict::Unknown || starved == decided,
+            "starved {:?} against decided {:?}",
+            starved,
+            decided
+        );
+        if budget::under(0, || negated.is_empty()) {
+            prop_assert_eq!(decided, Verdict::Empty);
+        }
+    }
+
     // THEORY: lattice-theory, property-testing, each-kind-is-closed
     /// The Boolean algebra, checked against the sets rather than by equality
     /// of the forms, which a union of lines does not make canonical.

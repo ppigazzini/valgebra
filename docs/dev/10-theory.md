@@ -397,7 +397,7 @@ there is no union left to read. Either decision there would stand on nothing,
 and the one a caller may act on is the proof of emptiness, so answering that one
 wrongly is the expensive direction.
 
-HELD-BY: a_negated_set_the_allowance_cannot_expand_declines,
+HELD-BY: a_starved_verdict_is_the_third_answer_or_the_decided_one, a_negated_set_the_allowance_cannot_expand_declines,
 a_negated_union_of_lines_the_allowance_cannot_expand_declines,
 a_covering_question_the_allowance_cannot_settle_answers_neither_way
 
@@ -592,7 +592,7 @@ neither, on every path a subtyping query can take: through a product, through
 the disjointness reading, and through the shared cell an equivalence query
 carries across its two directions. **[OBLIGATION: the-budget-declines]**
 
-HELD-BY: the_budget_declines_on_every_subtyping_path, an_exhausted_budget_refuses_to_spend, a_budgeted_equivalence_query_decides_the_same_or_declines
+HELD-BY: the_budget_declines_on_every_subtyping_path, an_exhausted_budget_refuses_to_spend, a_budgeted_equivalence_query_decides_the_same_or_declines, the_budget_declines_on_every_drawn_pair
 
 **The goals a query repeats are counted.** The decision not to memoise goals
 rests on a number: zero repeats over the workload shapes and the thirty-two
@@ -617,7 +617,7 @@ rather than as an argument. **[OBLIGATION: regularity-bounds-the-goals]**
 
 SOURCE: §14.2 "Regularity bounds the number of distinct"
 
-HELD-BY: the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks
+HELD-BY: the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks, the_goals_a_drawn_query_asks_are_pairs_of_the_subterms
 
 **A cache under coinduction is revertible or absent.** A memo added to the
 coinductive procedure must be persistent, so a failed disjunct can roll it

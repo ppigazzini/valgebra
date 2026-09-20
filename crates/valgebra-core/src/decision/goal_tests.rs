@@ -609,3 +609,42 @@ fn the_longest_trail_any_recursive_shape_builds_is_three_pairs() {
     }
     assert_eq!(deepest, 3, "no shape reached the length the page states");
 }
+
+/// The same bound, asked of drawn pairs over drawn definitions.
+mod drawn {
+    use super::distinct_against_subterm_pairs;
+    use crate::laws::{drawn_defs, recursive_schema};
+    use proptest::prelude::*;
+
+    proptest! {
+        // A bounded shrink, so a broken bound cannot turn a caught mutation
+        // into a run that outlasts a sweep: see `budget::law`.
+        #![proptest_config(ProptestConfig {
+            max_shrink_time: 2_000,
+            ..ProptestConfig::default()
+        })]
+
+        // THEORY: regularity-bounds-the-goals
+        /// The distinct goals a drawn query asks are bounded by the pairs of
+        /// subterms its two sides have, over drawn definitions.
+        ///
+        /// The eight chosen pairs above hold the bound on the shapes the
+        /// budget was measured over; this holds it on whatever the recursive
+        /// fragment draws, references into drawn definitions included, so a
+        /// rule that starts building goals past the subterms is caught on a
+        /// shape nobody chose.
+        #[test]
+        fn the_goals_a_drawn_query_asks_are_pairs_of_the_subterms(
+            sub in recursive_schema(),
+            sup in recursive_schema(),
+            defs in drawn_defs(),
+        ) {
+            let (distinct, pairs) = distinct_against_subterm_pairs(&sub, &sup, &defs);
+            prop_assert!(distinct >= 1, "the counter saw no goal for {sub:?} <= {sup:?}");
+            prop_assert!(
+                distinct <= pairs,
+                "{distinct} distinct goals over {pairs} subterm pairs for {sub:?} <= {sup:?}"
+            );
+        }
+    }
+}

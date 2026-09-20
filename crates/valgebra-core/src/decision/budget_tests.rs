@@ -224,3 +224,53 @@ fn a_budgeted_equivalence_query_decides_the_same_or_declines() {
         "the descriptor needs a budget it does not take"
     );
 }
+
+/// The same obligation, asked of drawn pairs.
+mod drawn {
+    use super::super::{DECISION_BUDGET, NoLeafRelations, Relation};
+    use crate::laws::decidable_schema;
+    use proptest::prelude::*;
+    use std::cell::Cell;
+
+    proptest! {
+        // A bounded shrink, so a broken obligation cannot turn a caught
+        // mutation into a run that outlasts a sweep: see `budget::law`.
+        #![proptest_config(ProptestConfig {
+            max_shrink_time: 2_000,
+            ..ProptestConfig::default()
+        })]
+
+        // THEORY: the-budget-declines
+        /// The budget never changes a decision, over drawn pairs.
+        ///
+        /// The four chosen pairs above drive one path each. This asks every
+        /// pair the decidable fragment draws: with no budget the query answers
+        /// neither way, and at every allowance short of the one the pair
+        /// needs the answer is the one the ceiling gives or it is the decline.
+        /// A refutation is a value of the subject outside the supertype, and
+        /// a budget that ran out found none.
+        #[test]
+        fn the_budget_declines_on_every_drawn_pair(
+            sub in decidable_schema(),
+            sup in decidable_schema(),
+        ) {
+            let none = Cell::new(0u32);
+            prop_assert_eq!(
+                sub.subtype_relation(&sup, &NoLeafRelations, &[], &none),
+                Relation::Unknown
+            );
+            let ceiling = Cell::new(DECISION_BUDGET);
+            let decided = sub.subtype_relation(&sup, &NoLeafRelations, &[], &ceiling);
+            let needed = sub.subtype_steps(&sup);
+            for budget in 1..needed.min(24) {
+                let cell = Cell::new(budget);
+                let answer = sub.subtype_relation(&sup, &NoLeafRelations, &[], &cell);
+                prop_assert!(
+                    answer == Relation::Unknown || answer == decided,
+                    "{sub:?} <= {sup:?} answered {answer:?} on a budget of {budget} \
+                     and {decided:?} at the ceiling"
+                );
+            }
+        }
+    }
+}

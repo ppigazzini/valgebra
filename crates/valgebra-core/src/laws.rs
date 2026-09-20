@@ -3887,7 +3887,7 @@ enum Negation {
 }
 
 /// Every decidable shape, a negated one among them.
-fn decidable_schema() -> impl Strategy<Value = Schema> {
+pub(crate) fn decidable_schema() -> impl Strategy<Value = Schema> {
     schema_fragment(Negation::Allowed, Producer::Any)
 }
 
@@ -4417,7 +4417,7 @@ proptest! {
 /// The structural fragment with a reference into [`fixpoint_defs`] among its
 /// leaves, so a drawn schema reaches a fixpoint with a word branch and one
 /// whose reference sits under a complement.
-fn recursive_schema() -> impl Strategy<Value = Schema> {
+pub(crate) fn recursive_schema() -> impl Strategy<Value = Schema> {
     prop_oneof![
         8 => decidable_schema(),
         1 => Just(Schema::Ref(DefIx::new(0))),
@@ -4843,7 +4843,7 @@ fn scalar_triple() -> impl Strategy<Value = Vec<Schema>> {
 /// fragment -- what a caller writes -- since the equivalence below is a
 /// promise the pages make to a caller, and a body holding a refinement the
 /// frontend refuses is one no caller can observe the promise on.
-fn drawn_defs() -> impl Strategy<Value = Vec<Schema>> {
+pub(crate) fn drawn_defs() -> impl Strategy<Value = Vec<Schema>> {
     let guarded = |index: usize| {
         (buildable_schema(), 0usize..4).prop_map(move |(leaf, shape)| {
             let reference = Schema::Ref(DefIx::new(index));
