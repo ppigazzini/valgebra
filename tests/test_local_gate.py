@@ -321,13 +321,21 @@ def test_a_forced_colour_variable_does_not_reach_a_step(
     which wrote ANSI escapes into the requirements file it generates, and
     `pip-audit` refused the file. The gate reported a failed step for a
     property of the terminal it was run from.
+
+    The second plant: `VIRTUAL_ENV`, which `uv run` sets for the gate itself,
+    reached a clone step's `uv pip install`, which installed the wheel into the
+    caller's venv, and the step after it ran under `uv run` in the clone's venv
+    and could not import what was installed. The gate reported the profile
+    comparison failed for a property of how it was launched.
     """
     monkeypatch.setenv("FORCE_COLOR", "3")
     monkeypatch.setenv("CLICOLOR_FORCE", "1")
+    monkeypatch.setenv("VIRTUAL_ENV", "/somewhere/else/.venv")
     monkeypatch.setenv("VALGEBRA_GATE_MARKER", "kept")
     environment = gate.runner_environment()
     assert "FORCE_COLOR" not in environment
     assert "CLICOLOR_FORCE" not in environment
+    assert "VIRTUAL_ENV" not in environment
     # Everything else is carried: the gate runs the lane's steps in the
     # caller's toolchain, and dropping more than the terminal's own would make
     # it a different environment rather than a runner's.

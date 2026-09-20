@@ -55,7 +55,13 @@ reaches a step that a lane runs with it unset. One of them gave a false red:
 `FORCE_COLOR` overrides a tool's terminal check, `uv export` wrote escape codes
 into the requirements file it generates, and `pip-audit` refused the file
 against a dependency tree with no advisory in it. The two variables whose only
-purpose is that override are dropped (`runner_environment`).
+purpose is that override are dropped (`runner_environment`), and so is
+`VIRTUAL_ENV`, which `uv run` sets for the gate it launches: in the clone it
+sends a step's `uv pip install` to the caller's venv while `uv run` reads the
+clone's, so the wheel the profile comparison times was installed where the
+timing step could not import it, and the caller's venv kept a wheel built from
+a clone of `HEAD`. Without it, `uv pip` finds the clone's `.venv` from the
+working directory, as a runner's step does.
 
 **The whole list, since two of these cost a day each.** The table is what a
 lane differs from a local run in, and the `modelled` column is what the gate

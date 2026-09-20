@@ -99,9 +99,6 @@ NEEDS_A_RUNNER = {
         "--ignore-filename-regex 'valgebra-py|/(laws|index_laws)\\.rs$|tests\\.rs$' "
         "--fail-under-lines 98 --fail-under-regions 97"
     ): "an instrumented rebuild under nextest",
-    "uv sync --locked --no-install-project --group bench": (
-        "the bench group, for steps this list already skips"
-    ),
     "Cross-check membership against pydantic-core and jsonschema": (
         "needs the bench group installed above"
     ),
@@ -581,6 +578,12 @@ def fetched(plan: list[Step], cwd: Path) -> bool:
 #: check. A runner sets none of them.
 FORCED_COLOUR = ("FORCE_COLOR", "CLICOLOR_FORCE")
 
+#: The variable `uv run` sets for the process it starts, naming the caller's
+#: environment. In the clone it points `uv pip` at the caller's venv while
+#: `uv run` ignores it and uses the clone's own, so a wheel a step installs
+#: lands where the next step cannot import it. A runner sets it nowhere.
+CALLERS_VENV = ("VIRTUAL_ENV",)
+
 
 def runner_environment() -> dict[str, str]:
     """Read the caller's environment, less what only a terminal would put in it.
@@ -596,8 +599,18 @@ def runner_environment() -> dict[str, str]:
 
     Dropped rather than overridden with `NO_COLOR`, because the runner carries
     neither: what a step should see is the absence.
+
+    `VIRTUAL_ENV` is dropped for the same reason from the other side: the gate
+    is launched by `uv run`, which sets it to the caller's venv, and a step in
+    the clone that runs `uv pip install` then installs into the caller's venv
+    while the step after it, run by `uv run`, reads the clone's. The wheel the
+    profile comparison times went to the wrong environment that way, and the
+    caller's venv kept a wheel of a clone of `HEAD` it never asked for. Without
+    the variable, `uv pip` finds the clone's `.venv` from the working
+    directory, which is what a runner's step does.
     """
-    return {key: value for key, value in os.environ.items() if key not in FORCED_COLOUR}
+    dropped = FORCED_COLOUR + CALLERS_VENV
+    return {key: value for key, value in os.environ.items() if key not in dropped}
 
 
 def step_environment(environment: dict[str, str], outputs: Path) -> dict[str, str]:
