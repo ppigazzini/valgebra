@@ -59,13 +59,18 @@ is immutable, so the copy shares the pool rather than duplicating it.
 `repr` is a **rendering**, not a serialization. What it gives back is an
 expression that builds the same schema — a recursive schema as the `recursive`
 call it is, an open record as the catch-all entry it carries, the nullary product
-as `tuple[()]` — so it can be pasted into a session and read back. Four things
+as `tuple[()]` — so it can be pasted into a session and read back. Five things
 it cannot render as an expression, and none of them reads back quietly: a
 **class**, which is an object rather than syntax and appears as its name; a
 **predicate**, which is a function and appears as `Predicate(...)`, and which
 the frontend refuses where it is built; a **constant too long to print**, which
-is cut mid-string and is a syntax error where it is parsed; and a **schema past
-the renderer's own depth bound**, which gives up and prints `<...>`. The bound
+is cut mid-string and is a syntax error where it is parsed; a **meet of two
+classes that each declare attributes**, which flattens to the two classes and
+their two attribute records, and a record standing apart from its class prints
+as `object(x=int)`, a form no constructor spells -- the schema does not record
+which class each record came from, so the render cannot fold them back; and a
+**schema past the renderer's own depth bound**, which gives up and prints
+`<...>`. The bound
 is within reach: no *single* annotation
 can be written deep enough, since the frontend refuses past `MAX_SCHEMA_DEPTH`
 and the renderer's bound sits above it, but a chain of recursive definitions

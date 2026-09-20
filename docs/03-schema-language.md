@@ -521,6 +521,28 @@ assert extensible.is_valid({"name": "Ada", "age": 36})
 assert not extensible.is_valid({"name": "Ada", "age": "old"})
 ```
 
+The one shape that separates a clause from a field is a literal-keyed clause
+beside a kind clause that covers the same key. Both clauses read `"k"`, so
+`"k"` may carry what either admits, and the schema is the same set as the
+record whose optional field takes both; the field spelling is a different set,
+since a field is read instead of the clauses:
+
+```python
+from typing import Literal
+
+from valgebra import Validator
+
+both = Validator({Literal["k"]: str, str: int})
+assert both.is_valid({"k": "x"})  # the literal clause reads it
+assert both.is_valid({"k": 1})  # and so does the str clause
+assert not both.is_valid({"k": 1.5})  # neither does
+assert both.is_equivalent({"k?": str | int, str: int})
+
+field = Validator({"k": str, str: int})
+assert not field.is_valid({"k": 1})  # the field is read, not the clauses
+assert field.relation_to(both) == "subset"
+```
+
 ### A key schema names whole types, not narrowed ones
 
 A clause's key says which keys it governs, and that must be a **type** —
