@@ -581,6 +581,45 @@ def test_every_held_test_carries_the_marker() -> None:
     )
 
 
+def test_every_marked_test_is_one_its_claim_names() -> None:
+    """A test that says which claim it holds is a test that claim names.
+
+    The marker above is the page reaching the test. This is the test reaching
+    the page, and it is the direction that was missing: a test written for a
+    claim, carrying the claim's own id, and left off the holding line reads --
+    from the page, which is where a reader looks -- as evidence nobody has.
+    Sixteen tests were in that state at once, the seven strongest among them
+    written the week the claims they hold were tightened, so the page pointed
+    at the weaker tests beside them while the ledger stayed green.
+
+    A marker naming a claim the page does not carry fails here too, which is
+    the same line gone stale from the other end.
+    """
+    claims = {claim.identifier for claim in _claims()}
+    named = {
+        (claim.identifier, _name_of(entry))
+        for claim in _held()
+        for entry in claim.names
+    }
+    adrift = sorted(
+        f"{name} ({path}) marks {identifier!r}, which "
+        + (
+            "no claim on this page carries"
+            if identifier not in claims
+            else "does not name it"
+        )
+        for identifier, sites in _markers().items()
+        for path, name in sites
+        if (identifier, name) not in named
+    )
+    assert not adrift, (
+        "tests that name a claim and are not named by it:\n"
+        + "\n".join(f"  {row}" for row in adrift)
+        + "\n\nAdd the test to that claim's `HELD-BY:` line, or drop the "
+        "marker if the test does not hold the claim."
+    )
+
+
 #: The argument the tracked page restates. Not redistributed, and both halves of
 #: the path are spelled from their pieces: the internal area and the note's own
 #: name each dangle for every reader but the author, and `docs_lint` refuses

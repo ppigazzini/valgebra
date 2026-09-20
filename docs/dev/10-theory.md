@@ -143,7 +143,7 @@ asked as a meet with a complement is not decided.
 
 SOURCE: §13.1 "**The product decomposition.**"
 
-HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, the_product_rule_is_lemma_6_5, test_a_product_splits_across_union_branches
+HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, the_product_rule_is_lemma_6_5, test_a_product_splits_across_union_branches, the_product_rule_is_lemma_6_5_at_three_positions, the_product_rule_decides_every_covering_split
 
 ## Records and maps
 
@@ -216,7 +216,7 @@ shape pydantic-core's `definition-ref` has. **[LOAD-BEARING: a-reference-denotes
 
 SOURCE: §4 "an **equirecursive** reading"
 
-HELD-BY: test_a_reference_denotes_the_definition_it_names, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively
+HELD-BY: test_a_reference_denotes_the_definition_it_names, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, a_reference_and_its_definition_are_one_set_over_drawn_definitions, test_a_fixpoint_and_its_unfolding_are_one_set
 
 **A descent past the bound is an error, never a crash.** The walk unfolds to
 `MAX_RECURSION_DEPTH` and reports `recursion_limit` past it, which converts any
@@ -320,7 +320,7 @@ deciding them means deciding whether two Python callables agree.
 
 SOURCE: §10 "the runtime check; the static/SMT side is"
 
-HELD-BY: test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker
+HELD-BY: test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker, test_every_cell_narrows_its_base_or_is_refused
 
 ## Decision procedures, for widening the decided fragment
 
@@ -373,7 +373,7 @@ spelling answers and the other declines. `a ∧ ¬(b ∨ c)` against `a ∧ ¬b 
 is the pair, De Morgan is why they are one set, and the tests below read what a
 caller is told rather than what a value is.
 
-HELD-BY: the_lattice_laws_hold_of_the_descriptors, the_complement_laws_hold_of_the_descriptors, emptiness_agrees_with_the_values, laws.rs::the_verdict_is_stable_under_de_morgan, a_meet_with_a_negated_union_answers_as_the_spelled_out_meet, test_the_verdict_is_stable_under_de_morgan
+HELD-BY: the_lattice_laws_hold_of_the_descriptors, the_complement_laws_hold_of_the_descriptors, emptiness_agrees_with_the_values, laws.rs::the_verdict_is_stable_under_de_morgan, a_meet_with_a_negated_union_answers_as_the_spelled_out_meet, test_the_verdict_is_stable_under_de_morgan, descr/maps/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, descr/records/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, descr/sets/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, a_meet_against_a_negated_side_removes_one_line_at_a_time
 
 It is built beside the structural procedure and is the second decider a caller
 reaches: the rules answer first and this answers where they decline
@@ -521,7 +521,7 @@ in both. **[LOAD-BEARING: two-fixpoints-one-procedure]**
 
 SOURCE: §13.4 "**Mixed induction and coinduction.**"
 
-HELD-BY: detects_uninhabited_recursive_schemas, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively
+HELD-BY: detects_uninhabited_recursive_schemas, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively, the_fixpoint_laws_hold_over_drawn_definitions
 
 **A clause is a region with its own default.** A keyed map is a quasi-K-step
 function: named labels, and a default per key-type region rather than one
@@ -562,7 +562,7 @@ carrier, `nan`, the newline, the empty container. **[LOAD-BEARING: each-kind-is-
 
 SOURCE: §14.5 "Each kind's representation should be closed under complement"
 
-HELD-BY: descr/integers/tests.rs::the_lattice_laws_hold_of_the_integers, the_lattice_laws_hold_of_the_floats, the_lattice_laws_hold_of_the_languages, the_lattice_laws_hold_of_the_sequences, descr/sets/tests.rs::the_lattice_laws_hold_of_the_sets, the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_objects, the_lattice_laws_hold_of_the_values, the_complement_laws_hold_of_the_values, an_emptiness_is_refused_by_every_boundary_value, the_universe_separates_a_pair_inside_a_shape
+HELD-BY: descr/integers/tests.rs::the_lattice_laws_hold_of_the_integers, the_lattice_laws_hold_of_the_floats, the_lattice_laws_hold_of_the_languages, the_lattice_laws_hold_of_the_sequences, descr/sets/tests.rs::the_lattice_laws_hold_of_the_sets, the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_objects, the_lattice_laws_hold_of_the_values, the_complement_laws_hold_of_the_values, an_emptiness_is_refused_by_every_boundary_value, the_universe_separates_a_pair_inside_a_shape, test_each_kinds_top_is_decided_at_the_value_that_decides_it, test_a_hashable_subclass_of_an_unhashable_kind_is_a_set_member, test_a_class_whose_metaclass_runs_isinstance_declines_every_relation
 
 **A node built alike is one handle.** Interning shares the nodes of two schemas
 built the same way, so the trail's comparisons short-circuit on pointer
@@ -583,7 +583,7 @@ stands on a value, and a decline is reported as itself rather than as either.
 
 SOURCE: §14.1 "The decision's return type destroys the contract's only observable"
 
-HELD-BY: test_the_three_answers_agree_with_the_two, an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_negated_set_the_allowance_cannot_expand_declines
+HELD-BY: test_the_three_answers_agree_with_the_two, an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_negated_set_the_allowance_cannot_expand_declines, a_union_narrowed_to_one_branch_refutes_where_that_branch_does, test_every_predicate_is_the_proof_answer_of_a_relation
 
 **The budget declines; it never refutes.** Exhausting the work budget answers
 neither, on every path a subtyping query can take: through a product, through
@@ -731,13 +731,13 @@ list as written rather than the semantic domain the paper's operators read.
 
 SOURCE: §13.3 "**the `S` component is absent**"
 
-HELD-BY: two_spellings_of_one_keyed_map_are_one_term, opening_drops_a_field_the_record_already_said
+HELD-BY: two_spellings_of_one_keyed_map_are_one_term, opening_drops_a_field_the_record_already_said, a_label_carrying_its_regions_default_is_absorbed
 
 **Clauses are unordered where the source orders them.** A key belongs when
 *some* clause admits it and its value, in the walk and in subtyping alike, and
 two clauses may claim one key. **[DEVIATION: clauses-are-unordered]**
 
-HELD-BY: test_heterogeneous_mapping_by_key_schema, test_two_clauses_claiming_one_key_are_a_disjunction, a_literal_keyed_clause_is_read_beside_the_clauses_that_cover_its_key, test_a_parsed_object_is_covered_by_whichever_clause_can_read_its_keys, test_named_field_takes_precedence_over_the_catch_all
+HELD-BY: test_heterogeneous_mapping_by_key_schema, test_two_clauses_claiming_one_key_are_a_disjunction, a_literal_keyed_clause_is_read_beside_the_clauses_that_cover_its_key, a_field_is_read_instead_of_a_clause_that_names_its_key, test_a_parsed_object_is_covered_by_whichever_clause_can_read_its_keys, test_named_field_takes_precedence_over_the_catch_all
 
 **Clauses are quasi-K-step rather than quasi-constant.** A default per
 key-type region rather than one default for the rest; nothing against the
