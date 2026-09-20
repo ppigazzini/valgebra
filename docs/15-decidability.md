@@ -335,6 +335,18 @@ constructor at decision time, which is the same code the pure-metaclass test
 exists to refuse. What it buys is every relation between two classes decided by
 a rule, at about a microsecond rather than a hundred.
 
+**A declared attribute does not widen this.** A class with declared
+attributes -- a dataclass, a `NamedTuple` -- compiles to the class beside a
+record of its fields, and the record narrows the class's instances rather than
+reaching outside them. So a relation that declines beside one declines for the
+class: `int ≤ ~C` is "not proven" for a dataclass and for a class with no
+fields alike, and a class laid out as a kind decides either way. The record is
+not a second source of conservatism, and in the one place it tells two schemas
+apart it makes a refutation reachable that the class alone leaves open. A
+`Protocol` is a third thing again: it compiles to a class that answers
+`isinstance` itself, which is the decline the section above owns, and carries
+no record at all.
+
 ## Sound but conservative
 
 Here valgebra is correct but not complete: it may answer `False` or "not empty"
@@ -445,19 +457,6 @@ the shape. What is left below is what the descriptor cannot hold.
     relation that needs the body *twice* — a fixpoint below a
     differently-written fixpoint whose bodies only agree after two steps — and
     there the coinductive rule is the whole of the answer.
-
-- **An attribute record, on either side.** A `Protocol` with a data member, and
-  a class with declared attributes, ask whether a *value* carries a name. That
-  is a question about the object rather than about its kind: any instance of any
-  class may have the attribute set on it, and which classes exist is the open
-  world above. So a relation with such a schema on either side is left to the
-  rules, which decline it, and the descriptor holds a kind as a set of values
-  with nothing finer to say — `int ≤ HasX` and `HasX ≤ int` both come back "not
-  proven", and a value decides each.
-
-  `tests/test_relation_ledger.py` asks every ordered pair of schema nodes and
-  separates the declines a value decides, which are these, from the ones nothing
-  does, which are the open world's. Only the first list can fall.
 
 - **A length bound over a set or a dict, in the sets.** A length is not a word's alone, and
   two of the kinds that have one state it: a word's length is a pattern over

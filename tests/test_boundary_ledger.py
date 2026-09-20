@@ -47,9 +47,7 @@ from typing import (
     Any,
     Final,
     Literal,
-    Protocol,
     TypeVar,
-    runtime_checkable,
 )
 
 import annotated_types as at
@@ -137,13 +135,6 @@ class Opaque:
 Row = Decides | Declines | Refuses | Opaque
 
 _T = TypeVar("_T")
-
-
-@runtime_checkable
-class _HasX(Protocol):
-    """A protocol with a data member, which is an attribute record alone."""
-
-    x: int
 
 
 class _Colour(enum.Enum):
@@ -246,11 +237,6 @@ ROWS: dict[str, Row] = {
         # What one unfolding does reach: the kinds a fixpoint admits. A value of
         # another kind shares nothing with it, so it is below its complement.
         beside=(bytes, complement(_CHAIN), "subset"),
-    ),
-    "An attribute record, on either side.": Declines(
-        int,
-        complement(_HasX),
-        "an oracle that enumerates the values of a kind, which the open world denies",
     ),
     "A length bound over a set or a dict, in the sets.": Declines(
         Annotated[set[int], at.MinLen(1)],

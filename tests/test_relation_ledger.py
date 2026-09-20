@@ -89,13 +89,6 @@ class Point:
     x: int
 
 
-@runtime_checkable
-class HasX(Protocol):
-    """A protocol with a data member, which is what an `AttrRecord` alone is."""
-
-    x: int
-
-
 #: One representative per variant. Each is the form `tests/test_node_matrix.py`
 #: names for that node, so the two tables describe one node set: a pair here is
 #: a pair of the schemas that file already drives values through.
@@ -113,7 +106,15 @@ REPRESENTATIVES: dict[str, Any] = {
     "Seq": list[int],
     "Coll": set[int],
     "KeyedMap": {"x": int},
-    "AttrRecord": HasX,
+    # `tests/test_node_matrix.py` names a class with declared attributes for
+    # this node, and a class is the only producer of one: no annotation builds
+    # a carrier-free attribute record, so the form is `Instance ∧ AttrRecord`
+    # and the column is named for the variant only it reaches. A
+    # `@runtime_checkable` Protocol is not that form -- it compiles to an
+    # `Instance` alone, whose own `__instancecheck__` answers membership, so a
+    # column built from one reports the hooked-class decline under this name.
+    # That class belongs in `HOOKED`, where it is.
+    "AttrRecord": Point,
     "Refine": Annotated[int, at.Ge(0)],
     "Union": union(int, str),
     "Complement": complement(int),
@@ -172,18 +173,6 @@ CORPUS: list[Any] = [
     object(),
 ]
 
-#: A protocol with a data member asks whether a value carries an attribute, and
-#: that is a question about the object rather than about its kind: any instance
-#: of any class may have one set on it, and which classes exist is not something
-#: the core can enumerate. So the rules decline and the descriptor, which holds
-#: a kind as a set of values, has nothing finer to say.
-AN_ATTRIBUTE_IS_A_PYTHON_QUESTION = (
-    "an attribute record asks whether a value carries a name, which is a "
-    "question about the object rather than about its kind; the rules decline "
-    "it and the descriptor holds no finer set -- see the attribute-record entry "
-    "under `docs/15-decidability.md`'s conservative list"
-)
-
 #: `a ≤ b` is `a ∧ ¬b = ∅`, so the supertype of an inclusion is where a schema
 #: appears *under a complement* -- and a reference under one is lowered to the
 #: bottom, which is what keeps the difference sound. The difference then
@@ -214,42 +203,10 @@ THE_CLASS_ORDER_IS_OPEN = (
 #: a rule that begins refuting one of these moves it out of the table and fails
 #: here until somebody does.
 DECLINED_THOUGH_A_VALUE_DECIDES: dict[tuple[str, str], str] = {
-    ("Anything", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
     ("Anything", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,
-    ("NoneType", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("Bool", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("Int", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("Float", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("Str", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("Bytes", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("Instance", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
     ("Instance", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,
-    ("Seq", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("Coll", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("KeyedMap", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Nothing"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "NoneType"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Bool"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Int"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Float"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Str"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Bytes"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Literal"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Instance"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Seq"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Coll"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "KeyedMap"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Refine"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Union"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Intersection"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("AttrRecord", "Ref"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("Refine", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("Union", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
-    ("Complement", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
     ("Complement", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,
-    ("Intersection", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
     ("Intersection", "Ref"): A_FIXPOINT_IS_LOWERED_ONCE,
-    ("Ref", "AttrRecord"): AN_ATTRIBUTE_IS_A_PYTHON_QUESTION,
 }
 
 
@@ -332,6 +289,36 @@ def test_the_representatives_are_that_many_different_sets(
         if a < b and built[a].is_equivalent(REPRESENTATIVES[b])
     ]
     assert not same, f"representatives denoting one set: {same}"
+
+
+def test_a_representative_denotes_a_set_the_procedure_can_read() -> None:
+    """No column stands for a node and reports another node's decline.
+
+    A schema whose own contradiction cannot be proved empty carries something
+    the procedure will not read: a class that answers membership itself, a
+    predicate, a reference nothing resolves. That opacity dominates the whole
+    row and the whole column it sits in, so every decline there is
+    attributable to it rather than to the variant the column is named for --
+    and the reasons recorded below would describe the wrong cause while every
+    other check in this file passed.
+
+    `A ∧ ¬A = ∅` is the reading that detects it, because it asks the
+    procedure about the representative alone. A representative the reading
+    cannot settle is one this product must not be built from; the opaque
+    forms have a table of their own in `HOOKED`, where the decline is the
+    claim rather than the background.
+    """
+    opaque = sorted(
+        variant
+        for variant, form in REPRESENTATIVES.items()
+        if not intersection(form, complement(form)).is_empty()
+    )
+    assert not opaque, (
+        f"representatives whose own contradiction is not proved empty: {opaque}. "
+        "Each stands for its variant in name and for an opacity in fact. Pick "
+        "the form `tests/test_node_matrix.py` names for the node, and drive the "
+        "opaque one through `HOOKED` instead."
+    )
 
 
 def test_every_pair_is_proved_refuted_or_declined_with_a_reason(
