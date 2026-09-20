@@ -96,7 +96,13 @@ def _ignored(lane: str) -> re.Pattern[str]:
     script = _lane_scripts()[lane]
     # The argument is quoted and may be wrapped, so the continuations go first.
     flat = script.replace("\\\n", " ")
-    found = re.search(r"--ignore-filename-regex\s+'([^']*)'", flat)
+    # A lane names its scope once and spends it twice -- the crate floor and
+    # the per-file one -- so the shell variable it is bound to is where the
+    # scope is written. The literal argument is read too, for a lane that
+    # passes it inline.
+    found = re.search(r"^\s*ignore='([^']*)'", flat, re.MULTILINE) or re.search(
+        r"--ignore-filename-regex\s+'([^']*)'", flat
+    )
     assert found, f"{lane} enforces a floor without naming a scope"
     return re.compile(found.group(1))
 
