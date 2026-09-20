@@ -17,7 +17,7 @@ from typing import Literal
 
 import pytest
 
-from valgebra import ValidationError, Validator, union
+from valgebra import ValidationError, Validator, recursive, union
 
 
 class _Backend(enum.Enum):
@@ -119,3 +119,36 @@ def test_the_closest_branch_probe_stops_at_its_cap(
         Validator(spec).validate({"zz": {"b": "not an int"}})
     paths = [error["path"] for error in info.value.errors]
     assert (("zz", "b") in paths) is explained, paths
+
+
+# BOUND: MAX_LABEL_UNFOLDS
+def test_a_union_label_follows_four_references_and_then_names_the_kind() -> None:
+    """A branch label follows a chain of definitions to a depth, not forever.
+
+    A reference contributes the label of the definition it names, and a
+    definition may name another. The chain is followed four references deep,
+    which is far enough for the definitions a caller writes, and past it the
+    node's own kind is the honest answer: a label is prose, and a label that
+    followed a cycle would be a walk with no end.
+    """
+    chain = recursive(lambda t: union(int, list[t]))  # ty: ignore[invalid-type-form]
+
+    def wrapped(depth: int) -> Validator:
+        schema = chain
+        for _ in range(depth):
+            schema = recursive(lambda t, inner=schema: union(inner, {"n": t}))
+        return Validator(union(schema, bytes))
+
+    def expected(schema: Validator) -> str:
+        with pytest.raises(ValidationError) as caught:
+            schema.validate("x")
+        return caught.value.expected
+
+    # Three wrappers and the chain are four references: every one is followed,
+    # and the chain's own branches are named.
+    assert expected(wrapped(3)) == "one of: bytes, dict, dict, dict, int, list"
+    # A fourth wrapper puts the chain a fifth reference away, which is not
+    # followed: its label is the kind of a reference, `value`.
+    assert expected(wrapped(4)) == "one of: bytes, dict, dict, dict, dict, value"
+    # And a longer chain reads the same, since nothing past the bound is read.
+    assert expected(wrapped(9)) == expected(wrapped(4))

@@ -99,6 +99,7 @@ def _nested_value(depth: int) -> object:
     return value
 
 
+# BOUND: MAX_BUILD_DEPTH
 def test_build_depth_guard_rejects_an_overdeep_schema() -> None:
     # A reasonably nested annotation compiles; one past the build-depth guard is
     # rejected at compile time with a clean exception, not a stack overflow.
@@ -262,6 +263,7 @@ def test_the_published_bounds_are_positive() -> None:
     assert MAX_SCHEMA_NODES > MAX_SCHEMA_DEPTH
 
 
+# BOUND: MAX_RECURSION_DEPTH
 def test_deeply_nested_object_hits_the_recursion_limit() -> None:
     schema = Validator(recursive(lambda j: union(int, [j])))
     deep = _nested_value(5000)
@@ -373,6 +375,7 @@ def test_self_referential_value_is_caught_as_a_loop() -> None:
     assert info.value.code == "recursion_loop"
 
 
+# BOUND: CLOSEST_BRANCH_PROBE_LIMIT
 def test_wide_union_membership_is_decided_and_bounded() -> None:
     wide = union(*[Literal[i] for i in range(5000)])  # ty: ignore[invalid-type-form]
     # The value-driven work (the linear scan and the capped closest-branch probe)
@@ -610,6 +613,7 @@ def test_two_steps_that_meet_past_the_period_bound_are_refused() -> None:
         assert intersection(step(n), complement(step(n))).is_empty()
 
 
+# BOUND: MAX_MARKER_TYPES
 def test_a_marker_type_past_the_cache_bound_is_still_read() -> None:
     """`MAX_MARKER_TYPES`: the cache stops growing; the reading stays right.
 

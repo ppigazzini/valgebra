@@ -437,6 +437,7 @@ def test_a_chain_one_link_short_of_the_bound_renders_whole(shape: str) -> None:
     assert rebuilt == Validator(schema)
 
 
+# BOUND: MAX_RENDER_DEPTH
 @pytest.mark.parametrize("shape", sorted(_CHAIN_SHAPES))
 def test_one_link_further_truncates_and_says_so(shape: str) -> None:
     """Past the bound the render gives up, and the mark is not valid Python.

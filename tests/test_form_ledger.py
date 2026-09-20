@@ -35,6 +35,7 @@ PRODUCT: every form the schema-language pages tabulate
 from __future__ import annotations
 
 import enum
+import json
 import re
 import sys
 import typing
@@ -400,10 +401,41 @@ def _refusing() -> list[tuple[str, Refuses]]:
 
 @pytest.mark.parametrize(("cell", "row"), _reading(), ids=[c for c, _ in _reading()])
 def test_a_form_the_tables_read_admits_and_refuses(cell: str, row: Reads) -> None:
-    """A form the page says is read admits its member and refuses its outsider."""
+    """A form the page says is read admits its member and refuses its outsider.
+
+    On both paths. The JSON path parses before it walks and materialises a
+    value only at the nodes that compare against a Python object, so a form
+    read one way from an object and another from a document would pass the
+    object row alone. Asked wherever a document names the value: a tuple, a
+    set, a bytes value or an instance has none, and those rows stay on the
+    object path.
+    """
     compiled = Validator(row.spec)
     assert compiled.is_valid(row.member), f"{cell}: {row.member!r} is not admitted"
     assert not compiled.is_valid(row.outsider), f"{cell}: {row.outsider!r} is admitted"
+    for value, expected in ((row.member, True), (row.outsider, False)):
+        document = _document_naming(value)
+        if document is not None:
+            assert compiled.is_valid_json(document) is expected, (
+                f"{cell}: the JSON path reads {document} as {not expected}"
+            )
+
+
+def _document_naming(value: object) -> str | None:
+    """Give the JSON document that names `value`, where one does.
+
+    A value whose document reads back as something else -- a tuple, a set,
+    bytes, an instance, a float that is integral -- has no document, so the
+    two paths would be asked about two values and are not compared.
+    """
+    try:
+        text = json.dumps(value)
+    except (TypeError, ValueError):
+        return None
+    back = json.loads(text)
+    if type(back) is not type(value) or back != value:
+        return None
+    return text
 
 
 @pytest.mark.parametrize(("cell", "row"), _refusing(), ids=[c for c, _ in _refusing()])

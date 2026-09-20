@@ -34,10 +34,13 @@ import enum
 import json
 import re
 from dataclasses import dataclass
-from typing import Annotated, NamedTuple
+from typing import TYPE_CHECKING, Annotated, NamedTuple
 
 import annotated_types as at
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from valgebra import (
     Regex,
@@ -410,6 +413,59 @@ def test_a_code_a_document_can_carry_is_reported_on_every_json_path(code: str) -
         assert error.code == expected, (fail_fast, _codes_of(error))
         assert error.path == where
     assert Validator(case.spec).is_valid_json(document) is False
+
+
+#: The location grammar `docs/08-error-model.md` states, one shape per row: how
+#: a failing value is placed under a key or an index, and the segment the path
+#: carries for it. A string key is itself; an integer key is itself as an
+#: integer, whatever its size, and a boolean key with it, since `d[True]` and
+#: `d[1]` are one entry; an index is its integer; a key that is none of those
+#: is its `repr`, naming the key rather than being one a caller indexes with.
+_LOCATIONS: dict[
+    str, tuple[Callable[[object], object], Callable[[object], object], object]
+] = {
+    "string key": (lambda spec: {"k": spec}, lambda value: {"k": value}, "k"),
+    "integer key": (lambda spec: {int: spec}, lambda value: {7: value}, 7),
+    "index": (lambda spec: [spec], lambda value: [value], 0),
+    "folded boolean key": (lambda spec: {int: spec}, lambda value: {True: value}, 1),
+    "big integer key": (
+        lambda spec: {int: spec},
+        lambda value: {2**70: value},
+        2**70,
+    ),
+    "a key that is neither": (
+        lambda spec: {tuple: spec},
+        lambda value: {(1, 2): value},
+        "(1, 2)",
+    ),
+}
+
+
+@pytest.mark.parametrize("where", list(_LOCATIONS))
+@pytest.mark.parametrize("code", sorted(CASES))
+def test_a_code_carries_its_path_under_every_location_shape(
+    code: str, where: str
+) -> None:
+    """Every code under every location shape the page's grammar names.
+
+    The code-by-location product, in both modes, with the segment the path
+    carries asserted. The nested row above places each code under one string
+    key. The grammar
+    names five more spellings a segment can have, and a code whose walk built
+    its path differently under one of them -- an integer key rendered as text,
+    a boolean key kept as a boolean -- would be invisible to a single shape.
+    """
+    case = CASES[code]
+    if case.nested is None:
+        pytest.skip(f"{code} is driven by a test of its own")
+    wrap_spec, wrap_value, segment = _LOCATIONS[where]
+    spec, value = wrap_spec(case.spec), wrap_value(case.value)
+    first = _fail_fast(spec, value)
+    assert first.code == code
+    assert first.path == (segment, *case.path), (where, first.path)
+    every = _aggregate(spec, value)
+    assert (segment, *case.path) in [tuple(entry["path"]) for entry in every.errors]  # ty: ignore[invalid-argument-type]
+    assert code in _codes_of(every)
 
 
 # THEORY: the-depth-bound-reports-itself

@@ -96,6 +96,7 @@ def test_the_grouped_markers_of_the_vocabulary_are_unmoved() -> None:
     assert length.is_valid("abcd") is False
 
 
+# BOUND: MAX_GROUPING_DEPTH
 def test_a_grouped_marker_that_never_bottoms_out_is_refused() -> None:
     """A marker yielding itself is refused rather than followed forever."""
     with pytest.raises(ValueError, match=r"nested too deeply|does not bottom out"):

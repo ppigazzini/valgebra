@@ -214,6 +214,18 @@ PLANTS = (
         ),
     ),
     Plant(
+        # A bound declared and driven by nothing: the state every bound starts
+        # in, and the one a limits page cannot see from its own prose.
+        "tests/test_bound_ledger.py",
+        ("crates/valgebra-core/src/descr/lower.rs",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/src/descr/lower.rs",
+            "pub const UNFOLDS: u32 = 1;",
+            "pub const UNFOLDS: u32 = 1;\npub const MAX_PLANTED_BOUND: u32 = 1;",
+        ),
+    ),
+    Plant(
         # A load-bearing result whose `HELD-BY:` names a test the tree does not
         # have: the shape a rename leaves behind, and the one the page cannot
         # detect on its own.

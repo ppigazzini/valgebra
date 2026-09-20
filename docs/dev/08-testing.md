@@ -81,7 +81,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Thirty-nine of them:
+for and misses the other. Forty of them:
 
 | Ledger | Holds |
 |---|---|
@@ -113,6 +113,7 @@ for and misses the other. Thirty-nine of them:
 | `tests/test_module_placement.py` | no inline test module is longer than a screen |
 | `tests/test_theory_ledger.py` | every load-bearing theory result names a test, and every name is one |
 | `tests/test_use_case_ledger.py` | every public name and every error code is named by the suite, or accepted with a reason |
+| `tests/test_bound_ledger.py` | every declared bound is driven by a test, or accepted with a reason |
 | `tests/test_coverage_scope.py` | every coverage lane names its scope, and the scope is the tree's |
 | `tests/test_typed_consumer.py` | every public name is put through `assert_type` by the typed consumer |
 | `tests/test_frontend_refusals.py` | every frontend refusal message is matched by a test, or accepted with a reason |
@@ -128,7 +129,7 @@ for and misses the other. Thirty-nine of them:
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are thirty-nine.
+because a table nothing counts is the one that drifts: there are forty.
 
 **Which interpreter reads them.** A ledger is a repository check: it reads the
 tree, the workflow and the scripts, none of which answers differently by
