@@ -687,7 +687,7 @@ is a surface the decision must be sound over for nothing.
 
 SOURCE: §14.7 "The IR should be exactly as expressive as its producers"
 
-HELD-BY: test_every_variant_is_a_generator_a_representative_or_a_marker, test_no_column_names_a_variant_that_is_gone, test_the_node_table_covers_every_ir_variant
+HELD-BY: every_variant_is_built_by_a_producer_and_the_placeholder_by_none, test_every_variant_is_a_generator_a_representative_or_a_marker, test_no_column_names_a_variant_that_is_gone, test_the_node_table_covers_every_ir_variant
 
 **The definition imports nothing from the optimisation.** The partition and the
 answer types sit below both deciders; no descriptor module names the structural
