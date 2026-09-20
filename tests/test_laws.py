@@ -455,6 +455,42 @@ def test_the_complement_laws_hold_of_any_as_of_the_top() -> None:
     assert repr(complement(Any).simplify()) == "nothing"
 
 
+#: Bodies a fixpoint is built from: each takes the leaf beside the recursion
+#: and gives the builder `recursive` takes. Every body guards the reference
+#: under a container, so each is a fixpoint the frontend accepts.
+_FIXPOINT_BODIES: list[Callable[[object], Callable[[Validator], object]]] = [
+    lambda leaf: lambda t: union(leaf, list[t]),  # ty: ignore[invalid-type-form]
+    lambda leaf: lambda t: union(leaf, {"v": leaf, "n?": t}),
+    lambda leaf: lambda t: union(leaf, tuple[leaf, t]),  # ty: ignore[invalid-type-form]
+    lambda leaf: lambda t: {"head": leaf, "tail?": list[t]},  # ty: ignore[invalid-type-form]
+]
+
+
+# THEORY: a-reference-denotes-its-definition
+@given(
+    body=st.sampled_from(_FIXPOINT_BODIES),
+    leaf=st.sampled_from(ATOM_SCHEMAS),
+    vals=value_lists,
+)
+def test_a_fixpoint_and_its_unfolding_are_one_set(
+    body: Callable[[object], Callable[[Validator], object]],
+    leaf: object,
+    vals: list[object],
+) -> None:
+    """`recursive(f)` and `f(recursive(f))` admit the same values, and are decided so.
+
+    The equirecursive reading: a reference denotes the definition it names,
+    so writing the body out once by hand around the fixpoint is writing the
+    same schema. Asked of the walk on values and of the decision as an
+    equivalence, over every body above and every atom as its leaf.
+    """
+    build = body(leaf)
+    fixpoint = recursive(build)
+    unfolded = Validator(build(fixpoint))
+    assert equivalent(fixpoint, unfolded, vals), "the unfolding is another set"
+    assert fixpoint.is_equivalent(unfolded), "the unfolding is not decided one set"
+
+
 # THEORY: lattice-theory
 @given(a=schemas, vals=value_lists)
 def test_the_complement_laws_hold_of_every_drawn_schema(

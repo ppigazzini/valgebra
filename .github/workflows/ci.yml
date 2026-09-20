@@ -1561,7 +1561,15 @@ jobs:
     # The slowest shard of twelve runs forty-five minutes on a shared runner
     # and the others twenty-five to forty, so a ceiling at forty-five cancels
     # a healthy sweep and a cancelled job is red. Twice the slowest reading.
-    timeout-minutes: 90
+    # Measured: at the 0.0.12 tag the slowest of the twelve shards took 58
+    # minutes of a 90-minute budget. The laws this change draws take the
+    # core's own suite from 26 to 53 seconds, and a sweep runs that suite
+    # once per mutant, so every shard roughly doubles with it -- nine of
+    # twelve then run out at exactly 90 and a run out of time is reported
+    # cancelled, which the ratchet reads as a sweep with shards missing.
+    # The budget follows the measurement rather than the laws being drawn
+    # at fewer cases to fit it.
+    timeout-minutes: 150
     # One seed for the baseline and every mutant of this shard. A mutation is
     # caught when the tests answer differently with it than without it, so the
     # two runs have to be given the same inputs; proptest otherwise draws from

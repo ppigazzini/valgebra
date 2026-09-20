@@ -61,6 +61,13 @@ from valgebra import (
 # A recursive schema, reused below to record a reflexivity hole.
 _RECURSIVE = recursive(lambda t: union(None, {"value": int, "next": t}))
 
+# A fixpoint whose body carries a meet against a union beside the recursive
+# member: the shape whose unfolding, as a union, the deciders decline to place
+# below it, while each member alone is decided.
+_MEET_MEMBER_FIXPOINT = recursive(
+    lambda t: union(intersection(int, union(float, bool)), list[t])  # ty: ignore[invalid-type-form]
+)
+
 # A linked chain, and the same chain one optional field wider. The two are two
 # sets -- the wider admits a link carrying `v` -- and the value that says so
 # sits at the first link rather than past an unfolding.
@@ -888,6 +895,23 @@ _LEDGERED: list[object] = [
         marks=_missed(
             "the difference reads more schema nodes than a lowering builds, "
             "and costs more work than one spends"
+        ),
+    ),
+    # A fixpoint's unfolding is below the fixpoint -- the equirecursive
+    # reading -- and the deciders place every *member* of the body below the
+    # fixpoint on its own, and the body spelled as a union below it on every
+    # shape but this: a member that is a meet against a union (or a literal).
+    # The union-on-the-left rule under a reference declines what the member
+    # alone decides. Found by
+    # `a_reference_and_its_definition_are_one_set_over_drawn_definitions`.
+    pytest.param(
+        "subtype",
+        union(intersection(int, union(float, bool)), list[_MEET_MEMBER_FIXPOINT]),  # ty: ignore[invalid-type-form]
+        _MEET_MEMBER_FIXPOINT,
+        id="recursion:unfolding-with-a-meet-member<=its-fixpoint",
+        marks=_missed(
+            "the union rule under a reference declines a member that is a meet "
+            "against a union, which the same member alone is decided below"
         ),
     ),
 ]

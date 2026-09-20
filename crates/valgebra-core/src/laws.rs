@@ -3930,6 +3930,24 @@ fn schema_fragment(negation: Negation) -> impl Strategy<Value = Schema> {
                 }]
                 .into(),
             });
+        // Two clauses claiming one key: a literal-keyed clause over the `"a"`
+        // constant beside the `Str` clause, which the walk reads as the
+        // disjunction of the two and the oracle transcribes the same way.
+        let two_clauses =
+            (inner.clone(), inner.clone()).prop_map(|(named, rest)| Schema::KeyedMap {
+                fields: Vec::new().into(),
+                defaults: vec![
+                    MapClause {
+                        key: Schema::Literal(ConstIx::new(3)),
+                        value: named,
+                    },
+                    MapClause {
+                        key: Schema::Str,
+                        value: rest,
+                    },
+                ]
+                .into(),
+            });
         let positive = prop_oneof![
             inner.clone().prop_map(Schema::set),
             inner.clone().prop_map(Schema::frozen_set),
@@ -3966,6 +3984,7 @@ fn schema_fragment(negation: Negation) -> impl Strategy<Value = Schema> {
                 defaults: vec![].into(),
             }),
             open_record,
+            two_clauses,
             proptest::collection::vec(inner.clone(), 1..3).prop_map(|m| Schema::Union(m.into())),
             proptest::collection::vec(inner.clone(), 1..3)
                 .prop_map(|m| Schema::Intersection(m.into())),
@@ -4621,24 +4640,33 @@ proptest! {
     }
 }
 
-/// Every strict subset of `items`, as index masks, and the whole: the `2^|N|`
-/// enumeration JACM Lemma 6.5 states over the negative atoms of a clause.
-fn masks(count: usize) -> impl Iterator<Item = usize> {
-    0..(1usize << count)
+/// Every way of assigning each branch to one of `arity` positions, as a
+/// digit string: the `k^|N|` enumeration JACM Lemma 6.5 states over the
+/// negative atoms of a clause, which at arity two is its `2^|N|` subsets.
+fn assignments(count: usize, arity: usize) -> impl Iterator<Item = Vec<usize>> {
+    (0..arity.pow(u32::try_from(count).unwrap_or(0))).map(move |mut code| {
+        (0..count)
+            .map(|_| {
+                let digit = code % arity;
+                code /= arity;
+                digit
+            })
+            .collect()
+    })
 }
 
-/// A meet of one component of every branch a mask selects, negated, with the
-/// subject's component at that position: the clause the lemma reads for
-/// emptiness on one side of the product.
+/// A meet of the subject's component at `position` with the negation of that
+/// component of every branch the assignment sends there: the clause the lemma
+/// reads for emptiness on one side of the product.
 fn side_clause(
     component: &Schema,
     branches: &[Vec<Schema>],
-    mask: usize,
+    assignment: &[usize],
     position: usize,
 ) -> Schema {
     let mut members = vec![component.clone()];
-    for (index, branch) in branches.iter().enumerate() {
-        if mask & (1 << index) != 0 {
+    for (branch, &sent_to) in branches.iter().zip(assignment) {
+        if sent_to == position {
             members.push(not(branch[position].clone()));
         }
     }
@@ -4651,27 +4679,106 @@ fn intersection_of(members: Vec<Schema>) -> Schema {
     Schema::Intersection(members.into())
 }
 
-/// JACM Lemma 6.5 for a product of two components, as the paper states it.
+/// JACM Lemma 6.5 for a product, as the paper states it for pairs:
 ///
 /// ```text
 /// t1 × t2 <= ⋁_{i∈N} (s1ᵢ × s2ᵢ)
 ///   iff  ∀ N' ⊆ N.  t1 ∧ ⋀_{i∈N'} ¬s1ᵢ = ∅   or   t2 ∧ ⋀_{i∈N∖N'} ¬s2ᵢ = ∅
 /// ```
 ///
-/// Each side's emptiness is asked of the scalar fragment, where it is exact,
-/// so the value this returns is the relation itself and not an approximation
-/// of it.
-fn lemma_6_5(components: &[Schema; 2], branches: &[Vec<Schema>]) -> bool {
-    masks(branches.len()).all(|chosen| {
-        let rest = !chosen & ((1 << branches.len()) - 1);
-        side_clause(&components[0], branches, chosen, 0).is_empty()
-            || side_clause(&components[1], branches, rest, 1).is_empty()
+/// and applied at any fixed arity, as Castagna & Duboc state the tuple rule:
+/// every assignment of the branches to positions has some position whose
+/// clause is empty. Each clause's emptiness is asked of the scalar fragment,
+/// where it is exact, so the value this returns is the relation itself and
+/// not an approximation of it.
+fn lemma_6_5(components: &[Schema], branches: &[Vec<Schema>]) -> bool {
+    assignments(branches.len(), components.len()).all(|assignment| {
+        (0..components.len()).any(|position| {
+            side_clause(&components[position], branches, &assignment, position).is_empty()
+        })
     })
 }
 
 /// A branch of the same arity as the subject, over the scalar fragment.
 fn scalar_pair() -> impl Strategy<Value = Vec<Schema>> {
     (scalar_schema(), scalar_schema()).prop_map(|(a, b)| vec![a, b])
+}
+
+/// Branches that cover `subject` only taken together: one per member of the
+/// union at `position`, with the other components as they are.
+///
+/// A random union of products rarely covers a random product, so a property
+/// drawn from both alone asks the rule about refutations and declines and
+/// seldom about the split it exists for. These are the splits: the lemma
+/// holds of every one, and a rule that stopped narrowing declines them.
+fn covering_split(subject: &[Schema], position: usize) -> Vec<Vec<Schema>> {
+    let members: Vec<Schema> = match &subject[position] {
+        Schema::Union(members) => members.iter().cloned().collect(),
+        other => vec![other.clone()],
+    };
+    members
+        .into_iter()
+        .map(|member| {
+            let mut branch = subject.to_vec();
+            branch[position] = member;
+            branch
+        })
+        .collect()
+}
+
+/// A product whose components are unions of scalar atoms, so a split has
+/// branches to be made of.
+fn union_product(arity: usize) -> impl Strategy<Value = Vec<Schema>> {
+    proptest::collection::vec(
+        proptest::collection::vec(scalar_schema(), 1..4).prop_map(union_of),
+        arity,
+    )
+}
+
+/// A union written as one node over the members, which is what a split reads.
+fn union_of(members: Vec<Schema>) -> Schema {
+    Schema::Union(members.into())
+}
+
+/// The same at three positions, which is the fixed component count the rule
+/// generalises to and the pair cannot show.
+fn scalar_triple() -> impl Strategy<Value = Vec<Schema>> {
+    (scalar_schema(), scalar_schema(), scalar_schema()).prop_map(|(a, b, c)| vec![a, b, c])
+}
+
+/// Two definitions drawn from the structural fragment, each with a reference
+/// under a container so the body is guarded, and each reaching the other.
+///
+/// The fixed pair in [`fixpoint_defs`] is two shapes; the fixpoint laws are
+/// about every recursive definition a caller can write, so the bodies are
+/// drawn: a leaf beside a list, a tuple or an optional field over a
+/// reference, with the reference optionally under a complement, which is the
+/// shape the polarity cut is for. The leaf is a scalar or a set of them --
+/// what a caller writes -- rather than the whole positive fragment, whose
+/// refinements include bounds over bases the frontend refuses, and a body
+/// holding a member no producer builds is a body about which the equivalence
+/// below says nothing a caller could observe.
+fn drawn_defs() -> impl Strategy<Value = Vec<Schema>> {
+    let guarded = |index: usize| {
+        (scalar_or_set_schema(), 0usize..4).prop_map(move |(leaf, shape)| {
+            let reference = Schema::Ref(DefIx::new(index));
+            let guard = match shape {
+                0 => Schema::list(SeqShape::homogeneous(reference)),
+                1 => Schema::tuple(SeqShape::fixed([Schema::Int, reference])),
+                2 => Schema::record(
+                    vec![Field {
+                        name: "n".into(),
+                        schema: reference,
+                        required: false,
+                    }],
+                    Openness::Closed,
+                ),
+                _ => Schema::list(SeqShape::homogeneous(not(reference))),
+            };
+            union(leaf, guard)
+        })
+    };
+    (guarded(0), guarded(1)).prop_map(|(a, b)| vec![a, b])
 }
 
 proptest! {
@@ -4741,13 +4848,146 @@ proptest! {
         let split = Schema::union(branches.iter().map(|branch| pair(branch)));
         let budget = std::cell::Cell::new(DECISION_BUDGET);
         let rules = tuple.subtype_relation(&split, &NoLeafRelations, &[], &budget);
-        let components = [subject[0].clone(), subject[1].clone()];
-        let lemma = lemma_6_5(&components, &branches);
+        let lemma = lemma_6_5(&subject, &branches);
         prop_assert_eq!(
             rules.holds(),
             lemma,
             "the rules answer {:?} and the lemma {} for {:?} <= {:?}",
             rules, lemma, tuple, split
         );
+    }
+
+    // THEORY: a-sequence-splits-across-a-union
+    /// The same at three positions, where the lemma's subsets are the `3^|N|`
+    /// assignments of the branches and the rule's narrowing runs per position.
+    #[test]
+    fn the_product_rule_is_lemma_6_5_at_three_positions(
+        subject in scalar_triple(),
+        branches in proptest::collection::vec(scalar_triple(), 1..4),
+    ) {
+        let triple = |components: &[Schema]| Schema::tuple(SeqShape::fixed(components.to_vec()));
+        let tuple = triple(&subject);
+        let split = Schema::union(branches.iter().map(|branch| triple(branch)));
+        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        let rules = tuple.subtype_relation(&split, &NoLeafRelations, &[], &budget);
+        let lemma = lemma_6_5(&subject, &branches);
+        prop_assert_eq!(rules.holds(), lemma, "{:?} <= {:?}", tuple, split);
+    }
+
+    // THEORY: a-sequence-splits-across-a-union
+    /// The rule decides every covering split, at two and three positions.
+    ///
+    /// A subject whose component at some position is a union is covered by
+    /// the branches that take one member each, and by no branch alone: the
+    /// lemma says the inclusion holds, and the rule must find it through
+    /// the narrowing. Held apart from the random rows above because those
+    /// draw a split by accident, and a property that catches a dropped
+    /// narrowing by accident is one that misses it by accident too.
+    #[test]
+    fn the_product_rule_decides_every_covering_split(
+        arity in 2usize..4,
+        subject in union_product(3),
+        position in 0usize..3,
+    ) {
+        let subject: Vec<Schema> = subject.into_iter().take(arity).collect();
+        let position = position % arity;
+        let branches = covering_split(&subject, position);
+        let product = |components: &[Schema]| Schema::tuple(SeqShape::fixed(components.to_vec()));
+        let tuple = product(&subject);
+        let split = Schema::union(branches.iter().map(|branch| product(branch)));
+        prop_assert!(lemma_6_5(&subject, &branches), "the lemma refutes a covering split");
+        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        let rules = tuple.subtype_relation(&split, &NoLeafRelations, &[], &budget);
+        prop_assert!(rules.holds(), "the rules answer {:?} for {:?} <= {:?}", rules, tuple, split);
+    }
+
+    // THEORY: two-fixpoints-one-procedure
+    /// The fixpoint laws over definitions the test draws rather than lists.
+    ///
+    /// The proof direction of both fixpoints at once: an inclusion proved
+    /// between two schemas over drawn definitions admits no counterexample
+    /// the oracle finds, and an emptiness proved of one is refused by every
+    /// boundary value. The definitions are the variable here; the schemas
+    /// are the recursive fragment already drawn over the fixed pair.
+    #[test]
+    fn the_fixpoint_laws_hold_over_drawn_definitions(
+        a in recursive_schema(),
+        b in recursive_schema(),
+        defs in drawn_defs(),
+    ) {
+        let pool = const_pool();
+        let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+        let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+        let values = boundary_values(&[&subject, &other]);
+        if a.is_subtype_of_under(&b, &NoLeafRelations, &defs) {
+            for value in &values {
+                prop_assert!(
+                    !member_full(&subject, value, &pool) || member_full(&other, value, &pool),
+                    "{value:?} is in {a:?} and not in {b:?} under {defs:?}"
+                );
+            }
+        }
+        if a.is_empty_under(&defs) {
+            for value in &values {
+                prop_assert!(
+                    !member_full(&subject, value, &pool),
+                    "{value:?} is a member of {a:?}, decided empty under {defs:?}"
+                );
+            }
+        }
+    }
+
+    // THEORY: a-reference-denotes-its-definition
+    /// A reference and the definition it names are one set, over drawn
+    /// definitions, by the deciders and by the values.
+    ///
+    /// The equirecursive reading: `Ref(i)` denotes what `defs[i]` denotes,
+    /// so the two are equivalent in both directions -- which is the
+    /// coinductive rule deciding a pair whose one side is the other's
+    /// unfolding -- and the oracle, reading both past every value's depth,
+    /// admits the same values through either.
+    #[test]
+    fn a_reference_and_its_definition_are_one_set_over_drawn_definitions(
+        defs in drawn_defs(),
+        which in 0usize..2,
+    ) {
+        let pool = const_pool();
+        let reference = Schema::Ref(DefIx::new(which));
+        let body = defs[which].clone();
+        // The corpus oracle, which reads the literals: an oracle that declines
+        // every literal question leaves a body holding one undecided, which is
+        // a decline of the oracle and not of the reading.
+        //
+        // The reference is decided below its body, and neither direction is
+        // ever refuted -- of the whole, or of any member of the body against
+        // the reference. The proof of the other direction is not a property
+        // the rules hold over drawn definitions: a member that is a meet is
+        // declined below the reference where its own members are not each
+        // below the body, and the set reading is asked of a difference the cut
+        // leaves inhabited on some of those shapes. The completeness ledger
+        // carries the shape, and the surface law holds the equivalence over
+        // the bodies a caller writes; what is held here of every drawn body
+        // is that the two never part on a value, below.
+        let forward = reference.subtype_relation_under(&body, &CorpusOracle, &defs);
+        let backward = body.subtype_relation_under(&reference, &CorpusOracle, &defs);
+        prop_assert!(forward.holds(), "{reference:?} is not decided below its body");
+        prop_assert!(backward != Relation::Fails, "the body is refuted below {reference:?}");
+        let members: Vec<Schema> = match &body {
+            Schema::Union(members) => members.iter().cloned().collect(),
+            other => vec![other.clone()],
+        };
+        for member in &members {
+            let relation = member.subtype_relation_under(&reference, &CorpusOracle, &defs);
+            prop_assert!(relation != Relation::Fails, "{member:?} is refuted below {reference:?}");
+        }
+        let through_reference = unfold_for_oracle(&reference, &defs, ORACLE_UNFOLDS + 1);
+        let through_body = unfold_for_oracle(&body, &defs, ORACLE_UNFOLDS);
+        for value in &boundary_values(&[&through_reference, &through_body]) {
+            prop_assert_eq!(
+                member_full(&through_reference, value, &pool),
+                member_full(&through_body, value, &pool),
+                "{:?} separates the reference from its body", value
+            );
+        }
     }
 }

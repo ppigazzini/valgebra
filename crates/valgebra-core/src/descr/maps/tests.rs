@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 
 use super::{
-    Entry, KEY_KINDS, Label, MAX_ATOMS, MapAtom, MapLattice, Wanted, key_slot, unordered_pairs,
+    Entry, KEY_KINDS, Label, MAX_ATOMS, MapAtom, MapLattice, Wanted, key_slot, tidy,
+    unordered_pairs,
 };
 use crate::descr::budget;
 use crate::descr::integers::IntSet;
@@ -623,7 +624,9 @@ fn lattice() -> impl Strategy<Value = MapLattice<IntSet>> {
         (1i64..=2).prop_map(|n| MapLattice::label(Label::str("a"), IntSet::just(n), false)),
         (1i64..=2).prop_map(|n| MapLattice::label(Label::str("a"), IntSet::just(n), true)),
         (1i64..=2).prop_map(|n| MapLattice::label(Label::str("b"), IntSet::just(n), false)),
+        (1i64..=3).prop_map(|n| MapLattice::label(Label::str("c"), IntSet::just(n), true)),
         Just(MapLattice::keyed(Kind::Str, IntSet::just(1))),
+        Just(MapLattice::keyed(Kind::Str, IntSet::just(3))),
         Just(MapLattice::keyed(Kind::Int, IntSet::all())),
         Just(MapLattice::keys_among(&[Some(Kind::Str)])),
     ];
@@ -857,6 +860,46 @@ proptest! {
         if let (Some(met), Some(joined)) = (a.intersect(&b), not_a.union(&not_b)) {
             prop_assert!(same_over(&met.complement(), &joined, &universe), "and the other");
         }
+    }
+
+    // THEORY: no-negative-clause-component
+    /// Two spellings of one atom are one atom: a label written with its
+    /// region's own default says nothing, and is dropped.
+    ///
+    /// ICFP 2023 Definition 2.2 declines univocality of the written notation
+    /// and Theorem 4.2 makes the operators independent of the finite `L`
+    /// chosen over `dom`; the descriptor answers both by reading `dom`
+    /// semantically. Over drawn lattices, every atom padded with a label
+    /// carrying its part's default absorbs back to the atom, and the lattice
+    /// rebuilt from the padded atoms compares equal to the one it was drawn
+    /// as -- equality, not agreement on dicts, since the claim is about the
+    /// representation.
+    #[test]
+    fn a_label_carrying_its_regions_default_is_absorbed(a in lattice()) {
+        let _allowance = budget::law();
+        // A label no drawn atom names, so the padding adds a spelling rather
+        // than overwriting a constraint.
+        let label = Label::str("d");
+        let padded: Vec<MapAtom<IntSet>> = a
+            .atoms
+            .iter()
+            .map(|atom| {
+                let mut padded = atom.clone();
+                padded.labels.insert(label.clone(), atom.default_for(Some(Kind::Str)));
+                padded
+            })
+            .collect();
+        for (atom, padded) in a.atoms.iter().zip(&padded) {
+            prop_assert_eq!(&padded.clone().absorbed(), &atom.clone().absorbed());
+        }
+        let Some(atoms) = tidy(padded) else {
+            return Ok(());
+        };
+        let rebuilt = MapLattice {
+            atoms,
+            negated: a.negated,
+        };
+        prop_assert_eq!(&rebuilt, &a, "the padded spelling is another lattice");
     }
 
     // THEORY: records-maps-and-structs
