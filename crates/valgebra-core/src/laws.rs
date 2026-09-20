@@ -4958,20 +4958,20 @@ proptest! {
         // every literal question leaves a body holding one undecided, which is
         // a decline of the oracle and not of the reading.
         //
-        // The reference is decided below its body, and neither direction is
-        // ever refuted -- of the whole, or of any member of the body against
-        // the reference. The proof of the other direction is not a property
-        // the rules hold over drawn definitions: a member that is a meet is
-        // declined below the reference where its own members are not each
-        // below the body, and the set reading is asked of a difference the cut
-        // leaves inhabited on some of those shapes. The completeness ledger
-        // carries the shape, and the surface law holds the equivalence over
-        // the bodies a caller writes; what is held here of every drawn body
-        // is that the two never part on a value, below.
+        // A reference and its body are one set in both directions: the
+        // reference below its body by the reference arm's unfolding, and the
+        // body below the reference member by member -- a plain member through
+        // the same arm, a meet member through the meet rule where a member of
+        // it is below, and through the unfolding where none is, since the
+        // meet is a branch of the definition. Neither direction is ever
+        // refuted, of the whole or of any member.
         let forward = reference.subtype_relation_under(&body, &CorpusOracle, &defs);
         let backward = body.subtype_relation_under(&reference, &CorpusOracle, &defs);
         prop_assert!(forward.holds(), "{reference:?} is not decided below its body");
-        prop_assert!(backward != Relation::Fails, "the body is refuted below {reference:?}");
+        prop_assert!(
+            backward.holds(),
+            "the body is not decided below {reference:?} under {defs:?}: {backward:?}"
+        );
         let members: Vec<Schema> = match &body {
             Schema::Union(members) => members.iter().cloned().collect(),
             other => vec![other.clone()],

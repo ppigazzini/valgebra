@@ -410,7 +410,19 @@ the shape. What is left below is what the descriptor cannot hold.
     so a chain of records beside a `None` branch is refuted by the record branch
     alone. Where *every* branch goes that way the subject is outside the whole
     union, which is a refutation rather than a decline as long as the subject
-    holds a value at all.
+    holds a value at all. And a fixpoint's own unfolding is below it however
+    its body is spelled: a member that is a meet is not placed by any member of
+    the meet, so the reference is unfolded for it and the meet is read as the
+    branch of the definition it is.
+
+    ```python
+    from valgebra import Validator, intersection, recursive, union
+
+    meet = intersection(int, union(float, bool))
+    tree = recursive(lambda t: union(meet, list[t]))
+    assert Validator(union(meet, list[tree])).relation_to(tree) == "subset"
+    assert tree.relation_to(union(meet, list[tree])) == "subset"
+    ```
 
     Branches are dropped where one of them **refutes**, which is the answer the
     narrowing carries back from the branch it leaves. A union no branch of

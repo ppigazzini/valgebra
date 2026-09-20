@@ -542,6 +542,31 @@ impl Schema {
         }
     }
 
+    /// `A ⊆ R` for a reference `R`: assume the goal and ask the definition.
+    ///
+    /// The coinductive rule. The pair goes on the trail so a goal that comes
+    /// back is answered by the assumption, and the definition is what `R`
+    /// denotes, so the answer about it is the answer about `R`. `Unknown` for a
+    /// supertype that is no reference, or a reference the table does not
+    /// resolve, which names a set this query cannot read.
+    fn below_a_reference(
+        &self,
+        other: &Schema,
+        cx: SubtypeCx<'_>,
+        assumptions: &mut Vec<(Schema, Schema)>,
+    ) -> Relation {
+        let Schema::Ref(id) = other else {
+            return Relation::Unknown;
+        };
+        let Some(def) = cx.defs.get(id.get()) else {
+            return Relation::Unknown;
+        };
+        push_assumption(assumptions, (self.clone(), other.clone()));
+        let holds = self.is_subtype_rec(def, cx, assumptions);
+        assumptions.pop();
+        holds
+    }
+
     /// `A ⊆ (Y ∪ Z)`: every rule that can place a subject inside a union.
     ///
     /// A branch equal to the subject settles it, which is set containment and is
@@ -832,9 +857,16 @@ impl Schema {
                     .iter()
                     .map(|m| self.is_subtype_rec(m, cx, assumptions)),
             ),
+            // A meet is placed by the member rule where a member is below the
+            // supertype, and where none is -- the meet is a branch of a
+            // definition, say -- the reference it may be asked against is
+            // unfolded, as it is for any other subject: a reference denotes
+            // exactly its definition, and the decomposition that runs first is
+            // the cheap route rather than the only one.
             (Schema::Intersection(members), _) => self
                 .meet_below(other, members, cx, assumptions)
-                .or_else(|| self.unstructured(other, cx, assumptions)),
+                .or_else(|| self.unstructured(other, cx, assumptions))
+                .or_else(|| self.below_a_reference(other, cx, assumptions)),
             (_, Schema::Union(members)) => self
                 .below_a_union(other, members, cx, assumptions)
                 .or_else(|| self.unstructured(other, cx, assumptions)),
@@ -855,23 +887,14 @@ impl Schema {
             (_, Schema::Refine { base, constraints }) if constraints.is_empty() => {
                 self.is_subtype_rec(base, cx, assumptions)
             }
-            // Unfold a recursive reference — after the lattice rules, so an
-            // intersection or union meeting a reference decomposes first (which
+            // Unfold a recursive reference -- after the lattice rules, so an
+            // intersection or union meeting a reference decomposes first, which
             // lets a recursive member be compared against the reference rather
-            // than the reference being unfolded past it). Where the union rule
-            // above ran first and declined, it has already asked this one.
+            // than the reference being unfolded past it. A union member reaches
+            // this arm on its own; a meet the member rule does not place reaches
+            // the same reading from its arm above.
             (Schema::Ref(_), _) => self.left_reduces_below(other, cx, assumptions),
-            (_, Schema::Ref(id)) => match cx.defs.get(id.get()) {
-                Some(def) => {
-                    push_assumption(assumptions, (self.clone(), other.clone()));
-                    let holds = self.is_subtype_rec(def, cx, assumptions);
-                    assumptions.pop();
-                    holds
-                }
-                // As in `left_reduces_below`: a reference the table does not
-                // resolve names a set this query cannot read.
-                None => Relation::Unknown,
-            },
+            (_, Schema::Ref(_)) => self.below_a_reference(other, cx, assumptions),
             // Set and frozenset inclusion reduces to element inclusion.
             (
                 Schema::Coll {

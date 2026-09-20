@@ -4192,10 +4192,12 @@ fn a_meet_is_read_against_what_a_reference_names() {
         Relation::Fails
     );
 
-    // The unfolding is one step: a reference naming a union is not followed
-    // into its branches, so it says nothing, and the walk owes termination no
-    // argument about cycles.
-    assert_ne!(relation(&Schema::Ref(DefIx::new(1))), Relation::Fails);
+    // The kind reading unfolds one step: a reference naming a union is not
+    // followed into its branches by it, so it says nothing there and owes
+    // termination no argument about cycles. The pair is decided all the same,
+    // by the reference arm the meet falls to: the goal goes on the trail, the
+    // union is read branch by branch, and the direct instance refutes each.
+    assert_eq!(relation(&Schema::Ref(DefIx::new(1))), Relation::Fails);
 
     // A reference to no definition is not an answer either.
     assert_ne!(relation(&Schema::Ref(DefIx::new(9))), Relation::Fails);

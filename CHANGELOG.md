@@ -14,10 +14,23 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a literal-keyed clause is read beside the clauses that cover its key
+- fix: a meet against a reference is asked the unfolding
 
 -->
 
 ### Fixed
+
+- **A fixpoint's unfolding is decided below the fixpoint however its body is
+  spelled.** `Validator(union(m, list[t])).relation_to(t)` for
+  `t = recursive(lambda x: union(m, list[x]))` and
+  `m = intersection(int, union(float, bool))` answered `"undecided"` and
+  answers `"subset"`. A meet on the left of a reference was placed only where
+  a member of the meet was below the reference, and where none was the pair
+  ended undecided without the reference being unfolded; every other subject
+  reached the unfolding. The meet rule runs first as before, and a meet it
+  does not place is asked against the definition the reference names, as a
+  union member always was. A widening: no answer that was a proof or a
+  refutation changes.
 
 - **A literal-keyed clause is a clause, and a relation reads it as one.**
   `Validator({"k?": str | int, str: int}).relation_to({Literal["k"]: str,

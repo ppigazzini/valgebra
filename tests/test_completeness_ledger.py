@@ -211,6 +211,17 @@ _DECIDED = [
         "subtype", [bool, int, ...], [int, int, ...], id="[bool,int,...]<=[int,int,...]"
     ),
     pytest.param("empty", intersection(int, str), None, id="empty:int&str"),
+    # A fixpoint's unfolding is below the fixpoint -- the equirecursive
+    # reading -- on a body whose union holds a member that is a meet against
+    # a union. The meet rule finds no member of the meet below the reference,
+    # and the meet as a whole is a branch of the definition, which the
+    # reference's unfolding reads.
+    pytest.param(
+        "subtype",
+        union(intersection(int, union(float, bool)), list[_MEET_MEMBER_FIXPOINT]),  # ty: ignore[invalid-type-form]
+        _MEET_MEMBER_FIXPOINT,
+        id="recursion:unfolding-with-a-meet-member<=its-fixpoint",
+    ),
     # A fixpoint every unfolding of which needs one more element: each element
     # is a value of the same fixpoint, so no finite value satisfies it. Decided
     # by reading a length bound over a container that repeats one element --
@@ -895,23 +906,6 @@ _LEDGERED: list[object] = [
         marks=_missed(
             "the difference reads more schema nodes than a lowering builds, "
             "and costs more work than one spends"
-        ),
-    ),
-    # A fixpoint's unfolding is below the fixpoint -- the equirecursive
-    # reading -- and the deciders place every *member* of the body below the
-    # fixpoint on its own, and the body spelled as a union below it on every
-    # shape but this: a member that is a meet against a union (or a literal).
-    # The union-on-the-left rule under a reference declines what the member
-    # alone decides. Found by
-    # `a_reference_and_its_definition_are_one_set_over_drawn_definitions`.
-    pytest.param(
-        "subtype",
-        union(intersection(int, union(float, bool)), list[_MEET_MEMBER_FIXPOINT]),  # ty: ignore[invalid-type-form]
-        _MEET_MEMBER_FIXPOINT,
-        id="recursion:unfolding-with-a-meet-member<=its-fixpoint",
-        marks=_missed(
-            "the union rule under a reference declines a member that is a meet "
-            "against a union, which the same member alone is decided below"
         ),
     ),
 ]
