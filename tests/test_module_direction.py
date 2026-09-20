@@ -144,3 +144,64 @@ def test_the_optimisation_may_still_depend_on_the_definition() -> None:
         "the fast path no longer asks the definition; if that is deliberate, "
         "this test is what says the edge was allowed"
     )
+
+
+#: The binding's membership walk: the files that decide whether a value belongs.
+WALK = ROOT / "crates" / "valgebra-py" / "src" / "check"
+
+#: A call into the decision procedure, by any of the names it is reached under.
+#: `is_empty` is deliberately absent: `Vec::is_empty` is the same spelling and a
+#: different question, so the schema's own emptiness is caught by the module
+#: path rather than by the method name.
+_SUBTYPING = re.compile(
+    r"\bis_subtype_of\b|\bsubtype_relation\b|\bsubtype_steps\b"
+    r"|\brelation_to\b|\bcrate::decision\b|\bvalgebra_core::decision\b"
+)
+
+
+def _walk_sources() -> list[Path]:
+    return sorted(path for path in WALK.rglob("*.rs") if path.name != "tests.rs")
+
+
+# THEORY: no-arrow-type
+def test_the_membership_walk_never_consults_subtyping() -> None:
+    """Membership is decided without asking whether one schema is inside another.
+
+    This is what lets the naive interpretation stand. A set-theoretic type
+    system with arrows cannot read a type as a set of values directly: the
+    meaning of an arrow is a set of functions, a function is checked by its
+    type, and the type needs the subtyping relation the interpretation was
+    supposed to define. The circle is broken by the universal model and the
+    extensional interpretation, which is the apparatus this project does not
+    have.
+
+    It escapes because a value's membership here is structural: the walk reads
+    the value and the node and answers, and it never asks the decision
+    procedure anything. So the interpretation is the naive one, and the
+    theorems that close the circle are machinery nothing needs.
+
+    A call from the walk into the procedure would not be a bug on its own --
+    it would be the claim above becoming false, and every argument resting on
+    it going with it.
+    """
+    sources = _walk_sources()
+    # A scan that finds no files makes the assertion vacuous.
+    assert len(sources) >= 5, f"the walk scan found only {sources}"
+    assert any(path.name == "walk.rs" for path in sources), (
+        "the scan missed the walk itself"
+    )
+
+    offenders: list[str] = []
+    for source in sources:
+        for number, line in enumerate(
+            source.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            if _SUBTYPING.search(line):
+                offenders.append(f"{source.name}:{number}: {line.strip()}")
+    assert not offenders, (
+        "the membership walk reaches into the decision procedure:\n"
+        + "\n".join(offenders)
+        + "\nMembership is structural, and that is what keeps the naive "
+        "interpretation available. A walk that asks about inclusion makes the "
+        "circularity argument in `docs/dev/10-theory.md` false."
+    )

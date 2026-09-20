@@ -684,3 +684,47 @@ def test_a_complement_names_its_witness_from_the_kinds_it_still_holds() -> None:
 
     # And a complement of a schema carrying no kind names no kinds to search.
     assert Validator(complement(object)).is_subtype_of(Point)
+
+
+# THEORY: no-arrow-type
+def test_a_callable_annotation_erases_the_arrow_it_writes() -> None:
+    """`Callable[[A], B]` denotes the callables, and `A` and `B` denote nothing.
+
+    The algebra has no arrow, and this is what that means at the surface. A
+    `Callable[...]` compiles to the `isinstance` check its origin names, so
+    the argument list and the return type are read and discarded: a callable
+    of any arity belongs, and one returning anything belongs.
+
+    The witness is the pair. Two arrows written with their argument and return
+    types *swapped* are one set here, each below the other, which no system
+    with an arrow type answers: a real arrow is contravariant in its argument,
+    so `(int) -> str <= (str) -> int` would need `str <= int`, and the pair
+    would be refuted in both directions rather than proved in both.
+
+    So the naive interpretation stands -- a schema is a set of values, read
+    directly -- and the apparatus that breaks the circularity for a system
+    with arrows is machinery this project does not need. The other half of
+    that claim, that the walk never consults subtyping, is held in
+    `tests/test_module_direction.py`.
+    """
+    arrow = Validator(typing.Callable[[int], str])
+
+    # The argument list is not enforced: any arity belongs.
+    assert arrow.is_valid(lambda: None)
+    assert arrow.is_valid(lambda a, b, c: (a, b, c))
+    # Nor is the return type.
+    assert arrow.is_valid(lambda x: x)
+    # What is enforced is the one thing the node carries.
+    assert not arrow.is_valid(5)
+    assert arrow.is_valid(len)
+
+    # The pair: swapping argument and return leaves one set, not two.
+    swapped = typing.Callable[[str], int]
+    assert arrow.relation_to(swapped) == "subset"
+    assert Validator(swapped).relation_to(typing.Callable[[int], str]) == "subset"
+    assert arrow.is_equivalent(swapped)
+    # And an arrow of a different arity is that same set again.
+    assert arrow.is_equivalent(typing.Callable[[int, str], bool])
+    # `str <= int` is refuted, which is what a contravariant arrow would have
+    # needed to hold for the first of those to be true.
+    assert Validator(str).relation_to(int) == "not_subset"

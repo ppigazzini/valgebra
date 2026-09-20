@@ -276,7 +276,7 @@ rather than a lack. **[NOT-REACHED: no-arrow-type]**
 
 SOURCE: §13.0 "**The circularity, and why valgebra escapes it.**"
 
-HELD-BY: test_every_variant_is_a_generator_a_representative_or_a_marker, test_no_column_names_a_variant_that_is_gone
+HELD-BY: test_the_membership_walk_never_consults_subtyping, test_a_callable_annotation_erases_the_arrow_it_writes, test_every_variant_is_a_generator_a_representative_or_a_marker, test_no_column_names_a_variant_that_is_gone
 
 **Frisch, Castagna & Benzaken, Definition 6.9.** Emptiness is proved
 coinductively too: a *simulation* is "a self-justifying set, that is a
