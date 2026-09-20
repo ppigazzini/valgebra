@@ -224,6 +224,42 @@ def test_both_binding_sweeps_read_the_same_files() -> None:
     )
 
 
+#: The line of the push lane's diff step that decides whether the binding
+#: sweep runs at all: a regex over the changed paths, and the sweep is skipped
+#: when nothing matches.
+_WALK_TRIGGER = re.compile(r"walk=\$\(grep -E '([^']+)' changed\.txt")
+
+
+def test_the_binding_sweep_triggers_on_every_file_it_sweeps() -> None:
+    """A file the sweep lists is one the trigger matches.
+
+    The push lane sweeps its files only when the change touches one, and
+    "touches one" is a regex over the diff written apart from the `--file` list
+    it guards. The two drifted: the list named the record, scalar and sequence
+    walks, the index, the input decoders, the dialect and the codes, and the
+    regex matched none of them, so a change to the membership procedure itself
+    reached `main` with the sweep skipped. The list is what the sweep judges;
+    the trigger is held to it here.
+    """
+    job = _workflow()["jobs"]["mutants-diff-walk"]
+    runs = [str(step.get("run", "")) for step in job["steps"]]
+    triggers = [found.group(1) for run in runs for found in _WALK_TRIGGER.finditer(run)]
+    assert len(triggers) == 1, f"expected one trigger regex, found {triggers}"
+    trigger = re.compile(triggers[0])
+    swept = {
+        line.strip().removeprefix("--file ").removesuffix("\\").strip()
+        for run in runs
+        for line in run.splitlines()
+        if line.strip().startswith("--file crates/valgebra-py/")
+    }
+    assert swept, "the push sweep names no files"
+    unguarded = sorted(path for path in swept if not trigger.fullmatch(path))
+    assert not unguarded, (
+        f"files the binding sweep lists and its trigger does not match: "
+        f"{unguarded}. A change to one of them lands with the sweep skipped."
+    )
+
+
 def test_every_supported_interpreter_runs_on_every_event() -> None:
     """What a push runs across interpreters is the list the package claims.
 

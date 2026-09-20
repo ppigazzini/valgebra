@@ -1207,7 +1207,7 @@ jobs:
           # change touched, because a Rust test and the code it covers are swept
           # together here.
           git diff --name-only --diff-filter=d "$base"...HEAD -- '*.rs' > changed.txt
-          walk=$(grep -E '^crates/valgebra-py/src/(check/(walk|ctx)|build(/(classes|generics|refine))?|equality|oracle)\.rs$' changed.txt || true)
+          walk=$(grep -E '^crates/valgebra-py/src/(check/(walk|ctx|index|walk/(record|scalar|sequence))|input|build(/(classes|generics|refine|dialect))?|equality|oracle|codes)\.rs$' changed.txt || true)
           {
             echo "walk<<EOF"; echo "$walk"; echo "EOF"
           } >> "$GITHUB_OUTPUT"
