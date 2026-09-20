@@ -1,6 +1,11 @@
-use super::{Entry, KEY_KINDS, Label, MAX_ATOMS, MapLattice, key_slot, unordered_pairs};
+use std::collections::BTreeSet;
+
+use super::{
+    Entry, KEY_KINDS, Label, MAX_ATOMS, MapAtom, MapLattice, Wanted, key_slot, unordered_pairs,
+};
 use crate::descr::budget;
 use crate::descr::integers::IntSet;
+use crate::descr::values::{Field, Values};
 use crate::kind::Kind;
 use crate::verdict::Verdict;
 use proptest::prelude::*;
@@ -282,6 +287,84 @@ fn an_atom_requiring_a_key_and_its_boolean_holds_no_dict() {
     );
 }
 
+// THEORY: the-key-partition-is-by-kind
+/// A want with one candidate left names a key the atom requires, and the
+/// required set is read from the *viable* candidates.
+///
+/// `S` asks for some key of a part to map into a type, and the candidates
+/// are the part's labels and its default. Where every candidate but one is
+/// empty, every dict of the atom carries the one left, so it joins the
+/// required set -- which is what the `1`/`True` reading consults. Built by
+/// hand, because no public construction reaches an atom whose want is
+/// witnessed by exactly one label while its boolean twin is required: the
+/// generator's complements produce wants over defaults, and the lattice
+/// operations tidy an empty atom away before its verdict is read.
+///
+/// Both directions, so the reading cannot be inverted and pass: with the
+/// label the only viable witness the atom is empty, and with the default the
+/// only viable witness the same atom is inhabited, because a want the
+/// default satisfies names no key.
+#[test]
+fn a_want_with_one_viable_witness_requires_that_key() {
+    let int_slot = key_slot(Some(Kind::Int)).expect("the integers are a part");
+    let one = || Values::Only(IntSet::just(1));
+    let atom = |label_ty: Values<IntSet>, default_ty: Values<IntSet>| {
+        let mut atom: MapAtom<IntSet> = MapAtom::top();
+        atom.labels.insert(
+            Label::Bool(true),
+            Field {
+                ty: one(),
+                absent: false,
+            },
+        );
+        atom.labels.insert(
+            Label::Int(1),
+            Field {
+                ty: label_ty,
+                absent: true,
+            },
+        );
+        atom.defaults[int_slot] = Field {
+            ty: default_ty,
+            absent: true,
+        };
+        atom.wanted.push(Wanted {
+            slot: int_slot,
+            ty: one(),
+            besides: BTreeSet::new(),
+        });
+        atom
+    };
+
+    // The label is the one viable witness: the key `1` is required beside the
+    // required key `True`, and one dict cannot carry both.
+    let by_the_label = atom(one(), Values::none());
+    assert_eq!(by_the_label.emptiness(), Verdict::Empty);
+    for dict in dicts() {
+        assert!(
+            !by_the_label.holds(&dict),
+            "{dict:?} is a dict of an empty atom"
+        );
+    }
+    // The default is the one viable witness: any other integer key satisfies
+    // the want, so no key is required by it and the atom is inhabited.
+    let by_the_default = atom(Values::none(), one());
+    assert_eq!(by_the_default.emptiness(), Verdict::Inhabited);
+    let witness = vec![
+        Entry {
+            label: Some(Label::Bool(true)),
+            kind: Some(Kind::Bool),
+            value: 1,
+        },
+        Entry {
+            label: Some(Label::Int(2)),
+            kind: Some(Kind::Int),
+            value: 1,
+        },
+    ];
+    assert!(by_the_default.holds(&witness));
+}
+
 /// An optional key is not a required one, so the pair above is only empty
 /// where the atom asks for both.
 #[test]
@@ -475,6 +558,63 @@ fn same(a: &MapLattice<IntSet>, b: &MapLattice<IntSet>) -> bool {
     dicts().iter().all(|d| a.holds(d) == b.holds(d))
 }
 
+/// One drawn entry: a key of any part the generator's atoms name, and a
+/// value in the range their integer sets separate.
+///
+/// The labelled keys are the two the atoms name and one they do not; the
+/// unlabelled ones cover the integer part, the boolean part -- whose labels
+/// fold onto the integers' -- and a part no atom constrains.
+fn entry() -> impl Strategy<Value = Entry<i64>> {
+    let key = prop_oneof![
+        Just((Some(Label::str("a")), Some(Kind::Str))),
+        Just((Some(Label::str("b")), Some(Kind::Str))),
+        Just((Some(Label::str("c")), Some(Kind::Str))),
+        Just((Some(Label::Int(1)), Some(Kind::Int))),
+        Just((Some(Label::Int(2)), Some(Kind::Int))),
+        Just((Some(Label::Bool(true)), Some(Kind::Bool))),
+        Just((Some(Label::Bool(false)), Some(Kind::Bool))),
+        Just((Some(Label::NoneType), Some(Kind::NoneType))),
+        Just((None, Some(Kind::Int))),
+        Just((None, Some(Kind::Float))),
+        Just((None, None)),
+    ];
+    (key, 0i64..=3).prop_map(|((label, kind), value)| Entry { label, kind, value })
+}
+
+/// A drawn dict: up to four entries over distinct keys.
+///
+/// Distinct as a dict's keys are: `1` and `True` are one key, so an entry
+/// carrying either drops the other. The fixed eight of [`dicts`] are kept
+/// beside these, so a law asked over the draw is asked over them too.
+fn drawn_dict() -> impl Strategy<Value = Vec<Entry<i64>>> {
+    proptest::collection::vec(entry(), 0..=4).prop_map(|entries| {
+        let mut kept: Vec<Entry<i64>> = Vec::new();
+        for entry in entries {
+            let repeats = kept.iter().any(|held| {
+                held.kind == entry.kind
+                    && (held.label == entry.label
+                        || matches!((&held.label, &entry.label), (Some(a), Some(b)) if super::one_key(a, b)))
+            });
+            if !repeats {
+                kept.push(entry);
+            }
+        }
+        kept
+    })
+}
+
+/// A universe of dicts: the fixed eight and the drawn ones.
+fn dicts_with(drawn: &[Vec<Entry<i64>>]) -> Vec<Vec<Entry<i64>>> {
+    let mut all = dicts();
+    all.extend(drawn.iter().cloned());
+    all
+}
+
+/// Agreement over a universe a test draws rather than the fixed eight.
+fn same_over(a: &MapLattice<IntSet>, b: &MapLattice<IntSet>, dicts: &[Vec<Entry<i64>>]) -> bool {
+    dicts.iter().all(|d| a.holds(d) == b.holds(d))
+}
+
 /// Lattices over the integer sets whose own laws are already held.
 fn lattice() -> impl Strategy<Value = MapLattice<IntSet>> {
     let leaf = prop_oneof![
@@ -639,6 +779,105 @@ proptest! {
                 "an empty lattice holds no dict"
             ),
             Verdict::Inhabited | Verdict::Unknown => {}
+        }
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    // THEORY: records-maps-and-structs
+    /// ICFP 2023's (12): the meet of two atoms holds exactly the dicts both
+    /// hold, over dicts the test draws rather than the eight it lists.
+    ///
+    /// The meet is the componentwise meet -- each label's type met, each
+    /// part's default met, the wanted sets united -- and that construction is
+    /// a set only if it holds a dict exactly when both operands do. Drawn
+    /// dicts reach the keys the fixed eight do not: a third label, a boolean
+    /// key beside its integer, a key of a part no atom constrains.
+    #[test]
+    fn a_meet_holds_the_dicts_of_both_over_drawn_dicts(
+        a in lattice(),
+        b in lattice(),
+        drawn in proptest::collection::vec(drawn_dict(), 1..6),
+    ) {
+        let _allowance = budget::law();
+        let Some(met) = a.intersect(&b) else {
+            return Ok(());
+        };
+        for dict in dicts_with(&drawn) {
+            prop_assert_eq!(
+                met.holds(&dict),
+                a.holds(&dict) && b.holds(&dict),
+                "the meet of {:?} and {:?} disagrees about {:?}", a, b, dict
+            );
+        }
+        if let Some(joined) = a.union(&b) {
+            for dict in dicts_with(&drawn) {
+                prop_assert_eq!(
+                    joined.holds(&dict),
+                    a.holds(&dict) || b.holds(&dict),
+                    "the join of {:?} and {:?} disagrees about {:?}", a, b, dict
+                );
+            }
+        }
+    }
+
+    // THEORY: records-maps-and-structs
+    /// The lattice and complement laws, over drawn dicts.
+    ///
+    /// The same laws the block above holds, with the universe drawn: a law
+    /// that holds on eight dicts over two labels holds on the fragment those
+    /// eight reach, and the atoms reach more.
+    #[test]
+    fn the_lattice_laws_hold_of_the_dicts_over_drawn_dicts(
+        a in lattice(),
+        b in lattice(),
+        drawn in proptest::collection::vec(drawn_dict(), 1..6),
+    ) {
+        let _allowance = budget::law();
+        let universe = dicts_with(&drawn);
+        let not_a = a.complement();
+        prop_assert!(same_over(&not_a.complement(), &a, &universe), "twice is nothing");
+        for dict in &universe {
+            prop_assert_ne!(a.holds(dict), not_a.holds(dict), "{:?} is in {:?} and its complement, or neither", dict, a);
+        }
+        if let Some(met) = a.intersect(&b)
+            && let Some(absorbed) = a.union(&met)
+        {
+            prop_assert!(same_over(&absorbed, &a, &universe), "join absorbs the meet");
+        }
+        let not_b = b.complement();
+        if let (Some(joined), Some(met)) = (a.union(&b), not_a.intersect(&not_b)) {
+            prop_assert!(same_over(&joined.complement(), &met, &universe), "de Morgan one way");
+        }
+        if let (Some(met), Some(joined)) = (a.intersect(&b), not_a.union(&not_b)) {
+            prop_assert!(same_over(&met.complement(), &joined, &universe), "and the other");
+        }
+    }
+
+    // THEORY: records-maps-and-structs
+    /// ICFP 2023's (11), in the direction a proof runs: an atom decided empty
+    /// holds no dict, drawn or listed.
+    ///
+    /// The other direction is not a law a finite universe can state -- an
+    /// inhabited atom need not have a witness among a few drawn dicts -- so
+    /// the proof is what is held, and it is held over dicts the eight fixed
+    /// ones do not spell: a key and its boolean, which a dict carries as one
+    /// entry, is where a required-key reading goes wrong.
+    #[test]
+    fn an_emptiness_holds_no_drawn_dict(
+        a in lattice(),
+        drawn in proptest::collection::vec(drawn_dict(), 1..6),
+    ) {
+        let _allowance = budget::law();
+        if a.emptiness() == Verdict::Empty {
+            for dict in dicts_with(&drawn) {
+                prop_assert!(!a.holds(&dict), "{:?} is decided empty and holds {:?}", a, dict);
+            }
         }
     }
 }

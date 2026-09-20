@@ -58,7 +58,7 @@ equivalence against membership rather than asserting it.
 
 SOURCE: §13.2 "**The laws hold by construction**"
 
-HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption
+HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema
 
 **Stone's representation theorem (1936).** Every Boolean algebra is isomorphic to
 an algebra of sets. **[GUIDING: stone-duality]** — the licence for treating the scalar fragment
@@ -141,7 +141,7 @@ count the way Castagna & Duboc state the tuple rule for larger arities.
 and nowhere else: emptiness does not decompose a product, so the same relation
 asked as a meet with a complement is not decided.
 
-HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, test_a_product_splits_across_union_branches
+HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, the_product_rule_is_lemma_6_5, test_a_product_splits_across_union_branches
 
 ## Records and maps
 
@@ -151,7 +151,7 @@ the heterogeneous mapping and their combination. **[LOAD-BEARING: records-maps-a
 `Schema::KeyedMap`, where a closed record is no default clause and `dict[K, V]`
 is a single clause with no fields.
 
-HELD-BY: the_lattice_laws_hold_of_the_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_map_constrains_one_part_of_the_key_partition
+HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition
 
 The paper's model is a *quasi-constant function*: named labels over a finite
 domain, with the rest given by a default keyed by a partition of the key space.
@@ -488,7 +488,7 @@ widened difference contains the real one, so its emptiness proves the inclusion
 and its inhabitance proves nothing; a refutation comes only from a pair the
 lowering did not widen. **[LOAD-BEARING: a-cut-reference-proves]**
 
-HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, the_descriptor_and_the_procedure_never_contradict_each_other
+HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other, the_descriptor_and_the_procedure_never_contradict_each_other
 
 **Kinds decompose emptiness.** Positives of mixed kind make a clause empty
 outright, negatives of another kind are dropped, and each kind is then an
@@ -733,7 +733,7 @@ HELD-BY: a_decision_leaves_an_assumption_it_did_not_make, a_decision_leaves_the_
 two labels to the partition, so an atom requiring both under distinct values
 holds no dict, and the descriptor reads it that way. **[DEVIATION: the-key-partition-is-by-kind]**
 
-HELD-BY: an_atom_requiring_a_key_and_its_boolean_holds_no_dict, a_labelled_key_witnesses_a_wanted_key
+HELD-BY: an_atom_requiring_a_key_and_its_boolean_holds_no_dict, a_want_with_one_viable_witness_requires_that_key, a_labelled_key_witnesses_a_wanted_key
 
 **The integer and float carriers are `i64` and `f64`.** Membership is exact --
 the walk reads the Python object -- and a relation *declines* where deciding it

@@ -9,6 +9,7 @@ use super::*;
 use crate::decision::{DECISION_BUDGET, LeafRelations, NoLeafRelations};
 use crate::descr::classes::Class;
 use crate::descr::lower::{Constants, Operand};
+use crate::ir::Polarity;
 use crate::kind::Kind;
 use crate::verdict::Relation;
 use proptest::prelude::*;
@@ -4617,5 +4618,136 @@ proptest! {
         if a.subtype_relation(&b, &NoLeafRelations, &[], &budget) == Relation::Holds {
             prop_assert!(a.is_subtype_of(&b));
         }
+    }
+}
+
+/// Every strict subset of `items`, as index masks, and the whole: the `2^|N|`
+/// enumeration JACM Lemma 6.5 states over the negative atoms of a clause.
+fn masks(count: usize) -> impl Iterator<Item = usize> {
+    0..(1usize << count)
+}
+
+/// A meet of one component of every branch a mask selects, negated, with the
+/// subject's component at that position: the clause the lemma reads for
+/// emptiness on one side of the product.
+fn side_clause(
+    component: &Schema,
+    branches: &[Vec<Schema>],
+    mask: usize,
+    position: usize,
+) -> Schema {
+    let mut members = vec![component.clone()];
+    for (index, branch) in branches.iter().enumerate() {
+        if mask & (1 << index) != 0 {
+            members.push(not(branch[position].clone()));
+        }
+    }
+    intersection_of(members)
+}
+
+/// A meet written as one node, so the emptiness asked of it is the scalar
+/// fragment's exact reading and not a fold over pairs.
+fn intersection_of(members: Vec<Schema>) -> Schema {
+    Schema::Intersection(members.into())
+}
+
+/// JACM Lemma 6.5 for a product of two components, as the paper states it.
+///
+/// ```text
+/// t1 × t2 <= ⋁_{i∈N} (s1ᵢ × s2ᵢ)
+///   iff  ∀ N' ⊆ N.  t1 ∧ ⋀_{i∈N'} ¬s1ᵢ = ∅   or   t2 ∧ ⋀_{i∈N∖N'} ¬s2ᵢ = ∅
+/// ```
+///
+/// Each side's emptiness is asked of the scalar fragment, where it is exact,
+/// so the value this returns is the relation itself and not an approximation
+/// of it.
+fn lemma_6_5(components: &[Schema; 2], branches: &[Vec<Schema>]) -> bool {
+    masks(branches.len()).all(|chosen| {
+        let rest = !chosen & ((1 << branches.len()) - 1);
+        side_clause(&components[0], branches, chosen, 0).is_empty()
+            || side_clause(&components[1], branches, rest, 1).is_empty()
+    })
+}
+
+/// A branch of the same arity as the subject, over the scalar fragment.
+fn scalar_pair() -> impl Strategy<Value = Vec<Schema>> {
+    (scalar_schema(), scalar_schema()).prop_map(|(a, b)| vec![a, b])
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        max_shrink_time: 2_000,
+        ..ProptestConfig::default()
+    })]
+
+    // THEORY: a-cut-reference-proves
+    /// The polarity cut widens a difference and never narrows it.
+    ///
+    /// A reference read positively is cut to the top and one read under a
+    /// complement to the bottom, so the schema a lowering reads on the
+    /// subject's side contains the real one and the schema it reads on the
+    /// other side is contained by it: `self⁺ ⊇ self` and `other⁻ ⊆ other`,
+    /// which together give `self⁺ ∧ ¬other⁻ ⊇ self ∧ ¬other`. That containment
+    /// is what makes an empty cut difference a proof of the inclusion, and it
+    /// is held here on values rather than on the one pair that showed it: the
+    /// oracle reads the real set six unfoldings deep, which is deeper than any
+    /// value of the universe, and the cut set one unfolding deep, as the
+    /// descriptor does.
+    #[test]
+    fn a_cut_reference_widens_the_subject_and_narrows_the_other(
+        a in recursive_schema(),
+        b in recursive_schema(),
+    ) {
+        let pool = const_pool();
+        let defs = fixpoint_defs();
+        let real_a = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+        let real_b = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+        let wide = a.unfolded(&defs, crate::descr::lower::UNFOLDS, Polarity::Widen);
+        let narrow = b.unfolded(&defs, crate::descr::lower::UNFOLDS, Polarity::Narrow);
+        prop_assert!(!wide.has_reference() && !narrow.has_reference(), "the cut leaves a reference");
+        for value in &boundary_values(&[&real_a, &real_b]) {
+            if member_full(&real_a, value, &pool) {
+                prop_assert!(
+                    member_full(&wide, value, &pool),
+                    "{value:?} is in {a:?} and outside its widening"
+                );
+            }
+            if member_full(&narrow, value, &pool) {
+                prop_assert!(
+                    member_full(&real_b, value, &pool),
+                    "{value:?} is in the narrowing of {b:?} and outside it"
+                );
+            }
+        }
+    }
+
+    // THEORY: a-sequence-splits-across-a-union
+    /// The product rule decides exactly what JACM Lemma 6.5 says it decides.
+    ///
+    /// `Φ` is the backtrack-free form of the lemma's `2^|N|` enumeration, and
+    /// the two are held to one answer over drawn products: a fixed pair
+    /// against a union of fixed pairs, every component a Boolean combination
+    /// of scalar atoms, where emptiness is exact and so the lemma's right-hand
+    /// side is the relation itself. Asked of the rules alone, since the public
+    /// relation asks the descriptor after them and would decide the pair for
+    /// the other reason.
+    #[test]
+    fn the_product_rule_is_lemma_6_5(
+        subject in scalar_pair(),
+        branches in proptest::collection::vec(scalar_pair(), 1..4),
+    ) {
+        let pair = |components: &[Schema]| Schema::tuple(SeqShape::fixed(components.to_vec()));
+        let tuple = pair(&subject);
+        let split = Schema::union(branches.iter().map(|branch| pair(branch)));
+        let budget = std::cell::Cell::new(DECISION_BUDGET);
+        let rules = tuple.subtype_relation(&split, &NoLeafRelations, &[], &budget);
+        let components = [subject[0].clone(), subject[1].clone()];
+        let lemma = lemma_6_5(&components, &branches);
+        prop_assert_eq!(
+            rules.holds(),
+            lemma,
+            "the rules answer {:?} and the lemma {} for {:?} <= {:?}",
+            rules, lemma, tuple, split
+        );
     }
 }

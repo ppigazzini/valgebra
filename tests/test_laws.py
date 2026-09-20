@@ -455,6 +455,31 @@ def test_the_complement_laws_hold_of_any_as_of_the_top() -> None:
     assert repr(complement(Any).simplify()) == "nothing"
 
 
+# THEORY: lattice-theory
+@given(a=schemas, vals=value_lists)
+def test_the_complement_laws_hold_of_every_drawn_schema(
+    a: object, vals: list[object]
+) -> None:
+    """`a | ~a` admits every value and `a & ~a` admits none, whatever `a` is.
+
+    The two laws that make the lattice Boolean rather than distributive, held
+    over the drawn universe: every atom, refinement, class, fixpoint and
+    container the strategy builds, rather than the four fixed schemas the
+    examples below ask. Both readings are asked. The walk answers with the
+    values, since a law is a claim about membership, and the decision answers
+    with a proof, since the constructors fold the two spellings to the bounds
+    and a fold that stopped firing on some shape would leave a verdict the
+    values still refute.
+    """
+    top = union(a, complement(a))
+    bottom = intersection(a, complement(a))
+    for value in [*VALUES, *vals]:
+        assert top.is_valid(value), f"{value!r} is outside a | ~a"
+        assert not bottom.is_valid(value), f"{value!r} is inside a & ~a"
+    assert bottom.is_empty(), "a & ~a is not decided empty"
+    assert top.is_equivalent(anything), "a | ~a is not decided the top"
+
+
 # Two spellings the procedure itself proves equal, for the law below.
 _RESPELLINGS = [
     ("a-or-nothing", lambda a: union(a, nothing)),
