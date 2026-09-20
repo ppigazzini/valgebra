@@ -10,7 +10,10 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBytes, PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple, PyType};
-use valgebra_core::{Constraint, Kind, OperandIx, Schema, SeqKind};
+use valgebra_core::{
+    Carries, Constraint, Kind, OperandIx, OrderGroup, Schema, carries_division, carries_length,
+    carries_pattern,
+};
 
 use super::{Pool, build_schema, not_implemented};
 
@@ -66,153 +69,34 @@ pub(super) fn build_refine(
     Ok(Schema::refine(base_schema, constraints))
 }
 
-/// Whether the values a base admits can answer a constraint.
-///
-/// Three answers, because a refusal needs certainty. A constraint is refused only
-/// where *no* value of the base can answer it, since that is the case where the
-/// refinement denotes the empty set and the marker was written to narrow rather
-/// than to empty. Where the base is opaque — a class, the gradual atom, a
-/// literal's pooled constant, a recursive reference — the check stands aside.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum Carries {
-    /// Every value of the base can answer the constraint.
-    Yes,
-    /// No value of the base can, so the refinement admits nothing.
-    No,
-    /// The base does not say.
-    Maybe,
-}
-
-impl Carries {
-    /// The answer for a base that is a union of the two.
-    ///
-    /// A member that can answer makes the constraint a narrowing of the union
-    /// rather than an emptying of it: `Annotated[int | str, MinLen(1)]` is the
-    /// non-empty strings, which is a set a reader can mean.
-    fn or(self, other: Carries) -> Carries {
-        match (self, other) {
-            (Carries::Yes, _) | (_, Carries::Yes) => Carries::Yes,
-            (Carries::Maybe, _) | (_, Carries::Maybe) => Carries::Maybe,
-            (Carries::No, Carries::No) => Carries::No,
-        }
-    }
-}
-
-/// Fold `answer` over the members of a union, and stand aside anywhere else that
-/// is not a plain base: an intersection or a complement narrows a set this check
-/// does not compute, and a refinement's answer is its own base's.
-pub(super) fn carries_through(
-    base: &Schema,
-    answer: &impl Fn(&Schema) -> Carries,
-) -> Option<Carries> {
-    match base {
-        Schema::Union(members) => Some(members.iter().map(answer).fold(Carries::No, Carries::or)),
-        Schema::Refine { base, .. } => Some(answer(base)),
-        Schema::Intersection(_) | Schema::Complement(_) | Schema::Ref(_) | Schema::SelfRef(_) => {
-            Some(Carries::Maybe)
-        }
-        _ => None,
-    }
-}
-
-/// Whether the base's values have a length.
-pub(super) fn carries_length(base: &Schema) -> Carries {
-    if let Some(answer) = carries_through(base, &carries_length) {
-        return answer;
-    }
-    match base {
-        Schema::Str
-        | Schema::Bytes
-        | Schema::Seq { .. }
-        | Schema::Coll { .. }
-        | Schema::KeyedMap { .. } => Carries::Yes,
-        Schema::NoneType | Schema::Bool | Schema::Int | Schema::Float => Carries::No,
-        _ => Carries::Maybe,
-    }
-}
-
-/// Whether the base's values are text a pattern can be matched against.
-pub(super) fn carries_pattern(base: &Schema) -> Carries {
-    if let Some(answer) = carries_through(base, &carries_pattern) {
-        return answer;
-    }
-    match base {
-        Schema::Str => Carries::Yes,
-        Schema::NoneType
-        | Schema::Bool
-        | Schema::Int
-        | Schema::Float
-        | Schema::Bytes
-        | Schema::Seq { .. }
-        | Schema::Coll { .. }
-        | Schema::KeyedMap { .. } => Carries::No,
-        _ => Carries::Maybe,
-    }
-}
-
-/// Whether the base's values are numbers, which is what a divisor needs.
-pub(super) fn carries_division(base: &Schema) -> Carries {
-    if let Some(answer) = carries_through(base, &carries_division) {
-        return answer;
-    }
-    match base {
-        Schema::Bool | Schema::Int | Schema::Float => Carries::Yes,
-        Schema::NoneType
-        | Schema::Str
-        | Schema::Bytes
-        | Schema::Seq { .. }
-        | Schema::Coll { .. }
-        | Schema::KeyedMap { .. } => Carries::No,
-        _ => Carries::Maybe,
-    }
-}
-
-/// Whether the base's values are ordered against `operand`.
-///
-/// Python orders numbers with numbers, text with text, bytes with bytes, lists
-/// with lists, tuples with tuples and sets with sets -- and raises across those
-/// groups. A bound whose operand is in another group than the base compares
-/// nothing, so the refinement it builds admits nothing.
-///
-/// Two kinds order against *no* group: `None`, which has no comparison at all,
-/// and `dict`, whose values are unordered however ordered their keys are. A
-/// bound over either names the empty set whatever the operand is, which is why
-/// they answer before the operand is read.
-///
-/// The question is about the **pair**. A base with an order of its own says
-/// nothing on its own: a set is ordered by inclusion and `{1} >= 0` raises all
-/// the same, so a rule reading only the base admits every mismatched bound and
-/// builds the schema that admits nothing.
-pub(super) fn carries_order(base: &Schema, operand: &Bound<'_, PyAny>) -> Carries {
-    let by_group = |base: &Schema| carries_order(base, operand);
-    if let Some(answer) = carries_through(base, &by_group) {
-        return answer;
-    }
+/// The group Python orders `operand` within, or `None` for a value of no group.
+fn order_group(operand: &Bound<'_, PyAny>) -> Option<OrderGroup> {
     let number = operand
         .py()
         .import("numbers")
         .and_then(|numbers| numbers.getattr("Number"))
         .is_ok_and(|class| operand.is_instance(&class).unwrap_or(false));
-    let matches = match base {
-        Schema::Bool | Schema::Int | Schema::Float => number,
-        Schema::Str => operand.is_instance_of::<PyString>(),
-        Schema::Bytes => operand.is_instance_of::<PyBytes>(),
-        // A sequence orders against a sequence of its own container: a list and
-        // a tuple are two kinds to Python's comparison as much as to this one.
-        Schema::Seq { container, .. } => match container {
-            SeqKind::List => operand.is_instance_of::<PyList>(),
-            SeqKind::Tuple => operand.is_instance_of::<PyTuple>(),
-        },
-        // Sets order by *inclusion*, and the two set kinds share that order:
-        // `frozenset({1}) <= {1}` is a question about membership, not about
-        // which of the two constructors built the operand.
-        Schema::Coll { .. } => {
-            operand.is_instance_of::<PySet>() || operand.is_instance_of::<PyFrozenSet>()
-        }
-        Schema::NoneType | Schema::KeyedMap { .. } => return Carries::No,
-        _ => return Carries::Maybe,
-    };
-    if matches { Carries::Yes } else { Carries::No }
+    if number {
+        Some(OrderGroup::Number)
+    } else if operand.is_instance_of::<PyString>() {
+        Some(OrderGroup::Text)
+    } else if operand.is_instance_of::<PyBytes>() {
+        Some(OrderGroup::Bytes)
+    } else if operand.is_instance_of::<PyList>() {
+        Some(OrderGroup::List)
+    } else if operand.is_instance_of::<PyTuple>() {
+        Some(OrderGroup::Tuple)
+    } else if operand.is_instance_of::<PySet>() || operand.is_instance_of::<PyFrozenSet>() {
+        Some(OrderGroup::Set)
+    } else {
+        None
+    }
+}
+
+/// Whether the base's values are ordered against `operand`: the core's rule,
+/// asked with the operand's group.
+pub(super) fn carries_order(base: &Schema, operand: &Bound<'_, PyAny>) -> Carries {
+    valgebra_core::carries_order(base, order_group(operand))
 }
 
 /// Refuse a constraint no value of the base can answer.

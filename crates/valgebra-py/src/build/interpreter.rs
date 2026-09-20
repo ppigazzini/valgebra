@@ -7,7 +7,10 @@ use crate::render::render;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::ffi::CString;
-use valgebra_core::{Constraint, MapClause, SeqShape};
+use valgebra_core::{
+    Carries, Constraint, MapClause, SeqShape, carries_division, carries_length, carries_pattern,
+    carries_through,
+};
 
 /// The namespace a row's expression is evaluated in.
 ///

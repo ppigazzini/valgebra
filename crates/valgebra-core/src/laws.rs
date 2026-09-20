@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::carries::{Carries, OrderGroup, carries_division, carries_length, carries_order};
 use crate::decision::{DECISION_BUDGET, LeafRelations, NoLeafRelations};
 use crate::descr::classes::Class;
 use crate::descr::lower::{Constants, Operand};
@@ -3919,41 +3920,27 @@ enum Producer {
 
 /// Whether the frontend builds `constraint` over `base`.
 ///
-/// The rule `build/refine.rs` applies at build, read for the bases this
-/// generator draws: an order bound wants a base whose values compare with the
-/// pool's operands, which are numbers, so a numeric kind; a divisor the same;
-/// a length wants a sized kind. A base that is a union of such kinds is read
-/// as its members, since the frontend reads it that way. Held in step with
-/// the frontend by reading rather than by a test, which is the limit of a
-/// generator that lives in the core.
+/// The rule `build/refine.rs` applies at build is the core's own
+/// [`crate::carries`] module, asked here with the group the pool's operands
+/// belong to, which is the numbers. A base the frontend refuses is one this
+/// generator never draws, and a base it accepts outright -- every value can
+/// answer -- is one it may; a base that does not say, a class or a literal,
+/// is left undrawn, since the fragment is what the completeness laws claim
+/// and a refinement the walk cannot ask is not in it.
+///
+/// A pattern and a predicate are excluded on the generator's side rather
+/// than the frontend's: the frontend builds a pattern over text, and the
+/// completeness laws do not claim the language a pattern names.
 fn frontend_builds(base: &Schema, constraint: &Constraint) -> bool {
-    fn numeric(base: &Schema) -> bool {
-        match base {
-            Schema::Int | Schema::Float | Schema::Bool => true,
-            Schema::Union(members) => members.iter().all(numeric),
-            _ => false,
+    let answer = match constraint {
+        Constraint::Ge(_) | Constraint::Gt(_) | Constraint::Le(_) | Constraint::Lt(_) => {
+            carries_order(base, Some(OrderGroup::Number))
         }
-    }
-    fn sized(base: &Schema) -> bool {
-        match base {
-            Schema::Str
-            | Schema::Bytes
-            | Schema::Seq { .. }
-            | Schema::Coll { .. }
-            | Schema::KeyedMap { .. } => true,
-            Schema::Union(members) => members.iter().all(sized),
-            _ => false,
-        }
-    }
-    match constraint {
-        Constraint::Ge(_)
-        | Constraint::Gt(_)
-        | Constraint::Le(_)
-        | Constraint::Lt(_)
-        | Constraint::MultipleOf(_) => numeric(base),
-        Constraint::MinLen(_) | Constraint::MaxLen(_) => sized(base),
-        Constraint::Predicate(_) | Constraint::Regex(_) => false,
-    }
+        Constraint::MultipleOf(_) => carries_division(base),
+        Constraint::MinLen(_) | Constraint::MaxLen(_) => carries_length(base),
+        Constraint::Predicate(_) | Constraint::Regex(_) => return false,
+    };
+    answer == Carries::Yes
 }
 
 /// `base` narrowed by the constraints the producer builds over it.

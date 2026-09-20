@@ -38,6 +38,20 @@ The rest are read in this order:
 Metadata matching neither is ignored, which the typing spec requires of any
 consumer for metadata it does not recognise.
 
+**A constraint no value of the base can answer is refused where it is
+written.** Reading a length off an `int` raises, and the walk reads a raise as
+a non-member, so `Annotated[int, MinLen(1)]` would compile to a set that
+admits nothing and says nothing about why. The rule that says which bases can
+answer which constraints is the core's `carries` module, with three answers:
+every value can, no value can, or the base does not say. Only the second is a
+refusal. A union answers for its members, so `Annotated[int | str,
+MinLen(1)]` is the non-empty strings; an intersection, a complement and a
+reference do not say; and an order bound is asked about the pair, since
+Python orders a value only within its own group. The laws' buildable fragment
+draws its refinements through the same module, so the pairs the generator
+draws are the pairs the frontend builds by construction rather than by two
+tables kept alike.
+
 **A name is a handle, and an absence is not an exception.** Every attribute the
 protocol asks for is asked by an interned `PyString` the interpreter already
 holds, because text would be decoded into a fresh string and hashed before the

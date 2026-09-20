@@ -28,6 +28,7 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod carries;
 mod decision;
 pub mod descr;
 mod ir;
@@ -37,6 +38,10 @@ mod simplify;
 mod verdict;
 mod violation;
 
+pub use carries::{
+    Carries, OrderGroup, carries_division, carries_length, carries_order, carries_pattern,
+    carries_through,
+};
 pub use decision::{LeafRelations, NoLeafRelations};
 pub use ir::{
     ClassIx, Clauses, CollKind, ConstIx, Constraint, Constraints, DefIx, DefShift, Field, Fields,
