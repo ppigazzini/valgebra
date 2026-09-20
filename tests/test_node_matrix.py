@@ -10,7 +10,9 @@ of hole -- fails here rather than shipping silently.
 PRODUCT: every schema node, in every walk mode
 """
 
+import copy
 import json
+import pickle
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -266,6 +268,118 @@ def test_every_entry_point_gives_one_answer(label: str) -> None:
                 continue
             answers = _json_path(compiled, text)
             assert set(answers.values()) == {expected}, (label, text, answers)
+
+
+#: The entry points the two loops above ask, named as the stub names them.
+#: `in` is `__contains__`, and a mode or a bytes spelling is the same entry.
+_ASKED_ENTRY_POINTS = {
+    "is_valid",
+    "__contains__",
+    "validate",
+    "ensure",
+    "is_valid_json",
+    "validate_json",
+    "load",
+}
+
+
+def _validator_class_body() -> str:
+    """Give the stub's `Validator` class, up to the next top-level statement."""
+    stub = ROOT / "python" / "valgebra" / "_valgebra.pyi"
+    text = stub.read_text(encoding="utf-8")
+    start = text.index("class Validator:")
+    after = re.search(r"^(?:def |class |[A-Za-z_]+:)", text[start + 1 :], re.MULTILINE)
+    return text[start : start + 1 + after.start()] if after else text[start:]
+
+
+def _entry_points_in_the_stub() -> set[str]:
+    """Give every method of the stub's validator that takes a value or text."""
+    body = _validator_class_body()
+    found = set()
+    for match in re.finditer(r"def (\w+)\(self, (\w+): ", body):
+        name, parameter = match.groups()
+        if parameter in {"obj", "data"}:
+            found.add(name)
+    return found
+
+
+def test_the_entry_point_loops_ask_every_entry_point_the_stub_declares() -> None:
+    """The columns of the entry-point run are read from the stub.
+
+    The loops above name seven ways of asking, by hand. A method added to the
+    stub that takes a value would be an eighth the table never runs, so the
+    hand list is held to the stub in both directions.
+    """
+    declared = _entry_points_in_the_stub()
+    assert len(declared) >= 7, sorted(declared)
+    asked = {
+        name.removesuffix("_fail_fast")
+        .removesuffix("_bytes")
+        .replace("in", "__contains__")
+        if name == "in"
+        else name.removesuffix("_fail_fast").removesuffix("_bytes")
+        for name in [*_object_path(Validator(int), 1), *_json_path(Validator(int), "1")]
+    }
+    assert asked == _ASKED_ENTRY_POINTS
+    assert declared == _ASKED_ENTRY_POINTS, (
+        f"entry points the stub declares and the run does not ask: "
+        f"{sorted(declared - _ASKED_ENTRY_POINTS)}; asked and not declared: "
+        f"{sorted(_ASKED_ENTRY_POINTS - declared)}"
+    )
+
+
+#: The relations and operators the stub declares that take no value, each
+#: with the answer every node must give when asked about itself.
+_SELF_ANSWERS: dict[str, Callable[[Validator, object], bool]] = {
+    "is_subtype_of": lambda v, spec: v.is_subtype_of(spec),
+    "is_equivalent": lambda v, spec: v.is_equivalent(spec),
+    "relation_to": lambda v, spec: v.relation_to(spec) == "subset",
+    "is_empty": lambda v, spec: v.is_empty() is (spec is nothing),
+    "open": lambda v, _spec: v.is_subtype_of(v.open()),
+    "close": lambda v, _spec: v.close().is_subtype_of(v),
+    "simplify": lambda v, _spec: v.simplify().is_equivalent(v),
+    "__eq__": lambda v, spec: v == Validator(spec),
+    "__hash__": lambda v, spec: hash(v) == hash(Validator(spec)),
+    "__or__": lambda v, _spec: (v | nothing).is_equivalent(v),
+    "__ror__": lambda v, _spec: (nothing | v).is_equivalent(v),
+    "__copy__": lambda v, _spec: copy.copy(v) == v,
+    "__deepcopy__": lambda v, _spec: copy.deepcopy(v) == v,
+    "__reduce__": lambda v, _spec: _refuses_to_pickle(v),
+}
+
+
+def _refuses_to_pickle(v: Validator) -> bool:
+    try:
+        pickle.dumps(v)
+    except TypeError:
+        return True
+    return False
+
+
+@pytest.mark.parametrize("label", list(_NODES))
+def test_every_relation_and_operator_answers_for_every_node(label: str) -> None:
+    """The operator-by-node product, each cell with its answer asserted.
+
+    Every relation and operator the stub declares that asks about a schema
+    rather than a value is put to every node representative, and the answer
+    it must give of a schema against itself is asserted: reflexivity for the
+    relations, identity for the operators, refusal for pickling. A node an
+    operator answers differently for is a cell this fails by name.
+    """
+    spec = _NODES[label]
+    compiled = Validator(spec)
+    for name, answer in _SELF_ANSWERS.items():
+        assert answer(compiled, spec), f"{name} over {label}"
+
+
+def test_the_self_answers_are_every_schema_method_the_stub_declares() -> None:
+    """The rows of the product are read from the stub, in both directions."""
+    declared = set(re.findall(r"def (\w+)\(", _validator_class_body())) - {"__new__"}
+    asks_about_a_schema = declared - _entry_points_in_the_stub()
+    assert asks_about_a_schema == set(_SELF_ANSWERS), (
+        f"declared and not asked: {sorted(asks_about_a_schema - set(_SELF_ANSWERS))}; "
+        f"asked and not declared: {sorted(set(_SELF_ANSWERS) - asks_about_a_schema)}"
+    )
 
 
 def test_the_json_comparison_reaches_the_nodes_it_can() -> None:

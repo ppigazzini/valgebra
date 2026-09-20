@@ -262,6 +262,7 @@ def test_every_kind_has_a_base_a_caller_writes() -> None:
         assert not compiled.is_valid(outsider), f"{kind}: the outsider is one"
 
 
+# THEORY: a-refinement-narrows-its-base
 @pytest.mark.parametrize(
     ("constraint", "kind"), _product(), ids=[f"{c}:{k}" for c, k in _product()]
 )
@@ -288,6 +289,13 @@ def test_every_cell_narrows_its_base_or_is_refused(constraint: str, kind: str) -
     # verdict. The predicate cells' outsiders lie outside the base itself, so
     # there the base's kind is what refuses and the code says so.
     base = get_args(cell.spec)[0]
+    # A refinement is its base narrowed: below the base whatever the
+    # constraint says, and the base is not below it, since that would need
+    # the constraint to hold of every value of the base.
+    assert compiled.relation_to(base) == "subset", f"{constraint} over {kind}"
+    assert Validator(base).relation_to(compiled) != "subset", (
+        f"{constraint} over {kind} is decided equal to its base"
+    )
     with pytest.raises(ValidationError) as caught:
         compiled.validate(cell.outsider, fail_fast=True)
     assert caught.value.path == ()

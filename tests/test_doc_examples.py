@@ -33,6 +33,7 @@ LEDGER: every python example in a tracked page is run or marked with a reason
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -103,6 +104,33 @@ def test_every_example_in_a_tracked_page_is_run_or_marked() -> None:
     assert not unreached, (
         f"examples no lane runs: {unreached}. Add the page to the runner's "
         "list, or mark the block with the reason it cannot run."
+    )
+
+
+#: What makes a block a check rather than a demonstration: an `assert`, a
+#: raise the block expects, or a reason it can carry neither.
+_CHECKS = re.compile(r"^\s*assert\b|raise AssertionError|# no assertion:", re.MULTILINE)
+
+
+def test_every_example_block_asserts_what_it_shows() -> None:
+    """A block that prints and checks nothing holds the page to nothing.
+
+    The runner reads the exit code, so a block that runs to completion passes
+    whatever it printed. A page that states an answer beside an example owes
+    the reader the assertion, and a block that cannot carry one says why.
+    """
+    module = runner()
+    silent = []
+    for page in _tracked_pages():
+        blocks = module.BLOCK.findall(page.read_text(encoding="utf-8"))
+        silent += [
+            f"{page.relative_to(ROOT).as_posix()} block {index}"
+            for index, block in enumerate(blocks, start=1)
+            if not module.planned(block) and not _CHECKS.search(block)
+        ]
+    assert not silent, (
+        f"example blocks that check nothing: {silent}. Assert the answer the "
+        "page states, or mark the block `# no assertion:` with the reason."
     )
 
 

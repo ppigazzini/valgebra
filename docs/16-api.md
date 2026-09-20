@@ -230,7 +230,8 @@ from valgebra import MAX_SCHEMA_DEPTH, Validator, complement
 schema = Validator(int)
 for _ in range(MAX_SCHEMA_DEPTH - 1):
     schema = complement(schema)
-print(schema.is_valid(1))
+# An odd number of complements is the complement of `int`, so `1` is outside.
+assert schema.is_valid(1) is ((MAX_SCHEMA_DEPTH - 1) % 2 == 0)
 ```
 
 ## Package version
@@ -245,7 +246,8 @@ import time for a string the manifest already carries.
 ```python
 import valgebra
 
-print(valgebra.__version__)
+assert isinstance(valgebra.__version__, str)
+assert valgebra.__version__
 ```
 
 ## What is public
