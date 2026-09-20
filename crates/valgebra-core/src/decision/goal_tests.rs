@@ -220,7 +220,7 @@ fn tree_defs() -> Vec<Schema> {
     }]
 }
 
-// THEORY: repeated-goals-are-counted
+// THEORY: repeated-goals-are-counted, regularity-bounds-the-goals
 /// The counter is wired to the procedure, so a zero from it is a reading.
 ///
 /// The control every count below needs. A recorder attached to nothing reports
@@ -385,4 +385,134 @@ fn the_matrix_repeats_a_goal_only_where_a_meet_meets_a_union() {
     // The matrix's whole number, so a pair that starts repeating somewhere else
     // while one of the two stops cannot cancel out row by row.
     assert_eq!(total, 8);
+}
+
+/// A fixed pair of unions: the subject the product rule splits across the
+/// branches of [`product_split`], where no single branch contains it.
+fn product_subject() -> Schema {
+    Schema::tuple(SeqShape::fixed([
+        Schema::union([Schema::Int, Schema::Str, Schema::Bytes]),
+        Schema::union([Schema::Int, Schema::Str]),
+    ]))
+}
+
+/// The union of pairs that covers [`product_subject`] only taken together.
+fn product_split() -> Schema {
+    let pair = |a: Schema, b: Schema| Schema::tuple(SeqShape::fixed([a, b]));
+    Schema::union([
+        pair(Schema::Int, Schema::Int),
+        pair(Schema::Str, Schema::Int),
+        pair(Schema::Bytes, Schema::Int),
+        pair(
+            Schema::union([Schema::Int, Schema::Str, Schema::Bytes]),
+            Schema::Str,
+        ),
+    ])
+}
+
+/// Every distinct subtree of `schema`, and of every definition it can reach.
+///
+/// The set regularity is about: a schema is a finite tree with back edges, so
+/// unfolding it forever reaches only these, and a goal the procedure asks is
+/// a pair of them unless a rule built a term of its own.
+fn subterms(schema: &Schema, defs: &[Schema]) -> Vec<Schema> {
+    fn collect(schema: &Schema, out: &mut Vec<Schema>) {
+        if !out.contains(schema) {
+            out.push(schema.clone());
+        }
+        for child in schema.children() {
+            collect(child, out);
+        }
+    }
+    let mut out = Vec::new();
+    collect(schema, &mut out);
+    for body in defs {
+        collect(body, &mut out);
+    }
+    out
+}
+
+/// The distinct goals a query asks, against the pairs of subterms the two
+/// sides have.
+fn distinct_against_subterm_pairs(sub: &Schema, sup: &Schema, defs: &[Schema]) -> (usize, usize) {
+    let (_, counts) = ask(sub, sup, defs);
+    let pairs = subterms(sub, defs).len() * subterms(sup, defs).len();
+    (counts.asked - counts.repeated, pairs)
+}
+
+// THEORY: regularity-bounds-the-goals
+/// Regularity, spent: the distinct goals a query asks are bounded by the
+/// pairs of subterms the two schemas have.
+///
+/// A schema is regular by construction -- a finite tree with back edges into
+/// a finite table of definitions -- so the subterms reachable by unfolding are
+/// finitely many, and a goal the procedure asks is a pair of them. That is
+/// the finiteness JACM §6.9 uses as a termination argument, and the number
+/// the work budget stands in for. Held here on the shapes the budget was
+/// measured over, on the recursive pairs the trail is for, and on the one
+/// rule that builds terms of its own: the product rule narrows a component
+/// by a branch it does not cover and asks the narrowed tuple against the
+/// rest, and the narrowed tuple is no subterm of the pair. Counted, that
+/// shape asks fewer distinct goals than the pair has subterm pairs -- the
+/// narrowings are few and each is asked once -- so the bound holds of it as
+/// a measurement where it holds of the others as an argument, and the row
+/// is what says so when a rule starts building past it.
+#[test]
+fn the_goals_a_query_asks_are_pairs_of_the_subterms() {
+    let element = nested_lists(2, Schema::Int);
+    let wider = nested_lists(2, Schema::union([Schema::Int, Schema::Str]));
+    let tree = tree_defs();
+    let list_tree = vec![Schema::union([
+        Schema::Int,
+        list_of(Schema::Ref(DefIx::new(0))),
+    ])];
+    let pairs: Vec<(Schema, Schema, Vec<Schema>)> = vec![
+        (
+            repeating_record(8, &element),
+            repeating_record(8, &wider),
+            vec![],
+        ),
+        (
+            repeating_tuple(6, &element),
+            repeating_tuple(6, &wider),
+            vec![],
+        ),
+        (
+            nested_lists(6, Schema::Bool),
+            nested_lists(6, Schema::Int),
+            vec![],
+        ),
+        (
+            Schema::Ref(DefIx::new(0)),
+            Schema::union([Schema::Ref(DefIx::new(0)), Schema::Str]),
+            tree.clone(),
+        ),
+        (Schema::Ref(DefIx::new(0)), Schema::Ref(DefIx::new(0)), tree),
+        (
+            Schema::Ref(DefIx::new(0)),
+            Schema::union([Schema::Int, list_of(Schema::ANYTHING)]),
+            list_tree.clone(),
+        ),
+        (
+            list_of(Schema::Ref(DefIx::new(0))),
+            Schema::Ref(DefIx::new(0)),
+            list_tree,
+        ),
+        (product_subject(), product_split(), vec![]),
+    ];
+    assert_eq!(
+        ask(&product_subject(), &product_split(), &[]).0,
+        Relation::Holds
+    );
+    for (sub, sup, defs) in &pairs {
+        let (distinct, bound) = distinct_against_subterm_pairs(sub, sup, defs);
+        assert!(
+            distinct >= 1,
+            "the counter saw no goal for {sub:?} <= {sup:?}"
+        );
+        assert!(
+            distinct <= bound,
+            "{sub:?} <= {sup:?} asked {distinct} distinct goals over {bound} subterm pairs"
+        );
+    }
 }

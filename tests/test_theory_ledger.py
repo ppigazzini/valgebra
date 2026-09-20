@@ -593,14 +593,24 @@ SOURCE = "SOURCE:"
 #: the sentence this page restates. Entries are separated by `;`, because a
 #: fragment carries commas and a claim may restate two paragraphs -- Nakano's
 #: modality is argued in two places and lands here as one sentence.
-_SOURCE_ENTRY = re.compile(r'§(\d+\.\d+[a-z]?) "([^"]{12,})"')
+_SOURCE_ENTRY = re.compile(r'§(\d+(?:\.\d+[a-z]?)?) "([^"]{12,})"')
 
 #: Where the argument's results are tagged, and where its obligations are whole
 #: numbered sections rather than tagged paragraphs.
+#:
+#: Three universes, read at every heading level the argument uses. The
+#: bibliography (§1--§12, `## N.`) tags a paragraph `[LOAD-BEARING]` where code
+#: rests on it; the results ledger (§13.x) tags a paragraph `[USED]` or
+#: `[DEVIATION]`; the obligations (§14.x) are whole sections. Each is a claim
+#: the tree can be false against, so each must be restated here by a
+#: paragraph that carries a holding line -- a `GUIDING` restatement of a
+#: `[USED]` result is a citation, not a claim, and does not count.
 _RESULT = re.compile(r"\*\*\[(?:USED|DEVIATION)")
-_SECTION = re.compile(r"^## (\d+\.\d+[a-z]?) ", re.MULTILINE)
+_FOUNDATION = re.compile(r"`\[LOAD-BEARING\]`")
+_SECTION = re.compile(r"^#{1,2} (\d+(?:\.\d+[a-z]?)?)\.? ", re.MULTILINE)
 _RESULTS_FROM = "13."
 _OBLIGATIONS_FROM = "14."
+_FOUNDATIONS_BELOW = 13
 
 
 def _argument() -> dict[str, str]:
@@ -826,23 +836,37 @@ def test_every_result_the_argument_carries_is_restated_here() -> None:
     sections = _argument()
     if not sections:
         pytest.skip("the argument is not redistributed, so a clone has none to read")
-    claimed = {(section, fragment) for _, section, fragment in _sources()}
+    tags = {claim.identifier: claim.tag for claim in _claims()}
+    # What each citation is worth: a `SOURCE:` on a claim that carries a
+    # holding line restates a result; one on a guiding or planned paragraph
+    # cites it, which is a different thing and is not counted here.
+    claimed = {
+        (section, fragment)
+        for identifier, section, fragment in _sources()
+        if tags[identifier] in CLAIMS
+    }
+
+    def restated(number: str, paragraph: str) -> bool:
+        return any(
+            section == number and fragment in paragraph for section, fragment in claimed
+        )
+
+    def unrestated_in(number: str, body: str, tagged: re.Pattern[str]) -> list[str]:
+        return [
+            f"§{number}: {' '.join(paragraph.split())[:90]}"
+            for paragraph in body.split("\n\n")
+            if tagged.search(paragraph) and not restated(number, paragraph)
+        ]
 
     unrestated: list[str] = []
     for number, body in sections.items():
         if number.startswith(_RESULTS_FROM):
-            for paragraph in body.split("\n\n"):
-                if not _RESULT.search(paragraph):
-                    continue
-                if not any(
-                    section == number and fragment in paragraph
-                    for section, fragment in claimed
-                ):
-                    unrestated.append(f"§{number}: {' '.join(paragraph.split())[:90]}")
-        elif number.startswith(_OBLIGATIONS_FROM) and not any(
-            section == number for section, _ in claimed
-        ):
-            unrestated.append(f"§{number}: {body.splitlines()[0]}")
+            unrestated += unrestated_in(number, body, _RESULT)
+        elif number.startswith(_OBLIGATIONS_FROM):
+            if not any(section == number for section, _ in claimed):
+                unrestated.append(f"§{number}: {body.splitlines()[0]}")
+        elif number.isdigit() and int(number) < _FOUNDATIONS_BELOW:
+            unrestated += unrestated_in(number, body, _FOUNDATION)
 
     assert not unrestated, (
         "results the argument carries and this page does not restate:\n"

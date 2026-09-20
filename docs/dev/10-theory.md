@@ -56,7 +56,7 @@ sets form a Boolean algebra; the folds the constructors apply are its laws.
 in the lattice normal form, and the property suites that check each claimed
 equivalence against membership rather than asserting it.
 
-SOURCE: §13.2 "**The laws hold by construction**"
+SOURCE: §13.2 "**The laws hold by construction**"; §2 "every combinator builds the normal"
 
 HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema
 
@@ -75,7 +75,7 @@ decompose each pair by shape, and it calls `is_empty` at the three places where 
 shape is available to recurse into: the two lattice bounds, and a complement on
 the right. Everywhere else the arms decide directly.
 
-SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"
+SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
 
 HELD-BY: the_two_deciders_agree_under_an_oracle, test_the_two_deciders_are_measured_against_each_other
 
@@ -141,6 +141,8 @@ count the way Castagna & Duboc state the tuple rule for larger arities.
 and nowhere else: emptiness does not decompose a product, so the same relation
 asked as a meet with a complement is not decided.
 
+SOURCE: §13.1 "**The product decomposition.**"
+
 HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, the_product_rule_is_lemma_6_5, test_a_product_splits_across_union_branches
 
 ## Records and maps
@@ -150,6 +152,8 @@ named fields plus default clauses subsumes the record, the homogeneous mapping,
 the heterogeneous mapping and their combination. **[LOAD-BEARING: records-maps-and-structs]** —
 `Schema::KeyedMap`, where a closed record is no default clause and `dict[K, V]`
 is a single clause with no fields.
+
+SOURCE: §3 "The model behind `Schema::KeyedMap`"; §13.3 "**The representation Theorem 4.2 produces.**"
 
 HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition
 
@@ -190,7 +194,7 @@ recursion variable under a guard is productive. **[LOAD-BEARING: guarded-recursi
 *discipline* — `occurs_unguarded` is that condition, and it is what makes the
 induction above well founded.
 
-SOURCE: §13.0 "Contractivity buys **well-definedness of the fixpoint**; regularity buys"; §13.4 "**Guarded recursion.** Nakano's modality"
+SOURCE: §13.0 "Contractivity buys **well-definedness of the fixpoint**; regularity buys"; §13.4 "**Guarded recursion.** Nakano's modality"; §4 "for the *discipline* (`occurs_unguarded`)"; §4 "recursion is sound when the variable sits under a guard"; §4 "`Schema::occurs_unguarded` (the contractivity check)"
 
 The paper proves soundness of a modal type system
 by a step-indexed realizability argument; it states no theorem about contractive
@@ -210,6 +214,8 @@ about which side of that coercion a value sits on. Pierce, *TAPL* ch. 20--21 is
 where the two are set beside each other; the definitions table is the same
 shape pydantic-core's `definition-ref` has. **[LOAD-BEARING: a-reference-denotes-its-definition]**
 
+SOURCE: §4 "an **equirecursive** reading"
+
 HELD-BY: test_a_reference_denotes_the_definition_it_names, test_the_unfolding_is_sound_in_both_directions, decides_recursive_subtyping_coinductively
 
 **A descent past the bound is an error, never a crash.** The walk unfolds to
@@ -220,6 +226,8 @@ path reaches the parser's own nesting bound first, which is the lower of the
 two, so a document that deep is refused as unreadable before the walk sees it;
 [10-limits.md](../10-limits.md) names both. The conventional default, 128,
 follows `serde_json`. **[LOAD-BEARING: the-depth-bound-reports-itself]**
+
+SOURCE: §5 "converts any unbounded descent"
 
 HELD-BY: test_every_entry_point_reports_the_bound_it_reaches, test_a_value_past_the_depth_bound_reports_the_bound
 
@@ -309,6 +317,8 @@ carrying it: two refinements over one predicate are one set, and two over
 separately written predicates that agree everywhere are undecided, since
 deciding them means deciding whether two Python callables agree.
 **[LOAD-BEARING: a-refinement-narrows-its-base]**
+
+SOURCE: §10 "the runtime check; the static/SMT side is"
 
 HELD-BY: test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque, test_predicate_marker
 
@@ -434,7 +444,7 @@ hypothesis and proptest. **[LOAD-BEARING: property-testing]** — every algebra 
 membership by a property suite rather than asserted
 ([08-testing.md](08-testing.md)).
 
-SOURCE: §13.8 "**Property-based testing.**"
+SOURCE: §13.8 "**Property-based testing.**"; §9 "Hypothesis adds integrated test-case shrinking"
 
 HELD-BY: test_de_morgan, laws.rs::the_lattice_laws_hold_of_the_sets, test_simplify_preserves_acceptance
 
@@ -488,6 +498,8 @@ widened difference contains the real one, so its emptiness proves the inclusion
 and its inhabitance proves nothing; a refutation comes only from a pair the
 lowering did not widen. **[LOAD-BEARING: a-cut-reference-proves]**
 
+SOURCE: §13.1 "**The polarity cut is one-directional.**"
+
 HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other, the_descriptor_and_the_procedure_never_contradict_each_other
 
 **Kinds decompose emptiness.** Positives of mixed kind make a clause empty
@@ -496,6 +508,8 @@ independent question -- which is what lets every kind carry its own
 representation and the whole be a product over them. `Kind` is the one
 partition both deciders read; `Region` is derived from it, never maintained
 beside it. **[LOAD-BEARING: kinds-decompose-emptiness]**
+
+SOURCE: §13.1 "positives of mixed kind make a clause empty outright"
 
 HELD-BY: the_same_shape_under_two_kinds_does_not_meet, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart
 
@@ -587,6 +601,21 @@ tests, and a memo that changed it would fail the rows. **[OBLIGATION: repeated-g
 SOURCE: §14.2 "Regularity is held and unspent"
 
 HELD-BY: the_matrix_repeats_a_goal_only_where_a_meet_meets_a_union, a_record_of_thirty_two_fields_sharing_one_schema_repeats_no_goal, the_counter_sees_the_goals_a_query_asks
+
+**Regularity bounds the goals a query asks.** A schema is a finite tree with
+back edges into a finite table of definitions, so the subterms reachable by
+unfolding it are finitely many, and a goal the procedure asks is a pair of
+them: the distinct goals a query reaches are bounded by the subterm pairs of
+the two sides. That is the finiteness the saturating algorithm uses as its
+termination argument, and the number the work budget stands in for. The
+count is held on the workload shapes, on the recursive pairs the trail is
+for, and on the product rule -- the one rule that builds terms of its own,
+whose narrowings are counted and stay inside the bound as a measurement
+rather than as an argument. **[OBLIGATION: regularity-bounds-the-goals]**
+
+SOURCE: §14.2 "Regularity bounds the number of distinct"
+
+HELD-BY: the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks
 
 **A cache under coinduction is revertible or absent.** A memo added to the
 coinductive procedure must be persistent, so a failed disjunct can roll it
@@ -690,7 +719,7 @@ not the set, and two spellings of one set can order differently -- which is why
 the laws are asserted over Boolean combinations and the deciders' agreement over
 a corpus that adds shapes. **[DEVIATION: the-normal-form-is-not-canonical]**
 
-SOURCE: §13.1 "`simplify` produces negation normal form and no further"
+SOURCE: §13.1 "`simplify` produces negation normal form and no further"; §3 "A rewriter missing rules is sound and incomplete"
 
 HELD-BY: test_eq_is_the_normal_form_and_not_the_set, test_simplify_preserves_acceptance
 
