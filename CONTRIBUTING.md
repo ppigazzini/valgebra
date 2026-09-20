@@ -136,6 +136,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | walk mutation adequacy | `scripts/mutation_baseline_walk.json` | `cargo mutants --package valgebra-py --features interpreter-tests -- -- --skip recursion_deeper_than_the_bound_is_refused` |
 | suite mutation adequacy | `scripts/mutation_baseline_pytest.json` | `cargo mutants --config .cargo/mutants-pytest.toml --package valgebra-py --features pytest-sweep` |
 | a mutation verdict | any baseline | `python3 scripts/mutation_gate.py --baseline core` |
+| no file under the per-file coverage floor | `scripts/coverage_gate.py`'s floor and the files named under it, per lane scope | `uv run python scripts/coverage_gate.py --json coverage-core.json --scope core` |
 | supply chain (Rust) | `deny.toml` | `cargo deny check` |
 | supply chain (Python) | `uv.lock` | `uv run pip-audit` |
 | workflow security | `.github/workflows/`, `.github/actions/` | `uvx zizmor .github/workflows/ .github/actions/` |

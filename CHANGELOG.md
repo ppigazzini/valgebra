@@ -15,10 +15,23 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a literal-keyed clause is read beside the clauses that cover its key
 - fix: a meet against a reference is asked the unfolding
+- fix: the relation product reads the attribute record, not a class beside it
 
 -->
 
 ### Fixed
+
+- **A relation between a builtin kind and a class with declared attributes is
+  decided.** The published decidability boundary listed an attribute record on
+  either side as a conservative case, and `int ≤ C` and `C ≤ int` as "not
+  proven" for a class with declared attributes. Both are refuted, with a value
+  that decides each. A declared attribute is not a source of conservatism: the
+  same relation declines for a class with no fields and decides for a class
+  laid out as a kind, so the declines beside such a class are the open class
+  order's, which the page assumes elsewhere. Thirty-two ordered pairs of schema
+  nodes move from "not proven" to decided in the page's account. No answer the
+  library gives changes; what changes is the account of it, and the ledger
+  behind it, which drove a `Protocol` where it said it drove a record.
 
 - **A fixpoint's unfolding is decided below the fixpoint however its body is
   spelled.** `Validator(union(m, list[t])).relation_to(t)` for
