@@ -13,8 +13,22 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: a literal-keyed clause is read beside the clauses that cover its key
 
 -->
+
+### Fixed
+
+- **A literal-keyed clause is a clause, and a relation reads it as one.**
+  `Validator({"k?": str | int, str: int}).relation_to({Literal["k"]: str,
+  str: int})` answered `"not_subset"` and answers `"subset"`; the two are one
+  set, and `is_equivalent` says so. The walk reads a literal-keyed clause as
+  the page states -- a key belongs when *some* clause admits it and its value,
+  so `{"k": 1}` is a member through the `str` clause -- and the set
+  representation read it as a field, which takes precedence, so it refuted an
+  inclusion no value refutes. The lowering joins the clause's type with every
+  clause that covers the key; a field of the same name is read instead of
+  them, as before.
 
 ## [0.0.12] - 2026-09-19
 

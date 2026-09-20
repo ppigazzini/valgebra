@@ -339,6 +339,35 @@ def _record_of(children: list[Spec]) -> Spec:
     return (spec, _record_pred(preds))
 
 
+#: The literal key the two-clause shape names, built once: a `Literal` is a
+#: type expression to the checker and a schema key to the frontend.
+_K_LITERAL = Literal["k"]
+
+
+def _literal_clause_pred(key: str, named: Pred, rest: Pred) -> Pred:
+    """Membership for `{Literal[key]: A, str: B}`: a key two clauses may read.
+
+    A literal-keyed clause is a clause, not a field: the key belongs when
+    either clause admits its value, so `key` takes `A` or `B` and every
+    other `str` key takes `B`. A key of another kind is read by no clause.
+    """
+
+    def pred(x: object) -> bool:
+        if not isinstance(x, dict):
+            return False
+        for k, v in x.items():
+            if not isinstance(k, str):
+                return False
+            if k == key:
+                if not (named(v) or rest(v)):
+                    return False
+            elif not rest(v):
+                return False
+        return True
+
+    return pred
+
+
 def _open_record_spec(children: list[Spec], rest: object) -> dict[object, object]:
     """Give the closed record over `children` with a `str` clause beside it."""
     fields, _ = _record_of(children)
@@ -552,6 +581,14 @@ def _specs() -> st.SearchStrategy[Spec]:
                     _open_record_pred(_record_preds(fc[0]), fc[1][1]),
                 )
             ),
+            # A literal-keyed clause beside a `str` clause: two clauses that
+            # claim one key, read as the disjunction the page declares.
+            st.tuples(child, child).map(
+                lambda ab: (
+                    {_K_LITERAL: ab[0][0], str: ab[1][0]},
+                    _literal_clause_pred("k", ab[0][1], ab[1][1]),
+                )
+            ),
             # The connectives at depth: a union of two drawn specs and a
             # complement of one, so the algebra is reached inside a container
             # rather than only at the top.
@@ -708,7 +745,8 @@ _NODES_DRAWN: dict[str, str] = {
     "Literal": "`Literal[c]` over the constants",
     "Seq": "the fixed, homogeneous and prefix-tail forms, under both containers",
     "Coll": "`set[K]` and `frozenset[K]`",
-    "KeyedMap": "a closed record, an open record, `dict[K, V]`, `{str: A, int: B}`",
+    "KeyedMap": "a closed record, an open record, `dict[K, V]`, `{str: A, int: B}`, "
+    "`{Literal['k']: A, str: B}`",
     "Union": "a union of scalars, and a union of two drawn specs",
     "Intersection": "the meet of two drawn specs",
     "Complement": "the complement of a drawn spec, at the top and at depth",

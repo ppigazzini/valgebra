@@ -362,10 +362,15 @@ fn descend(schema: &Schema, pool: &dyn Constants, budget: &Cell<u32>, depth: u32
 
 /// The dicts a keyed map spells.
 ///
-/// A record's field and a mapping's literal key are one thing -- each names a
-/// key and says what it maps to -- so both become labels. A clause whose key is
-/// a *kind* opens that part of the key partition instead. What no clause opens
-/// stays shut, which is what makes a record with no catch-all closed.
+/// A record's field and a mapping's literal key both name a key and say what
+/// it maps to, so both become labels -- and they differ in one thing the atom
+/// has to be told. A field is read *instead of* the clauses: a key a field
+/// names is governed by the field alone. A literal-keyed clause is read
+/// *beside* them: clauses are a disjunction, so a key the clause names is
+/// admitted when it or any other clause covering that key admits the value,
+/// and the label's type is the join of every clause that reads it. A clause
+/// whose key is a *kind* opens that part of the key partition. What no clause
+/// opens stays shut, which is what makes a record with no catch-all closed.
 fn map(
     fields: &[Field],
     defaults: &[MapClause],
@@ -378,17 +383,38 @@ fn map(
         let ty = descend(&field.schema, pool, budget, depth)?;
         labels.push((Label::str(&field.name), ty, !field.required));
     }
-    let mut opened: Vec<(Option<Kind>, Descr)> = Vec::new();
+    // Every clause first -- what it names, what it opens, what it maps to --
+    // because a named key's type is read off all of them.
+    let mut clauses: Vec<(Vec<Label>, Vec<Option<Kind>>, Descr)> =
+        Vec::with_capacity(defaults.len());
     for clause in defaults {
         let value = descend(&clause.value, pool, budget, depth)?;
         let (named, parts) = key_cover(&clause.key, pool)?;
+        clauses.push((named, parts, value));
+    }
+    let mut opened: Vec<(Option<Kind>, Descr)> = Vec::new();
+    for (index, (named, parts, value)) in clauses.iter().enumerate() {
         for label in named {
+            // A field of this name is read instead of the clause.
+            if fields.iter().any(|field| Label::str(&field.name) == *label) {
+                continue;
+            }
             // A clause names a key without requiring it: `dict[Literal["a"], V]`
-            // admits the dict that carries no `a` at all.
-            labels.push((label, value.clone(), true));
+            // admits the dict that carries no `a` at all. And the key is read
+            // by every clause that covers it, so its type is the join.
+            let mut ty = value.clone();
+            for (other, (other_named, other_parts, other_value)) in clauses.iter().enumerate() {
+                let covers = other != index
+                    && (other_named.contains(label)
+                        || other_parts.iter().any(|part| *part == Some(label.kind())));
+                if covers {
+                    ty = ty.union(other_value)?;
+                }
+            }
+            labels.push((label.clone(), ty, true));
         }
         for part in parts {
-            opened.push((part, value.clone()));
+            opened.push((*part, value.clone()));
         }
     }
     Descr::keyed_map(labels, opened)

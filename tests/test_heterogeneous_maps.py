@@ -26,6 +26,34 @@ def test_heterogeneous_mapping_by_key_schema() -> None:
     assert schema.is_valid({})  # no key violates any clause
 
 
+# THEORY: clauses-are-unordered
+def test_two_clauses_claiming_one_key_are_a_disjunction() -> None:
+    """A key two clauses claim is admitted when either reads it.
+
+    A literal-keyed clause and a `str` clause both claim the key `k`. The
+    paper's clauses are ordered and the first wins; here a key belongs when
+    *some* clause admits it and its value, so `k` may carry what either clause
+    allows -- which is the deviation, stated as the set it denotes: the same
+    dicts as the record whose optional field `k` takes either type. Decided
+    equivalent by the relation, and not equal as a term, since a clause is not
+    a field.
+    """
+    both = Validator({Literal["k"]: str, str: int})
+    assert both.is_valid({"k": "x"})  # the literal clause reads it
+    assert both.is_valid({"k": 1})  # the str clause reads it
+    assert both.is_valid({"k": "x", "a": 1})
+    assert not both.is_valid({"k": 1.5})  # neither clause reads it
+    assert not both.is_valid({"a": "x"})  # only the str clause reads `a`
+    spelled = Validator({"k?": str | int, str: int})
+    assert both.is_equivalent(spelled)
+    assert both != spelled
+    # An ordered reading would refuse the value the second clause admits.
+    first_wins = Validator({"k": str, str: int})
+    assert not first_wins.is_valid({"k": 1})
+    assert first_wins.relation_to(both) == "subset"
+    assert both.relation_to(first_wins) == "not_subset"
+
+
 def test_record_with_a_typed_catch_all() -> None:
     schema = Validator({"name": str, str: int})  # name: str, other str keys: int
     assert schema.is_valid({"name": "Ada"})

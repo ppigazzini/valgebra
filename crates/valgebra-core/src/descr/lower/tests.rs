@@ -1304,3 +1304,171 @@ fn a_clause_over_a_finite_key_part_is_exhausted_by_its_keys() {
         "and naming nothing leaves it"
     );
 }
+
+// THEORY: clauses-are-unordered
+/// A literal-keyed clause is a clause, and the key it names is read by every
+/// clause that covers it.
+///
+/// `{Literal["a"]: str, str: int}` admits `{"a": 1}`: the `str` clause reads
+/// the key `a` as it reads any string key, and clauses are a disjunction, so
+/// the literal clause widens what `a` may hold rather than overriding the
+/// part's default. The lowering once read the literal clause as a field,
+/// which takes precedence, and refuted an inclusion the walk holds on that
+/// dict. A field of the same name *does* take precedence, and the second
+/// half holds that apart.
+#[test]
+fn a_literal_keyed_clause_is_read_beside_the_clauses_that_cover_its_key() {
+    const A_INT: &[(Value, Value)] = &[(Value::word(b"a", Kind::Str), Value::integer(1))];
+    const A_STR: &[(Value, Value)] =
+        &[(Value::word(b"a", Kind::Str), Value::word(b"x", Kind::Str))];
+    const A_FLOAT: &[(Value, Value)] = &[(Value::word(b"a", Kind::Str), Value::float(1.5))];
+    const B_STR: &[(Value, Value)] =
+        &[(Value::word(b"b", Kind::Str), Value::word(b"x", Kind::Str))];
+    const A_BYTES: &[(Value, Value)] =
+        &[(Value::word(b"a", Kind::Str), Value::word(b"x", Kind::Bytes))];
+    let pool = Pool(vec![Operand::Word(b"a".to_vec(), Kind::Str)]);
+    let clause = |key: Schema, value: Schema| MapClause { key, value };
+    let two_clauses = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![
+            clause(Schema::Literal(ConstIx::new(0)), Schema::Str),
+            clause(Schema::Str, Schema::Int),
+        ]
+        .into(),
+    };
+    let descr = lower(&two_clauses, &pool).expect("two clauses lower");
+    assert!(
+        descr.admits(Value::dict(A_STR)),
+        "the literal clause reads `a`"
+    );
+    assert!(
+        descr.admits(Value::dict(A_INT)),
+        "and the str clause reads `a` too"
+    );
+    assert!(
+        !descr.admits(Value::dict(A_FLOAT)),
+        "neither clause reads a float"
+    );
+    assert!(
+        !descr.admits(Value::dict(B_STR)),
+        "only the str clause reads `b`"
+    );
+    // The spelling with an optional field taking either type is one set.
+    let spelled = Schema::KeyedMap {
+        fields: vec![Field {
+            name: "a".into(),
+            schema: Schema::union([Schema::Str, Schema::Int]),
+            required: false,
+        }]
+        .into(),
+        defaults: vec![clause(Schema::Str, Schema::Int)].into(),
+    };
+    let spelled = lower(&spelled, &pool).expect("the spelling lowers");
+    assert_eq!(
+        descr
+            .intersect(&spelled.complement())
+            .map(|d| d.emptiness()),
+        Some(Verdict::Empty)
+    );
+    assert_eq!(
+        spelled
+            .intersect(&descr.complement())
+            .map(|d| d.emptiness()),
+        Some(Verdict::Empty)
+    );
+
+    // A field takes precedence over a clause that covers its key.
+    let field_wins = Schema::KeyedMap {
+        fields: vec![Field {
+            name: "a".into(),
+            schema: Schema::Str,
+            required: true,
+        }]
+        .into(),
+        defaults: vec![clause(Schema::Str, Schema::Int)].into(),
+    };
+    let field_wins = lower(&field_wins, &pool).expect("a field and a clause lower");
+    assert!(field_wins.admits(Value::dict(A_STR)));
+    assert!(
+        !field_wins.admits(Value::dict(A_INT)),
+        "the field is read, not the clause"
+    );
+
+    // A clause that does not cover the label contributes nothing to it. An
+    // `int` key opens the integer part and names no string, so the key `a`
+    // maps into the literal clause's type alone -- reading every *other*
+    // clause into it, rather than every covering one, would admit a dict the
+    // schema refuses.
+    let apart = Schema::KeyedMap {
+        fields: Vec::new().into(),
+        defaults: vec![
+            clause(Schema::Literal(ConstIx::new(0)), Schema::Str),
+            clause(Schema::Int, Schema::Bytes),
+        ]
+        .into(),
+    };
+    let apart = lower(&apart, &pool).expect("two clauses over two parts lower");
+    assert!(
+        apart.admits(Value::dict(A_STR)),
+        "the literal clause reads `a`"
+    );
+    assert!(
+        !apart.admits(Value::dict(A_BYTES)),
+        "a clause keyed by another part does not widen `a`"
+    );
+}
+
+// THEORY: clauses-are-unordered
+/// A field is read instead of a clause that names its key, and a clause
+/// naming another key is read all the same.
+///
+/// Named fields take precedence over the clauses, which is the one place the
+/// disjunction does not run: a field and a literal-keyed clause naming one
+/// key are not two readings of it, they are the field. The clause beside it
+/// keeps its own key, so the precedence is about the key rather than about
+/// the term. The pair is what separates "the field wins" from "a field
+/// anywhere silences the clauses".
+#[test]
+fn a_field_is_read_instead_of_a_clause_that_names_its_key() {
+    const A_STR: &[(Value, Value)] =
+        &[(Value::word(b"a", Kind::Str), Value::word(b"x", Kind::Str))];
+    const A_INT: &[(Value, Value)] = &[(Value::word(b"a", Kind::Str), Value::integer(1))];
+    const B_INT_A_STR: &[(Value, Value)] = &[
+        (Value::word(b"b", Kind::Str), Value::integer(1)),
+        (Value::word(b"a", Kind::Str), Value::word(b"x", Kind::Str)),
+    ];
+    let pool = Pool(vec![Operand::Word(b"a".to_vec(), Kind::Str)]);
+    let clause = |key: Schema, value: Schema| MapClause { key, value };
+    let field = |name: &str, schema: Schema| Field {
+        name: name.into(),
+        schema,
+        required: false,
+    };
+
+    // One key, a field and a clause: the field is what governs it.
+    let same_key = Schema::KeyedMap {
+        fields: vec![field("a", Schema::Str)].into(),
+        defaults: vec![clause(Schema::Literal(ConstIx::new(0)), Schema::Int)].into(),
+    };
+    let same_key = lower(&same_key, &pool).expect("a field beside its clause lowers");
+    assert!(same_key.admits(Value::dict(A_STR)), "the field reads `a`");
+    assert!(
+        !same_key.admits(Value::dict(A_INT)),
+        "the clause naming the field's key is not read beside it"
+    );
+
+    // A field of another name leaves the clause's key to the clause.
+    let other_key = Schema::KeyedMap {
+        fields: vec![field("b", Schema::Int)].into(),
+        defaults: vec![clause(Schema::Literal(ConstIx::new(0)), Schema::Str)].into(),
+    };
+    let other_key = lower(&other_key, &pool).expect("a field beside another key lowers");
+    assert!(
+        other_key.admits(Value::dict(B_INT_A_STR)),
+        "a field elsewhere does not silence the clause"
+    );
+    assert!(
+        !other_key.admits(Value::dict(A_INT)),
+        "and the clause is what governs its own key"
+    );
+}
