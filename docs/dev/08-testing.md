@@ -111,7 +111,7 @@ for and misses the other. Forty of them:
 | `tests/test_fuzz_lane.py` | the fuzz soak names its allocation ceiling and forks its batches |
 | `tests/test_floor_names.py` | every typing and enum name read at import time, and every stdlib module imported, exists on the floor |
 | `tests/test_module_placement.py` | no inline test module is longer than a screen |
-| `tests/test_theory_ledger.py` | every load-bearing theory result names a test, and every name is one |
+| `tests/test_theory_ledger.py` | every load-bearing theory result names a test, and every name is one; the rows that read the argument itself skip where it is absent, which is every lane |
 | `tests/test_use_case_ledger.py` | every public name and every error code is named by the suite, or accepted with a reason |
 | `tests/test_bound_ledger.py` | every declared bound is driven by a test, or accepted with a reason |
 | `tests/test_coverage_scope.py` | every coverage lane names its scope, and the scope is the tree's |
@@ -304,6 +304,7 @@ ledger that holds it in both directions:
 | every public name a caller reaches | the type stub the package ships | the product suite *names* the cell, read from the syntax tree with the prose cut | `tests/test_use_case_ledger.py` |
 | every error code a report can carry | the walk that writes them | the same: the suite names the code | `tests/test_use_case_ledger.py` |
 | every result, obligation and deviation the design rests on | `10-theory.md`'s tags, with the debt it admits recorded | a `HELD-BY:` names a test that fails when the sentence is false | `tests/test_theory_ledger.py` |
+| every `SOURCE:` line, against the argument it quotes | the argument, which the distribution does not carry | the quotation is found where the line says it is -- **on a clone that has the argument only**, so these rows skip in every lane and run on the maintainer's gate | `tests/test_theory_ledger.py` |
 | every refusal the frontend writes | the error constructors in `build*.rs` | a test matches the message the constructor writes | `tests/test_frontend_refusals.py` |
 | every code a report can carry, in both modes and on both paths | the same walk | the code is driven at that mode and on that path | `tests/test_error_matrix.py`, held by `tests/test_use_case_ledger.py` |
 | every ordered pair of schema variants | the `Schema` enum in `ir.rs`, one representative each | the pair is proved, refuted with a value the walk checks, or declined with a reason | `tests/test_relation_ledger.py` |
