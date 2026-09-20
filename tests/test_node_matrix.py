@@ -72,6 +72,7 @@ _NODES: dict[str, object] = {
     "Seq:tuple-homogeneous": tuple[int, ...],
     "Seq:tuple-prefixtail": _pt_tuple(int, int, ...),
     "Coll": set[int],
+    "Coll:frozenset": frozenset[int],
     "KeyedMap:record": {"x": int},
     "KeyedMap:mapping": {str: int},
     "Union": union(int, str),
@@ -137,12 +138,18 @@ _MEMBERSHIP: dict[str, tuple[list[object], list[object]]] = {
     "Seq:tuple-homogeneous": ([(), (1, 2)], [("a",), [1], (1, "a")]),
     "Seq:tuple-prefixtail": ([(1,), (1, 2), (1, 2, 3)], [(), ("a",), (1, "a"), [1, 2]]),
     "Coll": ([set(), {1, 2}], [{"a"}, [1], frozenset({1})]),
+    "Coll:frozenset": ([frozenset(), frozenset({1, 2})], [frozenset({"a"}), [1], {1}]),
     "KeyedMap:record": ([{"x": 1}], [{"x": "a"}, {}, 1]),
     "KeyedMap:mapping": ([{}, {"a": 1, "b": 2}], [{"a": "x"}, [1]]),
     "Union": ([1, "a", True], [1.5, None, b"x"]),
     "Intersection": ([1, True], ["a", 1.5]),  # int and not str
     "Complement": (["a", 1.5, None], [1, True]),  # not int
     "Refine": ([0, 1, 5], [-1, "a"]),  # int >= 0
+    # The instance and attribute nodes, with live instances. A dataclass
+    # instance whose field is mistyped is the case that separates the record
+    # from the class: the class admits it and the attribute record does not.
+    "Instance": ([_Klass()], [1, "a", None, object()]),
+    "Object": ([_Record(1)], [_Record("a"), 1, {"x": 1}, object()]),  # ty: ignore[invalid-argument-type]
     "Recursive": ([None, {"next": None}, {"next": {"next": None}}], [1, {"next": 1}]),
 }
 
@@ -294,14 +301,9 @@ def test_load_hands_back_the_parsed_value() -> None:
 
 
 def test_membership_table_covers_every_node() -> None:
-    # The instance/object nodes need live class instances, added here; every other
-    # node kind must carry an independent membership case.
-    klass, record = _Klass(), _Record(1)
-    assert Validator(_NODES["Instance"]).is_valid(klass)
-    assert not Validator(_NODES["Instance"]).is_valid(object())
-    assert Validator(_NODES["Object"]).is_valid(record)
-    assert not Validator(_NODES["Object"]).is_valid(object())
-    covered = set(_MEMBERSHIP) | {"Instance", "Object"}
+    # Every node kind carries an independent membership case, the instance and
+    # attribute nodes included, so every row runs through every entry point.
+    covered = set(_MEMBERSHIP)
     assert covered == set(_NODES), (
         f"node kinds without a denotation case: {set(_NODES) - covered}"
     )

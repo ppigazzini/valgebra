@@ -34,15 +34,16 @@ PRODUCT: every constraint, against every kind a base's values have
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, get_args
 
 import annotated_types as at
 import pytest
 
-from valgebra import Regex, Validator
+from valgebra import Regex, ValidationError, Validator
 
 ROOT = Path(__file__).resolve().parent.parent
 IR = ROOT / "crates" / "valgebra-core" / "src" / "ir.rs"
@@ -280,6 +281,58 @@ def test_every_cell_narrows_its_base_or_is_refused(constraint: str, kind: str) -
     assert not compiled.is_valid(cell.outsider), (
         f"{constraint} over {kind} admits a value the constraint does not hold of"
     )
+    # And the refusal is the constraint's own code at the root, on the object
+    # path and, where a document names the outsider, on the parsed one: a cell
+    # refused at a nested path, or by the base's kind where the outsider is a
+    # value of the base, would be a different failure wearing the right
+    # verdict. The predicate cells' outsiders lie outside the base itself, so
+    # there the base's kind is what refuses and the code says so.
+    base = get_args(cell.spec)[0]
+    with pytest.raises(ValidationError) as caught:
+        compiled.validate(cell.outsider, fail_fast=True)
+    assert caught.value.path == ()
+    if Validator(base).is_valid(cell.outsider):
+        assert caught.value.code == _CODE_OF[constraint], caught.value.errors
+    else:
+        assert caught.value.code != _CODE_OF[constraint], caught.value.errors
+    document = _document_naming(cell.outsider)
+    if document is not None:
+        with pytest.raises(ValidationError) as parsed:
+            compiled.validate_json(document, fail_fast=True)
+        assert parsed.value.code == caught.value.code, parsed.value.errors
+        assert parsed.value.path == ()
+
+
+#: The code each constraint reports when a value of the base fails it.
+_CODE_OF: dict[str, str] = {
+    "MinLen": "too_short",
+    "MaxLen": "too_long",
+    "Regex": "string_pattern_mismatch",
+    "MultipleOf": "multiple_of",
+    "Ge": "greater_than_equal",
+    "Gt": "greater_than",
+    "Le": "less_than_equal",
+    "Lt": "less_than",
+    "Predicate": "predicate_failed",
+}
+
+
+def _document_naming(value: Any) -> str | None:
+    """Give the JSON document that names `value`, where one does.
+
+    A tuple, a set, a frozenset and a bytes value have no document that reads
+    back as themselves, so a cell over those kinds is asked on the object path
+    alone. A float that is integral reads back as an `int` and is not named
+    either.
+    """
+    try:
+        text = json.dumps(value)
+    except TypeError:
+        return None
+    back = json.loads(text)
+    if type(back) is not type(value) or back != value:
+        return None
+    return text
 
 
 #: The spec a refused cell is written as. A refusal has no schema to carry, so

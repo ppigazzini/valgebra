@@ -301,9 +301,18 @@ def _aggregate(spec: object, value: object) -> ValidationError:
     return caught.value
 
 
-def _from_json(spec: object, document: str) -> ValidationError:
+def _from_json(
+    spec: object, document: str, *, fail_fast: bool = False
+) -> ValidationError:
     with pytest.raises(ValidationError) as caught:
-        Validator(spec).validate_json(document)
+        Validator(spec).validate_json(document, fail_fast=fail_fast)
+    return caught.value
+
+
+def _loaded(spec: object, document: str, *, fail_fast: bool = False) -> ValidationError:
+    """Give the refusal `load` raises, the only answer it has for a non-member."""
+    with pytest.raises(ValidationError) as caught:
+        Validator(spec).load(document, fail_fast=fail_fast)
     return caught.value
 
 
@@ -371,6 +380,38 @@ def test_a_code_a_document_can_carry_is_reported_from_one(code: str) -> None:
     assert error.path == case.path
 
 
+@pytest.mark.parametrize("code", sorted(CASES))
+def test_a_code_a_document_can_carry_is_reported_on_every_json_path(code: str) -> None:
+    """The four ways a document is asked report one code at one place.
+
+    `validate_json` in each mode and `load` in each mode parse the same text
+    and run the same walk, so a code the aggregate reports at a path is the
+    code the first-failure mode leads with and the code `load` refuses by.
+    The row above asks the aggregate; a mode or an entry point that reports
+    a different code, or a code with no path, is invisible to it.
+    """
+    case = CASES[code]
+    document, expected = (
+        (case.document, code) if case.document is not None else (None, code)
+    )
+    if document is None:
+        if case.instead is None:
+            return
+        document, expected = case.instead
+    # A row the grammar cannot reach reports its stand-in at the root: the
+    # document is refused by the kind before the walk descends to the path.
+    where = case.path if case.document is not None else ()
+    first = _from_json(case.spec, document, fail_fast=True)
+    assert first.code == expected
+    assert first.path == where
+    assert len(first.errors) == 1
+    for fail_fast in (False, True):
+        error = _loaded(case.spec, document, fail_fast=fail_fast)
+        assert error.code == expected, (fail_fast, _codes_of(error))
+        assert error.path == where
+    assert Validator(case.spec).is_valid_json(document) is False
+
+
 # THEORY: the-depth-bound-reports-itself
 def test_a_value_past_the_depth_bound_reports_the_bound() -> None:
     """A value nested deeper than the walk descends reports the bound.
@@ -422,6 +463,56 @@ def test_a_value_that_moves_under_the_walk_is_reported() -> None:
     # failure the walk can look past to find another.
     moved = {"a": 1, "b": 2}
     assert "mutated_during_validation" in _codes_of(_aggregate(schema, moved))
+
+
+def test_the_limits_leave_by_every_entry_point() -> None:
+    """A limit is reported through `ensure`, `load` and `in` as through the rest.
+
+    The four codes no table row reaches -- the depth bound, a cyclic value, a
+    value that moves, a document that is not JSON -- are each driven above
+    through `validate` in both modes and, where a document exists, through
+    `validate_json`. The entry points that answer with the value or with the
+    operator form are the same walk, and a limit that one of them folded into
+    a verdict or a copy would be invisible to the rows above.
+    """
+    deep = recursive(lambda s: union(int, [s]))
+    nested: object = 0
+    for _ in range(200):
+        nested = [nested]
+    with pytest.raises(ValidationError) as caught:
+        Validator(deep).ensure(nested)
+    assert caught.value.code == "recursion_limit"
+    assert (nested in Validator(deep)) is False
+    with pytest.raises(ValidationError) as caught:
+        Validator(deep).load(json.dumps(nested))
+    assert caught.value.code == "recursion_limit"
+    assert Validator(deep).is_valid_json(json.dumps(nested)) is False
+
+    cyclic: list[object] = []
+    cyclic.append(cyclic)
+    with pytest.raises(ValidationError) as caught:
+        Validator(deep).ensure(cyclic)
+    assert caught.value.code == "recursion_loop"
+    assert (cyclic in Validator(deep)) is False
+
+    moved: dict[str, int] = {"a": 1, "b": 2}
+
+    def grow(_: object) -> bool:
+        moved.setdefault("c", 3)
+        return True
+
+    schema = Validator({"a": Annotated[int, at.Predicate(grow)], "b": int, "c?": int})
+    with pytest.raises(ValidationError) as caught:
+        schema.ensure(moved)
+    assert caught.value.code == "mutated_during_validation"
+    moved = {"a": 1, "b": 2}
+    assert (moved in schema) is False
+
+    with pytest.raises(ValidationError) as caught:
+        Validator(int).load("{ not json")
+    assert caught.value.code == "json_invalid"
+    assert caught.value.path == ()
+    assert Validator(int).is_valid_json("{ not json") is False
 
 
 def test_a_document_the_parser_refuses_reports_the_parse() -> None:
