@@ -346,6 +346,25 @@ fn a_union_answers_for_its_members_and_a_plain_base_for_itself() {
     let empty = Schema::Union(Vec::new().into());
     assert_eq!(carries_through(&empty, &carries_length), Some(Carries::No));
 
+    // A meet, a complement and a reference answer `Maybe` from the fold
+    // itself rather than deferring to the caller's table. The two routes give
+    // the same answer to all four callers here, so the arm is observable only
+    // from this side -- and it is the arm that keeps a caller whose own
+    // catch-all refuses from reading "the base does not say" as "no value
+    // can".
+    for opaque in [
+        Schema::Intersection(vec![Schema::Int, Schema::Str].into()),
+        Schema::Complement(Arc::new(Schema::Int)),
+        Schema::Ref(DefIx::new(0)),
+        Schema::SelfRef(0),
+    ] {
+        assert_eq!(
+            carries_through(&opaque, &carries_length),
+            Some(Carries::Maybe),
+            "{opaque:?} narrows a set this rule does not compute"
+        );
+    }
+
     // A refinement answers with its own base, whatever it already carries.
     let refined = Schema::Refine {
         base: Arc::new(Schema::Str),
