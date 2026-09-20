@@ -385,6 +385,52 @@ def test_every_constraint_kind_is_one_the_denotation_generator_builds() -> None:
     )
 
 
+_SCHEMA = re.compile(r"^pub enum Schema \{$(.*?)^\}$", re.DOTALL | re.MULTILINE)
+_NODE_DRAWN = re.compile(r'^    "([A-Z][A-Za-z]*)": "', re.MULTILINE)
+
+#: The one variant no compiled validator holds: the marker `recursive` uses
+#: while a definition is being built, resolved to a `Ref` before a validator
+#: is returned. No shape a caller writes leaves one in the tree.
+UNDRAWN = frozenset({"SelfRef"})
+
+
+def _schema_variants() -> set[str]:
+    """Give the node kinds the algebra carries, read from the tree."""
+    body = _SCHEMA.search(IR.read_text(encoding="utf-8"))
+    assert body, "ir.rs has no Schema enum this ledger reads"
+    found = set(_VARIANT.findall(body.group(1)))
+    assert len(found) >= 19, f"the scan found only {sorted(found)}"
+    return found
+
+
+def _drawn_nodes() -> set[str]:
+    """Give the variants the denotation generator says it builds a case from."""
+    found = set(_NODE_DRAWN.findall(DENOTATION.read_text(encoding="utf-8")))
+    assert found, "the denotation generator lists no node it draws"
+    return found
+
+
+def test_every_schema_variant_is_one_the_denotation_generator_builds() -> None:
+    """A node the generator never builds is an arm nothing independent reads.
+
+    The same claim the constraint ledger above makes, one enum over: the
+    denotation suite is the one layer that states each node's set from the
+    page rather than from the code, and a variant outside its generator has
+    no such reading. A generator that never builds a shape reports no failure
+    about it, so the list of what it builds is held to the enum.
+    """
+    missing = sorted(_schema_variants() - UNDRAWN - _drawn_nodes())
+    assert not missing, (
+        f"schema variants no denotation case is built from: {missing}. Add a "
+        "shape to `_specs` in tests/test_denotation.py with the predicate that "
+        "states its denotation independently, list the variant in "
+        "`_NODES_DRAWN`, or name it in `UNDRAWN` with the reason none can be."
+    )
+    unknown = sorted(_drawn_nodes() - _schema_variants())
+    assert not unknown, f"denotation shapes naming no variant: {unknown}"
+    assert _schema_variants() >= UNDRAWN, "an excuse with no subject"
+
+
 def test_every_leaf_the_denotation_generator_lists_is_a_kind() -> None:
     """The other direction: a leaf named for a kind the algebra dropped."""
     unknown = sorted(_oracled_kinds() - _constraint_kinds())

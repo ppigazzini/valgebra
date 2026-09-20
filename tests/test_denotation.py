@@ -58,6 +58,14 @@ class _Point:
     y: str
 
 
+class _Base:
+    """A plain class, so an `Instance` node is drawn with a subclass beside it."""
+
+
+class _Sub(_Base):
+    """Its subclass: a member of the base's set and of its own."""
+
+
 def _point_pred(value: object) -> bool:
     """Membership for the `_Point` schema: an instance with well-typed fields."""
     return (
@@ -224,6 +232,63 @@ _REFINED: list[tuple[str, st.SearchStrategy[Spec]]] = [
             )
         ),
     ),
+    # The same kinds over the bases the leaves above do not draw, since the
+    # walk has an arm per base: a length over a container counts its
+    # elements, an order over a float reads a double, and over an int an
+    # integer that `bool` is a member of.
+    (
+        "MinLen",
+        st.integers(min_value=0, max_value=3).map(
+            lambda k: (
+                Annotated[list[int], at.MinLen(k)],
+                lambda x, k=k: (
+                    isinstance(x, list)
+                    and all(isinstance(e, int) for e in x)
+                    and len(x) >= k
+                ),
+            )
+        ),
+    ),
+    (
+        "MaxLen",
+        st.integers(min_value=0, max_value=3).map(
+            lambda k: (
+                Annotated[set[int], at.MaxLen(k)],
+                lambda x, k=k: (
+                    isinstance(x, set)
+                    and all(isinstance(e, int) for e in x)
+                    and len(x) <= k
+                ),
+            )
+        ),
+    ),
+    (
+        "MaxLen",
+        st.integers(min_value=0, max_value=3).map(
+            lambda k: (
+                Annotated[str, at.MaxLen(k)],
+                lambda x, k=k: isinstance(x, str) and len(x) <= k,
+            )
+        ),
+    ),
+    (
+        "Ge",
+        st.floats(min_value=-5, max_value=5).map(
+            lambda k: (
+                Annotated[float, at.Ge(k)],
+                lambda x, k=k: isinstance(x, float) and x >= k,
+            )
+        ),
+    ),
+    (
+        "Lt",
+        st.integers(min_value=-5, max_value=5).map(
+            lambda k: (
+                Annotated[int, at.Lt(k)],
+                lambda x, k=k: isinstance(x, int) and x < k,
+            )
+        ),
+    ),
     (
         "Regex",
         st.sampled_from(["a", "a+", "[ab]*", "a?b"]).map(
@@ -274,6 +339,20 @@ def _record_of(children: list[Spec]) -> Spec:
     return (spec, _record_pred(preds))
 
 
+def _open_record_spec(children: list[Spec], rest: object) -> dict[object, object]:
+    """Give the closed record over `children` with a `str` clause beside it."""
+    fields, _ = _record_of(children)
+    assert isinstance(fields, dict)
+    return {**fields, str: rest}
+
+
+def _record_preds(children: list[Spec]) -> dict[str, tuple[bool, Pred]]:
+    """Give the field predicates `_record_of` builds, keyed by field name."""
+    return {
+        f"f{i}": (i % 2 == 0, child_pred) for i, (_, child_pred) in enumerate(children)
+    }
+
+
 def _record_pred(preds: dict[str, tuple[bool, Pred]]) -> Pred:
     names = set(preds)
 
@@ -313,6 +392,46 @@ def _hetero_pred(str_val: Pred, int_val: Pred) -> Pred:
     return pred
 
 
+def _fixed_pred(positions: list[Pred], container: type = list) -> Pred:
+    """Membership for a fixed-length sequence: one position per element."""
+    n = len(positions)
+
+    def pred(x: object) -> bool:
+        if not isinstance(x, list | tuple) or not isinstance(x, container):
+            return False
+        return len(x) == n and all(p(e) for p, e in zip(positions, x, strict=True))
+
+    return pred
+
+
+def _homogeneous_tuple_pred(elem: Pred) -> Pred:
+    """Membership for `tuple[T, ...]`: a tuple of any length over `T`."""
+    return lambda x: isinstance(x, tuple) and all(elem(e) for e in x)
+
+
+def _open_record_pred(preds: dict[str, tuple[bool, Pred]], rest: Pred) -> Pred:
+    """Membership for a record with a `str` clause beside its fields.
+
+    A declared key is read by its field; any other `str` key by the clause;
+    a key of another kind by nothing, so it is refused.
+    """
+
+    def pred(x: object) -> bool:
+        if not isinstance(x, dict):
+            return False
+        for key, val in x.items():
+            if not isinstance(key, str):
+                return False
+            if key in preds:
+                if not preds[key][1](val):
+                    return False
+            elif not rest(val):
+                return False
+        return all(name in x or not required for name, (required, _) in preds.items())
+
+    return pred
+
+
 def _prefix_tail_pred(prefix: list[Pred], tail: Pred, container: type = list) -> Pred:
     n = len(prefix)
 
@@ -343,6 +462,11 @@ _ATOMS: list[Spec] = [
     (Any, lambda _x: True),
     (complex, lambda x: isinstance(x, complex)),
     (_Point, _point_pred),
+    # A class and its subclass: an instance check is inclusion in the class
+    # lattice, so a subclass instance is a member of both and a base instance
+    # of one.
+    (_Base, lambda x: isinstance(x, _Base)),
+    (_Sub, lambda x: isinstance(x, _Sub)),
 ]
 
 
@@ -399,8 +523,45 @@ def _specs() -> st.SearchStrategy[Spec]:
                     _prefix_tail_pred([ab[0][1]], ab[1][1], tuple),
                 )
             ),
+            # A fixed-length list `[A, B]` and tuple `tuple[A, B]`: one
+            # position per element, and no element past them.
+            st.tuples(child, child).map(
+                lambda ab: ([ab[0][0], ab[1][0]], _fixed_pred([ab[0][1], ab[1][1]]))
+            ),
+            st.tuples(child, child).map(
+                lambda ab: (
+                    GenericAlias(tuple, (ab[0][0], ab[1][0])),
+                    _fixed_pred([ab[0][1], ab[1][1]], tuple),
+                )
+            ),
+            # A homogeneous tuple: the tuple form of `list[T]`.
+            child.map(
+                lambda sp: (
+                    GenericAlias(tuple, (sp[0], ...)),
+                    _homogeneous_tuple_pred(sp[1]),
+                )
+            ),
             # A closed record of named fields.
             st.lists(child, min_size=1, max_size=2).map(_record_of),
+            # An open record: fields beside a `str` clause that governs every
+            # other `str` key. The same node as the closed record, with the
+            # region no field claims given a default rather than refused.
+            st.tuples(st.lists(child, min_size=1, max_size=2), child).map(
+                lambda fc: (
+                    _open_record_spec(fc[0], fc[1][0]),
+                    _open_record_pred(_record_preds(fc[0]), fc[1][1]),
+                )
+            ),
+            # The connectives at depth: a union of two drawn specs and a
+            # complement of one, so the algebra is reached inside a container
+            # rather than only at the top.
+            st.tuples(child, child).map(
+                lambda ab: (
+                    union(ab[0][0], ab[1][0]),
+                    lambda x, a=ab[0][1], b=ab[1][1]: a(x) or b(x),
+                )
+            ),
+            child.map(lambda sp: (complement(sp[0]), lambda x, p=sp[1]: not p(x))),
             # A heterogeneous mapping keyed by disjoint key schemas.
             st.tuples(child, child).map(
                 lambda ab: (
@@ -449,6 +610,8 @@ def _values() -> st.SearchStrategy[object]:
         st.frozensets(st.integers(-3, 3), max_size=3),
         st.builds(_Point, st.integers(-3, 3), st.text(max_size=2)),
         st.builds(_Point, st.text(max_size=2), st.integers(-3, 3)),
+        st.builds(_Base),
+        st.builds(_Sub),
     )
     return st.recursive(
         leaf,
@@ -526,6 +689,34 @@ def _cases(draw: st.DrawFn) -> tuple[Validator, Pred]:
     spec2, pred2 = draw(_specs())
     return intersection(spec, spec2), lambda x: pred(x) and pred2(x)
 
+
+#: The `Schema` variants the generator builds a case from, each with the shape
+#: that builds it. Read by `tests/test_coverage_scope.py` against the enum in
+#: `ir.rs`, the way `_REFINED` is read against `Constraint`: a variant with no
+#: shape here is an arm of the walk nothing independent reads. Every wrapper
+#: and leaf above is one of these shapes, and each shape leads with the
+#: variant's own name so the list is the claim rather than a second copy.
+_NODES_DRAWN: dict[str, str] = {
+    "Anything": "`object` and `Any`",
+    "Nothing": "`NoReturn`",
+    "NoneType": "`type(None)`",
+    "Bool": "`bool`",
+    "Int": "`int`",
+    "Float": "`float`",
+    "Str": "`str`",
+    "Bytes": "`bytes`",
+    "Literal": "`Literal[c]` over the constants",
+    "Seq": "the fixed, homogeneous and prefix-tail forms, under both containers",
+    "Coll": "`set[K]` and `frozenset[K]`",
+    "KeyedMap": "a closed record, an open record, `dict[K, V]`, `{str: A, int: B}`",
+    "Union": "a union of scalars, and a union of two drawn specs",
+    "Intersection": "the meet of two drawn specs",
+    "Complement": "the complement of a drawn spec, at the top and at depth",
+    "Instance": "`complex`, a class and its subclass",
+    "AttrRecord": "a dataclass",
+    "Refine": "`_REFINED`, one leaf per constraint kind and base",
+    "Ref": "the two recursive shapes",
+}
 
 #: The values every case is checked against, beside the drawn one.
 #:
