@@ -159,6 +159,21 @@ frontend only ever meets one with the class it read it from. Giving it a
 spelling is a surface question, and it belongs where the surface is decided
 rather than here.
 
+**A class-with-record node, so that a meet of two attribute-carrying classes
+renders as its two classes.** Refused. A dataclass lowers to
+`Instance ∧ AttrRecord`, and a meet of two flattens to four members, so
+`repr(intersection(D, E))` prints the two records as `object(x=int)` forms no
+constructor spells. A node holding the class and its record together would be
+a representative -- the meet already reaches its set -- and a representative
+goes in only where the normal form has to name it, which this one never does:
+nothing folds *to* a class-with-record, and a meet's normal form is the flat
+meet. `tests/test_closure_ledger.py` is the row it fails, since the node has
+no column. The other repair, pairing at render time, fails
+`a_node_built_twice_is_one_node_in_every_family`: an attribute record built
+from two classes is one interned handle, so the IR carries no record of which
+class a record came from, by design, and the renderer would have to ask the
+frontend. The rendering is a limit, stated on the API page.
+
 **Records keyed by a non-string.** Refused. A record's fields are named by
 strings, and arbitrary keys are a different labelling than the record model
 assumes.

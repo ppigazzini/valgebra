@@ -358,8 +358,11 @@ against fixed operators, not arbitrary callables — so it is a **documented slo
 path**, never a silent fallback. `is_valid` runs it once per value it reaches;
 `validate` may run it again, because a failing union is re-walked to find the
 branch to report, and that walk asks the predicate a second time. A predicate
-with side effects should expect that. Use it for checks the markers cannot
-express:
+is user code, and every occurrence the walk reaches is a call: the walk keeps
+no cache over it, because a cache would change what a predicate that does not
+answer from its value alone observes, and the same reading is what keeps
+`A & ~A` from folding when `A` carries one. A predicate that must run once per
+value memoises on its own side. Use it for checks the markers cannot express:
 
 ```python
 from typing import Annotated

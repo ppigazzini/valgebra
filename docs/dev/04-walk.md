@@ -86,6 +86,13 @@ branch is reported even to a caller that asked to stop at the first violation.
 That is the point: the caller asked for less noise, not for less of the one
 branch that matters.
 
+The probe asks a predicate again wherever it re-walks one, and keeps no memo
+over the answers. A predicate is user code, so each occurrence the walk
+reaches is a call, and a cache keyed on the value's identity would decide for
+an impure predicate which of its answers counts. The refinements page states
+the count a caller sees; a predicate that must run once per value is memoised
+on the caller's side, where the key is the caller's to choose.
+
 ## What is precomputed, and what correctness may not depend on
 
 Three per-validator indexes are built once on first use and keyed by the address
