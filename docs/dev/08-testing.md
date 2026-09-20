@@ -331,11 +331,13 @@ bookkeeping a reader keeps true and a name in the code is not.
 
 The largest is the public surface and the error codes together, and the lane
 prints them **apart**, because one figure over two products hides which of the
-two is growing:
+two is growing. The public surface counts the operator surface too -- the
+dunders the stub declares behind `in`, `|`, `==`, `hash`, `copy` and `pickle`
+-- each reached only where the suite writes the operator:
 
 | Product | Cells | Named | Asserted | Empty, with a reason |
 |---|---|---|---|---|
-| every public name a caller reaches | 30 | 30 | 30 | 0 |
+| every public name a caller reaches | 38 | 38 | 38 | 0 |
 | every error code a report can carry | 41 | 35 | 35 | 6 |
 
 **Named and asserted are two different claims**, and the ratio the lane prints
@@ -346,6 +348,14 @@ reads. It is *asserted* when it appears inside an `assert` or a
 only the first counts a name the suite never asks a question about, which is
 the half a mention count cannot see; the two figures are equal today, and they
 are printed apart so the day they part is a day the page shows it.
+
+**And a cell is read by its receiver, not by its word.** A method is a call on
+a receiver, an attribute is a read off one, and a read off the name a
+`pytest.raises` block binds is pytest's exception rather than the cell: the
+word `value` is on every line that catches an error and names
+`ValidationError.value` on almost none of them, and a search over words
+reported the attribute as asserted by the whole suite. The reading is the
+syntax tree's, so `caught.value.code` counts `code` and not `value`.
 
 Every empty cell is a **code**, and splitting the figure is what makes that
 readable: five are arms no schema a caller can build reaches, and the sixth is

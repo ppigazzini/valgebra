@@ -62,8 +62,8 @@ def public_surface() -> set[str]:
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
             for member in node.body:
-                if isinstance(member, ast.FunctionDef) and not member.name.startswith(
-                    "__"
+                if isinstance(member, ast.FunctionDef) and (
+                    not member.name.startswith("__") or member.name in OPERATORS
                 ):
                     names.add(f"{node.name}.{member.name}")
                 if isinstance(member, ast.AnnAssign) and isinstance(
@@ -80,6 +80,22 @@ def public_surface() -> set[str]:
         if isinstance(node, ast.ImportFrom) and node.module == "_markers":
             names.update(alias.name for alias in node.names)
     return {name for name in names if not name.startswith("__")}
+
+
+#: The operator surface: the dunders the stub declares that a caller reaches
+#: through an operator or a builtin rather than by name, each with the shape
+#: the suite spells it in. `__new__` is not here, because `Validator(...)` is
+#: every test's first line and a cell that cannot be empty counts nothing.
+OPERATORS: dict[str, str] = {
+    "__contains__": "`x in v`",
+    "__or__": "`a | b`",
+    "__ror__": "`a | b`",
+    "__eq__": "`a == b`",
+    "__hash__": "`hash(v)`",
+    "__copy__": "`copy.copy(v)`",
+    "__deepcopy__": "`copy.deepcopy(v)`",
+    "__reduce__": "`pickle.dumps(v)`",
+}
 
 
 def error_codes() -> set[str]:
@@ -233,23 +249,144 @@ def _raises(node: ast.With) -> bool:
     return False
 
 
+def _stub_kinds() -> dict[str, str]:
+    """Give each public name's kind: `method`, `attribute`, `function`, `constant`."""
+    tree = ast.parse(STUB.read_text(encoding="utf-8"))
+    kinds: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            for member in node.body:
+                if isinstance(member, ast.FunctionDef):
+                    kinds[f"{node.name}.{member.name}"] = "method"
+                elif isinstance(member, ast.AnnAssign) and isinstance(
+                    member.target, ast.Name
+                ):
+                    kinds[f"{node.name}.{member.target.id}"] = "attribute"
+        elif isinstance(node, ast.FunctionDef):
+            kinds[node.name] = "function"
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            kinds[node.target.id] = "constant"
+    return kinds
+
+
+def raises_aliases() -> frozenset[str]:
+    """Give every name the product suite binds a `pytest.raises` context to.
+
+    `ValidationError.value` is the failing value's summary, and `caught.value`
+    is pytest's exception: the same spelling, and the second is written on
+    every line that reads an error. A reading that counted it would report the
+    attribute as asserted by the whole suite, so the aliases are read out of
+    the suite and an attribute read off one of them is not the cell.
+    """
+    found: set[str] = set()
+    for path in sorted((ROOT / "tests").rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        if "pytestmark = pytest.mark.repository" in text:
+            continue
+        for node in ast.walk(ast.parse(text)):
+            if isinstance(node, ast.With) and _raises(node):
+                for item in node.items:
+                    if isinstance(item.optional_vars, ast.Name):
+                        found.add(item.optional_vars.id)
+    return frozenset(found)
+
+
+#: The builtin or module function behind each dunder a caller reaches by a call.
+_CALLED_AS: dict[str, str] = {
+    "__hash__": "hash",
+    "__copy__": "copy",
+    "__deepcopy__": "deepcopy",
+    "__reduce__": "dumps",
+}
+
+
+def _operator_reached(name: str, node: ast.AST) -> bool:
+    """Whether this node is the operator or the call behind `name`."""
+    match name:
+        case "__contains__":
+            return isinstance(node, ast.Compare) and any(
+                isinstance(op, ast.In | ast.NotIn) for op in node.ops
+            )
+        case "__or__" | "__ror__":
+            return isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr)
+        case "__eq__":
+            return isinstance(node, ast.Compare) and any(
+                isinstance(op, ast.Eq | ast.NotEq) for op in node.ops
+            )
+        case _:
+            if not isinstance(node, ast.Call):
+                return False
+            callee = node.func
+            spelled = (
+                callee.id
+                if isinstance(callee, ast.Name)
+                else callee.attr
+                if isinstance(callee, ast.Attribute)
+                else None
+            )
+            return spelled == _CALLED_AS.get(name)
+
+
+class _Reading:
+    """What one blob of the suite reaches, read once off its syntax tree.
+
+    A **method** is a call on a receiver, an **attribute** a read off one that
+    is not a `pytest.raises` alias, a **function** or a **constant** a name or
+    a read off the package, and an **operator** the operator itself -- each
+    read from the tree rather than from the word, because the word `value` is
+    on every line that catches an exception and names the cell on almost none
+    of them.
+    """
+
+    def __init__(self, suite: str) -> None:
+        try:
+            self.tree: ast.AST = ast.parse(suite)
+        except SyntaxError:  # pragma: no cover - the suite parses
+            self.tree = ast.Module(body=[], type_ignores=[])
+        aliases = raises_aliases()
+        self.called: set[str] = set()
+        self.read: set[str] = set()
+        self.named: set[str] = set()
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                self.called.add(node.func.attr)
+            if isinstance(node, ast.Attribute) and not (
+                isinstance(node.value, ast.Name) and node.value.id in aliases
+            ):
+                self.read.add(node.attr)
+            if isinstance(node, ast.Name):
+                self.named.add(node.id)
+
+    def reaches(self, cell: str, kind: str | None) -> bool:
+        """Whether the suite reaches this cell, read the way its kind is written."""
+        needle = cell.rsplit(".", maxsplit=1)[-1]
+        if needle in OPERATORS:
+            return any(_operator_reached(needle, node) for node in ast.walk(self.tree))
+        if kind == "method":
+            return needle in self.called
+        if kind == "attribute":
+            return needle in self.read
+        return needle in self.named or needle in self.read
+
+
 def names_reached(cells: set[str], suite: str) -> set[str]:
-    """Give the cells the suite mentions, each looked for the way it is written.
+    """Give the cells the suite reaches, each looked for the way it is written.
 
     A **code** is a string a test compares against, so it is looked for quoted:
-    the bare word appears in prose about recursion without any test asserting the
-    code. A **name** is called or imported, so the word itself is the evidence.
+    the bare word appears in prose about recursion without any test asserting
+    the code. Every other cell is read off the syntax tree by its kind, which
+    `_Reading` says.
     """
     codes = error_codes()
+    kinds = _stub_kinds()
+    reading = _Reading(suite)
     reached = set()
     for cell in cells:
-        needle = cell.split(".")[-1]
-        pattern = (
-            rf"[\"']{re.escape(needle)}[\"']"
-            if cell in codes
-            else rf"\b{re.escape(needle)}\b"
-        )
-        if re.search(pattern, suite):
+        if cell in codes:
+            needle = re.escape(cell)
+            if re.search(rf"[\"']{needle}[\"']", suite):
+                reached.add(cell)
+        elif reading.reaches(cell, kinds.get(cell)):
             reached.add(cell)
     return reached
 

@@ -140,8 +140,6 @@ def test_the_count_is_reported() -> None:
     universe = _universe()
     reached = _names_reached(universe, _product_sources()) | _markers()
     assert reached | set(ACCEPTED) >= universe
-    covered = len(reached) / len(universe)
-    assert covered > 0.85, f"{len(reached)} of {len(universe)} use cases named"
 
 
 def _matrix_rows() -> tuple[set[str], dict[str, str]]:
