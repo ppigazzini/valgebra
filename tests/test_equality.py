@@ -42,6 +42,17 @@ from valgebra import (
     union,
 )
 
+
+def _is_even(value: int) -> bool:
+    """Give one callable, so a predicate row compares a schema with itself."""
+    return value % 2 == 0
+
+
+def _is_odd(value: int) -> bool:
+    """Give a second callable, for the row that says two predicates are two."""
+    return value % 2 == 1
+
+
 # Pairs that are one schema written two ways. Each row is a set, and the two
 # spellings differ only in an order that is not part of it.
 SAME = [
@@ -68,6 +79,12 @@ SAME = [
         Annotated[int, at.Ge(0), at.Ge(0)],
         Annotated[int, at.Ge(0)],
     ),
+    # The strict bounds and a predicate each read their operand through the
+    # pool, as the loose bounds do, so two spellings naming one constant -- or
+    # one callable -- are one schema and hash alike.
+    ("a strict lower bound", Annotated[int, at.Gt(0)], Annotated[int, at.Gt(0)]),
+    ("a strict upper bound", Annotated[int, at.Lt(9)], Annotated[int, at.Lt(9)]),
+    ("a predicate", Annotated[int, _is_even], Annotated[int, _is_even]),
     (
         "records inside a union",
         union({"a": int, "b": int}, str),
@@ -95,6 +112,9 @@ DIFFERENT = [
     ("open against closed", {"a": int}, {"a": int, anything: anything}),
     ("the bound's direction", Annotated[int, at.Ge(0)], Annotated[int, at.Le(0)]),
     ("the bound's value", Annotated[int, at.Ge(0)], Annotated[int, at.Ge(1)]),
+    ("a strict bound's value", Annotated[int, at.Gt(0)], Annotated[int, at.Gt(1)]),
+    ("strict against loose", Annotated[int, at.Lt(9)], Annotated[int, at.Le(9)]),
+    ("two predicates", Annotated[int, _is_even], Annotated[int, _is_odd]),
     ("a sequence is ordered", tuple[int, str], tuple[str, int]),
     ("the container", list[int], set[int]),
     ("a clause's value", {str: int}, {str: str}),

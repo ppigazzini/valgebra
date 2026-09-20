@@ -237,6 +237,20 @@ def test_repr_of_class_and_recursive_forms() -> None:
     # and a later meet flattens beside that pair: the class is still named, and
     # the other members render as themselves.
     assert repr(Validator(intersection(Point, int))) == "intersection(Point, int)"
+    # A meet of two classes that both carry attributes flattens to four
+    # members: each class by its name, and each attribute record on its own.
+    # A record standing alone renders in the `object(...)` form, which names
+    # the attributes it requires and is a rendering rather than a rebuild.
+
+    @dataclasses.dataclass
+    class Labelled:
+        x: int
+        y: str
+
+    assert (
+        repr(Validator(intersection(Point, Labelled)))
+        == "intersection(Point, Labelled, object(x=int), object(x=int, y=str))"
+    )
     assert (
         repr(recursive(lambda s: {"v": int, "n?": s}))
         == "recursive(lambda X: {'n?': X, 'v': int})"
@@ -438,6 +452,47 @@ def test_one_link_further_truncates_and_says_so(shape: str) -> None:
     assert TRUNCATED in rendered
     with pytest.raises(SyntaxError):
         eval(rendered, dict(_ROUNDTRIP_NS))  # noqa: S307
+
+
+#: The chain length at which a link of two attribute-carrying classes first
+#: truncates. The link is a meet of a fixed dataclass and one made per link
+#: whose field carries the chain body, so the render descends through the
+#: attribute record's own arm, which the shapes above never reach: their
+#: records are keyed mappings. Held at the edge, as theirs are.
+_ATTRIBUTE_CHAIN_BOUND = 67
+
+
+def _attribute_chain(links: int) -> object:
+    """Build a chain of meets of two classes with attributes, innermost `int`."""
+
+    @dataclasses.dataclass
+    class Point:
+        x: int
+
+    schema: object = int
+    for _ in range(links):
+        schema = recursive(
+            lambda body, inner=schema: intersection(
+                Point,
+                dataclasses.make_dataclass("Rec", [("y", body), ("z", inner)]),
+            )
+        )
+    return schema
+
+
+def test_an_attribute_record_costs_a_level_of_the_render() -> None:
+    """A field of an attribute record is one level deeper than the record.
+
+    The `object(...)` form is the one arm the keyed-mapping chains above never
+    render, so a record that stopped counting its fields as a level would
+    truncate at a length none of them notices. Both sides of the edge: the
+    chain one link short renders whole, and the chain at the bound gives up.
+    """
+    whole = repr(Validator(_attribute_chain(_ATTRIBUTE_CHAIN_BOUND - 1)))
+    assert TRUNCATED not in whole
+    assert "object(y=" in whole
+    cut = repr(Validator(_attribute_chain(_ATTRIBUTE_CHAIN_BOUND)))
+    assert TRUNCATED in cut
 
 
 def test_past_the_bound_a_longer_chain_renders_the_same() -> None:
