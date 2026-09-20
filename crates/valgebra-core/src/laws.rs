@@ -3886,15 +3886,98 @@ enum Negation {
 
 /// Every decidable shape, a negated one among them.
 fn decidable_schema() -> impl Strategy<Value = Schema> {
-    schema_fragment(Negation::Allowed)
+    schema_fragment(Negation::Allowed, Producer::Any)
 }
 
 /// The same fragment with no `complement` anywhere in it.
 fn positive_schema() -> impl Strategy<Value = Schema> {
-    schema_fragment(Negation::Absent)
+    schema_fragment(Negation::Absent, Producer::Any)
 }
 
-fn schema_fragment(negation: Negation) -> impl Strategy<Value = Schema> {
+/// The fragment a caller can write: every refinement it draws is one the
+/// frontend builds.
+///
+/// [`decidable_schema`] draws a bound over any base, which the fuzz target
+/// reaches and the decision must be sound over, and which the frontend
+/// refuses at build. A law about what the pages promise a caller -- an
+/// equivalence decided, a split placed -- is stated over this fragment, since
+/// a set the frontend refuses to name is not one the pages promise to decide.
+fn buildable_schema() -> impl Strategy<Value = Schema> {
+    schema_fragment(Negation::Allowed, Producer::Frontend)
+}
+
+/// Who a drawn refinement is held to.
+#[derive(Clone, Copy)]
+enum Producer {
+    /// Any producer of the IR: a bound over any base, as the fuzz target draws.
+    Any,
+    /// The frontend: a bound only over a base it accepts the bound on.
+    Frontend,
+}
+
+/// Whether the frontend builds `constraint` over `base`.
+///
+/// The rule `build/refine.rs` applies at build, read for the bases this
+/// generator draws: an order bound wants a base whose values compare with the
+/// pool's operands, which are numbers, so a numeric kind; a divisor the same;
+/// a length wants a sized kind. A base that is a union of such kinds is read
+/// as its members, since the frontend reads it that way. Held in step with
+/// the frontend by reading rather than by a test, which is the limit of a
+/// generator that lives in the core.
+fn frontend_builds(base: &Schema, constraint: &Constraint) -> bool {
+    fn numeric(base: &Schema) -> bool {
+        match base {
+            Schema::Int | Schema::Float | Schema::Bool => true,
+            Schema::Union(members) => members.iter().all(numeric),
+            _ => false,
+        }
+    }
+    fn sized(base: &Schema) -> bool {
+        match base {
+            Schema::Str
+            | Schema::Bytes
+            | Schema::Seq { .. }
+            | Schema::Coll { .. }
+            | Schema::KeyedMap { .. } => true,
+            Schema::Union(members) => members.iter().all(sized),
+            _ => false,
+        }
+    }
+    match constraint {
+        Constraint::Ge(_)
+        | Constraint::Gt(_)
+        | Constraint::Le(_)
+        | Constraint::Lt(_)
+        | Constraint::MultipleOf(_) => numeric(base),
+        Constraint::MinLen(_) | Constraint::MaxLen(_) => sized(base),
+        Constraint::Predicate(_) | Constraint::Regex(_) => false,
+    }
+}
+
+/// `base` narrowed by the constraints the producer builds over it.
+///
+/// Under the frontend a constraint it refuses over this base is dropped, and
+/// a refinement left with none is its base: the constructors fold that
+/// wrapper away and the frontend never builds it.
+fn refined(base: Schema, constraints: Vec<Constraint>, producer: Producer) -> Schema {
+    let constraints: Vec<Constraint> = match producer {
+        Producer::Any => constraints,
+        Producer::Frontend => constraints
+            .into_iter()
+            .filter(|constraint| frontend_builds(&base, constraint))
+            .collect(),
+    };
+    if constraints.is_empty() {
+        base
+    } else {
+        Schema::Refine {
+            base: Arc::new(base),
+            constraints: constraints.into(),
+        }
+    }
+}
+
+fn schema_fragment(negation: Negation, producer: Producer) -> impl Strategy<Value = Schema> {
     // `Copy`, and moved rather than borrowed: `prop_recursive` takes a closure
     // that outlives this frame.
     let leaf = prop_oneof![
@@ -3971,10 +4054,11 @@ fn schema_fragment(negation: Negation) -> impl Strategy<Value = Schema> {
                 inner.clone(),
                 proptest::collection::vec(constraint_strategy(), 1..3)
             )
-                .prop_map(|(base, constraints)| Schema::Refine {
-                    base: Arc::new(base),
-                    constraints: constraints.into(),
-                }),
+                .prop_map(move |(base, constraints)| refined(
+                    base,
+                    constraints,
+                    producer
+                )),
             // A closed record. The names are deduplicated: a record with two
             // fields of one name is an IR the frontend refuses to build, and
             // the decision procedure reads the field index on the invariant
@@ -4753,14 +4837,13 @@ fn scalar_triple() -> impl Strategy<Value = Vec<Schema>> {
 /// about every recursive definition a caller can write, so the bodies are
 /// drawn: a leaf beside a list, a tuple or an optional field over a
 /// reference, with the reference optionally under a complement, which is the
-/// shape the polarity cut is for. The leaf is a scalar or a set of them --
-/// what a caller writes -- rather than the whole positive fragment, whose
-/// refinements include bounds over bases the frontend refuses, and a body
-/// holding a member no producer builds is a body about which the equivalence
-/// below says nothing a caller could observe.
+/// shape the polarity cut is for. The leaf is drawn from the buildable
+/// fragment -- what a caller writes -- since the equivalence below is a
+/// promise the pages make to a caller, and a body holding a refinement the
+/// frontend refuses is one no caller can observe the promise on.
 fn drawn_defs() -> impl Strategy<Value = Vec<Schema>> {
     let guarded = |index: usize| {
-        (scalar_or_set_schema(), 0usize..4).prop_map(move |(leaf, shape)| {
+        (buildable_schema(), 0usize..4).prop_map(move |(leaf, shape)| {
             let reference = Schema::Ref(DefIx::new(index));
             let guard = match shape {
                 0 => Schema::list(SeqShape::homogeneous(reference)),
