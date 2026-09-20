@@ -1787,6 +1787,7 @@ fn schema_holding_a_ref() -> impl Strategy<Value = Schema> {
 }
 
 proptest! {
+    // THEORY: guarded-recursion
     /// `Guarded::Yes` absorbs: once a structural constructor has been crossed,
     /// no reference below it is ever reported unguarded, however the algebraic
     /// combinators nest underneath.
@@ -1801,6 +1802,7 @@ proptest! {
         prop_assert!(!s.occurs_unguarded(DefIx::new(0), Guarded::Yes));
     }
 
+    // THEORY: guarded-recursion
     /// The same schema read from the top is unguarded exactly when some
     /// occurrence of the reference is reachable through algebraic combinators
     /// alone -- the observable half of the check, and the one a recursive
@@ -4181,7 +4183,7 @@ proptest! {
         }
     }
 
-    // THEORY: subtyping-is-inclusion
+    // THEORY: subtyping-is-inclusion, semantic-subtyping
     /// A claimed subtype never admits a value its supertype rejects, over the
     /// same value-aware oracle.
     ///
@@ -4658,7 +4660,7 @@ proptest! {
         }
     }
 
-    // THEORY: semantic-subtyping
+    // THEORY: semantic-subtyping, an-exhaustible-procedure-is-searched
     /// The same claim where the two deciders can look something up.
     ///
     /// An oracle is the only place the core learns about Python -- a class's

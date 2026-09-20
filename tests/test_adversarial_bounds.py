@@ -320,6 +320,7 @@ def test_deeply_nested_json_is_rejected_cleanly() -> None:
     assert info.value.code == "json_invalid"
 
 
+# THEORY: the-depth-bound-reports-itself
 def test_the_parser_and_the_walk_bound_a_document_in_that_order() -> None:
     """Which bound a deep document reaches, and which one it reaches first.
 

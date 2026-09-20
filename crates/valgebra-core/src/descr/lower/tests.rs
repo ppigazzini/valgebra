@@ -415,7 +415,7 @@ fn corpus() -> Vec<Schema> {
     corpus
 }
 
-// THEORY: a-cut-reference-proves
+// THEORY: the-descriptor
 /// The descriptor and the procedure agree about emptiness wherever both
 /// decide it.
 ///

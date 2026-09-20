@@ -77,7 +77,7 @@ the right. Everywhere else the arms decide directly.
 
 SOURCE: §13.0 "**Subtyping is semantic, not syntactic.**"; §3 "Status: the set-theoretic model is"
 
-HELD-BY: the_two_deciders_agree_under_an_oracle, test_the_two_deciders_are_measured_against_each_other
+HELD-BY: the_two_deciders_agree_under_an_oracle, test_the_two_deciders_are_measured_against_each_other, subtyping_is_sound_over_the_structural_fragment
 
 The distinction is not pedantry. A rule stated as the reduction and implemented
 structurally has a hole wherever an arm is missing, and the reduction's name over
@@ -200,7 +200,7 @@ The paper proves soundness of a modal type system
 by a step-indexed realizability argument; it states no theorem about contractive
 maps, and citing one to it is an error this page is written to avoid.
 
-HELD-BY: contractivity_requires_a_structural_guard, test_non_contractive_body_is_rejected
+HELD-BY: contractivity_requires_a_structural_guard, test_non_contractive_body_is_rejected, structural_constructors_absorb_the_guard, a_reference_under_only_combinators_is_unguarded
 
 [01-schema-ir.md](01-schema-ir.md) records why the check's structural arms
 compute nothing.
@@ -222,14 +222,16 @@ HELD-BY: test_a_reference_denotes_the_definition_it_names, test_the_unfolding_is
 `MAX_RECURSION_DEPTH` and reports `recursion_limit` past it, which converts any
 unbounded descent -- a contractivity case the build check might miss, an exotic
 mutual cycle -- into an answer rather than a native stack overflow. The JSON
-path reaches the parser's own nesting bound first, which is the lower of the
-two, so a document that deep is refused as unreadable before the walk sees it;
-[10-limits.md](../10-limits.md) names both. The conventional default, 128,
+path has a third bound, the parser's own nesting limit, which sits between the
+unfolding bound and the descent bound: a document past the unfolding bound is
+refused by the walk, and one past the parser's is refused as unreadable before
+the walk sees it, so the descent bound is unreachable through a document;
+[10-limits.md](../10-limits.md) names the three regions. The conventional default, 128,
 follows `serde_json`. **[LOAD-BEARING: the-depth-bound-reports-itself]**
 
 SOURCE: §5 "converts any unbounded descent"
 
-HELD-BY: test_every_entry_point_reports_the_bound_it_reaches, test_a_value_past_the_depth_bound_reports_the_bound
+HELD-BY: test_every_entry_point_reports_the_bound_it_reaches, test_a_value_past_the_depth_bound_reports_the_bound, test_the_parser_and_the_walk_bound_a_document_in_that_order
 
 **A value that contains itself is caught by identity.** The guard on the
 descent path is a set of `(id(value), ref)` pairs, so a value reachable from
@@ -373,7 +375,7 @@ spelling answers and the other declines. `a ∧ ¬(b ∨ c)` against `a ∧ ¬b 
 is the pair, De Morgan is why they are one set, and the tests below read what a
 caller is told rather than what a value is.
 
-HELD-BY: the_lattice_laws_hold_of_the_descriptors, the_complement_laws_hold_of_the_descriptors, emptiness_agrees_with_the_values, laws.rs::the_verdict_is_stable_under_de_morgan, a_meet_with_a_negated_union_answers_as_the_spelled_out_meet, test_the_verdict_is_stable_under_de_morgan, descr/maps/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, descr/records/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, descr/sets/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, a_meet_against_a_negated_side_removes_one_line_at_a_time
+HELD-BY: the_lattice_laws_hold_of_the_descriptors, the_complement_laws_hold_of_the_descriptors, emptiness_agrees_with_the_values, laws.rs::the_verdict_is_stable_under_de_morgan, descr/maps/tests.rs::the_verdict_is_stable_under_de_morgan, the_descriptor_and_the_procedure_never_contradict_each_other, a_meet_with_a_negated_union_answers_as_the_spelled_out_meet, test_the_verdict_is_stable_under_de_morgan, descr/maps/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, descr/records/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, descr/sets/tests.rs::a_complement_is_expanded_only_where_it_is_one_product, a_meet_against_a_negated_side_removes_one_line_at_a_time
 
 It is built beside the structural procedure and is the second decider a caller
 reaches: the rules answer first and this answers where they decline
@@ -500,7 +502,7 @@ lowering did not widen. **[LOAD-BEARING: a-cut-reference-proves]**
 
 SOURCE: §13.1 "**The polarity cut is one-directional.**"
 
-HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other, the_descriptor_and_the_procedure_never_contradict_each_other
+HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other
 
 **Kinds decompose emptiness.** Positives of mixed kind make a clause empty
 outright, negatives of another kind are dropped, and each kind is then an
@@ -511,7 +513,7 @@ beside it. **[LOAD-BEARING: kinds-decompose-emptiness]**
 
 SOURCE: §13.1 "positives of mixed kind make a clause empty outright"
 
-HELD-BY: the_same_shape_under_two_kinds_does_not_meet, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart
+HELD-BY: the_same_shape_under_two_kinds_does_not_meet, every_kind_has_exactly_one_component, every_kind_lands_in_the_partition_and_the_scalars_land_apart, a_kind_is_an_independent_question
 
 **Two fixpoints, one procedure.** Emptiness reads a cycle back to a visiting
 reference as uninhabited -- the least fixpoint, no finite value reaches it --
@@ -531,7 +533,7 @@ mapping constrains one region and leaves the others as the openness says.
 
 SOURCE: §13.3 "**That is `Schema::KeyedMap` exactly**"
 
-HELD-BY: every_key_falls_in_exactly_one_part, a_map_constrains_one_part_of_the_key_partition, test_heterogeneous_mapping_by_key_schema
+HELD-BY: every_key_falls_in_exactly_one_part, a_map_constrains_one_part_of_the_key_partition, test_heterogeneous_mapping_by_key_schema, a_clause_constrains_its_region_alone_over_drawn_dicts
 
 **A sequence is a regular language, and the automaton over it is well formed.**
 The symbolic automaton that decides sequence inclusion has, at every state,
@@ -642,7 +644,7 @@ decider over a drawn universe and the recorded holes are held to a ledger.
 
 SOURCE: §13.1 "enumeration is the source of the exponent"; §14.4 "An exhaustible procedure needs the reduction"
 
-HELD-BY: test_the_two_deciders_are_measured_against_each_other, test_decision_decides_true_relations
+HELD-BY: test_the_two_deciders_are_measured_against_each_other, test_decision_decides_true_relations, the_two_deciders_agree_under_an_oracle
 
 **`open` and `close` read the region no clause claims, and nothing else.**
 Openness is the default of the key-type region the clauses leave over: `open`

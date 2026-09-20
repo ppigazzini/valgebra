@@ -651,6 +651,39 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: a-clause-is-a-region
+    /// A clause constrains one region and leaves the others alone, over
+    /// drawn dicts.
+    ///
+    /// `keyed(kind, ty)` holds a dict exactly when every key of that kind
+    /// maps into `ty`, and a key of any other kind is free. `keys_among`
+    /// holds a dict exactly when every key is of a listed kind. Both read an
+    /// entry's kind alone: a label is a key of its kind, and no label is
+    /// exempt from its region's default.
+    #[test]
+    fn a_clause_constrains_its_region_alone_over_drawn_dicts(
+        dict in drawn_dict(),
+        kind in prop_oneof![
+            Just(Kind::Str),
+            Just(Kind::Int),
+            Just(Kind::Bool),
+            Just(Kind::Float),
+            Just(Kind::NoneType),
+        ],
+        bound in 0i64..=3,
+    ) {
+        let clause = MapLattice::keyed(kind, IntSet::just(bound));
+        let every_key_of_the_kind_maps_in = dict
+            .iter()
+            .filter(|entry| entry.kind == Some(kind))
+            .all(|entry| entry.value == bound);
+        prop_assert_eq!(clause.holds(&dict), every_key_of_the_kind_maps_in);
+
+        let among: MapLattice<IntSet> = MapLattice::keys_among(&[Some(kind)]);
+        let every_key_is_of_the_kind = dict.iter().all(|entry| entry.kind == Some(kind));
+        prop_assert_eq!(among.holds(&dict), every_key_is_of_the_kind);
+    }
+
     // THEORY: records-maps-and-structs, each-kind-is-closed
     /// The Boolean algebra, checked against the dicts.
     #[test]

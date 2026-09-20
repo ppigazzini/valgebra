@@ -1068,6 +1068,33 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
+    // THEORY: kinds-decompose-emptiness
+    /// Each kind is an independent question, over drawn descriptors.
+    ///
+    /// A descriptor cut to one kind meets nothing of another kind, whatever
+    /// the two carry: positives of mixed kind are empty outright. And a
+    /// negative of another kind is dropped: meeting the cut with the
+    /// complement of the other gives the cut back, by equality of the forms.
+    #[test]
+    fn a_kind_is_an_independent_question(
+        a in descr(),
+        b in descr(),
+        i in 0..Kind::ALL.len(),
+        j in 0..Kind::ALL.len(),
+    ) {
+        prop_assume!(i != j);
+        let kind_a = Kind::ALL.get(i).copied().unwrap_or(Kind::Int);
+        let kind_b = Kind::ALL.get(j).copied().unwrap_or(Kind::Str);
+        let (Some(x), Some(y)) = (
+            a.intersect(&Descr::of_kind(kind_a)),
+            b.intersect(&Descr::of_kind(kind_b)),
+        ) else {
+            return Ok(());
+        };
+        prop_assert!(x.intersect(&y).is_some_and(|met| met.is_empty()));
+        prop_assert_eq!(x.intersect(&y.complement()), Some(x.clone()));
+    }
+
     // THEORY: the-descriptor
     /// The Boolean algebra, checked by equality of the canonical forms.
     ///
