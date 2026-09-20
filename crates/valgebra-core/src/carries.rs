@@ -176,3 +176,6 @@ pub fn carries_order(base: &Schema, group: Option<OrderGroup>) -> Carries {
     };
     if matches { Carries::Yes } else { Carries::No }
 }
+
+#[cfg(test)]
+mod tests;

@@ -2,7 +2,7 @@
   "_comment": "The branch-coverage floor for the core's shipped scope, and a region floor per file beside it. Recorded by scripts/branch_coverage.py --update after a measurement, held by that script without it, and only ever moved up. A line is covered when any part of it ran and a region when its span did; the scope figure counts the arms. The per-file floors are regions, and they are what a total cannot see: half of one file unreached moves a scope-wide figure by about the width of its tolerance.",
   "floor": 89.54,
   "files": {
-    "carries.rs": 77.9,
+    "carries.rs": 92.0,
     "decision.rs": 91.49,
     "decision/constraints.rs": 92.0,
     "decision/emptiness.rs": 91.79,
