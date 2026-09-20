@@ -54,6 +54,15 @@ from typing import Annotated, Any, Protocol, runtime_checkable
 import annotated_types as at
 import pytest
 
+# The two class-shaped forms come from the node table rather than being written
+# again here. This file's tables claim to be that file's forms, and for the
+# attribute record the claim was once false: a `@runtime_checkable` Protocol
+# stood in for it, which compiles to a class that answers `isinstance` itself
+# and carries no record at all, so every decline in that row and column was the
+# hooked class's under the record's name. Importing is what makes the claim true
+# rather than repeated.
+from test_node_matrix import _Klass as Plain
+from test_node_matrix import _Record as Point
 from valgebra import (
     Validator,
     anything,
@@ -76,17 +85,6 @@ _VARIANT = re.compile(r"^    ([A-Z][A-Za-z]*)[ ({,]", re.MULTILINE)
 #: class. Read out of the binding rather than restated: a third hook added
 #: there arrives here without a row.
 _HOOK = re.compile(r'intern!\(self\.py, "(__\w+check__)"\)')
-
-
-class Plain:
-    """A class deriving from no builtin, so it narrows no kind."""
-
-
-@dataclass
-class Point:
-    """A class with a declared attribute, which is an `Instance ∧ AttrRecord`."""
-
-    x: int
 
 
 #: One representative per variant. Each is the form `tests/test_node_matrix.py`
