@@ -6,7 +6,7 @@ from typing import Annotated
 import annotated_types as at
 import pytest
 
-from valgebra import ValidationError, Validator, intersection
+from valgebra import ValidationError, Validator, intersection, union
 
 
 def test_comparison_bounds() -> None:
@@ -465,3 +465,49 @@ def test_a_refinement_is_its_base_narrowed_and_a_predicate_is_opaque() -> None:
     assert refined.is_valid(1)
     assert not refined.is_valid(0)
     assert not refined.is_valid("a")
+
+
+def test_a_predicate_runs_once_per_value_the_fast_walk_reaches() -> None:
+    """The slow path is paid once on the fast walk, and again by the probe.
+
+    A predicate is a caller's own code, so how often it runs is part of what
+    the page promises. The membership walk asks it once for each value it
+    reaches and stops at the first failure. The explaining walk, on a union
+    none of whose branches matched, re-walks the branches to find the one that
+    descended furthest, and that pass asks the predicate again -- regardless
+    of `fail_fast`, since the probe aggregates the closest branch whole. The
+    counts here are the derivation, not a budget: one call from the deciding
+    walk, one from the probe of each branch that reaches the predicate.
+    """
+    calls = {"n": 0}
+
+    def positive(value: int) -> bool:
+        calls["n"] += 1
+        return value > 0
+
+    refined = Validator(Annotated[int, at.Predicate(positive)])
+    for ask in (
+        lambda: refined.is_valid(-1),
+        lambda: _refused(refined, -1),
+        lambda: _refused(refined, -1, fail_fast=True),
+    ):
+        calls["n"] = 0
+        ask()
+        assert calls["n"] == 1, "a refinement alone runs its predicate once"
+
+    branches = Validator(union({"a": refined, "b": refined}, {"c": int}))
+    value = {"a": -1, "b": -1}
+    calls["n"] = 0
+    assert branches.is_valid(value) is False
+    assert calls["n"] == 1, "the fast walk stops at the first failing field"
+    for fail_fast in (False, True):
+        calls["n"] = 0
+        _refused(branches, value, fail_fast=fail_fast)
+        # The deciding walk asks once and stops at `a`; the probe of the record
+        # branch aggregates, so it asks at `a` and at `b`.
+        assert calls["n"] == 3, (fail_fast, calls["n"])
+
+
+def _refused(schema: Validator, value: object, *, fail_fast: bool = False) -> None:
+    with pytest.raises(ValidationError):
+        schema.validate(value, fail_fast=fail_fast)

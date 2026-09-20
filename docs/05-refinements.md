@@ -355,7 +355,11 @@ A `Predicate` runs an arbitrary Python callable. It is the one *refinement*
 constraint that leaves Rust for a caller's own code — literals, instance and
 attribute checks, and comparison bounds also compare against Python objects, but
 against fixed operators, not arbitrary callables — so it is a **documented slow
-path**, never a silent fallback. Use it for checks the markers cannot express:
+path**, never a silent fallback. `is_valid` runs it once per value it reaches;
+`validate` may run it again, because a failing union is re-walked to find the
+branch to report, and that walk asks the predicate a second time. A predicate
+with side effects should expect that. Use it for checks the markers cannot
+express:
 
 ```python
 from typing import Annotated
