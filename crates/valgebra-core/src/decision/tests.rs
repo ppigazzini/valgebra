@@ -4927,3 +4927,110 @@ fn a_difference_past_the_allowance_declines() {
         "sixteen is past it, and what is past it declines rather than refutes"
     );
 }
+
+/// A record whose fields each take one of two types, against the union of the
+/// records that fix every field: `{a: A|B, b: A|B}` below `{a:A,b:A} | ... `.
+fn record_and_its_corners(width: usize) -> (Schema, Schema) {
+    let either = || Schema::union([Schema::Int, Schema::Str]);
+    let subject = closed(
+        (0..width)
+            .map(|i| field(&format!("f{i}"), either(), true))
+            .collect(),
+    );
+    // Every assignment of the two types to the `width` fields, as a union.
+    let corners = (0..1usize << width).map(|mask| {
+        closed(
+            (0..width)
+                .map(|i| {
+                    let leaf = if mask >> i & 1 == 0 {
+                        Schema::Int
+                    } else {
+                        Schema::Str
+                    };
+                    field(&format!("f{i}"), leaf, true)
+                })
+                .collect(),
+        )
+    });
+    (subject, Schema::union(corners))
+}
+
+// THEORY: no-backtrack-free-record-rule
+/// A record below a union of records is decided one representation over, not
+/// by a rule.
+///
+/// The record papers give a backtrack-free algorithm for exactly this shape:
+/// `R0 ≤ ⋁ R_i` iff `R0` is empty or the algorithm's condition holds, over the
+/// semantic domains. valgebra does not run it. `keyed_map_subtype` compares one
+/// map with one map, so the question a union of records asks is not a question
+/// it is shaped to answer, and the rules decline it whatever the width.
+///
+/// What decides it is the descriptor, which lowers the difference and reads
+/// its emptiness. That is a real answer and the caller sees no difference --
+/// and it is why the width at which the answer stops is a property of the
+/// *lowering's* bounds rather than of any rule: at four fields the difference
+/// is past the node budget and the work allowance, and
+/// `tests/test_completeness_ledger.py` carries that number. An implementation
+/// with the paper's algorithm would answer from the rule and never build the
+/// difference, so neither bound would bind.
+///
+/// Both halves are asserted, because the claim is the *pair*: the rules alone
+/// decline, and the procedure as a whole decides.
+#[test]
+fn a_record_below_a_union_of_records_is_the_descriptors_answer() {
+    for width in 2..=3 {
+        let (subject, corners) = record_and_its_corners(width);
+
+        // The structural procedure alone, with a budget it cannot exhaust.
+        let budget = Cell::new(DECISION_BUDGET);
+        assert_eq!(
+            subject.subtype_relation(&corners, &NoLeafRelations, &[], &budget),
+            Relation::Unknown,
+            "the rules answered a union of records at {width} fields"
+        );
+
+        // And the relation a caller asks, which reaches the second decider.
+        assert_eq!(
+            subject.subtype_relation_under(&corners, &NoLeafRelations, &[]),
+            Relation::Holds,
+            "the descriptor did not decide the corners at {width} fields"
+        );
+    }
+}
+
+// THEORY: no-backtrack-free-record-rule
+/// The width at which that answer stops is the lowering's, not a rule's.
+///
+/// The consequence of having no rule for the shape: the only decider is the
+/// one that builds the difference, so the answer stops where *building* stops
+/// rather than where the relation stops holding. At four fields the difference
+/// is past the node budget and the work allowance and the whole procedure
+/// declines, while the relation holds as plainly as it does at three.
+///
+/// A conservative decline is sound, so nothing a caller reads is wrong. What
+/// the row records is the number, and that the number belongs to the lowering:
+/// an implementation running the paper's algorithm would answer from the rule
+/// at any width, and neither bound would be reached.
+#[test]
+fn a_record_below_its_corners_stops_where_the_lowering_does() {
+    // Three fields: the rules decline and the difference is small enough.
+    let (narrow, its_corners) = record_and_its_corners(3);
+    assert_eq!(
+        narrow.subtype_relation_under(&its_corners, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+
+    // Four: the same shape, one field wider, and nothing decides it.
+    let (wide, its_corners) = record_and_its_corners(4);
+    let budget = Cell::new(DECISION_BUDGET);
+    assert_eq!(
+        wide.subtype_relation(&its_corners, &NoLeafRelations, &[], &budget),
+        Relation::Unknown,
+        "a rule answered the wider record"
+    );
+    assert_eq!(
+        wide.subtype_relation_under(&its_corners, &NoLeafRelations, &[]),
+        Relation::Unknown,
+        "the wider record decided, so the recorded width has moved"
+    );
+}

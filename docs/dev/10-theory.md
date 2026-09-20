@@ -157,6 +157,21 @@ SOURCE: §3 "The model behind `Schema::KeyedMap`"; §13.3 "**The representation 
 
 HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition
 
+**Castagna, ICFP 2023, (17): the backtrack-free record rule.** A record below a
+union of records is decided by an algorithm over the semantic domains, whose
+whole point is that it never backtracks. valgebra does not run it:
+`keyed_map_subtype` compares one map with one map, so the question a union of
+records asks is not one the rules are shaped to answer, and they decline it at
+any width. What decides it is the descriptor, which lowers the difference and
+reads its emptiness -- so the width at which the answer stops is the
+*lowering's* bound rather than a rule's, and at four fields the difference is
+past the node budget and the work allowance while the relation holds as plainly
+as it does at three. **[NOT-REACHED: no-backtrack-free-record-rule]**
+
+SOURCE: §13.3 "`keyed_map_subtype` is a structural rule, not `Phi`"
+
+HELD-BY: a_record_below_a_union_of_records_is_the_descriptors_answer, a_record_below_its_corners_stops_where_the_lowering_does
+
 The paper's model is a *quasi-constant function*: named labels over a finite
 domain, with the rest given by a default keyed by a partition of the key space.
 valgebra's clauses are neither ordered nor a partition — a key belongs when
