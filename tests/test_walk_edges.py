@@ -56,9 +56,10 @@ def test_a_buffer_is_not_a_bytes() -> None:
     assert Validator(bytes).is_valid(memoryview(b"a")) is False
     assert _codes(bytes, bytearray(b"a")) == ["bytes_type"]
     # And neither is a document the JSON entry points read.
-    with pytest.raises(TypeError):
-        Validator(int).validate_json(bytearray(b"1"))  # ty: ignore[invalid-argument-type]
-    assert Validator(int).is_valid_json(bytearray(b"1")) is False  # ty: ignore[invalid-argument-type]
+    for buffer in (bytearray(b"1"), memoryview(b"1")):
+        with pytest.raises(TypeError):
+            Validator(int).validate_json(buffer)  # ty: ignore[invalid-argument-type]
+        assert Validator(int).is_valid_json(buffer) is False  # ty: ignore[invalid-argument-type]
 
 
 def test_a_dict_subclass_is_read_through_its_storage() -> None:

@@ -1,8 +1,13 @@
 import collections
 import dataclasses
+import datetime
+import decimal
 import enum
+import pathlib
+import re
 import sys
 import typing
+import uuid
 from typing import (
     Annotated,
     Literal,
@@ -728,3 +733,72 @@ def test_a_callable_annotation_erases_the_arrow_it_writes() -> None:
     # `str <= int` is refuted, which is what a contravariant arrow would have
     # needed to hold for the first of those to be true.
     assert Validator(str).relation_to(int) == "not_subset"
+
+
+#: The stdlib classes a caller reaches for after the builtins, each with a value
+#: of it and one of another kind. None is special to this library: a bare class
+#: is an `isinstance` check, and that is the whole of what these rows assert --
+#: that the ordinary path carries them, and that nothing in the frontend picks
+#: one out for a reading of its own.
+_STDLIB_ATOMS: list[tuple[type, object, object]] = [
+    (
+        datetime.datetime,
+        datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc),
+        "2026-01-01",
+    ),
+    (datetime.date, datetime.date(2026, 1, 1), "2026-01-01"),
+    (datetime.timedelta, datetime.timedelta(seconds=1), 1.0),
+    (uuid.UUID, uuid.UUID(int=0), "00000000-0000-0000-0000-000000000000"),
+    (pathlib.PurePosixPath, pathlib.PurePosixPath("a/b"), "a/b"),
+    (decimal.Decimal, decimal.Decimal("1.5"), 1.5),
+    (re.Pattern, re.compile("a"), "a"),
+    (memoryview, memoryview(b"a"), b"a"),
+]
+
+
+@pytest.mark.parametrize(
+    ("declared", "member", "outsider"),
+    _STDLIB_ATOMS,
+    ids=[declared.__name__ for declared, _, _ in _STDLIB_ATOMS],
+)
+def test_a_stdlib_class_is_the_isinstance_check_it_looks_like(
+    declared: type, member: object, outsider: object
+) -> None:
+    """A class the standard library defines is read like any other class.
+
+    These are the types a schema reaches for once the builtins run out, and the
+    library says nothing about them anywhere -- which is the claim being made:
+    that there is nothing to say. Each denotes its instances, admits one, and
+    refuses a value of the kind it is most often written next to, which for
+    every row here is the string or number it serialises as.
+
+    The outsider matters more than the member. A frontend that quietly read one
+    of these as something else -- a date as a string, a `Decimal` as a float --
+    would admit the row's member and its outsider alike, and a test that
+    checked only membership would pass.
+    """
+    schema = Validator(declared)
+    assert schema.is_valid(member) is True
+    assert schema.is_valid(outsider) is False
+    # The repr names the class, so a caller reading one back sees what they
+    # wrote rather than the kind it was folded into.
+    assert repr(schema) == declared.__name__
+
+
+def test_a_stdlib_class_is_not_the_kind_it_serialises_as() -> None:
+    """The relations, where a silent folding would show as a proof.
+
+    A `Decimal` is not a `float` and a `Path` is not a `str`, whatever either
+    prints as. Asserted as *relations* rather than as membership, because a
+    frontend folding one into the other would make the inclusion hold, and the
+    membership rows above would keep passing while `relation_to` started
+    answering `"subset"` about two different sets.
+    """
+    assert Validator(decimal.Decimal).relation_to(float) == "not_subset"
+    assert Validator(pathlib.PurePosixPath).relation_to(str) == "not_subset"
+    assert Validator(datetime.datetime).relation_to(str) == "not_subset"
+    # A date is a datetime's base, and that inclusion is real: the class order
+    # is what the answer reads, so the one pair that holds here holds for the
+    # reason the others do not.
+    assert Validator(datetime.datetime).relation_to(datetime.date) == "subset"
+    assert Validator(datetime.date).relation_to(datetime.datetime) == "not_subset"

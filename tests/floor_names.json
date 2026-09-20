@@ -649,6 +649,9 @@
     "typing": {
       "since": "3.10"
     },
+    "uuid": {
+      "since": "3.10"
+    },
     "warnings": {
       "since": "3.10"
     },
