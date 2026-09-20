@@ -157,6 +157,19 @@ SOURCE: §3 "The model behind `Schema::KeyedMap`"; §13.3 "**The representation 
 
 HELD-BY: the_lattice_laws_hold_of_the_dicts, the_lattice_laws_hold_of_the_dicts_over_drawn_dicts, a_meet_of_maps_holds_only_the_dicts_of_both, a_meet_holds_the_dicts_of_both_over_drawn_dicts, an_emptiness_holds_no_drawn_dict, a_map_constrains_one_part_of_the_key_partition
 
+**Castagna & Duboc §7.1: a gradual type is two static types.** Every gradual
+`t` is `t_down ∨ (? ∧ t_up)` and is represented by **two** descriptors, with
+the operations run on each separately. valgebra carries one, because it has one
+type to carry: `typing.Any` builds the top with a spelling beside it, a
+spelling is what `repr` reads and nothing else does, and the two spellings
+lower to the same descriptor. The pair exists so that every lattice rule can
+exclude a gradual case; having no such case does the same work by having
+nothing to exclude. **[NOT-REACHED: one-descriptor-one-type]**
+
+SOURCE: §13.5 "There is one descriptor because there is one type"
+
+HELD-BY: the_two_spellings_of_the_top_lower_to_one_descriptor, the_two_spellings_of_the_top_are_not_one_node
+
 **Castagna, ICFP 2023, (17): the backtrack-free record rule.** A record below a
 union of records is decided by an algorithm over the semantic domains, whose
 whole point is that it never backtracks. valgebra does not run it:

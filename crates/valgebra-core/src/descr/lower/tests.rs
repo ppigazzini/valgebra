@@ -1472,3 +1472,31 @@ fn a_field_is_read_instead_of_a_clause_that_names_its_key() {
         "and the clause is what governs its own key"
     );
 }
+
+// THEORY: one-descriptor-one-type
+/// The gradual spelling lowers to the descriptor the top lowers to.
+///
+/// A gradual type is usually two static types, and the representation that
+/// follows is two descriptors carried together: the lattice rules then each
+/// have to remember a gradual case to exclude. valgebra has no gradual type to
+/// carry -- `typing.Any` builds the top with a spelling beside it, and a
+/// spelling is what `repr` reads and nothing else does -- so there is one
+/// descriptor because there is one type, and no rule has a case to exclude.
+///
+/// Asserted where the two would first differ. A pair representation reaching
+/// the descriptor makes the two spellings lower to different things, whatever
+/// it does afterwards to make them behave alike.
+#[test]
+fn the_two_spellings_of_the_top_lower_to_one_descriptor() {
+    let pool = empty_pool();
+    let lowered = |schema| lower(&schema, &pool).expect("the top lowers");
+
+    assert_eq!(lowered(Schema::ANY), lowered(Schema::ANYTHING));
+    assert_eq!(lowered(Schema::ANY), Descr::anything());
+
+    // And under a complement, which is where a pair's two halves are read
+    // apart: the bottom of one and the top of the other.
+    let negated = |schema| lowered(Schema::Complement(Arc::new(schema)));
+    assert_eq!(negated(Schema::ANY), negated(Schema::ANYTHING));
+    assert_eq!(negated(Schema::ANY), Descr::nothing());
+}

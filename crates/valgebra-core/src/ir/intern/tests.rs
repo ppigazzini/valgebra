@@ -364,9 +364,15 @@ fn a_node_is_found_again_after_another_of_its_family() {
     }
 }
 
+// THEORY: one-descriptor-one-type
 /// The two spellings of the top denote the same set and compare equal, and
 /// `repr` gives back the one that was written. Collapsing them would hand a
 /// caller the other one.
+///
+/// The other side of there being one type: the spellings are two *nodes*, so
+/// a caller reads back what they wrote, and one descriptor, so no rule has a
+/// gradual case to exclude. A pair representation would put the difference the
+/// other way round.
 #[test]
 fn the_two_spellings_of_the_top_are_not_one_node() {
     let top = members(&[Schema::Anything(Spelling::Top)]);
