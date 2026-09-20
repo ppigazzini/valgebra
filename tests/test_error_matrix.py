@@ -26,6 +26,7 @@ rather than here because it reads the Rust, and this file runs against an
 installed wheel.
 
 PRODUCT: every code a report can carry, in both modes and on both paths
+PRODUCT: every code under every location shape
 """
 
 from __future__ import annotations

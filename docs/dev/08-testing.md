@@ -311,6 +311,8 @@ ledger that holds it in both directions:
 | every entry of the published decidability boundary | the three lists in `15-decidability.md` | a decided entry is driven to its answer, a conservative one to `undecided`, an undecidable one to its refusal or its atom | `tests/test_boundary_ledger.py` |
 | every constraint, against every kind a base's values have | `Constraint` in `ir.rs` and `Kind` in `kind.rs` | the constraint narrows the base, with a value it holds of and one it does not, or the build is refused with the words naming what the base cannot answer | `tests/test_constraint_matrix.py` |
 | every outcome a method's docstring names | the binding's `Raises:` blocks | the call sits inside a `pytest.raises` for it, read from the syntax tree | `tests/test_surface_outcomes.py` |
+| every code under every location shape | the error-model page's location grammar, over the code table | the code is driven at that shape in both modes with the path segment asserted | `tests/test_error_matrix.py` |
+| every declared bound | every integer `const` in the crates whose name says it limits something, and the three the stub exports | a test names it by identifier or by a `# BOUND:` marker, or it is accepted with a reason | `tests/test_bound_ledger.py` |
 
 The number is computed rather than written down, and where this page repeats
 one, a test holds the copy to the computation. A cell with no test fails; a

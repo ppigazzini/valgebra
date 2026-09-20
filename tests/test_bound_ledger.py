@@ -17,6 +17,8 @@ the reason it is out of reach, and a reason for a bound a test does drive
 fails, so an excuse cannot outlive the gap it excuses.
 
 LEDGER: every declared bound is driven by a test, or accepted with a reason
+
+PRODUCT: every declared bound
 """
 
 from __future__ import annotations
