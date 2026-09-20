@@ -114,6 +114,16 @@ impl SeqShape {
     }
 }
 
+/// Push a goal onto the trail, and tell the test-side recorder how deep it is.
+///
+/// The two places a reference is unfolded push here, so the longest trail a
+/// query builds is a number a test reads rather than a sentence a page keeps.
+fn push_assumption(assumptions: &mut Vec<(Schema, Schema)>, pair: (Schema, Schema)) {
+    assumptions.push(pair);
+    #[cfg(test)]
+    goal_tests::goals::trail(assumptions.len());
+}
+
 impl Schema {
     /// Whether the descriptor proves every value of this schema is one of
     /// `other`, by proving the difference empty.
@@ -512,7 +522,7 @@ impl Schema {
         match self {
             Schema::Ref(id) => match cx.defs.get(id.get()) {
                 Some(def) => {
-                    assumptions.push((self.clone(), other.clone()));
+                    push_assumption(assumptions, (self.clone(), other.clone()));
                     let holds = def.is_subtype_rec(other, cx, assumptions);
                     assumptions.pop();
                     holds
@@ -853,7 +863,7 @@ impl Schema {
             (Schema::Ref(_), _) => self.left_reduces_below(other, cx, assumptions),
             (_, Schema::Ref(id)) => match cx.defs.get(id.get()) {
                 Some(def) => {
-                    assumptions.push((self.clone(), other.clone()));
+                    push_assumption(assumptions, (self.clone(), other.clone()));
                     let holds = self.is_subtype_rec(def, cx, assumptions);
                     assumptions.pop();
                     holds

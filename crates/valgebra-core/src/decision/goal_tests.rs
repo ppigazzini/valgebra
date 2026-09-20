@@ -45,6 +45,8 @@ pub(crate) mod goals {
         /// The goals asked inside a [`counted`] call, and how often each was.
         static ASKED: RefCell<Option<FxHashMap<(Schema, Schema), u32>>> =
             const { RefCell::new(None) };
+        /// The deepest the trail grew inside a [`counted`] call.
+        static DEEPEST: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     }
 
     /// What one counted query asked.
@@ -59,6 +61,8 @@ pub(crate) mod goals {
         pub(crate) asked: usize,
         /// How many of those asks were of a pair already asked.
         pub(crate) repeated: usize,
+        /// The most pairs the trail held at once.
+        pub(crate) deepest: usize,
     }
 
     /// Run `query` with its goals counted, and give back what it asked.
@@ -72,6 +76,7 @@ pub(crate) mod goals {
             assert!(slot.is_none(), "a count is already running on this thread");
             *slot = Some(FxHashMap::default());
         });
+        DEEPEST.with(|deepest| deepest.set(0));
         let answer = query();
         let table = ASKED
             .with(|asked| asked.borrow_mut().take())
@@ -79,8 +84,14 @@ pub(crate) mod goals {
         let counts = Counts {
             asked: table.values().map(|times| *times as usize).sum(),
             repeated: table.values().map(|times| (times - 1) as usize).sum(),
+            deepest: DEEPEST.with(std::cell::Cell::get),
         };
         (answer, counts)
+    }
+
+    /// Record the trail's depth after a push, where a count is running.
+    pub(crate) fn trail(depth: usize) {
+        DEEPEST.with(|deepest| deepest.set(deepest.get().max(depth)));
     }
 
     /// Record one goal, where a count is running.
@@ -515,4 +526,86 @@ fn the_goals_a_query_asks_are_pairs_of_the_subterms() {
             "{sub:?} <= {sup:?} asked {distinct} distinct goals over {bound} subterm pairs"
         );
     }
+}
+
+// THEORY: the-trail-holds-terms
+/// The longest trail any recursive shape in hand builds is three pairs.
+///
+/// The deviation's cost is a scan over the trail at every recursive goal, and
+/// the sentence that bounds the cost was a measurement taken once over the
+/// relation matrix -- two pairs -- and written into prose. It is a number the
+/// recorder reads: every recursive pair the counter's shapes carry, and the
+/// pairs the fixpoint laws are written over, are asked with the trail's depth
+/// recorded, and the deepest is the figure the page states. The first run of
+/// this row found the matrix's figure short by one: a list over a reference
+/// against a union holding that reference unfolds the reference on both
+/// sides and once more under the list, which is three. A shape whose trail
+/// grows past it fails here by name, which is what turns the sentence into a
+/// claim the tree holds.
+#[test]
+fn the_longest_trail_any_recursive_shape_builds_is_three_pairs() {
+    let tree = tree_defs();
+    let list_tree = vec![Schema::union([
+        Schema::Int,
+        list_of(Schema::Ref(DefIx::new(0))),
+    ])];
+    let word_and_not = vec![
+        Schema::union([Schema::Str, list_of(Schema::Ref(DefIx::new(0)))]),
+        Schema::union([
+            Schema::Int,
+            list_of(Schema::Complement(Arc::new(Schema::Ref(DefIx::new(1))))),
+        ]),
+    ];
+    let pairs: Vec<(Schema, Schema, Vec<Schema>)> = vec![
+        (
+            Schema::Ref(DefIx::new(0)),
+            Schema::Ref(DefIx::new(0)),
+            tree.clone(),
+        ),
+        (
+            Schema::Ref(DefIx::new(0)),
+            Schema::union([Schema::Ref(DefIx::new(0)), Schema::Str]),
+            tree,
+        ),
+        (
+            Schema::Ref(DefIx::new(0)),
+            Schema::union([Schema::Int, list_of(Schema::ANYTHING)]),
+            list_tree.clone(),
+        ),
+        (
+            list_of(Schema::Ref(DefIx::new(0))),
+            Schema::Ref(DefIx::new(0)),
+            list_tree,
+        ),
+        (
+            Schema::Ref(DefIx::new(0)),
+            Schema::Ref(DefIx::new(1)),
+            word_and_not.clone(),
+        ),
+        (
+            Schema::Ref(DefIx::new(1)),
+            Schema::Ref(DefIx::new(0)),
+            word_and_not.clone(),
+        ),
+        (
+            list_of(Schema::Ref(DefIx::new(1))),
+            Schema::union([Schema::Int, Schema::Ref(DefIx::new(1))]),
+            word_and_not,
+        ),
+    ];
+    let mut deepest = 0;
+    for (sub, sup, defs) in &pairs {
+        let (_, counts) = ask(sub, sup, defs);
+        assert!(
+            counts.asked >= 1,
+            "the counter saw no goal for {sub:?} <= {sup:?}"
+        );
+        assert!(
+            counts.deepest <= 3,
+            "{sub:?} <= {sup:?} grew the trail to {} pairs",
+            counts.deepest
+        );
+        deepest = deepest.max(counts.deepest);
+    }
+    assert_eq!(deepest, 3, "no shape reached the length the page states");
 }
