@@ -34,6 +34,7 @@ LEDGER: every binding file is swept or excluded by name
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -48,6 +49,15 @@ pytestmark = pytest.mark.repository
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / ".cargo" / "mutants.toml"
+
+#: The three sweeps' accepted survivors, one file per sweep. A sweep judges a
+#: fragment of the tree and the three fragments are disjoint, so neither
+#: baseline can absorb another's survivors.
+BASELINES = (
+    ROOT / "scripts" / "mutation_baseline.json",
+    ROOT / "scripts" / "mutation_baseline_walk.json",
+    ROOT / "scripts" / "mutation_baseline_pytest.json",
+)
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 BINDING = ROOT / "crates" / "valgebra-py"
 
@@ -343,6 +353,64 @@ def test_no_excused_mutant_has_outlived_its_subject() -> None:
     assert not stale, (
         f"exclusions matching no mutant: {stale}. "
         "Delete each with the argument beside it, or fix the pattern."
+    )
+
+
+#: `cargo mutants --list` prints `path:line:col: description`; a baseline
+#: records `path: description`, because a line number moves whenever a comment
+#: above it does. The same normalisation as
+#: `scripts/mutation_gate.py::_identity`, which is what writes those keys.
+_POSITION = re.compile(r"^(?P<path>[^:]+):\d+:\d+:\s*(?P<desc>.*)$")
+
+
+def _identity(line: str) -> str:
+    """Give a listed mutant the name a baseline records it under."""
+    stripped = line.strip()
+    match = _POSITION.match(stripped)
+    return f"{match['path']}: {match['desc']}" if match else stripped
+
+
+@pytest.mark.skipif(
+    shutil.which("cargo-mutants") is None, reason="cargo-mutants is not installed"
+)
+def test_no_accepted_survivor_has_outlived_its_subject() -> None:
+    """An accepted survivor names a mutant the sweep still offers.
+
+    The other half of the exclusion check above, over the other table. An
+    `exclude_re` entry excuses a mutant from being *run*; an `_accepted` entry
+    excuses one from being *counted*, and both are holes in the coverage claim
+    that a reader has to take on the argument written beside them. An argument
+    for a mutant that no longer exists is one nobody can check, and it hides
+    the case this catches: code that moves from one sweep's fragment to
+    another's arrives in the new one with no tests and leaves behind an excuse
+    that reads as coverage.
+
+    `scripts/mutation_gate.py` already refuses an entry whose *file* is gone.
+    A file that stays while the function moves out of it is the gap, and it is
+    the one that happened.
+    """
+    offered = {_identity(line) for line in _every_mutant()}
+    # The listing is the detector: an empty universe would excuse every entry.
+    assert len(offered) >= 100, f"the mutant listing returned {len(offered)} names"
+
+    stale = {
+        baseline.name: gone
+        for baseline in BASELINES
+        for gone in [
+            sorted(
+                key
+                for key in json.loads(baseline.read_text(encoding="utf-8"))["_accepted"]
+                if key not in offered
+            )
+        ]
+        if gone
+    }
+    assert not stale, (
+        f"accepted survivors naming no mutant the sweep offers: {stale}. "
+        "Delete each with the argument beside it, or move it to the baseline "
+        "of the sweep that reaches the code now -- and only after that sweep "
+        "has reported it, with a reason written for the cause it survives for "
+        "there."
     )
 
 
