@@ -164,6 +164,18 @@ fn simplify_union(members: &[Schema]) -> Schema {
 /// re-running `simplify` on each would repeat the whole subtree's work once per
 /// level it is nested under — the exponential `simplify` blowup. Pushing the
 /// complement inward over already-normal members keeps the pass linear.
+///
+/// The three arms before the default are **defensive**, and the caller is why:
+/// the only caller complements each member of an already-normal *intersection*,
+/// and a normal intersection holds neither bound and no nested intersection --
+/// it would have folded. So a member here is the top only if it was the bottom
+/// there, the bottom only if it was the top, and a union only if it was an
+/// intersection, and none of the three arrives. They are kept because what
+/// makes them unreachable is an invariant of the normal form rather than of
+/// this function: a fold that stopped absorbing would reach them, and reaching
+/// them is the answer being right rather than a panic.
+/// `schema_tests::the_de_morgan_path_folds_the_bounds_it_builds` holds the
+/// identities they would carry, through the path a caller has.
 fn union_of_simplified(members: impl IntoIterator<Item = Schema>) -> Schema {
     with_member_buffer(|flat| {
         for member in members {
@@ -236,6 +248,9 @@ fn simplify_intersection(members: &[Schema]) -> Schema {
 /// Collapse an intersection of already-normal members without re-normalising
 /// them — the De Morgan dual of [`union_of_simplified`], used along the complement
 /// path so a nested complement is not re-simplified once per level.
+///
+/// Its three arms before the default are defensive for the dual reason, stated
+/// once above.
 fn intersection_of_simplified(members: impl IntoIterator<Item = Schema>) -> Schema {
     with_member_buffer(|flat| {
         for member in members {

@@ -1816,3 +1816,91 @@ fn an_unguarded_occurrence_is_found_through_a_definition() {
     // the guard reads it as reaching nothing rather than as a panic.
     assert!(!Schema::Ref(DefIx::new(9)).occurs_unguarded_under(first, Guarded::No, &bare));
 }
+
+/// The De Morgan path collapses the bounds it meets, in both directions.
+///
+/// A complement of a meet becomes a join of complements, built from members
+/// the pass has already normalised -- re-normalising them is the exponential
+/// blowup the helpers exist to avoid, so they fold the bounds themselves
+/// rather than delegating. That leaves two small tables to get right, and the
+/// arms reachable only along this path are the ones a complement of a bound
+/// produces: the top absorbing a join, the bottom absorbing a meet, and each
+/// dropping out of the other.
+///
+/// Read as sets, this is the top and bottom identities surviving De Morgan,
+/// which is the one thing a fast path around normalisation can quietly lose.
+#[test]
+fn the_de_morgan_path_folds_the_bounds_it_builds() {
+    // ¬(⊥ ∩ int) = ¬⊥ ∪ ¬int = ⊤ ∪ ¬int = ⊤: the top absorbs the join.
+    assert_eq!(
+        not(Schema::Intersection(
+            vec![Schema::Nothing, Schema::Int].into()
+        ))
+        .simplify(),
+        Schema::ANYTHING
+    );
+    // ¬(⊤ ∪ int) = ¬⊤ ∩ ¬int = ⊥ ∩ ¬int = ⊥: the bottom absorbs the meet.
+    assert_eq!(
+        not(Schema::Union(vec![Schema::ANYTHING, Schema::Int].into())).simplify(),
+        Schema::Nothing
+    );
+    // ¬(⊤ ∩ int) = ⊥ ∪ ¬int = ¬int: the bottom drops out of a join.
+    assert_eq!(
+        not(Schema::Intersection(
+            vec![Schema::ANYTHING, Schema::Int].into()
+        ))
+        .simplify(),
+        not(Schema::Int).simplify()
+    );
+    // ¬(⊥ ∪ int) = ⊤ ∩ ¬int = ¬int: the top drops out of a meet.
+    assert_eq!(
+        not(Schema::Union(vec![Schema::Nothing, Schema::Int].into())).simplify(),
+        not(Schema::Int).simplify()
+    );
+
+    // And a member that is itself a join flattens into the one being built,
+    // rather than nesting a level per complement crossed.
+    let nested = not(Schema::Intersection(
+        vec![
+            Schema::Complement(Arc::new(Schema::Union(
+                vec![Schema::Int, Schema::Str].into(),
+            ))),
+            Schema::Bytes,
+        ]
+        .into(),
+    ))
+    .simplify();
+    assert!(
+        matches!(&nested, Schema::Union(members) if members
+            .iter()
+            .all(|member| !matches!(member, Schema::Union(_)))),
+        "a join nested inside the join it is built into: {nested:?}"
+    );
+    // The dual, so neither table is held by the other's row. The inner meet
+    // is two refinements of one base, which the pass leaves standing: a meet
+    // of two kinds would fold to the bottom before the arm was reached.
+    let bounded = |constraint| Schema::Refine {
+        base: Arc::new(Schema::Str),
+        constraints: vec![constraint].into(),
+    };
+    let nested = not(Schema::Union(
+        vec![
+            Schema::Complement(Arc::new(Schema::Intersection(
+                vec![
+                    bounded(Constraint::MinLen(1)),
+                    bounded(Constraint::MaxLen(5)),
+                ]
+                .into(),
+            ))),
+            Schema::Bytes,
+        ]
+        .into(),
+    ))
+    .simplify();
+    assert!(
+        matches!(&nested, Schema::Intersection(members) if members
+            .iter()
+            .all(|member| !matches!(member, Schema::Intersection(_)))),
+        "a meet nested inside the meet it is built into: {nested:?}"
+    );
+}
