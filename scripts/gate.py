@@ -99,6 +99,7 @@ NEEDS_A_RUNNER = {
         "--ignore-filename-regex 'valgebra-py|/(laws|index_laws)\\.rs$|tests\\.rs$' "
         "--fail-under-lines 98 --fail-under-regions 97"
     ): "an instrumented rebuild under nextest",
+    "Per-file coverage floor": "reads the profile the instrumented run above writes",
     "Cross-check membership against pydantic-core and jsonschema": (
         "needs the bench group installed above"
     ),

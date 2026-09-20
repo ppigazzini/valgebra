@@ -213,6 +213,17 @@ jobs:
           cargo llvm-cov nextest --locked --workspace --summary-only
           --ignore-filename-regex 'valgebra-py|/(laws|index_laws)\.rs$|tests\.rs$'
           --fail-under-lines 98 --fail-under-regions 97
+      # The floor above is a total, and a total absorbs a file. One entered the
+      # core reading 84% of lines against a crate held to 98, and the total
+      # moved by a hundredth of a percent. So the same profile is read per file
+      # against a floor far below the crate's, which detects a file nothing
+      # drives rather than ratcheting one that could be driven harder.
+      # `scripts/coverage_gate.py` carries the floor and the files under it.
+      - name: Per-file coverage floor
+        run: |
+          cargo llvm-cov report --json --output-path coverage-core.json \
+            --ignore-filename-regex 'valgebra-py|/(laws|index_laws)\.rs$|tests\.rs$'
+          python3 scripts/coverage_gate.py --json coverage-core.json --scope core
 
   binding-coverage:
     name: binding coverage
@@ -287,6 +298,12 @@ jobs:
             --ignore-filename-regex \
             'valgebra-core|valgebra-py/src/workload\.rs|/interpreter\.rs$|tests\.rs$' \
             --fail-under-lines 96 --fail-under-regions 93
+          # And the same reading per file, for the same reason the core's lane
+          # carries one: this floor is a total too.
+          cargo llvm-cov report --json --output-path coverage-binding.json \
+            --ignore-filename-regex \
+            'valgebra-core|valgebra-py/src/workload\.rs|/interpreter\.rs$|tests\.rs$'
+          python3 scripts/coverage_gate.py --json coverage-binding.json --scope binding
 
   python:
     # The trailing arm is not decoration: one leg of nine checks out the whole

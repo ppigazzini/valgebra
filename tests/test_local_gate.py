@@ -352,6 +352,7 @@ GATE_SCRIPTS = [
     "compare_gate.py",
     "mutation_gate.py",
     "perf_gate.py",
+    "coverage_gate.py",
 ]
 
 

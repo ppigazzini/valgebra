@@ -671,6 +671,35 @@ if the excuse goes stale in either direction. A script in no lane is not a gate.
 
 - **A line coverage floor cannot see a wrong answer.** It says a line ran, not
   that anything checked what it did. That is what the mutation sweeps are for.
+- **A crate-wide floor cannot see one file.** `--fail-under-lines` and
+  `--fail-under-regions` are read against the total, so a file sits under the
+  floor for as long as the rest of the crate carries it. A module entered the
+  core reading 84.48% of lines and 85.90% of regions -- worst in a crate held
+  to 98 and 97 -- and moved the total by a hundredth of a percent, so both
+  floors, the mutation ratchet and the whole product suite stayed green on the
+  merge path while a scoped sweep of it reported 22 of 22 mutants surviving.
+
+    What did report it is `scripts/branch_coverage.py`, which holds a region
+    floor per file and refuses a file the measurement carries and no floor
+    does. It runs on the **nightly** lane, on a pinned nightly toolchain, so it
+    answered after the change had merged rather than before.
+
+    So the merge path asks the same question of its own profile.
+    `scripts/coverage_gate.py` carries a floor far below the crate's, because
+    what it detects is a file nothing drives rather than a file that could be
+    driven harder, and the files under it are named with the reason each is
+    there. The list may only shrink: a file that climbs over the floor fails
+    the gate until its entry goes, which is the rule every excuse in this tree
+    is held to. The two per-file floors are not one check twice: the nightly
+    one ratchets a recorded figure and moves up with the measurement, this one
+    is a fixed floor a file clears or is named under.
+
+    The floor is **per scope**, for the reason the crate floors already are,
+    and then lower again by more than a figure moves between machines. One
+    binding file read 87.65% of regions on a developer's machine and 84.77% on
+    a runner, so a floor set within three points of a measurement reports which
+    machine ran it. A file nothing drives reads near zero, which is what leaves
+    the room to be that far under.
 - **A coverage figure read from a shared target directory is not a figure.**
   `cargo llvm-cov` merges the profile against every instrumented object the
   directory holds, and an object built from an earlier tree contributes a
