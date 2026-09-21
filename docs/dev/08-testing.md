@@ -476,8 +476,10 @@ a partition of the binding, so a file excused to the suite and examined nowhere
 fails.
 
 **What a coverage figure leaves over, and why.** Reading the annotated report
-for the core's shipped scope leaves about seventy statement lines no test
-executes, and they are four kinds rather than a backlog:
+for the core's shipped scope leaves **65 statement lines** no test executes,
+of 6,395 -- 98.98% -- and they are four kinds rather than a backlog. Take the
+figure in a fresh `CARGO_TARGET_DIR`: a profile merged against objects from an
+earlier tree reports lines as unreached that are not.
 
 - a `debug_assert!(false, ...)` and the `return` beside it. Each states an
   invariant a *constructed* value cannot break -- the guards leaving a state
@@ -495,12 +497,25 @@ executes, and they are four kinds rather than a backlog:
   the *line* runs on the other side of the boundary from the crate whose figure
   this is.
 
+**A fifth kind was there and is not a kind: a branch the caller already
+answered.** Three of them, and no input reached any: a reflexivity check whose
+caller returns on schema equality one frame up, a region comparison its caller
+makes four lines above, and the arm of a search for a class the guard beside it
+had matched. They read like the first kind and are not -- an invariant a
+*value* cannot break is a line worth keeping, while a question answered one
+frame up is a line to delete. What separates them is whether the answer comes
+from the shape of the data or from the shape of the call, and the second is
+closed by deletion rather than by a test. `decision.rs` and `oracle.rs` each
+read 100% of lines and regions once those went and the walk through a
+resolved reference gained the test it never had.
+
 None of the four is closed by a test worth writing, and saying so is what
 separates them from the lines that were: a table over the node set closed a
 file's worth of them in one commit, and it closed them because they were
 reachable and nobody had asked.
 
-**Some arms only a free-threaded interpreter reaches, and no lane runs one.**
+**Some arms only a free-threaded interpreter reaches, and no lane measures
+one.**
 The walk snapshots a container and compares the snapshot against what it read,
 because the container can move underneath the reading -- and under a global
 interpreter lock another thread cannot be the one that moves it. Three tests
