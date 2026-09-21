@@ -58,7 +58,7 @@ equivalence against membership rather than asserting it.
 
 SOURCE: §13.2 "**The laws hold by construction**"; §2 "every combinator builds the normal"
 
-HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema
+HELD-BY: laws.rs::the_lattice_laws_hold_of_the_sets, test_union_commutativity, test_absorption, test_the_complement_laws_hold_of_every_drawn_schema, a_reference_the_definitions_resolve_is_read_at_its_fixpoint, a_callback_inside_a_resolved_body_refuses_the_reference
 
 **Stone's representation theorem (1936).** Every Boolean algebra is isomorphic to
 an algebra of sets. **[GUIDING: stone-duality]** — the licence for treating the scalar fragment
@@ -228,7 +228,7 @@ The paper proves soundness of a modal type system
 by a step-indexed realizability argument; it states no theorem about contractive
 maps, and citing one to it is an error this page is written to avoid.
 
-HELD-BY: contractivity_requires_a_structural_guard, test_non_contractive_body_is_rejected, structural_constructors_absorb_the_guard, a_reference_under_only_combinators_is_unguarded
+HELD-BY: contractivity_requires_a_structural_guard, test_non_contractive_body_is_rejected, structural_constructors_absorb_the_guard, a_reference_under_only_combinators_is_unguarded, a_reference_the_definitions_resolve_is_read_at_its_fixpoint
 
 [01-schema-ir.md](01-schema-ir.md) records why the check's structural arms
 compute nothing.

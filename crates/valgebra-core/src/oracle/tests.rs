@@ -134,6 +134,87 @@ fn a_reference_is_not_a_set_the_fold_may_cancel() {
     }
 }
 
+// THEORY: lattice-theory, guarded-recursion
+/// A reference the definitions resolve is read, and read at its fixpoint.
+///
+/// The fold refuses a bare reference because a callback may hide behind a
+/// body it does not hold. Given the body it walks in, and the reference it
+/// meets again *inside* that body is assumed to be a set -- the greatest
+/// fixpoint, and the only reading that terminates. Both halves are here
+/// because each is a separate line of the walk: the resolution, and the
+/// revisit.
+///
+/// Without this the walk's recursive half ran in production -- the
+/// constructors pass their definitions -- and in no test, so the reading the
+/// doc comment states was held by nothing.
+#[test]
+fn a_reference_the_definitions_resolve_is_read_at_its_fixpoint() {
+    // `t = int | list[t]`: the body names the reference, so the walk reaches
+    // it twice and the second meeting is the one the fixpoint reading is for.
+    let reference = Schema::Ref(DefIx::new(0));
+    let definitions = [Schema::union([
+        Schema::Int,
+        Schema::list(SeqShape::homogeneous(reference.clone())),
+    ])];
+
+    assert!(
+        !denotes_a_set_within(&reference, &NoLeafRelations, &[]),
+        "a body not in hand may hide a callback"
+    );
+    assert!(
+        denotes_a_set_within(&reference, &NoLeafRelations, &definitions),
+        "the body holds no callback, and the back edge is a set by assumption"
+    );
+
+    // And the law the reading serves: the constructors cancel a fixpoint
+    // against its own complement exactly where they can read one.
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    assert_eq!(
+        Schema::union_within([reference.clone(), not(reference.clone())], &definitions),
+        Schema::ANYTHING
+    );
+    assert_eq!(
+        Schema::meet_within([reference.clone(), not(reference.clone())], &definitions),
+        Schema::Nothing
+    );
+    // The same two without the table decline, which is what makes the pair
+    // above a statement about the definitions rather than about the spelling.
+    assert_ne!(
+        Schema::union([reference.clone(), not(reference)]),
+        Schema::ANYTHING
+    );
+}
+
+// THEORY: lattice-theory
+/// A callback inside a resolved body is found through the reference.
+///
+/// The companion to the test above, and what stops it from being a walk that
+/// answers `true` for every table: the descent has to *read* the body it
+/// resolved, so a predicate one branch in refuses the whole fixpoint.
+#[test]
+fn a_callback_inside_a_resolved_body_refuses_the_reference() {
+    let reference = Schema::Ref(DefIx::new(0));
+    let predicate = Schema::Refine {
+        base: Arc::new(Schema::Int),
+        constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+    };
+    let definitions = [Schema::union([
+        predicate,
+        Schema::list(SeqShape::homogeneous(reference.clone())),
+    ])];
+
+    assert!(!denotes_a_set_within(
+        &reference,
+        &NoLeafRelations,
+        &definitions
+    ));
+    let not = |schema: Schema| Schema::Complement(Arc::new(schema));
+    assert_ne!(
+        Schema::union_within([reference.clone(), not(reference)], &definitions),
+        Schema::ANYTHING
+    );
+}
+
 /// A class is referred to the oracle, and a core with none declines it.
 ///
 /// The default answers nothing, which is what makes an unwired core
