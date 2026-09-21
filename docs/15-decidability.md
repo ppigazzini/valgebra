@@ -378,6 +378,15 @@ the shape. What is left below is what the descriptor cannot hold.
   declines rather than spreading it — so a relation about such a map is left to
   the rules, and a pair the rules do not decide comes back "not proven".
 
+    That partition is the model's, not a shortcut around it: the source treats
+    a record as a quasi-`K`-step function, where `K` is a *predefined finite
+    partition* of the key domain and the catch-all is split across its parts.
+    The paper weighs letting key domains overlap and declines it, because
+    comparing two records would then need the machinery for comparing
+    intersections of arrow types. A complement-keyed clause is exactly an
+    overlapping domain, so this decline is the model's shape rather than an
+    unfinished corner of the implementation.
+
     ```python
     from valgebra import Validator, anything, complement
 

@@ -140,12 +140,18 @@ constructor. Beyond the admission test, two costs specific to this one:
 
 - The model `KeyedMap` is built from is recorded in
   [10-theory.md](10-theory.md) as *records and maps as quasi-constant
-  functions* — named fields plus a key-typed default. No carrier appears in that
-  description. Whether the source paper treats a nominal carrier is **not
-  established here**, and its title names structs, so do not assume it does not.
-  What follows is only that this project has no recorded reading of a
-  carrier-indexed map: an absence of guidance, not a permission and not a
-  prohibition.
+  functions* — named fields plus a key-typed default. No carrier appears in
+  that description, and **none appears in the source either**, which the title
+  makes worth saying out loud. Castagna's "struct" is an *access style*, not a
+  carrier: the abstract defines one as a record "accessed by providing nominal
+  keys", and §1 contrasts `r.key`, which raises where the key is absent, with
+  `r[keyexp]`, which does not — one record value, two ways of reading it, one
+  record type covering both. The word *nominal* there qualifies the **key**.
+  Records and maps alike interpret as quasi-`K`-step functions from keys to
+  values, and §4.5, which is where the paper weighs variations, considers
+  overlapping key domains and row polymorphism and never a tag. So the model
+  offers no reading of a carrier-indexed map, and that is established rather
+  than assumed.
 - The decision procedures this project sources decide maps **without** a
   carrier: Elixir's `Module.Types.Descr`, and the negated-map-atom decomposition
   for deciding a keyed map under negation. A carrier-indexed map is outside the
