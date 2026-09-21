@@ -350,36 +350,49 @@ PERF_STEPS = (
 )
 
 
-def perf_base() -> str | None:
+def perf_base(tree: Path = ROOT) -> str | None:
     """Give the revision the instruction gate measures against, by the lane's rule.
 
     `ci.yml` reads the event's base, falls back to the default branch, and --
     where that resolves to `HEAD` itself, which is what a push to the default
     branch produces -- takes its parent instead, because measuring a commit
     against itself passes whatever it did. There is no event here, so the
-    first step is the remote-tracking branch and the rest is the same rule.
+    remote-tracking branch stands in for the event and the rest is that rule.
+
+    **The base is the merge base, not the branch tip.** What the event names
+    for a pull request is `base.sha`, the commit the two histories share, and
+    a tip is that only where the branch is ahead of it. On a branch *behind*
+    the default one the tip is not in this history at all, so a comparison
+    against it is a comparison of two unrelated trees -- and it reads as a
+    regression or an improvement according to what else landed meanwhile.
+    Taking the merge base gives the tip where the branch is ahead, the fork
+    point where it has diverged, and `HEAD` itself where it is behind, which
+    the rule below then turns into the parent.
 
     `None` where no base exists: a repository of one commit has nothing to
     compare against, and saying so is not a failure.
+
+    The tree is a parameter so the rule can be asked of a repository shaped
+    like the failure above, which the one it runs in is not.
     """
-    head = git_output("rev-parse", "HEAD")
+    head = git_output("rev-parse", "HEAD", cwd=tree)
     base = next(
         (
             resolved
             for ref in ("origin/HEAD", "origin/main")
-            if (resolved := git_output("rev-parse", ref)) is not None
+            if (resolved := git_output("merge-base", ref, "HEAD", cwd=tree)) is not None
         ),
         None,
     )
     if base is None or base == head:
-        base = git_output("rev-parse", "HEAD~1")
+        base = git_output("rev-parse", "HEAD~1", cwd=tree)
     return base
 
 
-def git_output(*args: str) -> str | None:
+def git_output(*args: str, cwd: Path = ROOT) -> str | None:
     """Give a git command's single line of output, or `None` where it fails."""
     done = subprocess.run(
-        ["git", "-C", str(ROOT), *args],
+        ["git", "-C", str(cwd), *args],
         capture_output=True,
         text=True,
         check=False,

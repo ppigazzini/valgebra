@@ -606,3 +606,63 @@ def test_the_instruction_gate_names_modes_the_measurer_has() -> None:
         assert f'"{mode.removeprefix("--")}"' in measurer, (
             f"the gate asks for {mode}, which `perf_gate.py` does not define"
         )
+
+
+def test_the_instruction_gate_measures_against_an_ancestor(tmp_path: Path) -> None:
+    """The base is the merge base, so it is always in this history.
+
+    What the lane's event names for a pull request is `base.sha`, the commit
+    the two histories share. A *tip* is that only where the branch is ahead of
+    it: on a branch behind the default one the tip is not reachable from
+    `HEAD`, and the step then compares two unrelated trees -- which reads as a
+    regression or an improvement according to what else landed meanwhile,
+    never as the change under test.
+
+    The repository this runs in is ahead of its remote or equal to it, which
+    is the one shape where a tip is right, so the rule is asked of a checkout
+    put behind its default branch instead.
+
+    Built rather than cloned from this tree, for the reason the perf gate's
+    own stage is: a synthetic history carries its own commits, so this runs in
+    the shallow checkouts the lanes take rather than skipping there. A clone of
+    a depth-one checkout has one commit and nothing to go behind, and reading
+    two back in it is an error rather than a branch behind its remote.
+    """
+
+    def git(*args: str, tree: Path) -> str:
+        done = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+            ["git", "-C", str(tree), *args],  # noqa: S607
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return done.stdout.strip()
+
+    upstream = tmp_path / "upstream"
+    upstream.mkdir()
+    git("init", "--quiet", "--initial-branch=main", tree=upstream)
+    git("config", "user.email", "gate@example.invalid", tree=upstream)
+    git("config", "user.name", "gate", tree=upstream)
+    for step in range(4):
+        git("commit", "--quiet", "--allow-empty", "-m", f"commit {step}", tree=upstream)
+
+    clone = tmp_path / "behind"
+    subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        ["git", "clone", "--no-hardlinks", "--quiet", str(upstream), str(clone)],  # noqa: S607
+        check=True,
+        capture_output=True,
+    )
+    behind = git("rev-parse", "HEAD~2", tree=clone)
+    git("checkout", "--detach", "--quiet", behind, tree=clone)
+
+    base = gate.perf_base(clone)
+    assert base is not None, "a clone with history has something to measure against"
+    reachable = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+        ["git", "-C", str(clone), "merge-base", "--is-ancestor", base, "HEAD"],  # noqa: S607
+        check=False,
+        capture_output=True,
+    )
+    assert reachable.returncode == 0, (
+        f"the gate would measure {behind[:12]} against {base[:12]}, which is not "
+        f"in its history: a comparison of two unrelated trees"
+    )
