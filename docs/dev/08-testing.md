@@ -476,10 +476,14 @@ a partition of the binding, so a file excused to the suite and examined nowhere
 fails.
 
 **What a coverage figure leaves over, and why.** Reading the annotated report
-for the core's shipped scope leaves **65 statement lines** no test executes,
-of 6,395 -- 98.98% -- and they are four kinds rather than a backlog. Take the
-figure in a fresh `CARGO_TARGET_DIR`: a profile merged against objects from an
-earlier tree reports lines as unreached that are not.
+for the core's shipped scope leaves **under a hundred** statement lines no
+test executes, and they are four kinds rather than a backlog. The figure is
+rounded on purpose: an exact one is right for a day and no gate reads it, and
+this page has been wrong before by carrying a number nothing held. Take the
+reading in a fresh `CARGO_TARGET_DIR` -- a profile merged against objects
+from an earlier tree reports lines as unreached that are not -- and the
+per-file floors in `scripts/branch_coverage.json` are the figures a gate does
+hold.
 
 - a `debug_assert!(false, ...)` and the `return` beside it. Each states an
   invariant a *constructed* value cannot break -- the guards leaving a state
@@ -505,9 +509,9 @@ had matched. They read like the first kind and are not -- an invariant a
 *value* cannot break is a line worth keeping, while a question answered one
 frame up is a line to delete. What separates them is whether the answer comes
 from the shape of the data or from the shape of the call, and the second is
-closed by deletion rather than by a test. `decision.rs` and `oracle.rs` each
-read 100% of lines and regions once those went and the walk through a
-resolved reference gained the test it never had.
+closed by deletion rather than by a test. Two files read every line and every
+region once those went and the walk through a resolved reference gained the
+test it never had.
 
 None of the four is closed by a test worth writing, and saying so is what
 separates them from the lines that were: a table over the node set closed a
