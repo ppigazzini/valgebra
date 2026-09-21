@@ -1913,6 +1913,31 @@ proptest! {
         }
     }
 
+    /// The two bounds again, over the fragment the value oracle cannot decide.
+    ///
+    /// The law above is stated where emptiness is *exact*, so its premise is a
+    /// proof by construction. Here the premise is a proof for a different
+    /// reason: `is_empty` is sound, so a `true` from it is a proof whatever
+    /// fragment it was asked on -- and the conclusion is then a completeness
+    /// claim about the procedure over records, sequences, collections and
+    /// refinements, which is where the atoms-only reading has nothing to say.
+    ///
+    /// Neither half needs a value: both sides are the procedure answering
+    /// about itself, which is what lets this run over a fragment no oracle
+    /// models.
+    #[test]
+    fn the_lattice_bounds_hold_over_the_shaped_fragment(
+        a in decidable_schema(),
+        b in decidable_schema(),
+    ) {
+        if a.is_empty() {
+            prop_assert!(a.is_subtype_of(&b), "empty {a:?} not below {b:?}");
+        }
+        if Schema::Complement(Arc::new(b.clone())).is_empty() {
+            prop_assert!(a.is_subtype_of(&b), "{a:?} not below universal {b:?}");
+        }
+    }
+
     /// The universe bound where the **subject takes no part in it**.
     ///
     /// `A ⊆ U` for every `A`, including the `A` no reading can build. The

@@ -741,7 +741,7 @@ over a corpus. **[DEVIATION: structural-rather-than-reduction]**
 
 SOURCE: §13.1 "`is_subtype_of` is not that reduction applied uniformly"
 
-HELD-BY: test_decision_decides_true_relations, test_the_two_deciders_are_measured_against_each_other
+HELD-BY: test_decision_decides_true_relations, test_the_two_deciders_are_measured_against_each_other, the_structural_inclusion_rules_decide_without_the_descriptor
 
 **Simplification stops at negation normal form, which is not canonical.**
 `simplify(a) == simplify(b)` is not an equivalence test, `==` is the form and

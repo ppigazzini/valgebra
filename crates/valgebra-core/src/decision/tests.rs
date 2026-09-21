@@ -464,6 +464,7 @@ fn members_of_the_universe(opaque: &Schema) -> crate::Members {
     .into()
 }
 
+// THEORY: structural-rather-than-reduction
 /// The structural inclusion rules, held to their own work.
 ///
 /// The descriptor is asked after these rules and decides much of what they
