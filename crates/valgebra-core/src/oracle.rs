@@ -261,6 +261,19 @@ pub(crate) fn has_complementary_pair_within(
 /// Given the body, a reference met again while that body is being walked is
 /// *assumed* to be a set: the greatest-fixpoint reading the rest of the
 /// recursion uses, and the only one that terminates.
+///
+/// **That assumption is contractivity, and this does not check it.** A
+/// contractive body has a *unique* fixpoint, which is what makes "the set the
+/// reference denotes" a thing to speak of at all; a body whose reference is
+/// unguarded may have many fixpoints or none, and `t = ~t` has none. Read as
+/// a set anyway, such a reference lets a caller fold `t | ~t` to the top --
+/// a lattice law applied to a set that does not exist.
+///
+/// The precondition is discharged before any `Ref` reaches here from the
+/// frontend: `recursive` builds its body around a `SelfRef`, which the arm
+/// below refuses outright, and `occurs_unguarded_under` runs on the resolved
+/// body before the definition is handed to anything. A caller assembling a
+/// definitions table by hand owes the same check.
 pub(crate) fn denotes_a_set_within(
     schema: &Schema,
     oracle: &dyn LeafRelations,

@@ -951,6 +951,14 @@ impl Schema {
     /// `json | ~json` is left standing while `int | ~int` folds to the top. A
     /// caller that holds the definitions -- which is every caller that combines
     /// two compiled validators -- passes them and gets the law for both.
+    ///
+    /// **The table is required to be contractive**, because the law is about
+    /// sets and a non-contractive definition names none: `t = ~t` is satisfied
+    /// by no set, and folding `t | ~t` over it applies a law to nothing. Every
+    /// caller in the bindings has run `occurs_unguarded_under` on the body
+    /// before a `Ref` into it exists; a caller assembling a table by hand owes
+    /// that check. `oracle::denotes_a_set_within` is where a reference is read
+    /// and where the precondition bites.
     #[must_use]
     pub fn union_within(
         members: impl IntoIterator<Item = Schema>,
@@ -1005,7 +1013,8 @@ impl Schema {
     }
 
     /// The meet, with the definitions its members may refer into. The dual of
-    /// [`union_within`](Self::union_within), and for the same reason.
+    /// [`union_within`](Self::union_within), and for the same reason -- and
+    /// under the same precondition, that the table is contractive.
     #[must_use]
     pub fn meet_within(
         members: impl IntoIterator<Item = Schema>,
