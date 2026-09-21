@@ -40,8 +40,8 @@ impl Schema {
     ///
     /// Where the rules decline, the question is asked again of the *set* the
     /// schema denotes, under a bound on what building it may cost, which
-    /// decides a container meet, a double complement and a kind against its own
-    /// literals. What is left undecided is what no bounded descriptor holds: an
+    /// decides a container meet, a complement nested inside another, and a kind
+    /// against its own literals. What is left undecided is what no bounded descriptor holds: an
     /// unresolved recursive reference, a predicate, and a schema past one of the
     /// build's bounds.
     ///

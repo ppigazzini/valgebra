@@ -222,9 +222,15 @@ impl Schema {
     /// conservative where it cannot decide: there it returns `false` rather than
     /// guess. A `false` is then asked again of the two *sets*, under a bound on
     /// what building them may cost, which decides
-    /// what no rule about shapes reaches: a container meet, a double complement,
-    /// one regular language inside another, a kind against its own literals, one
-    /// step dividing another.
+    /// what no rule about shapes reaches: a container meet, a complement nested
+    /// inside another, one regular language inside another, a kind against its own
+    /// literals, one step dividing another.
+    ///
+    /// A complement *directly* under a complement is not on that list and cannot
+    /// be: [`Schema::complement`] folds `¬¬X` to `X` whichever schema it is
+    /// given, so the shape reaches a comparison only from a term built without
+    /// the constructors -- which the fuzz target does, and which is where the
+    /// bound on a universal subject was found missing.
     ///
     /// The decision is bounded twice over: an adversarial schema that would take
     /// more than a fixed number of steps stops, and a descriptor too costly to

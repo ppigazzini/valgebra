@@ -130,10 +130,16 @@ when there is no value to name. `relation_to` reports the three answers apart;
 ## What the algebra decides, and the conservative frontier
 
 Deciding whether two arbitrary set-theoretic types are equal — equivalently,
-whether a type is empty — is decidable **in EXPTIME**, an upper bound Gesbert,
-Genevès & Layaïda establish. The EXPTIME-*completeness* result in this line of
-work is Hosoya, Vouillon & Pierce's, and is stated of their regular tree types, a
-narrower language.
+whether a type is empty — is decidable **in EXPTIME**, and the bound is older
+than either citation below is usually read as saying. For a language of regular
+tree types, with no arrows and no type variables, it follows from containment of
+tree automata, which **Seidl** proved EXPTIME-complete in 1990; Hosoya, Vouillon
+& Pierce state it for their type language as Theorem 1 and import the result
+from him. That is the language valgebra's fragment sits closest to. Gesbert,
+Genevès & Layaïda establish `2^O(n)` for a **larger** language — the
+Castagna & Xu relation, with function types and type variables — which is the
+bound no other proof existed for, and which covers the fragment here because a
+superset's upper bound bounds a sublanguage.
 
 valgebra does not need that decision to validate: membership is answered
 directly by the walk, not by reducing the schema. So the library is honest about
@@ -167,8 +173,9 @@ over the schema tree, exact on the published fragment and conservative beyond it
 Where they decline, a **descriptor** is built: each kind held as a set closed
 under union, intersection and complement, so the emptiness test is asked
 literally rather than approximated by a rule about the shape. It decides what a
-rule about shapes cannot — a container meet, a double complement, one regular
-language inside another, the ordering of two steps — and it is bounded, because
+rule about shapes cannot — a container meet, a complement nested inside another,
+one regular language inside another, the ordering of two steps — and it is
+bounded, because
 building one costs about two orders of magnitude more than a rule that already
 answered. What is past those bounds, and what no finite descriptor holds, is what
 the boundary records as conservative.
@@ -186,12 +193,16 @@ The essential reading, in the order it maps onto valgebra:
    The foundation: types as sets, subtyping as inclusion, full Boolean
    connectives.
 2. **Gesbert, Genevès & Layaïda — "A Logical Approach to Deciding Semantic
-   Subtyping", *TOPLAS* 38(1), 2015.** The decision procedure, and the EXPTIME
-   upper bound it establishes — why the full emptiness decision is deferred.
+   Subtyping", *TOPLAS* 38(1), 2015.** The decision procedure, and a `2^O(n)`
+   upper bound for set-theoretic types **with arrows and type variables** — a
+   language larger than this one, which is why the bound transfers rather than
+   being about the fragment here. Cited for why the full emptiness decision is
+   deferred.
 3. **Hosoya, Vouillon & Pierce — "Regular Expression Types for XML", *TOPLAS*
    27(1), 2005.** Regular-tree types — the model behind sequences as one regex
-   node, and the source of the EXPTIME-completeness result, which is stated of
-   that type language.
+   node. Their Theorem 1 states EXPTIME-completeness for that type language and
+   takes the result from Seidl's 1990 proof for tree-automata containment, which
+   is where it belongs.
 4. **Castagna — "Typing Records, Maps, and Structs", *ICFP* 2023.**
    [doi:10.1145/3607838](https://doi.org/10.1145/3607838). Records and maps as
    keyed-default functions.

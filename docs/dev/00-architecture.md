@@ -30,6 +30,47 @@ direction their dependencies run, and the two invariants the compiler holds.
 `valgebra-py` depends on `valgebra-core`. Nothing depends on `valgebra-py`, which
 is a `cdylib` and has no downstream Rust consumer.
 
+```mermaid
+flowchart TB
+    subgraph PY["crates/valgebra-py -- the PyO3 binding"]
+        direction LR
+        BUILD["build.rs<br/>annotations into the IR"]
+        VAL["validator.rs<br/>the compiled validator"]
+        WALK["check/<br/>the membership walk"]
+        ORACLE["oracle.rs<br/>implements LeafRelations"]
+    end
+
+    subgraph CORE["crates/valgebra-core -- pure Rust, no pyo3"]
+        direction TB
+        DECISION["decision.rs, decision/<br/>the structural rules -- the optimisation"]
+        DESCR["descr/<br/>the set representation -- the definition"]
+        IR["ir.rs<br/>the node set and what each denotes"]
+        FRAME["kind.rs, verdict.rs<br/>the partition, and the two three-valued answers"]
+        DECISION -->|"asks only where its own rules decline"| DESCR
+        DECISION --> IR
+        DESCR --> IR
+        DECISION --> FRAME
+        DESCR --> FRAME
+    end
+
+    BUILD --> IR
+    VAL --> DECISION
+    WALK --> IR
+    ORACLE -.->|"answers the questions only Python can:<br/>a class, a constant, an ordering"| DECISION
+
+    classDef frame fill:#0d47a1,stroke:#90caf9,color:#ffffff
+    classDef definition fill:#4a148c,stroke:#ce93d8,color:#ffffff
+    class FRAME frame
+    class DESCR definition
+```
+
+Three edges in that picture are the ones a change has to respect. **The frame
+sits below both deciders**, not inside either. **The edge from the rules to the
+descriptor runs one way**, and there is no edge back. And the dotted edge is
+not a dependency at all -- it is a trait the core defines and the binding
+implements, which is how a pure-Rust crate asks a question only Python can
+answer.
+
 **Inside the core, the definition does not import the optimisation.** The
 descriptor is what a schema's set *is* and the structural rules are an
 optimisation of the relation it defines, so the frame both read — the `Kind`

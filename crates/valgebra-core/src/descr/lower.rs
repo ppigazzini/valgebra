@@ -228,7 +228,8 @@ impl Bounds {
 ///
 /// Sized from the shapes on both sides of the question. The differences the
 /// descriptor decides and the structural rules do not -- a container meet, a
-/// double complement, one regular language inside another -- each spend under
+/// complement nested inside another, one regular language inside another -- each
+/// spend under
 /// 256 units. The shapes that blow up spend tens or hundreds of thousands: a
 /// record nested eight deep spends 22,806, and a union of four records nested
 /// three deep minus a union of its siblings spends 170,597.

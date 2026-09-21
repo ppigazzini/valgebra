@@ -32,6 +32,43 @@ building a set representation costs about two orders of magnitude more than a
 rule that already answers, which is what a relation the rules *refute* stops
 paying.
 
+**How the two deciders compose.** Each answers in three values, and the whole
+of the wiring is which answer passes to what. The cascade of *readings* inside
+the rules is a sequence and is written out below; what is not a sequence is
+this:
+
+```mermaid
+flowchart TD
+    Q(["a ⊆ b ?"]) --> RULES["the rules<br/>shapes, and the lattice bounds"]
+    RULES -->|refuted| W{"subject<br/>inhabited?"}
+    RULES -->|neither| DESC["the descriptor<br/>is a ∧ ¬b empty?"]
+    RULES -->|proved| H([Holds])
+    W -->|empty| H
+    W -->|yes| F([Fails])
+    W -->|undecided| U([Unknown])
+    DESC -->|empty| H
+    DESC -->|inhabited| F
+    DESC -->|refused| U
+
+    classDef proof fill:#1b5e20,stroke:#a5d6a7,color:#ffffff
+    classDef refute fill:#b71c1c,stroke:#ef9a9a,color:#ffffff
+    classDef decline fill:#4e342e,stroke:#bcaaa4,color:#ffffff
+    class H proof
+    class F refute
+    class U decline
+```
+
+Two places carry the design. The **witness guard** is the `W` diamond, and it
+has three exits rather than two: a refutation whose subject is proved empty
+becomes the *opposite* answer, which is what puts the empty set below
+everything, and one whose subject is undecided becomes a decline rather than a
+`Fails`. The **descriptor** is reached only from "neither" -- a pair the rules
+refuted is never lowered, because a sound second reading cannot overturn a
+proof, and lowering one costs about two orders of magnitude more than the rule
+that already answered. Its inhabited answer refutes only where no reference was
+cut: where one was, the difference was widened on the left and shrunk on the
+right, so a value found in it need be no value of the real difference.
+
 **A refutation stands on a value.** The descriptor's is direct: it proves the
 difference `a & ~b` holds one. A rule's is a mismatch of shapes -- two arities
 that cannot align, a key one side requires and the other does not declare --

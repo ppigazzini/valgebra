@@ -447,8 +447,9 @@ mapping, and mixed maps where the supertype's extra field is optional and the
 subtype's catch-all covers it), inclusion in a complement where the two schemas
 share no value, and recursion. Where a rule declines, the relation is asked again
 of the *sets* the two schemas denote, which decides what no rule about shapes
-reaches — a container meet, a double complement, one regular language inside
-another, a kind against its own literals, one step dividing another — under a
+reaches — a container meet, a complement nested inside another, one regular
+language inside another, a kind against its own literals, one step dividing
+another — under a
 bound on what building those sets may cost. The two readings, and the guard that
 decides when a negative answer is a refutation rather than a decline, are named
 in [the foundations](13-foundations.md). What is past that bound, and what no
