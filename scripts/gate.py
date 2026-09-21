@@ -911,11 +911,17 @@ def main() -> int:
         return EXIT_FAIL
     deep_steps = 0 if args.here else len(DEEP_HISTORY_STEPS)
     floor_count = len(floor_steps()) if floor_runs else 0
-    total = len(plan) + deep_steps + floor_count + len(NOTES_STEPS)
+    # Every lane the run took, including the two that are neither the plan nor
+    # the clone: a step that runs and is not counted is a step a green line
+    # does not cover.
+    total = (
+        len(plan) + deep_steps + floor_count + len(NOTES_STEPS) + len(perf_plan()[0])
+    )
     print(
         f"gate: {total} step(s) passed in a clone shaped like the runner's, in a "
         "clone that keeps the history and has no committer, on the floor "
-        "interpreter, and over the notes no runner carries."
+        "interpreter, against the base the instruction gate measures from, and "
+        "over the notes no runner carries."
     )
     report_what_was_not_run(here=args.here, floor=floor_runs)
     return EXIT_OK
