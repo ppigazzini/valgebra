@@ -368,6 +368,14 @@ it: the structural rules, and the emptiness of the difference through the
 descriptor. Both are sound and neither subsumes the other, so `is_subtype_of`
 asks the rules and then the descriptor, and `is_empty` asks its own pair.
 
+**The route needs both sides, and a pair it cannot lower is not a pair it can
+answer.** A schema carrying a class the pool cannot order has no narrowing --
+an opaque leaf has no floor to narrow to -- so `~object` has no widening to
+complement, and no difference can be formed at all. That is a decline like any
+other, and it is why a bound the *rules* can reach must be reached there rather
+than left to this route: the route is not available on the pairs that need it
+most.
+
 They do not always agree, and the disagreement is *incompleteness* rather than a
 wrong answer: `a.is_subtype_of(b)` can be `True` while
 `intersection(a, complement(b)).is_empty()` is `False`. Every case measured is a
@@ -600,6 +608,51 @@ refutation is read against that same emptiness by the witness guard on the way
 out, so asking first walked the subject on every pair the rules were about to
 decide anyway. The answer is the same either way -- both readings are sound,
 and an empty subject is below everything whichever of them says so.
+
+**The empty-subject bound reads a complement with the complete reading too.**
+`¬X` is empty exactly when `X` covers the universe, and the emptiness fold got
+that from the *fast* region reading alone -- which stops at the first member a
+union carries that the partition cannot read. So `list | object` read as unknown,
+`¬(list | object)` read as unknown with it, and a subject that denotes nothing
+was not below everything after all. The complete reading is asked where the fast
+one declines and only there, so a complement the regions already settle pays
+nothing for it, and the walk is a member list against a bitset rather than a
+lowering.
+
+That is the bound the fuzzer found missing, and it is worth naming how it
+surfaced, because the shape is not one a caller can spell. `¬¬(list | object)`
+is the universe; the constructors fold `¬¬X` to `X`, so only a term built by
+hand carries it. The contravariant rule turns `¬A ⊆ ¬¬U` into `¬U ⊆ A`, which
+puts the un-spellable complement in the *subject*, where this bound is the only
+thing that answers. `fuzz/seeds/decision/` keeps the input, and
+`a_universal_supertype_bounds_a_subject_that_does_not_lower` in `laws.rs` draws
+the pair deliberately -- eight thousand pairs over the structural corpus built
+it not once.
+
+**The dearer route was tried here and withdrawn.** Asking the set representation
+for the same bound -- lowering the supertype alone where the subject refused --
+is sound and decides the same pair, and it cost the relation matrix **6.45
+billion instructions against 89.8 million**, a seventy-fold regression, because
+a pair whose subject does not lower is common and the lowering is the dear
+operation. `scripts/perf_gate.py --decision-matrix` is where that showed.
+
+**The universe bound reads a union one De Morgan step in, where the region
+walk passes over the member that covers the rest.** The complete walk carries
+what the readable members cover between them and skips a member the partition
+cannot read -- sound, and short wherever the skipped member is the one doing
+the covering. `¬None ∪ ¬set[Any]` is the universe, because no value is both
+`None` and a set, but `¬set[Any]` has no region, so the walk sees every region
+except `None` and declines. Where the rules and the walk have both declined, the
+bound asks for the meet of the members' complements, `None ∩ set[Any]`, and the
+emptiness rules settle it by kind disjointness without lowering anything.
+
+It is asked only of a union with a member the walk skipped: a walk that read
+every member read each exactly, and its `false` is the answer. Without that
+filter the meet was built for every declined pair against a union, and the
+relation matrix paid **+20.5%** for answers it already had; with it, +0.24%. The
+nightly laws lane drew the pair with a literal subject the descriptor cannot
+lower, and `a_union_of_complements_covers_the_universe_where_their_inners_are_disjoint`
+in `decision/tests.rs` keeps it.
 
 ## Two more places a shape stood in for the question
 

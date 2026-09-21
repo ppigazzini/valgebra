@@ -398,6 +398,62 @@ fn a_union_covers_the_universe_behind_a_member_the_partition_cannot_read() {
     }
 }
 
+/// A union covers the universe where no member's region does the covering:
+/// `~None | ~set[Any]` holds every value, because none is both `None` and a
+/// set, but `~set[Any]` has no region, so the region walk sees every region
+/// save `None` and stops short.
+///
+/// The nightly laws lane drew it, with a literal subject the descriptor cannot
+/// lower without a pool -- so, as in the row above, the rules are the whole of
+/// the answer. They read it one De Morgan step in, where the union is the meet
+/// `None & set[Any]` of two kinds sharing no value.
+#[test]
+fn a_union_of_complements_covers_the_universe_where_their_inners_are_disjoint() {
+    let not_none = Schema::Complement(Arc::new(Schema::NoneType));
+    let not_a_set = Schema::Complement(Arc::new(Schema::Coll {
+        container: CollKind::Set,
+        element: Arc::new(Schema::ANYTHING),
+    }));
+    let subject = Schema::Union(
+        vec![Schema::Complement(Arc::new(Schema::Literal(ConstIx::new(
+            0,
+        ))))]
+        .into(),
+    );
+    let not_a_list = Schema::Complement(Arc::new(Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape::homogeneous(Schema::ANYTHING),
+    }));
+    // One member the walk reads and one it passes over, then two it passes
+    // over: the meet is asked wherever the walk skipped a member, however many
+    // it read.
+    for members in [
+        vec![not_none.clone(), not_a_set.clone()],
+        vec![not_a_set.clone(), not_a_list],
+    ] {
+        let universe = Schema::Union(members.clone().into());
+        assert!(
+            Schema::Complement(Arc::new(universe.clone())).is_empty(),
+            "{members:?} does not cover the universe"
+        );
+        assert_eq!(
+            subject.subtype_relation_under(&universe, &NoLeafRelations, &[]),
+            Relation::Holds,
+            "{subject:?} is below the universe {members:?}"
+        );
+    }
+
+    // Inners that share a value -- `{1}` is a set and a set of ints -- leave
+    // the union short of the universe, and the reading does not sweep it along.
+    let not_a_set_of_ints = Schema::Complement(Arc::new(Schema::Coll {
+        container: CollKind::Set,
+        element: Arc::new(Schema::Int),
+    }));
+    let partial = Schema::Union(vec![not_a_set, not_a_set_of_ints].into());
+    assert!(!Schema::Complement(Arc::new(partial.clone())).is_empty());
+    assert!(!subject.is_subtype_of(&partial));
+}
+
 /// `~bool | bool | opaque`, the union the row above is written around.
 fn members_of_the_universe(opaque: &Schema) -> crate::Members {
     vec![
@@ -585,21 +641,33 @@ fn schema() -> impl Strategy<Value = Schema> {
 }
 
 proptest! {
-    /// Asking whether a schema covers the universe by reading its region is the
-    /// same question as asking whether its complement is empty. The lattice
-    /// bound `A subset-of U` is decided the second way in principle and the
-    /// first way in the code, because the first builds nothing; this holds the
-    /// two together so the cheaper one cannot drift from the rule it stands in
-    /// for.
+    /// Asking whether a schema covers the universe is the same question as
+    /// asking whether its complement is empty. The lattice bound
+    /// `A subset-of U` is decided the second way in principle and the first way
+    /// in the code, because the first builds nothing; this holds the two
+    /// together so the cheaper one cannot drift from the rule it stands in for.
+    ///
+    /// The reading it is held to is [`covers_the_universe`], the complete one.
+    /// The *fast* region fold is a sound lower bound on it and no more: it
+    /// stops at the first member the partition cannot read, so `list | object`
+    /// covers the universe and folds to an unknown region. Pinning the
+    /// complement's emptiness to that fold instead would pin it to the stop,
+    /// and a subject denoting nothing would not be below everything -- which is
+    /// what the nightly fuzzer found. Both directions are asserted, so the
+    /// verdict can neither fall behind the reading nor run ahead of it.
     #[test]
     fn covering_the_universe_is_the_complement_being_empty(s in schema()) {
         let budget = Cell::new(DECISION_BUDGET);
         let via_complement = Schema::Complement(Arc::new(s.clone()))
             .is_empty_rec(&NoLeafRelations, &[], &mut Vec::new(), &budget);
+        prop_assert_eq!(via_complement, s.covers_the_universe());
+        // And the fast fold is below the complete reading, never past it.
         let budget = Cell::new(DECISION_BUDGET);
         let (_, regions) =
             s.empty_and_region(&NoLeafRelations, &[], &mut Vec::new(), &budget);
-        prop_assert_eq!(via_complement, regions == Regions::Known(Region::ALL));
+        if regions == Regions::Known(Region::ALL) {
+            prop_assert!(s.covers_the_universe());
+        }
     }
 
     /// The bottom-up region folded by `empty_and_region` is exactly the region

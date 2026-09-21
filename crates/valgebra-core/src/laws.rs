@@ -1752,6 +1752,58 @@ fn structural_schema() -> impl Strategy<Value = Schema> {
     })
 }
 
+/// A universe no walk reads as one, beside a subject with no widening.
+///
+/// The covering split for
+/// [`a_universal_supertype_bounds_a_subject_that_does_not_lower`], drawn
+/// deliberately. Both halves have to arrive together and the pair is out of
+/// reach by drawing: eight thousand pairs over [`structural_schema`] built it
+/// not once, and the nightly fuzzer took an accumulated corpus and a night.
+///
+/// **The supertype.** `⊤` beside anything is the universe and the fast region
+/// fold says so -- until a member whose region it cannot read stops the fold,
+/// and a member behind that one cannot reopen the answer. Two negations then
+/// wrap the union, and the contravariant rule turns `¬X ⊆ ¬Y` into `Y ⊆ X`,
+/// which moves the inner complement to the *subject* side. What answers there
+/// is the empty-subject bound, and it answers only if the emptiness fold reads
+/// `¬(list | ⊤)` as empty -- which takes the complete region reading, not the
+/// fast one that stops on the sequence.
+///
+/// **The subject.** A class the pool cannot order has no floor to narrow to,
+/// so a complement of one has no widening to complement, and the set
+/// representation cannot form a difference for the pair at all. That is what
+/// makes the pair the covering one: the second decider is not merely dearer
+/// here, it is unavailable, so whatever answers has to be a rule.
+///
+/// **Why the stopping member is a sequence of no positions and nothing else.**
+/// The property asserts its own premise rather than guarding on it, so every
+/// draw has to be one the emptiness decider *proves* universal, and it proves
+/// `¬¬¬(X | ⊤)` empty only where it can build `X`'s complement. A list or set
+/// of an element type is where that stops -- `list[int]` leaves the premise
+/// undecided, which is a conservatism of its own and not this pair's -- so the
+/// draw is over the two containers whose empty shape it settles.
+fn a_pair_only_the_supertype_settles() -> impl Strategy<Value = (Schema, Schema)> {
+    let opaque = (0usize..3).prop_map(|i| Schema::Instance(ClassIx::new(i)));
+    let subject = prop_oneof![
+        opaque
+            .clone()
+            .prop_map(|class| Schema::Complement(Arc::new(class))),
+        opaque.prop_map(|class| Schema::Complement(Arc::new(Schema::Intersection(
+            vec![class].into()
+        )))),
+    ];
+    let stops_the_fold =
+        prop_oneof![Just(SeqKind::List), Just(SeqKind::Tuple)].prop_map(|container| Schema::Seq {
+            container,
+            shape: SeqShape::default(),
+        });
+    (subject, stops_the_fold).prop_map(|(subject, member)| {
+        let universe = Schema::Union(vec![member, Schema::ANYTHING].into());
+        let spelled = Schema::Complement(Arc::new(Schema::Complement(Arc::new(universe))));
+        (subject, spelled)
+    })
+}
+
 /// A schema with a `Ref(0)` reachable somewhere inside it, for the
 /// guardedness property below: the reference is what the check looks for, so
 /// a generator that never produces one proves nothing.
@@ -1859,6 +1911,24 @@ proptest! {
         if Schema::Complement(Arc::new(b.clone())).is_empty() {
             prop_assert!(a.is_subtype_of(&b), "{a:?} not below universal {b:?}");
         }
+    }
+
+    /// The universe bound where the **subject takes no part in it**.
+    ///
+    /// `A ⊆ U` for every `A`, including the `A` no reading can build. The
+    /// premise is a proof of emptiness and emptiness is sound, so the
+    /// supertype here really is the universe however it was spelled -- which
+    /// makes the conclusion a completeness claim, and the one the fuzz target
+    /// asserts of every pair it draws.
+    #[test]
+    fn a_universal_supertype_bounds_a_subject_that_does_not_lower(
+        (a, b) in a_pair_only_the_supertype_settles(),
+    ) {
+        prop_assert!(
+            Schema::Complement(Arc::new(b.clone())).is_empty(),
+            "the premise: {b:?} is the universe"
+        );
+        prop_assert!(a.is_subtype_of(&b), "{a:?} not below universal {b:?}");
     }
 
     #[test]

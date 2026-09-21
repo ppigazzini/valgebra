@@ -465,7 +465,40 @@ impl Schema {
         // to walk rather than one to stop at. Here the pair has had every rule
         // and none of them answered, so the walk is spent on a query that was
         // going to be declined, and a query that decides never reaches it.
-        other.covers_the_universe()
+        other.covers_the_universe() || other.union_complement_is_empty(cx)
+    }
+
+    /// Whether a union's complement holds no value, read one De Morgan step
+    /// in: `¬(X₁ ∪ … ∪ Xₙ)` is `¬X₁ ∩ … ∩ ¬Xₙ`, and a meet is what emptiness
+    /// decides by its members.
+    ///
+    /// The region walk above passes over a member the partition cannot read,
+    /// and that member may be the one covering what the others leave out.
+    /// `~None | ~set[Any]` is the universe -- no value is both `None` and a
+    /// set -- yet `~set[Any]` has no region, so the walk sees every region but
+    /// `None` and declines. Pushed through the complement, the same union is
+    /// `None ∩ set[Any]`, a meet of two kinds that share no value, and the
+    /// rules settle it without lowering anything.
+    ///
+    /// Asked only of a union, only where every rule and the walk have
+    /// declined, and only where the walk passed a member over, so a query
+    /// that decides never builds the meet. Building it for every declined
+    /// union cost the relation matrix a fifth of its instructions.
+    fn union_complement_is_empty(&self, cx: SubtypeCx<'_>) -> bool {
+        let Schema::Union(members) = self else {
+            return false;
+        };
+        // A walk that skipped no member read every one exactly, so its `false`
+        // is the answer and the meet would only say it again.
+        if members.iter().all(|m| m.region_set() != Regions::Unknown) {
+            return false;
+        }
+        Schema::meet_within(members.iter().map(|m| m.clone().complement()), cx.defs).is_empty_rec(
+            cx.oracle,
+            cx.defs,
+            &mut Vec::new(),
+            cx.budget,
+        )
     }
 
     /// Whether `self` and `other` share no value, which is what decides `self ⊆

@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ae7490949000acadb23239ffea47691df8e41cf7347cb033661eafcfd5419a8d # shrinks to s = Union([Intersection([Literal(ConstIx(0))]), Anything(Top)])
+cc e1e81410857ef75231753827fad9365a607ac48d5799c17147dcc8e140f2f78d # shrinks to s = Complement(Union([Literal(ConstIx(0)), Anything(Top)]))

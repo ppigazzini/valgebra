@@ -39,3 +39,4 @@ cc 37cc6cf91e3da44e7249aa5f98dedc777c0abbabbdcbe7a67222b819b643a591 # shrinks to
 cc 77cb78e67465223588c1db7be271eeafdbbc83c8cdf0f501451b8a043c6cdca0 # shrinks to schema = KeyedMap { fields: [Field { name: "a", schema: KeyedMap { fields: [Field { name: "a", schema: Anything(Any), required: false }], defaults: [] }, required: false }], defaults: [] }
 cc 11fae70cdf67e4c4325e0db2453a6cc7af38dd866d369f84bfa13edd495d4a3f # shrinks to schema = Complement(KeyedMap { fields: [], defaults: [] })
 cc 53482d4d8b525f5004055d1eea212fa71a9a9b8c00c203bbcf1e050a02feeb1f # shrinks to a = Union([KeyedMap { fields: [], defaults: [MapClause { key: Str, value: Anything(Any) }] }]), b = KeyedMap { fields: [], defaults: [MapClause { key: Str, value: Anything(Any) }] }
+cc 02d9fd2b514ee99eb65854356170d4bf5629ed5d1d00b9e5f3a617a1531e49c7 # shrinks to a = Union([Complement(Literal(ConstIx(0)))]), b = Union([Complement(NoneType), Complement(Coll { container: Set, element: Anything(Top) })])

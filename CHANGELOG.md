@@ -16,6 +16,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a literal-keyed clause is read beside the clauses that cover its key
 - fix: a meet against a reference is asked the unfolding
 - fix: the relation product reads the attribute record, not a class beside it
+- fix: the complement of a universal union is read as the empty set
 
 -->
 
@@ -55,6 +56,17 @@ answer of its own, or a repair to a change not yet released.
   inclusion no value refutes. The lowering joins the clause's type with every
   clause that covers the key; a field of the same name is read instead of
   them, as before.
+
+- **A union of complements whose inners share no value is the universe, and
+  every subject is below it.** `Validator(complement(Annotated[int, pred]))
+  .relation_to(union(complement(None), complement(set)))`, for a predicate
+  `pred`, answered `"undecided"` and answers `"subset"`: no value is both `None` and a set, so
+  the union holds every value. The universe bound read a union's members by
+  their regions and passed over the one the partition cannot read, which here
+  is the member covering what the other leaves out. Where every rule declines,
+  the union is now also read one De Morgan step in, as the meet of its
+  members' complements, whose emptiness the rules decide. A widening: no
+  answer that was a proof or a refutation changes.
 
 ## [0.0.12] - 2026-09-19
 

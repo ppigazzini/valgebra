@@ -309,13 +309,38 @@ impl Schema {
             }
             // A complement's region is the partition minus its inner's region; it is
             // empty exactly when that region is empty (`¬⊤ = ∅`).
+            //
+            // The region that settles it is read by the **fast** fold, which
+            // stops at the first member a union carries that the partition
+            // cannot read. So `list | object` folds to an unknown region and
+            // `¬(list | object)` folds to one with it, though the inner is the
+            // universe and the complement is the empty set. Where the fast
+            // reading leaves the verdict open the *complete* one is asked --
+            // every member read and what they cover between them carried -- and
+            // only there, so a complement the regions already settle pays
+            // nothing for it. The reading is a member list walked against a
+            // bitset; the set representation answers the same question by
+            // lowering both sides, which is two orders of magnitude dearer.
+            //
+            // **The verdict moves and the region does not.** They are two
+            // answers, and only the first of them is this reading's to give: a
+            // region is what the *partition* can say about the schema, it is
+            // folded into every parent, and `region_set` recomputes it from
+            // scratch, so a region here that the recomputation does not reach
+            // is a divergence between two paths a test holds together
+            // (`empty_and_region_folds_the_same_region_as_region_set`). The
+            // emptiness verdict has no such second reader.
             Schema::Complement(inner) => {
                 let (_, inner_region) = inner.empty_and_region(oracle, defs, visiting, budget);
                 let region = match inner_region {
                     Regions::Known(regions) => Regions::Known(regions.complement()),
                     Regions::Unknown => Regions::Unknown,
                 };
-                (region.verdict(), region)
+                let verdict = match region.verdict() {
+                    Verdict::Unknown if inner.covers_the_universe() => Verdict::Empty,
+                    settled => settled,
+                };
+                (verdict, region)
             }
             // A literal denotes `{x | type(x) is type(c) and x == c}`, which
             // holds `c` itself exactly when `c` equals itself. A constant that
