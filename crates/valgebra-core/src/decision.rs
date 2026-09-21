@@ -94,15 +94,19 @@ impl SeqShape {
     /// borrowed out of the two shapes. There is no alternation to distribute
     /// over and no shape to first prove linear, because a shape is the linear
     /// form.
+    ///
+    /// **Two equal shapes never arrive here.** The arm that calls this matches
+    /// on the two containers being equal, and the caller above it answers
+    /// `Holds` for two equal schemas -- so an equal container and an equal
+    /// shape is a pair that returned one frame earlier. A reflexivity check
+    /// here would be a second answer to a question already answered, and no
+    /// input reaches it.
     fn shape_subtype(
         &self,
         other: &SeqShape,
         cx: SubtypeCx<'_>,
         assumptions: &mut Vec<(Schema, Schema)>,
     ) -> Relation {
-        if self == other {
-            return Relation::Holds;
-        }
         linear_subtype(
             &self.prefix,
             self.tail.as_deref(),
@@ -441,21 +445,16 @@ impl Schema {
     ///
     /// The universe side asks whether the complement is empty, which is the same
     /// question one De Morgan step away and needs no separate procedure.
-    fn bounds_the_pair(
-        &self,
-        other: &Schema,
-        supertype_regions: Regions,
-        cx: SubtypeCx<'_>,
-    ) -> bool {
-        // `other` covers the universe exactly when its region set is the whole
-        // partition. The set is the caller's -- `is_subtype_rec` reads it for the
-        // exact scalar rule and nothing between there and here changes `other` --
-        // so it arrives as an argument rather than being derived twice. The
-        // caller reads it again before the rules, because it is a comparison;
-        // this half is the walk, and the caller asks it last.
-        if supertype_regions == Regions::Known(Region::ALL) {
-            return true;
-        }
+    ///
+    /// **Only the walk is here.** The cheap half of the universe bound -- the
+    /// supertype's region set being the whole partition -- is a comparison the
+    /// caller already holds, and [`subtype_decide`](Self::subtype_decide)
+    /// answers on it before the rules run. A pair that reaches this one has
+    /// been past that comparison, so repeating it reads a value known to be
+    /// something else. What is left is the reading the comparison cannot do:
+    /// the subject's own emptiness, and the complete walk over a union whose
+    /// members cover the universe between them.
+    fn bounds_the_pair(&self, other: &Schema, cx: SubtypeCx<'_>) -> bool {
         if self.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget) {
             return true;
         }
@@ -812,13 +811,7 @@ impl Schema {
         // settles `isinstance(v, D)` through the order alone, and a class
         // deriving from both changes nothing about that value. The guard around
         // this rule reads whether the meet has it.
-        if !class_with_attributes(members) {
-            return placed;
-        }
-        let Some(class) = members.iter().find_map(|m| match m {
-            Schema::Instance(ix) => Some(*ix),
-            _ => None,
-        }) else {
+        let Some(class) = class_with_attributes(members) else {
             return placed;
         };
         if matches!(other, Schema::Instance(_))
@@ -869,7 +862,7 @@ impl Schema {
             return Relation::Holds;
         }
         let answer = self.subtype_by_shape(other, cx, assumptions);
-        self.or_bounded(answer, other, supertype_regions, cx)
+        self.or_bounded(answer, other, cx)
     }
 
     /// The arms that match a pair by the shapes on its two sides.
@@ -1037,17 +1030,9 @@ impl Schema {
     ///
     /// The answer is identical either way. Both readings are sound, and an
     /// empty subject is below everything whichever of them says so.
-    fn or_bounded(
-        &self,
-        answer: Relation,
-        other: &Schema,
-        supertype_regions: Regions,
-        cx: SubtypeCx<'_>,
-    ) -> Relation {
+    fn or_bounded(&self, answer: Relation, other: &Schema, cx: SubtypeCx<'_>) -> Relation {
         match answer {
-            Relation::Unknown if self.bounds_the_pair(other, supertype_regions, cx) => {
-                Relation::Holds
-            }
+            Relation::Unknown if self.bounds_the_pair(other, cx) => Relation::Holds,
             answer => answer,
         }
     }

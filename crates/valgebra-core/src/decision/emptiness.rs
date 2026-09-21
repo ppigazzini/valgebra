@@ -17,7 +17,7 @@
 use std::cell::Cell;
 
 use crate::descr::lower::{Constants, lower_unfolded};
-use crate::ir::{Constraint, Constraints, DefIx, Polarity, Schema};
+use crate::ir::{ClassIx, Constraint, Constraints, DefIx, Polarity, Schema};
 use crate::kind::{Kind, Region, Regions};
 use crate::verdict::Verdict;
 
@@ -461,7 +461,7 @@ fn intersection_verdict(
         || keyed_map_meet_empty(members, oracle, defs, budget);
     let verdict = if empty {
         Verdict::Empty
-    } else if class_with_attributes(members) {
+    } else if class_with_attributes(members).is_some() {
         members_hold
     } else {
         region.verdict()
@@ -485,12 +485,18 @@ fn intersection_verdict(
 /// attribute records would need their fields not to contradict each other --
 /// `{x: int}` and `{x: str}` are each inhabited and meet in nothing. Anything
 /// else in the meet leaves the answer to the regions.
-pub(super) fn class_with_attributes(members: &[Schema]) -> bool {
-    matches!(
-        members,
-        [Schema::Instance(_), Schema::AttrRecord { .. }]
-            | [Schema::AttrRecord { .. }, Schema::Instance(_)]
-    )
+///
+/// The class comes back with the answer because both callers want it: one
+/// reads the shape and the other reads the class out of it, and a guard that
+/// returned a `bool` made the second search for what the first had already
+/// matched -- a search that could not fail, and whose failure arm no input
+/// reached.
+pub(super) fn class_with_attributes(members: &[Schema]) -> Option<ClassIx> {
+    match members {
+        [Schema::Instance(class), Schema::AttrRecord { .. }]
+        | [Schema::AttrRecord { .. }, Schema::Instance(class)] => Some(*class),
+        _ => None,
+    }
 }
 
 /// Whether a refinement's bound and length constraints cannot hold together: a
