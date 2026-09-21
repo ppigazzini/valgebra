@@ -570,3 +570,39 @@ def test_the_floor_build_runs_a_second_time(tmp_path: Path) -> None:
             f"{done.stdout}{done.stderr}"
         )
     assert (target / "pyvenv.cfg").is_file()
+
+
+def test_the_instruction_gate_runs_here_or_says_why() -> None:
+    """The bench lane is excused whole, and its comparison is not part of it.
+
+    The lane wants cachegrind, a profiled wheel, a second interpreter and a
+    system package installed with `sudo`, so the gate excuses it by name. The
+    *comparison* wants none of those: two builds of one workload, measured in
+    one job. Excusing it with the rest is how a change that read sound and
+    cost seventy-one times the instructions passed this script with every
+    step green.
+
+    So the step runs, or it names the one thing it lacks. Both are answers;
+    silence is not.
+    """
+    runs, excused = gate.perf_plan()
+    assert runs or excused, "the instruction gate is neither run nor excused"
+    assert not (runs and excused), "a step both run and excused"
+    for row in excused:
+        assert row.endswith(
+            ("valgrind is not on PATH", "no commit to measure against")
+        ), f"an excuse the plan does not name: {row}"
+
+
+def test_the_instruction_gate_names_modes_the_measurer_has() -> None:
+    """A mode the gate asks for and `perf_gate.py` does not define is a typo.
+
+    The step is a command line rather than a call, so nothing but this reads
+    the two together: the gate would run, the measurer would refuse the
+    argument, and the step would fail for a reason that is not a regression.
+    """
+    measurer = (ROOT / "scripts" / "perf_gate.py").read_text(encoding="utf-8")
+    for _, _, mode in gate.PERF_STEPS:
+        assert f'"{mode.removeprefix("--")}"' in measurer, (
+            f"the gate asks for {mode}, which `perf_gate.py` does not define"
+        )

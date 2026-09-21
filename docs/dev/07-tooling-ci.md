@@ -34,6 +34,22 @@ A step that needs a runner (a PGO wheel, valgrind, a mutation sweep, a second
 operating system) is named with the reason instead, and `tests/test_local_gate.py`
 holds that list to the workflow in both directions.
 
+**The instruction gate runs here, although the lane that owns it cannot.**
+The `bench` lane wants cachegrind, a profiled wheel, a second interpreter and
+a system package installed with `sudo`, so it is excused whole -- and the
+*comparison* it carries wants none of those. Two builds of one workload,
+measured against the base by the lane's own rule (the remote-tracking branch,
+or its parent where that resolves to `HEAD`), is three minutes in the caller's
+tree, and the tree is where it has to run: the shallow clone holds one commit
+and a comparison needs the other. Excusing it with the rest of the lane is how
+a change that read sound and cost **seventy-one times** the instructions --
+6.45 billion against 89.8 million on the relation matrix -- passed this script
+with forty-five steps green. One mode runs, `--decision-matrix`, because it is
+the workload whose shapes reach the set representation and a union or
+complement change reads 0.00% on the others; the `--binding-*` modes want the
+extension built into an interpreter and stay with the lane. Missing valgrind
+is named as the reason rather than passed over.
+
 **The floor interpreter is built beside the caller's, and the suite runs on
 it.** The matrix runs seven releases and a developer runs one, so every
 difference between two of them is a difference the gate could not see -- and

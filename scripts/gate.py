@@ -324,6 +324,103 @@ NOTES_STEPS = (
 )
 
 
+#: The instruction gate, which the bench lane owns and this gate excused.
+#:
+#: **The hole this fills is measured.** A change to the decision procedure
+#: that read sound and cost seventy-one times the instructions -- 6.45 billion
+#: against 89.8 million on the relation matrix -- passed this script with
+#: forty-five steps green, because every instruction budget lives in the
+#: `bench` lane and that lane is excused by name for wanting cachegrind and a
+#: base built beside the head. The lane is right to be excused: it also wants
+#: a profiled wheel, a second interpreter and a system package installed with
+#: `sudo`. The *comparison* wants none of those, and it runs here in three
+#: minutes.
+#:
+#: One mode, and it is the one that moves: `--decision-matrix` is the workload
+#: whose shapes reach the set representation, and a union or complement change
+#: reads 0.00% on the other three. A binding-path regression is held by the
+#: `--binding-*` modes, which want the extension built into an interpreter and
+#: are left to the lane.
+PERF_STEPS = (
+    (
+        "local only (the instruction gate)",
+        "Decision-path instruction count, against the base the lane would use",
+        "--decision-matrix",
+    ),
+)
+
+
+def perf_base() -> str | None:
+    """Give the revision the instruction gate measures against, by the lane's rule.
+
+    `ci.yml` reads the event's base, falls back to the default branch, and --
+    where that resolves to `HEAD` itself, which is what a push to the default
+    branch produces -- takes its parent instead, because measuring a commit
+    against itself passes whatever it did. There is no event here, so the
+    first step is the remote-tracking branch and the rest is the same rule.
+
+    `None` where no base exists: a repository of one commit has nothing to
+    compare against, and saying so is not a failure.
+    """
+    head = git_output("rev-parse", "HEAD")
+    base = next(
+        (
+            resolved
+            for ref in ("origin/HEAD", "origin/main")
+            if (resolved := git_output("rev-parse", ref)) is not None
+        ),
+        None,
+    )
+    if base is None or base == head:
+        base = git_output("rev-parse", "HEAD~1")
+    return base
+
+
+def git_output(*args: str) -> str | None:
+    """Give a git command's single line of output, or `None` where it fails."""
+    done = subprocess.run(
+        ["git", "-C", str(ROOT), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return done.stdout.strip() if done.returncode == 0 else None
+
+
+def perf_plan() -> tuple[list[tuple[str, str, str]], list[str]]:
+    """Give the instruction-gate steps to run, and the ones excused with a reason."""
+
+    def excused(reason: str) -> tuple[list[tuple[str, str, str]], list[str]]:
+        return [], [f"{job}: {name} -- {reason}" for job, name, _ in PERF_STEPS]
+
+    if shutil.which("valgrind") is None:
+        return excused("valgrind is not on PATH")
+    base = perf_base()
+    if base is None:
+        return excused("no commit to measure against")
+    command = f"{shlex.quote(sys.executable)} scripts/perf_gate.py"
+    runs = [
+        (job, f"{name} ({base[:12]})", f"{command} {mode} --against {base}")
+        for job, name, mode in PERF_STEPS
+    ]
+    return runs, []
+
+
+def perf_failures() -> list[str]:
+    """Run the instruction gate, in the tree that has the history it needs.
+
+    The caller's tree rather than the shallow clone, for the reason the notes
+    steps use it: the clone carries one commit, and a comparison against a
+    base needs the base to be there.
+    """
+    runs, _ = perf_plan()
+    return [
+        f"{job}: {name}"
+        for job, name, command in runs
+        if not run_step(f"{job}: {name}", command, ROOT, runner_environment())
+    ]
+
+
 def floor_interpreter() -> str:
     """Read the oldest interpreter the python matrix runs.
 
@@ -687,6 +784,11 @@ def list_plan(
     show_plan(spec, jobs, plan, unresolved)
     for job, name, _ in NOTES_STEPS:
         print(f"run   {job}: {name}")
+    runs, excused = perf_plan()
+    for job, name, _ in runs:
+        print(f"run   {job}: {name}")
+    for row in excused:
+        print(f"skip  {row}")
     for job, name, _ in floor_steps() if floor else ():
         print(f"run   {job}: {name}")
 
@@ -780,6 +882,10 @@ def main() -> int:
             ]
         # The ledgers no runner can run, in the tree that has what they read.
         failures += notes_failures()
+        # And the instruction gate, which the bench lane owns and which wants
+        # only a comparison of two builds -- not the wheel, the interpreter or
+        # the system package the rest of that lane does.
+        failures += perf_failures()
         # And the release the suite is read on rather than written on. This runs
         # in the same tree as the plan: what makes it a second lane is the
         # environment, not the checkout.
