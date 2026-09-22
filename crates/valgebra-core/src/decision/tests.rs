@@ -1989,8 +1989,17 @@ fn a_catch_all_covers_an_optional_field_and_not_a_required_one() {
     assert!(!Schema::meet([mapping, with_field(true).complement()]).is_empty());
 }
 
+// THEORY: a-cut-reference-proves
 /// A meet with a recursive schema is decided by unfolding it once: the body
 /// names the kinds it admits, and a kind it never admits is disjoint from it.
+///
+/// This is the row that sees the lowering *unfold*. The two laws beside the
+/// claim ask the cut of `Schema::unfolded` directly and the difference for a
+/// refutation it must not give, and both are satisfied by a lowering that
+/// declines every schema holding a reference -- which is what deleting the
+/// fast path's guard in `lower_unfolded` produces. A proof of emptiness over
+/// a reference is what only the unfolding can give, so this row is what
+/// fails when it stops.
 #[test]
 fn a_meet_with_a_recursive_schema_is_decided_by_one_unfolding() {
     let defs = vec![Schema::union([

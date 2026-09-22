@@ -318,7 +318,7 @@ impl Schema {
     ///
     /// [`map_children`](Self::map_children) is this with `f` that always
     /// answers `Some`, so the child set is still written down once.
-    pub(crate) fn mapped_children(&self, f: &impl Fn(&Schema) -> Option<Schema>) -> Option<Schema> {
+    fn mapped_children(&self, f: &impl Fn(&Schema) -> Option<Schema>) -> Option<Schema> {
         match self {
             Schema::Anything(_)
             | Schema::Nothing

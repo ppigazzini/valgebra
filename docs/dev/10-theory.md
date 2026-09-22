@@ -530,7 +530,7 @@ lowering did not widen. **[LOAD-BEARING: a-cut-reference-proves]**
 
 SOURCE: §13.1 "**The polarity cut is one-directional.**"
 
-HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other
+HELD-BY: an_inhabited_difference_over_a_cut_reference_refutes_nothing, a_cut_reference_widens_the_subject_and_narrows_the_other, a_meet_with_a_recursive_schema_is_decided_by_one_unfolding
 
 **Kinds decompose emptiness.** Positives of mixed kind make a clause empty
 outright, negatives of another kind are dropped, and each kind is then an
