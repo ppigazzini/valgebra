@@ -1578,17 +1578,28 @@ jobs:
     # ratchets once.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    # The slowest shard of twelve runs forty-five minutes on a shared runner
-    # and the others twenty-five to forty, so a ceiling at forty-five cancels
-    # a healthy sweep and a cancelled job is red. Twice the slowest reading.
-    # Measured: at the 0.0.12 tag the slowest of the twelve shards took 58
-    # minutes of a 90-minute budget. The laws this change draws take the
-    # core's own suite from 26 to 53 seconds, and a sweep runs that suite
-    # once per mutant, so every shard roughly doubles with it -- nine of
-    # twelve then run out at exactly 90 and a run out of time is reported
-    # cancelled, which the ratchet reads as a sweep with shards missing.
-    # The budget follows the measurement rather than the laws being drawn
-    # at fewer cases to fit it.
+    # A cancelled job is red, and a job that runs out of time is cancelled --
+    # so the ceiling has to clear the slowest shard rather than sit near it,
+    # and what clears it is the shard COUNT rather than the ceiling. The sweep
+    # is one fixed pile of work cut into pieces: the pile is the core's mutants
+    # times the core's suite, neither of which a budget can talk down, and the
+    # only free variable is how many ways it is cut.
+    #
+    # Measured, twelve ways: at the 0.0.12 tag the slowest shard took 58
+    # minutes of a 90-minute budget; the laws drawn since take the core's own
+    # suite from 26 to 53 seconds and a sweep runs that suite once per mutant,
+    # so every shard roughly doubled and the budget followed to 150. The last
+    # fully green sweep then ran its twelve shards at 100 to 141 minutes --
+    # nine minutes of margin on a shared runner -- and the next two runs put
+    # six and then eight of the twelve on the ceiling at exactly 150.
+    #
+    # Twenty-four ways cuts the same pile in half: about 73 minutes a shard
+    # against a budget of 150, which is the margin the ceiling was chosen for
+    # and room for the suite to double again before this is read a third time.
+    # It buys that with one more baseline build per added shard and no more
+    # total work. The alternative -- drawing the laws at fewer cases so the
+    # sweep fits -- is refused here as it was when the budget moved to 150:
+    # the sweep follows the suite, never the other way round.
     timeout-minutes: 150
     # One seed for the baseline and every mutant of this shard. A mutation is
     # caught when the tests answer differently with it than without it, so the
@@ -1621,7 +1632,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+                12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1654,7 +1666,7 @@ jobs:
           # twice its mean. Mutant `i` on shard `i % 12` spreads every file
           # across every shard.
           cargo mutants --package valgebra-core -j 4 --timeout-multiplier 20 \
-            --shard "${{ matrix.shard }}/12" --sharding round-robin \
+            --shard "${{ matrix.shard }}/24" --sharding round-robin \
             -- -- --skip deep_subtype_into_bottom_terminates \
             --skip subtyping_terminates_on_a_distributed_tower
           status=$?
@@ -1752,7 +1764,7 @@ jobs:
       - name: Merge the shards into one sweep
         env:
           # The sweep's shard matrix, held to it by tests/test_required_jobs.py.
-          SHARDS: "12"
+          SHARDS: "24"
         run: |
           # A whole sweep, or none. The ratchet below runs the *expiry*
           # direction -- it fails a baseline entry whose survivor is gone -- and
