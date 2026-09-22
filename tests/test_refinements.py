@@ -24,6 +24,19 @@ def test_strict_comparison_bounds() -> None:
     assert not schema.is_valid(10)
 
 
+def test_a_nested_annotated_is_the_flat_one() -> None:
+    # The typing spec flattens `Annotated[Annotated[T, a], b]` to
+    # `Annotated[T, a, b]` at construction, so the frontend never sees the
+    # nesting: the two spellings are one term, and the bounds narrow together.
+    nested = Validator(Annotated[Annotated[int, at.Ge(0)], at.Le(10)])
+    flat = Validator(Annotated[int, at.Ge(0), at.Le(10)])
+    assert repr(nested) == repr(flat) == "Annotated[int, Ge(0), Le(10)]"
+    assert nested.is_equivalent(flat)
+    assert nested.is_valid(5)
+    assert not nested.is_valid(-1)
+    assert not nested.is_valid(11)
+
+
 def test_length_bounds() -> None:
     name = Validator(Annotated[str, at.MinLen(1), at.MaxLen(3)])
     assert name.is_valid("ab")

@@ -601,6 +601,9 @@
     "math": {
       "since": "3.10"
     },
+    "numbers": {
+      "since": "3.10"
+    },
     "operator": {
       "since": "3.10"
     },

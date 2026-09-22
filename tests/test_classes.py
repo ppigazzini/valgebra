@@ -3,6 +3,7 @@ import dataclasses
 import datetime
 import decimal
 import enum
+import numbers
 import pathlib
 import re
 import sys
@@ -333,6 +334,12 @@ class WithLateField:
     derived: int = dataclasses.field(init=False, default=7)
 
 
+@dataclasses.dataclass
+class WithFactory:
+    kept: int
+    items: list[int] = dataclasses.field(default_factory=list)
+
+
 def test_an_init_only_field_is_not_an_attribute() -> None:
     # `InitVar` names a constructor parameter; the instance does not keep it.
     schema = Validator(WithInitVar)
@@ -344,6 +351,16 @@ def test_a_class_variable_is_not_an_attribute_of_the_instance() -> None:
     schema = Validator(WithClassVar)
     assert schema.is_valid(WithClassVar(1))
     assert not schema.is_valid(WithClassVar("no"))  # ty: ignore[invalid-argument-type]
+
+
+def test_a_field_with_a_default_factory_is_checked_like_any_other() -> None:
+    # A factory produces the value the instance carries, and the declaration
+    # is what the instance is held to: the produced default is a member, and a
+    # value the factory did not produce is checked against the same type.
+    schema = Validator(WithFactory)
+    assert schema.is_valid(WithFactory(1))
+    assert schema.is_valid(WithFactory(1, [1, 2]))
+    assert not schema.is_valid(WithFactory(1, ["no"]))  # ty: ignore[invalid-argument-type]
 
 
 def test_a_field_the_constructor_does_not_take_is_still_checked() -> None:
@@ -576,9 +593,18 @@ def test_a_class_whose_metaclass_answers_isinstance_denotes_no_set() -> None:
     Every abstract base class is such a class, `ABCMeta` defining both hooks,
     and so is a runtime-checkable `Protocol`.
     """
-    for abstract in (collections.abc.Sequence, collections.abc.Iterable):
+    for abstract in (
+        collections.abc.Sequence,
+        collections.abc.Iterable,
+        numbers.Number,
+    ):
         assert Validator(int).relation_to(Validator(abstract)) == "undecided"
         assert Validator(list).relation_to(Validator(abstract)) == "undecided"
+    # And membership is the hook's answer, which for the numeric tower is the
+    # registration `int` and `float` carry and `str` does not.
+    assert Validator(numbers.Number).is_valid(1)
+    assert Validator(numbers.Number).is_valid(1.5)
+    assert not Validator(numbers.Number).is_valid("1")
 
     @runtime_checkable
     class HasX(Protocol):
@@ -750,6 +776,7 @@ _STDLIB_ATOMS: list[tuple[type, object, object]] = [
     (datetime.timedelta, datetime.timedelta(seconds=1), 1.0),
     (uuid.UUID, uuid.UUID(int=0), "00000000-0000-0000-0000-000000000000"),
     (pathlib.PurePosixPath, pathlib.PurePosixPath("a/b"), "a/b"),
+    (pathlib.Path, pathlib.Path("a/b"), "a/b"),
     (decimal.Decimal, decimal.Decimal("1.5"), 1.5),
     (re.Pattern, re.compile("a"), "a"),
     (memoryview, memoryview(b"a"), b"a"),
@@ -796,6 +823,11 @@ def test_a_stdlib_class_is_not_the_kind_it_serialises_as() -> None:
     """
     assert Validator(decimal.Decimal).relation_to(float) == "not_subset"
     assert Validator(pathlib.PurePosixPath).relation_to(str) == "not_subset"
+    assert Validator(pathlib.Path).relation_to(str) == "not_subset"
+    # The concrete path is below the pure one it derives from and beside the
+    # flavour it does not: the class order, again.
+    assert Validator(pathlib.Path).relation_to(pathlib.PurePath) == "subset"
+    assert Validator(pathlib.PurePosixPath).relation_to(pathlib.Path) == "not_subset"
     assert Validator(datetime.datetime).relation_to(str) == "not_subset"
     # A date is a datetime's base, and that inclusion is real: the class order
     # is what the answer reads, so the one pair that holds here holds for the
