@@ -3027,13 +3027,10 @@ fn deduplicated(values: Vec<Obj>) -> Vec<Obj> {
 /// Bounded the way everything here is: each ordered pair, each position of the
 /// one with a fixed width, each of a capped set of candidates.
 fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
-    let shapes: Vec<(SeqKind, &SeqShape)> = schemas
-        .iter()
-        .filter_map(|schema| match schema {
-            Schema::Seq { container, shape } => Some((*container, shape)),
-            _ => None,
-        })
-        .collect();
+    let mut shapes: Vec<(SeqKind, &SeqShape)> = Vec::new();
+    for schema in schemas {
+        shapes_named_by(schema, &mut shapes);
+    }
     // The schema at one position of a shape: the prefix where it reaches, and
     // the repeating tail past it. A tailed shape has a schema at every width,
     // which is what lets a fixed one be crossed against it.
@@ -3062,7 +3059,17 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
                 let Some(element) = at(theirs, position) else {
                     continue;
                 };
-                for value in candidates(&element, out).into_iter().take(CAP_PER_NODE / 4) {
+                let mut fill: Vec<Obj> = candidates(&element, out)
+                    .into_iter()
+                    .take(CAP_PER_NODE / 4)
+                    .collect();
+                fill.extend(crossed_position(
+                    &mine.prefix[position],
+                    &element,
+                    out,
+                    CROSS_DEPTH,
+                ));
+                for value in fill {
                     let mut items = base.clone();
                     items[position] = value;
                     made.push(hold(*container, items));
@@ -3095,6 +3102,84 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
     made
 }
 
+/// How deep the crossing goes past the position it starts at.
+///
+/// One level reaches the pair that asked for it, and the generator draws
+/// shapes one deeper again -- a sequence inside a tuple inside a list is a
+/// draw, and the two schemas are separated wherever they nest. A level costs a
+/// capped set of values per position of a shape both sides nest that far, and
+/// two of them cost nothing that a thousand cases over this module can measure
+/// -- 174 seconds against 180, inside the spread of a run.
+const CROSS_DEPTH: usize = 2;
+
+/// The same crossing, one position *inside* a position.
+///
+/// [`crossed_sequences`] fills a position of one shape from the other's
+/// element there, which separates the pair where the element schemas differ at
+/// the top. They differ one level down as often: `list[tuple[None, Any], X]`
+/// is refuted below `list[tuple[*not float], X]` because the subject's tuple
+/// admits a float at its second position, and the witness is a list whose head
+/// is `(None, 1.0)`. Neither half of the flat crossing builds it -- a value of
+/// the *other* schema's tuple is not the subject's tuple at all, and the
+/// subject's own tuple is filled from its own positions, where a cap divided
+/// by the width and again by the depth reaches five kinds of the ten.
+///
+/// So the fill recurses: the value at a position is the subject's member
+/// *there* with one of its positions taken from the other schema's element at
+/// that position. Bounded the way the flat crossing is -- each position, a
+/// capped set of candidates, and [`CROSS_DEPTH`] levels of it.
+fn crossed_position(mine: &Schema, theirs: &Schema, out: &mut Vec<Obj>, fuel: usize) -> Vec<Obj> {
+    let (
+        Schema::Seq {
+            container,
+            shape: ours,
+        },
+        Schema::Seq { shape: other, .. },
+    ) = (mine, theirs)
+    else {
+        return Vec::new();
+    };
+    if fuel == 0 || ours.tail.is_some() {
+        return Vec::new(); // no fuel, or no fixed width to fill
+    }
+    let Some(base): Option<Vec<Obj>> = ours
+        .prefix
+        .iter()
+        .map(|element| a_member(element, MEMBER_FUEL))
+        .collect()
+    else {
+        return Vec::new(); // a position with no member of its own builds no value
+    };
+    let mut made = Vec::new();
+    for position in 0..base.len() {
+        let Some(element) = other
+            .prefix
+            .get(position)
+            .or(other.tail.as_deref())
+            .cloned()
+        else {
+            continue;
+        };
+        let mut fill: Vec<Obj> = candidates(&element, out)
+            .into_iter()
+            .take(CAP_PER_NODE / 4)
+            .collect();
+        fill.extend(crossed_position(
+            &ours.prefix[position],
+            &element,
+            out,
+            fuel - 1,
+        ));
+        for value in fill {
+            let mut items = base.clone();
+            items[position] = value;
+            made.push(hold(*container, items));
+        }
+    }
+    made.truncate(CAP_PER_NODE);
+    made
+}
+
 /// Each length bound a sequence in `schemas` carries, with its container.
 ///
 /// Read through the refinement, because a bound is a node above the shape it
@@ -3102,19 +3187,58 @@ fn crossed_sequences(schemas: &[&Schema], out: &mut Vec<Obj>) -> Vec<Obj> {
 fn bounded_widths(schemas: &[&Schema]) -> Vec<(SeqKind, usize)> {
     let mut found = Vec::new();
     for schema in schemas {
-        let Schema::Refine { base, constraints } = schema else {
-            continue;
-        };
-        let Schema::Seq { container, .. } = base.as_ref() else {
-            continue;
-        };
-        for constraint in constraints.iter() {
-            if let Constraint::MinLen(len) | Constraint::MaxLen(len) = constraint {
-                found.push((*container, *len));
-            }
-        }
+        widths_named_by(schema, &mut found);
     }
     found
+}
+
+/// The sequence shapes a schema *names*: its own, and those under the
+/// wrappers a pair is spelled through.
+///
+/// A pair of sequences is rarely two bare `Seq` nodes. `tuple[*Any]` of at
+/// least three below `¬tuple[*None]` is refuted by `(None, None, None)`, and
+/// that value is one the crossing builds -- the subject's width, filled from
+/// the other schema's element -- if it sees the two shapes at all. Read off
+/// the top node alone, it saw neither: one sits under a refinement and the
+/// other under a complement, and the pair went uncrossed while both were in
+/// plain sight. So a wrapper is looked through, and the members of a union or
+/// meet are each looked at. Elements are not: a sequence *inside* a position
+/// is [`crossed_position`]'s.
+fn shapes_named_by<'a>(schema: &'a Schema, out: &mut Vec<(SeqKind, &'a SeqShape)>) {
+    match schema {
+        Schema::Seq { container, shape } => out.push((*container, shape)),
+        Schema::Refine { base, .. } => shapes_named_by(base, out),
+        Schema::Complement(inner) => shapes_named_by(inner, out),
+        Schema::Union(members) | Schema::Intersection(members) => {
+            for member in members.iter() {
+                shapes_named_by(member, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The length bounds a schema names, through the same wrappers.
+fn widths_named_by(schema: &Schema, out: &mut Vec<(SeqKind, usize)>) {
+    match schema {
+        Schema::Refine { base, constraints } => {
+            if let Schema::Seq { container, .. } = base.as_ref() {
+                for constraint in constraints.iter() {
+                    if let Constraint::MinLen(len) | Constraint::MaxLen(len) = constraint {
+                        out.push((*container, *len));
+                    }
+                }
+            }
+            widths_named_by(base, out);
+        }
+        Schema::Complement(inner) => widths_named_by(inner, out),
+        Schema::Union(members) | Schema::Intersection(members) => {
+            for member in members.iter() {
+                widths_named_by(member, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 // THEORY: each-kind-is-closed
@@ -3173,6 +3297,105 @@ fn the_universe_separates_a_pair_inside_a_shape() {
             "no value of the universe refutes the pair excluding {excluded:?}"
         );
     }
+}
+
+// THEORY: each-kind-is-closed
+/// The universe separates a pair at a position *inside a position*.
+///
+/// The row above is this one level up: the pair is told apart at a position of
+/// the outer shape, and the value that tells them apart is the subject's
+/// member with that position filled from the other schema's element there.
+/// They differ one level further down as often. `list[tuple[None, Any], t]` is
+/// refuted below `list[tuple[*not float], t]` because the subject's tuple
+/// admits a float at its second position and the other's tuple admits one
+/// nowhere, so the witness is a list whose head is `(None, 1.0)` -- the
+/// subject's tuple carrying the kind the other's excludes.
+///
+/// The flat crossing builds neither half of it. A value of the *other*
+/// schema's tuple is not a tuple of the subject's shape at all, and the
+/// subject's own tuple is filled from its own positions, where a cap divided
+/// by the width and again by the depth reached five kinds of the ten and
+/// `float` was not among them. That is what [`crossed_position`] is for.
+///
+/// Held as drawn, with the reference at the second position: it unfolds into a
+/// large schema, and crowding the caps is part of what the pair exercises.
+#[test]
+fn the_universe_separates_a_pair_inside_a_position() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let a = Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape::fixed([
+            Schema::Seq {
+                container: SeqKind::Tuple,
+                shape: SeqShape::fixed([Schema::NoneType, Schema::ANY]),
+            },
+            Schema::Ref(DefIx::new(1)),
+        ]),
+    };
+    let b = Schema::Seq {
+        container: SeqKind::List,
+        shape: SeqShape::fixed([
+            Schema::Seq {
+                container: SeqKind::Tuple,
+                shape: SeqShape::homogeneous(not(Schema::Float)),
+            },
+            Schema::Ref(DefIx::new(1)),
+        ]),
+    };
+    // The premise the law carries: a pair that is not refuted asserts nothing.
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
+}
+
+// THEORY: each-kind-is-closed
+/// The universe separates a pair whose sequences sit under a wrapper.
+///
+/// `tuple[*Any]` of at least three is refuted below `¬tuple[*None]`: a tuple
+/// of three `None`s satisfies the bound and is exactly what the complement
+/// excludes. The crossing builds that value -- a width the bound names, filled
+/// from the other schema's element -- when it sees the two shapes, and read
+/// off the top node alone it saw neither: the subject is a refinement over its
+/// tuple and the other schema a complement over its own. The pair came out of
+/// the nightly lane at eight thousand cases.
+#[test]
+fn the_universe_separates_a_pair_spelled_through_a_wrapper() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let variadic = |element: Schema| Schema::Seq {
+        container: SeqKind::Tuple,
+        shape: SeqShape::homogeneous(element),
+    };
+    let a = Schema::Refine {
+        base: Arc::new(variadic(Schema::ANY)),
+        constraints: vec![Constraint::MinLen(3)].into(),
+    };
+    let b = not(variadic(Schema::NoneType));
+    // The premise the law carries: a pair that is not refuted asserts nothing.
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
 }
 
 /// A union contributes a value of *each* branch, not sixty-four of the first.
