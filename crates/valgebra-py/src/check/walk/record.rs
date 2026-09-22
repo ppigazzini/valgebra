@@ -219,11 +219,29 @@ enum Undeclared {
 }
 
 impl Undeclared {
+    /// The reading, from the clause list alone.
+    ///
+    /// Asked once per record **value** rather than once per record node -- a
+    /// document of a hundred objects asks it a hundred times -- so it is a
+    /// match over the clause's two constructors rather than a comparison
+    /// against schemas built to be compared against. `anything` and
+    /// `typing.Any` are one node wearing two spellings and
+    /// [`Spelling`](valgebra_core::Spelling) makes them equal, so the variant
+    /// alone decides this: the payload is bound to `_` and never read, which
+    /// is what keeps the spelling out of the answer.
     fn of(defaults: &[MapClause]) -> Undeclared {
         match defaults {
             [] => Undeclared::Refused,
-            [clause] if *clause == MapClause::top() => Undeclared::Admitted,
-            [clause] if clause.key == Schema::Str && clause.value == Schema::ANYTHING => {
+            [clause]
+                if matches!(clause.key, Schema::Anything(_))
+                    && matches!(clause.value, Schema::Anything(_)) =>
+            {
+                Undeclared::Admitted
+            }
+            [clause]
+                if matches!(clause.key, Schema::Str)
+                    && matches!(clause.value, Schema::Anything(_)) =>
+            {
                 Undeclared::AnyStr
             }
             _ => Undeclared::Read,
