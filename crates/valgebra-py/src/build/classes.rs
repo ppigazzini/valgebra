@@ -34,6 +34,13 @@ use crate::errors::summarize;
 /// trigger.
 static IS_DATACLASS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
+/// `dataclasses.fields`, held beside [`IS_DATACLASS`] and for its reason.
+///
+/// Reached only from [`declared_fields`], which asks it after `is_dataclass`
+/// has answered yes -- so the module is already imported by the time this cell
+/// is filled, and a program that compiles no dataclass still never imports it.
+static DATACLASS_FIELDS: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
 /// `dataclasses.is_dataclass`, imported on first use.
 pub(super) fn is_dataclass(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let py = ty.py();
@@ -128,8 +135,8 @@ pub(super) fn build_type_object(
         return build_object(ty, lits, defs);
     }
     // Protocol: a runtime-checkable protocol validates by isinstance.
-    if is_truthy_attr(ty, "_is_protocol") {
-        if is_truthy_attr(ty, "_is_runtime_protocol") {
+    if is_truthy_attr(ty, intern!(py, "_is_protocol")) {
+        if is_truthy_attr(ty, intern!(py, "_is_runtime_protocol")) {
             return Ok(Schema::Instance(lits.intern_class(ty.as_any())));
         }
         return Err(not_implemented(
@@ -144,9 +151,16 @@ pub(super) fn build_type_object(
 }
 
 /// True if `obj.<name>` exists and is truthy; false on absence or error.
-pub(super) fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &str) -> bool {
-    obj.getattr(name)
+///
+/// The name arrives interned and the attribute is asked for *optionally*, which
+/// is what absence costs here: every one of these names is absent on an
+/// ordinary class, and a bare `getattr` answers that by building an
+/// `AttributeError`, raising it and dropping it -- per class node, for an answer
+/// that is `false`.
+pub(super) fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &Bound<'_, PyString>) -> bool {
+    obj.getattr_opt(name)
         .ok()
+        .flatten()
         .and_then(|value| value.is_truthy().ok())
         .unwrap_or(false)
 }
@@ -159,7 +173,7 @@ pub(super) fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &str) -> bool {
 pub(super) fn resolve_type_hints<'py>(ty: &Bound<'py, PyType>) -> PyResult<Bound<'py, PyAny>> {
     let py = ty.py();
     let kwargs = PyDict::new(py);
-    kwargs.set_item("include_extras", true)?;
+    kwargs.set_item(intern!(py, "include_extras"), true)?;
     forms(py)?
         .get_type_hints
         .bind(py)
@@ -329,13 +343,17 @@ pub(super) fn unnamed_keys(
 /// the instance and stays.
 pub(super) fn declared_fields<'py>(ty: &Bound<'py, PyType>) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py = ty.py();
-    let dataclasses = py.import("dataclasses")?;
-    if dataclasses
-        .call_method1("is_dataclass", (ty,))?
-        .is_truthy()?
-    {
-        return dataclasses
-            .call_method1("fields", (ty,))?
+    // Both questions go through the held handles. Spelled as a module import
+    // and two `call_method1`s, this asked `sys.modules` for `dataclasses` and
+    // decoded three names per class node -- and asked `is_dataclass` a second
+    // time, the caller having just had its answer.
+    if is_dataclass(ty)? {
+        return DATACLASS_FIELDS
+            .get_or_try_init(py, || {
+                Ok::<_, PyErr>(py.import("dataclasses")?.getattr("fields")?.unbind())
+            })?
+            .bind(py)
+            .call1((ty,))?
             .try_iter()?
             .map(|field| field?.getattr(intern!(py, "name")))
             .collect();

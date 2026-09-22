@@ -330,8 +330,12 @@ pub(crate) fn build_schema(
     }
 
     // NewType: validate the supertype it wraps.
-    if obj.hasattr("__supertype__")? {
-        return build_schema(&obj.getattr("__supertype__")?, lits, defs);
+    // Asked once, with a name the interpreter already holds -- the reading the
+    // `__metadata__` arm above states the reason for. Spelled `hasattr` then
+    // `getattr`, this decoded the name from UTF-8 and hashed it twice per node,
+    // on the path every form that is not a class and has no origin crosses.
+    if let Some(supertype) = obj.getattr_opt(intern!(py, "__supertype__"))? {
+        return build_schema(&supertype, lits, defs);
     }
 
     if let Ok(list) = obj.cast::<PyList>() {

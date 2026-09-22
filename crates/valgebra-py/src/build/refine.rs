@@ -17,8 +17,8 @@ use valgebra_core::{
 
 use super::{Pool, build_schema, not_implemented};
 
-/// `numbers.Number`, the register a remainder's comparison follows, resolved
-/// once per process.
+/// `numbers.Number`, the register a remainder's comparison and an order bound's
+/// both follow, resolved once per process.
 static NUMBER: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 use crate::errors::summarize;
 use crate::oracle::kind_of;
@@ -70,12 +70,16 @@ pub(super) fn build_refine(
 }
 
 /// The group Python orders `operand` within, or `None` for a value of no group.
+///
+/// The register is read through [`NUMBER`], the same handle
+/// [`refuse_unnumbered_step`] asks, rather than by importing `numbers` and
+/// decoding `Number` again. Spelled as an import this ran the module lookup and
+/// two attribute names per order bound, and a fifty-field record of
+/// `Annotated[int, Ge(0)]` carries fifty of them.
 fn order_group(operand: &Bound<'_, PyAny>) -> Option<OrderGroup> {
-    let number = operand
-        .py()
-        .import("numbers")
-        .and_then(|numbers| numbers.getattr("Number"))
-        .is_ok_and(|class| operand.is_instance(&class).unwrap_or(false));
+    let number = NUMBER
+        .import(operand.py(), "numbers", "Number")
+        .is_ok_and(|class| operand.is_instance(class).unwrap_or(false));
     if number {
         Some(OrderGroup::Number)
     } else if operand.is_instance_of::<PyString>() {
@@ -278,18 +282,23 @@ pub(super) fn with_inline_flags(
 /// The one member carrying no constraint is the documentation marker, which says
 /// nothing about which values belong.
 pub(super) fn is_unhandled_constraint(marker: &Bound<'_, PyAny>) -> bool {
+    let py = marker.py();
     let ty = marker.get_type();
-    let from_vocabulary = ty
-        .getattr("__module__")
-        .ok()
-        .and_then(|module| module.extract::<String>().ok())
-        .is_some_and(|module| module == "annotated_types");
-    let documentation = ty
-        .getattr("__name__")
-        .ok()
-        .and_then(|name| name.extract::<String>().ok())
-        .is_some_and(|name| name == "DocInfo");
-    from_vocabulary && !documentation
+    // Read through the string rather than into one: `extract::<String>` copies
+    // the text out so the comparison can be made against a Rust literal, which
+    // is an allocation and a free per marker for an answer that is a byte
+    // compare. The names are interned, so neither `getattr` builds a `str`.
+    let names = |attr: &Bound<'_, PyString>, want: &str| {
+        ty.getattr(attr)
+            .ok()
+            .and_then(|value| value.cast_into::<PyString>().ok())
+            .is_some_and(|text| text.to_str().is_ok_and(|text| text == want))
+    };
+    // The second name is asked only where the first says the marker is from the
+    // vocabulary: every marker written for someone else answers `false` here,
+    // and asking what such a marker is *called* decides nothing.
+    names(intern!(py, "__module__"), "annotated_types")
+        && !names(intern!(py, "__name__"), "DocInfo")
 }
 
 /// An optional attribute a refinement marker is read through.

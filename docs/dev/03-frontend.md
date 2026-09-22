@@ -55,7 +55,12 @@ tables kept alike.
 **A name is a handle, and an absence is not an exception.** Every attribute the
 protocol asks for is asked by an interned `PyString` the interpreter already
 holds, because text would be decoded into a fresh string and hashed before the
-lookup could begin, once per name per marker. And a marker carries one or two
+lookup could begin, once per name per marker. The rule is the whole frontend's
+and not the marker protocol's: the dispatch asks `__metadata__`, `__origin__`,
+`__args__` and `__supertype__` the same way, a class node asks `_is_protocol`
+and `_is_runtime_protocol` the same way, and each is asked *optionally* --
+`getattr_opt` rather than `hasattr` and then `getattr`, which is one lookup
+instead of two and no exception where the answer is no. And a marker carries one or two
 of the ten names and not the rest, so absence is the common answer, and giving
 it by *raising* costs an exception built, thrown and dropped — four hundred of
 them to compile fifty fields. Which names a marker can carry is a property of
@@ -154,11 +159,15 @@ order of the questions, and each is asked of an attribute the runtime fills in:
 8. **Any other class** names its instances: the remaining builtins, the
    `collections.abc` ABCs, and every user class, uniformly.
 
-`dataclasses.is_dataclass` is the one question that costs an import, so it is
-asked of a handle held after the first class that asks and *only* after one
+**A module is a handle too.** `dataclasses.is_dataclass` and `dataclasses.fields`
+are asked of handles held after the first class that asks and *only* after one
 asks: importing `dataclasses` pulls `inspect`, `copy` and `functools` in with
 it, and the tracked objects they leave behind are walked by every later garbage
-collection.
+collection. `numbers.Number` -- the register both a multiple-of's remainder and
+an order bound's comparison follow -- is held the same way, and for the ordinary
+reason rather than that one: written as an import it asked `sys.modules` and
+decoded two names **per bound**, which a fifty-field record of
+`Annotated[int, Ge(0)]` pays fifty times.
 
 ## What a parametrized form says
 
