@@ -1159,6 +1159,15 @@ def _compose(children: st.SearchStrategy) -> st.SearchStrategy:
 
 _schemas = st.recursive(_atoms, _compose, max_leaves=8)
 
+# What the emptiness law is asked about. Drawn from `_schemas` alone, a schema
+# the procedure proves empty arrives once in five hundred cases -- the
+# recursion wraps almost every draw in a container, and a container over an
+# empty element is not empty -- so the law asserts about nothing on the dev
+# profile's hundred. A meet of two drawn schemas is empty nine times in ten,
+# and it is where a proof of emptiness is decided rather than folded:
+# disjoint kinds, a bound against a bound, a record against a mapping.
+_meets = st.tuples(_schemas, _schemas).map(lambda pair: intersection(pair[0], pair[1]))
+
 
 @given(left=_schemas, right=_schemas)
 def test_subtype_claims_hold_on_the_universe(left: object, right: object) -> None:
@@ -1175,7 +1184,7 @@ def test_subtype_claims_hold_on_the_universe(left: object, right: object) -> Non
         assert _accepted(left) <= _accepted(right)
 
 
-@given(spec=_schemas)
+@given(spec=st.one_of(_schemas, _meets))
 def test_emptiness_claims_hold_on_the_universe(spec: object) -> None:
     # A schema reported empty accepts nothing in the universe. The converse does
     # not hold over a finite universe, so only this sound direction is asserted.
