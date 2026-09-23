@@ -444,28 +444,7 @@ fn wide_fields(py: Python<'_>) -> (Vec<Field>, Py<PyAny>) {
 pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: usize) -> u64 {
     match shape {
         BindingShape::Walk => binding_perf_workload(py, iters),
-        BindingShape::Boundary => {
-            let validator = Validator::new(Schema::Int, Vec::new(), Vec::new());
-            let obj = 42_i64
-                .into_pyobject(py)
-                .expect("an i64 always converts")
-                .into_any();
-            let mut checksum: u64 = 0;
-            for _ in 0..iters {
-                let state = WalkState::new();
-                let ok = member(
-                    std::hint::black_box(&validator.schema),
-                    &Value::Py(std::hint::black_box(&obj)),
-                    &mut Frame::new(
-                        &mut Vec::new(),
-                        &mut Vec::new(),
-                        validator.context(py, &state, WalkMode::Fast),
-                    ),
-                );
-                checksum = checksum.wrapping_add(u64::from(ok));
-            }
-            checksum
-        }
+        BindingShape::Boundary => boundary_walk(py, iters),
         BindingShape::Record | BindingShape::Open | BindingShape::Keys | BindingShape::Subclass => {
             let (schema, value) = match shape {
                 BindingShape::Record => wide_record(py),
@@ -478,6 +457,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             };
             let validator = Validator::new(schema, Vec::new(), Vec::new());
             let obj = value.bind(py).clone();
+            settle_the_heap(py);
             let mut checksum: u64 = 0;
             for _ in 0..iters {
                 let state = WalkState::new();
@@ -496,6 +476,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
         }
         BindingShape::Build => {
             let spelling = wide_spelling(py);
+            settle_the_heap(py);
             let mut checksum: u64 = 0;
             for _ in 0..iters {
                 let mut literals = Pool::default();
@@ -523,6 +504,7 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             } else {
                 object_record(py)
             };
+            settle_the_heap(py);
             let mut checksum: u64 = 0;
             for _ in 0..iters {
                 let mut literals = Pool::default();
@@ -542,6 +524,62 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
     }
 }
 
+/// The walk over a single integer, one validator call per iteration.
+fn boundary_walk(py: Python<'_>, iters: usize) -> u64 {
+    let validator = Validator::new(Schema::Int, Vec::new(), Vec::new());
+    let obj = 42_i64
+        .into_pyobject(py)
+        .expect("an i64 always converts")
+        .into_any();
+    settle_the_heap(py);
+    let mut checksum: u64 = 0;
+    for _ in 0..iters {
+        let state = WalkState::new();
+        let ok = member(
+            std::hint::black_box(&validator.schema),
+            &Value::Py(std::hint::black_box(&obj)),
+            &mut Frame::new(
+                &mut Vec::new(),
+                &mut Vec::new(),
+                validator.context(py, &state, WalkMode::Fast),
+            ),
+        );
+        checksum = checksum.wrapping_add(u64::from(ok));
+    }
+    checksum
+}
+
+/// Hand the allocator's free memory back before a shape starts counting.
+///
+/// The count is taken of the loop, but what a loop's allocations cost depends
+/// on the heap the loop starts from, and nothing in the loop decides that:
+/// whether glibc serves a large request straight from the top chunk or first
+/// consolidates every small chunk the previous iteration freed is a fact about
+/// where the long-lived blocks landed while the shape was being set up. The
+/// size of the process environment alone moves it. Measured on one build, the
+/// JSON shape reads 8.2% apart and the recursive one 7.2% apart between a
+/// `uv run` and a bare shell, and a change to the *build* path -- which runs
+/// before the loop and never inside it -- moved the JSON reading by the same
+/// amount while its loop executed the same instructions.
+///
+/// `malloc_trim(0)` consolidates the free lists and returns the top of the
+/// heap, so every shape counts from the same settled state whatever ran before
+/// it. Called through `ctypes` because the crate forbids `unsafe`; a C library
+/// without the symbol leaves the heap as it is, which is every platform the
+/// gate does not run on.
+fn settle_the_heap(py: Python<'_>) {
+    py.run(
+        c"import ctypes\n\
+          try:\n\
+          \x20   ctypes.CDLL(None).malloc_trim(0)\n\
+          except (AttributeError, OSError):\n\
+          \x20   pass\n",
+        None,
+        None,
+    )
+    .expect("trimming the heap raises nothing it does not catch");
+}
+
 /// The JSON document parsed and walked once per iteration.
 ///
 /// The document and the validator are built outside the loop, as every shape
@@ -557,6 +595,7 @@ fn json_walk(py: Python<'_>, iters: usize) -> u64 {
         .expect("a list of a five-field TypedDict always builds");
     let validator = Validator::checked(schema, literals.into_items(), definitions)
         .expect("a list of a five-field record is within every limit");
+    settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
         let ok = validator
@@ -594,6 +633,7 @@ fn recursive_walk(py: Python<'_>, iters: usize) -> u64 {
             .expect("a one-element list always builds")
             .into_any();
     }
+    settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
         let state = WalkState::new();
@@ -627,6 +667,7 @@ fn pattern_walk(py: Python<'_>, iters: usize) -> u64 {
     );
     let validator = Validator::new(schema, Vec::new(), Vec::new());
     let obj = PyString::new(py, "ada.lovelace@example.com").into_any();
+    settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
         let state = WalkState::new();
@@ -668,6 +709,7 @@ fn explaining_record(py: Python<'_>, iters: usize, wrong: Wrong) -> u64 {
             .set_item("f37", "not an int")
             .expect("replacing one key always succeeds");
     }
+    settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
         let state = WalkState::new();
@@ -705,6 +747,8 @@ pub fn binding_perf_workload(py: Python<'_>, iters: usize) -> u64 {
     let obj = PyList::new(py, items)
         .expect("a fresh list of i64 always builds")
         .into_any();
+
+    settle_the_heap(py);
 
     let mut checksum: u64 = 0;
     for _ in 0..iters {

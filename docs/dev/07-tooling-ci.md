@@ -318,6 +318,24 @@ verdict:
   through, so a reading taken by hand is the reading the gate takes — and a
   reading on a shape whose profile names no function of the changed file is
   read as the instrument's before it is read as the change's.
+- **The heap is settled before a shape counts.** What a loop's allocations
+  cost depends on the heap it starts from: whether glibc serves a large request
+  from the top chunk or first consolidates every small chunk the previous
+  iteration freed follows from where the setup's long-lived blocks landed. The
+  size of the process environment moves that, and so does any change to what
+  runs before the loop -- a change to the *build* path moved the JSON shape by
+  nine percent while its loop executed the same instructions. `settle_the_heap`
+  in `crates/valgebra-py/src/workload.rs` calls `malloc_trim(0)` before every
+  shape's loop, which took the JSON and recursive shapes from 8.2% and 7.2%
+  apart between two environments to 0.06% and 0.36%. A shape whose reading
+  moves with the environment has lost this call:
+
+  ```bash
+  b=target/release/examples/binding_workload   # built by perf_gate.py
+  for env in "uv run --no-sync" "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=$LD_LIBRARY_PATH PYTHONHOME=$PYTHONHOME"; do
+    $env valgrind --tool=cachegrind --cachegrind-out-file=/dev/null "$b" 500 json 2>&1 | grep 'I *refs'
+  done
+  ```
 
 ### What the merge gate compares against, and why not a number
 
