@@ -44,12 +44,18 @@
   "binding_keys_workload_irefs": 132210018,
   "binding_object_workload_irefs": 222264084,
   "binding_subclass_workload_irefs": 47300049,
-  "binding_json_workload_irefs": 531463737,
+  "binding_json_workload_irefs": 531156325,
   "binding_pattern_workload_irefs": 78300021,
   "_binding_recursive_comment": "A value walked against a recursive schema, `mu X. int | list[X]` over a list nested eight deep: the one shape that enters a reference. Every other binding shape walks a schema with no `Ref` in it, so the trail the walk keeps to refuse a cyclic value -- entered and left once per level, per value -- is reached by none of them and a change to how it is held reads as free. It was not free: holding the trail as a hash set rather than as the stack it is measured 7,108 instructions per walk against 6,397, which is ten percent of this shape and nothing at all of the thirteen beside it. A one-element list at each level keeps what is counted the descent rather than a list loop the homogeneous shapes already measure.",
   "binding_recursive_workload_irefs": 194355000,
   "measured_with": {
     "valgrind": "valgrind-3.22.0",
     "libc": "glibc 2.39"
-  }
+  },
+  "binding_json_reject_workload_irefs": 473584580,
+  "binding_json_union_workload_irefs": 393979950,
+  "binding_json_open_workload_irefs": 343504875,
+  "binding_json_deep_workload_irefs": 346599057,
+  "binding_deep_workload_irefs": 182315000,
+  "binding_refined_workload_irefs": 424830032
 }

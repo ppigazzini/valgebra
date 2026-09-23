@@ -749,8 +749,10 @@ jobs:
       # The same gate for the binding hot paths, in every shape the binding
       # budget records: the membership walk, the call boundary alone, the walk
       # over a wide record, building one, explaining a failure in one and
-      # accepting one, the JSON document, the compiled pattern, and the
-      # reference a recursive schema enters. Schema construction grows twelve
+      # accepting one, the JSON document accepted, rejected, read through a
+      # union and through a key-type clause, and against a recursive schema, the
+      # compiled pattern, a value nested twenty-five deep, refined elements, and
+      # the reference a recursive schema enters. Schema construction grows twelve
       # percent over a release cycle where only the walk is counted, which is
       # what the shapes beside it are for, and a budget no flag here passes is a
       # ceiling nothing crosses. Every shape is measured against one build of
@@ -768,7 +770,9 @@ jobs:
               --binding-build --binding-annotated --binding-object \
               --binding-subclass --binding-explain --binding-explain-accept \
               --binding-open --binding-json --binding-pattern \
-              --binding-recursive \
+              --binding-recursive --binding-json-reject --binding-json-union \
+              --binding-json-open --binding-json-deep --binding-deep \
+              --binding-refined \
               --against "$BASE"
         env:
           BASE: ${{ steps.base.outputs.sha }}
@@ -793,7 +797,9 @@ jobs:
               --binding-build --binding-annotated --binding-object \
               --binding-subclass --binding-explain --binding-explain-accept \
               --binding-open --binding-json --binding-pattern \
-              --binding-recursive
+              --binding-recursive --binding-json-reject --binding-json-union \
+              --binding-json-open --binding-json-deep --binding-deep \
+              --binding-refined
       # Smoke-run the wall-clock benches once (timing disabled) so the suites
       # keep working; their numbers are recorded by hand in the performance
       # page. The files are named bench_*, so override the collection pattern.

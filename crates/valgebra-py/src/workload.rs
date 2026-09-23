@@ -186,6 +186,31 @@ pub enum BindingShape {
     /// recursive schema is also the one a caller writes for a JSON document or
     /// a syntax tree, which is the shape most likely to carry real depth.
     Recursive,
+    /// The JSON document with one record's `id` a string, halfway through: the
+    /// *rejecting* path of `is_valid_json`, where the walk stops at the first
+    /// field that fails and every shape beside it accepts.
+    JsonReject,
+    /// A document of records of two kinds against `list[JsonRecord |
+    /// JsonEvent]`, alternating, so half the elements fail the first branch and
+    /// are asked again: the union over parsed objects, which no accepting record
+    /// shape reaches.
+    JsonUnion,
+    /// A document of records read through a typed catch-all, `{"id": int, str:
+    /// str}`: every key but one is covered by the clause rather than named by a
+    /// field, which is the reading an open record takes in place.
+    JsonOpen,
+    /// A recursive schema, `mu X. int | list[X]`, over a parsed document of
+    /// twenty trees twelve levels deep: the reference and its trail on the JSON
+    /// path, which the recursive shape measures only on Python values.
+    JsonDeep,
+    /// `list[list[...[int]...]]` twenty-five levels deep over a value nested as
+    /// deep: the deterministic twin of the comparison gate's `deep_nesting`, a
+    /// descent with no reference in it.
+    Deep,
+    /// Sixty-four integers against `list[Annotated[int, Ge(1000)]]`: a walk over
+    /// refined values, where every element reads its bound. Every other walk
+    /// shape checks a kind and nothing more.
+    Refined,
 }
 
 impl BindingShape {
@@ -207,6 +232,12 @@ impl BindingShape {
             "json" => BindingShape::Json,
             "pattern" => BindingShape::Pattern,
             "recursive" => BindingShape::Recursive,
+            "json-reject" => BindingShape::JsonReject,
+            "json-union" => BindingShape::JsonUnion,
+            "json-open" => BindingShape::JsonOpen,
+            "json-deep" => BindingShape::JsonDeep,
+            "deep" => BindingShape::Deep,
+            "refined" => BindingShape::Refined,
             _ => return None,
         })
     }
@@ -379,24 +410,8 @@ fn subclass_value(py: Python<'_>) -> Py<PyAny> {
 /// Returns the annotation and the document as bytes. `is_valid_json` takes
 /// `str` or `bytes` and decodes the first, so bytes is the form that measures
 /// the parse and not the decode.
-fn json_document(py: Python<'_>) -> (Py<PyAny>, Vec<u8>) {
-    let module = PyModule::from_code(
-        py,
-        &std::ffi::CString::new(
-            "import json\n\
-             from typing import TypedDict\n\
-             JsonRecord = TypedDict('JsonRecord', {'id': int, 'name': str, \
-             'email': str, 'tags': list[str], 'meta': dict[str, str]})\n\
-             SPELLING = list[JsonRecord]\n\
-             DOCUMENT = json.dumps([{'id': i, 'name': 'Ada', \
-             'email': 'a@b.c', 'tags': ['x', 'y'], 'meta': {'k': 'v'}} \
-             for i in range(200)]).encode()\n",
-        )
-        .expect("no interior nul"),
-        &std::ffi::CString::new("json_shape.py").expect("no interior nul"),
-        &std::ffi::CString::new("json_shape").expect("no interior nul"),
-    )
-    .expect("the spelling compiles");
+fn json_document(py: Python<'_>, source: &str) -> (Py<PyAny>, Vec<u8>) {
+    let module = spelled_module(py, source);
     let document = module
         .getattr("DOCUMENT")
         .expect("the document is defined")
@@ -408,6 +423,66 @@ fn json_document(py: Python<'_>) -> (Py<PyAny>, Vec<u8>) {
         .unbind();
     (spelling, document)
 }
+
+/// Run a shape's Python source as a module of its own.
+///
+/// The embedded interpreter has the standard library and nothing else, so a
+/// shape spells its annotation with `typing` and a marker class it defines.
+fn spelled_module<'py>(py: Python<'py>, source: &str) -> Bound<'py, PyModule> {
+    PyModule::from_code(
+        py,
+        &std::ffi::CString::new(source).expect("no interior nul"),
+        &std::ffi::CString::new("shape.py").expect("no interior nul"),
+        &std::ffi::CString::new("shape").expect("no interior nul"),
+    )
+    .expect("the spelling compiles")
+}
+
+/// A JSON shape's source: the record every one is written around, then its own
+/// spelling and document.
+macro_rules! json_shape {
+    ($shape:literal) => {
+        concat!(
+            "import json\n\
+     from typing import TypedDict\n\
+     JsonRecord = TypedDict('JsonRecord', {'id': int, 'name': str, \
+     'email': str, 'tags': list[str], 'meta': dict[str, str]})\n\
+     def record(i):\n\
+     \x20   return {'id': i, 'name': 'Ada', 'email': 'a@b.c', 'tags': ['x', 'y'], \
+     'meta': {'k': 'v'}}\n",
+            $shape
+        )
+    };
+}
+
+/// Two hundred records, every one a member.
+const JSON_DOCUMENT: &str = json_shape!(
+    "SPELLING = list[JsonRecord]\n\
+     DOCUMENT = json.dumps([record(i) for i in range(200)]).encode()\n"
+);
+
+/// The same two hundred, the hundredth with a string for its `id`.
+const JSON_REJECT: &str = json_shape!(
+    "SPELLING = list[JsonRecord]\n\
+     records = [record(i) for i in range(200)]\n\
+     records[100]['id'] = 'x'\n\
+     DOCUMENT = json.dumps(records).encode()\n"
+);
+
+/// Records and events alternating, against the union of the two.
+const JSON_UNION: &str = json_shape!(
+    "JsonEvent = TypedDict('JsonEvent', {'kind': str, 'at': int, 'tags': list[str]})\n\
+     SPELLING = list[JsonRecord | JsonEvent]\n\
+     DOCUMENT = json.dumps([record(i) if i % 2 else \
+     {'kind': 'login', 'at': i, 'tags': ['x']} for i in range(200)]).encode()\n"
+);
+
+/// Records whose every key but `id` is read through the `str` clause.
+const JSON_OPEN: &str = json_shape!(
+    "SPELLING = list[{'id': int, str: str}]\n\
+     DOCUMENT = json.dumps([{'id': i, 'name': 'Ada', 'email': 'a@b.c', \
+     'city': 'Rome', 'lang': 'en'} for i in range(200)]).encode()\n"
+);
 
 fn wide_fields(py: Python<'_>) -> (Vec<Field>, Py<PyAny>) {
     let fields: Vec<Field> = (0..50)
@@ -494,7 +569,13 @@ pub fn binding_perf_workload_shape(py: Python<'_>, shape: BindingShape, iters: u
             checksum
         }
         BindingShape::Recursive => recursive_walk(py, iters),
-        BindingShape::Json => json_walk(py, iters),
+        BindingShape::Json => json_walk(py, iters, JSON_DOCUMENT, Expect::Member),
+        BindingShape::JsonReject => json_walk(py, iters, JSON_REJECT, Expect::NonMember),
+        BindingShape::JsonUnion => json_walk(py, iters, JSON_UNION, Expect::Member),
+        BindingShape::JsonOpen => json_walk(py, iters, JSON_OPEN, Expect::Member),
+        BindingShape::JsonDeep => json_deep_walk(py, iters),
+        BindingShape::Deep => spelled_walk(py, iters, DEEP),
+        BindingShape::Refined => spelled_walk(py, iters, REFINED),
         BindingShape::Pattern => pattern_walk(py, iters),
         BindingShape::ExplainAccept => explaining_record(py, iters, Wrong::No),
         BindingShape::Explain => explaining_record(py, iters, Wrong::Yes),
@@ -587,20 +668,108 @@ fn settle_the_heap(py: Python<'_>) {
 /// the parse and the walk and the drop of the tree between them. That is the
 /// whole of what `is_valid_json` does after the argument is known to be bytes,
 /// and it is the entry the comparison gate times.
-fn json_walk(py: Python<'_>, iters: usize) -> u64 {
-    let (spelling, document) = json_document(py);
+/// What a JSON shape's document is, so the checksum counts the answer expected.
+#[derive(Clone, Copy)]
+enum Expect {
+    Member,
+    NonMember,
+}
+
+fn json_walk(py: Python<'_>, iters: usize, source: &str, expect: Expect) -> u64 {
+    let (spelling, document) = json_document(py, source);
     let mut literals = Pool::default();
     let mut definitions = Vec::new();
     let schema = build_schema(spelling.bind(py), &mut literals, &mut definitions)
-        .expect("a list of a five-field TypedDict always builds");
+        .expect("a JSON shape's spelling always builds");
     let validator = Validator::checked(schema, literals.into_items(), definitions)
-        .expect("a list of a five-field record is within every limit");
+        .expect("a JSON shape's schema is within every limit");
+    json_loop(py, iters, &validator, &document, expect)
+}
+
+/// Check one document `iters` times, counting the answers that were expected.
+///
+/// The count is the iteration count by construction, which is what the gate
+/// asserts: a rejecting shape counts its rejections.
+fn json_loop(
+    py: Python<'_>,
+    iters: usize,
+    validator: &Validator,
+    document: &[u8],
+    expect: Expect,
+) -> u64 {
     settle_the_heap(py);
     let mut checksum: u64 = 0;
     for _ in 0..iters {
         let ok = validator
-            .matches_json(py, std::hint::black_box(&document))
+            .matches_json(py, std::hint::black_box(document))
             .expect("a well-formed document raises nothing");
+        checksum = checksum.wrapping_add(u64::from(ok == matches!(expect, Expect::Member)));
+    }
+    checksum
+}
+
+/// `mu X. int | list[X]`, built as the recursive shape builds it, over a parsed
+/// document of twenty trees twelve levels deep.
+fn json_deep_walk(py: Python<'_>, iters: usize) -> u64 {
+    let body = Schema::union([
+        Schema::Int,
+        Schema::list(SeqShape::homogeneous(Schema::Ref(DefIx::new(0)))),
+    ]);
+    let validator = Validator::checked(Schema::Ref(DefIx::new(0)), Vec::new(), vec![body])
+        .expect("one definition is within every limit");
+    let document = spelled_module(
+        py,
+        "import json\n\
+         def tree(depth):\n\
+         \x20   return 1 if depth == 0 else [tree(depth - 1), depth]\n\
+         DOCUMENT = json.dumps([tree(12) for _ in range(20)]).encode()\n",
+    )
+    .getattr("DOCUMENT")
+    .expect("the document is defined")
+    .extract::<Vec<u8>>()
+    .expect("the document is bytes");
+    json_loop(py, iters, &validator, &document, Expect::Member)
+}
+
+/// `list[...]` nested twenty-five deep, over a value nested as deep.
+const DEEP: &str = "SPELLING = int\n\
+     VALUE = 0\n\
+     for _ in range(25):\n\
+     \x20   SPELLING = list[SPELLING]\n\
+     \x20   VALUE = [VALUE]\n";
+
+/// Sixty-four integers at or above their refinement's lower bound.
+const REFINED: &str = "from typing import Annotated\n\
+     class Ge:\n\
+     \x20   def __init__(self, ge):\n\
+     \x20       self.ge = ge\n\
+     SPELLING = list[Annotated[int, Ge(1000)]]\n\
+     VALUE = list(range(1000, 1064))\n";
+
+/// Build a shape's `SPELLING` through the frontend and walk its `VALUE`.
+fn spelled_walk(py: Python<'_>, iters: usize, source: &str) -> u64 {
+    let module = spelled_module(py, source);
+    let mut literals = Pool::default();
+    let mut definitions = Vec::new();
+    let spelling = module.getattr("SPELLING").expect("the spelling is defined");
+    let schema = build_schema(&spelling, &mut literals, &mut definitions)
+        .expect("a walk shape's spelling always builds");
+    let validator = Validator::checked(schema, literals.into_items(), definitions)
+        .expect("a walk shape's schema is within every limit");
+    let value = module.getattr("VALUE").expect("the value is defined");
+    settle_the_heap(py);
+    let mut checksum: u64 = 0;
+    for _ in 0..iters {
+        let state = WalkState::new();
+        let ok = member(
+            std::hint::black_box(&validator.schema),
+            &Value::Py(std::hint::black_box(&value)),
+            &mut Frame::new(
+                &mut Vec::new(),
+                &mut Vec::new(),
+                validator.context(py, &state, WalkMode::Fast),
+            ),
+        );
         checksum = checksum.wrapping_add(u64::from(ok));
     }
     checksum

@@ -30,14 +30,19 @@ Three workloads, and seven shapes across them:
   the core one never calls.
 * The **binding** workload measures live Python values through the shipped
   entry points -- the hot path the pure-Rust workloads do not reach -- in
-  fourteen shapes: the membership walk (`--binding`), the call boundary alone
+  twenty shapes: the membership walk (`--binding`), the call boundary alone
   (`--binding-boundary`), the walk over a wide record (`--binding-record`), the
   same walk over a value whose keys are interned (`--binding-keys`), the same
   fields declared by an open record (`--binding-open`), walking a `tuple`
   subclass (`--binding-subclass`), matching a string against a compiled pattern
   (`--binding-pattern`), walking a value against a recursive schema
-  (`--binding-recursive`), parsing and walking a JSON document
-  (`--binding-json`), building a validator from its Python spelling
+  (`--binding-recursive`), walking a value nested twenty-five deep
+  (`--binding-deep`), walking refined elements (`--binding-refined`), parsing
+  and walking a JSON document (`--binding-json`), the same document rejected
+  halfway (`--binding-json-reject`), a document of two record kinds against
+  their union (`--binding-json-union`), records read through a key-type clause
+  (`--binding-json-open`), a recursive schema over a nested document
+  (`--binding-json-deep`), building a validator from its Python spelling
   (`--binding-build`), compiling one written as a `TypedDict` of refined
   integers (`--binding-annotated`), compiling a fifty-field dataclass
   (`--binding-object`), and explaining a failure in a record
@@ -364,6 +369,12 @@ MODES = {
     "binding-json": ("binding_workload", "binding JSON document parse and walk"),
     "binding-pattern": ("binding_workload", "binding pattern refinement walk"),
     "binding-recursive": ("binding_workload", "binding recursive schema walk"),
+    "binding-json-reject": ("binding_workload", "binding JSON document rejected"),
+    "binding-json-union": ("binding_workload", "binding JSON union of records"),
+    "binding-json-open": ("binding_workload", "binding JSON records read by clause"),
+    "binding-json-deep": ("binding_workload", "binding JSON recursive document"),
+    "binding-deep": ("binding_workload", "binding deep nesting walk"),
+    "binding-refined": ("binding_workload", "binding refined element walk"),
 }
 
 #: The workload argument each binding mode passes, and the budget key it reads.
@@ -386,6 +397,12 @@ BINDING_ITERATIONS = {
     "binding-json": (500, 150),
     "binding-pattern": (150_000, 50_000),
     "binding-recursive": (50_000, 15_000),
+    "binding-json-reject": (500, 150),
+    "binding-json-union": (500, 150),
+    "binding-json-open": (500, 150),
+    "binding-json-deep": (1_000, 300),
+    "binding-deep": (50_000, 15_000),
+    "binding-refined": (20_000, 5_000),
 }
 
 BINDING_SHAPES = {
@@ -403,6 +420,12 @@ BINDING_SHAPES = {
     "binding-json": "json",
     "binding-pattern": "pattern",
     "binding-recursive": "recursive",
+    "binding-json-reject": "json-reject",
+    "binding-json-union": "json-union",
+    "binding-json-open": "json-open",
+    "binding-json-deep": "json-deep",
+    "binding-deep": "deep",
+    "binding-refined": "refined",
 }
 
 

@@ -198,14 +198,19 @@ gate only catches what it exercises:
   asks only for proofs holds a refuting rule to nothing;
 - the **binding** shapes (`--binding`, `--binding-boundary`,
   `--binding-record`, `--binding-keys`, `--binding-open`, `--binding-subclass`,
-  `--binding-json`, `--binding-pattern`, `--binding-build`,
-  `--binding-annotated`, `--binding-object`, `--binding-explain`,
-  `--binding-explain-accept`) —
+  `--binding-recursive`, `--binding-deep`, `--binding-refined`,
+  `--binding-json`, `--binding-json-reject`, `--binding-json-union`,
+  `--binding-json-open`, `--binding-json-deep`, `--binding-pattern`,
+  `--binding-build`, `--binding-annotated`, `--binding-object`,
+  `--binding-explain`, `--binding-explain-accept`) —
   membership over a live Python value, the call boundary
   alone, a wide record closed, the same record walked over a value whose keys
   are interned, the record open the way a `TypedDict` is, walking a
-  `NamedTuple`, parsing and walking a JSON document, matching a string against
-  a compiled pattern, building a validator
+  `NamedTuple`, a recursive schema's descent, a value nested twenty-five deep,
+  elements that each read a refinement's bound, parsing and walking a JSON
+  document -- accepted, rejected halfway, as a union of two record kinds, read
+  through a key-type clause, and against a recursive schema -- matching a
+  string against a compiled pattern, building a validator
   from its Python spelling, compiling one written as a `TypedDict` of refined
   integers, compiling a fifty-field dataclass, and explaining a failure in a
   record or accepting one in the same mode. The walk is the shipped
@@ -215,6 +220,13 @@ gate only catches what it exercises:
   was. Each shape builds what it reads outside its loop: the build shape once
   formatted fifty names and filled a dict per iteration, and three quarters of
   its count was that.
+
+  **One accepting JSON shape measured every JSON change**, and the paths a
+  change could lose on had no count: the reject a fast walk stops at, the union
+  that reads a parsed object once per branch, the clause that reads a key rather
+  than a field, the reference on the parsed path. So did one walk over plain
+  kinds measure the walk: a refined element reads its bound on every check,
+  sixteen times the instructions of an element that only has a kind.
 
   The later shapes are there because the earlier ones could not see repairs
   worth a third, three quarters, and six percent of what they touched. **A dict of bare type
