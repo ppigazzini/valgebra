@@ -311,3 +311,33 @@ def test_a_json_entry_refuses_a_value_that_is_not_a_document() -> None:
     # `is_valid_json` answers a question rather than raising one, so a value
     # that is not a document is not a member.
     assert validator.is_valid_json(123) is False  # ty: ignore[invalid-argument-type]
+
+
+@pytest.mark.parametrize("width", [1, 15, 16, 40])
+def test_a_record_reads_a_document_at_every_width(width: int) -> None:
+    """A record decides a parsed object alike on each side of the table width.
+
+    The walk gathers a document's value for each declared field into a table
+    held on the stack up to sixteen fields and on the heap past them. With the
+    optional field the widths give records of 2, 16, 17 and 41 fields, so each
+    assertion runs on both sides of that line, and against the object path.
+    """
+    v = Validator({f"k{i}": int for i in range(width)} | {"opt?": str})
+    whole = {f"k{i}": i for i in range(width)}
+    docs = [
+        whole,
+        whole | {"opt": "s"},
+        whole | {f"k{width - 1}": "x"},
+        {k: val for k, val in whole.items() if k != "k0"},
+        whole | {"undeclared": 1},
+    ]
+    for doc in docs:
+        text = json.dumps(doc)
+        assert v.is_valid_json(text) == v.is_valid(doc), text
+    assert v.is_valid_json(json.dumps(whole))
+    assert not v.is_valid_json(json.dumps(whole | {f"k{width - 1}": "x"}))
+    # The last of two entries for one key is the one read, whichever side of
+    # the width the record sits.
+    last = json.dumps(whole)[:-1] + ', "k0": "x", "k0": 0}'
+    assert v.is_valid_json(last)
+    assert not v.is_valid_json(json.dumps(whole)[:-1] + ', "k0": 0, "k0": "x"}')

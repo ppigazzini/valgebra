@@ -425,6 +425,10 @@ fn keyed_map_scan(
     matches!(scan, Scan::Complete) && required_remaining == 0
 }
 
+/// How wide a record's per-object field table may be and still sit on the
+/// stack: sixteen slots of one pointer each.
+const FOUND_ON_STACK: usize = 16;
+
 /// The keyed-map fast path over a JSON object. Keys are strings; a duplicate key
 /// keeps its last value (a reverse find), as `json.loads` does. Records are
 /// small, so a linear scan beats building a per-object map.
@@ -454,7 +458,19 @@ pub(super) fn keyed_map_matches_json(
         // The document's value for each declared field, last occurrence winning
         // as `json.loads` does, gathered before any of them is checked: an
         // earlier duplicate that fails is not the entry the document means.
-        let mut found: Vec<Option<&JsonValue<'_>>> = vec![None; fields.len()];
+        //
+        // Held on the stack for a record as wide as `FOUND_ON_STACK`, which is
+        // most of them: the table is asked for once per object in a document,
+        // and a heap table is a trip to the allocator and back per object.
+        let mut on_stack: [Option<&JsonValue<'_>>; FOUND_ON_STACK] = [None; FOUND_ON_STACK];
+        let mut on_heap: Vec<Option<&JsonValue<'_>>>;
+        let found: &mut [Option<&JsonValue<'_>>] =
+            if let Some(slots) = on_stack.get_mut(..fields.len()) {
+                slots
+            } else {
+                on_heap = vec![None; fields.len()];
+                &mut on_heap
+            };
         for (key, value) in entries {
             match plan.by_name.get(key.as_ref()) {
                 Some(&at) => match found.get_mut(at) {
@@ -470,7 +486,7 @@ pub(super) fn keyed_map_matches_json(
                 None => {}
             }
         }
-        for (field, value) in fields.iter().zip(found) {
+        for (field, value) in fields.iter().zip(found.iter().copied()) {
             match value {
                 Some(value) => {
                     if !member(&field.schema, &Value::Json(py, value), &mut sub) {
