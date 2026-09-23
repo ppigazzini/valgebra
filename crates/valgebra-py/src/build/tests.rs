@@ -237,3 +237,150 @@ fn every_variant_is_built_by_a_producer_and_the_placeholder_by_none() {
         assert!(!reached.contains("SelfRef"));
     });
 }
+
+/// Classes whose annotations `get_type_hints` hands back unchanged, and classes
+/// where it changes one, each row naming which it is. `AtTheBound` and `Deep`
+/// have nothing to evaluate: the first is nested as far as
+/// `MAX_ANNOTATION_DEPTH` reads and the second past it. `Meta` is a
+/// metaclass, whose `__mro__` holds `type` and the descriptor `type` keeps as
+/// its `__annotations__`, which the call skips.
+const TYPE_HINTS_CORPUS: &str = r#"
+import collections.abc, dataclasses, sys, typing
+from typing import Annotated, ClassVar, Generic, List, Literal, NamedTuple, Optional, TypeVar, TypedDict
+
+class Ge:
+    def __init__(self, ge):
+        self.ge = ge
+
+T = TypeVar("T")
+
+@dataclasses.dataclass
+class Plain:
+    a: int
+    b: None
+    c: Optional[list[int]]
+    d: Annotated[int, Ge(0)]
+    e: Literal["x", 1]
+    f: tuple[int, ...]
+    g: int | None
+    h: List[Literal["q"]]
+    i: Annotated[str, "meta"]
+
+class Derived(Plain):
+    j: ClassVar[int]
+    a: str
+
+class Record(TypedDict, total=False):
+    a: int
+    b: Annotated[int, Ge(0)]
+
+class Pair(NamedTuple):
+    a: int
+    b: Optional[str] = None
+
+@dataclasses.dataclass
+class Box(Generic[T]):
+    item: T
+    items: list[T]
+
+class Bare:
+    pass
+
+class Written:
+    a: "int"
+
+class Nested:
+    a: dict[str, "int"]
+
+class Referenced:
+    a: Optional["Plain"]
+
+class Called:
+    a: collections.abc.Callable[[int], str]
+
+@typing.no_type_check
+class Unchecked:
+    a: int
+
+def nested(levels):
+    alias = int
+    for _ in range(levels):
+        alias = list[alias]
+    return alias
+
+class AtTheBound:
+    a: nested(64)
+
+class Deep:
+    a: nested(70)
+
+class Meta(type):
+    x: int
+
+FAST = [Plain, Derived, Record, Pair, Box, Bare, AtTheBound, Meta]
+DECLINED = [Written, Nested, Referenced, Called, Unchecked, Deep]
+if sys.version_info >= (3, 11):
+    exec("class Unpacked:\n    a: tuple[int, *tuple[str, ...]]")
+    DECLINED.append(Unpacked)
+"#;
+
+/// The annotations as written are `get_type_hints`' answer wherever the reading
+/// takes them, and the reading declines every class where the call would
+/// change a value.
+///
+/// Equal key order as well as equal values, since a record's fields keep the
+/// order the hints give them. The decline half is what keeps the fast path
+/// honest: a reading that took `list["int"]` would hand the builder a string
+/// where the call hands it `int`.
+#[test]
+fn annotations_as_written_are_the_hints_get_type_hints_returns() {
+    Python::attach(|py| {
+        let source = std::ffi::CString::new(TYPE_HINTS_CORPUS).expect("no interior nul");
+        let module =
+            PyModule::from_code(py, &source, c"type_hints_corpus.py", c"type_hints_corpus")
+                .expect("the corpus compiles");
+        let get_type_hints = py
+            .import("typing")
+            .and_then(|typing| typing.getattr("get_type_hints"))
+            .expect("typing.get_type_hints");
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("include_extras", true).expect("a kwarg");
+        let classes = |name: &str| {
+            module
+                .getattr(name)
+                .expect("the row list is defined")
+                .cast_into::<PyList>()
+                .expect("a list")
+        };
+        for class in classes("FAST").iter() {
+            let class = class.cast_into::<PyType>().expect("a class");
+            let expected = get_type_hints
+                .call((&class,), Some(&kwargs))
+                .expect("get_type_hints answers");
+            let read = annotations_as_written(&class)
+                .expect("the reading answers")
+                .unwrap_or_else(|| panic!("{class} was declined"));
+            let order = |hints: &Bound<'_, PyAny>| {
+                py.get_type::<PyList>()
+                    .call1((hints,))
+                    .expect("a list of the keys")
+                    .unbind()
+            };
+            assert!(
+                read.eq(&expected).expect("dicts compare")
+                    && PyAnyMethods::eq(order(read.as_any()).bind(py), order(&expected))
+                        .expect("lists compare"),
+                "{class}: read {read}, get_type_hints {expected}"
+            );
+        }
+        for class in classes("DECLINED").iter() {
+            let class = class.cast_into::<PyType>().expect("a class");
+            assert!(
+                annotations_as_written(&class)
+                    .expect("the reading answers")
+                    .is_none(),
+                "{class} is one the reading declines, and was read as written"
+            );
+        }
+    });
+}

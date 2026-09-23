@@ -142,8 +142,8 @@ order of the questions, and each is asked of an attribute the runtime fills in:
 3. **`object`** is the lattice top, and a bare `Union`/`Optional` — a class on
    some Pythons — is refused, because it is a form rather than a value.
 4. **A `TypedDict`** declares itself by carrying `__required_keys__`, and
-   becomes a keyed map. Its fields come from `get_type_hints`, not from the raw
-   `__annotations__`: under `from __future__ import annotations` those are
+   becomes a keyed map. Its fields are what `get_type_hints` returns, not the
+   raw `__annotations__` (see the reading below): under `from __future__ import annotations` those are
    strings, so a `NotRequired[...]` is invisible to the class's own key sets and
    every optional key compiled required. A qualifier on the resolved hint wins
    over the key sets, and a qualifier may wrap another.
@@ -158,6 +158,26 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    admitting everything.
 8. **Any other class** names its instances: the remaining builtins, the
    `collections.abc` ABCs, and every user class, uniformly.
+
+**A class's annotations are read as written where evaluating them would change
+nothing.** `get_type_hints` evaluates forward references, and on a class with
+none it hands back the objects it was given -- after copying every base's
+namespace and walking every annotation in Python, which is 60 to 70% of
+compiling a dataclass or a `TypedDict`. `annotations_as_written` in
+`build/classes.rs` takes the call's own reading step for step: reversed
+`__mro__`, each base's own annotations, `None` as `type(None)`. It declines, and
+the call runs, wherever `typing._eval_type` would rebuild a value: a string, a
+`ForwardRef`, a builtin alias with a string argument, an unpacked alias, a
+`collections.abc.Callable`, or a class marked `__no_type_check__`. A failure
+inside the reading is a decline too, so an error a caller sees is the call's.
+The invariant is equality with the call, and two tests hold it: the Rust
+interpreter test compares the dicts on the interpreter the coverage lane
+builds, and `tests/test_classes.py` compares the validators on every
+interpreter the matrix runs.
+
+```bash
+uv run --no-sync python scripts/perf_gate.py --against HEAD~1 --binding-annotated --binding-object
+```
 
 **A module is a handle too.** `dataclasses.is_dataclass` and `dataclasses.fields`
 are asked of handles held after the first class that asks and *only* after one

@@ -12,7 +12,8 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{
-    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PySet, PyString, PyTuple, PyType,
+    PyBool, PyBytes, PyDict, PyFloat, PyFrozenSet, PyInt, PyList, PyNone, PySet, PyString, PyTuple,
+    PyType,
 };
 use valgebra_core::{Field, MapClause, Schema, SeqShape};
 
@@ -170,7 +171,20 @@ pub(super) fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &Bound<'_, PyString>)
 /// `include_extras=True` keeps `Annotated[...]` field types intact so a field's
 /// refinement markers reach [`build_refine`]; without it `get_type_hints` strips
 /// the metadata and the field's constraints are silently lost.
+///
+/// **The annotations as written are the answer wherever evaluation would hand
+/// each one back unchanged**, and [`annotations_as_written`] reads them without
+/// the call. `get_type_hints` exists to evaluate forward references, and on a
+/// class with none it still copies every base's namespace and walks every
+/// annotation in Python: 60 to 70% of compiling a dataclass or a `TypedDict`.
+/// Anything the reading is not certain of goes to `get_type_hints`, so an
+/// answer or an error from this function is always the one it gives.
 pub(super) fn resolve_type_hints<'py>(ty: &Bound<'py, PyType>) -> PyResult<Bound<'py, PyAny>> {
+    // A failure inside the reading is a decline and never an answer: the
+    // exception a caller sees is the one `get_type_hints` raises.
+    if let Ok(Some(hints)) = annotations_as_written(ty) {
+        return Ok(hints.into_any());
+    }
     let py = ty.py();
     let kwargs = PyDict::new(py);
     kwargs.set_item(intern!(py, "include_extras"), true)?;
@@ -178,6 +192,166 @@ pub(super) fn resolve_type_hints<'py>(ty: &Bound<'py, PyType>) -> PyResult<Bound
         .get_type_hints
         .bind(py)
         .call((ty,), Some(&kwargs))
+}
+
+/// The objects [`annotations_as_written`] reads a class and its annotations
+/// through, resolved once per interpreter.
+struct Evaluation {
+    /// `(typing._GenericAlias, types.GenericAlias, types.UnionType)`: the
+    /// classes whose `__args__` `typing._eval_type` descends into. Every other
+    /// object it returns as it was given.
+    aliases: Py<PyTuple>,
+    /// `types.GenericAlias`, the one alias `_eval_type` rebuilds whatever its
+    /// arguments are.
+    generic_alias: Py<PyAny>,
+    /// `types.GetSetDescriptorType`, which `get_type_hints` reads as a class
+    /// with no annotations of its own, below 3.14.
+    getset_descriptor: Py<PyAny>,
+    /// `annotationlib.get_annotations`, how `get_type_hints` reads one class's
+    /// own annotations from 3.14; `None` below it, where the class's namespace
+    /// holds them.
+    get_annotations: Option<Py<PyAny>>,
+}
+
+static EVALUATION: PyOnceLock<Evaluation> = PyOnceLock::new();
+
+fn evaluation(py: Python<'_>) -> PyResult<&'static Evaluation> {
+    EVALUATION.get_or_try_init(py, || {
+        let types = py.import("types")?;
+        let generic_alias = types.getattr("GenericAlias")?;
+        let aliases = PyTuple::new(
+            py,
+            [
+                py.import("typing")?.getattr("_GenericAlias")?,
+                generic_alias.clone(),
+                types.getattr("UnionType")?,
+            ],
+        )?;
+        let get_annotations = if py.version_info() >= (3, 14) {
+            Some(
+                py.import("annotationlib")?
+                    .getattr("get_annotations")?
+                    .unbind(),
+            )
+        } else {
+            None
+        };
+        Ok(Evaluation {
+            aliases: aliases.unbind(),
+            generic_alias: generic_alias.unbind(),
+            getset_descriptor: types.getattr("GetSetDescriptorType")?.unbind(),
+            get_annotations,
+        })
+    })
+}
+
+/// How deep an annotation is walked before the walk declines. `_eval_type`
+/// recurses without a bound of its own and meets the interpreter's recursion
+/// limit; a walk on the Rust stack stops well before its own.
+const MAX_ANNOTATION_DEPTH: usize = 64;
+
+/// A class's type hints read as `typing.get_type_hints(ty, include_extras=True)`
+/// returns them, or `None` where that call would change a value.
+///
+/// The reading is the call's own, step for step. Each base in reversed
+/// `__mro__` contributes its own annotations -- from its namespace's
+/// `__annotations__` below 3.14, from `annotationlib.get_annotations` from 3.14
+/// -- a later name replacing an earlier one in place, and `None` read as
+/// `type(None)`. What the call adds is `_eval_type` over each value, and that
+/// returns the value unchanged unless [`evaluates`] says otherwise. A class
+/// marked `__no_type_check__` is left to the call, which answers `{}` for it.
+///
+/// **Equal to the call's answer, and the objects themselves.** Two values
+/// differ only where `_eval_type` rebuilds a builtin alias, and every such
+/// alias is declined. `annotations_as_written_are_the_hints_get_type_hints_returns`
+/// in `build/tests.rs` holds the reading to the call, value for value and in
+/// order, and `tests/test_classes.py` holds the compiled validators to it on
+/// every interpreter the matrix runs.
+pub(super) fn annotations_as_written<'py>(
+    ty: &Bound<'py, PyType>,
+) -> PyResult<Option<Bound<'py, PyDict>>> {
+    let py = ty.py();
+    let names = evaluation(py)?;
+    if let Some(flag) = ty.getattr_opt(intern!(py, "__no_type_check__"))?
+        && flag.is_truthy()?
+    {
+        return Ok(None);
+    }
+    let hints = PyDict::new(py);
+    let mro = ty.getattr(intern!(py, "__mro__"))?;
+    for base in mro.cast::<PyTuple>()?.iter().rev() {
+        let own = if let Some(get_annotations) = &names.get_annotations {
+            get_annotations.bind(py).call1((&base,))?
+        } else {
+            // `base.__dict__.get('__annotations__', {})`, the call's own
+            // spelling, so a namespace a metaclass supplies is read the way the
+            // call reads it.
+            let own = base.getattr(intern!(py, "__dict__"))?.call_method1(
+                intern!(py, "get"),
+                (intern!(py, "__annotations__"), PyDict::new(py)),
+            )?;
+            if own.is_instance(names.getset_descriptor.bind(py))? {
+                continue;
+            }
+            own
+        };
+        // `get_type_hints` reads any mapping through `.items()`; a dict is the
+        // one this reading takes, and anything else is left to the call.
+        let Ok(own) = own.cast::<PyDict>() else {
+            return Ok(None);
+        };
+        for (name, value) in own.iter() {
+            if value.is_instance_of::<PyString>() || evaluates(&value, names, 0)? {
+                return Ok(None);
+            }
+            if value.is_none() {
+                hints.set_item(name, py.get_type::<PyNone>())?;
+            } else {
+                hints.set_item(name, value)?;
+            }
+        }
+    }
+    Ok(Some(hints))
+}
+
+/// Whether `typing._eval_type` would hand back anything other than `value`.
+///
+/// It resolves a forward reference, and descends only into the `__args__` of
+/// the three alias classes. A builtin `types.GenericAlias` it rebuilds as
+/// `origin[args]` from 3.11: a string argument becomes a forward reference, an
+/// unpacked alias becomes `Unpack[...]`, and a `collections.abc.Callable`'s
+/// argument list is re-nested. Each of those is a change, so each is `true`. A
+/// string under any other alias -- a `Literal`'s value -- is returned as it is.
+fn evaluates(value: &Bound<'_, PyAny>, names: &Evaluation, depth: usize) -> PyResult<bool> {
+    let py = value.py();
+    if depth > MAX_ANNOTATION_DEPTH {
+        return Ok(true);
+    }
+    if let Some(forward_ref) = &forms(py)?.forward_ref
+        && value.is_instance(forward_ref.bind(py))?
+    {
+        return Ok(true);
+    }
+    if !value.is_instance(names.aliases.bind(py))? {
+        return Ok(false);
+    }
+    let args = value.getattr(intern!(py, "__args__"))?;
+    let args = args.cast::<PyTuple>()?;
+    if value.is_instance(names.generic_alias.bind(py))?
+        && (is_truthy_attr(value, intern!(py, "__unpacked__"))
+            || value
+                .getattr(intern!(py, "__origin__"))?
+                .is(forms(py)?.callable.bind(py))
+            || args.iter().any(|arg| arg.is_instance_of::<PyString>()))
+    {
+        return Ok(true);
+    }
+    for arg in args.iter() {
+        if evaluates(&arg, names, depth + 1)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Read a record field name as Rust text, refusing a key that is not valid

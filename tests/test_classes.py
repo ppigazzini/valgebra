@@ -834,3 +834,74 @@ def test_a_stdlib_class_is_not_the_kind_it_serialises_as() -> None:
     # reason the others do not.
     assert Validator(datetime.datetime).relation_to(datetime.date) == "subset"
     assert Validator(datetime.date).relation_to(datetime.datetime) == "not_subset"
+
+
+_HINT_FORMS = """
+from typing import Annotated, Literal, Optional, TypedDict
+import annotated_types as at
+
+
+class Base(TypedDict):
+    a: int
+    b: Optional[list[int]]
+
+
+class Wide(Base, total=False):
+    c: Literal["x", 1]
+    d: None
+    e: Annotated[int, at.Ge(0)]
+    f: dict[str, tuple[int, ...]]
+    g: int | str
+"""
+
+
+def test_annotations_read_as_written_compile_as_the_evaluated_ones(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A class whose annotations need no evaluation compiles as if they had one.
+
+    The frontend reads such a class's annotations as written rather than
+    through `typing.get_type_hints`, which only differs from them where a
+    forward reference is evaluated. Under `from __future__ import annotations`
+    every annotation is a string, so the second module goes through the call
+    and the first does not; the two must be one validator on every interpreter
+    the matrix runs.
+    """
+    (tmp_path / "hints_as_written.py").write_text(_HINT_FORMS)
+    (tmp_path / "hints_as_strings.py").write_text(
+        "from __future__ import annotations\n" + _HINT_FORMS
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    written = __import__("hints_as_written")
+    strings = __import__("hints_as_strings")
+    for name in ("Base", "Wide"):
+        assert Validator(getattr(written, name)) == Validator(getattr(strings, name))
+    wide = Validator(written.Wide)
+    assert wide.is_valid({"a": 1, "b": None, "e": 0, "g": "s"})
+    assert not wide.is_valid({"a": 1, "b": None, "e": -1})
+
+
+@dataclasses.dataclass
+class _Point:
+    x: int
+    y: int
+
+
+@dataclasses.dataclass
+class _Labelled(_Point):
+    label: str
+    x: bool
+
+
+def test_a_dataclass_reads_the_annotations_of_every_base() -> None:
+    """A dataclass's fields are its bases' annotations and its own, later wins.
+
+    A `TypedDict` merges its bases into its own annotations when it is created,
+    so only a class like this one tells a reading of the class alone from a
+    reading of its whole `__mro__`: `y` is declared by the base alone, and `x`
+    is redeclared, so the derived type is the one checked.
+    """
+    labelled = Validator(_Labelled)
+    assert labelled.is_valid(_Labelled(x=True, y=2, label="p"))
+    assert not labelled.is_valid(_Labelled(x=True, y="2", label="p"))  # ty: ignore[invalid-argument-type]
+    assert not labelled.is_valid(_Labelled(x=1, y=2, label="p"))  # ty: ignore[invalid-argument-type]

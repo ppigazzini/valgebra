@@ -706,6 +706,8 @@ mod dialect;
 mod generics;
 mod refine;
 
+#[cfg(all(test, feature = "interpreter-tests"))]
+use classes::annotations_as_written;
 use classes::build_type_object;
 use generics::{build_dict, build_parametrized, build_sequence};
 use refine::build_refine;
