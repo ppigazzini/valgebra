@@ -1581,9 +1581,8 @@ impl Schema {
     /// `loop` reads the same condition and compiles to the same walk, and no
     /// single edit to it removes the exit.
     ///
-    /// [`has_escaped_self_ref`](Self::has_escaped_self_ref) keeps the
-    /// recursion, and says there what the measurement was that separates
-    /// them.
+    /// [`measure`](Self::measure) reads this beside the node count and the
+    /// marker test in the same walk, which is what building a validator asks.
     #[must_use]
     pub fn depth(&self) -> usize {
         let mut depth = 1;
@@ -1727,39 +1726,65 @@ impl Schema {
             .any(|child| child.occurs_unguarded_within(target, below, defs, visiting))
     }
 
-    /// Whether this schema carries a self-reference marker whose token `is_open`
-    /// does not recognise.
+    /// The three facts a validator is accepted on, read in one walk: how deep
+    /// the tree nests, how many nodes it spans, and whether it carries a
+    /// self-reference marker whose token `is_open` does not recognise.
     ///
-    /// A finished schema carries no marker at all: `recursive` resolves the one
-    /// it minted into a back edge before it returns. A marker reaches
-    /// construction two ways, and only one of them is legitimate — from inside
+    /// Each is what [`depth`](Self::depth) and [`node_count`](Self::node_count)
+    /// return and what the marker test below states, and a property test holds
+    /// the three to those readings. They are one walk because every one of them
+    /// visits every node, and building a validator asked for all three: three
+    /// passes over the same tree, one of them recursing and collecting each
+    /// node's children into a vector of its own.
+    ///
+    /// **The marker.** A finished schema carries none: `recursive` resolves the
+    /// one it minted into a back edge before it returns. A marker reaches
+    /// construction two ways, and only one of them is legitimate -- from inside
     /// the builder of the definition it stands for, where the schemas the caller
     /// composes carry it until that definition closes; or from a placeholder kept
     /// past the call it was handed to, which stands for a fixpoint nobody is
     /// defining any more. Which token is which is the caller's fact, so the
     /// caller brings the test and this walk brings the traversal.
     ///
-    /// **Recursion here, and a worklist next door, and the difference is
-    /// measured.** This walk asks each node for its `children`, which collects
-    /// them into a vector of its own, and [`depth`](Self::depth) beside it
-    /// does not -- so a reader who makes the two alike will make this one a
-    /// worklist too, and the reading that refuses it belongs here rather than
-    /// in a review. Written that way this is the last caller `children` has
-    /// but one, and the whole-program inline schedule the release profile
-    /// builds under moves with it: the walk over a parsed JSON document reads
-    /// **14.26% dearer** (`scripts/perf_gate.py --binding-json`), for a
-    /// traversal that runs once per validator and never on that path. Under a
-    /// build carrying symbols the per-iteration cost of that walk does not
-    /// move at all, which is what says the cost is the schedule and not the
-    /// work. What the worklist would save is one vector per node holding a
-    /// child, once per validator built.
+    /// Read level by level against two buffers, as `depth` is, so a leaf
+    /// allocates nothing and a deep schema descends none of the native stack the
+    /// depth bound is there to protect.
     #[must_use]
-    pub fn has_escaped_self_ref(&self, is_open: &dyn Fn(u64) -> bool) -> bool {
-        match self {
-            Schema::SelfRef(token) => !is_open(*token),
-            _ => self
-                .children()
-                .any(|child| child.has_escaped_self_ref(is_open)),
+    pub fn measure(&self, is_open: &dyn Fn(u64) -> bool) -> Measure {
+        let escapes = |node: &Schema| matches!(node, Schema::SelfRef(token) if !is_open(*token));
+        let mut measure = Measure {
+            depth: 1,
+            nodes: self.own_nodes(),
+            escaped_self_ref: escapes(self),
+        };
+        let mut level: Vec<&Schema> = Vec::new();
+        let mut next: Vec<&Schema> = Vec::new();
+        self.push_children(&mut level);
+        loop {
+            if level.is_empty() {
+                break;
+            }
+            measure.depth += 1;
+            for node in level.drain(..) {
+                measure.nodes += node.own_nodes();
+                measure.escaped_self_ref |= escapes(node);
+                node.push_children(&mut next);
+            }
+            std::mem::swap(&mut level, &mut next);
         }
+        measure
     }
+}
+
+/// What [`Schema::measure`] reads off a tree: the facts a validator is accepted
+/// on, taken in one walk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Measure {
+    /// How deep the tree nests, as [`Schema::depth`] counts it.
+    pub depth: usize,
+    /// How many nodes the tree spans, as [`Schema::node_count`] counts it.
+    pub nodes: usize,
+    /// Whether a self-reference marker the caller does not recognise is
+    /// anywhere in the tree.
+    pub escaped_self_ref: bool,
 }

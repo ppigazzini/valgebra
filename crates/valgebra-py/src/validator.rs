@@ -15,7 +15,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyBool;
 use pyo3::{PyTraverseError, PyVisit};
 use rustc_hash::FxHashMap;
-use valgebra_core::{Openness, Relation, Schema};
+use valgebra_core::{Measure, Openness, Relation, Schema};
 
 use crate::build::{Pool, build_schema};
 use crate::check::{Ctx, Frame, ValidatorIndex, WalkMode, WalkState, build_index, member};
@@ -169,12 +169,33 @@ impl Validator {
         // the definitions too. Dropping it here is what makes the top built that
         // way the top built any other way.
         let (schema, definitions) = valgebra_core::pruned(schema, definitions);
-        let depth = definitions
-            .iter()
-            .map(Schema::depth)
-            .max()
-            .unwrap_or(0)
-            .max(schema.depth());
+        // The placeholder a `recursive` builder receives is an ordinary validator,
+        // so a caller can keep it and hand it back after the call it stands for
+        // has finished -- at which point it names a fixpoint nobody is defining.
+        // A marker for a definition still open is the ordinary way a body is
+        // written and passes; one for a closed definition denotes no set, so it
+        // is refused below rather than validating as a value nothing matches.
+        //
+        // One walk per tree reads all three facts the checks below are asked
+        // on; the checks keep their order, so the error a caller sees is the
+        // same whichever of them a schema breaks first.
+        let is_open: &dyn Fn(u64) -> bool = &definition_is_open;
+        let whole = std::iter::once(&schema)
+            .chain(&definitions)
+            .map(|tree| tree.measure(is_open))
+            .fold(
+                Measure {
+                    depth: 0,
+                    nodes: 0,
+                    escaped_self_ref: false,
+                },
+                |whole, tree| Measure {
+                    depth: whole.depth.max(tree.depth),
+                    nodes: whole.nodes.saturating_add(tree.nodes),
+                    escaped_self_ref: whole.escaped_self_ref || tree.escaped_self_ref,
+                },
+            );
+        let depth = whole.depth;
         if depth > MAX_SCHEMA_DEPTH {
             return Err(PyValueError::new_err(format!(
                 "schema nesting is too deep: this validator reaches {depth} levels of \
@@ -193,11 +214,7 @@ impl Validator {
                 definitions.len()
             )));
         }
-        let nodes = definitions
-            .iter()
-            .map(Schema::node_count)
-            .sum::<usize>()
-            .saturating_add(schema.node_count());
+        let nodes = whole.nodes;
         if nodes > MAX_SCHEMA_NODES {
             return Err(PyValueError::new_err(format!(
                 "schema is too large: this validator spans {nodes} nodes, past the limit \
@@ -206,18 +223,7 @@ impl Validator {
                  step; building it would exhaust memory."
             )));
         }
-        // The placeholder a `recursive` builder receives is an ordinary validator,
-        // so a caller can keep it and hand it back after the call it stands for
-        // has finished -- at which point it names a fixpoint nobody is defining.
-        // A marker for a definition still open is the ordinary way a body is
-        // written and passes; one for a closed definition denotes no set, so it
-        // is refused here rather than validating as a value nothing matches.
-        let is_open: &dyn Fn(u64) -> bool = &definition_is_open;
-        if schema.has_escaped_self_ref(is_open)
-            || definitions
-                .iter()
-                .any(|definition| definition.has_escaped_self_ref(is_open))
-        {
+        if whole.escaped_self_ref {
             return Err(PyValueError::new_err(
                 "schema holds an unresolved recursive placeholder: the validator a \
                  recursive(...) builder receives stands for the schema being defined \

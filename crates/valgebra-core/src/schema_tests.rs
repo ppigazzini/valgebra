@@ -1109,19 +1109,23 @@ fn the_escaped_marker_walk_finds_a_marker_wherever_it_sits() {
 
     // A bare marker is the shortest case, and the one an arm that only
     // recursed into children would miss: a marker has no children.
-    assert!(Schema::SelfRef(7).has_escaped_self_ref(open_none));
+    assert!(Schema::SelfRef(7).measure(open_none).escaped_self_ref);
     // Open is the other answer, and it is the common one: inside the builder
     // of the definition the marker stands for, every schema carries it.
-    assert!(!Schema::SelfRef(7).has_escaped_self_ref(open_all));
+    assert!(!Schema::SelfRef(7).measure(open_all).escaped_self_ref);
     // Which token is which is the caller's fact, so two markers under one
     // predicate answer differently.
-    assert!(!Schema::SelfRef(7).has_escaped_self_ref(open_seven));
-    assert!(Schema::SelfRef(9).has_escaped_self_ref(open_seven));
+    assert!(!Schema::SelfRef(7).measure(open_seven).escaped_self_ref);
+    assert!(Schema::SelfRef(9).measure(open_seven).escaped_self_ref);
 
     // A schema with no marker at all is the finished shape, and `recursive`
     // returns one: the marker it minted is a back edge by then.
-    assert!(!Schema::Ref(DefIx::new(0)).has_escaped_self_ref(open_none));
-    assert!(!Schema::Int.has_escaped_self_ref(open_none));
+    assert!(
+        !Schema::Ref(DefIx::new(0))
+            .measure(open_none)
+            .escaped_self_ref
+    );
+    assert!(!Schema::Int.measure(open_none).escaped_self_ref);
 
     // Buried, under each way a schema holds a child: an escaped marker
     // anywhere in the tree is one the validator must not carry.
@@ -1132,8 +1136,8 @@ fn the_escaped_marker_walk_finds_a_marker_wherever_it_sits() {
             Schema::set(Schema::SelfRef(9)),
         )),
     ]);
-    assert!(buried.has_escaped_self_ref(open_none));
-    assert!(!buried.has_escaped_self_ref(open_all));
+    assert!(buried.measure(open_none).escaped_self_ref);
+    assert!(!buried.measure(open_all).escaped_self_ref);
 }
 
 #[test]
@@ -1903,4 +1907,69 @@ fn the_de_morgan_path_folds_the_bounds_it_builds() {
             .all(|member| !matches!(member, Schema::Intersection(_)))),
         "a meet nested inside the meet it is built into: {nested:?}"
     );
+}
+
+/// A tree over every way a schema holds a child, with markers among its
+/// leaves, for the measure property below.
+fn measured_tree() -> impl proptest::strategy::Strategy<Value = Schema> {
+    use proptest::prelude::*;
+    let leaf = prop_oneof![
+        Just(Schema::Int),
+        Just(Schema::Str),
+        Just(Schema::Ref(DefIx::new(0))),
+        (0_u64..3).prop_map(Schema::SelfRef),
+    ];
+    leaf.prop_recursive(5, 48, 4, |inner| {
+        prop_oneof![
+            prop::collection::vec(inner.clone(), 1..4).prop_map(|m| Schema::Union(m.into())),
+            prop::collection::vec(inner.clone(), 1..4).prop_map(|m| Schema::Intersection(m.into())),
+            inner.clone().prop_map(|s| Schema::Complement(Arc::new(s))),
+            inner.clone().prop_map(Schema::set),
+            (
+                prop::collection::vec(inner.clone(), 0..3),
+                prop::option::of(inner.clone())
+            )
+                .prop_map(|(prefix, tail)| Schema::list(match tail {
+                    Some(tail) => SeqShape::prefix_tail(prefix, tail),
+                    None => SeqShape::fixed(prefix),
+                })),
+            (inner.clone(), inner.clone(), inner.clone()).prop_map(|(field, key, value)| {
+                Schema::keyed_map(
+                    vec![Field {
+                        name: "f".into(),
+                        schema: field,
+                        required: true,
+                    }],
+                    vec![MapClause { key, value }],
+                )
+            }),
+            inner.prop_map(|s| Schema::Refine {
+                base: Arc::new(s),
+                constraints: vec![Constraint::MinLen(1), Constraint::MaxLen(4)].into(),
+            }),
+        ]
+    })
+}
+
+proptest::proptest! {
+    /// One walk reads what the three readings it stands for read: the depth
+    /// and the node count as their own functions count them, and an escaped
+    /// marker as the recursion over every child finds one.
+    #[test]
+    fn one_measure_is_the_depth_the_count_and_the_marker_test(
+        tree in measured_tree(),
+        open in 0_u64..4,
+    ) {
+        fn escapes(schema: &Schema, is_open: &dyn Fn(u64) -> bool) -> bool {
+            match schema {
+                Schema::SelfRef(token) => !is_open(*token),
+                _ => schema.children().any(|child| escapes(child, is_open)),
+            }
+        }
+        let is_open: &dyn Fn(u64) -> bool = &|token| token < open;
+        let measure = tree.measure(is_open);
+        proptest::prop_assert_eq!(measure.depth, tree.depth());
+        proptest::prop_assert_eq!(measure.nodes, tree.node_count());
+        proptest::prop_assert_eq!(measure.escaped_self_ref, escapes(&tree, is_open));
+    }
 }
