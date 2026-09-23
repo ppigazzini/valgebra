@@ -99,6 +99,10 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 # Three outcomes, three exit codes: 0 within budget, 1 outside it or the wrong
 # workload, 2 could not measure.
@@ -204,6 +208,55 @@ def parse_measurement(stdout: str, stderr: str) -> Measurement:
     return Measurement(irefs, checksum)
 
 
+#: The variables a workload runs with, when the caller has them set: the loader
+#: path an embedded interpreter's library is found on, the home a relocated
+#: interpreter needs to find its standard library, and valgrind's own override.
+#: Nothing else of the caller's environment reaches a measurement.
+PASSED_THROUGH = ("LD_LIBRARY_PATH", "PYTHONHOME", "VALGRIND_LIB")
+
+
+def workload_environment(caller: Mapping[str, str]) -> dict[str, str]:
+    """Return the environment a measurement runs in: the few names it needs.
+
+    A count depends on the environment it is taken in, and not only through the
+    variables a workload reads. The block is copied onto the stack at start-up,
+    so its size moves everything laid out after it, and an embedded interpreter
+    copies it onto the heap: one binary read the JSON shape 504,839,830 under
+    `uv run` and 550,142,966 from a login shell, and a pure-Rust workload, which
+    is not differenced, carries 2.97% between the two as a constant. A caller's
+    `PATH`, virtual environment and tool variables are the caller's; the
+    measurement runs without them, with the hash seed fixed, so the same binary
+    reads the same count from any shell.
+    """
+    kept = {name: caller[name] for name in PASSED_THROUGH if name in caller}
+    kept["PYTHONHASHSEED"] = "0"
+    return kept
+
+
+def measuring_toolchain() -> dict[str, str]:
+    """Name the valgrind and C library a count is taken with.
+
+    A recorded budget is a reading of one environment, and two parts of it move
+    a count without any change to the tree: the valgrind that simulates the
+    machine, and the allocator the workloads call, whose free lists
+    `settle_the_heap` normalises and which glibc 2.43 reorganised.
+    """
+    valgrind = subprocess.run(
+        ["valgrind", "--version"], capture_output=True, text=True, check=False
+    ).stdout.strip()
+    try:
+        libc = os.confstr("CS_GNU_LIBC_VERSION") or "unknown"
+    except (ValueError, OSError):
+        libc = "unknown"
+    return {"valgrind": valgrind or "unknown", "libc": libc}
+
+
+def record_budget(budget: dict) -> None:
+    """Write the budget file, with the toolchain the counts in it were taken with."""
+    budget["measured_with"] = measuring_toolchain()
+    BUDGET_FILE.write_text(json.dumps(budget, indent=2) + "\n", encoding="utf-8")
+
+
 def measure(binary: Path, *args: str) -> Measurement:
     """Count the instructions one run of a workload executes.
 
@@ -219,11 +272,16 @@ def measure(binary: Path, *args: str) -> Measurement:
     Half a percent on a raw count is several percent on the *difference* of two
     counts this gate reads, which is the two-percent ceiling it holds changes to.
     So the seed is fixed here, in the one place every measurement passes through,
-    rather than left to the caller's environment.
+    rather than left to the caller's environment -- and the rest of that
+    environment is left behind with it (`workload_environment`).
     """
+    valgrind = shutil.which("valgrind")
+    if valgrind is None:
+        print("perf_gate: valgrind is not on PATH")
+        sys.exit(EXIT_CANNOT_RUN)
     result = subprocess.run(
         [
-            "valgrind",
+            valgrind,
             "--tool=cachegrind",
             "--cachegrind-out-file=/dev/null",
             str(binary),
@@ -233,7 +291,7 @@ def measure(binary: Path, *args: str) -> Measurement:
         check=True,
         capture_output=True,
         text=True,
-        env=os.environ | {"PYTHONHASHSEED": "0"},
+        env=workload_environment(os.environ),
     )
     return parse_measurement(result.stdout, result.stderr)
 
@@ -714,7 +772,7 @@ def run_core(budget: dict, *, update: bool) -> int:
     if update:
         budget["core_workload_irefs"] = result.irefs
         budget["core_workload_checksum"] = result.checksum
-        BUDGET_FILE.write_text(json.dumps(budget, indent=2) + "\n", encoding="utf-8")
+        record_budget(budget)
         print(f"recorded core budget: {result.irefs:,} instructions")
         print(f"recorded core checksum: {result.checksum}")
         return 0
@@ -750,7 +808,7 @@ def run_decision(budget: dict, mode: str, *, update: bool) -> int:
     if update:
         budget[f"{key}_irefs"] = result.irefs
         budget[f"{key}_checksum"] = result.checksum
-        BUDGET_FILE.write_text(json.dumps(budget, indent=2) + "\n", encoding="utf-8")
+        record_budget(budget)
         print(f"recorded {subject} budget: {result.irefs:,} instructions")
         print(f"recorded {subject} checksum: {result.checksum}")
         return 0
@@ -781,7 +839,7 @@ def run_binding(budget: dict, mode: str, *, update: bool) -> int:
     )
     if update:
         budget[key] = measured
-        BUDGET_FILE.write_text(json.dumps(budget, indent=2) + "\n", encoding="utf-8")
+        record_budget(budget)
         print(f"recorded {subject} budget: {measured:,} instructions")
         return 0
     if key not in budget:

@@ -159,6 +159,37 @@ def test_a_readable_measurement_carries_both_halves() -> None:
     assert bare.checksum == 150000
 
 
+def test_a_workload_runs_without_the_callers_environment() -> None:
+    """A measurement sees the loader path, a home, valgrind's override and a seed.
+
+    The environment's size moves a count on its own -- one binary read 2.97% apart
+    between a login shell and `uv run` -- so everything the caller carries that a
+    workload does not need is left behind, and the seed is fixed whatever the
+    caller set it to.
+    """
+    caller = {
+        "PATH": "/home/u/.venv/bin:/usr/bin",
+        "VIRTUAL_ENV": "/home/u/.venv",
+        "UV_RUN_RECURSION_DEPTH": "1",
+        "HOME": "/home/u",
+        "LD_LIBRARY_PATH": "/opt/python/lib",
+        "PYTHONHOME": "/opt/python",
+        "PYTHONHASHSEED": "random",
+    }
+    assert gate.workload_environment(caller) == {
+        "LD_LIBRARY_PATH": "/opt/python/lib",
+        "PYTHONHOME": "/opt/python",
+        "PYTHONHASHSEED": "0",
+    }
+    assert gate.workload_environment({}) == {"PYTHONHASHSEED": "0"}
+
+
+def test_the_budget_file_names_the_toolchain_its_counts_were_taken_with() -> None:
+    """A recorded count is a reading of one valgrind and one C library."""
+    budget = json.loads((ROOT / "scripts" / "perf_budget.json").read_text())
+    assert set(budget["measured_with"]) == {"valgrind", "libc"}
+
+
 def test_the_committed_core_checksum_matches_the_workload() -> None:
     # The recorded checksum is a constant of the workload's fixed corpus and
     # iteration count, so it belongs in the tree beside the budget. If the

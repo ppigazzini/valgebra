@@ -318,6 +318,16 @@ verdict:
   through, so a reading taken by hand is the reading the gate takes — and a
   reading on a shape whose profile names no function of the changed file is
   read as the instrument's before it is read as the change's.
+- **The environment is the gate's, not the caller's.** A process's environment
+  block is copied onto its stack at start-up and, by an embedded interpreter,
+  onto its heap, so its size moves a count on its own: a pure-Rust shape, which
+  is not differenced, read 2.97% apart between a login shell and `uv run`.
+  `workload_environment` in `perf_gate.py` passes a workload the loader path,
+  `PYTHONHOME` and `VALGRIND_LIB` where the caller has them, and the fixed seed,
+  and nothing else; valgrind is resolved to an absolute path first. The same
+  binary then reads the same count from any shell. `--update` writes the
+  valgrind and C library a budget was recorded with under `measured_with` in
+  `scripts/perf_budget.json`, since both move a count with the tree unchanged.
 - **The heap is settled before a shape counts.** What a loop's allocations
   cost depends on the heap it starts from: whether glibc serves a large request
   from the top chunk or first consolidates every small chunk the previous
