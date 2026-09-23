@@ -277,7 +277,7 @@ pub(super) fn annotations_as_written<'py>(
     {
         return Ok(None);
     }
-    let hints = PyDict::new(py);
+    let mut hints = PyDict::new(py);
     let mro = ty.getattr(intern!(py, "__mro__"))?;
     for base in mro.cast::<PyTuple>()?.iter().rev() {
         let own = if let Some(get_annotations) = &names.get_annotations {
@@ -300,14 +300,26 @@ pub(super) fn annotations_as_written<'py>(
         let Ok(own) = own.cast::<PyDict>() else {
             return Ok(None);
         };
-        for (name, value) in own.iter() {
+        let mut holds_none = false;
+        for (_, value) in own.iter() {
             if value.is_instance_of::<PyString>() || evaluates(&value, names, 0)? {
                 return Ok(None);
             }
-            if value.is_none() {
-                hints.set_item(name, py.get_type::<PyNone>())?;
-            } else {
-                hints.set_item(name, value)?;
+            holds_none |= value.is_none();
+        }
+        // The first base that says anything is copied whole, which is one
+        // table copy against an insertion per name; a later one merges in, a
+        // name it repeats keeping its place.
+        if hints.is_empty() {
+            hints = own.copy()?;
+        } else {
+            hints.update(own.as_mapping())?;
+        }
+        if holds_none {
+            for (name, value) in own.iter() {
+                if value.is_none() {
+                    hints.set_item(name, py.get_type::<PyNone>())?;
+                }
             }
         }
     }
@@ -326,6 +338,14 @@ fn evaluates(value: &Bound<'_, PyAny>, names: &Evaluation, depth: usize) -> PyRe
     let py = value.py();
     if depth > MAX_ANNOTATION_DEPTH {
         return Ok(true);
+    }
+    // A class is the common annotation, and `isinstance` answers `false` for
+    // it only after looking up its `__class__`. For an object whose type is
+    // exactly `type` that lookup returns `type` whatever the class defines --
+    // the metatype's own descriptor wins -- and `type` derives from none of
+    // the classes asked below, so every one of them answers `false`.
+    if value.get_type().is(py.get_type::<PyType>()) {
+        return Ok(false);
     }
     if let Some(forward_ref) = &forms(py)?.forward_ref
         && value.is_instance(forward_ref.bind(py))?
