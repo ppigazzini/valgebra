@@ -253,13 +253,16 @@ _WRITTEN = {
 
 
 def _gil_skipped_tests() -> list[str]:
-    """Every test the global interpreter lock stands down, by name.
+    """Every test the running interpreter's lock stands down, by name.
 
-    Read from the decorators rather than by running the suite: the reason
-    strings are what the page's paragraph is about, and a count taken from a
-    run would be a count of *items*, which the parametrised one multiplies.
-    Parsed rather than matched, because a reason spanning two lines is one
-    string to the interpreter and two to a regex.
+    Read from the decorators rather than by running the suite: a count taken
+    from a run would be a count of *items*, which the parametrised one
+    multiplies. A test is counted by the *condition* it skips on -- the running
+    interpreter holding its lock, `_gil_enabled()` -- because that is the case
+    the page's paragraph is about: two threads that cannot overlap, so the arm
+    a moving container drives is never reached. A test that skips on how the
+    interpreter was *built* stands down for another reason and drives no walk
+    arm, however its reason is worded.
     """
     found = []
     for path in sorted((ROOT / "tests").glob("test_*.py")):
@@ -268,16 +271,14 @@ def _gil_skipped_tests() -> list[str]:
             if not isinstance(node, ast.FunctionDef):
                 continue
             for decorator in node.decorator_list:
-                if not isinstance(decorator, ast.Call):
+                if not isinstance(decorator, ast.Call) or not decorator.args:
                     continue
-                reasons = [
-                    keyword.value.value
-                    for keyword in decorator.keywords
-                    if keyword.arg == "reason"
-                    and isinstance(keyword.value, ast.Constant)
-                    and isinstance(keyword.value.value, str)
-                ]
-                if any("GIL" in reason for reason in reasons):
+                condition = decorator.args[0]
+                if (
+                    isinstance(condition, ast.Call)
+                    and isinstance(condition.func, ast.Name)
+                    and condition.func.id == "_gil_enabled"
+                ):
                     found.append(f"{path.name}::{node.name}")
     return found
 

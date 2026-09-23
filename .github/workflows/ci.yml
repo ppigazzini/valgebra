@@ -320,8 +320,9 @@ jobs:
       ', full history' || '' }}
     # 3.15 is an early-warning prerelease lane. 3.14t (free-threaded) is a
     # supported lane: the extension declares `gil_used = false`, imports without
-    # re-enabling the GIL, and the concurrency test exercises true parallel
-    # validation there.
+    # re-enabling the GIL -- `test_a_free_threaded_build_keeps_the_gil_off_after_import`
+    # fails the lane if it does, where the parallel tests would only skip -- and
+    # the concurrency test exercises true parallel validation there.
     #
     # Every interpreter the package supports runs on every event. The release
     # ships a wheel built per version against a version-specific ABI, so each

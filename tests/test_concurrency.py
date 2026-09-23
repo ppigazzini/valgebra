@@ -15,6 +15,7 @@ under concurrency.
 from __future__ import annotations
 
 import sys
+import sysconfig
 import threading
 from typing import Annotated
 
@@ -27,6 +28,25 @@ def _gil_enabled() -> bool:
     """Whether the interpreter holds a GIL, so threads do not run in parallel."""
     query = getattr(sys, "_is_gil_enabled", None)
     return query() if query is not None else True
+
+
+@pytest.mark.skipif(
+    not sysconfig.get_config_var("Py_GIL_DISABLED"),
+    reason="a build with a GIL has none to keep off",
+)
+def test_a_free_threaded_build_keeps_the_gil_off_after_import() -> None:
+    """Importing the extension leaves a free-threaded interpreter without a GIL.
+
+    A module that does not declare itself free-threading-ready makes the
+    interpreter turn the GIL back on at import, with a `RuntimeWarning` and no
+    error, and the parallel tests below then skip rather than fail: the lane
+    that exists to run them reads green having run none. This is the row that
+    turns that red. A GIL the caller asked for (`PYTHON_GIL=1`, `-X gil=1`) is
+    the caller's choice rather than the module's, and is left alone.
+    """
+    if getattr(sys.flags, "gil", None) == 1:
+        pytest.skip("the GIL was asked for when the interpreter started")
+    assert not _gil_enabled()
 
 
 _RECORD = Validator({"name": str, "age?": int, "tags": list[str]})

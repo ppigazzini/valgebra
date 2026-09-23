@@ -634,6 +634,9 @@
     "sys": {
       "since": "3.10"
     },
+    "sysconfig": {
+      "since": "3.10"
+    },
     "tempfile": {
       "since": "3.10"
     },
