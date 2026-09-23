@@ -34,6 +34,7 @@ PRODUCT: every form the schema-language pages tabulate
 
 from __future__ import annotations
 
+import builtins
 import enum
 import json
 import re
@@ -271,6 +272,11 @@ FORMS: dict[str, Reads | Refuses] = {
         lambda: {int}, "a set literal is not a schema"
     ),
     "a tuple literal": Refuses(lambda: (int, str), "a tuple literal is not a schema"),
+    "a frozen dict literal": Refuses(
+        lambda: builtins.frozendict(a=int),  # ty: ignore[unresolved-attribute]
+        "a frozen dict literal is not a schema",
+        needs=(3, 15),
+    ),
 }
 
 #: The second spelling of a cell that names two forms, so the row is not held by

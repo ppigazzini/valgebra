@@ -16,6 +16,8 @@ it.
 
 from __future__ import annotations
 
+import builtins
+import collections.abc
 import dataclasses
 import sys
 import typing
@@ -25,6 +27,9 @@ import annotated_types as at
 import pytest
 
 from valgebra import Regex, Validator
+
+#: PEP 814's frozen dict, which arrives in 3.15; `None` below it.
+FROZENDICT = getattr(builtins, "frozendict", None)
 
 
 class Yields(at.GroupedMetadata):
@@ -168,6 +173,27 @@ def test_a_frozenset_literal_is_refused_as_its_set_sibling_is() -> None:
     assert Validator(frozenset[int]).is_valid(frozenset({1, 2}))
 
 
+@pytest.mark.skipif(FROZENDICT is None, reason="frozendict arrives in 3.15")
+def test_a_frozen_dict_is_a_mapping_and_not_a_dict() -> None:
+    """A `frozendict` value is a `Mapping`, and no schema that denotes dicts admits it.
+
+    The record and mapping node denotes dicts, and a `frozendict` is not a
+    `dict` subclass, so `dict[K, V]` and a record refuse one exactly as they
+    refuse any other mapping; the `Mapping` atom is the `isinstance` check that
+    admits it. `frozendict[K, V]` names a set of frozen dicts, a carrier the
+    node set does not have, and is refused rather than read as `dict[K, V]`.
+    """
+    assert FROZENDICT is not None
+    with pytest.raises(NotImplementedError, match="a frozen dict literal is not a"):
+        Validator(FROZENDICT(a=int))
+    value = FROZENDICT(a=1)
+    assert not Validator(dict[str, int]).is_valid(value)
+    assert not Validator({"a": int}).is_valid(value)
+    assert Validator(collections.abc.Mapping).is_valid(value)
+    with pytest.raises(NotImplementedError, match="unsupported typing form"):
+        Validator(FROZENDICT[str, int])
+
+
 def test_a_frozen_set_of_constants_is_still_a_value() -> None:
     """A frozen set *of constants* is a value, and stays one.
 
@@ -199,6 +225,12 @@ if sys.version_info >= (3, 11):
     # dropped, because both are forms a typed-Python author writes and the
     # reading a schema would otherwise give them is the silent one.
     NO_SET += [("Self", typing.Self), ("LiteralString", typing.LiteralString)]
+
+if FROZENDICT is not None:
+    # The dict literal's frozen sibling. A `frozendict` is not a `dict`, so it
+    # misses the dict literal's arm and, without one of its own, was read as a
+    # constant: a schema admitting that one mapping of a type object.
+    NO_SET += [("a frozen dict literal", FROZENDICT(a=int))]
 
 
 @pytest.mark.parametrize(

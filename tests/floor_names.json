@@ -559,6 +559,9 @@
     "base64": {
       "since": "3.10"
     },
+    "builtins": {
+      "since": "3.10"
+    },
     "collections": {
       "since": "3.10"
     },

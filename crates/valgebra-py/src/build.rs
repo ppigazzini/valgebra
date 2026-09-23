@@ -191,6 +191,8 @@ struct Forms {
     /// `typing.get_type_hints`, which resolves a class's annotations.
     get_type_hints: Py<PyAny>,
     object: Py<PyAny>,
+    /// `builtins.frozendict` (PEP 814), absent below 3.15.
+    frozendict: Option<Py<PyAny>>,
     enum_class: Py<PyAny>,
     callable: Py<PyAny>,
     ellipsis: Py<PyAny>,
@@ -230,6 +232,7 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             unpack: optional_form(&typing, "Unpack"),
             get_type_hints: typing.getattr("get_type_hints")?.unbind(),
             object: builtins.getattr("object")?.unbind(),
+            frozendict: optional_form(&builtins, "frozendict"),
             enum_class: py.import("enum")?.getattr("Enum")?.unbind(),
             callable: py.import("collections.abc")?.getattr("Callable")?.unbind(),
             ellipsis: builtins.getattr("Ellipsis")?.unbind(),
@@ -366,6 +369,18 @@ pub(crate) fn build_schema(
         return Err(not_implemented(
             "a frozen set literal is not a schema; write a frozen set as \
              frozenset[T]",
+        ));
+    }
+    // And the dict literal's frozen sibling. A `frozendict` is not a `dict`, so
+    // the arm below does not see it, and past it the constant fallthrough would
+    // intern `frozendict(a=int)` as a schema admitting that one mapping of a
+    // type object. It names a record, which the dict literal spells.
+    if let Some(frozendict) = &forms.frozendict
+        && obj.is_instance(frozendict.bind(py))?
+    {
+        return Err(not_implemented(
+            "a frozen dict literal is not a schema; write a record as a dict \
+             literal {\"key\": T}, or a mapping as dict[K, V]",
         ));
     }
     if let Ok(dict) = obj.cast::<PyDict>() {

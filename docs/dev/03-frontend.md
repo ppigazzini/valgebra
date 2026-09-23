@@ -223,7 +223,22 @@ question: `[A, B]` is the fixed-length list, which `typing` cannot spell, and a
 `dict` literal is a record — string keys are named fields, with `"key?"` for an
 optional one, and any other key is a schema governing the rest. A tuple literal
 and a set literal are refused rather than accepted, since `tuple[A, B]` and
-`set[T]` already spell them and two spellings for one set is a fork. A key
+`set[T]` already spell them and two spellings for one set is a fork. The frozen
+siblings are refused for the same reason and need arms of their own: a
+`frozenset` is not a `set` and, on 3.15, a `frozendict` is not a `dict`, so
+without one each falls through to the constant reading and becomes a schema
+admitting that one object.
+
+**A `frozendict` is a `Mapping` and not a `dict`.** The record and mapping node
+denotes dicts (`ir.rs`), so `dict[K, V]`, a record and a `TypedDict` refuse a
+`frozendict` value, and the bare `collections.abc.Mapping` atom admits it.
+`frozendict[K, V]` names a set of frozen dicts, a carrier the node set does not
+have, and is refused as an unknown origin rather than read as `dict[K, V]`:
+admitting it is a question for the admission test of
+[01-schema-ir.md](01-schema-ir.md), not for this page.
+`test_a_frozen_dict_is_a_mapping_and_not_a_dict` in
+`tests/test_frontend_forms.py` holds all three, on the interpreters that have
+the type. A key
 narrowed by a constraint is refused where "Three rejections that belong at
 compile time" says why.
 

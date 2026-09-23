@@ -291,6 +291,7 @@ with a message instead:
 | bare `Protocol`, and a `Protocol` without `@runtime_checkable` | membership is `isinstance`, which such a class refuses to answer |
 | a set or frozen set literal | `{int}` and `frozenset({int})` name containers, which are `set[T]` and `frozenset[T]` |
 | a tuple literal | `(A, B)` is `tuple[A, B]`; the list literal `[A, B]` is the fixed-length list |
+| a frozen dict literal | `frozendict(a=int)` names a record, which the dict literal `{"a": int}` spells (Python 3.15+) |
 
 A qualifier is the exception that is read rather than refused:
 `Required[X]`, `NotRequired[X]` and `ReadOnly[X]` survive hint resolution

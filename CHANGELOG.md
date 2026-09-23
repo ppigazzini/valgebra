@@ -17,10 +17,21 @@ answer of its own, or a repair to a change not yet released.
 - fix: a meet against a reference is asked the unfolding
 - fix: the relation product reads the attribute record, not a class beside it
 - fix: the complement of a universal union is read as the empty set
+- fix: a frozen dict literal is refused as a frozen set literal is
 
 -->
 
 ### Fixed
+
+- **A `frozendict` literal is refused rather than read as a constant.** On
+  Python 3.15, `Validator(frozendict(a=int))` built
+  `Literal[frozendict({'a': <class 'int'>})]`, a schema admitting that one
+  mapping and refusing `frozendict(a=1)` and `{"a": 1}`: a `frozendict` is not
+  a `dict`, so it missed the dict literal's arm and fell to the constant
+  reading. It raises `NotImplementedError` naming the dict literal and
+  `dict[K, V]`, as a `frozenset` literal does. `frozendict[K, V]` stays refused,
+  and a `frozendict` value is admitted by `collections.abc.Mapping` and not by
+  `dict[K, V]` or a record.
 
 - **A relation between a builtin kind and a class with declared attributes is
   decided.** The published decidability boundary listed an attribute record on
