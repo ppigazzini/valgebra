@@ -25,6 +25,20 @@ unreachable by construction, and a document reaches the same codes with the same
 the question that needs no objects at all, and that is the one that answers a
 `bool`.
 
+**A streaming check is refused.** Reading the document with jiter's pull
+parser instead of its tree saves at most the tree's construction and drop, and
+nothing where a node reads its value again -- a union reads it per branch, a
+meet per member, a complement and a refinement after their inner schema. A
+stream is read once, so it cannot be a `Value`: it would be the second walk this
+page refuses, and it answers differently from the tree on documents the tests
+hold. `next_skip` does not check UTF-8 in a value the schema never reads
+(`test_invalid_utf8_in_an_unread_value_is_not_a_document`); every jiter
+iterator call starts a fresh nesting budget where the tree counts from the root
+(`test_the_nesting_limit_counts_from_the_root`); and a predicate would run on
+values of a document that turns out malformed, or on a key the document repeats
+(`test_a_predicate_sees_only_what_a_parsed_document_holds`). The three are in
+`tests/test_json.py`, and each passes because the check reads a finished parse.
+
 `WalkMode` names what the walk is for:
 
 | Mode | Reports |

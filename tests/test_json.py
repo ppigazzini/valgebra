@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from types import GenericAlias
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypedDict
 
 import annotated_types as at
 import pytest
@@ -341,3 +341,77 @@ def test_a_record_reads_a_document_at_every_width(width: int) -> None:
     last = json.dumps(whole)[:-1] + ', "k0": "x", "k0": 0}'
     assert v.is_valid_json(last)
     assert not v.is_valid_json(json.dumps(whole)[:-1] + ', "k0": 0, "k0": "x"}')
+
+
+class _OpenRecord(TypedDict):
+    a: int
+
+
+@pytest.mark.parametrize("spec", [_OpenRecord, object, dict[str, Any]])
+def test_invalid_utf8_in_an_unread_value_is_not_a_document(spec: object) -> None:
+    """A string the schema never looks at is still decoded, and a bad one refuses.
+
+    The tree parser decodes every string it meets, so `is_valid_json` answers
+    for a document with a byte that is not UTF-8 exactly as `validate_json`
+    does, whether or not a field reads it. A reader that skips the unread value
+    -- jiter's `next_skip` does not check UTF-8 -- would call the document a
+    member, which is what `docs/dev/04-walk.md` refuses a streaming check for.
+    """
+    v = Validator(spec)
+    doc = b'{"a": 1, "x": "\xff"}'
+    assert not v.is_valid_json(doc)
+    assert _outcome(lambda: v.validate_json(doc)) == ("json_invalid",)
+
+
+def _nested(depth: int) -> str:
+    return "[" * depth + "1" + "]" * depth
+
+
+def test_two_hundred_containers_deep_is_a_document() -> None:
+    """The parser's nesting limit admits two hundred containers.
+
+    The row beside it refuses one more, and the pair is the limit's edge.
+    """
+    v = Validator(object)
+    assert v.is_valid_json(_nested(200))
+    assert _outcome(lambda: v.validate_json(_nested(200))) is None
+
+
+@pytest.mark.parametrize("depth", [201, 300])
+def test_the_nesting_limit_counts_from_the_root(depth: int) -> None:
+    """One container past the limit refuses, whatever the schema reads.
+
+    The limit is the parser's over the whole document, counted from the root,
+    so a schema that reads none of the nesting still refuses a document past
+    it. A reader that hands each unread subtree to a fresh parser call gets a
+    fresh budget per call and would accept the deeper documents.
+    """
+    v = Validator(object)
+    assert not v.is_valid_json(_nested(depth))
+    assert _outcome(lambda: v.validate_json(_nested(depth))) == ("json_invalid",)
+
+
+def test_a_predicate_sees_only_what_a_parsed_document_holds() -> None:
+    """The document is parsed before any of the schema's Python runs.
+
+    So a predicate is never called for a document that turns out malformed,
+    and a repeated key calls it with the value the document means -- the last
+    -- and never with an earlier one. Both are orders a caller can observe, and
+    both hold because the check reads a finished parse.
+    """
+    calls: list[object] = []
+
+    def seen(x: object) -> bool:
+        calls.append(x)
+        return True
+
+    items = Validator(list[Annotated[int, at.Predicate(seen)]])
+    assert not items.is_valid_json("[1, 2, 3, oops")
+    assert calls == []
+
+    record = Validator({"a": Annotated[int, at.Predicate(seen)]})
+    assert record.is_valid_json('{"a": 1, "a": 2}')
+    assert calls == [2]
+    calls.clear()
+    assert record.is_valid_json('{"a": "no", "a": 2}')
+    assert calls == [2]
