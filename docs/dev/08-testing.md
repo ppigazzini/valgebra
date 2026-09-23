@@ -288,6 +288,15 @@ workflow and `tests/conftest.py` — read them there.
 `tests/conftest.py` sets no hypothesis deadline, and says why: the job timeout is
 the bound. Every job carries one.
 
+**Each profile names its own randomness.** On a runner Hypothesis makes its own
+`ci` settings -- derandomised, no database -- the default a registered profile
+inherits, so a deep profile that names neither replays the same examples every
+night. `ci` is derandomised on purpose, so a red merge gate is the same red on a
+re-run; `nightly` draws at random and keeps what fails in `.hypothesis/examples`,
+which the nightly lane uploads on failure. `tests/test_property_profiles.py`
+reads each profile in a child interpreter with `CI` set, where the inheritance
+happens.
+
 ## What a use case is, and how many there are
 
 "Every use case is covered" is a claim only once a use case is a thing something

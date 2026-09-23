@@ -1311,6 +1311,16 @@ jobs:
           tests/test_equivalence.py
           tests/test_json_semantics.py
           tests/test_surrogate_strings.py
+      # The `nightly` profile draws at random and keeps what fails in its
+      # example database, so a red night is replayable from the database rather
+      # than from a seed nobody recorded. Hidden, so it is asked for by name.
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hypothesis-examples-nightly
+          path: .hypothesis/examples
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   nightly-rust-laws:
     name: nightly deep rust laws
