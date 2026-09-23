@@ -1,4 +1,6 @@
-use super::{Ctx, Entered, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, Trail, WalkMode, WalkState};
+use super::{
+    Ctx, Entered, FIRST_TRAIL, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, Trail, WalkMode, WalkState,
+};
 use pyo3::exceptions::PyKeyboardInterrupt;
 use rustc_hash::FxHashMap;
 
@@ -176,5 +178,33 @@ fn a_level_leaves_the_pair_it_entered() {
     assert!(
         matches!(trail.enter(pair), Entered::Open),
         "and the bound is not a one-way latch"
+    );
+}
+
+/// The first level a trail opens reserves room for the levels that follow.
+///
+/// A value nested `FIRST_TRAIL` deep enters every level without the trail
+/// growing again, so a membership test against a recursive schema asks the
+/// allocator once rather than once per doubling. Nothing an answer depends on
+/// sees the reservation -- the recursive binding shape counts it -- so the
+/// capacity is the thing held here.
+#[test]
+fn the_first_level_reserves_the_levels_after_it() {
+    let mut trail = Trail::default();
+    assert_eq!(
+        trail.0.capacity(),
+        0,
+        "a walk that enters no reference allocates nothing"
+    );
+    assert!(matches!(trail.enter((0, 0)), Entered::Open));
+    let reserved = trail.0.capacity();
+    assert!(reserved >= FIRST_TRAIL);
+    for level in 1..FIRST_TRAIL {
+        assert!(matches!(trail.enter((level, 0)), Entered::Open));
+    }
+    assert_eq!(
+        trail.0.capacity(),
+        reserved,
+        "the trail did not grow inside the reservation"
     );
 }

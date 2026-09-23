@@ -85,6 +85,16 @@ pub(crate) const MAX_RECURSION_DEPTH: usize = 128;
 #[derive(Default)]
 pub(crate) struct Trail(Vec<(usize, usize)>);
 
+/// How many levels the trail holds before its first growth.
+///
+/// A `Vec` grown from empty by pushes allocates at four pairs and reallocates
+/// at five and nine, so a value nested nine deep paid three trips to the
+/// allocator on every membership test -- a sixth of the recursive shape's
+/// count. Sixteen pairs is one 256-byte request, inside the size the
+/// allocator serves from its per-thread cache, and a schema with no reference
+/// never makes it.
+pub(crate) const FIRST_TRAIL: usize = 16;
+
 /// What entering a reference at a value found.
 pub(crate) enum Entered {
     /// The level is open, and [`Trail::leave`] closes it.
@@ -107,6 +117,9 @@ impl Trail {
         }
         if self.0.len() >= MAX_RECURSION_DEPTH {
             return Entered::Full;
+        }
+        if self.0.capacity() == 0 {
+            self.0.reserve_exact(FIRST_TRAIL);
         }
         self.0.push(key);
         Entered::Open
