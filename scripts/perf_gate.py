@@ -131,6 +131,19 @@ BINDING_ITERS_HIGH = 150_000
 # move: which inlining decisions the linker makes as code is added elsewhere.
 RELATIVE_TOLERANCE = 0.02
 IREFS = re.compile(r"I\s+refs:\s*([\d,]+)")
+MISPREDICTS = re.compile(r"Mispredicts:\s*([\d,]+)")
+
+#: The shapes whose simulated branch mispredicts are read beside their count.
+#: The decision path dispatches on a node's kind through jump tables taken
+#: several times per goal, and removing them trades instructions for predicted
+#: branches: +4% instructions and -6 to -8% wall clock on the matrix shape, on
+#: one machine. An instruction-only gate reads that as a regression, so the
+#: mispredicts are printed where such a change would be judged -- and not gated,
+#: because cachegrind predicts an indirect branch by its last target, a model its
+#: manual calls older than the processors the lanes run on.
+BRANCH_MODES = frozenset(
+    {"decision", "decision-refute", "decision-repeat", "decision-matrix"}
+)
 # Both workloads print one trailing line holding the checksum, bare or prefixed.
 CHECKSUM = re.compile(r"^(?:checksum=)?(\d+)$")
 
@@ -141,6 +154,8 @@ class Measurement:
 
     irefs: int
     checksum: int
+    #: Simulated branch mispredicts, for a mode in `BRANCH_MODES`; else `None`.
+    mispredicts: int | None = None
 
 
 def _cargo(args: list[str], root: Path, target: Path | None) -> None:
@@ -210,7 +225,9 @@ def parse_measurement(stdout: str, stderr: str) -> Measurement:
         print("could not find a workload checksum in the output:")
         print(stdout)
         raise SystemExit(EXIT_CANNOT_RUN)
-    return Measurement(irefs, checksum)
+    branched = MISPREDICTS.search(stderr)
+    mispredicts = int(branched.group(1).replace(",", "")) if branched else None
+    return Measurement(irefs, checksum, mispredicts)
 
 
 #: The variables a workload runs with, when the caller has them set: the loader
@@ -262,7 +279,7 @@ def record_budget(budget: dict) -> None:
     BUDGET_FILE.write_text(json.dumps(budget, indent=2) + "\n", encoding="utf-8")
 
 
-def measure(binary: Path, *args: str) -> Measurement:
+def measure(binary: Path, *args: str, branches: bool = False) -> Measurement:
     """Count the instructions one run of a workload executes.
 
     The count of a given binary is deterministic, which is the whole premise of
@@ -289,6 +306,7 @@ def measure(binary: Path, *args: str) -> Measurement:
             valgrind,
             "--tool=cachegrind",
             "--cachegrind-out-file=/dev/null",
+            *(["--branch-sim=yes"] if branches else []),
             str(binary),
             *args,
         ],
@@ -444,7 +462,7 @@ def measure_mode(
     if mode not in BINDING_SHAPES:
         build_workload(example, root, target)
         binary = (target or root / "target") / "release" / "examples" / example
-        return measure(binary)
+        return measure(binary, branches=mode in BRANCH_MODES)
 
     shape = BINDING_SHAPES[mode]
     hi, lo = BINDING_ITERATIONS[mode]
@@ -619,6 +637,12 @@ def check_against_base(
     print(f"base:     {base.irefs:,} instructions ({subject})")
     print(f"head:     {head.irefs:,} instructions")
     print(f"delta:    {delta:+.2%} (ceiling +{ceiling:.0%})")
+    if head.mispredicts is not None and base.mispredicts:
+        moved = (head.mispredicts - base.mispredicts) / base.mispredicts
+        print(
+            f"branch mispredicts: {base.mispredicts:,} -> {head.mispredicts:,} "
+            f"({moved:+.2%}; simulated, read and not gated)"
+        )
     if step:
         print(f"recorded step from this base: {step['why']}")
     if delta > ceiling:
@@ -827,7 +851,12 @@ def run_decision(budget: dict, mode: str, *, update: bool) -> int:
     example, subject = MODES[mode]
     key = mode.replace("-", "_") + "_workload"
     build_workload(example)
-    result = measure(ROOT / "target" / "release" / "examples" / example)
+    result = measure(ROOT / "target" / "release" / "examples" / example, branches=True)
+    if result.mispredicts is not None:
+        print(
+            f"branch mispredicts: {result.mispredicts:,} "
+            "(simulated, read and not gated)"
+        )
     if update:
         budget[f"{key}_irefs"] = result.irefs
         budget[f"{key}_checksum"] = result.checksum

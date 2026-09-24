@@ -340,6 +340,16 @@ verdict:
   binary then reads the same count from any shell. `--update` writes the
   valgrind and C library a budget was recorded with under `measured_with` in
   `scripts/perf_budget.json`, since both move a count with the tree unchanged.
+- **Branch mispredicts are read beside the decision shapes, and not gated.**
+  The decision path dispatches on a node's kind through jump tables taken
+  several times per goal, so a change can trade instructions for predicted
+  branches, which an instruction count reads as a regression. The four
+  decision modes run under `--branch-sim=yes`, which leaves the instruction
+  count as it is, and print the simulated mispredicts and their movement
+  against the base (`BRANCH_MODES` in `perf_gate.py`). No verdict reads them:
+  cachegrind predicts an indirect branch by its last target, a model its
+  manual dates to processors older than the lanes', so the column says where
+  to look with a hardware counter rather than what a change costs.
 - **The heap is settled before a shape counts.** What a loop's allocations
   cost depends on the heap it starts from: whether glibc serves a large request
   from the top chunk or first consolidates every small chunk the previous

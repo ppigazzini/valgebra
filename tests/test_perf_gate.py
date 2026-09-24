@@ -190,6 +190,33 @@ def test_the_budget_file_names_the_toolchain_its_counts_were_taken_with() -> Non
     assert set(budget["measured_with"]) == {"valgrind", "libc"}
 
 
+def test_a_branch_simulated_run_carries_its_mispredicts() -> None:
+    """A run with branch simulation reads its mispredicts; one without has none."""
+    stderr = (
+        "==1== I   refs:      89,565,334\n"
+        "==1== Branches:       10,196,616  (9,135,548 cond + 1,061,068 ind)\n"
+        "==1== Mispredicts:     1,080,406  (  512,000 cond +   568,406 ind)\n"
+    )
+    measured = gate.parse_measurement("68000\n", stderr)
+    assert measured.mispredicts == 1080406
+    plain = gate.parse_measurement("68000\n", "==1== I   refs: 1,000")
+    assert plain.mispredicts is None
+
+
+def test_mispredicts_are_read_beside_the_count_and_never_gate_it() -> None:
+    """A change that doubles the mispredicts and keeps its count passes.
+
+    The column is there so a trade of instructions for predicted branches is
+    seen where it is judged, and the predictor cachegrind simulates is older
+    than the processors the lanes run on, so it informs and does not decide.
+    """
+    base = gate.Measurement(100_000_000, 134000, 1_000_000)
+    head = gate.Measurement(100_000_000, 134000, 2_000_000)
+    assert gate.check_against_base(head, base, "matrix decision workload") == 0
+    assert set(gate.MODES) >= gate.BRANCH_MODES
+    assert all(mode.startswith("decision") for mode in gate.BRANCH_MODES)
+
+
 def test_the_committed_core_checksum_matches_the_workload() -> None:
     # The recorded checksum is a constant of the workload's fixed corpus and
     # iteration count, so it belongs in the tree beside the budget. If the
