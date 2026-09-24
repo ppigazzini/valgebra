@@ -13,19 +13,27 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: a literal-keyed clause is read beside the clauses that cover its key
-- fix: a meet against a reference is asked the unfolding
-- fix: the relation product reads the attribute record, not a class beside it
-- fix: the complement of a universal union is read as the empty set
-- fix: a frozen dict literal is refused as a frozen set literal is
-- fix: the product rule drops a branch it shares no value with, and refutes
-- fix: a recursive meet of maps is decided within its unfoldings
-- fix: a validator's indexes are awaited detached from the interpreter
-- fix: the release builds a wheel for every interpreter its classifiers name
-- feat: Python 3.15 is a supported release
-- fix: a release names the interpreters a macOS wheel is built for -- internal
-
 -->
+
+## [0.0.13] - 2026-09-24
+
+A support and correctness release: ten entries, one addition and nine fixes.
+
+Python 3.15 is supported, and every platform a wheel ships for gets one for
+every interpreter the classifiers name: 0.0.12 left Apple silicon without 3.10
+and every platform but Linux without free-threaded 3.14.
+
+Two fixes are about a process rather than an answer. A recursive meet of
+records overflowed the native stack from `is_empty()` and `is_subtype_of()` and
+ended the interpreter, and two threads reaching a validator's first call
+together could stop each other on a free-threaded build.
+
+The decision procedure decides more, and one wrong answer goes. A fixed-length
+sequence of unions against the union of its corners, a fixpoint's unfolding
+below the fixpoint, and a union of complements that covers every value are
+decided where they were undecided; a literal-keyed clause is read as the clause
+it is, where it refuted an inclusion no value refutes. On 3.15 a `frozendict`
+literal is refused as a `frozenset` literal is, rather than read as a constant.
 
 ### Added
 
@@ -1862,7 +1870,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.12...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.13...HEAD
+[0.0.13]: https://github.com/ppigazzini/valgebra/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/ppigazzini/valgebra/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/ppigazzini/valgebra/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/ppigazzini/valgebra/compare/v0.0.9...v0.0.10
