@@ -36,6 +36,12 @@ use crate::input::Value;
 /// iterator is never advanced into either of the states it panics in. The
 /// critical section keeps a second thread out of the dict for the parts of the
 /// scan that do not call back into the interpreter.
+///
+/// That section is the scan's only one on a free-threaded build: the iterator
+/// opens none per entry inside it, so a 3.14t build of the open-record shape
+/// reads one `PyCriticalSection_Begin` per scan and no more. Folding the loop
+/// into `Iterator::all`, which holds a single section for the whole loop, would
+/// hold nothing longer than this does.
 pub(super) fn scan_dict<'py>(
     dict: &Bound<'py, PyDict>,
     mut visit: impl FnMut(&Bound<'py, PyAny>, &Bound<'py, PyAny>) -> ControlFlow<()>,
