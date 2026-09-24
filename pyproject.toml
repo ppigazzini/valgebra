@@ -14,6 +14,10 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
 keywords = ["validation", "schema", "typing", "rust"]
+urls.Homepage = "https://github.com/ppigazzini/valgebra"
+urls.Documentation = "https://ppigazzini.github.io/valgebra/"
+urls.Changelog = "https://github.com/ppigazzini/valgebra/blob/main/CHANGELOG.md"
+urls.Issues = "https://github.com/ppigazzini/valgebra/issues"
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
