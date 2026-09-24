@@ -39,10 +39,12 @@ happened; it is a marker, not a trigger.
 Four conditions stand between a dispatch and an upload, and each is a step or a
 job condition in `release.yml` rather than a convention:
 
-- **The smoke must pass.** Each wheel is imported on its own platform and the
-  sdist is compiled from source and imported before the publish job runs. A
-  version cannot be replaced on an index once uploaded, only yanked, so a broken
-  wheel has to fail before the upload rather than after it.
+- **The smoke must pass.** Each wheel set is imported on its own platform, on
+  the floor, the newest release and the free-threaded build where the set
+  carries a wheel for them, with the free-threaded import required to leave the
+  GIL off; the sdist is compiled from source and imported before the publish job
+  runs. A version cannot be replaced on an index once uploaded, only yanked, so
+  a broken wheel has to fail before the upload rather than after it.
 - **`confirm_version` must equal the version in the built wheels**, and an empty
   input aborts. A dispatch cannot publish a version the run did not build.
 - **The ref must be `main`.** A dispatch from a topic branch uploads nothing, so
@@ -156,10 +158,16 @@ re-dispatching the publish.
 The interpreter is part of what is being checked, not a detail of the check. The
 extension module is built per interpreter version rather than against the stable
 ABI, so a release ships many wheels and one install exercises exactly one of them
-— `release.yml` owns the matrix. A version selector resolves to whichever build
-is on the machine: `uv venv --python 3.14` can land on the free-threaded
-interpreter, so read `sysconfig.get_config_var("Py_GIL_DISABLED")` in the venv to
-record which wheel the check actually covered.
+— `release.yml` owns the matrix. On macOS and Windows the builds run on the
+host, where `--find-interpreter` sees only the interpreters installed on the
+image, so the workflow installs every supported one first; Windows builds its
+free-threaded wheel in a job of its own, since the two 3.14 builds can fail to
+co-install in one step. The maturin a release builds with is the one `uv.lock`
+resolves, pinned in the workflow rather than taken as the newest. A version
+selector resolves to whichever build is on the machine: `uv venv --python 3.14`
+can land on the free-threaded interpreter, so read
+`sysconfig.get_config_var("Py_GIL_DISABLED")` in the venv to record which wheel
+the check actually covered.
 
 ## What this does not cover
 

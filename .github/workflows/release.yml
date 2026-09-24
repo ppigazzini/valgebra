@@ -36,7 +36,7 @@ env:
 
 jobs:
   wheels:
-    name: wheels (${{ matrix.platform.runner }} ${{ matrix.platform.target }} ${{ matrix.platform.manylinux || 'native' }})
+    name: wheels (${{ matrix.platform.runner }} ${{ matrix.platform.target }} ${{ matrix.platform.manylinux || matrix.platform.variant || 'native' }})
     runs-on: ${{ matrix.platform.runner }}
     timeout-minutes: 45
     strategy:
@@ -79,9 +79,20 @@ jobs:
           # macos-15-intel is the last GitHub-hosted x86_64 macOS image (macOS
           # 15, available through August 2027); it replaces the retired
           # macos-13. The arm64 build below runs on macos-latest.
-          - { runner: macos-15-intel, target: x86_64, pgo: true }
-          - { runner: macos-latest, target: aarch64, pgo: true }
-          - { runner: windows-latest, target: x64, pgo: true }
+          #
+          # On a host runner `--find-interpreter` builds for what the image
+          # carries, and the images carry no free-threaded 3.14 and, on macOS
+          # arm64, no 3.10: 0.0.12 shipped no cp314t wheel off Linux and no cp310
+          # one for Apple silicon. `pythons` installs every supported interpreter
+          # first. Windows takes its free-threaded build in a job of its own,
+          # because co-installing the two 3.14 builds in one setup step can fail
+          # there (maturin-action's README, python/cpython#127294), and that job
+          # builds the one interpreter by name. The Windows arm64 image keeps
+          # what it carries.
+          - { runner: macos-15-intel, target: x86_64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.14t" }
+          - { runner: macos-latest, target: aarch64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.14t" }
+          - { runner: windows-latest, target: x64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14" }
+          - { runner: windows-latest, target: x64, pgo: true, pythons: "3.14t", interpreter: python3.14t, variant: freethreaded }
           - { runner: windows-11-arm, target: aarch64 }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -93,6 +104,10 @@ jobs:
       # before-script-linux below.
       - if: ${{ matrix.platform.pgo && runner.os != 'Linux' }}
         run: rustup component add llvm-tools
+      - if: ${{ matrix.platform.pythons }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.platform.pythons }}
       # The action pulls its container itself, once, with no retry, so a registry
       # answering `504` fails a release dispatch that has nothing wrong with it --
       # and a dispatch is a person at a button rather than a push that reruns
@@ -127,6 +142,9 @@ jobs:
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           command: build
+          # The version `uv.lock` resolves, so a release builds with the maturin
+          # the lanes tested rather than whichever is newest on the day.
+          maturin-version: "1.15.0"
           target: ${{ matrix.platform.target }}
           # --find-interpreter builds for every interpreter the image exposes
           # that satisfies requires-python: each CPython, the free-threaded
@@ -134,7 +152,10 @@ jobs:
           # docs/00-installation.md, which names what ships). --pgo (native
           # targets only) runs the training workload configured in
           # pyproject.toml against the instrumented build.
-          args: --release --out dist --find-interpreter ${{ matrix.platform.pgo && '--pgo' || '' }}
+          args: >-
+            --release --out dist
+            ${{ matrix.platform.interpreter && format('--interpreter {0}', matrix.platform.interpreter) || '--find-interpreter' }}
+            ${{ matrix.platform.pgo && '--pgo' || '' }}
           manylinux: ${{ matrix.platform.manylinux || 'auto' }}
           # llvm-tools inside the manylinux container for the PGO profile merge.
           before-script-linux: ${{ matrix.platform.pgo && 'rustup component add llvm-tools' || '' }}
@@ -142,7 +163,7 @@ jobs:
           sccache: "false"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}-${{ matrix.platform.manylinux || 'native' }}
+          name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}-${{ matrix.platform.manylinux || matrix.platform.variant || 'native' }}
           path: dist
           # An empty upload must fail here rather than downstream: the smoke job
           # installs "the matching wheel from the downloaded set", and a set with
@@ -160,6 +181,7 @@ jobs:
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           command: sdist
+          maturin-version: "1.15.0"
           args: --out dist
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -178,12 +200,16 @@ jobs:
       fail-fast: false
       matrix:
         wheel:
-          - { name: linux-x86_64, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-native }
-          - { name: linux-aarch64, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-native }
-          - { name: macos-x86_64, runner: macos-15-intel, artifact: wheels-macos-15-intel-x86_64-native }
-          - { name: macos-arm64, runner: macos-latest, artifact: wheels-macos-latest-aarch64-native }
-          - { name: windows-x64, runner: windows-latest, artifact: wheels-windows-latest-x64-native }
-          - { name: windows-arm64, runner: windows-11-arm, artifact: wheels-windows-11-arm-aarch64-native }
+          # `pythons` are the interpreters each wheel set is imported on: the
+          # floor, the newest release and the free-threaded build, where the set
+          # carries a wheel for them.
+          - { name: linux-x86_64, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-native, pythons: "3.10 3.14 3.14t" }
+          - { name: linux-aarch64, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-native, pythons: "3.10 3.14 3.14t" }
+          - { name: macos-x86_64, runner: macos-15-intel, artifact: wheels-macos-15-intel-x86_64-native, pythons: "3.10 3.14 3.14t" }
+          - { name: macos-arm64, runner: macos-latest, artifact: wheels-macos-latest-aarch64-native, pythons: "3.10 3.14 3.14t" }
+          - { name: windows-x64, runner: windows-latest, artifact: wheels-windows-latest-x64-native, pythons: "3.10 3.14" }
+          - { name: windows-x64-freethreaded, runner: windows-latest, artifact: wheels-windows-latest-x64-freethreaded, pythons: "3.14t" }
+          - { name: windows-arm64, runner: windows-11-arm, artifact: wheels-windows-11-arm-aarch64-native, pythons: "3.14" }
     runs-on: ${{ matrix.wheel.runner }}
     timeout-minutes: 20
     # The two musllinux wheels are not smoked here: running them needs a musl
@@ -205,14 +231,19 @@ jobs:
           # dependency file, so there is nothing for the uv cache to key on.
           enable-cache: false
       - name: Install the built wheel and import it
-        # Create a venv on the target interpreter, install the matching wheel from
-        # the downloaded set with no index, then import and validate across the
-        # object and JSON paths.
+        # A venv per interpreter, the matching wheel from the downloaded set with
+        # no index, then an import validated across the object and JSON paths.
+        # On a free-threaded interpreter the import must leave the GIL off.
         shell: bash
+        env:
+          PYTHONS: ${{ matrix.wheel.pythons }}
         run: |
-          uv venv
-          uv pip install --no-index --find-links dist valgebra
-          uv run python -c "import valgebra as v; assert v.Validator(int).is_valid(1); assert not v.Validator(int).is_valid('x'); assert v.Validator(list[int]).is_valid([1, 2]); assert v.Validator(int).is_valid_json('1'); print('smoke ok', v.__version__)"
+          for py in $PYTHONS; do
+            uv venv --python "$py" ".venv-$py"
+            uv pip install --python ".venv-$py" --no-index --find-links dist valgebra
+            bin=".venv-$py/bin"; [ -d "$bin" ] || bin=".venv-$py/Scripts"
+            "$bin/python" -c "import sys, sysconfig, valgebra as v; assert v.Validator(int).is_valid(1); assert not v.Validator(int).is_valid('x'); assert v.Validator(list[int]).is_valid([1, 2]); assert v.Validator(int).is_valid_json('1'); assert not (sysconfig.get_config_var('Py_GIL_DISABLED') and sys._is_gil_enabled()); print('smoke ok', sys.version.split()[0], v.__version__)"
+          done
 
   sdist-smoke:
     name: smoke sdist

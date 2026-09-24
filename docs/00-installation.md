@@ -30,9 +30,10 @@ pip install annotated-types
 ```
 
 Wheels are published for Linux (manylinux and musllinux, x86_64 and aarch64),
-macOS (Intel and Apple silicon), Windows, and free-threaded CPython 3.14 where
-the release image exposes a `cp314t` interpreter. Free-threaded support starts at
-3.14t; the earlier 3.13 free-threaded build is not a target.
+macOS (Intel and Apple silicon) and Windows x64 for every supported CPython,
+Windows arm64 from 3.12, and free-threaded CPython 3.14 on Linux, macOS and
+Windows x64. Free-threaded support starts at 3.14t; the earlier 3.13
+free-threaded build is not a target.
 
 **PyPy 3.11 is a target, on Linux.** Four wheels are published for it —
 manylinux and musllinux, x86_64 and aarch64 — and every push builds the

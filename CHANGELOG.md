@@ -21,10 +21,21 @@ answer of its own, or a repair to a change not yet released.
 - fix: the product rule drops a branch it shares no value with, and refutes
 - fix: a recursive meet of maps is decided within its unfoldings
 - fix: a validator's indexes are awaited detached from the interpreter
+- fix: the release builds a wheel for every interpreter its classifiers name
 
 -->
 
 ### Fixed
+
+- **Every platform gets a wheel for every interpreter the classifiers name.**
+  0.0.12 shipped no `cp310` wheel for Apple silicon and no free-threaded 3.14
+  wheel off Linux, though its classifiers name 3.10 and stable free threading:
+  the macOS and Windows builds ran on the host and built for the interpreters
+  the image carried. The release installs 3.10 through 3.14 and 3.14t there
+  first, and Windows builds its free-threaded wheel in a job of its own. The
+  smoke imports each wheel set on the floor, the newest release and the
+  free-threaded build, and the free-threaded import must leave the GIL off.
+  Windows arm64 keeps 3.12 and later, which its image carries.
 
 - **Threads that reach a validator's first call together wait detached.** The
   first call builds the validator's indexes, and a second thread arriving
