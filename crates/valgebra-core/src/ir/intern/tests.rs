@@ -190,6 +190,14 @@ fn parted_pair(make: impl Fn(usize) -> Schema) -> (Schema, Schema) {
 ///
 /// So the leaf is chosen rather than fixed: the first that lands clear of
 /// its own nesting, searched the way [`parted_pair`] searches.
+///
+/// **The slot is read off the first build, not off a probe.** A nesting may
+/// carry a list of its own -- a sequence's prefix -- and a list built only to
+/// read a slot dies with the probe, so the first build allocates another at
+/// another address and hashes to another slot. Read that way the check never
+/// saw the slot the sequence rows land in: the probe's slot and the build's
+/// disagreed on every run measured, and a Windows lane found the leaf in the
+/// build's.
 fn nesting_built_twice(wrap: &dyn Fn(Arc<Schema>) -> Schema) -> (Arc<Schema>, Arc<Schema>) {
     for leaf in [
         Schema::Bytes,
@@ -199,14 +207,12 @@ fn nesting_built_twice(wrap: &dyn Fn(Arc<Schema>) -> Schema) -> (Arc<Schema>, Ar
         Schema::Bool,
         Schema::NoneType,
     ] {
-        // Held for the length of the check, so the address the slot is
-        // read from is the address the two builds below will hash.
+        // Both held for the length of the check, so the addresses the slot
+        // is read from are the addresses the second build hashes.
         let inner = node(leaf.clone());
-        if slot(&wrap(Arc::clone(&inner))) != slot(&leaf) {
-            return (
-                node(wrap(node(leaf.clone()))),
-                node(wrap(node(leaf.clone()))),
-            );
+        let first = node(wrap(Arc::clone(&inner)));
+        if slot(&first) != slot(&leaf) {
+            return (first, node(wrap(node(leaf.clone()))));
         }
     }
     panic!("every leaf shares a slot with its own nesting");
