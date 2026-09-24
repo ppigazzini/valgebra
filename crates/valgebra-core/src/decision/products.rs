@@ -30,7 +30,7 @@ pub(super) fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
 }
 
 /// Whether the product `components` is contained in the union of the products in
-/// `branches`, all of the same arity.
+/// `branches`, all of the same arity, in the three values of [`Relation`].
 ///
 /// JACM Lemma 6.5 characterises this by splitting the negative set every way,
 /// which is `2^|N|` subsets *and* needs a hypothesis retracted whenever a split
@@ -38,56 +38,92 @@ pub(super) fn fixed_components(shape: &SeqShape) -> Option<Vec<Schema>> {
 /// and this is that function at `n` components rather than two:
 ///
 /// ```text
-/// Phi(P, [])       = false
+/// Phi(P, [])       = P is empty
 /// Phi(P, [B, ..R]) = for every i:  P[i] <= B[i]  or  Phi(P with P[i] := P[i] \ B[i], R)
 /// ```
 ///
 /// Narrowing a component to the empty set makes the whole product empty, and the
 /// empty set is below everything -- which is the base case that makes a value
 /// split across branches decide, since no single branch contains it.
+///
+/// **A branch that shares no value with the product at some position is
+/// dropped.** Where `P[j] & B[j]` is empty, narrowing `P[j]` by `B[j]` leaves it
+/// as it was, so that conjunct is `Phi(P, R)`, and every other conjunct follows
+/// from it because narrowing only makes a product easier to cover:
+/// `Phi(P, [B, ..R]) = Phi(P, R)`, exactly. Without the drop the recursion
+/// narrows by every branch at every position, arity to the power of the branch
+/// count, and `tuple[K, K]` against the twenty-five pairs of a five-kind `K` ran
+/// out of budget on an inclusion that holds. A branch is dropped only on a
+/// *proof* that the two share nothing; one merely not shown to overlap stays.
+///
+/// **The characterisation is exact, so it refutes as well as proves.** A
+/// conjunct fails where its position is refuted against the branch *and* the
+/// narrowed product is refuted against the rest; the base case fails where every
+/// narrowed component is proved inhabited, which is a product with a value and
+/// no branch left. The conjuncts are asked in order and the first that does not
+/// hold is the answer, as the boolean reading stopped at the first `false`.
 pub(super) fn product_subtype(
     components: &[Schema],
     branches: &[&[Schema]],
     cx: SubtypeCx<'_>,
     assumptions: &mut Vec<(Schema, Schema)>,
-) -> bool {
+) -> Relation {
     if !spend(cx.budget) {
-        return false;
+        return Relation::Unknown;
     }
-    if components
+    let verdicts: Vec<Verdict> = components
         .iter()
-        .any(|c| c.is_empty_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget))
-    {
-        return true;
+        .map(|c| c.verdict_rec(cx.oracle, cx.defs, &mut Vec::new(), cx.budget))
+        .collect();
+    if verdicts.iter().any(|verdict| verdict.is_empty()) {
+        return Relation::Holds;
     }
-    let Some((branch, rest)) = branches.split_first() else {
-        return false;
+    let mut remaining = branches;
+    let (branch, rest) = loop {
+        let Some((branch, rest)) = remaining.split_first() else {
+            return if verdicts.iter().all(|v| *v == Verdict::Inhabited) {
+                Relation::Fails
+            } else {
+                Relation::Unknown
+            };
+        };
+        let disjoint = components
+            .iter()
+            .zip(branch.iter())
+            .any(|(mine, theirs)| mine.shares_no_value_with(theirs, cx));
+        if !disjoint {
+            break (branch, rest);
+        }
+        remaining = rest;
     };
-    components
-        .iter()
-        .zip(branch.iter())
-        .enumerate()
-        .all(|(position, (mine, theirs))| {
-            mine.is_subtype_rec(theirs, cx, assumptions).holds() || {
-                // The component this branch does not cover, narrowed by what the
-                // branch takes away, with the rest of the tuple as it was. Built
-                // by mapping rather than by writing at an index: the position
-                // comes from the same enumeration as the component, so an index
-                // write cannot go out of range and cannot be seen not to.
-                let narrowed: Vec<Schema> = components
-                    .iter()
-                    .enumerate()
-                    .map(|(index, component)| {
-                        if index == position {
-                            Schema::meet([mine.clone(), theirs.clone().complement()])
-                        } else {
-                            component.clone()
-                        }
-                    })
-                    .collect();
-                product_subtype(&narrowed, rest, cx, assumptions)
-            }
-        })
+    for (position, (mine, theirs)) in components.iter().zip(branch.iter()).enumerate() {
+        let here = mine.is_subtype_rec(theirs, cx, assumptions);
+        if here == Relation::Holds {
+            continue;
+        }
+        // The component this branch does not cover, narrowed by what the
+        // branch takes away, with the rest of the tuple as it was. Built by
+        // mapping rather than by writing at an index: the position comes from
+        // the same enumeration as the component, so an index write cannot go
+        // out of range and cannot be seen not to.
+        let narrowed: Vec<Schema> = components
+            .iter()
+            .enumerate()
+            .map(|(index, component)| {
+                if index == position {
+                    Schema::meet([mine.clone(), theirs.clone().complement()])
+                } else {
+                    component.clone()
+                }
+            })
+            .collect();
+        match (here, product_subtype(&narrowed, rest, cx, assumptions)) {
+            (_, Relation::Holds) => {}
+            (Relation::Fails, Relation::Fails) => return Relation::Fails,
+            _ => return Relation::Unknown,
+        }
+    }
+    Relation::Holds
 }
 
 /// Whether a fixed-arity sequence is covered by the sequence branches of a union.
@@ -97,17 +133,24 @@ pub(super) fn product_subtype(
 /// that tries each branch alone cannot see it. Branches of another container or
 /// another arity share no value with `self` by shape, so they drop out rather
 /// than blocking the decomposition.
+///
+/// A refutation from the product rule is a refutation of the union only where
+/// every member it set aside holds none of the subject's values. A sequence of
+/// another kind or of another fixed arity holds none; one of this kind with a
+/// repeated tail, a class, a complement or a reference may hold the value the
+/// rule found outside the branches, so where one is set aside the refutation is
+/// dropped and only a proof is carried.
 pub(super) fn seq_splits_across_union(
     schema: &Schema,
     members: &[Schema],
     cx: SubtypeCx<'_>,
     assumptions: &mut Vec<(Schema, Schema)>,
-) -> bool {
+) -> Relation {
     let Schema::Seq { container, shape } = schema else {
-        return false;
+        return Relation::Unknown;
     };
     let Some(components) = fixed_components(shape) else {
-        return false;
+        return Relation::Unknown;
     };
     let branches: Vec<Vec<Schema>> = members
         .iter()
@@ -120,11 +163,27 @@ pub(super) fn seq_splits_across_union(
         })
         .filter(|branch| branch.len() == components.len())
         .collect();
-    if branches.is_empty() {
-        return false;
+    let set_aside_hold_none = members.iter().all(|member| match member {
+        Schema::Seq {
+            container: their_kind,
+            shape: their_shape,
+        } => their_kind != container || their_shape.tail.is_none(),
+        _ => false,
+    });
+    // With no branch to split over, the rule can only answer from the product's
+    // own emptiness, which the empty-subject bound asks anyway -- except where
+    // nothing set aside may hold a value, and then `Phi(P, [])` is exact: a
+    // product with a value is outside a union of none of its shape.
+    if branches.is_empty() && !set_aside_hold_none {
+        return Relation::Unknown;
     }
     let branches: Vec<&[Schema]> = branches.iter().map(Vec::as_slice).collect();
-    product_subtype(&components, &branches, cx, assumptions)
+    let answer = product_subtype(&components, &branches, cx, assumptions);
+    if set_aside_hold_none {
+        answer
+    } else {
+        answer.proof_only()
+    }
 }
 
 /// Whether the language `pa · ta*` is included in `pb · tb*` — a fixed prefix

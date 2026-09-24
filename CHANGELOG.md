@@ -18,10 +18,22 @@ answer of its own, or a repair to a change not yet released.
 - fix: the relation product reads the attribute record, not a class beside it
 - fix: the complement of a universal union is read as the empty set
 - fix: a frozen dict literal is refused as a frozen set literal is
+- fix: the product rule drops a branch it shares no value with, and refutes
 
 -->
 
 ### Fixed
+
+- **A fixed-length sequence of unions is decided against the union of its
+  corners.** `Validator(tuple[K, K]).relation_to(union(*(tuple[a, b] for a, b in
+  product(K, K))))` for `K = int | str | bytes | float | None` answered
+  `"undecided"` and answers `"subset"`, in a few milliseconds; with one corner
+  left out it answered `"undecided"` and answers `"not_subset"`. The product
+  rule narrowed by every branch at every position and ran out of its work
+  budget; it drops a branch that shares no value with what is left, which is
+  exact, and it refutes where every union member it sets aside holds none of the
+  subject's values. A widening: no answer that was a proof or a refutation
+  changes.
 
 - **A `frozendict` literal is refused rather than read as a constant.** On
   Python 3.15, `Validator(frozendict(a=int))` built

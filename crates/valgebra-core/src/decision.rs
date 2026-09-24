@@ -643,8 +643,9 @@ impl Schema {
             }
             refuted |= answer == Relation::Fails;
         }
-        if seq_splits_across_union(self, members, cx, assumptions) {
-            return Relation::Holds;
+        let split = seq_splits_across_union(self, members, cx, assumptions);
+        if split != Relation::Unknown {
+            return split;
         }
         // A branch the subject shares no value with decides nothing about the
         // inclusion: `A ⊆ X ∪ Y` with `A ∩ X = ∅` is `A ⊆ Y`. Dropping such a

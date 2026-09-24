@@ -1879,6 +1879,41 @@ proptest! {
         );
     }
 
+    // THEORY: a-sequence-splits-across-a-union
+    /// A pair of scalars against a union of pairs of scalars decides exactly as
+    /// the values do: the pair is below the union when every pair of samples it
+    /// holds lies in some branch, and refuted when one does not.
+    ///
+    /// The product rule's own fragment, and the one where a sample per kind is
+    /// an exact oracle, so the law holds both answers and admits no decline.
+    /// The union is built raw so its branches reach the rule unfolded.
+    #[test]
+    fn the_product_rule_decides_scalar_pairs_as_the_values_do(
+        subject in proptest::collection::vec(scalar_schema(), 2),
+        branches in proptest::collection::vec(
+            proptest::collection::vec(scalar_schema(), 2),
+            0..6,
+        ),
+    ) {
+        let pair = |parts: &[Schema]| Schema::Seq {
+            container: SeqKind::Tuple,
+            shape: SeqShape::fixed(parts.iter().cloned()),
+        };
+        let covered = SAMPLES.iter().all(|&x| {
+            SAMPLES.iter().all(|&y| {
+                !(member(&subject[0], x) && member(&subject[1], y))
+                    || branches
+                        .iter()
+                        .any(|branch| member(&branch[0], x) && member(&branch[1], y))
+            })
+        });
+        let union = Schema::Union(branches.iter().map(|b| pair(b)).collect::<Vec<_>>().into());
+        prop_assert_eq!(
+            pair(&subject).subtype_relation_under(&union, &NoLeafRelations, &[]),
+            Relation::decided(covered)
+        );
+    }
+
     #[test]
     fn scalar_decision_matches_the_value_oracle(a in scalar_schema(), b in scalar_schema()) {
         let a_empty = SAMPLES.iter().all(|&v| !member(&a, v));

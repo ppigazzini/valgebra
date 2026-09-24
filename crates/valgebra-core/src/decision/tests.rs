@@ -5112,3 +5112,120 @@ fn a_record_below_its_corners_stops_where_the_lowering_does() {
         "the wider record decided, so the recorded width has moved"
     );
 }
+
+/// `int | str | bytes | float | None`, the five kinds the product rows spread over.
+fn kinds(width: usize) -> Vec<Schema> {
+    [
+        Schema::Int,
+        Schema::Str,
+        Schema::Bytes,
+        Schema::Float,
+        Schema::NoneType,
+    ]
+    .into_iter()
+    .take(width)
+    .collect()
+}
+
+fn pair(first: Schema, second: Schema) -> Schema {
+    Schema::Seq {
+        container: SeqKind::Tuple,
+        shape: SeqShape::fixed([first, second]),
+    }
+}
+
+/// `tuple[K, K]` and the union of its `width * width` corners, one corner held back.
+fn product_and_corners(width: usize, held_back: usize) -> (Schema, Vec<Schema>) {
+    let each = Schema::Union(kinds(width).into());
+    let corners = kinds(width)
+        .into_iter()
+        .flat_map(|a| kinds(width).into_iter().map(move |b| pair(a.clone(), b)))
+        .collect::<Vec<_>>();
+    let kept = corners.len() - held_back;
+    (
+        pair(each.clone(), each),
+        corners.into_iter().take(kept).collect(),
+    )
+}
+
+// THEORY: a-sequence-splits-across-a-union
+/// A product is below the union of its corners, and refuted when one is missing.
+///
+/// `tuple[K, K]` for five kinds against its twenty-five corners is an inclusion
+/// that holds; the product rule narrowed by every branch at every position and
+/// ran out of budget on it. A branch that shares no value with the narrowed
+/// product is dropped, which is exact, and the rule answers in three values, so
+/// the corner held back is a refutation rather than a decline.
+#[test]
+fn a_product_is_below_its_corners_and_refuted_by_a_missing_one() {
+    let (product, corners) = product_and_corners(5, 0);
+    assert_eq!(
+        product.subtype_relation_under(&Schema::Union(corners.into()), &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    let (product, corners) = product_and_corners(5, 1);
+    assert_eq!(
+        product.subtype_relation_under(&Schema::Union(corners.into()), &NoLeafRelations, &[]),
+        Relation::Fails
+    );
+    // No corner at all: the union of none is the empty set, and a product with
+    // a value is outside it. The law over drawn pairs found this one declined.
+    // Read by the rules alone, since the set representation refutes it as well
+    // and would answer for a rule that declined.
+    let (product, _) = product_and_corners(5, 0);
+    assert_eq!(
+        product.subtype_relation(
+            &Schema::Union(Vec::new().into()),
+            &NoLeafRelations,
+            &[],
+            &Cell::new(DECISION_BUDGET),
+        ),
+        Relation::Fails
+    );
+}
+
+// THEORY: a-sequence-splits-across-a-union
+/// The rule's refutation is withheld where a member it sets aside may hold the value.
+///
+/// The corner held back is `(None, None)`, and `tuple[None, ...]` holds it. The
+/// rule reads fixed products of this kind and sets that member aside, so what
+/// it finds outside the branches is not outside the union: the inclusion holds,
+/// and a `Fails` here would be a refutation with no value under it.
+#[test]
+fn a_member_the_product_rule_sets_aside_withholds_its_refutation() {
+    let (product, mut corners) = product_and_corners(5, 1);
+    corners.push(Schema::Seq {
+        container: SeqKind::Tuple,
+        shape: SeqShape::homogeneous(Schema::NoneType),
+    });
+    assert_ne!(
+        product.subtype_relation_under(&Schema::Union(corners.into()), &NoLeafRelations, &[]),
+        Relation::Fails
+    );
+}
+
+/// The rules decide a product against its corners in steps polynomial in the width.
+///
+/// Read off the budget the structural rules spend, without the second decider:
+/// with the disjoint branches dropped the work follows the ways the corners
+/// can be ordered rather than arity to the power of their count.
+#[test]
+fn the_product_rule_decides_its_corners_in_a_bounded_number_of_steps() {
+    let mut spent = Vec::new();
+    for width in 2..=5 {
+        let (product, corners) = product_and_corners(width, 0);
+        let budget = Cell::new(DECISION_BUDGET);
+        let answer = product.subtype_relation(
+            &Schema::Union(corners.into()),
+            &NoLeafRelations,
+            &[],
+            &budget,
+        );
+        assert_eq!(answer, Relation::Holds, "width {width}");
+        spent.push(DECISION_BUDGET - budget.get());
+    }
+    assert!(
+        spent.last().is_some_and(|&five| five < 60_000),
+        "steps by width 2..=5: {spent:?}"
+    );
+}

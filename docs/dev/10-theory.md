@@ -137,13 +137,18 @@ offers no complement.
 decomposition — Frisch, Castagna & Benzaken Lemma 6.5 for pairs, in the
 backtrack-free form Castagna gives as `Φ`, and generalised to a fixed component
 count the way Castagna & Duboc state the tuple rule for larger arities.
-**[LOAD-BEARING: a-sequence-splits-across-a-union]** — `product_subtype` in `decision.rs`. It applies in subtyping
+**[LOAD-BEARING: a-sequence-splits-across-a-union]** — `product_subtype` in `decision/products.rs`. It applies in subtyping
 and nowhere else: emptiness does not decompose a product, so the same relation
-asked as a meet with a complement is not decided.
+asked as a meet with a complement is not decided. `Φ` characterises the
+inclusion exactly, so the rule refutes as well as proves -- a product with a
+value and no branch left is outside the union -- where every member the rule
+sets aside holds none of the subject's values; and a branch that shares no value
+with the narrowed product at some position is dropped, which the same
+characterisation makes exact.
 
 SOURCE: §13.1 "**The product decomposition.**"
 
-HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, the_product_rule_is_lemma_6_5, test_a_product_splits_across_union_branches, the_product_rule_is_lemma_6_5_at_three_positions, the_product_rule_decides_every_covering_split
+HELD-BY: a_fixed_sequence_splits_across_the_branches_that_share_its_shape, the_product_rule_is_lemma_6_5, test_a_product_splits_across_union_branches, the_product_rule_is_lemma_6_5_at_three_positions, the_product_rule_decides_every_covering_split, the_product_rule_decides_scalar_pairs_as_the_values_do, a_product_is_below_its_corners_and_refuted_by_a_missing_one, a_member_the_product_rule_sets_aside_withholds_its_refutation
 
 ## Records and maps
 

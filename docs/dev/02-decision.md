@@ -588,8 +588,17 @@ properties rather than as prose: `decision/tests.rs` reads a query's steps with
 union-of-literal fields, two wide literal tables against each other, a fixed
 tuple of unions against the union of its expansions. The step count grows with
 the size of the query rather than exponentially in its depth on every one of
-them, and the build limits cap that size, so nothing yet constructed comes near
-the ceiling.
+them, and the build limits cap that size.
+
+**One family does reach it, and says where.** The product rule narrows a
+fixed-length sequence by each branch at each position, and it drops a branch
+that shares no value with the narrowed sequence at some position -- exactly, since
+narrowing by a disjoint branch changes nothing. So `tuple[K, K]` against its
+corners costs the ways the corners can be ordered, not two to the power of
+their count: `the_product_rule_decides_its_corners_in_a_bounded_number_of_steps`
+holds five kinds under a fixed bound. Three positions over five kinds against
+their hundred and twenty-five corners multiply that again and reach the
+ceiling, and the pair is declined, which is the conservative answer.
 
 Exhaustion returns the conservative answer. That is sound by the contract above,
 and the numbers say it is a ceiling no real annotation reaches — only an
