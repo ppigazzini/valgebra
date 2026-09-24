@@ -145,7 +145,10 @@ patterns, built once with the validator and read by the walk that uses them.
 `walk/scalar.rs` answers what a value is **without descending into it**: a
 scalar kind, a literal, and the constraints that narrow one. A container's
 length is answered there too, for the same reason -- `MinLen` counts what a
-value holds without reading any of it.
+value holds without reading any of it. A constraint's operand is borrowed out
+of the pool for as long as the walk runs, so a check that passes takes no
+reference to it: on a free-threaded interpreter a reference is an atomic write
+to a counter every thread sharing the validator touches.
 
 `walk/record.rs` reads a value as a **keyed map or an attribute record**: the
 shape whose membership is a question per key rather than per position -- which

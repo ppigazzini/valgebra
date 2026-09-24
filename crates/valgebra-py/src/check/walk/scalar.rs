@@ -332,11 +332,11 @@ fn stored_len(value: &Bound<'_, PyAny>) -> PyResult<usize> {
 /// cost the size of the schema's *operand* rather than the size of the value.
 enum Expected<'py> {
     /// A comparison against a pool operand, as `symbol operand`.
-    Order(&'static str, Bound<'py, PyAny>),
+    Order(&'static str, &'py Bound<'py, PyAny>),
     /// A length bound, as `length symbol n`.
     Length(&'static str, usize),
     /// A divisibility operand from the pool.
-    Multiple(Bound<'py, PyAny>),
+    Multiple(&'py Bound<'py, PyAny>),
     /// A pattern the whole string must match.
     Pattern(&'py str),
     /// A message with nothing to render into it.
@@ -369,7 +369,7 @@ impl Expected<'_> {
 fn order_bound<'py>(
     value: &Bound<'py, PyAny>,
     index: OperandIx,
-    ctx: Ctx<'_>,
+    ctx: Ctx<'py>,
     py: Python<'py>,
     compare: impl Fn(&Bound<'py, PyAny>, &Bound<'py, PyAny>) -> PyResult<bool>,
     code: Code,
@@ -377,10 +377,11 @@ fn order_bound<'py>(
 ) -> Option<(bool, Code, Expected<'py>)> {
     let bound = operand_at(ctx, index, py)?;
     let ok = fold(compare(value, bound), py, ctx);
-    // Cloned only here, where the violation payload owns what it will summarize.
-    // The lookup itself borrows, which is what keeps a literal comparison and an
-    // isinstance check off the reference-count path.
-    Some((ok, code, Expected::Order(symbol, bound.clone())))
+    // Borrowed from the pool for as long as the walk's context lives, so a
+    // passing check -- every check, in fast mode -- takes no reference to the
+    // bound; a free-threaded interpreter would make that an atomic on one
+    // counter every thread sharing the validator touches.
+    Some((ok, code, Expected::Order(symbol, bound)))
 }
 
 /// Whether `value` (already a base member, materialized once) satisfies one
@@ -434,7 +435,7 @@ fn check_constraint<'py>(
                 return false;
             };
             let ok = fold(is_multiple_of(value, operand), py, ctx);
-            (ok, MULTIPLE_OF, Expected::Multiple(operand.clone()))
+            (ok, MULTIPLE_OF, Expected::Multiple(operand))
         }
         Constraint::Predicate(i) => {
             // Slow path: the user's Python callable runs at the boundary. A
