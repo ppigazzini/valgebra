@@ -965,6 +965,7 @@ fn a_record_meet_is_empty_only_where_a_required_key_cannot_hold() {
     ]));
 }
 
+// THEORY: regularity-bounds-the-goals
 /// A meet of two maps that refer back to it is decided within its unfoldings.
 ///
 /// The key both maps require carries a type that names the fixpoint, so the

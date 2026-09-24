@@ -545,10 +545,10 @@ general, so an accepted survivor carries the argument for why no test can kill
 it, in the baseline beside it.
 
 **Read a mutation score with its skip list.** A test that exists to prove a
-bound runs without end under a mutation that removes the bound, so the whole
-run returns no verdict. Each such test leaves the *sweep* and stays in the test
-lane, marked `SWEEP-SKIP` in its own source with the reason;
-`tests/test_sweep_skips.py` owns the list and holds the marks and the
+bound runs past any timeout the sweep sets under a mutation that removes the
+bound, so the whole run returns no verdict. Each such test leaves the *sweep*
+and stays in the test lane, marked `SWEEP-SKIP` in its own source with the
+reason; `tests/test_sweep_skips.py` owns the list and holds the marks and the
 workflow's skip list to each other in both directions. A mutant whose
 experiment cannot finish is a rig fault, not a detection -- and a mutant the
 skipped tests would hang on is still caught by the rest of the suite, which is

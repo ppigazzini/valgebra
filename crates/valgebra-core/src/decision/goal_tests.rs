@@ -1,10 +1,12 @@
-//! The number the work budget's argument rests on: goals a query asks twice.
+//! The goals a query asks: how often it asks one twice, and what they are
+//! drawn from.
 //!
-//! `DECISION_BUDGET` stands in for a termination argument, and its doc says a
-//! goal memo would not pay the debt down -- because over the decision workloads
-//! the goals a query *repeats* number zero. That sentence was prose. The
-//! counter in [`super::goals`] makes it a measurement, and this asks it of the
-//! shapes the claim is about.
+//! `DECISION_BUDGET`'s doc says a goal memo would mostly not lower it, because
+//! over the decision workloads the goals a query *repeats* number zero, and
+//! that termination does not rest on it, because every goal is a pair drawn
+//! from a finite closure of the query's subterms. The recorder in
+//! [`super::goals`] reads both, and this asks them of the shapes the claims
+//! are about.
 //!
 //! The shapes are the workloads' own, written here rather than imported: an
 //! example is a binary and a test cannot call into one. What is measured is the
@@ -17,23 +19,25 @@
 //! a repeated field or position without asking again. So zero here is "the
 //! caches absorb it", not "the goal was never reached".
 
+use std::cell::Cell;
 use std::sync::Arc;
 
-/// A test-side count of the goals one query asks twice.
+/// A test-side record of the goals one query asks.
 ///
-/// [`DECISION_BUDGET`]'s own argument rests on a number -- over the decision
-/// workloads the goals a query *repeats* are zero, so the ceiling stands in for
-/// a termination argument and not for a memo -- and nothing read that number.
-/// This reads it. Compiled for this crate's own tests only, so the procedure a
-/// caller runs carries no counter and pays nothing for one.
+/// [`DECISION_BUDGET`]'s doc rests on two readings of it: over the decision
+/// workloads the goals a query *repeats* are zero, so a memo would mostly not
+/// lower the ceiling, and every goal is drawn from the closure of the query's
+/// subterms, so the ceiling bounds cost rather than standing in for
+/// termination. This takes both. Compiled for this crate's own tests only, so
+/// the procedure a caller runs carries no recorder and pays nothing for one.
 ///
 /// A goal is the pair the recursion is asked about, and two are the same goal
 /// when the pair is equal. Equality rather than the interned address: a query
-/// builds goals of its own -- [`seq_splits_across_union`] makes a sequence per
-/// branch -- and those are temporaries, so an address freed and handed out
-/// again would read as a repeat that never happened. Equality also counts at
-/// least as many repeats as identity can, which is the safe direction for a
-/// claim that there are none.
+/// builds goals of its own -- [`seq_splits_across_union`] meets a component
+/// with a branch's complement -- and those are temporaries, so an address
+/// freed and handed out again would read as a repeat that never happened.
+/// Equality also counts at least as many repeats as identity can, which is the
+/// safe direction for a claim that there are none.
 pub(crate) mod goals {
     use std::cell::RefCell;
 
@@ -71,6 +75,23 @@ pub(crate) mod goals {
     /// other's query, and a number about part of a query is not the number the
     /// argument needs.
     pub(crate) fn counted<T>(query: impl FnOnce() -> T) -> (T, Counts) {
+        let (answer, table) = tabled(query);
+        let counts = Counts {
+            asked: table.values().map(|times| *times as usize).sum(),
+            repeated: table.values().map(|times| (times - 1) as usize).sum(),
+            deepest: DEEPEST.with(std::cell::Cell::get),
+        };
+        (answer, counts)
+    }
+
+    /// Run `query`, and give back every distinct goal it asked, each once.
+    pub(crate) fn recorded<T>(query: impl FnOnce() -> T) -> (T, Vec<(Schema, Schema)>) {
+        let (answer, table) = tabled(query);
+        (answer, table.into_keys().collect())
+    }
+
+    /// Run `query` with the table installed, and hand the table back.
+    fn tabled<T>(query: impl FnOnce() -> T) -> (T, FxHashMap<(Schema, Schema), u32>) {
         ASKED.with(|asked| {
             let mut slot = asked.borrow_mut();
             assert!(slot.is_none(), "a count is already running on this thread");
@@ -81,12 +102,7 @@ pub(crate) mod goals {
         let table = ASKED
             .with(|asked| asked.borrow_mut().take())
             .expect("the table installed above is still there");
-        let counts = Counts {
-            asked: table.values().map(|times| *times as usize).sum(),
-            repeated: table.values().map(|times| (times - 1) as usize).sum(),
-            deepest: DEEPEST.with(std::cell::Cell::get),
-        };
-        (answer, counts)
+        (answer, table)
     }
 
     /// Record the trail's depth after a push, where a count is running.
@@ -109,6 +125,8 @@ use crate::{
     SeqShape,
 };
 use goals::Counts;
+
+use super::DECISION_BUDGET;
 
 /// Two classes that lay down no builtin layout, answered as the bindings answer
 /// a plain Python class. The matrix workload's oracle, for the matrix's pairs:
@@ -451,25 +469,71 @@ fn distinct_against_subterm_pairs(sub: &Schema, sup: &Schema, defs: &[Schema]) -
     (counts.asked - counts.repeated, pairs)
 }
 
-// THEORY: regularity-bounds-the-goals
-/// Regularity, spent: the distinct goals a query asks are bounded by the
-/// pairs of subterms the two schemas have.
+/// Whether `term` is in the closure the goals of a query over `subterms` are
+/// drawn from.
 ///
-/// A schema is regular by construction -- a finite tree with back edges into
-/// a finite table of definitions -- so the subterms reachable by unfolding are
-/// finitely many, and a goal the procedure asks is a pair of them. That is
-/// the finiteness JACM §6.9 uses as a termination argument, and the number
-/// the work budget stands in for. Held here on the shapes the budget was
-/// measured over, on the recursive pairs the trail is for, and on the one
-/// rule that builds terms of its own: the product rule narrows a component
-/// by a branch it does not cover and asks the narrowed tuple against the
-/// rest, and the narrowed tuple is no subterm of the pair. Counted, that
-/// shape asks fewer distinct goals than the pair has subterm pairs -- the
-/// narrowings are few and each is asked once -- so the bound holds of it as
-/// a measurement where it holds of the others as an argument, and the row
-/// is what says so when a rule starts building past it.
-#[test]
-fn the_goals_a_query_asks_are_pairs_of_the_subterms() {
+/// A rule asks a pair of the children of the pair it was asked, or unfolds a
+/// reference into the definition `subterms` holds, except in three places. The
+/// product rule meets a component with the complement of a branch's
+/// component, one conjunct per narrowing, so what it asks is a meet of
+/// subterms and of their complements. The union rule asks the subject against
+/// the branches it can meet, which is a union of some members of a union among
+/// the subterms. And a complement or a meet folds to a bound, the top or the
+/// bottom. Each of the three is a subset or a sign of the subterms, so the
+/// closure is finite because they are.
+fn in_closure(term: &Schema, subterms: &[Schema]) -> bool {
+    let signed = |t: &Schema| {
+        subterms.contains(t) || matches!(t, Schema::Complement(inner) if subterms.contains(inner))
+    };
+    match term {
+        _ if signed(term) => true,
+        Schema::Nothing | Schema::Anything(_) => true,
+        Schema::Intersection(members) => members.iter().all(signed),
+        Schema::Union(members) => subterms.iter().any(|union| match union {
+            Schema::Union(theirs) => members.iter().all(|m| theirs.contains(m)),
+            _ => false,
+        }),
+        _ => false,
+    }
+}
+
+/// The goals a query asks that fall outside the closure of its subterms, and
+/// how many of the goals inside it are built rather than found.
+fn outside_the_closure(
+    sub: &Schema,
+    sup: &Schema,
+    defs: &[Schema],
+) -> (Vec<(Schema, Schema)>, usize) {
+    let (_, asked) = goals::recorded(|| sub.subtype_relation_under(sup, &PlainClasses, defs));
+    let found = [subterms(sub, defs), subterms(sup, defs)].concat();
+    let built = asked
+        .iter()
+        .filter(|(a, b)| !found.contains(a) || !found.contains(b))
+        .count();
+    let outside = asked
+        .into_iter()
+        .filter(|(a, b)| !in_closure(a, &found) || !in_closure(b, &found))
+        .collect();
+    (outside, built)
+}
+
+/// A product over `kinds` against the products of every two of them, less
+/// the last `missing`: the shape the product rule narrows most.
+fn corners(kinds: &[Schema], missing: usize) -> (Schema, Schema) {
+    let pair = |a: &Schema, b: &Schema| Schema::tuple(SeqShape::fixed([a.clone(), b.clone()]));
+    let any = Schema::union(kinds.iter().cloned());
+    let mut products: Vec<Schema> = kinds
+        .iter()
+        .flat_map(|a| kinds.iter().map(move |b| (a, b)))
+        .map(|(a, b)| pair(a, b))
+        .collect();
+    products.truncate(products.len() - missing);
+    (pair(&any, &any), Schema::union(products))
+}
+
+/// The shapes the budget was measured over, the recursive pairs the trail is
+/// for, and the product rule's split, each with the definitions it reads.
+fn measured_pairs() -> Vec<(Schema, Schema, Vec<Schema>)> {
     let element = nested_lists(2, Schema::Int);
     let wider = nested_lists(2, Schema::union([Schema::Int, Schema::Str]));
     let tree = tree_defs();
@@ -477,7 +541,7 @@ fn the_goals_a_query_asks_are_pairs_of_the_subterms() {
         Schema::Int,
         list_of(Schema::Ref(DefIx::new(0))),
     ])];
-    let pairs: Vec<(Schema, Schema, Vec<Schema>)> = vec![
+    vec![
         (
             repeating_record(8, &element),
             repeating_record(8, &wider),
@@ -510,12 +574,68 @@ fn the_goals_a_query_asks_are_pairs_of_the_subterms() {
             list_tree,
         ),
         (product_subject(), product_split(), vec![]),
+    ]
+}
+
+// THEORY: regularity-bounds-the-goals
+/// Every goal a query asks is a pair drawn from the closure of its subterms.
+///
+/// The closure is finite, so the distinct goals number at most its square, and
+/// a recursion whose pairs are drawn from a finite set and whose trail cuts a
+/// pair that comes back terminates without a budget. That is the argument
+/// JACM §6.9 makes over `N(A)` and TOPLAS 2005 Theorem 4 makes over its
+/// automaton's states. What a test can hold is the premise: no rule builds a
+/// term outside the closure. The product shapes build one narrowing per branch
+/// and position, and the last shape a union of the branches its subject can
+/// meet, so each is also held to have built something, which keeps the row
+/// from passing on a shape that never reached the rule.
+#[test]
+fn every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms() {
+    let kinds = [Schema::Int, Schema::Str, Schema::Bytes, Schema::NoneType];
+    let (product, all) = corners(&kinds, 0);
+    let (_, all_but_one) = corners(&kinds, 1);
+    assert_eq!(ask(&product, &all, &[]).0, Relation::Holds);
+    assert_eq!(ask(&product, &all_but_one, &[]).0, Relation::Fails);
+    // A branch refutes and another shares no value with the subject, so the
+    // union rule asks the subject against the two it can meet.
+    let words = list_of(Schema::union([Schema::Int, Schema::Str]));
+    let split_by_kind =
+        Schema::union([list_of(Schema::Int), list_of(Schema::Str), Schema::NoneType]);
+    assert_eq!(ask(&words, &split_by_kind, &[]).0, Relation::Fails);
+    let built = [
+        (product.clone(), all),
+        (product, all_but_one),
+        (product_subject(), product_split()),
+        (words, split_by_kind),
     ];
+    for (sub, sup) in &built {
+        let (outside, built) = outside_the_closure(sub, sup, &[]);
+        assert_eq!(outside, [], "{sub:?} <= {sup:?} asked outside the closure");
+        assert!(built >= 1, "{sub:?} <= {sup:?} built no goal of its own");
+    }
+    for (sub, sup, defs) in measured_pairs() {
+        let (outside, _) = outside_the_closure(&sub, &sup, &defs);
+        assert_eq!(outside, [], "{sub:?} <= {sup:?} asked outside the closure");
+    }
+}
+
+// THEORY: regularity-bounds-the-goals
+/// The distinct goals a query asks, measured against the pairs of subterms the
+/// two schemas have.
+///
+/// The closure bounds them by an argument, and its square is a bound on
+/// nothing a caller waits for: a meet per subset of the subterms. This is the
+/// number the shapes in hand reach, which is far below it. Each shape here
+/// asks fewer distinct goals than its sides have subterm pairs, the product
+/// rule's split included -- its narrowings are few and each is asked once --
+/// and the row is what says so when a rule starts asking more.
+#[test]
+fn the_goals_a_query_asks_are_pairs_of_the_subterms() {
     assert_eq!(
         ask(&product_subject(), &product_split(), &[]).0,
         Relation::Holds
     );
-    for (sub, sup, defs) in &pairs {
+    for (sub, sup, defs) in &measured_pairs() {
         let (distinct, bound) = distinct_against_subterm_pairs(sub, sup, defs);
         assert!(
             distinct >= 1,
@@ -610,9 +730,50 @@ fn the_longest_trail_any_recursive_shape_builds_is_three_pairs() {
     assert_eq!(deepest, 3, "no shape reached the length the page states");
 }
 
+// THEORY: the-assumption-set-is-popped
+/// A goal reached by two paths is derived twice, so a family whose every level
+/// reaches the next twice doubles its work per level until the budget declines.
+///
+/// Gapeyev, Levin & Pierce (JFP 2002, §11) build the family for the algorithm
+/// that keeps no proved pair across its calls, where the two directions of an
+/// arrow reach the level below twice. A second constructor does it here -- a
+/// pair of `T` and `list[T]` -- and the goals stay few, two per level, while
+/// the steps double. Seventeen levels decide; the eighteenth spends the whole
+/// budget and is declined, which is the conservative answer.
+#[test]
+fn a_goal_reached_by_two_paths_is_derived_twice_until_the_budget_declines() {
+    let level = |inner: Schema| Schema::tuple(SeqShape::fixed([inner.clone(), list_of(inner)]));
+    let (mut sub, mut sup) = (Schema::Int, Schema::union([Schema::Int, Schema::Str]));
+    let mut spent = Vec::new();
+    for depth in 1..=18 {
+        sub = level(sub);
+        sup = level(sup);
+        if depth <= 8 {
+            let counts = ask(&sub, &sup, &[]).1;
+            assert_eq!(
+                counts.asked - counts.repeated,
+                2 * depth + 1,
+                "depth {depth}"
+            );
+        }
+        let budget = Cell::new(DECISION_BUDGET);
+        let answer = sub.subtype_relation(&sup, &PlainClasses, &[], &budget);
+        spent.push((answer, DECISION_BUDGET - budget.get()));
+    }
+    for (depth, pair) in spent.windows(2).enumerate().take(16) {
+        assert!(pair[1].1 >= 2 * pair[0].1, "depth {}: {pair:?}", depth + 2);
+    }
+    assert!(
+        spent[..17]
+            .iter()
+            .all(|(answer, _)| *answer == Relation::Holds)
+    );
+    assert_eq!(spent[17], (Relation::Unknown, DECISION_BUDGET));
+}
+
 /// The same bound, asked of drawn pairs over drawn definitions.
 mod drawn {
-    use super::distinct_against_subterm_pairs;
+    use super::{distinct_against_subterm_pairs, outside_the_closure};
     use crate::laws::{drawn_defs, recursive_schema};
     use proptest::prelude::*;
 
@@ -625,14 +786,15 @@ mod drawn {
         })]
 
         // THEORY: regularity-bounds-the-goals
-        /// The distinct goals a drawn query asks are bounded by the pairs of
-        /// subterms its two sides have, over drawn definitions.
+        /// The goals a drawn query asks are drawn from the closure of its
+        /// subterms, and number no more than its subterm pairs, over drawn
+        /// definitions.
         ///
-        /// The eight chosen pairs above hold the bound on the shapes the
-        /// budget was measured over; this holds it on whatever the recursive
-        /// fragment draws, references into drawn definitions included, so a
-        /// rule that starts building goals past the subterms is caught on a
-        /// shape nobody chose.
+        /// The chosen pairs above hold both on the shapes the budget was
+        /// measured over; this holds them on whatever the recursive fragment
+        /// draws, references into drawn definitions included, so a rule that
+        /// starts building goals past the closure is caught on a shape nobody
+        /// chose.
         #[test]
         fn the_goals_a_drawn_query_asks_are_pairs_of_the_subterms(
             sub in recursive_schema(),
@@ -641,6 +803,11 @@ mod drawn {
         ) {
             let (distinct, pairs) = distinct_against_subterm_pairs(&sub, &sup, &defs);
             prop_assert!(distinct >= 1, "the counter saw no goal for {sub:?} <= {sup:?}");
+            let (outside, _) = outside_the_closure(&sub, &sup, &defs);
+            prop_assert!(
+                outside.is_empty(),
+                "{sub:?} <= {sup:?} asked {outside:?} outside the closure"
+            );
             prop_assert!(
                 distinct <= pairs,
                 "{distinct} distinct goals over {pairs} subterm pairs for {sub:?} <= {sup:?}"

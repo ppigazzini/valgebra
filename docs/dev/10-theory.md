@@ -639,18 +639,22 @@ HELD-BY: the_matrix_repeats_a_goal_only_where_a_meet_meets_a_union, a_record_of_
 
 **Regularity bounds the goals a query asks.** A schema is a finite tree with
 back edges into a finite table of definitions, so the subterms reachable by
-unfolding it are finitely many, and a goal the procedure asks is a pair of
-them: the distinct goals a query reaches are bounded by the subterm pairs of
-the two sides. That is the finiteness the saturating algorithm uses as its
-termination argument, and the number the work budget stands in for. The
-count is held on the workload shapes, on the recursive pairs the trail is
-for, and on the product rule -- the one rule that builds terms of its own,
-whose narrowings are counted and stay inside the bound as a measurement
-rather than as an argument. **[OBLIGATION: regularity-bounds-the-goals]**
+unfolding it are finitely many. A rule asks a pair of them or a pair built out
+of them -- a meet of subterms and their complements from the product rule, a
+union of some of a union's members from the union rule, a bound from a fold --
+so every goal is drawn from a finite closure, and the distinct goals a query
+reaches are at most its square. With the trail cutting a pair that comes back,
+that is the termination argument the saturating algorithm makes, and the work
+budget bounds cost rather than standing in for it. The closure is held on the
+workload shapes, on the recursive pairs the trail is for, on the rules that
+build, and on drawn queries; the subterm pairs, a tighter count, are held on the
+same shapes as a measurement. Emptiness is held to the same finiteness: a
+recursive meet of maps is read under its cycle rather than unfolded again.
+**[OBLIGATION: regularity-bounds-the-goals]**
 
 SOURCE: §14.2 "Regularity bounds the number of distinct"
 
-HELD-BY: the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks, the_goals_a_drawn_query_asks_are_pairs_of_the_subterms
+HELD-BY: every_goal_a_query_asks_is_drawn_from_the_closure_of_its_subterms, the_goals_a_query_asks_are_pairs_of_the_subterms, the_counter_sees_the_goals_a_query_asks, the_goals_a_drawn_query_asks_are_pairs_of_the_subterms, a_recursive_meet_of_maps_is_decided_within_its_unfoldings
 
 **A cache under coinduction is revertible or absent.** A memo added to the
 coinductive procedure must be persistent, so a failed disjunct can roll it
@@ -792,9 +796,13 @@ HELD-BY: a_decision_leaves_the_trail_it_was_given, an_assumption_is_read_as_the_
 
 **The assumption set is popped, not threaded.** Every relation proved on the
 way is discarded, so a goal reached twice by different paths is decided twice,
-and a decision leaves behind no assumption it did not make. **[DEVIATION: the-assumption-set-is-popped]**
+and a decision leaves behind no assumption it did not make. The cost is the one
+Gapeyev, Levin & Pierce (JFP 2002, §11) give the algorithm that keeps nothing
+across its calls: a family whose every level reaches the next twice doubles its
+work per level, and the work budget is what caps it, declining the family
+eighteen levels deep. **[DEVIATION: the-assumption-set-is-popped]**
 
-HELD-BY: a_decision_leaves_an_assumption_it_did_not_make, a_decision_leaves_the_trail_it_was_given
+HELD-BY: a_decision_leaves_an_assumption_it_did_not_make, a_decision_leaves_the_trail_it_was_given, a_goal_reached_by_two_paths_is_derived_twice_until_the_budget_declines
 
 **The dict key partition is by kind.** `1` and `True` are one key to a dict and
 two labels to the partition, so an atom requiring both under distinct values

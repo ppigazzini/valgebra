@@ -1,10 +1,10 @@
 """A test the mutation sweep skips must be marked in its own source.
 
 Three Rust tests exist to prove a bound -- the decision budget, the recursion
-depth. A mutation that removes the bound makes each of them run without end, so
-the whole sweep returns no verdict for that mutant: a rig fault, not a
-detection. Each therefore leaves the *sweep* while staying in the test lane,
-where it runs on every push.
+depth. A mutation that removes the bound makes each of them run past any
+timeout the sweep sets, so the whole sweep returns no verdict for that mutant: a
+rig fault, not a detection. Each therefore leaves the *sweep* while staying in
+the test lane, where it runs on every push.
 
 That is a hole in what the sweep can judge, so it is held to the tree in both
 directions rather than living as three strings in a workflow:
@@ -98,8 +98,9 @@ def test_the_documented_rerun_command_carries_the_same_skips() -> None:
     The inventory in ``CONTRIBUTING.md`` names a rerun command per contract, and
     its whole value is that following it reproduces that one verdict. A sweep
     command without these skips does not: the skipped cases exist to prove a
-    bound, so a mutation removing the bound runs without end and the sweep
-    returns no verdict at all -- a rig fault the reader then reads as a finding.
+    bound, so a mutation removing the bound runs past the sweep's timeout and the
+    sweep returns no verdict at all -- a rig fault the reader then reads as a
+    finding.
 
     Held here rather than beside the table because this is the same list
     ``ci.yml`` carries, and a second copy of a list is how the first one drifts.

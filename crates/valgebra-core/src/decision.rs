@@ -36,43 +36,45 @@ pub use crate::oracle::{LeafRelations, NoLeafRelations};
 /// The most decision steps one top-level query may take before it stops and
 /// returns the conservative answer. Subtyping distributes over unions and
 /// intersections and emptiness recurses the structural fragment, so a deeply
-/// nested Boolean combination can demand work exponential in its depth; a memo
-/// over goals is what would collapse that, and until one is written the
-/// procedure bounds its own work.
+/// nested Boolean combination can demand work exponential in its depth.
 ///
-/// The trail carries part of the termination argument already: a goal that comes
-/// back returns against its hypothesis rather than unfolding again, which is
-/// what decides a recursive schema. It does not carry all of it, because not
-/// every goal is a subterm of the query -- [`seq_splits_across_union`] builds a
-/// sequence per branch expansion -- so the set of goals the trail draws from is
-/// not obviously finite, and this counter is what stands where that argument
-/// would go. One budget is threaded through a whole top-level query —
-/// subtyping and the emptiness checks it calls into share it, and the two
-/// directions of an equivalence share it — so the bound cannot be escaped through
-/// a side door or spent twice.
+/// **The bound is on cost; termination does not rest on it.** Every goal a
+/// query asks is a pair drawn from a finite closure of its subterms -- the
+/// subterms, their complements, meets of those, and unions of some members of
+/// a union among them -- because the three rules that build a term build it
+/// out of the subterms: [`seq_splits_across_union`] meets a component with the
+/// complements of branch components, the union rule narrows a union to the
+/// branches the subject can meet, and a meet or a complement folds to a bound.
+/// Every other step asks a smaller pair or unfolds a reference onto the trail,
+/// where a pair that comes back is answered by hypothesis, so every path is
+/// finite. `docs/dev/02-decision.md` writes the argument out, and
+/// `decision::goal_tests` holds its premise. The closure is exponential in the
+/// subterms, a meet per subset, so a query that terminates can still outlast
+/// any caller, and that is what this ceiling is for.
 ///
-/// **This bound is debt, and a memo is mostly not what would pay it.**
-/// Regularity bounds the number of distinct subtyping goals a query can reach,
-/// so a table over goals would terminate by a theorem rather than by a ceiling.
-/// Counted by `decision::goal_tests` over the older workloads' shapes and over
-/// a record of thirty-two fields sharing one inner schema, the goals a query
-/// *repeats* number zero: the trail absorbs recursion, and the field and
-/// position caches absorb the shape where one goal is asked once per field.
+/// One budget is threaded through a whole top-level query — subtyping and the
+/// emptiness checks it calls into share it, and the two directions of an
+/// equivalence share it — so the bound cannot be escaped through a side door or
+/// spent twice.
+///
+/// **A memo is mostly not what would lower it.** Counted by
+/// `decision::goal_tests` over the older workloads' shapes and over a record of
+/// thirty-two fields sharing one inner schema, the goals a query *repeats*
+/// number zero: the trail absorbs recursion, and the field and position caches
+/// absorb the shape where one goal is asked once per field.
 ///
 /// The relation matrix is where that stops holding. A meet against a union
 /// repeats **four** goals per query, twice in that corpus and eight over it:
 /// the union distribution asks the meet of each branch, and the meet rule asks
 /// the class atom against the same thing once per member with no cache between
-/// the two rules. That is the shape this argument named as what would reopen
-/// the question, and it is in hand. What the ceiling stands in for is still a
-/// termination argument; what a table over goals would collect is a saving on
-/// that one shape, measured rather than assumed.
+/// the two rules. What a table over goals would collect is a saving on that one
+/// shape, measured rather than assumed.
 ///
-/// The ceiling is far above any schema a real
-/// annotation produces, so a legitimate relation is always decided; only an
-/// adversarial schema built to blow up the decision reaches it, and there a
-/// `false` ("not proven") is sound by the conservative contract. A complete,
-/// work-sharing decision is the interning-based procedure.
+/// The ceiling is far above any schema a real annotation produces, so a
+/// legitimate relation is always decided; only an adversarial schema built to
+/// blow up the decision reaches it, and there a `false` ("not proven") is sound
+/// by the conservative contract. A complete, work-sharing decision is the
+/// interning-based procedure.
 pub(crate) const DECISION_BUDGET: u32 = 1_000_000;
 
 /// Spend one unit of `budget`; returns `false` when it is already exhausted, the

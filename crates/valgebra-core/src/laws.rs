@@ -2363,8 +2363,9 @@ fn an_exhausted_budget_proves_nothing_in_either_direction() {
 /// runner. A wall-clock assertion tests the machine alongside the algorithm
 /// and fails for reasons that have nothing to do with the code.
 // SWEEP-SKIP: this case exists to prove a bound, so a mutation that removes
-// the bound makes it run without end. It stays in the test lane and leaves
-// the mutation sweep, where a run that returns no verdict is a rig fault.
+// the bound leaves it an exponential search that outlasts the sweep's timeout.
+// It stays in the test lane and leaves the mutation sweep, where a run that
+// returns no verdict is a rig fault.
 #[test]
 fn subtyping_terminates_on_a_distributed_tower() {
     let narrow = intersection_of_unions_tower(18, Schema::Int);
@@ -2459,8 +2460,9 @@ fn the_shared_budget_decides_real_emptiness_and_equivalence() {
 /// which shares the subtyping budget, so it stops promptly rather than running
 /// the decision unbounded down a side door.
 // SWEEP-SKIP: this case exists to prove a bound, so a mutation that removes
-// the bound makes it run without end. It stays in the test lane and leaves
-// the mutation sweep, where a run that returns no verdict is a rig fault.
+// the bound leaves it an exponential search that outlasts the sweep's timeout.
+// It stays in the test lane and leaves the mutation sweep, where a run that
+// returns no verdict is a rig fault.
 #[test]
 fn deep_subtype_into_bottom_terminates() {
     let deep = intersection_of_unions_tower(18, Schema::Int);

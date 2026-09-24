@@ -537,9 +537,9 @@ and a memo over goals has the cheap key it wants. What a memo does not yet have
 is its soundness argument, and that is not about keys: an answer reached under
 the coinductive hypothesis the trail carries is not an answer without it, so
 what may be remembered is a goal decided with an empty trail and nothing else.
-The procedure bounds its own work with a counter until one is written, threaded
-through a whole top-level query so the two directions of an equivalence share it
-and the bound cannot be spent twice or escaped through a side door.
+The procedure bounds its own work with a counter, threaded through a whole
+top-level query so the two directions of an equivalence share it and the bound
+cannot be spent twice or escaped through a side door.
 
 One shape needs neither the memo nor the counter. A union of nothing but
 literals denotes a **finite set of values**, and inclusion between two finite
@@ -559,29 +559,59 @@ workload whose goals repeat and two whose goals do not, in four designs, and
 every one of them charged the queries with nothing to remember more than it
 saved the queries with something.
 
-**A memo is not what is missing.** Counted over the three decision workloads and
-over a DAG of thirty-two fields sharing one interned inner record, the number of
-subtyping goals a query *repeats* is zero: the trail absorbs recursion, and the
-field and position caches absorb the shape where one goal is asked many times.
-A table over goals would have nothing to hit, so memoisation is not a way to
-make budget exhaustion rarer. What would reopen it is a shape where one goal is
-reached by two rules with no cache between them, and none is in hand.
+**A memo is not what the workloads miss.** Counted over the three decision
+workloads and over a DAG of thirty-two fields sharing one interned inner record,
+the number of subtyping goals a query *repeats* is zero: the trail absorbs
+recursion, and the field and position caches absorb the shape where one goal is
+asked many times. A table over goals would have nothing to hit there. It hits
+where one goal is reached by two paths with no cache between them: a meet
+against a union repeats four goals per query in the relation matrix, and a
+family that reaches each level twice repeats all but a linear number of its
+goals (below).
 
-Part of the argument the counter stands in for is already in the code: the trail
-holds each `(subject, supertype)` pair it is deciding, and a pair that comes back
-returns against the hypothesis rather than unfolding again, which is what makes a
-recursive schema decide at all. A pair is a pair of shared handles, so pushing
-one costs a reference count rather than a copy of the subtree, and comparing two
-short-circuits on pointer identity where the two schemas were built alike. What it does not cover is the goals a rule
-*builds*: deciding a fixed-length sequence against a union expands the branches
-and constructs a sequence per expansion, and those are not subterms of anything
-the query was handed, so the set the trail draws from is not obviously finite.
-That is the gap between this counter and a theorem, and it is why the bound is
-carried as debt rather than as a limit ([00-architecture.md](00-architecture.md)
-groups the kinds).
+**The recursion terminates without the counter.** Regularity makes a query's
+subterms finitely many: a schema is a finite tree with back edges into a finite
+table of definitions, and unfolding a reference reaches a body that table holds.
+A rule asks a pair of the children of the pair it was asked, or unfolds a
+reference, except in three places, and each builds out of the subterms rather
+than past them. The product rule meets a component with the complements of
+branch components, so what it asks is a meet of subterms and their complements.
+The union rule asks the subject against the branches it can meet, a union of
+some members of a union it was handed. And a meet or a complement folds to the
+top or the bottom. So every goal is a pair drawn from a finite closure `C` --
+JACM §6.9's `N(A)`, the normal forms over the atoms a type mentions, read over
+schemas -- and a query asks at most `|C|²` distinct goals.
 
-The honest thing to say about the ceiling meanwhile is what it is measured to
-reach. `DECISION_BUDGET` is the ceiling and is a row of the bounds table
+That bounds the goals and not yet a path, and the trail is what ends one. Every
+step but an unfolding asks a smaller pair: children are smaller than their
+parent, a narrowed union has fewer members, and a narrowing's conjuncts come out
+of the product and the branches it was asked about. An unfolding pushes its
+pair onto the trail, which holds each `(subject, supertype)` pair being decided,
+and a pair that comes back is answered by hypothesis. Along one path the trail
+only grows and holds distinct pairs of `C`, so `(|C|² − trail length, size of
+the goal)` falls at every step in the lexicographic order, a reference counting
+as one node of its side: the induction TOPLAS 2005 Theorem 4 makes over its
+automaton's states, with the trail as its `Γ`.
+Emptiness is the same argument over one side. A verdict recurses into children
+or unfolds a reference its `visiting` list does not hold, and the meet of a
+key's types the record-meet rule asks is smaller than the meet it came from and
+is read under the same list.
+
+`decision/goal_tests.rs` holds the premise: every goal the recorder sees is in
+`C`, over the product rule's widest shapes, the union rule's narrowing, and
+whatever the drawn-query property draws. A pair on the trail is a pair of shared
+handles, so pushing one costs a reference count rather than a copy of the
+subtree, and comparing two short-circuits on pointer identity where the two
+schemas were built alike.
+
+**So the counter bounds cost, not termination.** `C` is exponential in the
+subterms -- a meet per subset -- and a query that terminates can still outlast
+any caller. `DECISION_BUDGET` caps the steps one query spends, past it the
+answer is undecided, and [00-architecture.md](00-architecture.md) names that
+kind of bound.
+
+What to say about the ceiling is what it is measured to reach.
+`DECISION_BUDGET` is the ceiling and is a row of the bounds table
 ([00-architecture.md](00-architecture.md)). What the shapes cost is pinned as
 properties rather than as prose: `decision/tests.rs` reads a query's steps with
 `subtype_steps` and holds the shapes that have been probed -- deep records with
@@ -590,7 +620,7 @@ tuple of unions against the union of its expansions. The step count grows with
 the size of the query rather than exponentially in its depth on every one of
 them, and the build limits cap that size.
 
-**One family does reach it, and says where.** The product rule narrows a
+**The product family reaches it, and says where.** The product rule narrows a
 fixed-length sequence by each branch at each position, and it drops a branch
 that shares no value with the narrowed sequence at some position -- exactly, since
 narrowing by a disjoint branch changes nothing. So `tuple[K, K]` against its
@@ -600,13 +630,27 @@ holds five kinds under a fixed bound. Three positions over five kinds against
 their hundred and twenty-five corners multiply that again and reach the
 ceiling, and the pair is declined, which is the conservative answer.
 
+**A popped trail pays for every path, and one family doubles them.** The trail
+keeps no pair once its decision returns, so a goal reached by two paths is
+derived twice. Gapeyev, Levin & Pierce (JFP 2002, §11) build the family that
+turns that exponential for the algorithm that keeps nothing across its calls,
+and a second constructor spells it here: `T(n+1)` is a pair of `T(n)` and
+`list[T(n)]`, so each level reaches the one below twice. It asks two goals per
+level and spends twice the steps of the level below, and eighteen levels
+exhaust the budget and are declined:
+`a_goal_reached_by_two_paths_is_derived_twice_until_the_budget_declines`.
+Threading the proved pairs through, as their algorithm does, would make it
+linear, and that is a memo under coinduction, held to the condition this
+section opens with.
+
 Exhaustion returns the conservative answer. That is sound by the contract above,
 and the numbers say it is a ceiling no real annotation reaches — only an
 adversarial one, if one exists, would.
 
 **Two tests exist to prove that bound and they leave the mutation sweep**, because
-a mutation that removes the bound makes them run without end. They are marked in
-their own source and the ledger holds the marks to the sweep's skip list;
+a mutation that removes the bound leaves them an exponential search, which
+outlasts any timeout the sweep sets. They are marked in their own source and the
+ledger holds the marks to the sweep's skip list;
 [07-tooling-ci.md](07-tooling-ci.md) owns that rule.
 
 ## Construction is not a decision procedure

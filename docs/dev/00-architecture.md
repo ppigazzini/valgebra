@@ -152,7 +152,7 @@ both directions by `scripts/docs_lint.py`, values included, so a number that
 moves in the source and not here fails, and a row naming a constant that is gone
 fails too.
 
-Each row says which of four kinds its bound is, because they are not the same
+Each row says which of five kinds its bound is, because they are not the same
 sort of thing and only one of them is a defect.
 
 * **limit** -- past it this representation holds no sound answer, so the
@@ -163,13 +163,13 @@ sort of thing and only one of them is a defect.
   how many members it has, how much of it an error message prints. A caller can
   see these and work within them.
 * **debt** -- a budget on *work*, standing in for a termination argument that is
-  not written. Regularity bounds the goals drawn from one query's own subterms,
-  so a memo over shared nodes would terminate by a theorem for those -- but not
-  every goal is a subterm: deciding a fixed-length sequence against a union
-  builds sequences out of the branch expansions, and a goal a rule *constructs*
-  is outside the set regularity counts. So the argument is a step short of the
-  procedure it would cover, each budget names the work that removes it, and none
-  of them is called a limit in the meantime.
+  not written. Each names the work that removes it, and none of them is called a
+  limit in the meantime.
+* **cost** -- a budget on *work* the procedure finishes without: it terminates
+  by an argument written beside the bound, and the bound caps how long a caller
+  waits on an input whose finite work is exponential. Raising one decides more
+  relations and costs more, as a reach does, but it caps what a reading spends
+  rather than what it is given.
 
 * **reach** -- how much of a schema a reading is *given to build from*, rather
   than what it may spend building. Raising one decides more relations and costs
@@ -177,7 +177,8 @@ sort of thing and only one of them is a defect.
   limit, and no caller writes it, which is what separates it from a shape.
 
 A bound that is `debt` carries the change that retires it in its own doc
-comment. A `limit`, a `shape` or a `reach` carries the reason it is where it is.
+comment, and a `cost` carries where its termination argument is written. A
+`limit`, a `shape` or a `reach` carries the reason it is where it is.
 
 A row kinded **not a bound** is possible. The scan that holds this table to the
 tree reads every file-scope integer constant in a crate's source whose value is a
@@ -209,7 +210,7 @@ table's length is outside the scan: it is the table's size, in one place.
 | `crates/valgebra-py/src/check/walk.rs` | `CLOSEST_BRANCH_PROBE_LIMIT` | `64` | shape | the error path's second walk costing the branch count | `tests/test_union_messages.py` |
 | `crates/valgebra-py/src/check/walk.rs` | `UNION_LABEL_LIMIT` | `64` | shape | a union naming a thousand labels in one `expected` | its own tests |
 | `crates/valgebra-core/src/descr/lower.rs` | `UNFOLDS` | `1` | reach | a fixpoint unfolded past its own body, which multiplies the schema the descriptor must build against its node bound for relations nobody asks about | its own tests, and `tests/test_completeness_ledger.py` |
-| `crates/valgebra-core/src/decision.rs` | `DECISION_BUDGET` | `1_000_000` | debt | one query spending more work than a caller waits for: the goals a decision constructs are bounded by its input, so termination rests on that rather than on this figure, and the debt the number carries is the *cost* argument | its own tests, and `tests/test_decision_adversarial.py` |
+| `crates/valgebra-core/src/decision.rs` | `DECISION_BUDGET` | `1_000_000` | cost | one query spending more work than a caller waits for: every goal is drawn from a finite closure of the query's subterms, so the decision terminates without this figure, and the figure caps the search that closure allows, which is exponential | its own tests, `crates/valgebra-core/src/decision/goal_tests.rs`, and `tests/test_decision_adversarial.py` |
 | `crates/valgebra-core/src/descr/lower.rs` | `BUDGET` | `64` | debt | the schema nodes one lowering reads | its own tests, and `crates/valgebra-core/benches/core.rs` |
 | `crates/valgebra-core/src/descr/lower.rs` | `DEPTH` | `5` | debt | the nesting one lowering descends, which is the exponential | its own tests, and `crates/valgebra-core/benches/core.rs` |
 | `crates/valgebra-core/src/descr/lower.rs` | `WORK` | `4096` | debt | the multiplying work one build spends before refusing | its own tests, and `crates/valgebra-core/benches/core.rs` |
