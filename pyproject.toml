@@ -39,7 +39,7 @@ classifiers = [
 [dependency-groups]
 dev = [
     "annotated-types>=0.8",
-    "hypothesis>=6.168.0",
+    "hypothesis>=6.168.1",
     "maturin>=1.15.0,<2",
     "mypy>=2.3.1",
     "pre-commit>=4.6.2",
@@ -51,7 +51,7 @@ dev = [
     "pyyaml>=6.0.3",
     "ruff>=0.16.8",
     "syrupy>=6.1.1",
-    "ty>=0.0.82",
+    "ty>=0.0.84",
 ]
 # The wall-clock harness and the external comparison points: the libraries the
 # benchmarks time valgebra against, and the same libraries the boundary suite
