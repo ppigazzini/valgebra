@@ -331,7 +331,12 @@ impl PoolRelations<'_, '_> {
             return None;
         }
         let mut bases = Vec::new();
-        for base in ty.getattr("__mro__").ok()?.try_iter().ok()? {
+        for base in ty
+            .getattr(intern!(ty.py(), "__mro__"))
+            .ok()?
+            .try_iter()
+            .ok()?
+        {
             let base = base.ok()?;
             let base = base.cast_into::<PyType>().ok()?;
             // A base need not denote a set for the order to hold: what `is_a`
@@ -650,12 +655,14 @@ impl LeafRelations for PoolRelations<'_, '_> {
         // what makes this comparison the one the build already made.
         let step = self.literals.get(step.get())?.bind(self.py);
         let multiple = self.literals.get(multiple.get())?.bind(self.py);
-        let remainder = multiple.call_method1("__mod__", (step,)).ok()?;
+        let remainder = multiple
+            .call_method1(intern!(self.py, "__mod__"), (step,))
+            .ok()?;
         if remainder.is(self.py.NotImplemented()) {
             return None;
         }
         remainder
-            .call_method1("__eq__", (0i64,))
+            .call_method1(intern!(self.py, "__eq__"), (0i64,))
             .ok()?
             .is_truthy()
             .ok()
@@ -686,7 +693,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
             floor
                 .call1((&lo,))
                 .ok()?
-                .call_method1("__add__", (one,))
+                .call_method1(intern!(self.py, "__add__"), (one,))
                 .ok()?
         } else {
             ceil.call1((&lo,)).ok()?
@@ -694,7 +701,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
         let greatest = if hi_strict {
             ceil.call1((&hi,))
                 .ok()?
-                .call_method1("__sub__", (one,))
+                .call_method1(intern!(self.py, "__sub__"), (one,))
                 .ok()?
         } else {
             floor.call1((&hi,)).ok()?

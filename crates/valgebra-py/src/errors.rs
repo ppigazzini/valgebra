@@ -13,7 +13,7 @@ use crate::exception::ValidationError;
 /// The class name for an error label, falling back to its repr.
 pub(crate) fn class_label(class: &Bound<'_, PyAny>) -> String {
     class
-        .getattr("__name__")
+        .getattr(intern!(class.py(), "__name__"))
         .ok()
         .and_then(|name| name.extract::<String>().ok())
         .unwrap_or_else(|| summarize(class))
