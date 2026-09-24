@@ -12,6 +12,7 @@ use std::sync::OnceLock;
 use jiter::JsonValue;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::sync::OnceLockExt;
 use pyo3::types::PyBool;
 use pyo3::{PyTraverseError, PyVisit};
 use rustc_hash::FxHashMap;
@@ -256,9 +257,16 @@ impl Validator {
 
     /// The precompute, built once from this validator's schema, definitions, and
     /// constants pool.
+    ///
+    /// A thread that finds another building it waits detached from the
+    /// interpreter. `build_index` interns strings, which on a free-threaded
+    /// build can wait on a lock and let a stop-the-world pause begin; a waiter
+    /// still attached would never reach that pause, and the builder would never
+    /// finish. The built path is the same `get()` either way.
     fn index(&self, py: Python<'_>) -> &ValidatorIndex {
-        self.index
-            .get_or_init(|| build_index(py, &self.schema, &self.definitions, &self.literals))
+        self.index.get_or_init_py_attached(py, || {
+            build_index(py, &self.schema, &self.definitions, &self.literals)
+        })
     }
 
     /// The read-only walk context: the pool, the definitions, the precomputed

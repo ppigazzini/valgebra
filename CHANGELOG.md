@@ -20,10 +20,19 @@ answer of its own, or a repair to a change not yet released.
 - fix: a frozen dict literal is refused as a frozen set literal is
 - fix: the product rule drops a branch it shares no value with, and refutes
 - fix: a recursive meet of maps is decided within its unfoldings
+- fix: a validator's indexes are awaited detached from the interpreter
 
 -->
 
 ### Fixed
+
+- **Threads that reach a validator's first call together wait detached.** The
+  first call builds the validator's indexes, and a second thread arriving
+  during the build waited attached to the interpreter. On a free-threaded build
+  the builder interns strings, which can wait on a lock and let a stop-the-world
+  pause begin that an attached waiter never reaches, and both threads stop. The
+  waiter detaches, which is the wait PyO3 provides for this shape; the hang is
+  reasoned from that contract rather than reproduced.
 
 - **A recursive meet of records is decided rather than overflowing the stack.**
   `is_empty()` and `is_subtype_of(int)` on

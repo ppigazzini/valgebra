@@ -116,6 +116,11 @@ of a node's own buffer:
 - value sets for unions whose members are all literals;
 - compiled patterns per regex source.
 
+A thread that finds another building them waits **detached** from the
+interpreter. The build interns strings, and on a free-threaded interpreter that
+can wait on a lock and let a stop-the-world pause begin, which a waiter still
+attached would never reach. Once built, the read is the same load either way.
+
 **Correctness never depends on one being present.** A node absent from an index
 falls back to building the map, scanning the branches, or recompiling the
 pattern. The literal-union plan is consulted only on the membership path and only
