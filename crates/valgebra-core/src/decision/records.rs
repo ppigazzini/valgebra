@@ -16,7 +16,7 @@ use std::cell::Cell;
 
 use rustc_hash::FxHashMap;
 
-use crate::ir::{Field, MapClause, Schema};
+use crate::ir::{DefIx, Field, MapClause, Schema};
 use crate::kind::Kind;
 use crate::verdict::Relation;
 
@@ -42,10 +42,17 @@ use super::{LeafRelations, SubtypeCx};
 /// admits a given name means comparing a bare `String` against a key schema,
 /// which the core cannot do, so any clause at all leaves the map open and the
 /// second rule declines.
+///
+/// **The meet of a key's types is read under the caller's `visiting`.** It is a
+/// required position of the node being decided, so a reference already being
+/// resolved is read as the cycle it is, as the field of a single map reads it.
+/// A fresh list there unfolds the reference again: a recursive meet of two maps
+/// reaches this rule once per unfolding, with nothing to stop it but the stack.
 pub(super) fn keyed_map_meet_empty(
     members: &[Schema],
     oracle: &dyn LeafRelations,
     defs: &[Schema],
+    visiting: &mut Vec<DefIx>,
     budget: &Cell<u32>,
 ) -> bool {
     let maps: Vec<(&[Field], bool)> = members
@@ -72,7 +79,7 @@ pub(super) fn keyed_map_meet_empty(
         .any(|(name, (types, _))| {
             let types_cannot_hold = types.len() > 1 && {
                 let meet = Schema::Intersection(types.iter().copied().cloned().collect());
-                meet.is_empty_rec(oracle, defs, &mut Vec::new(), budget)
+                meet.is_empty_rec(oracle, defs, visiting, budget)
             };
             types_cannot_hold
                 || maps.iter().any(|(fields, closed)| {

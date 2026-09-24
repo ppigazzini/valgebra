@@ -858,7 +858,13 @@ fn open(fields: Vec<Field>) -> Schema {
 }
 
 fn meet_is_empty(members: &[Schema]) -> bool {
-    keyed_map_meet_empty(members, &NoLeafRelations, &[], &Cell::new(DECISION_BUDGET))
+    keyed_map_meet_empty(
+        members,
+        &NoLeafRelations,
+        &[],
+        &mut Vec::new(),
+        &Cell::new(DECISION_BUDGET),
+    )
 }
 
 /// The two rules ICFP formulae (11) and (12) give for a meet of record atoms,
@@ -957,6 +963,42 @@ fn a_record_meet_is_empty_only_where_a_required_key_cannot_hold() {
         closed(vec![field("a", Schema::Int, true)]),
         closed(vec![field("a", Schema::Str, true)]),
     ]));
+}
+
+/// A meet of two maps that refer back to it is decided within its unfoldings.
+///
+/// The key both maps require carries a type that names the fixpoint, so the
+/// meet of those types unfolds the fixpoint again, and that unfolding reaches
+/// the same meet. It is a required position of the node being decided, so the
+/// reference read there is the cycle the field of a single map reads it as. A
+/// fresh `visiting` list at the meet reached the rule once per unfolding, and
+/// the stack gave out before the budget did.
+#[test]
+fn a_recursive_meet_of_maps_is_decided_within_its_unfoldings() {
+    let this = Schema::Ref(DefIx::new(0));
+    let defs = vec![Schema::Intersection(
+        vec![
+            closed(vec![field(
+                "a",
+                Schema::union([this.clone(), Schema::Int]),
+                true,
+            )]),
+            closed(vec![field(
+                "a",
+                Schema::union([this.clone(), Schema::Str]),
+                true,
+            )]),
+        ]
+        .into(),
+    )];
+    let budget = Cell::new(DECISION_BUDGET);
+    // The meet holds no finite value: a value of the key is in both unions, so
+    // it is in the fixpoint again. Declining is sound, and a claim of a value
+    // is not.
+    let verdict = this.verdict_rec(&NoLeafRelations, &defs, &mut Vec::new(), &budget);
+    assert_ne!(verdict, Verdict::Inhabited);
+    let spent = DECISION_BUDGET - budget.get();
+    assert!(spent < 100, "the meet spent {spent} steps");
 }
 
 /// The structural rules alone, without the descriptor that widens them.

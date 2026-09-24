@@ -458,7 +458,7 @@ fn intersection_verdict(
         || has_complementary_pair(members, oracle)
         || has_disjoint_pair(members, oracle)
         || intersection_bounds_unsatisfiable(members, oracle)
-        || keyed_map_meet_empty(members, oracle, defs, budget);
+        || keyed_map_meet_empty(members, oracle, defs, visiting, budget);
     let verdict = if empty {
         Verdict::Empty
     } else if class_with_attributes(members).is_some() {

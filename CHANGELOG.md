@@ -19,10 +19,20 @@ answer of its own, or a repair to a change not yet released.
 - fix: the complement of a universal union is read as the empty set
 - fix: a frozen dict literal is refused as a frozen set literal is
 - fix: the product rule drops a branch it shares no value with, and refutes
+- fix: a recursive meet of maps is decided within its unfoldings
 
 -->
 
 ### Fixed
+
+- **A recursive meet of records is decided rather than overflowing the stack.**
+  `is_empty()` and `is_subtype_of(int)` on
+  `Validator(recursive(lambda t: intersection({"a": union(t, int)}, {"a": union(t, str)})))`
+  overflowed the native stack and ended the process; both answer. Emptiness of
+  a meet of records asks the meet of the types a required key carries, and it
+  read that meet with a fresh cycle check, so each unfolding of the fixpoint
+  reached the same meet again. The meet is read under the cycle check of the
+  node it belongs to, as a field of a single record is.
 
 - **A fixed-length sequence of unions is decided against the union of its
   corners.** `Validator(tuple[K, K]).relation_to(union(*(tuple[a, b] for a, b in

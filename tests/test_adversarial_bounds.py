@@ -298,6 +298,34 @@ def test_a_deep_body_reaches_the_walk_bound_rather_than_the_stack() -> None:
     assert info.value.code == "recursion_limit"
 
 
+def test_a_recursive_meet_of_records_is_decided_rather_than_overflowing() -> None:
+    # The key both records require names the fixpoint, so deciding the meet
+    # asks the meet of the key's types, and that unfolds the fixpoint into the
+    # same meet. The decision reads the second unfolding as the cycle it is. A
+    # child process, because the failure this guards is the stack giving out,
+    # and that takes the interpreter with it.
+    program = textwrap.dedent(
+        """
+        from valgebra import Validator, intersection, recursive, union
+        def meet(t):
+            return intersection({"a": union(t, int)}, {"a": union(t, str)})
+        node = Validator(recursive(meet))
+        print(node.is_empty(), node.is_subtype_of(int))
+        """
+    )
+    result = subprocess.run(  # noqa: S603 -- fixed interpreter, in-repo program
+        [sys.executable, "-c", program],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    # The meet holds no finite value, so any answer either gives is sound: the
+    # claim is that both finish.
+    assert len(result.stdout.split()) == 2, result.stdout
+
+
 def test_a_recursive_value_at_the_unfolding_bound_still_validates() -> None:
     # The walk bound sits above what the published unfolding bound asks of a
     # linked list, so bounding the descent refuses only the shapes that would
