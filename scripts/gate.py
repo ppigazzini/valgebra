@@ -98,25 +98,13 @@ NEEDS_A_RUNNER = {
     "Cross-check membership against pydantic-core and jsonschema": (
         "needs the bench group installed above"
     ),
-    # These three were the candidates for running here rather than being named,
-    # since a developer's machine has what they need. Lending the caller's
-    # environment to the clone -- `UV_PROJECT_ENVIRONMENT` at the caller's
-    # `.venv` -- was tried and reverted: `uv run` in the clone *wrote* that
-    # environment, uninstalling the built extension and the bench group from the
-    # tree the developer was working in. A gate that damages the environment it
-    # is checking is worse than one that skips three steps, so the excuse is now
-    # the cost rather than the assumption.
-    "Build the extension into the venv": (
-        "maturin develop into the clone is a full rebuild; into the caller's "
-        "environment it overwrites what the caller built"
-    ),
-    "Install dev dependencies": (
-        "uv sync into the clone resolves the whole tree; into the caller's "
-        "environment it rewrites what the caller installed"
-    ),
-    "Stub matches the extension": (
-        "needs the built extension, so it needs one of the two above"
-    ),
+    # Not here: the lane's own sync and build. Every step after them runs under
+    # `uv run --no-sync`, so a clone that skipped them has no environment of its
+    # own, and a step reaching for a tool finds the caller's instead -- a pytest
+    # that imports the caller's package and reports on the caller's tree, green,
+    # from inside the clone. They run in the clone and write the clone's `.venv`,
+    # which is the one environment a gate may write: lending it the caller's was
+    # tried and reverted, because `uv` then uninstalled what the developer built.
     "A caller's strict types, on the floor and on the current": (
         "needs both interpreters installed"
     ),
@@ -714,9 +702,23 @@ def runner_environment() -> dict[str, str]:
     caller's venv kept a wheel of a clone of `HEAD` it never asked for. Without
     the variable, `uv pip` finds the clone's `.venv` from the working
     directory, which is what a runner's step does.
+
+    The same `uv run` put that venv's `bin` at the head of `PATH`, and it goes
+    too. A lane runs its tools under `uv run --no-sync`, which finds a tool the
+    clone's environment lacks on `PATH` -- the caller's pytest, importing the
+    caller's package, reporting on the caller's tree from inside the clone.
+    Without the entry such a step fails on a missing command instead.
     """
     dropped = FORCED_COLOUR + CALLERS_VENV
-    return {key: value for key, value in os.environ.items() if key not in dropped}
+    environment = {
+        key: value for key, value in os.environ.items() if key not in dropped
+    }
+    callers = os.environ.get("VIRTUAL_ENV")
+    if callers:
+        tools = str(Path(callers) / ("Scripts" if os.name == "nt" else "bin"))
+        entries = environment.get("PATH", "").split(os.pathsep)
+        environment["PATH"] = os.pathsep.join(e for e in entries if e != tools)
+    return environment
 
 
 def step_environment(environment: dict[str, str], outputs: Path) -> dict[str, str]:

@@ -327,20 +327,33 @@ def test_a_forced_colour_variable_does_not_reach_a_step(
     caller's venv, and the step after it ran under `uv run` in the clone's venv
     and could not import what was installed. The gate reported the profile
     comparison failed for a property of how it was launched.
+
+    The third: that venv's `bin` on `PATH`, where `uv run --no-sync pytest` in a
+    clone with no environment of its own found the caller's pytest, and the
+    gate reported green on the caller's tree.
     """
     monkeypatch.setenv("FORCE_COLOR", "3")
     monkeypatch.setenv("CLICOLOR_FORCE", "1")
-    monkeypatch.setenv("VIRTUAL_ENV", "/somewhere/else/.venv")
+    venv = "/somewhere/else/.venv"
+    monkeypatch.setenv("VIRTUAL_ENV", venv)
     monkeypatch.setenv("VALGEBRA_GATE_MARKER", "kept")
+    toolchain = os.environ.get("PATH", "")
+    # Spelled as the platform names a venv's scripts, which is `Scripts` under
+    # a Windows separator and `bin` elsewhere: the entry `uv run` puts there.
+    callers = str(Path(venv) / ("Scripts" if os.name == "nt" else "bin"))
+    monkeypatch.setenv("PATH", os.pathsep.join([callers, toolchain]))
     environment = gate.runner_environment()
     assert "FORCE_COLOR" not in environment
     assert "CLICOLOR_FORCE" not in environment
     assert "VIRTUAL_ENV" not in environment
     # Everything else is carried: the gate runs the lane's steps in the
     # caller's toolchain, and dropping more than the terminal's own would make
-    # it a different environment rather than a runner's.
+    # it a different environment rather than a runner's. The one `PATH` entry
+    # that goes is the caller's venv, which `uv run` put there with the
+    # variable above: through it a clone step without an environment of its
+    # own ran the caller's pytest against the caller's tree.
     assert environment["VALGEBRA_GATE_MARKER"] == "kept"
-    assert environment.get("PATH") == os.environ.get("PATH")
+    assert environment.get("PATH") == toolchain
 
 
 #: Every script that answers in the three-code vocabulary, by the path a caller

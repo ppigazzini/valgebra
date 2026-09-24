@@ -261,11 +261,11 @@ jobs:
           cargo llvm-cov clean --workspace
           source <(cargo llvm-cov show-env --export-prefix)
           uv sync --locked --no-install-project
-          uv run maturin develop --uv
-          uv run pytest --deselect tests/test_concurrency.py
+          uv run --no-sync maturin develop --uv
+          uv run --no-sync pytest --deselect tests/test_concurrency.py
           # The interpreter-backed Rust tests link libpython, so point pyo3 at the
           # uv interpreter and put its library directory on the loader path.
-          export PYO3_PYTHON="$(uv run python -c 'import sys; print(sys.executable)')"
+          export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
           libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           LD_LIBRARY_PATH="$libdir:$LD_LIBRARY_PATH" \
             cargo test -p valgebra-py --features interpreter-tests
@@ -382,7 +382,7 @@ jobs:
       - name: Install dev dependencies
         run: uv sync --locked --no-install-project
       - name: Build the extension into the venv
-        run: uv run maturin develop --uv
+        run: uv run --no-sync maturin develop --uv
       # The binding's four corpora drive live Python objects through the
       # frontend, the walk and the oracle, and they are the tests `cargo test
       # --workspace` cannot run: the feature that links an interpreter is off by
@@ -429,7 +429,7 @@ jobs:
         env:
           PRERELEASE: ${{ matrix.python-version == '3.15' }}
         run: |
-          base="$(uv run python -c 'import sys; print(sys.base_prefix)')"
+          base="$(uv run --no-sync python -c 'import sys; print(sys.base_prefix)')"
           PYO3_PYTHON="$base/bin/python3"
           export PYO3_PYTHON
           libdir="$("$PYO3_PYTHON" -c \
@@ -452,32 +452,32 @@ jobs:
       - name: pytest
         env:
           HYPOTHESIS_PROFILE: ci
-        run: uv run pytest --cov=valgebra --cov-report=term-missing
+        run: uv run --no-sync pytest --cov=valgebra --cov-report=term-missing
       # ruff and ty are static and pinned to a target version, so their result
       # does not depend on the runner's Python; run them once on the floor.
       - name: Ruff lint
         if: ${{ matrix.python-version == '3.10' }}
-        run: uv run ruff check .
+        run: uv run --no-sync ruff check .
       - name: Ruff format
         if: ${{ matrix.python-version == '3.10' }}
-        run: uv run ruff format --check .
+        run: uv run --no-sync ruff format --check .
       - name: ty type check
         if: ${{ matrix.python-version == '3.10' }}
-        run: uv run ty check
+        run: uv run --no-sync ty check
       # The whole tree is read at the newest supported release, because the
       # suite names typing members later releases added. The shipped package is
       # read again at the floor `requires-python` claims, which is the reading a
       # caller on that release gets; one setting cannot answer both, so both run.
       - name: ty type check, at the supported floor
         if: ${{ matrix.python-version == '3.10' }}
-        run: uv run ty check python/ --python-version 3.10
+        run: uv run --no-sync ty check python/ --python-version 3.10
       # The stub is checked against the *built* extension, so this one is not
       # runner-independent the way the two above are: it imports the module and
       # compares every signature, and a mismatch is a stub that type-checks code
       # the runtime rejects. Run on the floor, where the wheel is already built.
       - name: Stub matches the extension
         if: ${{ matrix.python-version == '3.10' }}
-        run: uv run python -m mypy.stubtest valgebra._valgebra
+        run: uv run --no-sync python -m mypy.stubtest valgebra._valgebra
       # And the stub is checked from the other side: a caller's own strictly
       # typed code, which is what a typed downstream project runs. stubtest says
       # the stub matches the runtime; this says the surface can be *used*
@@ -489,7 +489,7 @@ jobs:
         if: ${{ matrix.python-version == '3.10' }}
         run: |
           for target in 3.10 3.14; do
-            uv run mypy --strict --python-version="$target" \
+            uv run --no-sync mypy --strict --python-version="$target" \
               tests/typing/consumer.py python/valgebra
           done
 
@@ -511,7 +511,7 @@ jobs:
       - name: Install the differential oracles
         run: uv sync --locked --group bench
       - name: Build the extension into the venv
-        run: uv run --group bench maturin develop --uv
+        run: uv run --no-sync maturin develop --uv
       # Run the same schemas and values through valgebra and through
       # pydantic-core and jsonschema; the environment flag turns a missing oracle
       # into a hard failure so the gate cannot pass by silently skipping. The
@@ -522,7 +522,7 @@ jobs:
           VALGEBRA_REQUIRE_DIFFERENTIAL: "1"
           HYPOTHESIS_PROFILE: ci
         run: >
-          uv run --group bench pytest
+          uv run --no-sync pytest
           tests/test_differential.py
           tests/test_pydantic_boundary.py
 
@@ -542,14 +542,14 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --locked
-      - run: uv run maturin develop --uv
+      - run: uv run --no-sync maturin develop --uv
       # Run the corpus through this build and compare it against the recorded
       # reference: membership must not move at all, and a decision the reference
       # proved must still be proven. A new proof is allowed and searched for a
       # counterexample among the corpus values, so a build that proved
       # everything would fail here rather than read as a clean widening.
       - name: Compare membership and decisions against the reference
-        run: uv run python scripts/metamorphic_gate.py
+        run: uv run --no-sync python scripts/metamorphic_gate.py
 
   doc-examples:
     name: doc examples
@@ -567,10 +567,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --locked
-      - run: uv run maturin develop --uv
+      - run: uv run --no-sync maturin develop --uv
       # Execute every runnable example in the README and the docs site; fail on
       # a stale snippet.
-      - run: uv run python scripts/run_doc_examples.py
+      - run: uv run --no-sync python scripts/run_doc_examples.py
 
   pypy:
     name: pypy 3.11
@@ -645,7 +645,7 @@ jobs:
           python-version: "3.12"
       - run: uv sync --locked --group docs
       # mkdocstrings imports the package to read its docstrings.
-      - run: uv run --group docs maturin develop --uv
+      - run: uv run --no-sync maturin develop --uv
       # --strict fails the build on a broken link or an unresolved reference.
       # The mechanical half of documentation rot. Read the script's own docstring
       # for the rules; restating them here is how this comment went stale once
@@ -658,7 +658,7 @@ jobs:
       # tree's -- a cell nothing names and nothing excuses, or an excuse for a
       # cell a test now names.
       - run: uv run --no-sync python scripts/use_case_ledger.py
-      - run: uv run --group docs mkdocs build --strict
+      - run: uv run --no-sync mkdocs build --strict
 
   bench:
     name: bench
@@ -1243,7 +1243,7 @@ jobs:
         if: steps.diff.outputs.walk != ''
         run: |
           uv sync --locked --no-install-project
-          export PYO3_PYTHON="$(uv run python -c 'import sys; print(sys.executable)')"
+          export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
           libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           export LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}"
           set +e
@@ -1301,12 +1301,12 @@ jobs:
       - name: Install dev dependencies
         run: uv sync --locked --no-install-project
       - name: Build the extension into the venv
-        run: uv run maturin develop --uv
+        run: uv run --no-sync maturin develop --uv
       - name: Deep property suite
         env:
           HYPOTHESIS_PROFILE: nightly
         run: >
-          uv run pytest
+          uv run --no-sync pytest
           tests/test_completeness_ledger.py
           tests/test_necessary_properties.py
           tests/test_decision_adversarial.py
@@ -1872,7 +1872,7 @@ jobs:
       - name: Sweep the membership walk
         run: |
           uv sync --locked --no-install-project
-          export PYO3_PYTHON="$(uv run python -c 'import sys; print(sys.executable)')"
+          export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
           libdir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR") or "")')"
           export LD_LIBRARY_PATH="$libdir:${LD_LIBRARY_PATH:-}"
           set +e
@@ -2144,7 +2144,7 @@ jobs:
         # addition to the static ones.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: uvx zizmor==1.30.1 .github/workflows/ .github/actions/
+        run: uvx zizmor==1.30.1 .github/
 
   ci:
     name: ci

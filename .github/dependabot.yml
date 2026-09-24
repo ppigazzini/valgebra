@@ -1,9 +1,14 @@
 version: 2
+# Every ecosystem waits seven days after a release before proposing it, so a
+# version pulled or compromised in its first week never reaches a pull request;
+# zizmor's `dependabot-cooldown` audit reads this.
 updates:
   - package-ecosystem: cargo
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       cargo:
         patterns: ["*"]
@@ -15,6 +20,8 @@ updates:
     directory: "/fuzz"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       fuzz:
         patterns: ["*"]
@@ -23,6 +30,8 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
@@ -34,6 +43,8 @@ updates:
     directory: "/.github/actions/setup-uv"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       setup-uv:
         patterns: ["*"]
@@ -42,6 +53,8 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       python:
         patterns: ["*"]

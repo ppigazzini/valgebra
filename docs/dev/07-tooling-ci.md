@@ -77,7 +77,11 @@ sends a step's `uv pip install` to the caller's venv while `uv run` reads the
 clone's, so the wheel the profile comparison times was installed where the
 timing step could not import it, and the caller's venv kept a wheel built from
 a clone of `HEAD`. Without it, `uv pip` finds the clone's `.venv` from the
-working directory, as a runner's step does.
+working directory, as a runner's step does. The venv's `bin` leaves `PATH` with
+it, and the clone runs the lane's own sync and build rather than excusing them,
+because every later step runs under `uv run --no-sync`: with neither, a clone
+with no environment of its own found the caller's pytest, which imported the
+caller's package and reported green on the caller's tree.
 
 **The whole list, since two of these cost a day each.** The table is what a
 lane differs from a local run in, and the `modelled` column is what the gate
@@ -727,6 +731,16 @@ thing resolved over the network, and makes a second attempt when the first one
 fails. The release workflow's two smoke jobs stay on the upstream action, because
 they deliberately never check the repository out and a local action needs its own
 files on disk.
+
+**A lane syncs once and runs without re-resolving.** A bare `uv run` resolves
+the environment again first, which uninstalls the editable build `maturin
+develop` put there and installs the wheel from the lock, so every command after
+it tests a module the lane did not build. Every lane installs what it needs with
+one `uv sync`, the dependency groups it names included, and runs every later
+command under `uv run --no-sync`. Dependabot proposes a release seven days
+after it is published, so a version pulled in its first week never reaches a
+pull request, and `zizmor` audits the whole of `.github/`, where that setting
+lives.
 
 **Every gate script runs in a lane.** `tests/test_lane_coverage.py` holds each
 executable under `scripts/` to being driven by a workflow, by the packaging
