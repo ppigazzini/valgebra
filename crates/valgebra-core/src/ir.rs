@@ -1788,3 +1788,13 @@ pub struct Measure {
     /// anywhere in the tree.
     pub escaped_self_ref: bool,
 }
+
+/// The sizes every walk and decision copies, pinned so a layout change is a
+/// compile error rather than a cost a gate reads as a percent: a schema node is
+/// cloned into every narrowing and a field into every rebuilt record, and the
+/// layout of a `repr(Rust)` enum is the compiler's to change between releases.
+#[cfg(target_pointer_width = "64")]
+const _: () = {
+    assert!(size_of::<Schema>() == 40);
+    assert!(size_of::<Field>() == 64);
+};

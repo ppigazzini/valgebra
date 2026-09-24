@@ -54,6 +54,15 @@ pedantic = { level = "warn", priority = -1 }
 # subject is how this project already writes, against a group whose other
 # members are style preferences it has not made.
 too_long_first_doc_paragraph = "warn"
+# Four lints outside the default groups that read zero hits over every target,
+# switched on so the allocation and the stack cost they refuse cannot arrive
+# unseen: an instruction gate reads one of them as a percent or two, inside its
+# ceiling. `redundant_clone` and `needless_collect` are left off: nursery lints
+# with false positives, and every hit either has is in a test.
+or_fun_call = "warn"
+rc_buffer = "warn"
+set_contains_or_insert = "warn"
+large_stack_frames = "warn"
 
 # Fast local iteration: the Rust side is debugged through the Python test suite,
 # not a native debugger, so the default full debuginfo is build and link cost

@@ -68,3 +68,8 @@ impl std::fmt::Display for Violation {
 }
 
 impl std::error::Error for Violation {}
+
+/// A violation's size, pinned beside the node sizes in `ir.rs`: an explaining
+/// walk builds one per failure and moves it into the report.
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(size_of::<Violation>() == 88);
