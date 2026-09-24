@@ -113,6 +113,46 @@ jobs:
         with:
           python-version: ${{ matrix.platform.pythons }}
           allow-prereleases: true
+      # On macOS a free-threaded install answers to `python3.14` as well as
+      # `python3.14t`, and the one installed last is first on `PATH`: there
+      # `--find-interpreter` found the free-threaded build under the release's
+      # name, and built `cp314t` and `cp315t` with no `cp314` or `cp315` beside
+      # them. So each interpreter is found where `setup-python` records it, in
+      # the tool cache under the runner's architecture -- some releases install
+      # as a framework and some as a plain build, and the tool cache holds both
+      # -- and asked whether it is the build it is named for.
+      - name: Name the interpreters
+        id: interpreters
+        if: ${{ matrix.platform.pythons && runner.os == 'macOS' }}
+        shell: bash
+        env:
+          PYTHONS: ${{ matrix.platform.pythons }}
+        run: |
+          arch="$(echo "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')"
+          named=""
+          for version in $PYTHONS; do
+            case "$version" in
+              *t) minor="${version%t}"; want=1 ;;
+              *) minor="$version"; want=0 ;;
+            esac
+            exe=""
+            for candidate in \
+              "$RUNNER_TOOL_CACHE"/Python/"$minor".*/"$arch"*/bin/python"$minor"t \
+              "$RUNNER_TOOL_CACHE"/Python/"$minor".*/"$arch"*/bin/python"$minor"; do
+              [ -x "$candidate" ] || continue
+              got="$("$candidate" -c 'import sysconfig; print(sysconfig.get_config_var("Py_GIL_DISABLED") or 0)')"
+              if [ "$got" = "$want" ]; then
+                exe="$candidate"
+                break
+              fi
+            done
+            if [ -z "$exe" ]; then
+              echo "::error::no $version build for $arch in the tool cache"
+              exit 1
+            fi
+            named="$named $exe"
+          done
+          echo "list=${named# }" >> "$GITHUB_OUTPUT"
       # The action pulls its container itself, once, with no retry, so a registry
       # answering `504` fails a release dispatch that has nothing wrong with it --
       # and a dispatch is a person at a button rather than a push that reruns
@@ -154,12 +194,13 @@ jobs:
           # --find-interpreter builds for every interpreter the image exposes
           # that satisfies requires-python: each CPython, the free-threaded
           # build where present, and PyPy on the Linux images (see
-          # docs/00-installation.md, which names what ships). --pgo (native
+          # docs/00-installation.md, which names what ships). macOS and the
+          # Windows free-threaded job name theirs instead. --pgo (native
           # targets only) runs the training workload configured in
           # pyproject.toml against the instrumented build.
           args: >-
             --release --out dist
-            ${{ matrix.platform.interpreter && format('--interpreter {0}', matrix.platform.interpreter) || '--find-interpreter' }}
+            ${{ steps.interpreters.outputs.list && format('--interpreter {0}', steps.interpreters.outputs.list) || matrix.platform.interpreter && format('--interpreter {0}', matrix.platform.interpreter) || '--find-interpreter' }}
             ${{ matrix.platform.pgo && '--pgo' || '' }}
           manylinux: ${{ matrix.platform.manylinux || 'auto' }}
           # llvm-tools inside the manylinux container for the PGO profile merge.
@@ -214,7 +255,7 @@ jobs:
           - { name: macos-arm64, runner: macos-latest, artifact: wheels-macos-latest-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t" }
           - { name: windows-x64, runner: windows-latest, artifact: wheels-windows-latest-x64-native, pythons: "3.10 3.15" }
           - { name: windows-x64-freethreaded, runner: windows-latest, artifact: wheels-windows-latest-x64-freethreaded, pythons: "3.14t 3.15t" }
-          - { name: windows-arm64, runner: windows-11-arm, artifact: wheels-windows-11-arm-aarch64-native, pythons: "3.12 3.15" }
+          - { name: windows-arm64, runner: windows-11-arm, artifact: wheels-windows-11-arm-aarch64-native, pythons: "3.12 3.15", host: "3.12\n3.15" }
     runs-on: ${{ matrix.wheel.runner }}
     timeout-minutes: 20
     # The two musllinux wheels are not smoked here: running them needs a musl
@@ -235,6 +276,15 @@ jobs:
           # This job installs from a downloaded artifact, not a checked-out
           # dependency file, so there is nothing for the uv cache to key on.
           enable-cache: false
+      # uv's own build of a release candidate can exist for x64 alone, which
+      # Windows on arm64 runs emulated and which loads no arm64 wheel: the arm64
+      # set is imported on the interpreters setup-python installs for the
+      # runner's own architecture, and uv is held to those.
+      - if: ${{ matrix.wheel.host }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.wheel.host }}
+          allow-prereleases: true
       - name: Install the built wheel and import it
         # A venv per interpreter, the matching wheel from the downloaded set with
         # no index, then an import validated across the object and JSON paths.
@@ -242,6 +292,7 @@ jobs:
         shell: bash
         env:
           PYTHONS: ${{ matrix.wheel.pythons }}
+          UV_PYTHON_PREFERENCE: ${{ matrix.wheel.host && 'only-system' || 'managed' }}
         run: |
           for py in $PYTHONS; do
             uv venv --python "$py" ".venv-$py"

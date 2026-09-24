@@ -23,6 +23,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a validator's indexes are awaited detached from the interpreter
 - fix: the release builds a wheel for every interpreter its classifiers name
 - feat: Python 3.15 is a supported release
+- fix: a release names the interpreters a macOS wheel is built for -- internal
 
 -->
 

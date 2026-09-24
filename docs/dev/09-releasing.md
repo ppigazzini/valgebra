@@ -162,7 +162,13 @@ ABI, so a release ships many wheels and one install exercises exactly one of the
 host, where `--find-interpreter` sees only the interpreters installed on the
 image, so the workflow installs every supported one first; Windows builds its
 free-threaded wheels in a job of their own, since a release and its
-free-threaded build can fail to co-install in one step. The maturin a release builds with is the one `uv.lock`
+free-threaded build can fail to co-install in one step. On macOS a free-threaded
+install also answers to the release's name, and `--find-interpreter` found it
+there in the release's place, so the macOS builds find each interpreter in the
+tool cache `setup-python` records it in, under the runner's architecture, and
+ask it which build it is -- a framework path holds only some releases. The Windows arm64 smoke imports
+on the arm64 interpreters `setup-python` installs, because uv's own build of a
+release candidate can be x64 alone. The maturin a release builds with is the one `uv.lock`
 resolves, pinned in the workflow rather than taken as the newest. A version
 selector resolves to whichever build is on the machine: `uv venv --python 3.14`
 can land on the free-threaded interpreter, so read
