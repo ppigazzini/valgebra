@@ -229,8 +229,8 @@ A release written onto a row is a claim about the lanes, and
 lane below it, where the guard is taken, and an **enforced** lane at or above
 it, where the guarded code runs. A gate above every lane is code that runs
 nowhere and passes; one below the floor is a guard always taken; and a gate
-whose only interpreter above it is the prerelease leg is a gate nothing
-enforces, since that leg runs under `continue-on-error`. The same ledger refuses
+whose only interpreter above it is a prerelease leg is a gate nothing enforces,
+since such a leg runs under `continue-on-error`. The same ledger refuses
 a corpus that compares `version_info` for itself, because a release spelled any
 other way is one it cannot read -- which would reopen the hole a file down.
 

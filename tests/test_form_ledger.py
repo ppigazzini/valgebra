@@ -273,7 +273,7 @@ FORMS: dict[str, Reads | Refuses] = {
     ),
     "a tuple literal": Refuses(lambda: (int, str), "a tuple literal is not a schema"),
     "a frozen dict literal": Refuses(
-        lambda: builtins.frozendict(a=int),  # ty: ignore[unresolved-attribute]
+        lambda: builtins.frozendict(a=int),
         "a frozen dict literal is not a schema",
         needs=(3, 15),
     ),

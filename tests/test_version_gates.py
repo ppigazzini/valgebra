@@ -23,10 +23,10 @@ Two spellings, one rule:
   corpus is a release this ledger cannot read, so it fails rather than passing
   over one.
 
-A lane whose failure the workflow forgives is not a side to stand on. The 3.15
-leg runs under `continue-on-error`, because a prerelease that breaks is news
-rather than a defect -- so a gate whose only interpreter above it is that one is
-a gate nothing enforces.
+A lane whose failure the workflow forgives is not a side to stand on. A
+prerelease leg runs under `continue-on-error`, because a prerelease that breaks
+is news rather than a defect -- so a gate whose only interpreter above it is
+that one is a gate nothing enforces.
 
 LEDGER: every release a version gate names has an enforced lane on each side
 """
@@ -151,7 +151,7 @@ def _enforced(forgiven: object, version: str) -> bool:
     """Whether a job's `continue-on-error` leaves this interpreter's red a gate.
 
     Two shapes, and reading only the first gets the second backwards. A job may
-    forgive *one* leg with an expression naming its version, which is how the
+    forgive *one* leg with an expression naming its version, which is how a
     prerelease runs; it may also forgive itself outright with a literal, and a
     check looking for the version inside that literal finds nothing and calls
     the lane enforced -- the answer that hides a whole job nobody's merge waits
@@ -273,7 +273,7 @@ def test_a_job_that_forgives_itself_outright_enforces_no_interpreter() -> None:
     """The two shapes of `continue-on-error`, read apart."""
     assert _enforced(False, "3.14")
     assert _enforced("", "3.14")
-    # One leg named, which is how the prerelease is forgiven.
+    # One leg named, which is how a prerelease leg is forgiven.
     assert not _enforced("${{ matrix.python-version == '3.15' }}", "3.15")
     assert _enforced("${{ matrix.python-version == '3.15' }}", "3.14")
     # And the whole job, which names no version to look for.

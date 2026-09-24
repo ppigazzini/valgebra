@@ -651,7 +651,7 @@ else. `tests/test_required_jobs.py` reads which jobs those are from their own
 conditions and holds each reading to the kind of job it is.
 
 **Every supported interpreter runs on every event.** The floor (3.10) through
-the prerelease (3.15), the free-threaded build (3.14t) among them, plus one
+the newest release (3.15), the free-threaded build (3.14t) among them, plus one
 macOS and one Windows leg. The release ships a wheel built per version against a
 version-specific ABI, so each interpreter is a separate artifact a caller
 installs, and a leg that runs only at night is a wheel nothing exercised until

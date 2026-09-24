@@ -40,7 +40,7 @@ Four conditions stand between a dispatch and an upload, and each is a step or a
 job condition in `release.yml` rather than a convention:
 
 - **The smoke must pass.** Each wheel set is imported on its own platform, on
-  the floor, the newest release and the free-threaded build where the set
+  the floor, the newest release and the free-threaded builds where the set
   carries a wheel for them, with the free-threaded import required to leave the
   GIL off; the sdist is compiled from source and imported before the publish job
   runs. A version cannot be replaced on an index once uploaded, only yanked, so
@@ -161,8 +161,8 @@ ABI, so a release ships many wheels and one install exercises exactly one of the
 — `release.yml` owns the matrix. On macOS and Windows the builds run on the
 host, where `--find-interpreter` sees only the interpreters installed on the
 image, so the workflow installs every supported one first; Windows builds its
-free-threaded wheel in a job of its own, since the two 3.14 builds can fail to
-co-install in one step. The maturin a release builds with is the one `uv.lock`
+free-threaded wheels in a job of their own, since a release and its
+free-threaded build can fail to co-install in one step. The maturin a release builds with is the one `uv.lock`
 resolves, pinned in the workflow rather than taken as the newest. A version
 selector resolves to whichever build is on the machine: `uv venv --python 3.14`
 can land on the free-threaded interpreter, so read

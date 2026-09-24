@@ -318,7 +318,7 @@ jobs:
       python ${{ matrix.python-version }} (${{ matrix.os }})${{
       (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10') &&
       ', full history' || '' }}
-    # 3.15 is an early-warning prerelease lane. 3.14t (free-threaded) is a
+    # 3.15 is the newest supported release. 3.14t (free-threaded) is a
     # supported lane: the extension declares `gil_used = false`, imports without
     # re-enabling the GIL -- `test_a_free_threaded_build_keeps_the_gil_off_after_import`
     # fails the lane if it does, where the parallel tests would only skip -- and
@@ -332,7 +332,6 @@ jobs:
     # or at the current release first, and that claim is about the interpreters
     # rather than about this extension -- so it is not one to hold a supported
     # version on.
-    continue-on-error: ${{ matrix.python-version == '3.15' }}
     strategy:
       fail-fast: false
       matrix:
@@ -399,35 +398,27 @@ jobs:
       # matrix's macOS and Windows legs exist for the shipped extension.
       #
       # Bounded, because an embedded interpreter can *hang* rather than fail:
-      # four rows that run a class definition through `py.run` stopped
-      # answering on the 3.15 prerelease and held the job to its own
-      # thirty-minute limit, and a job killed by that limit is **cancelled**
-      # rather than failed -- which the `continue-on-error` on that leg does
-      # not absorb, so the aggregate gate went red for the one lane that is
-      # meant to be an early warning. The same rows pass on 3.10 through
-      # 3.14t, and on that same prerelease build run by hand. With a bound, a
-      # hang is a failing step in five minutes: forgiven on the prerelease,
-      # red anywhere else, and never thirty minutes of a runner.
+      # four rows that run a class definition through `py.run` stop answering
+      # on the runner's 3.15 and would hold the job to its own thirty-minute
+      # limit, and a job killed by that limit is **cancelled** rather than
+      # failed, which the aggregate gate reads as red. The same rows pass on
+      # 3.10 through 3.14t, and on the same 3.15 build run by hand. With a
+      # bound, a hang is a failing step in five minutes rather than thirty
+      # minutes of a runner.
       #
-      # The forgiveness is read from a variable the step is *given* rather
-      # than written into its body, so the body carries no matrix expression
-      # and a developer's gate runs the step as written -- where the variable
-      # is unset, the comparison is false and a failure is a failure, which is
-      # the answer a developer wants from their own machine.
-      #
-      # It is spelled here rather than left to the leg's
-      # `continue-on-error`, because the two forgive different things. That
-      # flag is about the *gate*: whether a red prerelease leg blocks the
-      # merge. This is about the *step*: on the one interpreter where the hang
-      # is known and reproduced by nobody outside this runner, a timeout is a
-      # warning printed and walked past, so the rest of the leg -- every other
-      # step after this one -- still runs and still reports. Without it the leg
-      # stops at the hang and the early warning stops warning about anything
-      # else.
+      # The one exit forgiven is that hang: a timeout, on 3.15, printed as a
+      # warning and walked past, so every step after this one still runs and
+      # still reports. Any other failure of the corpora is red on 3.15 as on
+      # every release, and the leg is a merge gate like the rest. The version
+      # is read from a variable the step is *given* rather than written into
+      # its body, so the body carries no matrix expression and a developer's
+      # gate runs the step as written -- where the variable is unset, a timeout
+      # is a failure, which is the answer a developer wants from their own
+      # machine.
       - name: The binding's interpreter corpora
         if: ${{ matrix.os == 'ubuntu-latest' }}
         env:
-          PRERELEASE: ${{ matrix.python-version == '3.15' }}
+          CORPORA_HANG: ${{ matrix.python-version == '3.15' }}
         run: |
           base="$(uv run --no-sync python -c 'import sys; print(sys.base_prefix)')"
           PYO3_PYTHON="$base/bin/python3"
@@ -439,9 +430,9 @@ jobs:
             timeout 300 cargo test -p valgebra-py --features interpreter-tests \
             || status=$?
           if [ "$status" -ne 0 ]; then
-            if [ "${PRERELEASE:-false}" = true ]; then
-              echo "::warning::the corpora exited $status on the prerelease" \
-                "interpreter; the same rows pass on every supported version"
+            if [ "${CORPORA_HANG:-false}" = true ] && [ "$status" -eq 124 ]; then
+              echo "::warning::the corpora timed out on 3.15, where four py.run" \
+                "rows hang on the runner; the same rows pass on every other release"
             else
               exit "$status"
             fi
@@ -488,7 +479,7 @@ jobs:
       - name: A caller's strict types, on the floor and on the current
         if: ${{ matrix.python-version == '3.10' }}
         run: |
-          for target in 3.10 3.14; do
+          for target in 3.10 3.15; do
             uv run --no-sync mypy --strict --python-version="$target" \
               tests/typing/consumer.py python/valgebra
           done

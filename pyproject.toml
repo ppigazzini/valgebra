@@ -30,6 +30,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Programming Language :: Python :: Free Threading :: 3 - Stable",
     "Topic :: Software Development :: Quality Assurance",
     "Typing :: Typed",
@@ -222,7 +223,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 # claims. Both run in the type lane, because one setting cannot answer both
 # questions -- the newest release accepts a construct the floor cannot import,
 # and the floor rejects the names the suite exists to exercise.
-python-version = "3.14"
+python-version = "3.15"
 
 [tool.ty.src]
 # Benchmarks and the suites that cross-check against another library are

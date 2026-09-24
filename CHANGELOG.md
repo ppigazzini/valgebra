@@ -22,8 +22,17 @@ answer of its own, or a repair to a change not yet released.
 - fix: a recursive meet of maps is decided within its unfoldings
 - fix: a validator's indexes are awaited detached from the interpreter
 - fix: the release builds a wheel for every interpreter its classifiers name
+- feat: Python 3.15 is a supported release
 
 -->
+
+### Added
+
+- **Python 3.15 is supported.** The package names it in its classifiers, every
+  push runs the suite on 3.15 as a merge gate, and a release ships `cp315` and
+  free-threaded `cp315t` wheels for Linux, macOS and Windows x64, and `cp315`
+  for Windows arm64. Until 3.15.0 is published the wheels build against its
+  release candidate, whose ABI the final release keeps. 3.10 stays the floor.
 
 ### Fixed
 

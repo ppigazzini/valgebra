@@ -269,17 +269,17 @@ def test_every_supported_interpreter_runs_on_every_event() -> None:
     and a lane that runs on no event at all is one `requires-python` promises
     and nothing checks.
 
-    Held in both directions: every version between the floor and the prerelease
-    is here, and a version added to the package's own floor-to-ceiling range has
-    to be added here too. The list is read from the matrix rather than from a
-    schedule condition, because there is no longer one to read.
+    Held in both directions: every version between the floor and the newest
+    release is here, and a version added to the package's own floor-to-ceiling
+    range has to be added here too. The list is read from the matrix rather
+    than from a schedule condition, because there is no longer one to read.
     """
     text = WORKFLOW.read_text(encoding="utf-8")
     matrix = re.search(r"python-version: (\[[^\]]*\])", text)
     assert matrix, "the python matrix is not a list"
     versions = json.loads(matrix.group(1))
 
-    # The floor `requires-python` names, and every release up to the prerelease.
+    # The floor `requires-python` names, and every release up to the newest.
     assert versions == [
         "3.10",
         "3.11",

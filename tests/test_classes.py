@@ -90,8 +90,8 @@ def test_typeddict_closed_and_extra_items_are_obeyed() -> None:
     class Plain(typing.TypedDict):
         a: int
 
-    Shut.__closed__ = True  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-    Extra.__extra_items__ = str  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    Shut.__closed__ = True  # type: ignore[attr-defined]
+    Extra.__extra_items__ = str  # type: ignore[attr-defined]
 
     # `closed=True` leaves the declared keys alone and admits nothing else.
     assert Validator(Shut).is_valid({"a": 1})
@@ -124,7 +124,7 @@ def test_the_no_extra_items_sentinel_is_not_a_type_to_admit() -> None:
     class Plain(typing.TypedDict):
         a: int
 
-    Plain.__extra_items__ = typing.NoExtraItems  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    Plain.__extra_items__ = typing.NoExtraItems  # type: ignore[attr-defined]
     assert Validator(Plain).is_valid({"a": 1, "x": 2})
 
 

@@ -81,19 +81,20 @@ jobs:
           # macos-13. The arm64 build below runs on macos-latest.
           #
           # On a host runner `--find-interpreter` builds for what the image
-          # carries, and the images carry no free-threaded 3.14 and, on macOS
-          # arm64, no 3.10: 0.0.12 shipped no cp314t wheel off Linux and no cp310
-          # one for Apple silicon. `pythons` installs every supported interpreter
-          # first. Windows takes its free-threaded build in a job of its own,
-          # because co-installing the two 3.14 builds in one setup step can fail
-          # there (maturin-action's README, python/cpython#127294), and that job
-          # builds the one interpreter by name. The Windows arm64 image keeps
-          # what it carries.
-          - { runner: macos-15-intel, target: x86_64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.14t" }
-          - { runner: macos-latest, target: aarch64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.14t" }
-          - { runner: windows-latest, target: x64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14" }
-          - { runner: windows-latest, target: x64, pgo: true, pythons: "3.14t", interpreter: python3.14t, variant: freethreaded }
-          - { runner: windows-11-arm, target: aarch64 }
+          # carries, and the images carry no free-threaded build, no 3.15 and, on
+          # macOS arm64, no 3.10: 0.0.12 shipped no cp314t or cp315 wheel off
+          # Linux and no cp310 one for Apple silicon. `pythons` installs every
+          # supported interpreter first. Windows takes its free-threaded builds in
+          # a job of their own, because co-installing a release and its
+          # free-threaded build in one setup step can fail there (maturin-action's
+          # README, python/cpython#127294), and that job builds the interpreters
+          # by name. Windows arm64 installs 3.12 onward, the releases its 0.0.12
+          # wheels covered, and 3.15 beside them.
+          - { runner: macos-15-intel, target: x86_64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
+          - { runner: macos-latest, target: aarch64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.15\n3.14t\n3.15t" }
+          - { runner: windows-latest, target: x64, pgo: true, pythons: "3.10\n3.11\n3.12\n3.13\n3.14\n3.15" }
+          - { runner: windows-latest, target: x64, pgo: true, pythons: "3.14t\n3.15t", interpreter: python3.14t python3.15t, variant: freethreaded }
+          - { runner: windows-11-arm, target: aarch64, pythons: "3.12\n3.13\n3.14\n3.15" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -104,10 +105,14 @@ jobs:
       # before-script-linux below.
       - if: ${{ matrix.platform.pgo && runner.os != 'Linux' }}
         run: rustup component add llvm-tools
+      # `allow-prereleases` lets `3.15` resolve to its release candidate until
+      # 3.15.0 is published and to the release after: the ABI is fixed from the
+      # first candidate, so the wheel is the one the final release loads.
       - if: ${{ matrix.platform.pythons }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.platform.pythons }}
+          allow-prereleases: true
       # The action pulls its container itself, once, with no retry, so a registry
       # answering `504` fails a release dispatch that has nothing wrong with it --
       # and a dispatch is a person at a button rather than a push that reruns
@@ -201,15 +206,15 @@ jobs:
       matrix:
         wheel:
           # `pythons` are the interpreters each wheel set is imported on: the
-          # floor, the newest release and the free-threaded build, where the set
+          # floor, the newest release and the free-threaded builds, where the set
           # carries a wheel for them.
-          - { name: linux-x86_64, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-native, pythons: "3.10 3.14 3.14t" }
-          - { name: linux-aarch64, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-native, pythons: "3.10 3.14 3.14t" }
-          - { name: macos-x86_64, runner: macos-15-intel, artifact: wheels-macos-15-intel-x86_64-native, pythons: "3.10 3.14 3.14t" }
-          - { name: macos-arm64, runner: macos-latest, artifact: wheels-macos-latest-aarch64-native, pythons: "3.10 3.14 3.14t" }
-          - { name: windows-x64, runner: windows-latest, artifact: wheels-windows-latest-x64-native, pythons: "3.10 3.14" }
-          - { name: windows-x64-freethreaded, runner: windows-latest, artifact: wheels-windows-latest-x64-freethreaded, pythons: "3.14t" }
-          - { name: windows-arm64, runner: windows-11-arm, artifact: wheels-windows-11-arm-aarch64-native, pythons: "3.14" }
+          - { name: linux-x86_64, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t" }
+          - { name: linux-aarch64, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t" }
+          - { name: macos-x86_64, runner: macos-15-intel, artifact: wheels-macos-15-intel-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t" }
+          - { name: macos-arm64, runner: macos-latest, artifact: wheels-macos-latest-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t" }
+          - { name: windows-x64, runner: windows-latest, artifact: wheels-windows-latest-x64-native, pythons: "3.10 3.15" }
+          - { name: windows-x64-freethreaded, runner: windows-latest, artifact: wheels-windows-latest-x64-freethreaded, pythons: "3.14t 3.15t" }
+          - { name: windows-arm64, runner: windows-11-arm, artifact: wheels-windows-11-arm-aarch64-native, pythons: "3.12 3.15" }
     runs-on: ${{ matrix.wheel.runner }}
     timeout-minutes: 20
     # The two musllinux wheels are not smoked here: running them needs a musl
