@@ -12,7 +12,14 @@ the implementation's own output. The snapshot is recorded from the code, so read
 it alongside that suite rather than as a standalone correctness check.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from valgebra import ValidationError, Validator, union
+
+if TYPE_CHECKING:
+    from syrupy.assertion import SnapshotAssertion
 
 # (label, schema, value). The schema is either a raw spec or a compiled
 # validator (the named combinators return one).
@@ -41,6 +48,6 @@ def _capture(schema: object, value: object) -> list[dict[str, object]]:
     return []  # pragma: no cover - every case is meant to fail
 
 
-def test_structured_error_corpus(snapshot):
+def test_structured_error_corpus(snapshot: SnapshotAssertion) -> None:
     captured = {label: _capture(schema, value) for label, schema, value in CASES}
     assert captured == snapshot

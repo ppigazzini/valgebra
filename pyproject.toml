@@ -142,23 +142,16 @@ src = ["python", "tests"]
 
 [tool.ruff.lint]
 select = ["ALL"]
+# Only what holds for every file is ignored here. A rule the shipped package
+# satisfies and another directory does not is excused for that directory
+# alone, below, so the package is held to it.
 ignore = [
     # Formatter conflicts, per the ruff docs.
     "COM812",
     "ISC001",
-    # Missing docstrings — added incrementally as the public surface stabilises.
-    "D100",
-    "D101",
-    "D102",
-    "D103",
-    "D104",
-    "D105",
-    "D107",
     # Docstring style pairs that contradict each other; keep the ruff defaults.
     "D203",
     "D213",
-    # Public-surface annotations live in the .pyi stub, not the runtime module.
-    "ANN",
     # Licensing is declared once, in the PEP 639 SPDX expression and the two
     # LICENSE files, not repeated as a per-file header.
     "CPY001",
@@ -168,7 +161,17 @@ ignore = [
 # Tests assert freely, use magic values, take unused fixture args, are not a
 # package, pass bools positionally, raise ad-hoc exceptions with inline
 # messages, and carry descriptive (not commented-out) comments in data tables.
+# A test's name states its claim, so a docstring is written where there is more
+# to say than the name; and a helper typed `Any` takes any value on purpose,
+# since what a validator is handed is anything a caller has.
 "tests/**" = [
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D105",
+    "D107",
+    "ANN401",
     "S101",
     "PLR2004",
     "ARG001",
@@ -179,11 +182,23 @@ ignore = [
     "ERA001",
 ]
 # Benchmarks assert results, use magic sizes, are not a package, and print
-# their own recorded numbers when run as scripts.
-"benches/**" = ["S101", "PLR2004", "INP001", "T201"]
+# their own recorded numbers when run as scripts; a benchmark's name is the
+# shape it times.
+"benches/**" = ["D103", "S101", "PLR2004", "INP001", "T201"]
 # Maintenance scripts run subprocesses (tools resolved from PATH) and print
-# progress.
-"scripts/**" = ["INP001", "S603", "S607", "T201"]
+# progress. A script's module docstring is its contract and its functions are
+# steps of one run; a builder typed `Any` builds any schema it is handed.
+"scripts/**" = [
+    "D101",
+    "D102",
+    "D103",
+    "D107",
+    "ANN401",
+    "INP001",
+    "S603",
+    "S607",
+    "T201",
+]
 # The PyPy link check builds the *legacy* typing spellings on purpose: telling
 # `typing.List` from `list[...]` is what reached for the type object it exists
 # to guard, so the rules that modernise those spellings would rewrite the check
@@ -224,6 +239,42 @@ exclude_also = ["if TYPE_CHECKING:"]
 # questions -- the newest release accepts a construct the floor cannot import,
 # and the floor rejects the names the suite exists to exercise.
 python-version = "3.15"
+
+[tool.ty.rules]
+# Every stable rule ty leaves off by default that the tree passes, raised to an
+# error; `ty explain rule` gives each rule's default level. Three stay at
+# ty's default:
+#
+# - `missing-override-decorator`: the shipped package would import `override`
+#   at runtime, from `typing_extensions` below 3.12 -- a runtime dependency the
+#   package does not have -- or from `typing`, whose import `_markers.py` is
+#   written to avoid;
+# - `missing-type-argument`, and `unsound-return-statement` with its
+#   `unsound-yield` and `unsound-assignment` siblings: each reports across the
+#   tests and scripts -- a bare generic, or a value read from JSON, YAML or a
+#   module loaded by path flowing into a declared type -- and raising one is a
+#   change of its own, with the readings typed.
+blanket-ignore-comment = "error"
+disjoint-cast = "error"
+division-by-zero = "error"
+dynamic-function-decorator-return = "error"
+invalid-legacy-positional-parameter = "error"
+possibly-missing-attribute = "error"
+possibly-missing-import = "error"
+possibly-unresolved-reference = "error"
+redundant-condition-strict = "error"
+unsupported-dynamic-base = "error"
+
+[tool.ty.analysis]
+# `x == "a"` leaves a `str` a `str` rather than narrowing it to `Literal["a"]`,
+# because a subclass may define `__eq__` to answer yes: the reason a `Literal`
+# schema's membership is exact.
+strict-equality-semantics = true
+# `strict-generic-narrowing` stays off. Under it `isinstance(x, dict)` on an
+# `object` narrows to a dict whose key type is unknown, and indexing it takes a
+# key of type `Never`: walking a value by the path a `ValidationError` reports
+# -- `docs/08-error-model.md` shows a caller doing it -- cannot be written
+# without a cast.
 
 [tool.ty.src]
 # Benchmarks and the suites that cross-check against another library are

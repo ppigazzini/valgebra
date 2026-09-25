@@ -92,7 +92,7 @@ def test_every_shape_the_gate_measures_carries_a_ceiling() -> None:
 
 
 def test_an_unreadable_ceiling_file_is_could_not_run(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # A gate that could not read its ceilings compared nothing. Exit 2 keeps that
     # distinguishable from a regression, which is exit 1.
@@ -101,7 +101,7 @@ def test_an_unreadable_ceiling_file_is_could_not_run(
 
 
 def test_a_missing_benchmark_dependency_is_could_not_run(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(gate, "CEILING_FILE", ROOT / "scripts" / "perf_compare.json")
 

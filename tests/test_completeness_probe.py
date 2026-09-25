@@ -450,7 +450,12 @@ def _members(schema: Validator) -> frozenset[int]:
     return frozenset(i for i, value in enumerate(VALUES) if _admits(schema, value))
 
 
-def _survey() -> tuple[dict[str, str], list[str], int, int]:
+#: What `_survey` gives: the suspected gaps, the unsound decisions, and how many
+#: relations it decided true and false.
+Survey = tuple[dict[str, str], list[str], int, int]
+
+
+def _survey() -> Survey:
     """Every ordered pair: (suspected gaps, unsound decisions, trues, falses)."""
     memberships = {name: _members(schema) for name, schema in SCHEMAS}
     gaps: dict[str, str] = {}
@@ -476,11 +481,11 @@ def _survey() -> tuple[dict[str, str], list[str], int, int]:
 
 
 @pytest.fixture(scope="module")
-def survey() -> tuple[dict[str, str], list[str], int, int]:
+def survey() -> Survey:
     return _survey()
 
 
-def test_the_probe_actually_compared_something(survey) -> None:
+def test_the_probe_actually_compared_something(survey: Survey) -> None:
     # A probe that decided nothing would pass every check below having compared
     # nothing at all. Both directions must be exercised for the search to mean
     # anything: only-true says the universe is trivial, only-false says the
@@ -492,7 +497,7 @@ def test_the_probe_actually_compared_something(survey) -> None:
     assert len(SCHEMAS) > 20, "the schema universe covers too few kinds"
 
 
-def test_a_refutation_names_a_value_outside(survey) -> None:
+def test_a_refutation_names_a_value_outside(survey: Survey) -> None:
     """A reported refutation stands on a value, or it is a false claim.
 
     `is_subtype_of` folds "a value of this schema is outside the other" and "no
@@ -525,7 +530,7 @@ def test_a_refutation_names_a_value_outside(survey) -> None:
 
 
 # THEORY: the-decision-has-three-answers
-def test_the_three_answers_agree_with_the_two(survey) -> None:
+def test_the_three_answers_agree_with_the_two(survey: Survey) -> None:
     """`relation_to` and `is_subtype_of` answer the same question."""
     for name_a, a in SCHEMAS:
         for name_b, b in SCHEMAS:
@@ -537,7 +542,7 @@ def test_the_three_answers_agree_with_the_two(survey) -> None:
 
 
 # THEORY: the-decision-has-three-answers
-def test_every_predicate_is_the_proof_answer_of_a_relation(survey) -> None:
+def test_every_predicate_is_the_proof_answer_of_a_relation(survey: Survey) -> None:
     """Each `is_*` is one answer of a relation, so the surface needs no fourth.
 
     The relation reports which of proof, refutation and decline it reached, and
@@ -569,13 +574,13 @@ def test_every_predicate_is_the_proof_answer_of_a_relation(survey) -> None:
             )
 
 
-def test_no_decided_relation_is_refuted_by_a_value(survey) -> None:
+def test_no_decided_relation_is_refuted_by_a_value(survey: Survey) -> None:
     # Unsoundness. Not a ledger matter -- this is the contract itself.
     _, unsound, _, _ = survey
     assert not unsound, "UNSOUND: " + "; ".join(unsound)
 
 
-def test_every_suspected_gap_is_on_the_ledger(survey) -> None:
+def test_every_suspected_gap_is_on_the_ledger(survey: Survey) -> None:
     gaps, _, _, _ = survey
     unlisted = sorted(set(gaps) - set(ACCEPTED))
     assert not unlisted, (
@@ -585,7 +590,7 @@ def test_every_suspected_gap_is_on_the_ledger(survey) -> None:
     )
 
 
-def test_no_ledger_entry_is_stale(survey) -> None:
+def test_no_ledger_entry_is_stale(survey: Survey) -> None:
     gaps, _, _, _ = survey
     closed = sorted(set(ACCEPTED) - set(gaps))
     assert not closed, (

@@ -141,7 +141,7 @@ def test_composition_depth_guard_rejects_unbounded_nesting(
         _compose_in_a_loop(compose)
 
 
-def test_a_repeated_composition_does_not_grow():
+def test_a_repeated_composition_does_not_grow() -> None:
     # Idempotence, the identities and the complement laws are settled where the
     # schema is built, so a loop that re-applies the same step reaches a fixed
     # point instead of a bound. There is nothing to guard, which is a better

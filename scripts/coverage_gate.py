@@ -48,6 +48,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -100,7 +101,7 @@ BELOW_THE_FLOOR: dict[str, dict[str, str]] = {
 }
 
 
-def _cannot_run(message: str) -> None:
+def _cannot_run(message: str) -> NoReturn:
     print(f"coverage_gate: {message}", file=sys.stderr)
     raise SystemExit(EXIT_CANNOT_RUN)
 

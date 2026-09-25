@@ -15,24 +15,24 @@ import annotated_types as at
 from valgebra import Validator, anything, complement, intersection, nothing, union
 
 
-def test_a_literal_is_disjoint_from_another_kind():
+def test_a_literal_is_disjoint_from_another_kind() -> None:
     assert Validator(Literal["a"]).is_subtype_of(complement(int))
 
 
-def test_two_distinct_literals_share_no_value():
+def test_two_distinct_literals_share_no_value() -> None:
     assert intersection(Literal["a"], Literal["b"]).is_empty()
 
 
 # --- A literal is a typed singleton, so its kind places it --------------------
 
 
-def test_a_literal_int_is_disjoint_from_a_literal_bool():
+def test_a_literal_int_is_disjoint_from_a_literal_bool() -> None:
     # `Literal[1]` requires `type(x) is int`, `Literal[True]` requires `bool`,
     # so they share no value even though `1 == True` in Python.
     assert intersection(Literal[1], Literal[True]).is_empty()
 
 
-def test_an_enum_literal_meet_is_decided_by_how_the_members_compare():
+def test_an_enum_literal_meet_is_decided_by_how_the_members_compare() -> None:
     # An enumeration's members compare by identity unless the class says
     # otherwise, and two distinct objects are then two values -- so the meet is
     # empty. An `IntEnum` says otherwise: its members equal the integers they
@@ -49,7 +49,7 @@ def test_an_enum_literal_meet_is_decided_by_how_the_members_compare():
     assert not intersection(Literal[Level.LOW], Literal[Level.HIGH]).is_empty()
 
 
-def test_a_literal_is_still_a_member_of_its_own_kind():
+def test_a_literal_is_still_a_member_of_its_own_kind() -> None:
     assert Validator(Literal["a"]).is_subtype_of(str)
     assert not Validator(Literal["a"]).is_subtype_of(int)
 
@@ -58,36 +58,36 @@ def test_a_literal_is_still_a_member_of_its_own_kind():
 
 
 # THEORY: a-sequence-splits-across-a-union
-def test_a_product_splits_across_union_branches():
+def test_a_product_splits_across_union_branches() -> None:
     assert Validator(tuple[int | str, int]).is_subtype_of(
         union(tuple[int, int], tuple[str, int])
     )
 
 
-def test_a_product_splits_on_its_second_component():
+def test_a_product_splits_on_its_second_component() -> None:
     assert Validator(tuple[int, int | str]).is_subtype_of(
         union(tuple[int, int], tuple[int, str])
     )
 
 
-def test_a_list_product_splits_too():
+def test_a_list_product_splits_too() -> None:
     assert Validator([int | str, int]).is_subtype_of(union([int, int], [str, int]))
 
 
-def test_a_product_does_not_split_across_both_components():
+def test_a_product_does_not_split_across_both_components() -> None:
     # (int, bytes) is in the left and in neither branch on the right.
     assert not Validator(tuple[int | str, int | bytes]).is_subtype_of(
         union(tuple[int, int], tuple[str, bytes])
     )
 
 
-def test_a_product_is_not_below_branches_that_miss_it():
+def test_a_product_is_not_below_branches_that_miss_it() -> None:
     assert not Validator(tuple[int, int]).is_subtype_of(
         union(tuple[str, int], tuple[int, str])
     )
 
 
-def test_arity_does_not_mix():
+def test_arity_does_not_mix() -> None:
     assert not Validator(tuple[int, int]).is_subtype_of(
         union(tuple[int], tuple[int, int, int])
     )
@@ -96,39 +96,39 @@ def test_arity_does_not_mix():
 # --- The record meet, and the shapes it must NOT empty -----------------------
 
 
-def test_a_record_is_below_the_complement_of_a_disjoint_record():
+def test_a_record_is_below_the_complement_of_a_disjoint_record() -> None:
     assert Validator({"a": int}).is_subtype_of(complement({"a": str}))
 
 
-def test_a_required_field_with_an_empty_meet_empties_the_record():
+def test_a_required_field_with_an_empty_meet_empties_the_record() -> None:
     assert intersection({"a": int}, {"a": str}).is_empty()
 
 
-def test_required_on_one_side_is_enough():
+def test_required_on_one_side_is_enough() -> None:
     assert intersection({"a": int}, {"a?": str}).is_empty()
 
 
-def test_two_optional_fields_do_not_empty_the_record():
+def test_two_optional_fields_do_not_empty_the_record() -> None:
     # The empty dict is in both, so the meet is inhabited.
     assert not intersection({"a?": int}, {"a?": str}).is_empty()
 
 
-def test_two_pure_maps_never_meet_empty():
+def test_two_pure_maps_never_meet_empty() -> None:
     # ICFP footnote 11: a meet of two mappings always contains `{}`.
     assert not intersection({str: int}, {str: str}).is_empty()
 
 
-def test_a_compatible_meet_stays_inhabited():
+def test_a_compatible_meet_stays_inhabited() -> None:
     assert not intersection({"a": int}, {"a": bool}).is_empty()
 
 
-def test_a_closed_record_admits_no_key_it_does_not_declare():
+def test_a_closed_record_admits_no_key_it_does_not_declare() -> None:
     # `{'a': int}` is closed, so no dict in it carries 'b'; `{'b': str}` requires
     # one. Nothing is in both.
     assert intersection({"a": int}, {"b": str}).is_empty()
 
 
-def test_two_open_records_admit_each_other_s_keys():
+def test_two_open_records_admit_each_other_s_keys() -> None:
     # Both carry a catch-all, so each admits the key the other requires and a
     # dict with both keys is in the meet.
     assert not intersection({"a": int, str: object}, {"b": str, str: object}).is_empty()
@@ -143,17 +143,17 @@ def test_two_open_records_admit_each_other_s_keys():
 # ledger.
 
 
-def test_a_double_complement_is_the_schema_it_negates_twice():
+def test_a_double_complement_is_the_schema_it_negates_twice() -> None:
     record = Validator({"a": int})
     assert complement(complement(record)) == record
     assert complement(complement(complement(complement(record)))) == record
 
 
-def test_a_join_with_a_complement_is_the_top():
+def test_a_join_with_a_complement_is_the_top() -> None:
     assert union(list[int], complement(list[int])) == Validator(anything)
 
 
-def test_the_fold_reaches_a_schema_built_through_the_constructors_only():
+def test_the_fold_reaches_a_schema_built_through_the_constructors_only() -> None:
     # A schema is built in the lattice normal form, so a respelling that differs
     # from the top by the identity and complement laws alone *is* the top: the
     # empty join drops out and the pair cancels where the schema is built.
@@ -174,7 +174,7 @@ def test_the_fold_reaches_a_schema_built_through_the_constructors_only():
     assert record.is_subtype_of(respelled)
 
 
-def test_any_folds_like_the_top_it_is():
+def test_any_folds_like_the_top_it_is() -> None:
     # `Any` denotes every value, so the join with its complement is the top and
     # the construction folds it there like any other set.
     assert union(Any, complement(Any)) == Validator(anything)
@@ -182,11 +182,11 @@ def test_any_folds_like_the_top_it_is():
     assert intersection(Any, complement(Any)) == Validator(nothing)
 
 
-def test_a_meet_with_a_complement_is_the_bottom():
+def test_a_meet_with_a_complement_is_the_bottom() -> None:
     assert intersection(list[int], complement(list[int])) == Validator(nothing)
 
 
-def test_the_cancelling_folds_decline_an_atom_that_is_not_a_set():
+def test_the_cancelling_folds_decline_an_atom_that_is_not_a_set() -> None:
     """The law is about sets, and an atom that answers by running code is not one.
 
     ``A | ~A`` and ``A & ~A`` ask ``A`` twice, and a predicate may answer
@@ -201,7 +201,7 @@ def test_the_cancelling_folds_decline_an_atom_that_is_not_a_set():
     assert complement(complement(coin)) == Validator(coin)
 
 
-def test_an_enumeration_is_the_union_of_its_members():
+def test_an_enumeration_is_the_union_of_its_members() -> None:
     """A class whose values the bindings can enumerate is those values.
 
     Three facts make it: an enumeration's members are fixed when the class is

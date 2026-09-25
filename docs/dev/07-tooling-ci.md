@@ -180,6 +180,31 @@ the fuzz lane red. `tests/test_build_surfaces.py` holds every manifest in the
 tree to being a workspace member or a detached surface named with the command
 that builds it.
 
+## What the linters excuse, and where
+
+**An ignore in `pyproject.toml` covers the files its reason is about, and no
+others.** ruff selects every rule. The global list holds only what is true of
+every file -- the two formatter conflicts, the contradicting docstring pairs,
+the licence header. The annotation and docstring rules apply to the shipped
+package, which satisfies them, and are excused per directory in `tests/`,
+`scripts/` and `benches/`, by the codes each one breaks and with the reason
+beside them. An ignore written wider than its reason lifts a rule from the
+package that nobody decided to lift, and nothing reports it: ruff flags an
+unused `noqa` and says nothing about a per-file ignore that matches no finding.
+
+**ty runs every stable rule it leaves off by default that the tree passes,
+raised to an error**, and `[tool.ty.rules]` names the ones left at the default
+with the reason for each: one declined, and two that report across the tests
+and scripts and wait for a change of their own. `[tool.ty.analysis]` turns
+strict equality on and says why strict generic narrowing stays off. A warning
+fails the run as an error does, so the level written is the intent, not the
+exit code.
+
+**The limit.** ty's rule list moves with its releases, and a rule a release adds
+off by default stays off here until someone raises it; `ty explain rule` gives
+every rule's default level, which is the list to read against
+`[tool.ty.rules]` when the lock moves ty.
+
 ## The numeric gates
 
 ### The instruction budget

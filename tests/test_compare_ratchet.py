@@ -18,8 +18,12 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -27,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 pytestmark = pytest.mark.repository
 
 
-def _gate():
+def _gate() -> ModuleType:
     spec = importlib.util.spec_from_file_location(
         "compare_gate", ROOT / "scripts" / "compare_gate.py"
     )
