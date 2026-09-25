@@ -91,8 +91,8 @@ assert repr(Validator(Any)) == "Any"
 | `dict[K, V]` | dicts whose keys are in `K` and values in `V` |
 | `tuple[A, B]` | length-2 tuples with `A` then `B` |
 | `tuple[T, ...]` | tuples of any length, every element in `T` |
-| `tuple[A, B, ...]` | a fixed prefix `A`, then zero or more `B` (see below) |
-| `tuple[A, *tuple[B, ...]]` | the same, spelled by unpacking (3.11+) |
+| `tuple[A, *tuple[B, ...]]` | a fixed prefix `A`, then zero or more `B` (see below; 3.11+) |
+| `tuple[A, B, ...]` | the same, in the spelling 3.10 can write and a static checker refuses |
 | `typing.List`, `typing.Tuple`, ... | the class each aliases, bare or parametrized |
 
 ```python
@@ -102,7 +102,7 @@ assert Validator(list[int]).is_valid([1, 2, 3])
 assert Validator(dict[str, int]).is_valid({"a": 1})
 assert Validator(tuple[int, str]).is_valid((1, "a"))
 assert Validator(tuple[int, ...]).is_valid((1, 2, 3))
-assert Validator(tuple[str, int, ...]).is_valid(("x", 1, 2))
+assert Validator(tuple[str, *tuple[int, ...]]).is_valid(("x", 1, 2))
 ```
 
 ## Native forms
@@ -144,16 +144,16 @@ list is never a member of the tuple form and vice versa.
 A sequence schema is, in general, a **regular expression over element types**: a
 fixed positional prefix followed by an optional repeated tail. A trailing `...`
 repeats the element just before it, so `[T, ...]` (any number of `T`) is the
-prefix-free case. The same shape is available for tuples with `tuple[A, B, ...]`;
-the container is part of the type, so a tuple is never a member of the list form
+prefix-free case. The same shape is available for tuples, spelled
+`tuple[A, *tuple[B, ...]]`; the container is part of the type, so a tuple is never a member of the list form
 and vice versa.
 
 | Form | Denotes |
 | --- | --- |
 | `[A, B, ...]` | a list: an `A`, then zero or more `B` |
 | `[T, T, ...]` | a non-empty list of `T` (at least one) |
-| `tuple[A, B, ...]` | a tuple: an `A`, then zero or more `B` |
-| `tuple[A, *tuple[B, ...]]` | the same tuple, spelled by unpacking (3.11+) |
+| `tuple[A, *tuple[B, ...]]` | a tuple: an `A`, then zero or more `B` (3.11+) |
+| `tuple[A, B, ...]` | the same tuple, in the shorter spelling a static checker refuses |
 
 An **unpacked** variadic tuple says the prefix-and-tail shape the way PEP 646
 spells it, and `Unpack[tuple[B, ...]]` is the same thing written out. An unpacked
@@ -174,21 +174,21 @@ non_empty = Validator([int, int, ...])  # at least one int
 assert non_empty.is_valid([1])
 assert not non_empty.is_valid([])
 
-tup = Validator(tuple[str, int, ...])  # the same shape, as a tuple
+tup = Validator(tuple[str, *tuple[int, ...]])  # the same shape, as a tuple
 assert tup.is_valid(("x", 1, 2))
 assert not tup.is_valid(["x", 1, 2])  # a list is not a member of the tuple form
 
-unpacked = Validator(tuple[str, *tuple[int, ...]])  # the PEP 646 spelling
-assert unpacked.is_valid(("x", 1, 2))
-assert repr(unpacked) == "tuple[str, int, ...]"
+short = Validator(tuple[str, int, ...])  # the spelling 3.10 can write
+assert short == tup
+assert repr(tup) == "tuple[str, int, ...]"
 ```
 
 ## Literals
 
 `Literal[...]` denotes a typed singleton: a value is a member iff it has the
-**same type** as the literal and is equal to it. The same-type rule keeps
-`Literal[1]`, `Literal[True]`, and `Literal[1.0]` distinct, even though Python's
-`==` conflates them:
+**same type** as the literal and is equal to it. The same-type rule keeps the
+constants `1`, `True` and `1.0` distinct, even though Python's `==` conflates
+them:
 
 ```python
 from typing import Literal
@@ -200,21 +200,25 @@ assert not Validator(Literal[1]).is_valid(True)
 assert not Validator(Literal[1]).is_valid(1.0)
 ```
 
-**`Literal[nan]` denotes nothing.** Membership is equality, and a `nan` is equal
-to nothing at all — itself included — so the set has no member. That is not a
+`Literal` takes the values the typing spec lists -- an `int`, `str`, `bytes` or
+`bool` value, an enum member, `None` -- and a static checker refuses anything
+else there. Any other constant, a `float` or a tuple or an instance, is written
+bare: `Validator(1.0)` is the schema `Literal[1.0]` names, and a checker accepts
+it ([static checkers](18-static-checking.md)).
+
+**The constant `nan` denotes nothing.** Membership is equality, and a `nan` is
+equal to nothing at all — itself included — so the set has no member. That is not a
 gap in the check: the set is *decided* empty, and a `float` still admits `nan`
 as it always did. Write `float` and a predicate if what you mean is "the not-a-
 number value".
 
 ```python
-from typing import Literal
-
 from valgebra import Validator
 
 nan = float("nan")
 
-assert Validator(Literal[nan]).is_empty()  # equality admits nothing
-assert not Validator(Literal[nan]).is_valid(nan)
+assert Validator(nan).is_empty()  # equality admits nothing
+assert not Validator(nan).is_valid(nan)
 assert Validator(float).is_valid(nan)  # the kind still holds it
 ```
 
@@ -315,18 +319,39 @@ assert Validator(Optional[int]).is_valid(None)
 
 ## Records
 
-A dict literal with all-string keys is a **record**: named fields, closed by
-default. A required field's key must be present with a matching value; a trailing
-`?` on the key name marks it optional. A closed record admits no key outside the
-declared names.
+A **record** is a dict with named fields: a required field's key must be present
+with a matching value, and a closed record admits no key outside the declared
+names. The typing spelling is a `TypedDict`, open as the typing spec defines one
+or closed with `closed=True` (PEP 728; in `typing` from 3.15 and in
+`typing_extensions` before). A static checker reads it as its own type, so
+`is_valid` narrows to it ([static checkers](18-static-checking.md)).
+
+```python
+from typing_extensions import NotRequired, TypedDict
+
+from valgebra import Validator
+
+
+class User(TypedDict, closed=True):
+    name: str
+    age: NotRequired[int]
+
+
+user = Validator(User)
+assert user.is_valid({"name": "Ada"})  # optional key absent
+assert user.is_valid({"name": "Ada", "age": 36})
+assert not user.is_valid({"name": "Ada", "x": 1})  # closed: no extra keys
+```
+
+A dict literal with all-string keys is the same record written as a shape:
+closed by default, with a trailing `?` on a key name marking it optional.
 
 ```python
 from valgebra import Validator
 
 user = Validator({"name": str, "age?": int})
-assert user.is_valid({"name": "Ada"})  # optional key absent
-assert user.is_valid({"name": "Ada", "age": 36})
-assert not user.is_valid({"name": "Ada", "x": 1})  # closed: no extra keys
+assert user.is_valid({"name": "Ada"})
+assert not user.is_valid({"name": "Ada", "x": 1})
 ```
 
 ### A key name that ends in a question mark

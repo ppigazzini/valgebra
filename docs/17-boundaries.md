@@ -154,7 +154,8 @@ program by discipline.
   translation would be lossy in both directions rather than merely absent.
 - **No static checking.** valgebra runs; a type checker does not run it. The two
   are complementary, and the [foundations](13-foundations.md) page says where
-  their models agree and where they part.
+  their models agree and where they part. What a checker reads from a validator,
+  and the spellings it refuses, are on [static checkers](18-static-checking.md).
 
 ## One operator, and it is the one typing already uses
 

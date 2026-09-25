@@ -103,6 +103,7 @@ cover.
 | [09-inspection.md](09-inspection.md) | interrogating a codebase that has no schemas of its own |
 | [10-limits.md](10-limits.md) | the resource bounds the validator enforces |
 | [11-performance.md](11-performance.md) | the measured benchmarks, and what they do not claim |
+| [18-static-checking.md](18-static-checking.md) | what a static checker reads from a schema, and the spellings it refuses |
 | [12-changelog.md](12-changelog.md) | every released version, and what to do on upgrade |
 | [13-foundations.md](13-foundations.md) | the denotational frame and the theory it is sourced from |
 | [14-soundness.md](14-soundness.md) | why an accept is never wrong, node by node |
@@ -118,6 +119,7 @@ cover.
   form with its denotation, [refinements](05-refinements.md) the constraints,
   and [recursive schemas](06-recursion.md) the fixpoint.
 - Composing them? The [Boolean algebra](04-algebra.md).
+- Type-checking code that uses them? [Static checkers](18-static-checking.md).
 - Studying a codebase with no schemas of its own? [Inspecting a
   codebase](09-inspection.md) asks what its annotations imply, and what nothing
   enforces.

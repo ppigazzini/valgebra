@@ -48,6 +48,7 @@ nav:
       - Inspecting a codebase: 09-inspection.md
       - Resource limits: 10-limits.md
       - Performance: 11-performance.md
+      - Static checkers: 18-static-checking.md
   - Release notes: 12-changelog.md
   - Explanation:
       - Foundations: 13-foundations.md
@@ -128,6 +129,7 @@ plugins:
           - 09-inspection.md: Recipes for interrogating a codebase that has no schemas of its own.
           - 10-limits.md: Resource limits and the bounds the validator enforces.
           - 11-performance.md: Measured benchmarks, datasets, and compared versions.
+          - 18-static-checking.md: What ty, mypy and pyright read from a schema, the spellings they refuse, and the ruff settings a validated class needs.
         Explanation:
           - 13-foundations.md: The denotational frame and the sourced set-theoretic and lattice theory.
           - 14-soundness.md: Why membership checking is sound on its own terms.

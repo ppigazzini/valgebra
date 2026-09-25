@@ -73,7 +73,7 @@ nodes (`Seq`, `Coll`, `KeyedMap`) the walk evaluates the children exactly by
 hypothesis and combines them by the same connective the denotation uses. The
 scalar and `Instance` leaves reduce to `isinstance`, which is Python's own
 membership test for those sets, and `Literal` adds the same-type guard that keeps
-`Literal[1]`, `Literal[True]`, and `Literal[1.0]` distinct.
+the constants `1`, `True` and `1.0` distinct.
 
 ### Recursion terminates and stays exact
 
