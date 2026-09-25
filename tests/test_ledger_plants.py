@@ -445,6 +445,19 @@ PLANTS = (
         ),
     ),
     Plant(
+        # A supported release gone from the python job. The release still
+        # builds, its classifier still promises it, and every other leg is
+        # green, which is why a calendar has to be the thing that notices.
+        "tests/test_python_lifecycle.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            '"3.12", "3.13", "3.14", "3.14t"',
+            '"3.12", "3.14", "3.14t"',
+        ),
+    ),
+    Plant(
         "tests/test_lane_interpreters.py",
         (".github/workflows/ci.yml",),
         # A lane that installs an interpreter and names none, which is the

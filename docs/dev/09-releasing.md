@@ -175,6 +175,29 @@ can land on the free-threaded interpreter, so read
 `sysconfig.get_config_var("Py_GIL_DISABLED")` in the venv to record which wheel
 the check actually covered.
 
+## Which interpreters a release supports
+
+**The supported set is CPython's, on CPython's calendar.** A feature release is
+supported from its first release candidate, when its ABI freezes, to the end of
+the month its schedule PEP gives for its last security release. Each supported
+release is a blocking leg of the `python` job in `ci.yml` and a classifier in
+`pyproject.toml`, and the oldest is the floor that `requires-python`, ruff's
+`target-version`, the ty and mypy floor steps and `tests/floor_names.json` name.
+So the first release after a version's support ends drops it, and the first
+release after the next one's first candidate supports it.
+
+**The next release runs a year early, and forgiven.** From its first alpha it is
+a leg of the `python` job with a `continue-on-error` that names its version, so
+a break shows while there is time to fix it and blocks no merge. PyO3 builds for
+the release after the newest it supports with a warning that the artifact must
+not be distributed, which is what a forgiven leg is; it refuses the release
+after that unless `UNSAFE_PYO3_SKIP_VERSION_CHECK=1` is set.
+
+`tests/test_python_lifecycle.py` holds all of it against the day the suite runs,
+from a table of the schedule PEPs' dates. It turns red on the calendar, with no
+commit, and its message names the edit. It does not read the wheels
+`release.yml` builds, whose per-platform lists carry gaps the platforms set.
+
 ## What this does not cover
 
 - **A platform outside the smoke matrix.** The musllinux wheels are built and not
