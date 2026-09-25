@@ -288,7 +288,7 @@ with a message instead:
 | `Final`, `ClassVar` | a declaration about a name, not about a value |
 | `Unpack[X]` | binds element types into a `tuple[...]`, so it has no meaning alone |
 | a user `Generic[T]` parametrisation | the parameter is erased at runtime, so the type argument narrows nothing |
-| bare `Protocol`, and a `Protocol` without `@runtime_checkable` | membership is `isinstance`, which such a class refuses to answer |
+| bare `Protocol`, and a `Protocol` not itself decorated `@runtime_checkable` | membership is `isinstance`, which such a class refuses to answer; one that inherits the decorator from a base answers with a warning from Python 3.15 and refuses from 3.20 |
 | a set or frozen set literal | `{int}` and `frozenset({int})` name containers, which are `set[T]` and `frozenset[T]` |
 | a tuple literal | `(A, B)` is `tuple[A, B]`; the list literal `[A, B]` is the fixed-length list |
 | a frozen dict literal | `frozendict(a=int)` names a record, which the dict literal `{"a": int}` spells (Python 3.15+) |
@@ -629,7 +629,7 @@ Membership is unaffected — the walk reads the value.
 | dataclass | `isinstance` plus a deep check of each declared field |
 | `NamedTuple` | `isinstance` plus the tuple its fields lay out, checked by position |
 | `Enum` | an instance of the enumeration (any member) |
-| runtime-checkable `Protocol` | `isinstance` against the protocol |
+| `Protocol` decorated `@runtime_checkable` | `isinstance` against the protocol |
 | `NewType` | validates the supertype it wraps |
 | PEP 695 `type` alias | validates the aliased type, and ties the fixpoint where the alias names itself ([recursion](06-recursion.md)) |
 

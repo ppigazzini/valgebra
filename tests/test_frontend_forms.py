@@ -21,6 +21,7 @@ import collections.abc
 import dataclasses
 import sys
 import typing
+import warnings
 from typing import Annotated, Literal
 
 import annotated_types as at
@@ -280,6 +281,47 @@ def test_a_bare_protocol_is_refused() -> None:
     """Membership of a protocol is `isinstance`, which the bare form refuses."""
     with pytest.raises(NotImplementedError, match="runtime_checkable"):
         Validator(typing.Protocol)
+
+
+@typing.runtime_checkable
+class Sized(typing.Protocol):
+    """A protocol the decorator was applied to."""
+
+    def __len__(self) -> int: ...
+
+
+class InheritsTheMark(Sized, typing.Protocol):
+    """A subclass protocol: it inherits the decorator's mark, not the decorator."""
+
+    def __iter__(self) -> typing.Iterator[object]: ...
+
+
+@typing.runtime_checkable
+class CarriesTheMark(Sized, typing.Protocol):
+    """The same subclass protocol, decorated itself."""
+
+    def __iter__(self) -> typing.Iterator[object]: ...
+
+
+def test_a_protocol_is_runtime_checkable_only_where_it_is_decorated() -> None:
+    """A subclass protocol is refused unless the decorator was applied to it.
+
+    It inherits the attribute `@runtime_checkable` sets, so `isinstance`
+    answers for it, with a `DeprecationWarning` on 3.15 and a `TypeError` from
+    3.20. The walk reads a warning raised as an error as a non-member, so under
+    `-W error` such a schema would admit nothing and say nothing; it is refused
+    by name on every release instead. Decorated itself, the same class is read,
+    and a check against it raises no warning.
+    """
+    with pytest.raises(
+        NotImplementedError, match=r"InheritsTheMark.* inherits @runtime_checkable"
+    ):
+        Validator(InheritsTheMark)
+    schema = Validator(CarriesTheMark)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert schema.is_valid([1])
+        assert not schema.is_valid(1)
 
 
 def test_a_qualifier_is_unwrapped_wherever_it_is_written() -> None:

@@ -153,9 +153,16 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    wrong type is not a member. A field the hints do not carry is unannotated —
    a `collections` namedtuple's are — and the class's own instance check is the
    whole of it.
-7. **A `Protocol`** validates by `isinstance` and must be `@runtime_checkable`
-   to be a schema at all; one that is not is refused rather than silently
-   admitting everything.
+7. **A `Protocol`** validates by `isinstance`, and is a schema only where
+   `@runtime_checkable` was applied to the class itself; any other protocol is
+   refused. A subclass protocol inherits the attribute the decorator sets, so
+   `isinstance` answers for it -- with a `DeprecationWarning` from Python 3.15
+   and a `TypeError` from 3.20 -- and the walk reads a warning raised as an
+   error as a non-member, so under `-W error` such a schema would admit nothing
+   and say nothing. `declares_runtime_checkable` in `build/classes.rs` reads
+   `_is_runtime_protocol` in the class's own namespace, where the decorator
+   writes it in `typing` and `typing_extensions` alike on every supported
+   release, and the inheriting class is refused by name.
 8. **Any other class** names its instances: the remaining builtins, the
    `collections.abc` ABCs, and every user class, uniformly.
 

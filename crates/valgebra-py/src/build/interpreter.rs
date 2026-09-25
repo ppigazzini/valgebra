@@ -782,12 +782,7 @@ fn a_declared_field_becomes_an_attribute_beside_the_class() {
                  \x20   pass\n\
                  @dataclasses.dataclass\n\
                  class Boxed(tuple):\n\
-                 \x20   x: int\n\
-                 @typing.runtime_checkable\n\
-                 class Sized(typing.Protocol):\n\
-                 \x20   def __len__(self) -> int: ...\n\
-                 class Quiet(typing.Protocol):\n\
-                 \x20   def __len__(self) -> int: ...\n",
+                 \x20   x: int\n",
             )
             .expect("a source with no interior nul"),
             Some(&namespace),
@@ -859,16 +854,63 @@ fn a_declared_field_becomes_an_attribute_beside_the_class() {
             matches!(build("Bare"), Ok(Schema::Instance(_))),
             "a class with no declared field is the isinstance atom"
         );
-        // A protocol is an isinstance check, and only where the class says
-        // the check is allowed.
-        assert!(matches!(build("Sized"), Ok(Schema::Instance(_))));
-        let refusal = match build("Quiet") {
-            Err(refusal) => refusal.to_string(),
-            Ok(schema) => panic!("a plain Protocol built {schema:?}"),
+    });
+}
+
+/// A protocol is an `isinstance` check, and only where the class says the
+/// check is allowed: `@runtime_checkable` applied to the class itself.
+///
+/// A subclass protocol inherits the attribute the decorator sets without the
+/// decorator. Python 3.15 warns on every `isinstance` against one and 3.20
+/// refuses it, so it is refused here on every release, by name; the same
+/// class decorated itself is read.
+#[test]
+fn a_protocol_is_read_only_where_it_carries_the_decorator() {
+    Python::attach(|py| {
+        let namespace = namespace(py).expect("the corpus namespace builds");
+        py.run(
+            &CString::new(
+                "import typing\n\
+                 @typing.runtime_checkable\n\
+                 class Sized(typing.Protocol):\n\
+                 \x20   def __len__(self) -> int: ...\n\
+                 class Quiet(typing.Protocol):\n\
+                 \x20   def __len__(self) -> int: ...\n\
+                 class Inherits(Sized, typing.Protocol):\n\
+                 \x20   def __bool__(self) -> bool: ...\n\
+                 @typing.runtime_checkable\n\
+                 class Carries(Sized, typing.Protocol):\n\
+                 \x20   def __bool__(self) -> bool: ...\n",
+            )
+            .expect("a source with no interior nul"),
+            Some(&namespace),
+            None,
+        )
+        .expect("the corpus protocols define");
+        let build = |name: &str| {
+            let annotation = namespace
+                .get_item(name)
+                .expect("the namespace answers")
+                .expect("the class is in it");
+            let mut pool = Pool::default();
+            let mut defs = Vec::new();
+            build_schema(&annotation, &mut pool, &mut defs)
         };
+        let refusal = |name: &str| match build(name) {
+            Err(refusal) => refusal.to_string(),
+            Ok(schema) => panic!("{name} built {schema:?}"),
+        };
+        assert!(matches!(build("Sized"), Ok(Schema::Instance(_))));
+        assert!(matches!(build("Carries"), Ok(Schema::Instance(_))));
+        let plain = refusal("Quiet");
         assert!(
-            refusal.contains("runtime_checkable"),
-            "the refusal does not say what is missing: {refusal}"
+            plain.contains("must be @runtime_checkable"),
+            "the refusal does not say what is missing: {plain}"
+        );
+        let inherited = refusal("Inherits");
+        assert!(
+            inherited.contains("Inherits") && inherited.contains("inherits @runtime_checkable"),
+            "the refusal does not name the class and what it lacks: {inherited}"
         );
     });
 }

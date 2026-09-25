@@ -3,7 +3,8 @@
 //!
 //! A `TypedDict` says so by carrying `__required_keys__`, an enum by subclassing
 //! `Enum`, a dataclass by `dataclasses.is_dataclass`, a `Protocol` by
-//! `_is_protocol`; every other class names its instances and is an `isinstance`
+//! `_is_protocol` and a runtime-checkable one by the decorator's mark in its own
+//! namespace; every other class names its instances and is an `isinstance`
 //! atom. The section "What a class declares" in `docs/dev/03-frontend.md` is
 //! this module.
 
@@ -135,10 +136,23 @@ pub(super) fn build_type_object(
     {
         return build_object(ty, lits, defs);
     }
-    // Protocol: a runtime-checkable protocol validates by isinstance.
+    // Protocol: membership is `isinstance`, which a protocol answers only where
+    // `@runtime_checkable` was applied to the class itself. A subclass protocol
+    // inherits the attribute the decorator sets, and Python 3.15 warns on every
+    // check against one and 3.20 refuses it; the walk reads a warning raised as
+    // an error as a non-member, so under `-W error` such a schema would admit
+    // nothing and say nothing.
     if is_truthy_attr(ty, intern!(py, "_is_protocol")) {
-        if is_truthy_attr(ty, intern!(py, "_is_runtime_protocol")) {
+        if declares_runtime_checkable(ty)? {
             return Ok(Schema::Instance(lits.intern_class(ty.as_any())));
+        }
+        if is_truthy_attr(ty, intern!(py, "_is_runtime_protocol")) {
+            return Err(not_implemented(&format!(
+                "{} inherits @runtime_checkable from a base rather than carrying it, \
+                 and Python refuses isinstance against such a protocol from 3.20: \
+                 decorate the class itself with @runtime_checkable",
+                summarize(ty.as_any())
+            )));
         }
         return Err(not_implemented(
             "a Protocol must be @runtime_checkable to be used as a schema",
@@ -149,6 +163,22 @@ pub(super) fn build_type_object(
     // the `collections.abc` ABCs including Callable, ...) and arbitrary user
     // classes uniformly.
     Ok(Schema::Instance(lits.intern_class(ty.as_any())))
+}
+
+/// Answer whether `@runtime_checkable` was applied to this protocol itself,
+/// rather than to a base it inherits the decorator's attribute from.
+///
+/// The decorator sets `_is_runtime_protocol` in the class's own namespace, in
+/// `typing` and `typing_extensions` alike, on every supported release; a
+/// subclass protocol sees the attribute through its bases and has none of its
+/// own. Read as `cls.__dict__.get(name)`, the shape [`annotations_as_written`]
+/// reads a namespace with, so one a metaclass supplies is read the way Python
+/// reads it.
+fn declares_runtime_checkable(ty: &Bound<'_, PyType>) -> PyResult<bool> {
+    let py = ty.py();
+    ty.getattr(intern!(py, "__dict__"))?
+        .call_method1(intern!(py, "get"), (intern!(py, "_is_runtime_protocol"),))?
+        .is_truthy()
 }
 
 /// True if `obj.<name>` exists and is truthy; false on absence or error.

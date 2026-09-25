@@ -27,7 +27,7 @@ from __future__ import annotations
 import re
 import sys
 import typing
-from typing import Annotated, Protocol, TypeVar
+from typing import Annotated, Protocol, TypeVar, runtime_checkable
 
 import annotated_types as at
 import pytest
@@ -56,6 +56,19 @@ class _Structural(Protocol):
     """A protocol with no `@runtime_checkable`, which `isinstance` refuses."""
 
     def method(self) -> None: ...
+
+
+@runtime_checkable
+class _Checked(Protocol):
+    """A protocol the decorator was applied to."""
+
+    def method(self) -> None: ...
+
+
+class _Inheriting(_Checked, Protocol):
+    """A subclass protocol: it inherits the decorator's mark, not the decorator."""
+
+    def other(self) -> None: ...
 
 
 #: Each row: what the refusal is about, the annotation that provokes it, the
@@ -185,6 +198,14 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
         _Structural,
         NotImplementedError,
         "must be @runtime_checkable",
+    ),
+    # A subclass protocol inherits the attribute the decorator sets and not the
+    # decorator, and Python refuses `isinstance` against one from 3.20.
+    (
+        "a protocol that inherits runtime-checkability",
+        _Inheriting,
+        NotImplementedError,
+        "inherits @runtime_checkable from a base",
     ),
 ]
 

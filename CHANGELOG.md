@@ -13,7 +13,20 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: a protocol says for itself that it is runtime-checkable
+
 -->
+
+### Fixed
+
+- **A protocol is a schema only where `@runtime_checkable` was applied to
+  it.** A subclass protocol inherits the attribute the decorator sets without
+  the decorator, and was read as the `isinstance` check its base allows. Python
+  3.15 warns on every `isinstance` against such a class and 3.20 refuses it,
+  and the walk reads a warning raised as an error as a non-member, so under
+  `-W error` on 3.15 the schema admitted nothing and said nothing. It is refused
+  on every release, naming the class and the decorator to add; decorated
+  itself, the same class is read as before.
 
 ## [0.0.13] - 2026-09-24
 

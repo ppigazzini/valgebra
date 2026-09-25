@@ -121,6 +121,13 @@ T = TypeVar("T")
 P = typing.ParamSpec("P")
 
 
+#: The refusal table's protocol cell. It names more than one form, so the row,
+#: `ALSO` and the set of such cells all key on it.
+UNDECORATED_PROTOCOL = (
+    "bare `Protocol`, and a `Protocol` not itself decorated `@runtime_checkable`"
+)
+
+
 class Parametrised(Generic[T]):
     """A user generic, whose parameter is erased before a value exists."""
 
@@ -136,6 +143,12 @@ class HasX(Protocol):
     """A protocol `isinstance` does answer for."""
 
     x: int
+
+
+class InheritsRuntimeCheckable(HasX, Protocol):
+    """A subclass protocol: it inherits the decorator's mark, not the decorator."""
+
+    y: int
 
 
 class Movie(TypedDict):
@@ -234,7 +247,7 @@ FORMS: dict[str, Reads | Refuses] = {
     "dataclass": Reads(Point, Point(1), "a"),
     "`NamedTuple`": Reads(Pair, Pair(1, "a"), (1, 2)),
     "`Enum`": Reads(Colour, Colour.RED, "red"),
-    "runtime-checkable `Protocol`": Reads(HasX, Point(1), "a"),
+    "`Protocol` decorated `@runtime_checkable`": Reads(HasX, Point(1), "a"),
     "`NewType`": Reads(UserId, 1, "a"),
     "PEP 695 `type` alias": Reads(_ALIAS.get("Alias", list[int]), [1], ["a"]),
     # -- the refinement markers ---------------------------------------------
@@ -264,7 +277,7 @@ FORMS: dict[str, Reads | Refuses] = {
     "a user `Generic[T]` parametrisation": Refuses(
         lambda: Parametrised[int], "unsupported typing form with origin"
     ),
-    "bare `Protocol`, and a `Protocol` without `@runtime_checkable`": Refuses(
+    UNDECORATED_PROTOCOL: Refuses(
         lambda: NotRuntimeCheckable,
         "a Protocol must be @runtime_checkable to be used as a schema",
     ),
@@ -291,10 +304,14 @@ ALSO: dict[str, list[Reads | Refuses]] = {
     "`Final`, `ClassVar`": [
         Refuses(lambda: typing.ClassVar[int], "unsupported typing form with origin"),
     ],
-    "bare `Protocol`, and a `Protocol` without `@runtime_checkable`": [
+    UNDECORATED_PROTOCOL: [
         Refuses(
             lambda: Protocol,
             "a Protocol must be @runtime_checkable to be used as a schema",
+        ),
+        Refuses(
+            lambda: InheritsRuntimeCheckable,
+            "inherits @runtime_checkable from a base",
         ),
     ],
     "a set or frozen set literal": [
@@ -317,7 +334,7 @@ NAMES_MORE_THAN_ONE_FORM = {
     "`typing.List`, `typing.Tuple`, ...",
     "`TypeVar`, `ParamSpec`, `TypeVarTuple`",
     "`Final`, `ClassVar`",
-    "bare `Protocol`, and a `Protocol` without `@runtime_checkable`",
+    UNDECORATED_PROTOCOL,
     "a set or frozen set literal",
 }
 
