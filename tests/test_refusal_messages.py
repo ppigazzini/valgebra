@@ -201,6 +201,14 @@ REFUSALS: list[tuple[str, object, type[Exception], str]] = [
     ),
     # A subclass protocol inherits the attribute the decorator sets and not the
     # decorator, and Python refuses `isinstance` against one from 3.20.
+    # `Validator[int]` annotates a validator for a checker; the subscript is a
+    # generic alias of the class, which no schema reads.
+    (
+        "a subscripted validator",
+        vg.Validator[int],
+        NotImplementedError,
+        "is the annotation a static checker reads",
+    ),
     (
         "a protocol that inherits runtime-checkability",
         _Inheriting,

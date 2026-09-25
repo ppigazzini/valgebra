@@ -290,6 +290,9 @@ FORMS: dict[str, Reads | Refuses] = {
         "a frozen dict literal is not a schema",
         needs=(3, 15),
     ),
+    "`Validator[T]`": Refuses(
+        lambda: Validator[int], "is the annotation a static checker reads"
+    ),
 }
 
 #: The second spelling of a cell that names two forms, so the row is not held by

@@ -26,7 +26,7 @@ from __future__ import annotations
 import copy
 import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Literal, TypedDict
+from typing import TYPE_CHECKING, Annotated, Literal, NoReturn, TypedDict
 
 if sys.version_info >= (3, 11):
     from typing import assert_type
@@ -70,24 +70,41 @@ class Row(TypedDict):
 Relation = Literal["subset", "not_subset", "undecided"]
 
 
-def build() -> Validator:
-    """Every constructor, and the combinators over what they build."""
+def build() -> Validator[object]:
+    """Every constructor, and the combinators over what they build.
+
+    A class reads as the type it names and a validator as its own; a form the
+    static language cannot spell -- a record literal, a `Literal`, an
+    `Annotated` refinement -- reads as `object`, and so does what a combinator
+    builds, since a meet or a complement has no static spelling.
+    """
     scalars = Validator(int)
-    assert_type(scalars, Validator)
+    assert_type(scalars, Validator[int])
+    assert_type(Validator(scalars), Validator[int])
+    assert_type(Validator(None), Validator[None])
     shapes = Validator({"name": str, "tags": [str]})
+    assert_type(shapes, Validator[object])
     classes = Validator(Point)
+    assert_type(classes, Validator[Point])
     records = Validator(Row)
+    assert_type(records, Validator[Row])
     literals = Validator(Literal["a", "b"])
+    assert_type(literals, Validator[object])
     refined = Validator(Annotated[int, at.Ge(0), at.Le(10)])
-    assert_type(union(scalars, shapes, classes, records), Validator)
-    assert_type(intersection(literals, refined), Validator)
-    assert_type(complement(literals), Validator)
-    assert_type(recursive(lambda inner: union(int, [inner])), Validator)
-    # The two operator spellings, which are separate signatures in the stub.
-    assert_type(scalars | shapes, Validator)
-    assert_type(shapes.__ror__(scalars), Validator)
-    assert_type(anything, Validator)
-    assert_type(nothing, Validator)
+    assert_type(refined, Validator[object])
+    assert_type(union(scalars, shapes, classes, records), Validator[object])
+    assert_type(intersection(literals, refined), Validator[object])
+    assert_type(complement(literals), Validator[object])
+    assert_type(recursive(lambda inner: union(int, [inner])), Validator[object])
+    # The two operator spellings, which are separate signatures in the stub. Two
+    # typed validators join to the union of their types. A typed one beside an
+    # untyped one is `int | object`, which pyright prints unsimplified and the
+    # other two print as `object`, so the rows pair like with like.
+    assert_type(scalars | Validator(str), Validator[int | str])
+    assert_type(shapes | refined, Validator[object])
+    assert_type(shapes.__ror__(refined), Validator[object])
+    assert_type(anything, Validator[object])
+    assert_type(nothing, Validator[NoReturn])
     return union(scalars, refined, anything, nothing)
 
 
@@ -101,8 +118,13 @@ def decide(left: Validator, right: Validator) -> bool:
     return 1 in left
 
 
-def check(schema: Validator, value: object, document: bytes) -> None:
-    """Walk the membership surface, including the one that returns its argument."""
+def check(schema: Validator[object], value: object, document: bytes) -> None:
+    """Walk the membership surface of a validator whose set has no static type.
+
+    Most validators are this receiver: whatever a native form, a refinement or
+    a combinator builds. `is_valid` answers a `bool`, and `ensure` returns its
+    argument as the argument's own type.
+    """
     assert_type(schema.is_valid(value), bool)
     assert_type(schema.validate(value, fail_fast=True), None)
     assert_type(schema.ensure(value), object)
@@ -112,20 +134,63 @@ def check(schema: Validator, value: object, document: bytes) -> None:
     # checker narrows a literal argument, and an annotated local, to that
     # literal, and the claim here is about the parameter rather than about
     # which reading is right.
-    assert_type(Validator(int).ensure(len(document)), int)
+    assert_type(schema.ensure(len(document)), int)
     assert_type(schema.load(document), object)
     assert_type(schema.validate_json(document, fail_fast=False), None)
     assert_type(schema.is_valid_json(document), bool)
 
 
-def reshape(schema: Validator) -> Validator:
-    """Reshape through the whole-schema operations, and copy the result."""
-    assert_type(schema.open(), Validator)
-    assert_type(schema.close(), Validator)
-    assert_type(schema.simplify(), Validator)
-    assert_type(copy.copy(schema), Validator)
-    assert_type(copy.deepcopy(schema), Validator)
-    return schema.open().close().simplify()
+def narrow(value: object, size: int | str, document: bytes) -> None:
+    """Read a typed validator's answers as the type its schema names.
+
+    A `True` from `is_valid` narrows the argument and a `False` leaves it as it
+    was: `Validator(float)` refuses `1`, which the static `float` admits, so a
+    refusal is no evidence that a value is outside the static type.
+    """
+    counts = Validator(int)
+    if counts.is_valid(size):
+        assert_type(size, int)
+    assert_type(size, int | str)
+    assert_type(counts.ensure(value), int)
+    assert_type(Validator(list[int]).ensure(value), list[int])
+    assert_type(Validator(Row).load(document), Row)
+
+
+def takes_any(schema: Validator) -> Validator:
+    """Take any validator: the bare annotation is `Validator[Any]`."""
+    return schema
+
+
+def takes_untyped(schema: Validator[object]) -> Validator[object]:
+    """Take only a validator whose set reads as `object`."""
+    return schema
+
+
+def parameters(typed: Validator[int]) -> None:
+    """Write a parameter bare unless it means one set.
+
+    The parameter is invariant, which is what lets the overloads tell an
+    untyped receiver from a typed one, so a `Validator[object]` parameter
+    refuses a `Validator[int]`. Both ignores below are held: `mypy --strict`
+    reports an unused ignore and so does ty, so the refusal is asserted rather
+    than tolerated.
+    """
+    takes_any(typed)
+    takes_untyped(typed)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+
+
+def reshape(schema: Validator[int]) -> Validator[object]:
+    """Reshape through the whole-schema operations, and copy the result.
+
+    `close` and the copies keep the set the annotation names; `open` frees the
+    key region no clause claims, so what it builds reads as `object`.
+    """
+    assert_type(schema.open(), Validator[object])
+    assert_type(schema.close(), Validator[int])
+    assert_type(schema.simplify(), Validator[int])  # ty: ignore[deprecated]
+    assert_type(copy.copy(schema), Validator[int])
+    assert_type(copy.deepcopy(schema), Validator[int])
+    return schema.open().close()
 
 
 def report(schema: Validator, value: object) -> tuple[str, tuple[str | int, ...]]:

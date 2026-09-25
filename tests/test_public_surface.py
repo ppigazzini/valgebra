@@ -13,6 +13,8 @@ from __future__ import annotations
 import copy
 import importlib
 import re
+import types
+import typing
 from pathlib import Path
 
 import pytest
@@ -36,6 +38,28 @@ def test_a_validator_cannot_be_subclassed() -> None:
     # system's `@final` says so only to a type checker.
     with pytest.raises(TypeError):
         type("Sub", (Validator,), {})  # ty: ignore[subclass-of-final-class]
+
+
+def test_a_subscripted_validator_is_the_annotation_a_checker_reads() -> None:
+    """`Validator[int]` exists at runtime, as the alias of the class it names.
+
+    The stub makes the class generic, and an annotation is evaluated at runtime
+    wherever something asks for it -- at import on 3.10 to 3.13, and by
+    `get_type_hints` on every release -- so the subscript has to answer. It
+    carries nothing a validator reads, and handed back as a schema it is
+    refused rather than read as a constant.
+    """
+    alias = Validator[int]
+    assert isinstance(alias, types.GenericAlias)
+    assert typing.get_origin(alias) is Validator
+    assert typing.get_args(alias) == (int,)
+
+    class Holder:
+        checked: Validator[int]
+
+    assert typing.get_type_hints(Holder) == {"checked": Validator[int]}
+    with pytest.raises(NotImplementedError, match="annotation a static checker"):
+        Validator(alias)
 
 
 @pytest.mark.parametrize(
@@ -155,7 +179,7 @@ def test_simplify_warns_that_it_is_going() -> None:
     rewriting the term.
     """
     with pytest.deprecated_call(match="simplify is deprecated"):
-        Validator(int).simplify()
+        Validator(int).simplify()  # ty: ignore[deprecated]
 
 
 def test_the_whole_schema_rewrites_stay() -> None:

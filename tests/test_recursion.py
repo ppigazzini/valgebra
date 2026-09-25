@@ -279,7 +279,7 @@ def test_simplify_reduces_a_recursive_definition() -> None:
     node = recursive(
         lambda n: Validator({"a": union(int, int, int), "n": union(None, n)})
     )
-    assert repr(node.simplify()).count("int") == 1
+    assert repr(node.simplify()).count("int") == 1  # ty: ignore[deprecated]
 
 
 # PEP 695 is 3.12+ syntax, so the alias is written in a source string rather than

@@ -124,7 +124,14 @@ enum Operand {
 /// keeps true. It cannot be subclassed: every method reads a schema this type
 /// built, and a subclass overriding one would be a validator whose answers are
 /// not the algebra's.
-#[pyclass(frozen, weakref, module = "valgebra")]
+///
+/// `Validator[T]` is the annotation a static checker reads for a validator whose
+/// members are `T`s. At runtime it is a `types.GenericAlias`, so an annotation
+/// that is evaluated finds it; the parameter changes nothing a validator does,
+/// and the alias is not a schema.
+// `generic` is PyO3's `__class_getitem__`, which returns that alias; the
+// parameter itself lives in the stub, where the checkers read it.
+#[pyclass(frozen, weakref, generic, module = "valgebra")]
 pub struct Validator {
     pub(crate) schema: Schema,
     pub(crate) literals: Vec<Py<PyAny>>,
@@ -389,9 +396,9 @@ impl Validator {
     ///
     /// The schema is any supported form: a type or typing annotation (`int`,
     /// `list[str]`, `int | None`, `Literal[...]`, a `TypedDict`, a dataclass, an
-    /// `Annotated` refinement, ...), a native form (a `[T]` list, a `{T}` set, a
-    /// `{K: V}` mapping, an all-string-key dict record, or any constant as a
-    /// literal), or another `Validator`.
+    /// `Annotated` refinement, ...), a native form (a `[T]` list, a `{K: V}`
+    /// mapping, an all-string-key dict record, or any constant as a literal), or
+    /// another `Validator`.
     ///
     /// Args:
     ///     schema: The schema to compile.

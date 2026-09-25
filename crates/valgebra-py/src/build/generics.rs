@@ -18,6 +18,7 @@ use valgebra_core::{Field, MapClause, Schema, SeqShape};
 use super::classes::{field_name, is_truthy_attr};
 use super::{Pool, build_schema, checked_key, forms, is_forward_reference, not_implemented};
 use crate::errors::summarize;
+use crate::validator::Validator;
 
 /// What to write instead of a container given several element types. Each is
 /// the remedy for its own kind rather than one sentence for all of them: a
@@ -111,6 +112,13 @@ pub(super) fn build_parametrized(
         // return types cannot be inspected, so the parameters are ignored and
         // the schema is the opaque `isinstance(x, Callable)` test.
         return Ok(Schema::Instance(lits.intern_class(origin)));
+    }
+    if origin.is(py.get_type::<Validator>()) {
+        return Err(not_implemented(&format!(
+            "{} is the annotation a static checker reads for a validator, not a \
+             schema: pass the schema itself, or a compiled Validator",
+            summarize(alias)
+        )));
     }
     Err(not_implemented(&format!(
         "unsupported typing form with origin {}; supported: list, set, dict, \

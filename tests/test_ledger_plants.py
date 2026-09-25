@@ -208,8 +208,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "python/valgebra/_valgebra.pyi",
-            "    def is_valid(self, obj: object, /) -> bool: ...",
-            "    def is_valid(self, obj: object, /) -> bool: ...\n"
+            "    def is_empty(self) -> bool: ...",
+            "    def is_empty(self) -> bool: ...\n"
             "    def unnamed_by_any_test(self) -> None: ...",
         ),
     ),

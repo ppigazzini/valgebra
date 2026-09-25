@@ -292,6 +292,7 @@ with a message instead:
 | a set or frozen set literal | `{int}` and `frozenset({int})` name containers, which are `set[T]` and `frozenset[T]` |
 | a tuple literal | `(A, B)` is `tuple[A, B]`; the list literal `[A, B]` is the fixed-length list |
 | a frozen dict literal | `frozendict(a=int)` names a record, which the dict literal `{"a": int}` spells (Python 3.15+) |
+| `Validator[T]` | annotates a validator for a static checker; the schema, or a compiled `Validator`, is what builds |
 
 A qualifier is the exception that is read rather than refused:
 `Required[X]`, `NotRequired[X]` and `ReadOnly[X]` survive hint resolution

@@ -915,6 +915,36 @@ fn a_protocol_is_read_only_where_it_carries_the_decorator() {
     });
 }
 
+/// `Validator[int]` is an annotation for a static checker, and a schema is refused
+/// it by name: the subscript is a `types.GenericAlias` whose origin is the class,
+/// which the dispatch reads as a parametrized form it does not know.
+#[test]
+fn a_subscripted_validator_is_an_annotation_and_not_a_schema() {
+    Python::attach(|py| {
+        let class = py.get_type::<Validator>();
+        let alias = class
+            .get_item(py.get_type::<pyo3::types::PyInt>())
+            .expect("the class subscripts");
+        assert!(
+            alias
+                .getattr("__origin__")
+                .expect("the alias has an origin")
+                .is(&class),
+            "the subscript is an alias of the class itself"
+        );
+        let mut pool = Pool::default();
+        let mut defs = Vec::new();
+        let refusal = match build_schema(&alias, &mut pool, &mut defs) {
+            Err(refusal) => refusal.to_string(),
+            Ok(schema) => panic!("Validator[int] built {schema:?}"),
+        };
+        assert!(
+            refusal.contains("is the annotation a static checker reads"),
+            "the refusal does not say what the alias is: {refusal}"
+        );
+    });
+}
+
 /// A `TypedDict` says which keys it admits beyond the ones it declares, and
 /// the two ways it says so are read.
 #[test]

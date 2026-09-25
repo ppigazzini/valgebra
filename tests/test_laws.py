@@ -417,15 +417,15 @@ def test_simplify_preserves_acceptance(
     a: object, b: object, c: object, vals: list[object]
 ) -> None:
     original = complement(union(a, intersection(b, complement(c))))
-    assert equivalent(original, original.simplify(), vals)
+    assert equivalent(original, original.simplify(), vals)  # ty: ignore[deprecated]
 
 
 @given(a=schemas, b=schemas, vals=value_lists)
 def test_simplify_is_idempotent_on_acceptance(
     a: object, b: object, vals: list[object]
 ) -> None:
-    once = intersection(a, complement(b)).simplify()
-    twice = once.simplify()
+    once = intersection(a, complement(b)).simplify()  # ty: ignore[deprecated]
+    twice = once.simplify()  # ty: ignore[deprecated]
     assert equivalent(once, twice, vals)
 
 
@@ -434,25 +434,25 @@ def test_simplify_decides_the_complement_laws() -> None:
     # its complement collapse, and provably disjoint types collapse. Asserted on
     # the *denotation* of the simplified form (empty / universal) through the
     # decision procedure, not on the printed node string.
-    assert intersection(int, complement(int)).simplify().is_empty()
-    assert union(int, complement(int)).simplify().is_equivalent(anything)
-    assert intersection(int, str).simplify().is_empty()
-    assert union(complement(int), complement(str)).simplify().is_equivalent(anything)
+    assert intersection(int, complement(int)).simplify().is_empty()  # ty: ignore[deprecated]
+    assert union(int, complement(int)).simplify().is_equivalent(anything)  # ty: ignore[deprecated]
+    assert intersection(int, str).simplify().is_empty()  # ty: ignore[deprecated]
+    assert union(complement(int), complement(str)).simplify().is_equivalent(anything)  # ty: ignore[deprecated]
 
 
 def test_the_complement_laws_hold_of_any_as_of_the_top() -> None:
     # `Any` is the top, spelled: one node, one set, and the same laws. A rule
     # cannot tell the spellings apart, so the laws fire across them too.
-    assert intersection(Any, complement(Any)).simplify().is_empty()
-    assert union(Any, complement(Any)).simplify().is_equivalent(anything)
-    assert intersection(Any, complement(anything)).simplify().is_empty()
+    assert intersection(Any, complement(Any)).simplify().is_empty()  # ty: ignore[deprecated]
+    assert union(Any, complement(Any)).simplify().is_equivalent(anything)  # ty: ignore[deprecated]
+    assert intersection(Any, complement(anything)).simplify().is_empty()  # ty: ignore[deprecated]
     assert Validator(Any) == Validator(anything)
     assert Validator(Any).is_equivalent(anything)
 
     # What survives is the spelling, which `repr` gives back.
     assert repr(Validator(Any)) == "Any"
     assert repr(Validator(anything)) == "anything"
-    assert repr(complement(Any).simplify()) == "nothing"
+    assert repr(complement(Any).simplify()) == "nothing"  # ty: ignore[deprecated]
 
 
 #: Bodies a fixpoint is built from: each takes the leaf beside the recursion

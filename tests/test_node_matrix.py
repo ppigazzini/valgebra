@@ -94,7 +94,7 @@ def test_every_node_is_reachable_and_handled(spec: object) -> None:
     assert compiled.is_subtype_of(spec)  # reflexivity
     assert compiled.is_equivalent(spec)  # self-equivalence
     # The rendered form is stable under simplification.
-    assert repr(compiled.simplify()) == repr(compiled.simplify().simplify())
+    assert repr(compiled.simplify()) == repr(compiled.simplify().simplify())  # ty: ignore[deprecated]
 
 
 # Each sequence shape must be reachable via both containers; the list and tuple
@@ -287,7 +287,9 @@ def _validator_class_body() -> str:
     """Give the stub's `Validator` class, up to the next top-level statement."""
     stub = ROOT / "python" / "valgebra" / "_valgebra.pyi"
     text = stub.read_text(encoding="utf-8")
-    start = text.index("class Validator:")
+    found = re.search(r"^class Validator\b", text, re.MULTILINE)
+    assert found is not None, "the stub declares no Validator class"
+    start = found.start()
     after = re.search(r"^(?:def |class |[A-Za-z_]+:)", text[start + 1 :], re.MULTILINE)
     return text[start : start + 1 + after.start()] if after else text[start:]
 
@@ -337,7 +339,7 @@ _SELF_ANSWERS: dict[str, Callable[[Validator, object], bool]] = {
     "is_empty": lambda v, spec: v.is_empty() is (spec is nothing),
     "open": lambda v, _spec: v.is_subtype_of(v.open()),
     "close": lambda v, _spec: v.close().is_subtype_of(v),
-    "simplify": lambda v, _spec: v.simplify().is_equivalent(v),
+    "simplify": lambda v, _spec: v.simplify().is_equivalent(v),  # ty: ignore[deprecated]
     "__eq__": lambda v, spec: v == Validator(spec),
     "__hash__": lambda v, spec: hash(v) == hash(Validator(spec)),
     "__or__": lambda v, _spec: (v | nothing).is_equivalent(v),
@@ -374,7 +376,9 @@ def test_every_relation_and_operator_answers_for_every_node(label: str) -> None:
 
 def test_the_self_answers_are_every_schema_method_the_stub_declares() -> None:
     """The rows of the product are read from the stub, in both directions."""
-    declared = set(re.findall(r"def (\w+)\(", _validator_class_body())) - {"__new__"}
+    # A method of a validator takes `self`; the constructor and the subscript
+    # take the class.
+    declared = set(re.findall(r"def (\w+)\(\s*self\b", _validator_class_body()))
     asks_about_a_schema = declared - _entry_points_in_the_stub()
     assert asks_about_a_schema == set(_SELF_ANSWERS), (
         f"declared and not asked: {sorted(asks_about_a_schema - set(_SELF_ANSWERS))}; "

@@ -201,7 +201,11 @@ decoded two names **per bound**, which a fifty-field record of
 Dispatch step 6 takes anything with a typing origin, and reads the origin
 before the arguments. The origins are compared by identity against the forms
 resolved once at import — `typing` is imported once, not once per node — and a
-form this frontend does not know is a refusal rather than a guess.
+form this frontend does not know is a refusal rather than a guess. One unknown
+origin is refused by name: `Validator[int]` is the alias the class's
+`__class_getitem__` builds for a static checker, and its origin is `Validator`
+itself, which no schema reads. The arm is the last before the fallthrough, so
+a form that builds never reaches it.
 
 `Union` and `X | Y` are the same origin in two spellings and build the same
 node. `Literal` interns each argument as a constant, and refuses a list, a dict

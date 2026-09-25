@@ -14,8 +14,28 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a protocol says for itself that it is runtime-checkable
+- feat: the validator is generic in the set a checker reads
 
 -->
+
+### Added
+
+- **A static checker reads a validator's set.** `Validator[T]` is generic in
+  the type a checker reads for its schema: `Validator(int)` is a
+  `Validator[int]`, a dataclass or `TypedDict` class names its own type, a
+  compiled validator keeps its own, and a native form, a `Literal`, an
+  `Annotated` refinement or a combinator reads as `Validator[object]`. On a
+  typed validator a `True` from `is_valid` narrows its argument to the type, and
+  `ensure` and `load` return it; on an untyped one the answer stays a `bool` and
+  `ensure` returns its argument's own type. The narrowing is a `TypeGuard` and
+  not a `TypeIs`, because a `False` proves nothing a checker can use: this
+  library's `float` refuses the `int` a checker admits there. A bare `Validator`
+  annotation is `Validator[Any]` and takes every validator; the parameter is
+  invariant, so a `Validator[object]` parameter takes only an untyped one.
+  `Validator[int]` is a `types.GenericAlias` at runtime, and handed back as a
+  schema it is refused by name. `simplify` is marked deprecated where a checker
+  sees it, beside the warning it raises at runtime. ty, mypy and pyright read
+  the stub alike.
 
 ### Fixed
 

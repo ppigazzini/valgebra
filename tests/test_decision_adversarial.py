@@ -160,7 +160,7 @@ def test_membership_walks_and_paths_agree(sa: object, v: object) -> None:
     except ValidationError:
         explained = False
     assert member == explained
-    assert compiled.simplify().is_valid(v) == member
+    assert compiled.simplify().is_valid(v) == member  # ty: ignore[deprecated]
     if _json_safe(v):
         text = json.dumps(v)
         assert compiled.is_valid_json(text) == compiled.is_valid(json.loads(text))

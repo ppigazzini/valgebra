@@ -305,7 +305,7 @@ def test_a_json_entry_refuses_a_value_that_is_not_a_document() -> None:
     """
     validator = Validator(int)
     with pytest.raises(TypeError, match="str or bytes"):
-        validator.load(123)  # ty: ignore[invalid-argument-type]
+        validator.load(123)  # ty: ignore[no-matching-overload]
     with pytest.raises(TypeError, match="str or bytes"):
         validator.validate_json(123)  # ty: ignore[invalid-argument-type]
     # `is_valid_json` answers a question rather than raising one, so a value
