@@ -26,13 +26,17 @@ pub struct Class {
     id: u32,
     /// This class and every class it derives from, transitively.
     ancestors: BTreeSet<u32>,
-    /// The instance layout this class lays down, or [`Class::PLAIN`] for one
-    /// that lays down none of its own.
+    /// The class whose instance layout this one carries -- itself, where it lays
+    /// one down, or the nearest ancestor that does -- or `None` for a class
+    /// carrying none: a plain class, whose instances have the shape of `object`.
     ///
-    /// Two classes laying down *different* layouts cannot both describe one
-    /// value -- Python refuses to build a class deriving from both -- which is a
-    /// disjointness the derivation order alone does not show.
-    layout: u32,
+    /// Python builds a class deriving from two others only where the layout one
+    /// carries extends the other's, so two classes whose layouts neither extend
+    /// the other share no value: a disjointness the derivation order alone does
+    /// not show. A layout is named by the class that laid it down, which is
+    /// always among the ancestors of a class carrying it, so "extends" is the
+    /// order this snapshot already holds.
+    layout: Option<u32>,
     /// The kind every instance of this class has, or `None` for a class whose
     /// instances may be of any kind.
     ///
@@ -47,20 +51,13 @@ pub struct Class {
 }
 
 impl Class {
-    /// The layout of a class that lays down none of its own.
-    ///
-    /// Every other layout extends this one, so it conflicts with nothing: a
-    /// plain class and a `str` subclass meet in a class deriving from both. It
-    /// is the layout to give a class whose own is unknown, which is why it is
-    /// zero -- the value a caller reaches for when it has nothing to say.
-    pub const PLAIN: u32 = 0;
-
-    /// A class deriving from `bases`, laid out as `layout`.
+    /// A class deriving from `bases`, carrying the layout of the class `layout`
+    /// names -- its own id, or an ancestor's -- or none.
     ///
     /// The ancestors are closed here rather than walked later: `bases` carries
     /// each base's own ancestors, so one union is the whole transitive order.
     #[must_use]
-    pub fn new(id: u32, layout: u32, bases: &[Class]) -> Class {
+    pub fn new(id: u32, layout: Option<u32>, bases: &[Class]) -> Class {
         let mut ancestors = BTreeSet::from([id]);
         for base in bases {
             ancestors.extend(base.ancestors.iter().copied());
@@ -100,10 +97,10 @@ impl Class {
     /// class is.
     #[must_use]
     pub fn plain(id: u32) -> Class {
-        Class::new(id, Class::PLAIN, &[])
+        Class::new(id, None, &[])
     }
 
-    /// A class deriving from nothing and laid out as `layout`.
+    /// A class deriving from nothing and carrying the layout `layout` names.
     ///
     /// Named for the half that decides disjointness. This was `root`, which read
     /// as a statement about *derivation* -- and the derivation is the half that
@@ -114,7 +111,17 @@ impl Class {
     /// so.
     #[must_use]
     pub fn laid_out(id: u32, layout: u32) -> Class {
-        Class::new(id, layout, &[])
+        Class::new(id, Some(layout), &[])
+    }
+
+    /// Whether this class carries a layout, its own or an ancestor's.
+    ///
+    /// A class that does confines every subclass to it: no class deriving from
+    /// this one can take on another layout that does not extend it. One that
+    /// carries none confines nothing, and a subclass of it may be anything.
+    #[must_use]
+    pub fn lays_down_a_layout(&self) -> bool {
+        self.layout.is_some()
     }
 
     /// Whether every instance of this class is an instance of `other`.
@@ -128,15 +135,26 @@ impl Class {
     /// Sound rather than complete: two classes neither of which derives from the
     /// other *may* still share an instance through a class deriving from both,
     /// unless their layouts conflict -- and a conflicting pair cannot have one,
-    /// because no class can derive from both. [`Class::PLAIN`] conflicts with no
-    /// layout at all, so a class carrying it is disjoint from nothing here.
+    /// because no class can derive from both. Two layouts conflict when neither
+    /// extends the other, and a layout extends another when the class that laid
+    /// it down derives from the class that laid down the other: `other`'s layout
+    /// extends this one's exactly when this one's is among `other`'s ancestors.
+    /// A class deriving from the other passes that test on its own, since the
+    /// layout it carries is an ancestor's. One layout is no conflict with
+    /// itself, and that is said outright rather than left to the ancestors,
+    /// because a layout named by a class outside the order -- which a caller
+    /// with nothing but a number may write -- is among nobody's. A class
+    /// carrying no layout is disjoint from nothing here.
     #[must_use]
     pub fn disjoint_from(&self, other: &Class) -> bool {
-        self.layout != other.layout
-            && self.layout != Class::PLAIN
-            && other.layout != Class::PLAIN
-            && !self.derives_from(other)
-            && !other.derives_from(self)
+        match (self.layout, other.layout) {
+            (Some(mine), Some(theirs)) => {
+                mine != theirs
+                    && !self.ancestors.contains(&theirs)
+                    && !other.ancestors.contains(&mine)
+            }
+            _ => false,
+        }
     }
 }
 
@@ -162,79 +180,4 @@ impl PartialOrd for Class {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::Class;
-
-    /// The order is the one the bases give, closed over.
-    #[test]
-    fn a_class_derives_from_its_bases_and_from_theirs() {
-        let animal = Class::laid_out(1, 1);
-        let dog = Class::new(2, 1, std::slice::from_ref(&animal));
-        let puppy = Class::new(3, 1, std::slice::from_ref(&dog));
-
-        assert!(dog.derives_from(&animal) && puppy.derives_from(&animal));
-        assert!(puppy.derives_from(&dog));
-        assert!(!animal.derives_from(&dog));
-        assert!(animal.derives_from(&animal), "and from itself");
-    }
-
-    /// Two bases meet in a class deriving from both, so neither deriving from
-    /// the other is not disjointness.
-    #[test]
-    fn unrelated_classes_of_one_layout_are_not_disjoint() {
-        let left = Class::laid_out(1, 1);
-        let right = Class::new(2, 1, &[]);
-
-        assert!(!left.derives_from(&right) && !right.derives_from(&left));
-        assert!(!left.disjoint_from(&right), "a common subclass may exist");
-    }
-
-    /// A layout conflict is disjointness, because no class can derive from both.
-    #[test]
-    fn classes_of_conflicting_layouts_are_disjoint() {
-        let ints = Class::laid_out(1, 1);
-        let words = Class::laid_out(2, 2);
-        let counter = Class::new(3, 1, std::slice::from_ref(&ints));
-
-        assert!(ints.disjoint_from(&words) && words.disjoint_from(&ints));
-        assert!(!ints.disjoint_from(&counter), "one derives from the other");
-        assert!(counter.disjoint_from(&words));
-    }
-
-    /// The plain layout is not a layout: every other extends it, so a class
-    /// carrying it can still meet any other in a common subclass.
-    ///
-    /// Asked of [`Class::plain`] rather than of the layout constant, because the
-    /// constructor is the thing a caller reaches for and the contract is its
-    /// own: a class built this way is disjoint from nothing, and the pair of
-    /// constructors is a choice between saying that and saying the opposite.
-    #[test]
-    fn the_plain_layout_conflicts_with_nothing() {
-        let plain = Class::plain(1);
-        let words = Class::laid_out(2, 2);
-
-        assert!(
-            !plain.disjoint_from(&words),
-            "`class Both(plain, str)` builds"
-        );
-        assert!(!words.disjoint_from(&plain));
-        assert!(!plain.disjoint_from(&Class::plain(3)));
-        // The other constructor says the opposite of the same two ids, which is
-        // the whole reason there are two of them.
-        assert!(Class::laid_out(1, 1).disjoint_from(&Class::laid_out(3, 3)));
-    }
-
-    /// Identity is the id: the order and the layout are what a class *knows*,
-    /// not what it *is*.
-    #[test]
-    fn a_class_is_its_id() {
-        let one = Class::laid_out(1, 1);
-        let same = Class::new(1, 9, &[Class::laid_out(7, 7)]);
-
-        assert_eq!(one, same);
-        assert_eq!(one.cmp(&same), core::cmp::Ordering::Equal);
-        // Total, and by id: the sets below hold classes in a `BTreeSet`, and a
-        // pair the order cannot compare is a pair that set would hold twice.
-        assert!(Class::laid_out(1, 1) < Class::laid_out(2, 2));
-    }
-}
+mod tests;

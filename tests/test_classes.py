@@ -7,6 +7,7 @@ import numbers
 import pathlib
 import re
 import sys
+import types
 import typing
 import uuid
 from typing import (
@@ -21,6 +22,8 @@ from typing import (
 
 import annotated_types as at
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from valgebra import (
     ValidationError,
@@ -905,3 +908,176 @@ def test_a_dataclass_reads_the_annotations_of_every_base() -> None:
     assert labelled.is_valid(_Labelled(x=True, y=2, label="p"))
     assert not labelled.is_valid(_Labelled(x=True, y="2", label="p"))  # ty: ignore[invalid-argument-type]
     assert not labelled.is_valid(_Labelled(x=1, y=2, label="p"))  # ty: ignore[invalid-argument-type]
+
+
+def test_two_classes_laying_down_slots_of_their_own_share_no_instance() -> None:
+    """`__slots__` that add a slot lay down an instance layout, as a builtin does.
+
+    Python refuses a class deriving from two layouts unless one extends the
+    other, so two such classes neither of which derives from the other have no
+    common subclass and no common instance: the meet is empty, and each is below
+    the other's complement. One laid down over no builtin holds values of no
+    builtin kind either, and no subclass of it can change that.
+    """
+
+    class Slotted:
+        __slots__ = ("field",)
+
+    class Other:
+        __slots__ = ("other",)
+
+    assert intersection(Slotted, Other).is_empty()
+    assert Validator(Slotted).relation_to(complement(Other)) == "subset"
+    assert Validator(Other).relation_to(complement(Slotted)) == "subset"
+    assert intersection(Slotted, str).is_empty()
+    assert Validator(Slotted).relation_to(complement(int)) == "subset"
+    assert Validator(Slotted).is_valid(Slotted())
+    assert Validator(intersection(Slotted, complement(Other))).is_valid(Slotted())
+
+
+def test_a_layout_a_class_extends_is_not_a_conflict() -> None:
+    """A plain subclass carries its base's layout; a slotted one extends it.
+
+    `class Both(Below, Extending)` builds, because the layout `Extending` lays
+    down extends the one `Below` carries. Neither derives from the other and
+    their layouts differ, so a rule comparing layouts for equality would call
+    the pair disjoint and refuse a value that exists.
+    """
+
+    class Base:
+        __slots__ = ("base",)
+
+    class Below(Base):
+        pass
+
+    class Extending(Base):
+        __slots__ = ("more",)
+
+    class Both(Below, Extending):
+        pass
+
+    met = intersection(Below, Extending)
+    assert not met.is_empty()
+    assert Validator(met).is_valid(Both())
+    assert Validator(Below).relation_to(complement(Extending)) == "undecided"
+    assert not intersection(Base, Extending).is_empty()
+
+
+def test_slots_that_add_no_slot_lay_down_nothing() -> None:
+    """An empty `__slots__`, or one naming only the two pointers, confines nothing.
+
+    `__dict__` and `__weakref__` ask for what a plain instance has anyway, and
+    Python lays down no layout for them: a class deriving from such a class and
+    from a slotted one builds, and its instances are values of both.
+    """
+
+    class Slotted:
+        __slots__ = ("field",)
+
+    class Empty:
+        __slots__ = ()
+
+    class Pointers:
+        __slots__ = ("__dict__", "__weakref__")
+
+    class WithEmpty(Empty, Slotted):
+        pass
+
+    # ty reads the two pointer slots as a layout and reports a conflict here;
+    # the interpreter lays none down for them and builds the class, which is
+    # the reading this test holds.
+    class WithPointers(Pointers, Slotted):  # ty: ignore[instance-layout-conflict]
+        pass
+
+    assert not intersection(Empty, Slotted).is_empty()
+    assert not intersection(Pointers, Slotted).is_empty()
+    assert Validator(intersection(Empty, Slotted)).is_valid(WithEmpty())
+    assert Validator(intersection(Pointers, Slotted)).is_valid(WithPointers())
+    assert Validator(Empty).relation_to(complement(int)) == "undecided"
+
+
+def test_a_disjoint_base_promise_is_not_evidence() -> None:
+    """The decorator of PEP 800 sets one attribute and enforces nothing.
+
+    A class deriving from two decorated classes exists if someone writes it, so a
+    meet called empty on the strength of the attribute would refuse a value that
+    exists. The attribute is written by hand here, which is all the decorator
+    does; the layout Python does enforce is read instead.
+    """
+
+    class Promised:
+        __disjoint_base__ = True
+
+    class AlsoPromised:
+        __disjoint_base__ = True
+
+    class Both(Promised, AlsoPromised):
+        pass
+
+    assert not intersection(Promised, AlsoPromised).is_empty()
+    assert Validator(intersection(Promised, AlsoPromised)).is_valid(Both())
+    assert Validator(Promised).relation_to(complement(AlsoPromised)) == "undecided"
+
+
+#: What a drawn class lays down: nothing, no slot, or one slot of its own.
+_SLOT_SHAPES: tuple[tuple[str, ...] | None, ...] = (None, (), ("own",))
+
+
+@st.composite
+def _class_orders(draw: st.DrawFn) -> list[type]:
+    """Draw a small class order, each class over an earlier one or over nothing.
+
+    Single inheritance, so the only way two drawn classes can fail to share a
+    subclass is a layout conflict: with linear chains the method resolution
+    order of a class over any two of them is consistent whenever one of the
+    two orders is.
+    """
+    classes: list[type] = []
+    for index in range(draw(st.integers(min_value=2, max_value=5))):
+        base = draw(st.integers(min_value=-1, max_value=index - 1))
+        slots = draw(st.sampled_from(_SLOT_SHAPES))
+        namespace = {} if slots is None else {"__slots__": slots}
+        classes.append(
+            type(f"C{index}", () if base < 0 else (classes[base],), namespace)
+        )
+    return classes
+
+
+def _derived(bases: tuple[type, type]) -> type | None:
+    """Give a class deriving from `bases` in that order, or `None` if Python refuses."""
+    # The bases are drawn, which is what the property is about, and a checker
+    # cannot read a class over bases it does not know.
+    try:
+        return types.new_class("Both", bases)  # ty: ignore[unsupported-dynamic-base]
+    except TypeError:
+        return None
+
+
+def _shares_an_instance(left: type, right: type) -> type | None:
+    """Give a class deriving from both, in whichever order Python builds one."""
+    return _derived((left, right)) or _derived((right, left))
+
+
+@given(_class_orders())
+def test_a_meet_of_two_classes_is_empty_exactly_where_python_refuses_a_subclass(
+    classes: list[type],
+) -> None:
+    """The layout rule is the interpreter's own, so the interpreter is the oracle.
+
+    For every pair of drawn classes: the meet is decided empty exactly when no
+    class deriving from both can be built, and where one can, its instance is a
+    member of the meet. The first half is completeness over the enforced rule
+    and the second is soundness.
+    """
+    for left in classes:
+        for right in classes:
+            if left is right:
+                continue
+            both = _shares_an_instance(left, right)
+            met = intersection(left, right)
+            assert met.is_empty() == (both is None), (left.__mro__, right.__mro__)
+            assert (Validator(left).relation_to(complement(right)) == "subset") == (
+                both is None
+            )
+            if both is not None:
+                assert Validator(met).is_valid(both())

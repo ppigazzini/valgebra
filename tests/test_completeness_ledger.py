@@ -109,6 +109,18 @@ class _Plain:
     """A class laying down no layout, whose subclasses may lay down any."""
 
 
+class _Slotted:
+    """A class whose `__slots__` lay down a layout over no builtin."""
+
+    __slots__ = ("field",)
+
+
+class _OtherSlotted:
+    """A second layout over no builtin, which no class can carry beside the first."""
+
+    __slots__ = ("other",)
+
+
 # A region-complete value universe whose numbers straddle the bounds the ledger
 # uses, so a subset relation over it reflects the true relation on those cases.
 _UNIVERSE = [
@@ -149,6 +161,9 @@ _UNIVERSE = [
     # placed on its kind: `_MyInt(3)` is an int and is not the integer 3.
     _MyInt(3),
     _MyStr("a"),
+    # An instance of a class laying down its own layout: a value of no builtin
+    # kind, which is what witnesses a meet with a kind decided empty.
+    _Slotted(),
 ]
 
 
@@ -261,6 +276,17 @@ _DECIDED = [
     pytest.param("subtype", _MyStr, str, id="MyStr<=str"),
     pytest.param("subtype", _MyInt, union(int, str), id="MyInt<=int|str"),
     pytest.param("empty", intersection(_MyInt, _MyStr), None, id="empty:MyInt&MyStr"),
+    pytest.param(
+        "empty",
+        intersection(_Slotted, _OtherSlotted),
+        None,
+        id="empty:Slotted&OtherSlotted",
+    ),
+    pytest.param("empty", intersection(_Slotted, str), None, id="empty:Slotted&str"),
+    pytest.param("subtype", _Slotted, complement(int), id="Slotted<=~int"),
+    pytest.param(
+        "subtype", _Slotted, complement(_OtherSlotted), id="Slotted<=~OtherSlotted"
+    ),
     pytest.param("subtype", _MyStr, complement(int), id="MyStr<=~int"),
     # A union on the right is tried branch by branch, which is lossy: it commits
     # to one branch. Where the subject is one a left-side rule reduces -- a

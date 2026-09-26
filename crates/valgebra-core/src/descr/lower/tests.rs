@@ -516,12 +516,12 @@ fn a_literal_lowers_to_the_singleton_its_kind_reads() {
 /// order it was given: the subclass is a subtype, and the two ends are not.
 #[test]
 fn a_class_the_pool_knows_lowers_to_its_instances() {
-    let animal = Class::new(0, Class::PLAIN, &[]);
-    let dog = Class::new(1, Class::PLAIN, std::slice::from_ref(&animal));
+    let animal = Class::new(0, None, &[]);
+    let dog = Class::new(1, None, std::slice::from_ref(&animal));
     let pool = Pool(vec![
         Operand::Instance(animal),
         Operand::Instance(dog),
-        Operand::Instance(Class::new(2, Class::PLAIN, &[])),
+        Operand::Instance(Class::new(2, None, &[])),
     ]);
     let instances = |at| lower(&Schema::Instance(ClassIx::new(at)), &pool).expect("a class");
     let (animals, dogs, others) = (instances(0), instances(1), instances(2));

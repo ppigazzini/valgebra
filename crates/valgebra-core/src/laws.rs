@@ -199,7 +199,7 @@ impl CorpusOracle {
     fn class_at(index: ClassIx) -> Option<Class> {
         let base = Class::plain(1);
         match index.get() {
-            0 => Some(Class::new(0, Class::PLAIN, &[base])),
+            0 => Some(Class::new(0, None, &[base])),
             1 => Some(base),
             2 => Some(Class::laid_out(2, 9).of_kind(Kind::Tuple)),
             _ => None,

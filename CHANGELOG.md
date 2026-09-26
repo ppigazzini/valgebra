@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a protocol says for itself that it is runtime-checkable
 - feat: the validator is generic in the set a checker reads
+- feat: two classes laying down slots of their own share no instance
 
 -->
 
@@ -36,6 +37,17 @@ answer of its own, or a repair to a change not yet released.
   schema it is refused by name. `simplify` is marked deprecated where a checker
   sees it, beside the warning it raises at runtime. ty, mypy and pyright read
   the stub alike.
+- **Two classes laying down slots of their own share no instance.** A class
+  whose `__slots__` add a slot lays down an instance layout, as a class built
+  on a builtin does, and Python refuses a class deriving from two layouts
+  unless one extends the other. `intersection(C, D).is_empty()` is `True` for
+  two such classes neither of which derives from the other, `Validator(C)` is
+  below `complement(D)`, and a slotted class over no builtin is below the
+  complement of every builtin kind. A plain subclass of a slotted class still
+  meets a slotted subclass of the same base, in the class Python builds from
+  both. An empty `__slots__`, or one naming only `__dict__` and `__weakref__`,
+  lays down nothing; the `@disjoint_base` decorator of PEP 800 is not read,
+  since the runtime does not enforce it.
 
 ### Fixed
 

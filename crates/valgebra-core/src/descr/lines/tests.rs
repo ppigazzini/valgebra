@@ -28,7 +28,7 @@ fn animal() -> Class {
 }
 
 fn dog() -> Class {
-    Class::new(2, 1, std::slice::from_ref(&animal()))
+    Class::new(2, Some(1), std::slice::from_ref(&animal()))
 }
 
 fn mineral() -> Class {
@@ -284,7 +284,7 @@ fn a_complement_past_the_bound_keeps_its_values_under_the_flag() {
     for n in 0..9i64 {
         let line = Lines::objects(
             &Component::Integers(IntSet::just(n)),
-            RecordLattice::instance_of(Class::laid_out(10 + u32::try_from(n).unwrap_or(0), 1)),
+            RecordLattice::instance_of(Class::plain(10 + u32::try_from(n).unwrap_or(0))),
         );
         wide = wide
             .combine(&line, Op::Union, WHOLE)
@@ -325,7 +325,7 @@ fn a_meet_against_a_negated_side_removes_one_line_at_a_time() {
     for n in 0..9i64 {
         let line = Lines::objects(
             &Component::Integers(IntSet::just(n)),
-            RecordLattice::instance_of(Class::laid_out(10 + u32::try_from(n).unwrap_or(0), 1)),
+            RecordLattice::instance_of(Class::plain(10 + u32::try_from(n).unwrap_or(0))),
         );
         wide = wide
             .combine(&line, Op::Union, WHOLE)
@@ -368,7 +368,7 @@ fn a_meet_is_bounded_by_the_width_of_its_union_and_not_by_its_pairs() {
     let line = |n: i64| {
         Lines::objects(
             &Component::Integers(IntSet::just(n)),
-            RecordLattice::instance_of(Class::laid_out(10 + u32::try_from(n).unwrap_or(0), 1)),
+            RecordLattice::instance_of(Class::plain(10 + u32::try_from(n).unwrap_or(0))),
         )
     };
     let mut wide = line(0);
@@ -392,7 +392,7 @@ fn a_meet_is_bounded_by_the_width_of_its_union_and_not_by_its_pairs() {
         "and an answer no wider than either side"
     );
     for n in 0..20i64 {
-        let class = Class::laid_out(10 + u32::try_from(n).unwrap_or(0), 1);
+        let class = Class::plain(10 + u32::try_from(n).unwrap_or(0));
         assert!(
             holds(&met, n, Some(&class)),
             "the meet holds the value its line {n} holds"

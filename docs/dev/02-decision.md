@@ -332,12 +332,14 @@ corpus of its own driving every question below
   running code, and no snapshot of the class order predicts what that code says,
   so every class question below declines on one;
 - `class_admits_kind` — can a value of this kind be an instance of that class.
-  Asked this way round because a class need not *have* a kind: one deriving from
-  no builtin lays down no layout, and the bindings decline rather than answer,
-  since `isinstance` reads the whole subtree beneath a class and a subclass may
-  derive from a builtin as well. A class that does lay one down confines its
-  instances to that kind, because Python refuses a subclass that would lay down
-  a second, and `Some(false)` is then a refutation the rules can make;
+  Asked this way round because a class need not *have* a kind: one laying down
+  no layout is declined rather than answered, since `isinstance` reads the whole
+  subtree beneath a class and a subclass may derive from a builtin as well. A
+  class that does lay one down confines its instances, because Python refuses a
+  subclass that would lay down a second: to that builtin's kind where the layout
+  is a builtin's, and to no listed kind at all where it is the class's own
+  `__slots__` over `object`. `Some(false)` is then a refutation the rules can
+  make;
 - `direct_instance_of_kind` — does a value whose *type is* this class have that
   kind. The narrower question beside the one above, and the one that can refute
   where it cannot: `class_admits_kind` reads the whole subtree and so must
@@ -349,6 +351,26 @@ corpus of its own driving every question below
   asked of the kind's own builtin so the answer is one `issubclass` over the
   order. The dual of the question above, with the kind and the class swapping
   sides.
+
+**A layout is the class that laid it down.** The snapshot a class enters the
+core with carries, beside its ancestors, the class whose instance layout it
+has: the first on its `__mro__` that lays one down, which is one of the nine
+builtins or a class whose own `__slots__` add a slot -- `__dict__` and
+`__weakref__` add none, and neither does an empty `__slots__`. Python builds a
+class deriving from two others only where the layout one carries extends the
+other's, and a layout extends another when the class that laid it down derives
+from the class that laid down the other. So two classes are disjoint exactly
+when both carry a layout and neither's is among the other's ancestors, which is
+what refutes `MyInt & MyStr` and two slotted classes alike, and lets a plain
+subclass of a slotted class meet a slotted subclass of the same base in the
+class Python builds from both. PEP 800 names the rule; its
+`@typing.disjoint_base` decorator is **not read**, for the reason the PEP gives:
+"there is no runtime enforcement of this decorator on user-defined classes". A
+class deriving from two decorated classes exists if someone writes it, and a
+meet called empty on the strength of the decorator would refuse a value that
+exists. `tests/test_classes.py` holds the layout rule to the interpreter over
+drawn class orders -- a meet is empty exactly where `type("E", (C, D), {})`
+raises -- and holds the decorator to nothing.
 
 `NoLeafRelations` is the core's default and decides nothing. Where **every** call
 site of a question reads one of the two answers as the conservative one, its

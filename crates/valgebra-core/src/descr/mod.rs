@@ -738,8 +738,16 @@ impl Descr {
         // string, so the class narrows the `Str` kind rather than standing
         // outside it, and that is where `MyStr <= str` is decided. A class that
         // confines nothing stays on every line, because a subclass of it may lay
-        // down any layout at all.
+        // down any layout at all. Between the two, a class laying down a layout
+        // that is no builtin's -- its own `__slots__`, over `object` -- confines
+        // its instances to the kindless slot: no subclass of it can take on a
+        // builtin's layout, so none of its instances is ever of a listed kind.
         let Some(kind) = class.kind() else {
+            if class.lays_down_a_layout() {
+                let mut descr = Descr::nothing();
+                descr.other = Lines::objects(&KINDLESS, RecordLattice::instance_of(class));
+                return descr;
+            }
             return Descr::objects(&RecordLattice::instance_of(class));
         };
         let lattice = RecordLattice::instance_of(class);

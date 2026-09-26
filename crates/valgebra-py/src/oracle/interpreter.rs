@@ -557,17 +557,17 @@ fn the_descriptor_reads_an_operand_through_the_same_pool_as_a_constant() {
 
 #[test]
 fn two_builtins_lay_down_layouts_that_conflict() {
-    // The layout tag is what says two classes share no instance: a class
-    // deriving from `int` and one deriving from `str` cannot both describe one
-    // value, because Python refuses a class body laying down two layouts.
-    // `Class::PLAIN` is the tag for laying none down, and it conflicts with
-    // nothing -- so a builtin whose tag collapsed into it would stop refuting
-    // the pairs it exists to refute.
+    // The layout is what says two classes share no instance: a class deriving
+    // from `int` and one deriving from `str` cannot both describe one value,
+    // because Python refuses a class body laying down two layouts. A class
+    // laying none down carries no layout, and that conflicts with nothing -- so
+    // a builtin read as laying none down would stop refuting the pairs it
+    // exists to refute.
     //
-    // `int` is the first row of the table the tags are read from, which makes
-    // it the one an off-by-one collapses into `PLAIN`. The assertions are the
-    // relation rather than the number, because the number is the oracle's own
-    // business and the relation is what the core reads.
+    // `int` is the first row of the table the layouts are read from, which
+    // makes it the one an off-by-one drops. The assertions are the relation
+    // rather than the class, because which class names a layout is the
+    // oracle's own business and the relation is what the core reads.
     Python::attach(|py| {
         let integer = py.get_type::<PyInt>().into_any().unbind();
         let text = py.get_type::<PyString>().into_any().unbind();
@@ -589,6 +589,59 @@ fn two_builtins_lay_down_layouts_that_conflict() {
             // and a subclass of it may derive from a builtin as well.
             assert!(!plain.disjoint_from(&integer));
             assert!(!integer.disjoint_from(&plain));
+        });
+    });
+}
+
+#[test]
+fn two_classes_whose_slots_add_a_slot_lay_down_layouts_that_conflict() {
+    // The same rule for a class over no builtin: `__slots__` that add a slot
+    // lay down a layout, and Python refuses a class deriving from two such
+    // classes unless one's layout extends the other's. A plain subclass
+    // carries its base's layout, a slotted subclass lays down one extending
+    // it, and a class deriving from both of those builds -- so the pair is not
+    // disjoint however their layouts differ.
+    Python::attach(|py| {
+        let scope = PyDict::new(py);
+        py.run(
+            c"class A:\n    __slots__ = ('a',)\nclass B:\n    __slots__ = 'b'\n\
+              class C(A):\n    pass\nclass D(A):\n    __slots__ = ('d',)\n\
+              class E:\n    __slots__ = ()\n\
+              class W:\n    __slots__ = ('__dict__', '__weakref__')\n",
+            None,
+            Some(&scope),
+        )
+        .expect("six classes");
+        let named = |name: &str| scope.get_item(name).unwrap().unwrap().unbind();
+        let classes: Vec<_> = ["A", "B", "C", "D", "E", "W"]
+            .into_iter()
+            .map(named)
+            .collect();
+        asking(py, classes, |oracle| {
+            let class = |slot| oracle.class(ClassIx::new(slot)).expect("the class is read");
+            let (a, b, below, extending) = (class(0), class(1), class(2), class(3));
+            let (empty, pointers) = (class(4), class(5));
+            assert!(
+                a.disjoint_from(&b),
+                "two layouts, neither extending the other"
+            );
+            assert!(b.disjoint_from(&a));
+            assert!(
+                !below.disjoint_from(&extending),
+                "D's layout extends C's, which is A's"
+            );
+            assert!(!extending.disjoint_from(&below));
+            assert!(!a.disjoint_from(&extending), "a base and what extends it");
+            assert!(below.disjoint_from(&b) && extending.disjoint_from(&b));
+            // Slots that add no slot lay down nothing.
+            assert!(!empty.disjoint_from(&a) && !pointers.disjoint_from(&a));
+            assert!(!empty.lays_down_a_layout() && !pointers.lays_down_a_layout());
+            // And a slotted class over no builtin holds values of no kind, where
+            // a plain one declines.
+            for kind in Kind::ALL {
+                assert_eq!(oracle.class_admits_kind(ClassIx::new(0), kind), Some(false));
+                assert_eq!(oracle.class_admits_kind(ClassIx::new(4), kind), None);
+            }
         });
     });
 }

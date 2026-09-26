@@ -80,7 +80,15 @@ answers `"undecided"`.
   class is a value of that kind and the class narrows the kind rather than
   standing beside it. A class built on no builtin narrows nothing — an instance
   of a subclass of it may be a string — so it relates to a kind in neither
-  direction.
+  direction. A class whose own `__slots__` add a slot lays down a layout as a
+  builtin does, and Python refuses a class deriving from two layouts unless one
+  extends the other: two such classes neither of which derives from the other
+  share no instance, so their meet is empty and each is below the other's
+  complement, and one laid down over no builtin is below the complement of
+  every builtin kind. An empty `__slots__`, or one naming only `__dict__` and
+  `__weakref__`, lays down nothing. The `@disjoint_base` decorator of PEP 800
+  is a promise to a checker that the runtime does not enforce, and it is not
+  read.
 - **Literals against other kinds.** A literal pins `type(x)` exactly, so it
   carries the kind of its constant and is decided against another kind:
   `Literal["a"]` is below `~int`, and `Literal["a"] & Literal["b"]` is empty.

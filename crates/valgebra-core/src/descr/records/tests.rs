@@ -54,7 +54,7 @@ fn a_union_drops_the_atoms_that_hold_nothing_and_the_ones_it_has() {
 #[test]
 fn a_class_and_its_base_are_one_object() {
     let animal = Class::laid_out(1, 1);
-    let dog = Class::new(2, 1, std::slice::from_ref(&animal));
+    let dog = Class::new(2, Some(1), std::slice::from_ref(&animal));
     let mineral = Class::laid_out(3, 3);
     let of = |class: &Class| RecordLattice::<IntSet>::instance_of(class.clone());
 
@@ -210,7 +210,7 @@ proptest! {
 #[test]
 fn a_class_and_its_complement_are_both_sets() {
     let animal = Class::laid_out(1, 1);
-    let dog = Class::new(2, 1, std::slice::from_ref(&animal));
+    let dog = Class::new(2, Some(1), std::slice::from_ref(&animal));
     let dogs = RecordLattice::<IntSet>::instance_of(dog.clone());
 
     assert!(dogs.holds(Some(&dog), &[]));
@@ -227,7 +227,7 @@ fn a_class_and_its_complement_are_both_sets() {
 #[test]
 fn deriving_decides_the_meet_and_the_emptiness() {
     let animal = Class::laid_out(1, 1);
-    let dog = Class::new(2, 1, std::slice::from_ref(&animal));
+    let dog = Class::new(2, Some(1), std::slice::from_ref(&animal));
     let dogs = RecordLattice::<IntSet>::instance_of(dog.clone());
     let animals = RecordLattice::instance_of(animal.clone());
 
@@ -261,17 +261,18 @@ fn excluding_an_unrelated_class_leaves_the_atom_inhabited() {
 fn two_classes_of_conflicting_layouts_meet_in_nothing() {
     let ints = Class::laid_out(1, 1);
     let words = Class::laid_out(2, 2);
-    let unrelated = Class::new(3, 1, &[]);
+    let left = Class::new(3, Some(1), std::slice::from_ref(&ints));
+    let right = Class::new(4, Some(1), std::slice::from_ref(&ints));
 
-    let met = RecordLattice::<IntSet>::instance_of(ints.clone())
+    let met = RecordLattice::<IntSet>::instance_of(ints)
         .intersect(&RecordLattice::instance_of(words))
         .expect("two small atoms");
     assert!(met.is_empty(), "no value is laid out both ways");
 
-    // Same layout and no derivation between them: a class deriving from both
-    // may exist, so this is *not* empty.
-    let open = RecordLattice::<IntSet>::instance_of(ints)
-        .intersect(&RecordLattice::instance_of(unrelated))
+    // One layout, inherited by both, and no derivation between them: a class
+    // deriving from both may exist, so this is *not* empty.
+    let open = RecordLattice::<IntSet>::instance_of(left)
+        .intersect(&RecordLattice::instance_of(right))
         .expect("two small atoms");
     assert!(!open.is_empty());
 }

@@ -272,19 +272,26 @@ fn builtin_of(py: Python<'_>, kind: Kind) -> Option<Bound<'_, PyType>> {
     })
 }
 
-/// The builtin base a class is built on: the layout tag [`Class`] reads, and the
-/// kind that layout confines an instance to.
+/// The class that lays down `ty`'s instance layout, and the kind that layout
+/// confines an instance to.
 ///
-/// Python refuses `class C(int, str)` -- "multiple bases have instance lay-out
-/// conflict" -- so a class built on one of these derives from no other, and two
-/// classes built on different ones share no instance. A class built on none of
-/// them lays down no layout of its own and takes [`Class::PLAIN`] and no kind,
-/// which conflicts with nothing and confines nothing: `class Both(Plain, MyStr)`
-/// builds, so a plain class and a `str` subclass do share instances, and those
-/// instances are strings.
-fn layout_of(ty: &Bound<'_, PyType>) -> (u32, Option<Kind>) {
+/// Python refuses a class deriving from two others unless the layout one lays
+/// down extends the other's: `class C(int, str)` is "multiple bases have
+/// instance lay-out conflict", and so is `class C(A, B)` for two classes whose
+/// `__slots__` each add a slot over `object`. The class laying down a layout is
+/// the first on the `__mro__` that does -- one of the nine builtins below, or a
+/// class whose own `__slots__` add one -- and a class built on none of them
+/// carries no layout, which conflicts with nothing and confines nothing:
+/// `class Both(Plain, MyStr)` builds, so a plain class and a `str` subclass do
+/// share instances, and those instances are strings.
+///
+/// The kind is the builtin's alone. A class whose `__slots__` add to a `str`
+/// lays down a layout of its own and its instances are still strings; one whose
+/// `__slots__` add to `object` lays down a layout and its instances are of no
+/// listed kind, which is the reading [`Class::lays_down_a_layout`] carries.
+fn layout_of<'py>(ty: &Bound<'py, PyType>) -> (Option<Bound<'py, PyType>>, Option<Kind>) {
     let py = ty.py();
-    [
+    let builtins = [
         (PyInt::type_object(py), Kind::Int),
         (PyString::type_object(py), Kind::Str),
         (PyBytes::type_object(py), Kind::Bytes),
@@ -294,17 +301,51 @@ fn layout_of(ty: &Bound<'_, PyType>) -> (u32, Option<Kind>) {
         (PyList::type_object(py), Kind::List),
         (PySet::type_object(py), Kind::Set),
         (PyDict::type_object(py), Kind::Dict),
-    ]
-    .into_iter()
-    .enumerate()
+    ];
     // `bool` derives from `int` and shares its layout, so a `bool` and an
     // `int` subclass land in one part rather than two -- which is right: the
-    // pair is disjoint for a reason this tag does not carry. It is also why the
-    // kind beside the tag is `Int` and not `Bool`: `bool` is final, so an `int`
-    // subclass is never a boolean.
-    .find(|(_, (builtin, _))| ty.is_subclass(builtin).unwrap_or(false))
-    .and_then(|(at, (_, kind))| u32::try_from(at).ok().map(|at| (at + 1, Some(kind))))
-    .unwrap_or((Class::PLAIN, None))
+    // pair is disjoint for a reason the layout does not carry. It is also why
+    // the kind is `Int` and not `Bool`: `bool` is final, so an `int` subclass
+    // is never a boolean.
+    let kind = builtins
+        .iter()
+        .find(|(builtin, _)| ty.is_subclass(builtin).unwrap_or(false))
+        .map(|(_, kind)| *kind);
+    let solid = ty
+        .mro()
+        .iter()
+        .filter_map(|base| base.cast_into::<PyType>().ok())
+        .find(|base| builtins.iter().any(|(builtin, _)| base.is(builtin)) || adds_slots(base));
+    (solid, kind)
+}
+
+/// Whether a class's own `__slots__` add an instance slot.
+///
+/// Read from the class's own namespace rather than inherited, because a slot is
+/// laid down once and a subclass without `__slots__` of its own adds none.
+/// `__dict__` and `__weakref__` name no slot: they ask for the two pointers a
+/// plain instance has anyway, and Python lays down no layout for them -- a
+/// class listing only those meets any other. A name is one slot, and a sequence
+/// of names is each of them; an empty sequence is no slot at all.
+fn adds_slots(ty: &Bound<'_, PyType>) -> bool {
+    let py = ty.py();
+    let Ok(slots) = ty
+        .getattr(intern!(py, "__dict__"))
+        .and_then(|namespace| namespace.get_item(intern!(py, "__slots__")))
+    else {
+        return false;
+    };
+    let adds = |name: &Bound<'_, PyAny>| {
+        !name
+            .cast::<PyString>()
+            .is_ok_and(|name| name == "__dict__" || name == "__weakref__")
+    };
+    if slots.is_instance_of::<PyString>() {
+        return adds(&slots);
+    }
+    slots
+        .try_iter()
+        .is_ok_and(|names| names.filter_map(Result::ok).any(|name| adds(&name)))
 }
 
 impl PoolRelations<'_, '_> {
@@ -353,7 +394,8 @@ impl PoolRelations<'_, '_> {
                 bases.push(Class::plain(self.class_id(&base)));
             }
         }
-        let (layout, kind) = layout_of(ty);
+        let (solid, kind) = layout_of(ty);
+        let layout = solid.map(|base| self.class_id(&base));
         let class = Class::new(self.class_id(ty), layout, &bases);
         Some(match kind {
             Some(kind) => class.of_kind(kind),
@@ -445,6 +487,11 @@ impl LeafRelations for PoolRelations<'_, '_> {
     /// would lay down a second layout, so the kind an instance has is fixed by
     /// the base and inherited by everything below it.
     ///
+    /// A class laying down a layout that is no builtin's -- its own `__slots__`,
+    /// over `object` -- holds values of no listed kind, and a subclass cannot
+    /// escape that either: Python refuses `class Both(Slotted, str)` as it
+    /// refuses `class C(int, str)`. That is `Some(false)` for every kind.
+    ///
     /// A class laying down no layout is declined rather than answered. Its own
     /// instances are plain objects, but `isinstance` reads the whole subtree
     /// beneath it, and a subclass may derive from a builtin as well -- a class
@@ -466,11 +513,14 @@ impl LeafRelations for PoolRelations<'_, '_> {
         if !self.denotes_a_set(class)? {
             return None;
         }
-        let (_, own) = layout_of(class);
+        let (solid, own) = layout_of(class);
         // `bool` lays down `int`'s layout, so a class laid out as an int may be
         // `bool` itself and hold booleans. Sound and coarse: the pair is never
         // refuted here.
-        own.map(|own| own == kind || matches!((own, kind), (Kind::Int, Kind::Bool)))
+        match own {
+            Some(own) => Some(own == kind || matches!((own, kind), (Kind::Int, Kind::Bool))),
+            None => solid.map(|_| false),
+        }
     }
     /// Whether a value whose *type is* the pooled class has `kind`.
     ///

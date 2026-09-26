@@ -222,15 +222,24 @@ fn universe() -> Vec<Value> {
 }
 
 /// A class order small enough to enumerate and wide enough to separate the
-/// three answers: deriving, unrelated, and laid out apart.
+/// three answers: deriving, unrelated, and laid out apart. An animal lays down
+/// a layout of its own -- `__slots__`, over no builtin -- which a dog inherits
+/// and a mineral lays down apart from.
 static ANIMAL: LazyLock<Class> = LazyLock::new(|| Class::laid_out(1, 1));
-static DOG: LazyLock<Class> = LazyLock::new(|| Class::new(2, 1, std::slice::from_ref(&ANIMAL)));
+static DOG: LazyLock<Class> =
+    LazyLock::new(|| Class::new(2, Some(1), std::slice::from_ref(&ANIMAL)));
 static MINERAL: LazyLock<Class> = LazyLock::new(|| Class::laid_out(3, 3));
-/// Laid out like an animal and deriving from nothing: the pair whose meet
-/// only a class outside the order could inhabit.
-static UNRELATED: LazyLock<Class> = LazyLock::new(|| Class::new(4, 1, &[]));
+/// Deriving from nothing and laying down no layout: the pair with an animal
+/// whose meet only a class outside the order could inhabit.
+static UNRELATED: LazyLock<Class> = LazyLock::new(|| Class::plain(4));
+/// A plain class and a plain subclass of it, the open world: a class deriving
+/// from either and from anything else may exist, so a meet with a kind is an
+/// unknown rather than a proof.
+static OPEN: LazyLock<Class> = LazyLock::new(|| Class::plain(6));
+static OPEN_DOG: LazyLock<Class> =
+    LazyLock::new(|| Class::new(7, None, std::slice::from_ref(&OPEN)));
 /// A class whose instances are strings, which is what `Class::of_kind` says.
-static SUBSTR: LazyLock<Class> = LazyLock::new(|| Class::new(5, 5, &[]).of_kind(Kind::Str));
+static SUBSTR: LazyLock<Class> = LazyLock::new(|| Class::new(5, Some(5), &[]).of_kind(Kind::Str));
 
 /// The attribute lists the universe's objects carry.
 const OBJECTS: [&[(&str, Value)]; 7] = [
@@ -648,9 +657,9 @@ fn excluding_an_unrelated_class_decides_nothing() {
 /// atom rather than sitting in two slots a complement would have to split.
 #[test]
 fn a_class_meets_a_builtin_kind() {
-    let dog = Descr::instance_of(DOG.clone());
+    let dog = Descr::instance_of(OPEN_DOG.clone());
     let ints = Descr::of_kind(Kind::Int);
-    let dog_int = Value::integer(1).of_class(&DOG, &[]);
+    let dog_int = Value::integer(1).of_class(&OPEN_DOG, &[]);
 
     // A class constrains a value within its kind, so the two meet in the
     // values that are both -- which is a set the kindless slot could not
@@ -659,8 +668,8 @@ fn a_class_meets_a_builtin_kind() {
     let both = dog.intersect(&ints).expect("an int that is a Dog");
     assert!(both.admits(dog_int));
 
-    // And whether that set holds a value is not something this can say. `Dog`
-    // lays down no builtin layout, so an integer that is a Dog needs a class
+    // And whether that set holds a value is not something this can say. The
+    // class lays down no layout, so an integer that is one of it needs a class
     // deriving from both -- the open world the atom rule already declines two
     // unrelated classes for. Membership is a different question and keeps its
     // answer: handed a value that is both, the set admits it.
@@ -675,19 +684,19 @@ fn a_class_meets_a_builtin_kind() {
     assert_eq!(substr.emptiness(), Verdict::Inhabited);
 
     // And it is *both*, not either: an integer nobody gave a class to is
-    // outside it, and so is a Dog of no listed kind.
+    // outside it, and so is an instance of the class of no listed kind.
     assert!(!both.admits(Value::integer(1)));
-    assert!(!both.admits(Value::instance(&DOG, &[])));
+    assert!(!both.admits(Value::instance(&OPEN_DOG, &[])));
 
     // Each half on its own still admits what it always did.
-    assert!(dog.admits(dog_int) && dog.admits(Value::instance(&DOG, &[])));
+    assert!(dog.admits(dog_int) && dog.admits(Value::instance(&OPEN_DOG, &[])));
     assert!(ints.admits(dog_int) && ints.admits(Value::integer(1)));
 
     // The order the classes stand in is read through the kind, not around
-    // it: a Dog is an Animal whatever kind the value also has.
-    let animal_int = Descr::instance_of(ANIMAL.clone())
+    // it: the subclass is its base whatever kind the value also has.
+    let animal_int = Descr::instance_of(OPEN.clone())
         .intersect(&ints)
-        .expect("an int that is an Animal");
+        .expect("an int that is an Open");
     assert!(animal_int.admits(dog_int));
     assert!(!animal_int.admits(Value::integer(1).of_class(&MINERAL, &[])));
 }
@@ -720,11 +729,41 @@ fn a_class_confined_to_a_kind_is_on_that_kind_alone() {
     // And the class that confines nothing keeps the open world's answer, which
     // is the contrast the confinement is for.
     assert!(
-        !Descr::instance_of(ANIMAL.clone())
+        !Descr::instance_of(OPEN.clone())
             .intersect(&ints)
             .expect("two small atoms")
             .is_empty(),
-        "an Animal may yet be laid out as an int"
+        "a plain class may yet be laid out as an int"
+    );
+}
+
+/// A class laying down a layout that is no builtin's confines its instances
+/// to the kindless slot: no subclass of it can take on a builtin's layout, so
+/// the meet with any listed kind is proved empty, as it is for a class laid
+/// out apart.
+#[test]
+fn a_class_laying_down_its_own_layout_is_off_every_kind() {
+    let animals = Descr::instance_of(ANIMAL.clone());
+    assert!(animals.admits(Value::instance(&ANIMAL, &[])));
+    assert!(animals.admits(Value::instance(&DOG, &[])));
+    assert!(!animals.admits(Value::integer(1).of_class(&ANIMAL, &[])));
+    for kind in Kind::ALL {
+        assert_eq!(
+            animals
+                .intersect(&Descr::of_kind(kind))
+                .expect("two small atoms")
+                .emptiness(),
+            Verdict::Empty,
+            "no {kind:?} is an Animal"
+        );
+    }
+    // The plain class beside it keeps the open world's answer on every kind.
+    assert_eq!(
+        Descr::instance_of(UNRELATED.clone())
+            .intersect(&Descr::of_kind(Kind::Int))
+            .expect("two small atoms")
+            .emptiness(),
+        Verdict::Unknown
     );
 }
 
