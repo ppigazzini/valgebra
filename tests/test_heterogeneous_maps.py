@@ -11,6 +11,8 @@ from typing import Annotated, Literal, TypedDict
 
 import annotated_types as at
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from valgebra import ValidationError, Validator, anything, recursive, union
 
@@ -52,6 +54,59 @@ def test_two_clauses_claiming_one_key_are_a_disjunction() -> None:
     assert not first_wins.is_valid({"k": 1})
     assert first_wins.relation_to(both) == "subset"
     assert both.relation_to(first_wins) == "not_subset"
+
+
+#: Key schemas a drawn clause may carry, chosen to overlap: a literal key is
+#: also a `str` key and a `bool` key is also an `int` key, so a drawn list
+#: claims one key through two clauses more often than not.
+_KEY_SCHEMAS: tuple[object, ...] = (str, int, bool, Literal["k"], Literal[1])
+_VALUE_SCHEMAS: tuple[object, ...] = (int, str, bool, None, float)
+#: The keys and values a drawn dict is built from: one for each clause to read,
+#: and one no clause reads.
+_KEYS: tuple[object, ...] = ("k", "a", 1, 2, True, 1.5)
+_VALUES: tuple[object, ...] = (1, "x", True, None, 1.5, b"")
+_ATOMS: dict[object, Validator] = {
+    spec: Validator(spec) for spec in {*_KEY_SCHEMAS, *_VALUE_SCHEMAS}
+}
+
+
+# THEORY: clauses-are-unordered
+@given(
+    clauses=st.lists(
+        st.sampled_from(_KEY_SCHEMAS), min_size=1, max_size=3, unique=True
+    ).flatmap(
+        lambda keys: st.tuples(*(st.sampled_from(_VALUE_SCHEMAS) for _ in keys)).map(
+            lambda values: list(zip(keys, values, strict=True))
+        )
+    ),
+    entries=st.dictionaries(
+        st.sampled_from(_KEYS), st.sampled_from(_VALUES), max_size=3
+    ),
+)
+def test_a_key_belongs_when_some_clause_admits_it_over_drawn_clauses(
+    clauses: list[tuple[object, object]], entries: dict[object, object]
+) -> None:
+    """The deviation as a law over drawn clause lists and drawn dicts.
+
+    A dict is a member exactly when every entry is read by *some* clause, the
+    key by the clause's key schema and the value by its value schema, and the
+    clauses' order is not part of the schema. The oracle is built from the
+    clauses' own atoms, so what it holds is the combination rule and nothing
+    about an atom; the paper's leftmost-match reading fails the first drawn
+    dict whose key two clauses claim and only the later one reads.
+    """
+    expected = all(
+        any(
+            _ATOMS[key_schema].is_valid(key) and _ATOMS[value_schema].is_valid(value)
+            for key_schema, value_schema in clauses
+        )
+        for key, value in entries.items()
+    )
+    schema = Validator(dict(clauses))
+    reversed_schema = Validator(dict(reversed(clauses)))
+    assert schema.is_valid(entries) == expected
+    assert reversed_schema.is_valid(entries) == expected
+    assert schema.is_equivalent(reversed_schema)
 
 
 def test_record_with_a_typed_catch_all() -> None:

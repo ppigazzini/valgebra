@@ -776,7 +776,7 @@ HELD-BY: two_spellings_of_one_keyed_map_are_one_term, opening_drops_a_field_the_
 *some* clause admits it and its value, in the walk and in subtyping alike, and
 two clauses may claim one key. **[DEVIATION: clauses-are-unordered]**
 
-HELD-BY: test_heterogeneous_mapping_by_key_schema, test_two_clauses_claiming_one_key_are_a_disjunction, a_literal_keyed_clause_is_read_beside_the_clauses_that_cover_its_key, a_field_is_read_instead_of_a_clause_that_names_its_key, test_a_parsed_object_is_covered_by_whichever_clause_can_read_its_keys, test_named_field_takes_precedence_over_the_catch_all
+HELD-BY: test_heterogeneous_mapping_by_key_schema, test_two_clauses_claiming_one_key_are_a_disjunction, test_a_key_belongs_when_some_clause_admits_it_over_drawn_clauses, a_literal_keyed_clause_is_read_beside_the_clauses_that_cover_its_key, a_field_is_read_instead_of_a_clause_that_names_its_key, test_a_parsed_object_is_covered_by_whichever_clause_can_read_its_keys, test_named_field_takes_precedence_over_the_catch_all
 
 **Clauses are quasi-K-step rather than quasi-constant.** A default per
 key-type region rather than one default for the rest; nothing against the
