@@ -3567,6 +3567,49 @@ fn a_length_bound_on_bytes_is_separated_one_past_it() {
     );
 }
 
+/// A map with a catch-all is separated from a closed record by a key neither
+/// declares.
+///
+/// The pair: `{str: set[Any]}` against the closed record `{"a"?: Any, "b"?:
+/// Any}`. It is refuted by a mapping under a key the record does not declare,
+/// `{"z": set()}`, and by nothing under `"a"` or `"b"`: the record's two
+/// optional fields admit any value there. The catch-all's probes therefore go
+/// under a name no drawn record declares as well as under the first the map
+/// itself leaves free -- probing under the map's own first two free names
+/// reaches exactly the two the record declares, and the universe holds no
+/// witness.
+#[test]
+fn a_catch_all_is_separated_from_a_closed_record_by_a_key_neither_declares() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let a = Schema::keyed_map(
+        Vec::new(),
+        vec![MapClause {
+            key: Schema::Str,
+            value: Schema::set(Schema::ANYTHING),
+        }],
+    );
+    let optional = |name: &str| Field {
+        name: name.into(),
+        schema: Schema::ANYTHING,
+        required: false,
+    };
+    let b = Schema::keyed_map(vec![optional("a"), optional("b")], Vec::new());
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
+}
+
 /// Every value of `len` items, in each container a length is read from.
 fn containers_of(len: usize, out: &mut Vec<Obj>) {
     let items = vec![Obj::Int(1); len];
@@ -4085,21 +4128,29 @@ fn record_edges(fields: &Fields, defaults: &Clauses, out: &mut Vec<Obj>) -> Vec<
     }
     // A default clause governs the keys no field declares, so its probes go
     // under names this record does not declare: under a declared one the field
-    // decides and the clause is never read. More than one name, because the key
-    // that separates this record from another is one *neither* declares -- a
-    // record of no fields would otherwise probe under the name the other one
-    // declares, and the value it builds would be admitted by both.
+    // decides and the clause is never read. Three names, for two different
+    // separations. The first two this record leaves free are the names another
+    // drawn record is likeliest to declare, which is where a clause is told
+    // from a field over the same key. The last is one no drawn record declares,
+    // because the key that separates a catch-all from a closed record is one
+    // *neither* declares: a record of no fields probing under its own first two
+    // free names reaches exactly the two the other record declares, and every
+    // value it builds is admitted by both.
     let undeclared: Vec<&'static str> = NAMES
         .into_iter()
-        .chain(["z"])
         .filter(|name| !fields.iter().any(|field| &*field.name == *name))
         .take(2)
+        .chain(["z"])
         .collect();
     for clause in defaults.iter() {
+        // Built once and laid under each name: the values are the clause's,
+        // and the names are only where they are read.
+        let values = candidates(&clause.value, out);
         for key in &undeclared {
             groups.push(
-                candidates(&clause.value, out)
-                    .into_iter()
+                values
+                    .iter()
+                    .cloned()
                     .map(|value| with(key, value))
                     .collect(),
             );
