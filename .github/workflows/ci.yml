@@ -1342,9 +1342,9 @@ jobs:
     # lane, and its first red is a seed pinned as a row rather than a revert.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    # Eight times the push lanes' depth reads two minutes per thousand cases on
-    # a developer's machine, so eight minutes here and twice that on a shared
-    # runner. Twice the slowest reading, as the sweep's ceiling is.
+    # Eight times the push lanes' depth. A passing run takes most of the hour
+    # on a shared runner, as the drawn laws have grown, so the ceiling is the
+    # hour: a run past it is a red to read as growth, not a limit to raise.
     timeout-minutes: 60
     env:
       # Eight times what the merge gate draws. The number is what the budget

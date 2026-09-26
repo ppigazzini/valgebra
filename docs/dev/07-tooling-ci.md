@@ -700,8 +700,9 @@ wrongly, which is worse than not answering it.
 PyPy 3.11 wheels, and a push that does not link against PyPy cannot see what
 breaks there: `cpyext` carries the limited API and not every static type object
 CPython exports, so an extension naming one links on CPython and fails at
-`import` on PyPy. The smoke jobs run on CPython, so without a PyPy lane the
-first run to find it is a user's. The `pypy 3.11`
+`import` on PyPy. The release smoke runs the suite on the PyPy wheel it
+ships, but a release is where a break is dearest to find, so the push runs
+one first. The `pypy 3.11`
 job builds a release wheel against PyPy and runs `scripts/pypy_import_check.py`
 first, which imports it and builds the annotation forms whose compilation
 reaches a type object: that is the *link*, and it fails with one line naming the
@@ -714,10 +715,13 @@ overrode it walked past the end of its storage and killed the process — an
 answer, not a symbol, and an import cannot see it.
 `tests/test_lane_interpreters.py` holds the rule both ways: an implementation
 the packaging classifiers state has a lane running the suite, and a lane running
-the suite is on an implementation somebody stated. The wheel is a **release**
-build, because a debug one carries frames large enough that the deep-nesting
-cases overflow PyPy's C stack, which is a property of the profile and not of the
-code.
+the suite is on an implementation somebody stated. The wheel is a **plain
+release** build, because the frame size decides whether the deep-nesting cases
+overflow the native stack budget `cpyext` sizes from the recursion limit: a
+debug build's frames are large enough, and so are a profile-guided build's,
+which is why the PyPy wheels the release ships are plain builds too and the
+release smoke runs the suite on them ([09-releasing.md](09-releasing.md)). That
+is a property of the build profile and not of the code.
 
 Three cases the suite carries cannot be decided there and say so rather than
 failing. `cpyext` builds a `PyTypeObject` proxy for every class an extension is
