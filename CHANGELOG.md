@@ -13,13 +13,28 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
-- fix: a protocol says for itself that it is runtime-checkable
-- feat: the validator is generic in the set a checker reads
-- feat: two classes laying down slots of their own share no instance
-- fix: the PyPy wheels are plain builds, smoked with the product suite
-- fix: a PyPy 8.0 wheel is built beside the 7.3 one, and each is smoked on its own
-
 -->
+
+## [0.0.14] - 2026-09-26
+
+A typing and correctness release: five entries, two additions and three
+fixes.
+
+A static checker reads a validator's set: `Validator[T]` is generic, a `True`
+from `is_valid` narrows to the type on a typed validator, and `ensure` and
+`load` return it. Two classes whose own `__slots__` lay down layouts share no
+instance, so their meet is decided empty as a meet of two builtin subclasses
+is, and a slotted class over no builtin is below the complement of every
+builtin kind.
+
+Three fixes. A protocol is a schema only where `@runtime_checkable` was
+applied to it, since a class that inherits the decorator answers `isinstance`
+with a warning from 3.15 and a refusal from 3.20, and under `-W error` was
+read as admitting nothing. The PyPy wheels are plain release builds: the
+profiled ones 0.0.12 and 0.0.13 carry die with a segmentation fault at the
+walk's depth bound. And there is a wheel for PyPy 8.0 beside the one for 7.3,
+since 8.0 changed the ABI tag and a wheel for one does not install on the
+other; the release runs the whole product suite on each PyPy wheel it ships.
 
 ### Added
 
@@ -1930,7 +1945,8 @@ the support matrix.
   baseline against pydantic-core and jsonschema, and a deterministic
   instruction-count CI regression gate.
 
-[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.13...HEAD
+[Unreleased]: https://github.com/ppigazzini/valgebra/compare/v0.0.14...HEAD
+[0.0.14]: https://github.com/ppigazzini/valgebra/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/ppigazzini/valgebra/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/ppigazzini/valgebra/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/ppigazzini/valgebra/compare/v0.0.10...v0.0.11
