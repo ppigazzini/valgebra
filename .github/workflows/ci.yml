@@ -656,6 +656,9 @@ jobs:
       # cell a test now names.
       - run: uv run --no-sync python scripts/use_case_ledger.py
       - run: uv run --no-sync mkdocs build --strict
+      # A build that exits 0 is not evidence the API reference has content: the
+      # page rendered headings and no prose for two releases while it did.
+      - run: uv run --no-sync python scripts/docs_stubs.py --check
 
   bench:
     name: bench

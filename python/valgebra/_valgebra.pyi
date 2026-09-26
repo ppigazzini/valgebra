@@ -2,8 +2,9 @@
 #
 # This stub carries the *types* of the public surface for type checkers and IDEs.
 # The prose documentation lives on the compiled objects themselves (the Rust
-# docstrings) and is rendered on the API reference page, so it has a single
-# source and cannot drift from a hand-copied duplicate here. Import the public
+# docstrings) and is rendered on the API reference page, which
+# `scripts/docs_stubs.py` merges with this stub, so each has a single source
+# and cannot drift from a hand-copied duplicate here. Import the public
 # names from the top-level `valgebra` package, not from this module.
 #
 # Every parameter is positional-only, because the compiled functions take them

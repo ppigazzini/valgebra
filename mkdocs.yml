@@ -88,6 +88,10 @@ plugins:
         python:
           paths: [python]
           options:
+            # The compiled module's classes, inspected where they are defined;
+            # the script says why griffe reads them as aliases on its own.
+            extensions:
+              - scripts/docs_stubs.py:InspectTheCompiledClasses
             docstring_style: google
             show_root_heading: true
             show_root_full_path: false

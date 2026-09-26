@@ -122,6 +122,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | Python lint and format | `pyproject.toml` `[tool.ruff]` | `uv run ruff check . && uv run ruff format --check .` |
 | Python types | `pyproject.toml` | `uv run ty check` |
 | documentation claims | every tracked `*.md` | `uv run python scripts/docs_lint.py` |
+| the API reference carries the compiled docstrings | `scripts/docs_stubs.py` | `uv run mkdocs build --strict && uv run python scripts/docs_stubs.py --check` |
 | the use cases the tree has, and how many the suite names | the type stub and the codes the walk writes | `uv run python scripts/use_case_ledger.py` |
 | the branch arms the core's tests reach | an instrumented run on the pinned nightly | `uv run python scripts/branch_coverage.py branches.json` |
 | when a `typing` or `enum` name, or a stdlib module, arrived | `tests/floor_names.json` | `uv run python scripts/floor_names.py --check` |

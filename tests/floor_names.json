@@ -592,6 +592,9 @@
     "gc": {
       "since": "3.10"
     },
+    "html": {
+      "since": "3.10"
+    },
     "importlib": {
       "since": "3.10"
     },

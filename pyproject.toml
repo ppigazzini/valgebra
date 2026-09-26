@@ -292,4 +292,7 @@ exclude = [
     "tests/test_differential.py",
     "tests/test_pydantic_boundary.py",
     "scripts/compare_gate.py",
+    # The API reference's griffe extension imports the docs group, which the
+    # type-check lane does not install.
+    "scripts/docs_stubs.py",
 ]
