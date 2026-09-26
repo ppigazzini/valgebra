@@ -41,8 +41,14 @@ extension against PyPy, imports it, and runs the whole suite there. Both halves
 are needed, because the C API PyPy offers is not CPython's: an extension there
 runs through `cpyext`, which carries the limited API and not every static type
 object CPython exports, so naming one of those links fine and fails at `import`
-— and `cpyext` also *answers* differently, which no import can show. There is no
-PyPy wheel for macOS or Windows, where the source distribution is the install.
+— and `cpyext` also *answers* differently, which no import can show. The PyPy
+wheels are plain release builds, where the CPython wheels are profile-guided:
+a profiled extension runs out of the native stack budget `cpyext` sizes from
+the recursion limit before the walk reaches its own depth bound, and the
+process dies where the plain build reports the bound. The release runs the
+whole suite on the PyPy wheel it ships, not only on the one the push lane
+builds. There is no PyPy wheel for macOS or Windows, where the source
+distribution is the install.
 
 One promise this page makes holds differently there. A validator releases the
 classes, enums and predicates its schema names when nothing else holds them, and

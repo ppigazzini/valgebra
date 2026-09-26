@@ -124,6 +124,14 @@ A test that needs a dependency the environment lacks skips rather than fails, so
 read the skip list: a suite whose oracles are absent has checked less than the
 same suite in a full development environment.
 
+Run it on PyPy as well (`uv venv --python pypy3.11`), because the PyPy wheel
+is a different build: plain rather than profile-guided, since a profiled
+extension crashes there at the walk's depth bound (`release.yml` says how),
+and the push lane's PyPy leg runs the suite on a wheel it builds itself. The
+release smoke runs the product suite on the PyPy wheel that ships, and
+`tests/test_release_smoke.py` holds every wheel the release builds on a runner
+to a smoke row there.
+
 **Do not add PyPI as a second index while checking TestPyPI.** uv resolves a name
 from the first index that carries it, so `--extra-index-url https://pypi.org/simple/`
 makes it refuse the TestPyPI version in favour of the older released one — the

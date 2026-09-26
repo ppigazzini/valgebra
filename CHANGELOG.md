@@ -16,6 +16,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a protocol says for itself that it is runtime-checkable
 - feat: the validator is generic in the set a checker reads
 - feat: two classes laying down slots of their own share no instance
+- fix: the PyPy wheels are plain builds, smoked with the product suite
 
 -->
 
@@ -51,6 +52,14 @@ answer of its own, or a repair to a change not yet released.
 
 ### Fixed
 
+- **The PyPy wheels no longer crash at the walk's depth bound.** The released
+  PyPy wheels were profile-guided builds like the CPython ones, and on a value
+  nested to the depth bound a profiled extension ran out of the native stack
+  budget PyPy's C-API layer sizes from the recursion limit before the walk
+  reported `recursion_limit`; the process died with a segmentation fault. The
+  PyPy wheels are plain release builds, which report the bound, and the
+  release smoke runs the whole product suite on the PyPy wheel it ships
+  rather than importing it alone.
 - **A protocol is a schema only where `@runtime_checkable` was applied to
   it.** A subclass protocol inherits the attribute the decorator sets without
   the decorator, and was read as the `isinstance` check its base allows. Python

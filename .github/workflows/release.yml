@@ -71,9 +71,22 @@ jobs:
         # run a musl-linked extension to train a profile. Native musl PGO is
         # possible in an Alpine container but is deliberately out of scope,
         # matching the reference build toolchain.
+        #
+        # PyPy is a third: a plain build in a row of its own, because a profiled
+        # extension crashes there. PyPy's C-API layer sizes a native stack budget
+        # from `sys.getrecursionlimit()`, the profile's inlining grows the walk's
+        # frames, and on a value nested to the walk's own depth bound the budget
+        # runs out first: a call that layer assumes cannot fail then does, and
+        # the process dies with SIGSEGV where the plain build reports
+        # `recursion_limit`. Measured on the 0.0.12 and 0.0.13 wheels; the same
+        # source built plain passes the whole suite. The Linux rows therefore
+        # name the CPython interpreters rather than finding every one the image
+        # has, and the smoke runs the suite on the PyPy wheel that ships.
         platform:
-          - { runner: ubuntu-latest, target: x86_64, pgo: true }
-          - { runner: ubuntu-24.04-arm, target: aarch64, pgo: true }
+          - { runner: ubuntu-latest, target: x86_64, pgo: true, interpreter: python3.10 python3.11 python3.12 python3.13 python3.14 python3.15 python3.14t python3.15t }
+          - { runner: ubuntu-24.04-arm, target: aarch64, pgo: true, interpreter: python3.10 python3.11 python3.12 python3.13 python3.14 python3.15 python3.14t python3.15t }
+          - { runner: ubuntu-latest, target: x86_64, interpreter: pypy3.11, variant: pypy }
+          - { runner: ubuntu-24.04-arm, target: aarch64, interpreter: pypy3.11, variant: pypy }
           - { runner: ubuntu-latest, target: x86_64, manylinux: musllinux_1_2 }
           - { runner: ubuntu-latest, target: aarch64, manylinux: musllinux_1_2 }
           # macos-15-intel is the last GitHub-hosted x86_64 macOS image (macOS
@@ -192,12 +205,12 @@ jobs:
           maturin-version: "1.15.0"
           target: ${{ matrix.platform.target }}
           # --find-interpreter builds for every interpreter the image exposes
-          # that satisfies requires-python: each CPython, the free-threaded
-          # build where present, and PyPy on the Linux images (see
-          # docs/00-installation.md, which names what ships). macOS and the
-          # Windows free-threaded job name theirs instead. --pgo (native
-          # targets only) runs the training workload configured in
-          # pyproject.toml against the instrumented build.
+          # that satisfies requires-python: each CPython and the free-threaded
+          # build where present (see docs/00-installation.md, which names what
+          # ships). The Linux, macOS and Windows free-threaded rows name theirs
+          # instead, the Linux ones so that PyPy is built in its own plain row.
+          # --pgo (native targets only) runs the training workload configured
+          # in pyproject.toml against the instrumented build.
           args: >-
             --release --out dist
             ${{ steps.interpreters.outputs.list && format('--interpreter {0}', steps.interpreters.outputs.list) || matrix.platform.interpreter && format('--interpreter {0}', matrix.platform.interpreter) || '--find-interpreter' }}
@@ -251,6 +264,12 @@ jobs:
           # carries a wheel for them.
           - { name: linux-x86_64, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t" }
           - { name: linux-aarch64, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t" }
+          # The PyPy wheels run the product suite as well as the import: the
+          # crash a profiled build had there showed only at the walk's depth
+          # bound, which no import reaches, and the CI lane runs the suite on a
+          # wheel it builds itself rather than on the one that ships.
+          - { name: linux-x86_64-pypy, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-pypy, pythons: "pypy3.11", suite: true }
+          - { name: linux-aarch64-pypy, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-pypy, pythons: "pypy3.11", suite: true }
           - { name: macos-x86_64, runner: macos-15-intel, artifact: wheels-macos-15-intel-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t" }
           - { name: macos-arm64, runner: macos-latest, artifact: wheels-macos-latest-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t" }
           - { name: windows-x64, runner: windows-latest, artifact: wheels-windows-latest-x64-native, pythons: "3.10 3.15" }
@@ -299,6 +318,27 @@ jobs:
             uv pip install --python ".venv-$py" --no-index --find-links dist valgebra
             bin=".venv-$py/bin"; [ -d "$bin" ] || bin=".venv-$py/Scripts"
             "$bin/python" -c "import sys, sysconfig, valgebra as v; assert v.Validator(int).is_valid(1); assert not v.Validator(int).is_valid('x'); assert v.Validator(list[int]).is_valid([1, 2]); assert v.Validator(int).is_valid_json('1'); assert not (sysconfig.get_config_var('Py_GIL_DISABLED') and sys._is_gil_enabled()); print('smoke ok', sys.version.split()[0], v.__version__)"
+          done
+      # The rows that say so run the product suite on the installed wheel: the
+      # checkout is for `tests/` alone, and the package under test is the wheel
+      # from `dist`, never the tree.
+      - if: ${{ matrix.wheel.suite }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: tree
+      - name: Run the product suite on the built wheel
+        if: ${{ matrix.wheel.suite }}
+        shell: bash
+        env:
+          PYTHONS: ${{ matrix.wheel.pythons }}
+          HYPOTHESIS_PROFILE: ci
+        run: |
+          for py in $PYTHONS; do
+            uv pip install --python ".venv-$py" \
+              "annotated-types>=0.8" "hypothesis>=6.168.1" "pytest>=9.1.1" \
+              "pyyaml>=6.0.3" "syrupy>=6.1.1"
+            ".venv-$py/bin/python" -m pytest -q -m "not repository" tree/tests
           done
 
   sdist-smoke:

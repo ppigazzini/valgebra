@@ -627,6 +627,19 @@ PLANTS = (
         ),
     ),
     Plant(
+        "tests/test_release_smoke.py",
+        (".github/workflows/release.yml",),
+        # The failure the ledger is for: a wheel set built and never run. Planted
+        # by pointing the PyPy smoke row at the CPython set, which is how it
+        # arrives -- a copied row whose artifact name nobody edited.
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            "artifact: wheels-ubuntu-latest-x86_64-pypy,",
+            "artifact: wheels-ubuntu-latest-x86_64-native,",
+        ),
+    ),
+    Plant(
         "tests/test_coverage_scope.py",
         (".github/workflows/ci.yml",),
         # The failure the ledger is for: a corpus counted as shipped code,

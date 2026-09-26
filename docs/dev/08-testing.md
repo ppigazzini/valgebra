@@ -81,7 +81,7 @@ no list will find it — only a search will.
 
 Every list in this repository that could rot is held to the tree in **both**
 directions, because a hand-written list satisfies the direction it was written
-for and misses the other. Forty-three of them:
+for and misses the other. Forty-four of them:
 
 | Ledger | Holds |
 |---|---|
@@ -127,12 +127,13 @@ for and misses the other. Forty-three of them:
 | `tests/test_boundary_ledger.py` | every entry of the published decidability boundary is driven by a test |
 | `tests/test_constraint_matrix.py` | every constraint is driven against every kind, narrowing it or refused |
 | `tests/test_python_lifecycle.py` | every supported interpreter is one CPython's calendar supports today |
+| `tests/test_release_smoke.py` | every wheel the release builds on a runner is smoked there; PyPy's is plain |
 | `tests/test_ledger_plants.py` | every ledger fails on the defect it exists to catch |
 
 Each declares itself with a `LEDGER:` marker, and `scripts/docs_lint.py` holds
 this table to those markers both ways, so a ledger added without a row fails
 rather than passing quietly. The count is spelled here and in the glossary
-because a table nothing counts is the one that drifts: there are forty-three.
+because a table nothing counts is the one that drifts: there are forty-four.
 
 **Which interpreter reads them.** A ledger is a repository check: it reads the
 tree, the workflow and the scripts, none of which answers differently by
