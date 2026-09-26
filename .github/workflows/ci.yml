@@ -472,16 +472,18 @@ jobs:
       # And the stub is checked from the other side: a caller's own strictly
       # typed code, which is what a typed downstream project runs. stubtest says
       # the stub matches the runtime; this says the surface can be *used*
-      # without an ignore. Both target versions, because a stub can be right for
-      # one and wrong for the other -- the checker's own view of the standard
-      # library moves between them. Static, so the runner is the floor and the
-      # `--python-version` flag is what varies.
+      # without an ignore, under the two checkers a downstream project runs
+      # besides ty, which reads the file with the tree. Both target versions,
+      # because a stub can be right for one and wrong for the other -- the
+      # checker's own view of the standard library moves between them. Static,
+      # so the runner is the floor and the target flag is what varies.
       - name: A caller's strict types, on the floor and on the current
         if: ${{ matrix.python-version == '3.10' }}
         run: |
           for target in 3.10 3.15; do
             uv run --no-sync mypy --strict --python-version="$target" \
               tests/typing/consumer.py python/valgebra
+            uv run --no-sync pyright --pythonversion "$target" tests/typing/consumer.py
           done
 
   differential:

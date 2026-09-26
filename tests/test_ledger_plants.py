@@ -599,6 +599,21 @@ PLANTS = (
         ),
     ),
     Plant(
+        "tests/test_checker_readings.py",
+        ("python/valgebra/_valgebra.pyi",),
+        # The failure the ledger is for: a reading that moves and nobody
+        # notices. Planted from the stub's side, which is how the tree causes
+        # it: the typed `union` overload goes, and ty's reading of two typed
+        # validators falls from their union to `object`.
+        lambda tree: _edit(
+            tree,
+            "python/valgebra/_valgebra.pyi",
+            "@overload\ndef union(*schemas: Validator[_S]) -> Validator[_S]: ...\n"
+            "@overload\ndef union(*schemas: object)",
+            "def union(*schemas: object)",
+        ),
+    ),
+    Plant(
         "tests/test_coverage_scope.py",
         (".github/workflows/ci.yml",),
         # The failure the ledger is for: a corpus counted as shipped code,

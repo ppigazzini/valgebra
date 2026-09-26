@@ -43,6 +43,7 @@ dev = [
     "maturin>=1.15.0,<2",
     "mypy>=2.3.1",
     "pre-commit>=4.6.2",
+    "pyright>=1.1.414",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     # `scripts/gate.py` and the ledger that holds it read the workflow, and a
@@ -281,8 +282,13 @@ strict-equality-semantics = true
 # separate measurement harnesses, not the typed public surface; they import the
 # optional bench dependency group (pydantic, jsonschema), which is absent in the
 # type-check lane.
+# The checker-reading fixtures are the one place a diagnostic is the point:
+# one of them holds ty's reading of a `TypeForm` overload, which is an error
+# today. `tests/test_checker_readings.py` runs ty over them by name, which an
+# exclusion does not stop, and holds what it reports.
 exclude = [
     "benches",
+    "tests/typing/readings",
     "tests/test_differential.py",
     "tests/test_pydantic_boundary.py",
     "scripts/compare_gate.py",

@@ -14,9 +14,12 @@ to `Any` passed in silence. `assert_type` asks whether the checker's own view of
 the expression is that type exactly, and fails on `Any`.
 
 It is not a test: nothing here runs, and pytest does not collect it. The
-assertion is the exit code of the two `mypy --strict` runs in the type-check
-lane, one on the supported floor and one on the current interpreter, because a
-stub can be right for one and wrong for the other.
+assertion is the exit code of the `mypy --strict` and pyright runs in the
+type-check lane, each on the supported floor and on the current interpreter,
+because a stub can be right for one and wrong for the other; `ty check` reads
+the file with the rest of the tree. A row here is therefore a reading the three
+checkers share. The readings they do not share are one fixture each under
+`readings/`, held per checker by `tests/test_checker_readings.py`.
 `tests/test_typed_consumer.py` holds the names below to the ones the stub
 declares, so a method added to the surface arrives here with a caller using it.
 """
@@ -90,6 +93,9 @@ def build() -> Validator[object]:
     assert_type(records, Validator[Row])
     literals = Validator(Literal["a", "b"])
     assert_type(literals, Validator[object])
+    # A union written with `|` is a `types.UnionType`, not a `type`, so it
+    # falls to the `object` overload under all three checkers.
+    assert_type(Validator(int | None), Validator[object])
     refined = Validator(Annotated[int, at.Ge(0), at.Le(10)])
     assert_type(refined, Validator[object])
     assert_type(union(scalars, shapes, classes, records), Validator[object])
