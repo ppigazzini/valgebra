@@ -44,7 +44,7 @@ env:
   # the monthly maintenance pass (Dependabot does not pin toolchains). The
   # scheduled libFuzzer soak stays on floating `nightly` so it still warns about
   # future nightly/fuzzer breakage.
-  FUZZ_NIGHTLY: nightly-2026-09-05
+  FUZZ_NIGHTLY: nightly-2026-09-25
 
 jobs:
   rust-lint:
