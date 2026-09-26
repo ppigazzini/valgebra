@@ -254,7 +254,7 @@ from valgebra import ValidationError, Validator
 grown = {"a": 1, "b": 2}
 schema = Validator(
     {
-        "a": Annotated[int, at.Predicate(lambda _: grown.setdefault("c", 3) or True)],
+        "a": Annotated[int, at.Predicate(lambda _: bool(grown.setdefault("c", 3)))],
         "b": int,
         "c?": int,
     }
@@ -349,7 +349,7 @@ def expected_of(spec: object, value: object) -> str:
     try:
         Validator(spec).validate(value)
     except ValidationError as err:
-        return err.errors[0]["expected"]
+        return err.expected
     raise AssertionError("expected a failure")
 
 
@@ -400,7 +400,7 @@ def report(spec: object) -> tuple[str, str]:
     try:
         Validator(spec).validate("x")
     except ValidationError as err:
-        return err.errors[0]["code"], err.errors[0]["expected"]
+        return err.code, err.expected
     raise AssertionError("expected a failure")
 
 

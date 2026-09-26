@@ -870,7 +870,7 @@ each is written out below.
   ```python
   from valgebra import Validator, recursive, union
 
-  type Json = None | bool | int | float | str | list[Json] | dict[str, Json]
+  type Json = bool | int | float | str | list[Json] | dict[str, Json] | None
 
   assert Validator(Json).is_equivalent(
       recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))

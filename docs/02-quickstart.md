@@ -100,7 +100,7 @@ assert not users.is_valid({"name": "Ada", "age": -1})
 Any schema combines with `union`, `intersection`, and `complement`:
 
 ```python
-from valgebra import complement, intersection, Validator
+from valgebra import complement, intersection
 
 # an int that is not a bool
 strict_int = intersection(int, complement(bool))

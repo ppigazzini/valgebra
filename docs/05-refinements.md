@@ -175,7 +175,7 @@ assert not oid.is_valid("0123")  # not the full 24 characters
 assert Validator(Annotated[str, re.compile(r"\d+")]).is_valid("123")
 
 # A compiled pattern's flags are part of the pattern and are carried over.
-assert Validator(Annotated[str, re.compile("abc", re.I)]).is_valid("ABC")
+assert Validator(Annotated[str, re.compile("abc", re.IGNORECASE)]).is_valid("ABC")
 ```
 
 A pattern is matched against text, so a `bytes` pattern is refused. So are

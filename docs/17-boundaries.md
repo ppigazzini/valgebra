@@ -53,7 +53,7 @@ is therefore an `isinstance` check for *being* callable, and the argument types
 are not checked at all.
 
 ```python
-from typing import Callable
+from collections.abc import Callable
 
 from valgebra import Validator
 
@@ -105,6 +105,7 @@ walk keeps its recursion guard in a per-call local, so a nested check is an
 ordinary one and does not disturb the outer.
 
 ```python
+from collections.abc import Iterable
 from typing import Annotated
 
 import annotated_types as at
@@ -114,8 +115,8 @@ from valgebra import Validator
 rows = Validator({"id": int})
 
 
-def every_row(value: object) -> bool:
-    return all(rows.is_valid(row) for row in value)  # type: ignore[union-attr]
+def every_row(value: Iterable[object]) -> bool:
+    return all(rows.is_valid(row) for row in value)
 
 
 page = Validator(Annotated[list, at.Predicate(every_row)])

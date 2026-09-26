@@ -25,7 +25,7 @@ assert anything.is_valid(object())  # top admits everything
 The combinators accept any schema spec, so they nest and mix freely:
 
 ```python
-from valgebra import complement, union, Validator
+from valgebra import complement, union
 
 color = union("red", "green", "blue")  # union of three literals
 assert color.is_valid("red")
@@ -107,7 +107,7 @@ from typing import Annotated
 
 import annotated_types as at
 
-from valgebra import anything, complement, intersection, nothing, union, Validator
+from valgebra import Validator, anything, complement, intersection, nothing, union
 
 
 # the same implies helper as above, repeated so this example runs on its own
@@ -118,7 +118,7 @@ def implies(condition, then, otherwise=anything):
     )
 
 
-def first_match(*cases, default=anything):
+def first_match(*cases, default: Validator = anything):
     result = Validator(default)
     for condition, then in reversed(cases):
         result = implies(condition, then, result)
@@ -144,7 +144,7 @@ record that merely asserts a key is present is an open record requiring it —
 `intersection`, and `complement`:
 
 ```python
-from valgebra import anything, complement, intersection, union, Validator
+from valgebra import Validator, anything, complement, intersection, union
 
 
 def has(key):
@@ -270,7 +270,7 @@ A schema is built in the lattice normal form, so the reduction `simplify`
 promises is the schema you already hold: `repr` shows it and `==` compares it.
 
 ```python
-from valgebra import Validator, complement, intersection, union
+from valgebra import complement, intersection, union
 
 assert repr(complement(complement(int))) == "int"
 assert repr(union(int, int)) == "int"
@@ -300,7 +300,7 @@ is set inclusion, `is_equivalent` is mutual inclusion, and `is_empty` reports an
 unsatisfiable schema:
 
 ```python
-from valgebra import complement, intersection, union, Validator
+from valgebra import Validator, complement, intersection, union
 
 # subtyping is set inclusion; bool is a subtype of int
 assert Validator(bool).is_subtype_of(int)

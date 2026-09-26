@@ -564,6 +564,10 @@ jobs:
       # Execute every runnable example in the README and the docs site; fail on
       # a stale snippet.
       - run: uv run --no-sync python scripts/run_doc_examples.py
+      # Then read the same blocks with ty, pyright and ruff, which is what a
+      # reader's project does with a copied one; a diagnostic no row of the
+      # script expects, or a row nothing reports, fails.
+      - run: uv run --no-sync python scripts/check_doc_examples.py
 
   pypy:
     name: pypy 3.11

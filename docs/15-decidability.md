@@ -235,7 +235,7 @@ from typing import Annotated, Any
 
 import annotated_types as at
 
-from valgebra import complement, intersection, recursive, union, Validator
+from valgebra import Validator, complement, intersection, recursive, union
 
 assert Validator(bool).is_subtype_of(int)  # bool is a subtype of int
 assert Validator(1).is_subtype_of(int)  # a literal is a member of int
@@ -567,10 +567,8 @@ import annotated_types as at
 from valgebra import (
     Regex,
     Validator,
-    anything,
     complement,
     intersection,
-    nothing,
     recursive,
     union,
 )

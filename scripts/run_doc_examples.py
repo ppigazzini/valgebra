@@ -25,6 +25,10 @@ import sys
 import tempfile
 import textwrap
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 ROOT = Path(__file__).resolve().parent.parent
 # The README, the changelog, and every page of the documentation site. Each
@@ -47,11 +51,22 @@ def planned(block: str) -> bool:
     return MARKER.search(block) is not None
 
 
+def examples() -> Iterator[tuple[Path, int, str]]:
+    """Give every block this runs: its page, its index on the page, its text.
+
+    A fenced block nested in a list item carries that item's indentation, which
+    is Markdown rather than Python. Strip what every line shares; a block at
+    the margin is unchanged. `scripts/check_doc_examples.py` reads the same
+    blocks, so what a checker reads is what this runs.
+    """
+    for doc in DOCS:
+        text = doc.read_text(encoding="utf-8")
+        for index, block in enumerate(BLOCK.findall(text), start=1):
+            if not planned(block):
+                yield doc, index, textwrap.dedent(block)
+
+
 def run_block(block: str, doc_name: str, index: int) -> bool:
-    # A fenced block nested in a list item carries that item's indentation, which
-    # is Markdown rather than Python. Strip what every line shares; a block at
-    # the margin is unchanged.
-    block = textwrap.dedent(block)
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "example.py"
         path.write_text(block, encoding="utf-8")
@@ -70,14 +85,10 @@ def run_block(block: str, doc_name: str, index: int) -> bool:
 def main() -> int:
     checked = 0
     failures = 0
-    for doc in DOCS:
-        text = doc.read_text(encoding="utf-8")
-        for index, block in enumerate(BLOCK.findall(text), start=1):
-            if planned(block):
-                continue
-            checked += 1
-            if not run_block(block, doc.name, index):
-                failures += 1
+    for doc, index, block in examples():
+        checked += 1
+        if not run_block(block, doc.name, index):
+            failures += 1
     print(f"checked {checked} example(s), {failures} failed")
     return 1 if failures else 0
 

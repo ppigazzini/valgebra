@@ -27,7 +27,7 @@ assert not json_value.is_valid({"a": object()})
 A `recursive` schema is an ordinary validator and composes like any other:
 
 ```python
-from valgebra import recursive, Validator
+from valgebra import Validator, recursive
 
 tree = recursive(lambda t: {"value": int, "left?": t, "right?": t})
 assert tree.is_valid({"value": 1, "left": {"value": 2}})
@@ -46,7 +46,7 @@ builds — the two are one set, and `is_equivalent` says so.
 ```python
 from valgebra import Validator, recursive, union
 
-type Json = None | bool | int | float | str | list[Json] | dict[str, Json]
+type Json = bool | int | float | str | list[Json] | dict[str, Json] | None
 
 alias = Validator(Json)
 assert alias.is_valid({"a": [1, "x", {"b": None}]})
@@ -129,7 +129,7 @@ guarded definition names one set, so what inclusion relates and what emptiness
 counts are the same set.
 
 ```python
-from valgebra import recursive, union, Validator
+from valgebra import Validator, recursive, union
 
 json_value = recursive(lambda j: union(None, bool, int, float, str, [j], {str: j}))
 assert Validator(json_value).is_subtype_of(json_value)  # reflexive across the fixpoint

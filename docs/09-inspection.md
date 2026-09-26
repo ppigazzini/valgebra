@@ -42,7 +42,7 @@ That is one set difference: `declared ∧ ¬implied` is exactly the set of value
 that pass the type check and break the code.
 
 ```python
-from valgebra import Validator, complement, intersection, union
+from valgebra import Validator, complement, intersection
 
 
 def unenforced(declared: object, implied: object) -> list[object]:
@@ -68,7 +68,7 @@ An **unannotated** parameter is the same question with the top on the left, whic
 is why the absence of a contract is the loudest answer rather than a silent one:
 
 ```python
-from valgebra import anything, complement, intersection, Validator
+from valgebra import Validator, anything, complement, intersection
 
 nothing_declared = intersection(anything, complement(Validator(None)))
 assert not nothing_declared.is_valid(None)  # the body needs non-None

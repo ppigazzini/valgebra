@@ -112,6 +112,16 @@ now, and let the number be the evidence.
 alternative.** "Do not pin the budget" leaves a reader stuck; "do not pin the
 budget — name `scripts/perf_budget.json`, which owns it" does not.
 
+**An example runs as written and reads clean.** Every fenced `python` block on
+a tracked page runs with its own imports (`scripts/run_doc_examples.py`), and
+is read by ty, pyright and ruff at the newest supported release
+(`scripts/check_doc_examples.py`), because a reader copies it into a project
+that runs them. A diagnostic that *is* the example -- the wrong argument a page
+shows refused, a forward reference the frontend does not resolve, a validator
+inside `list[...]` -- is a row of that script's ledger with its reason, never
+an ignore comment in the block: a reader copies the block and not the reason,
+and an ignore written for one checker is noise to the other two.
+
 **Cut anything that does not help implement or verify.** Background a reader
 could get from the typing spec belongs in [11-references.md](11-references.md) as
 a link. Length is not thoroughness; it is where rot hides. This binds a generated

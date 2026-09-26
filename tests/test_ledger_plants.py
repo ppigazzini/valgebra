@@ -614,6 +614,19 @@ PLANTS = (
         ),
     ),
     Plant(
+        "tests/test_doc_example_checkers.py",
+        ("README.md",),
+        # The failure the ledger is for: a diagnostic on a published example
+        # that no row expects. Planted as the shape it arrives in -- an import
+        # a later edit of the block left unused.
+        lambda tree: _edit(
+            tree,
+            "README.md",
+            "from valgebra import ValidationError, Validator\n",
+            "import os\n\nfrom valgebra import ValidationError, Validator\n",
+        ),
+    ),
+    Plant(
         "tests/test_coverage_scope.py",
         (".github/workflows/ci.yml",),
         # The failure the ledger is for: a corpus counted as shipped code,

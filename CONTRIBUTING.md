@@ -126,6 +126,7 @@ file that owns the contract and the single command that reproduces its verdict.
 | the branch arms the core's tests reach | an instrumented run on the pinned nightly | `uv run python scripts/branch_coverage.py branches.json` |
 | when a `typing` or `enum` name, or a stdlib module, arrived | `tests/floor_names.json` | `uv run python scripts/floor_names.py --check` |
 | doc examples run | `docs/` | `uv run python scripts/run_doc_examples.py` |
+| doc examples read clean under ty, pyright and ruff, or say why | `scripts/check_doc_examples.py` | `uv run python scripts/check_doc_examples.py` |
 | the rendered site builds | `mkdocs.yml` | `uv run --group docs mkdocs build --strict` |
 | core instruction budget | `scripts/perf_budget.json` | `uv run python scripts/perf_gate.py` |
 | binding instruction budget | `scripts/perf_budget.json` | `uv run python scripts/perf_gate.py --binding` |
