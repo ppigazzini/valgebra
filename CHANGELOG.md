@@ -17,6 +17,7 @@ answer of its own, or a repair to a change not yet released.
 - feat: the validator is generic in the set a checker reads
 - feat: two classes laying down slots of their own share no instance
 - fix: the PyPy wheels are plain builds, smoked with the product suite
+- fix: a PyPy 8.0 wheel is built beside the 7.3 one, and each is smoked on its own
 
 -->
 
@@ -58,8 +59,13 @@ answer of its own, or a repair to a change not yet released.
   budget PyPy's C-API layer sizes from the recursion limit before the walk
   reported `recursion_limit`; the process died with a segmentation fault. The
   PyPy wheels are plain release builds, which report the bound, and the
-  release smoke runs the whole product suite on the PyPy wheel it ships
+  release smoke runs the whole product suite on each PyPy wheel it ships
   rather than importing it alone.
+- **A wheel for PyPy 8.0.** PyPy 8.0 changed the ABI tag from `pp73` to
+  `pp80`, and an installer matches the tag exactly, so the `pp73` wheels
+  every earlier release built install on PyPy 7.3 and not on 8.0. The release
+  builds a wheel for each on manylinux x86_64 and aarch64, and smokes each on
+  the PyPy it is built for.
 - **A protocol is a schema only where `@runtime_checkable` was applied to
   it.** A subclass protocol inherits the attribute the decorator sets without
   the decorator, and was read as the `isinstance` check its base allows. Python

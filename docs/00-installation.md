@@ -35,9 +35,12 @@ macOS (Intel and Apple silicon) and Windows x64 for every supported CPython,
 3.15 on Linux, macOS and Windows x64. Free-threaded support starts at 3.14t; the
 earlier 3.13 free-threaded build is not a target.
 
-**PyPy 3.11 is a target, on Linux.** Four wheels are published for it —
-manylinux and musllinux, x86_64 and aarch64 — and every push builds the
-extension against PyPy, imports it, and runs the whole suite there. Both halves
+**PyPy 3.11 is a target, on Linux.** Wheels are published for PyPy 7.3 and
+for PyPy 8.0 on manylinux x86_64 and aarch64 — two, because PyPy 8.0 changed
+the ABI tag and an installer matches it exactly, so a wheel for one does not
+install on the other — and for the PyPy the musl build image carries on
+musllinux. Every push builds the extension against PyPy, imports it, and runs
+the whole suite there. Both halves
 are needed, because the C API PyPy offers is not CPython's: an extension there
 runs through `cpyext`, which carries the limited API and not every static type
 object CPython exports, so naming one of those links fine and fails at `import`
@@ -46,8 +49,8 @@ wheels are plain release builds, where the CPython wheels are profile-guided:
 a profiled extension runs out of the native stack budget `cpyext` sizes from
 the recursion limit before the walk reaches its own depth bound, and the
 process dies where the plain build reports the bound. The release runs the
-whole suite on the PyPy wheel it ships, not only on the one the push lane
-builds. There is no PyPy wheel for macOS or Windows, where the source
+whole suite on each PyPy wheel it ships, on the PyPy it is built for, not
+only on the one the push lane builds. There is no PyPy wheel for macOS or Windows, where the source
 distribution is the install.
 
 One promise this page makes holds differently there. A validator releases the

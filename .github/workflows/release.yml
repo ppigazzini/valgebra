@@ -82,11 +82,24 @@ jobs:
         # source built plain passes the whole suite. The Linux rows therefore
         # name the CPython interpreters rather than finding every one the image
         # has, and the smoke runs the suite on the PyPy wheel that ships.
+        #
+        # Two PyPy wheels per architecture, because PyPy 8.0 changed the ABI
+        # tag: a `pp73` wheel does not install on PyPy 8.0 and a `pp80` one
+        # not on 7.3, and an installer matches the tag exactly. PyPy 7.3 comes
+        # with the manylinux2014 image, as its own binaries run on glibc 2.17.
+        # PyPy 8.0's binaries need glibc 2.27, so the image that carries it is
+        # manylinux_2_28, where it sits at `/opt/python/pp311-pypy311_pp80`
+        # beside the 7.3 that `pypy3.11` still names; the row names the path,
+        # and an image without it fails the build rather than shipping the
+        # other ABI under this row's name. Each wheel is smoked on the PyPy it
+        # is built for.
         platform:
           - { runner: ubuntu-latest, target: x86_64, pgo: true, interpreter: python3.10 python3.11 python3.12 python3.13 python3.14 python3.15 python3.14t python3.15t }
           - { runner: ubuntu-24.04-arm, target: aarch64, pgo: true, interpreter: python3.10 python3.11 python3.12 python3.13 python3.14 python3.15 python3.14t python3.15t }
-          - { runner: ubuntu-latest, target: x86_64, interpreter: pypy3.11, variant: pypy }
-          - { runner: ubuntu-24.04-arm, target: aarch64, interpreter: pypy3.11, variant: pypy }
+          - { runner: ubuntu-latest, target: x86_64, interpreter: pypy3.11, variant: pypy73 }
+          - { runner: ubuntu-24.04-arm, target: aarch64, interpreter: pypy3.11, variant: pypy73 }
+          - { runner: ubuntu-latest, target: x86_64, manylinux: 2_28, interpreter: /opt/python/pp311-pypy311_pp80/bin/python, variant: pypy80 }
+          - { runner: ubuntu-24.04-arm, target: aarch64, manylinux: 2_28, interpreter: /opt/python/pp311-pypy311_pp80/bin/python, variant: pypy80 }
           - { runner: ubuntu-latest, target: x86_64, manylinux: musllinux_1_2 }
           - { runner: ubuntu-latest, target: aarch64, manylinux: musllinux_1_2 }
           # macos-15-intel is the last GitHub-hosted x86_64 macOS image (macOS
@@ -222,7 +235,7 @@ jobs:
           sccache: "false"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}-${{ matrix.platform.manylinux || matrix.platform.variant || 'native' }}
+          name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}-${{ matrix.platform.variant || matrix.platform.manylinux || 'native' }}
           path: dist
           # An empty upload must fail here rather than downstream: the smoke job
           # installs "the matching wheel from the downloaded set", and a set with
@@ -267,16 +280,20 @@ jobs:
           # The PyPy wheels run the product suite as well as the import: the
           # crash a profiled build had there showed only at the walk's depth
           # bound, which no import reaches, and the CI lane runs the suite on a
-          # wheel it builds itself rather than on the one that ships.
-          - { name: linux-x86_64-pypy, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-pypy, pythons: "pypy3.11", suite: true }
-          - { name: linux-aarch64-pypy, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-pypy, pythons: "pypy3.11", suite: true }
+          # wheel it builds itself rather than on the one that ships. Each is
+          # smoked on the PyPy it is built for, named by the release that
+          # carries the ABI: 3.11.15 is PyPy 7.3 and 3.11.16 is PyPy 8.0.
+          - { name: linux-x86_64-pypy73, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-pypy73, pythons: "pypy@3.11.15", suite: true }
+          - { name: linux-aarch64-pypy73, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-pypy73, pythons: "pypy@3.11.15", suite: true }
+          - { name: linux-x86_64-pypy80, runner: ubuntu-latest, artifact: wheels-ubuntu-latest-x86_64-pypy80, pythons: "pypy@3.11.16", suite: true }
+          - { name: linux-aarch64-pypy80, runner: ubuntu-24.04-arm, artifact: wheels-ubuntu-24.04-arm-aarch64-pypy80, pythons: "pypy@3.11.16", suite: true }
           - { name: macos-x86_64, runner: macos-15-intel, artifact: wheels-macos-15-intel-x86_64-native, pythons: "3.10 3.15 3.14t 3.15t" }
           - { name: macos-arm64, runner: macos-latest, artifact: wheels-macos-latest-aarch64-native, pythons: "3.10 3.15 3.14t 3.15t" }
           - { name: windows-x64, runner: windows-latest, artifact: wheels-windows-latest-x64-native, pythons: "3.10 3.15" }
           - { name: windows-x64-freethreaded, runner: windows-latest, artifact: wheels-windows-latest-x64-freethreaded, pythons: "3.14t 3.15t" }
           - { name: windows-arm64, runner: windows-11-arm, artifact: wheels-windows-11-arm-aarch64-native, pythons: "3.12 3.15", host: "3.12\n3.15" }
     runs-on: ${{ matrix.wheel.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     # The two musllinux wheels are not smoked here: running them needs a musl
     # (Alpine) container with a musl interpreter, a separate lane. The glibc
     # Linux, macOS, and Windows wheels — the platforms with no other functional

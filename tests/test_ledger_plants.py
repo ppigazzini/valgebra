@@ -635,7 +635,7 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             ".github/workflows/release.yml",
-            "artifact: wheels-ubuntu-latest-x86_64-pypy,",
+            "artifact: wheels-ubuntu-latest-x86_64-pypy73,",
             "artifact: wheels-ubuntu-latest-x86_64-native,",
         ),
     ),
