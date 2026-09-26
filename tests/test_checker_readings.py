@@ -262,6 +262,12 @@ def _pyright() -> dict[str, str]:
             sys.executable,
             "-m",
             "pyright",
+            # The environment pyright reads is the one running this suite, not
+            # whichever `python` is first on the path: run as `<venv>/bin/python
+            # -m pytest` with no venv activated, it otherwise finds a bare
+            # interpreter and reports every import as a stub without source.
+            "--pythonpath",
+            sys.executable,
             "--pythonversion",
             FLOOR,
             "--outputjson",

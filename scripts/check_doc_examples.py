@@ -311,6 +311,10 @@ def read_pyright(scratch: Path, release: str) -> Counter[Key]:
             sys.executable,
             "-m",
             "pyright",
+            # The environment pyright reads is the one running this script, so
+            # a venv that is not on the path still resolves the package.
+            "--pythonpath",
+            sys.executable,
             "--pythonversion",
             release,
             "--outputjson",
