@@ -3534,6 +3534,39 @@ fn a_length_bound_is_separated_by_the_shape_it_narrows() {
     );
 }
 
+/// A length bound on `bytes` is separated by a byte string one past it.
+///
+/// The pair: `bytes` against `bytes` of at most one. It is refuted by a
+/// **two-byte string** and by nothing shorter, and a byte string is a value
+/// only the bound puts in the universe: the kind edges carry the empty one and
+/// one of a single byte, which are members of both sides. The bound has to
+/// contribute a byte string at each of its neighbouring lengths, as it does a
+/// string and a container of each kind, because `bytes` is a kind a length is
+/// read from.
+#[test]
+fn a_length_bound_on_bytes_is_separated_one_past_it() {
+    let pool = const_pool();
+    let defs = fixpoint_defs();
+    let a = Schema::Bytes;
+    let b = Schema::Refine {
+        base: Arc::new(Schema::Bytes),
+        constraints: vec![Constraint::MaxLen(1)].into(),
+    };
+    assert_eq!(
+        a.subtype_relation_under(&b, &NoLeafRelations, &defs),
+        Relation::Fails,
+        "the pair is not refuted"
+    );
+    let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
+    let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
+    assert!(
+        boundary_values(&[&subject, &other]).iter().any(|value| {
+            member_full(&subject, value, &pool) && !member_full(&other, value, &pool)
+        }),
+        "no value of the universe refutes the pair"
+    );
+}
+
 /// Every value of `len` items, in each container a length is read from.
 fn containers_of(len: usize, out: &mut Vec<Obj>) {
     let items = vec![Obj::Int(1); len];
@@ -3543,6 +3576,7 @@ fn containers_of(len: usize, out: &mut Vec<Obj>) {
         .map(|name| (*name, Obj::Int(1)))
         .collect();
     out.push(Obj::Str(SIZED[len.min(SIZED.len() - 1)]));
+    out.push(Obj::Bytes(len));
     out.push(Obj::List(items.clone()));
     out.push(Obj::Tuple(items.clone()));
     out.push(Obj::Set(items.clone()));
