@@ -157,12 +157,17 @@ what to do instead.
   applies) ships with a property test — proptest on the Rust side, hypothesis on
   the Python side. Do not document a law without covering it.
 
-- **Keep the hot path allocation-free and Rust-only.** `validate` and
-  `is_valid` check membership of the actual object; they do not copy or coerce.
-  When a value must be returned after checking, use the explicit `ensure` (or
-  `load` for JSON) mode. User predicates and custom types run as a documented
-  Python-callback slow path — name it as
-  such, never let it become a silent fallback on the default loop.
+- **Keep the hot path Rust-only, and allocation-free except where a measured
+  reading pays for its own storage.** `validate` and `is_valid` check
+  membership of the actual object; they do not coerce it or return a copy of
+  it. A reading that allocates for itself — the list snapshot, on the
+  interpreters where an owned element costs more than the copy — names the
+  allocation and its measurement at its site, and
+  [docs/dev/04-walk.md](docs/dev/04-walk.md) says which readings do. When a
+  value must be returned after checking, use the explicit `ensure` (or `load`
+  for JSON) mode. User predicates and custom types run as a documented
+  Python-callback slow path — name it as such, never let it become a silent
+  fallback on the default loop.
 
 - **Cross the Python/Rust boundary once per call.** Push tree walks, key
   lookups, and bound checks into the Rust validator tree. Do not add Python work
