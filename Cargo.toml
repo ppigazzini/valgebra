@@ -43,7 +43,8 @@ unreachable_pub = "warn"
 # catches the shape a doc-comment sweep by eye does not: an item inserted between
 # a comment and the item it describes leaves the comment attached to the newcomer
 # and the original undocumented, which is what this found on the binding's public
-# type.
+# type. It reads public items only: the same shape on a private function passes,
+# as two doc blocks stacked over one item.
 missing_docs = "warn"
 
 [workspace.lints.clippy]

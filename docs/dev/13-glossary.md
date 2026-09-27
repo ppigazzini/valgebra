@@ -30,7 +30,7 @@ file or symbol that owns the thing, so a rename dates the entry.
 
 | Term | Means |
 |---|---|
-| **sound** | a `true` is a proof. Every relation here is sound, and a `false` means "not proven" rather than "false" |
+| **sound** | a `true` is a proof. Every relation here is sound over values that answer comparisons as their builtin does, and a `false` means "not proven" rather than "false"; `docs/14-soundness.md` pins the one case a lying comparison breaks |
 | **complete** | every true relation is decided. valgebra is complete on a published fragment and conservative elsewhere; `docs/15-decidability.md` states the line |
 | **conservative** | the answer a procedure gives when it cannot decide: the one that claims less |
 | **opaque** | a schema whose region is unknown, so the scalar rules do not apply. Any combination containing one is opaque |

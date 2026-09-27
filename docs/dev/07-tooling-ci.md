@@ -34,21 +34,21 @@ A step that needs a runner (a PGO wheel, valgrind, a mutation sweep, a second
 operating system) is named with the reason instead, and `tests/test_local_gate.py`
 holds that list to the workflow in both directions.
 
-**The instruction gate runs here, although the lane that owns it cannot.**
-The `bench` lane wants cachegrind, a profiled wheel, a second interpreter and
-a system package installed with `sudo`, so it is excused whole -- and the
+**The instruction gate runs here, although the lane that owns it cannot.** The
+`bench` lane wants cachegrind, a profiled wheel, a second interpreter and a
+system package installed with `sudo`, so it is excused whole -- and the
 *comparison* it carries wants none of those. Two builds of one workload,
-measured against the base by the lane's own rule (the remote-tracking branch,
-or its parent where that resolves to `HEAD`), is three minutes in the caller's
+measured against the base by the lane's own rule (the remote-tracking branch, or
+its parent where that resolves to `HEAD`), is three minutes in the caller's
 tree, and the tree is where it has to run: the shallow clone holds one commit
-and a comparison needs the other. Excusing it with the rest of the lane is how
-a change that read sound and cost **seventy-one times** the instructions --
-6.45 billion against 89.8 million on the relation matrix -- passed this script
-with forty-five steps green. One mode runs, `--decision-matrix`, because it is
-the workload whose shapes reach the set representation and a union or
-complement change reads 0.00% on the others; the `--binding-*` modes want the
-extension built into an interpreter and stay with the lane. Missing valgrind
-is named as the reason rather than passed over.
+and a comparison needs the other. Excusing it with the rest of the lane is how a
+change that read sound and cost **seventy-one times** the instructions -- 6.45
+billion against 89.8 million on the relation matrix -- passed this script green.
+One mode runs, `--decision-matrix`, because it is the workload whose shapes
+reach the set representation and a union or complement change reads 0.00% on the
+others; the `--binding-*` modes want the extension built into an interpreter and
+stay with the lane. Missing valgrind is named as the reason rather than passed
+over.
 
 **The floor interpreter is built beside the caller's, and the suite runs on
 it.** The matrix runs seven releases and a developer runs one, so every
@@ -212,6 +212,23 @@ over the package as well as over the typed consumer, because a checker reports
 nothing inside an installed library's stub: a stub one of them refuses is
 refused nowhere a caller looks. An ignore in the stub is coded for the one
 checker that reports, with the reason beside the line it covers.
+
+**Each surface is read by the checkers whose reading is its contract.**
+`.github/workflows/ci.yml` owns the commands, and ruff reads every surface:
+
+| Surface | ty | mypy | pyright |
+|---|---|---|---|
+| the package: the stub and its two modules | the newest release and the floor | `--strict`, floor and newest | floor and newest |
+| `tests/typing/consumer.py` | the newest release, with the tree | `--strict`, floor and newest | floor and newest |
+| `tests/typing/readings/` | the floor | the floor | the floor |
+| the published examples | yes | yes | yes |
+| the rest of `tests/`, and `scripts/` | yes | no | no |
+
+stubtest reads the stub against the built extension besides. The readings are
+held where the checkers disagree, by `tests/test_checker_readings.py`, and the
+examples by `scripts/check_doc_examples.py`. mypy and pyright read no other test
+or script, because a suite checked under three dialects carries three sets of
+ignore comments for code no caller imports.
 
 **The limit.** ty's rule list moves with its releases, and a rule a release adds
 off by default stays off here until someone raises it; `ty explain rule` gives

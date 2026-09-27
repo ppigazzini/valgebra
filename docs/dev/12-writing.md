@@ -100,8 +100,9 @@ comment ages exactly as a page does and is read by fewer people, which is why it
 is in the sweep. The list stops there on purpose: `no longer` states a rule a
 reader applies to a run -- a baseline entry that is no longer a survivor fails --
 and a sweep refusing it would be one nobody could keep. The changelog is a record
-of releases and is exempt, as is this page, which spells the words to forbid
-them.
+of releases and is exempt, as are the files that spell the words to forbid
+them: this page, the lint and its test, which `HISTORY_EXEMPT` in
+`scripts/docs_lint.py` names.
 
 A measurement is the exception, and only as a rule: where a number explains why
 the code has its shape — the walk mode's discriminant order in

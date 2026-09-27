@@ -412,23 +412,25 @@ HELD-BY: the_lattice_laws_hold_of_the_descriptors, the_complement_laws_hold_of_t
 
 It is built beside the structural procedure and is the second decider a caller
 reaches: the rules answer first and this answers where they decline
-([02-decision.md](02-decision.md)). Every kind now carries a representation that
+([02-decision.md](02-decision.md)). Every kind carries a representation that
 separates its values — `Component::top` in
-[descr/mod.rs](../../crates/valgebra-core/src/descr/mod.rs) is the one place that
-says which, and it is the sentence to read rather than this one. `Coarse`, the
-all-or-nothing component, survives only for `NoneType`, where a kind with one
-value makes it exact. What the descriptor cannot hold is a *cycle*, which is why
-a recursive schema is lowered by unfolding once and belongs to the rules; and
-anything past the three bounds a build is held to. Two properties hold of it
-that the structural IR does not have. Emptiness
-over the fragment it covers is a decision rather than a conservative answer,
-with a third verdict, `Unknown`, where an atom is not a set or where a build ran
-out of its allowance before the question could be answered. **[LOAD-BEARING: the-second-decider]** —
-the third verdict is what lets a bounded procedure stay *sound*: a negated form
-has to be expanded before its emptiness can be read, and past the allowance
-there is no union left to read. Either decision there would stand on nothing,
-and the one a caller may act on is the proof of emptiness, so answering that one
-wrongly is the expensive direction.
+[descr/mod.rs](../../crates/valgebra-core/src/descr/mod.rs) is the one place
+that says which, and it is the sentence to read rather than this one. `Coarse`,
+the all-or-nothing component, stands in two places: `NoneType`, where a kind
+with one value makes it exact, and the kindless slot (`KINDLESS`), whose values
+carry no structure it separates, so the classes and attributes do the work. What
+the descriptor cannot hold is a *cycle*, which is why a recursive schema is
+lowered by unfolding once and belongs to the rules; and anything past the three
+bounds a build is held to. Two properties hold of it that the structural IR does
+not have. Emptiness over the fragment it covers is a decision rather than a
+conservative answer, with a third verdict, `Unknown`, where an atom is not a set
+or where a build ran out of its allowance before the question could be answered.
+**[LOAD-BEARING: the-second-decider]** — the third verdict is what lets a
+bounded procedure stay *sound*: a negated form has to be expanded before its
+emptiness can be read, and past the allowance there is no union left to read.
+Either decision there would stand on nothing, and the one a caller may act on is
+the proof of emptiness, so answering that one wrongly is the expensive
+direction.
 
 HELD-BY: a_starved_verdict_is_the_third_answer_or_the_decided_one, a_negated_set_the_allowance_cannot_expand_declines,
 a_negated_union_of_lines_the_allowance_cannot_expand_declines,
@@ -877,7 +879,7 @@ different and larger gap than any of the above: see [Three representations with
 no paper here](#three-representations-with-no-paper-here).
 
 The departures are tagged rows in [the ledger above](#where-this-tree-departs-from-its-sources),
-each with the test that holds its cost or the milestone owing one.
+each with the tests that hold its cost.
 
 Tooling and toolchain facts are [11-references.md](11-references.md), not this
 page.

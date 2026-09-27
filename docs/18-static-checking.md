@@ -61,8 +61,9 @@ What each spelling reads as:
 | `intersection`, `complement`, `recursive` | `Validator[object]` |
 
 The rows that name a checker are held by a test that runs all three over one
-fixture per row and compares what each reveals, so a checker release that
-changes a reading changes this table rather than a caller's build.
+fixture per row and compares what each reveals, at the versions the project
+locks: a checker release that reads a row differently fails that test when the
+lock takes it, and this table moves with it.
 
 **Where the set has no static type, the validator reads as `object`.** A meet,
 a complement and a fixpoint have no static spelling. `int | None`, a `Literal`
@@ -192,5 +193,9 @@ immutable and hashable, so one built there is the intended shared value.
 - **A checker's type is an upper bound, not the set.** `Validator(Point)` reads
   as `Point` and admits only the points whose fields are members too; nothing
   here makes a checker run the validator.
-- **Each checker's own configuration**, and the rules it leaves off by default,
-  are the checker's documentation.
+- **An editor shows the types, not the prose.** The stub carries no docstrings,
+  as a stub does by convention (ruff's `PYI021`); the prose is on the compiled
+  objects, where `help()` reads it, and on the [API reference](16-api.md).
+- **The readings are the locked checkers'.** A caller on another release of ty,
+  mypy or pyright may read a row differently until the project's lock reaches
+  it.

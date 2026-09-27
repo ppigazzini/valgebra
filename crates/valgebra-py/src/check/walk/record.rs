@@ -165,26 +165,6 @@ fn covered(defaults: &[MapClause], key: &Value<'_, '_>, val: &Value<'_, '_>, ctx
         .any(|clause| member(&clause.key, key, &mut sub) && member(&clause.value, val, &mut sub))
 }
 
-/// A closed record's membership, asked key by key rather than read entry by
-/// entry, or `None` where that reading does not settle it.
-///
-/// A closed record declares every key the value may carry, so the value belongs
-/// exactly when each declared key it holds matches and it holds nothing else --
-/// and "nothing else" is a count, since a dict cannot repeat a key. Asking for
-/// the declared keys costs one probe each with the key's own hash, where
-/// scanning the value costs an iteration step, a decode of the key's bytes, a
-/// second hash of those bytes and a comparison against the name they matched.
-///
-/// A key is resolved the way Python resolves one -- by the dict's own lookup --
-/// rather than by decoding its bytes and matching those, so a key of a `str`
-/// subclass with an `__eq__` of its own is found exactly where indexing the
-/// dict would find it.
-///
-/// `None` means "ask the scan instead": the record is open, so an undeclared
-/// key may still be covered by a clause; the plan has no interned key for a
-/// field; or a probe raised, which is not an answer. A value that changes size
-/// under the probes is not one of those: it is answered here, as the scan
-/// answers it, because there is no reading of it left to fall back to.
 /// The field name a key resolves to, read the way the dict resolves one.
 ///
 /// A key of a `str` subclass carries the text of a field name without being
@@ -267,6 +247,28 @@ impl Undeclared {
     }
 }
 
+/// A record's membership, asked key by key rather than read entry by entry, or
+/// `None` where that reading does not settle it.
+///
+/// A dict cannot repeat a key, so the value holds nothing but declared keys
+/// exactly when the count of declared keys found equals the count it holds.
+/// Asking for the declared keys costs one probe each with the key's own hash,
+/// where scanning the value costs an iteration step, a decode of the key's
+/// bytes, a second hash of those bytes and a comparison against the name they
+/// matched. What the value holds beyond them is answered by the clause alone
+/// when [`Undeclared::of`] can read it without the key's value.
+///
+/// A key is resolved the way Python resolves one -- by the dict's own lookup --
+/// rather than by decoding its bytes and matching those, so a key of a `str`
+/// subclass with an `__eq__` of its own is found exactly where indexing the
+/// dict would find it.
+///
+/// `None` means "ask the scan instead": a clause reads an undeclared key
+/// together with its value; the plan has no interned key for a field; or a
+/// probe raised something other than a fatal signal, which is not an answer. A
+/// value that changes size under the probes is not one of those: it is answered
+/// here, as the scan answers it, because there is no reading of it left to fall
+/// back to.
 fn keyed_map_asks_for_its_keys(
     fields: &[Field],
     defaults: &[MapClause],

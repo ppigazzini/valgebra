@@ -21,7 +21,7 @@ and never `annotated_types`. A marker carrying `pattern`, `min_length`,
 `max_length` or `multiple_of` contributes the matching constraint, so any
 library's marker of that shape works.
 
-**A class is never a marker**, and is refused before any attribute is read. A
+**A class is never a marker**, and is ignored before any attribute is read. A
 marker *class* exposes descriptors where an instance exposes values: `at.Ge(0)`
 carries `ge = 0`, while `at.Ge` carries the slot descriptor that reads it, and
 taking that for a bound builds a comparison no value is ordered against. Calling
@@ -83,7 +83,7 @@ carries its callable on `.func`. Both carry a `.func`, so reading that attribute
 first would strip `Not` of its negation — and a `functools.partial` of its bound
 arguments, since it has one too.
 
-A class is excluded from the second arm although it is callable, because calling
+A class is excluded from the first arm although it is callable, because calling
 one **constructs** rather than asks. `Kilograms(1.5)` builds a unit marker; it
 does not answer whether `1.5` belongs, and a constructor that rejects the value
 would leave the schema uninhabited. Every other callable — a function, a lambda,

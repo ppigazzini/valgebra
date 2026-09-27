@@ -689,15 +689,6 @@ proptest! {
     }
 }
 
-/// A union fold stops only once a member is known inhabited. The stopping rule
-/// reads the *inhabited* accumulator, not the empty one: a member that is
-/// empty and opaque leaves the verdict open, and breaking there would report a
-/// union empty on the strength of the members walked so far.
-///
-/// The witness needs a member that is empty with an unknown region -- a record
-/// with an uninhabited required field -- followed by an inhabited one, because
-/// a member that is empty with a *known* region cannot make the accumulator
-/// absorbing on its own.
 /// The unordered pairs of a slice: every distinct pair once, in neither order
 /// twice, and none of an element with itself. Both disjointness laws scan them
 /// -- over members, and over the inners of complements -- so the scan is one
@@ -713,6 +704,15 @@ fn unordered_pairs_yields_each_distinct_pair_once() {
     assert_eq!(unordered_pairs(&[1, 2, 3, 4, 5]).count(), 10);
 }
 
+/// A union fold stops only once a member is known inhabited. The stopping rule
+/// reads the *inhabited* accumulator, not the empty one: a member that is
+/// empty and opaque leaves the verdict open, and breaking there would report a
+/// union empty on the strength of the members walked so far.
+///
+/// The witness needs a member that is empty with an unknown region -- a record
+/// with an uninhabited required field -- followed by an inhabited one, because
+/// a member that is empty with a *known* region cannot make the accumulator
+/// absorbing on its own.
 #[test]
 fn a_union_fold_stops_only_once_a_member_is_inhabited() {
     let uninhabited = Schema::record(
