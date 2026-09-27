@@ -678,6 +678,18 @@ note in `scripts/mutation_baseline_walk.json` is an argument about *that*
 interpreter: a mutant two spellings of `typing.Union` cannot tell apart on 3.14
 is caught where they are two objects, and the ratchet reads it as caught.
 
+**A reading compiled per interpreter names what it answers, and is measured on
+one side.** `crates/valgebra-py/build.rs` re-emits the interpreter's `Py_3_x`
+and `Py_GIL_DISABLED` flags, so a `cfg!` on one compiles a different reading per
+interpreter. Such a site says in its doc comment which behaviour of which
+release it answers, with the measurement for each reading; `snapshot_pays` in
+the sequence walk is the one site. The lanes that measure all read one side:
+the binding sweep, the coverage lane and the bench lane pin 3.12, where the
+snapshot reading compiles in. The product suite holds the answers on every
+interpreter, since the readings answer alike. What no lane holds is the cost of
+the 3.14 and free-threaded readings, which is the doc comment's measurement and
+nothing more.
+
 ## A gate that compared nothing must not pass
 
 "No mismatches" is true of an empty corpus. Every gate here refuses that shape

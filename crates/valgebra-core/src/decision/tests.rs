@@ -1792,6 +1792,30 @@ fn each_half_of_an_attribute_schema_is_reachable_through_the_meet() {
     assert!(!record(Schema::Int).is_subtype_of(&record(Schema::Bool)));
 }
 
+/// A set or frozenset holds the empty collection whatever its element admits,
+/// so it is proven inhabited rather than left unknown -- the answer a schema the
+/// rules cannot read gets, and the one that would leave a record requiring such
+/// a field unknown too.
+#[test]
+fn a_collection_is_inhabited_by_its_empty_value() {
+    let opaque = Schema::Instance(ClassIx::new(0));
+    for coll in [
+        Schema::set(Schema::Nothing),
+        Schema::frozen_set(opaque.clone()),
+    ] {
+        assert_eq!(coll.verdict(), Verdict::Inhabited, "{coll:?}");
+    }
+    let record = Schema::AttrRecord {
+        fields: vec![Field {
+            name: "a".into(),
+            schema: Schema::set(opaque),
+            required: true,
+        }]
+        .into(),
+    };
+    assert_eq!(record.verdict(), Verdict::Inhabited);
+}
+
 /// An attribute record carries no class, so its fields decide inhabitation
 /// as well as emptiness: an object carrying one witness per attribute is a
 /// value of it. The class half is the opaque one, and it is now a separate

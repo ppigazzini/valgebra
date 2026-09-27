@@ -75,15 +75,6 @@ exclude_globs = [
 # target that does not exist, which reads as coverage and is not.
 exclude_re = [
     "has_disjoint_complement_pair",
-    # `snapshot_pays` chooses between two readings of a list of one scalar kind
-    # -- the elements in place, or a snapshot of them read borrowed -- that test
-    # the same elements against the same schema and report the same membership.
-    # Every mutant of it moves cost and nothing else, which is the instruction
-    # budget's business and not a test's, so none is killable by construction.
-    # The two arms it chooses between are exercised either way: a list of
-    # sixty-four elements takes the snapshot and a narrow one does not, and an
-    # interpreter test asks both.
-    "snapshot_pays",
     # The explain pass over a keyed map runs only where the map did not match.
     # Running it always reports nothing extra -- a value that matched has no
     # violation to find -- and in the fast mode the violations go to a buffer
@@ -160,12 +151,6 @@ exclude_re = [
     # test's. The two readings themselves stay in the sweep and both of their
     # mutants die: the repeat test and the refusal are killable, and are killed.
     "replace <= with > in undeclared_covered",
-    # The collection arm of `empty_and_region` returns exactly what the match's
-    # default returns. It is written out because the two answer the same thing
-    # for OPPOSITE reasons -- a collection is known non-empty, the default is
-    # non-empty only by conservatism -- and the source carries the
-    # `match_same_arms` allow that says so. Deleting it cannot change a result.
-    "delete match arm Schema::Coll\\{..\\} in Schema::empty_and_region",
 ]
 
 # A few mutants run longer than the baseline; give generous headroom over it.
