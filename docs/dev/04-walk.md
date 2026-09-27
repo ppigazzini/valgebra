@@ -43,7 +43,7 @@ values of a document that turns out malformed, or on a key the document repeats
 
 | Mode | Reports |
 |---|---|
-| `Fast` | membership only: nothing allocated, no path built, every composite short-circuits |
+| `Fast` | membership only: no violation or path built, every composite short-circuits; storage a reading needs for itself is allocated where the reading says why |
 | `Explain` | a violation for each independent failure — every field, element and entry |
 | `ExplainFailFast` | the first violation only |
 

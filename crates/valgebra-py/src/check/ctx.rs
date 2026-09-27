@@ -255,7 +255,7 @@ pub(crate) enum WalkMode {
     Explain = 0,
     /// Membership plus the first violation only.
     ExplainFailFast = 1,
-    /// Membership only. Nothing is allocated, `out` is never touched, no path is
+    /// Membership only. No violation is built, `out` is never touched, no path is
     /// built, and every composite short-circuits as soon as the answer is fixed.
     Fast = 2,
 }

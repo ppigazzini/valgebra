@@ -4,8 +4,10 @@
 //! schema's set, and in an *explain* mode (`ctx.mode`) it also aggregates a
 //! [`Violation`] for each independent failure into `out` (each record field,
 //! each sequence element, each mapping entry), unless the fail-fast mode stops it
-//! at the first. In *fast* mode it allocates nothing and short-circuits as soon
-//! as membership is decided.
+//! at the first. In *fast* mode it builds no violation, path or value summary and
+//! short-circuits as soon as membership is decided; storage a reading needs for
+//! itself, such as a list's snapshot or a copy of a tuple subclass, is allocated
+//! at the site that says why.
 //!
 //! ## Comparison-raises policy
 //!
