@@ -453,6 +453,23 @@ def test_a_job_named_unreached_is_one_the_workflow_has() -> None:
     )
 
 
+def test_a_job_left_out_whole_is_one_the_workflow_has_and_says_why() -> None:
+    """`RUNNER_ONLY_JOBS` drops a job from the plan before a step of it is read.
+
+    A name no job carries drops nothing and reads as a lane accounted for, and a
+    job dropped whole with no line in `UNREACHED` is one a green run says nothing
+    about.
+    """
+    jobs = set(gate.workflow().get("jobs", {}))
+    absent = sorted(gate.RUNNER_ONLY_JOBS - jobs)
+    assert not absent, f"`RUNNER_ONLY_JOBS` names jobs `ci.yml` does not have: {absent}"
+    silent = sorted(gate.RUNNER_ONLY_JOBS - set(gate.UNREACHED))
+    assert not silent, (
+        f"jobs the gate leaves out whole without saying why: {silent}. "
+        "Add each to `UNREACHED` with what stops it running here."
+    )
+
+
 def _matrix_interpreters() -> list[str]:
     """Read the interpreters the python lane runs, floor first."""
     matrix = gate.workflow()["jobs"]["python"]["strategy"]["matrix"]

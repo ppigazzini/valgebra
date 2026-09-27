@@ -110,6 +110,7 @@ file that owns the contract and the single command that reproduces its verdict.
 
 | Contract | Source of truth | First rerun command |
 |---|---|---|
+| the merge gate's steps a developer can run pass, in a clone shaped like a runner's | `.github/workflows/ci.yml` | `uv run python scripts/gate.py` |
 | Rust formatting | rustfmt defaults, unconfigured | `cargo fmt --check` |
 | Rust lint policy | `Cargo.toml` `[workspace.lints]` | `cargo clippy --all-targets --all-features -- -D warnings` |
 | Rust behaviour | `crates/` | `cargo test` |
@@ -215,16 +216,13 @@ check is green only when every job is. `ci.yml` owns the job set, and
 `tests/test_required_jobs.py` holds the aggregator to it in both directions, so
 the list is not restated here: a second copy drifts by one entry and reads
 exactly like one that has not. What is worth knowing about its shape is the
-Python matrix, which runs the **ends** of the supported span on every push — the
-floor, the current release, the free-threaded build and the prerelease, the last
-of those without blocking — and fills in the interpreters between them nightly.
-`ci.yml` owns the matrix too, and
-`test_the_push_matrix_is_the_ends_and_the_odd_ones` in
-`tests/test_required_jobs.py` holds the push set to four legs that the nightly
-also runs, the floor and the free-threaded build among them.
-[docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md) explains why the span is
-sampled at its ends. Which leg is allowed to fail without blocking is `ci.yml`'s
-`continue-on-error` and nothing else reads it.
+Python matrix, which runs **every supported interpreter on every push**, the
+free-threaded build among them. `ci.yml` owns the matrix too:
+`tests/test_python_lifecycle.py` holds the releases it carries to the schedule
+each release follows, and which leg may fail without blocking to the release's
+stage, and `tests/test_required_jobs.py` holds that the job runs on every event
+and has a free-threaded leg. [docs/dev/07-tooling-ci.md](docs/dev/07-tooling-ci.md)
+says why each interpreter is a lane of its own.
 
 Scheduled lanes run the deep property suites, a libFuzzer soak over the
 core, and three mutation sweeps — the core crate, the membership walk under an

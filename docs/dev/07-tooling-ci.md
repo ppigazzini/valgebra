@@ -133,14 +133,20 @@ measures. Both halves of a gate are a claim -- the number and the scope -- and
 only the number is held to anything. **When a gate moves, read what it counts
 against the sentence that says what it counts.**
 
-Three of the excused steps need only what a developer's machine already has --
-the dependency sync, the extension build, and the stub check that needs both --
-and it is tempting to lend the caller's virtual environment to the clone so they
-can run. **Do not**: `uv run` inside the clone *writes* the environment it is
-pointed at, which uninstalls the built extension and the bench group from the
-tree being worked in. A gate that damages the environment it checks is worse
-than one that names three steps, so each carries
-that cost as its reason rather than "the caller has already run it".
+**The clone builds its own environment.** The lane's dependency sync and
+extension build run in the clone and write the clone's `.venv`, the one
+environment a gate may write, and every later step reads that one. **Do not**
+lend it the caller's virtual environment instead: `uv run` inside the clone
+*writes* the environment it is pointed at, which uninstalls the built extension
+and the bench group from the tree being worked in. A gate that damages the
+environment it checks is worse than one that spends a build on its own.
+
+**An excuse is a claim, and a false one is a hole.** A step is excused only
+for what a developer's machine cannot do. A check that is static -- a type
+checker given a target release, which reads the stubs for that release and
+needs no interpreter of it -- is not one, and runs. Jobs left out whole
+(`RUNNER_ONLY_JOBS`) are held to `ci.yml` and to a line in `UNREACHED` that the
+closing report prints, so a green run says what it did not reach.
 
 A step is **accounted for** when it is in the plan the gate builds or named in
 `NEEDS_A_RUNNER`, and the ledger asks it of the **plan**. Asking instead whether
@@ -169,7 +175,9 @@ reproduce one result rather than all of them.
 directions: a gate script with no row fails, and a row naming a script or a
 source of truth that does not exist fails. A script can be a row's *subject*
 rather than its command — the profile-guided training workload is driven through
-the packaging config rather than typed — so the check reads the whole row.
+the packaging config rather than typed — so the check reads the whole row, for
+the script's path rather than its name, since one script's name can be part of
+another's (`gate.py`, `perf_gate.py`).
 
 One line in it is easy to miss and is the reason a lane went red: **the fuzz
 crate is a detached workspace**. libFuzzer needs a nightly toolchain, and making
@@ -680,14 +688,15 @@ which is what a push gives a job it does not run — and refusing everything
 else. `tests/test_required_jobs.py` reads which jobs those are from their own
 conditions and holds each reading to the kind of job it is.
 
-**Every supported interpreter runs on every event.** The floor (3.10) through
-the newest release (3.15), the free-threaded build (3.14t) among them, plus one
-macOS and one Windows leg. The release ships a wheel built per version against a
-version-specific ABI, so each interpreter is a separate artifact a caller
-installs, and a leg that runs only at night is a wheel nothing exercised until
-somebody reported it. `test_every_supported_interpreter_runs_on_every_event` in
-`tests/test_required_jobs.py` holds the list in both directions, and holds its
-first entry to the floor `requires-python` claims.
+**Every supported interpreter runs on every event.** The release ships a wheel
+built per version against a version-specific ABI, so each interpreter is a
+separate artifact a caller installs, and a leg that runs only at night is a
+wheel nothing exercised until somebody reported it. `ci.yml` owns the matrix.
+`tests/test_python_lifecycle.py` holds the releases it carries to the schedule
+each follows, and the floor `requires-python` claims to the oldest of them;
+`test_every_supported_interpreter_runs_on_every_event` in
+`tests/test_required_jobs.py` holds that the job runs on every event and that
+the free-threading classifier has a free-threaded leg behind it.
 
 **One leg carries the history, and its name says so.** `actions/checkout`
 takes one commit and no tags, and the two checks that read `git log` back to

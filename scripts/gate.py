@@ -105,9 +105,6 @@ NEEDS_A_RUNNER = {
     # from inside the clone. They run in the clone and write the clone's `.venv`,
     # which is the one environment a gate may write: lending it the caller's was
     # tried and reverted, because `uv` then uninstalled what the developer built.
-    "A caller's strict types, on the floor and on the current": (
-        "needs both interpreters installed"
-    ),
     "Build the fuzz targets": "needs the pinned nightly toolchain and cargo-fuzz",
     "Test the fuzz harness": "needs the pinned nightly toolchain",
 }
@@ -170,15 +167,11 @@ FETCH_TRIES = 3
 #: push runs, so it stands in for none of those.
 SCHEDULED_ONLY = re.compile(r"github\.event_name == 'schedule'")
 
-#: Jobs whose every step is a runner's, so naming each would say nothing more.
-RUNNER_ONLY_JOBS = {
-    "wheel",
-    "wheel-macos",
-    "wheel-windows",
-    "sdist",
-    "pages",
-    "release",
-}
+#: Merge-gate jobs whose every step is a runner's, left out of the plan whole.
+#: Each is a job `ci.yml` has and is named in `UNREACHED` with the reason, which
+#: `tests/test_local_gate.py` holds: a name no job carries leaves out nothing
+#: and still reads as a lane accounted for.
+RUNNER_ONLY_JOBS = {"wheel"}
 
 
 def workflow() -> dict:

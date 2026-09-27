@@ -18,7 +18,6 @@ LEDGER: the merge gate requires every job the workflow defines
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
@@ -261,7 +260,7 @@ def test_the_binding_sweep_triggers_on_every_file_it_sweeps() -> None:
 
 
 def test_every_supported_interpreter_runs_on_every_event() -> None:
-    """What a push runs across interpreters is the list the package claims.
+    """The job that carries the supported interpreters runs on a push.
 
     The release ships a wheel built per version against a version-specific ABI,
     so each interpreter is a separate artifact a caller installs. A lane that
@@ -269,34 +268,23 @@ def test_every_supported_interpreter_runs_on_every_event() -> None:
     and a lane that runs on no event at all is one `requires-python` promises
     and nothing checks.
 
-    Held in both directions: every version between the floor and the newest
-    release is here, and a version added to the package's own floor-to-ceiling
-    range has to be added here too. The list is read from the matrix rather
-    than from a schedule condition, because there is no longer one to read.
+    Which releases the `python` job carries is `tests/test_python_lifecycle.py`'s
+    to hold, against the schedule each release follows; a list written here
+    would be a second place to move when the floor moves. This holds the two
+    things that ledger does not: the job runs on every event, and the
+    free-threaded build the classifiers promise has a leg in it.
     """
-    text = WORKFLOW.read_text(encoding="utf-8")
-    matrix = re.search(r"python-version: (\[[^\]]*\])", text)
-    assert matrix, "the python matrix is not a list"
-    versions = json.loads(matrix.group(1))
-
-    # The floor `requires-python` names, and every release up to the newest.
-    assert versions == [
-        "3.10",
-        "3.11",
-        "3.12",
-        "3.13",
-        "3.14",
-        "3.14t",
-        "3.15",
-    ], f"the matrix is {versions}"
-
-    # Read with a regex rather than parsed: `tomllib` is 3.11+ and this suite
-    # runs from 3.10, which is the floor this assertion is about.
-    manifest = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    requires = re.search(r'^requires-python\s*=\s*"([^"]+)"', manifest, re.MULTILINE)
-    assert requires, "pyproject.toml declares no `requires-python`"
-    claimed = requires.group(1).removeprefix(">=")
-    assert versions[0] == claimed, (
-        f"the matrix starts at {versions[0]} and the package claims {claimed}; "
-        "the floor a caller installs on is the floor a lane runs"
+    job = _workflow()["jobs"]["python"]
+    condition = str(job.get("if", ""))
+    assert not NOT_ON_A_PUSH.search(condition), (
+        f"the python job runs only when {condition!r}, so a push reads no interpreter"
     )
+    matrix = job["strategy"]["matrix"]
+    versions = [str(version) for version in matrix["python-version"]]
+    versions += [str(row["python-version"]) for row in matrix.get("include", [])]
+    manifest = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    if "Programming Language :: Python :: Free Threading" in manifest:
+        assert any(version.endswith("t") for version in versions), (
+            "the classifiers promise free threading and no leg of the python job "
+            f"is a free-threaded build: {versions}"
+        )

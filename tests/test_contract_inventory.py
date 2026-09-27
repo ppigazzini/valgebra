@@ -75,10 +75,11 @@ def test_the_inventory_has_rows() -> None:
 
 def test_every_gate_script_has_a_row() -> None:
     # A promise nothing in the table reproduces is a promise a reader cannot
-    # check on its own.
-    table = _whole_table()
+    # check on its own. A script is listed where a cell names its path, not where
+    # its name occurs: `gate.py` is a substring of `perf_gate.py`.
+    named = set(re.findall(r"scripts/([\w.]+\.py)", _whole_table()))
     unlisted = sorted(
-        script.name for script in SCRIPTS.glob("*.py") if script.name not in table
+        script.name for script in SCRIPTS.glob("*.py") if script.name not in named
     )
     assert not unlisted, (
         f"gate scripts with no row in the contract inventory: {unlisted}. "

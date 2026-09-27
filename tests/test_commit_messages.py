@@ -13,8 +13,8 @@ being an argument. "This was planned as a fix" says what happened; naming a note
 that planned it says only that somebody once wrote it down. A message has to
 carry its own reason, because the reason is the whole of what a message is for.
 
-Held over every commit the current branch adds to the released tag, which is the
-range a contributor can still amend.
+Held over every commit the current branch adds to the newest release tag it
+reaches, which is the range a contributor can still amend.
 
 The names are assembled from their pieces below rather than written out, for the
 reason this file exists: a check that spells the thing it refuses fails itself.
@@ -46,10 +46,6 @@ MILESTONE = r"\bM[0-9]+(?:\.[0-9]+)?\b"
 
 INTERNAL = re.compile("|".join((NOTE, ITER, re.escape(AREA), PAGES, PROMPT, MILESTONE)))
 
-#: The tag the branch is measured from. A commit at or below it is released, so
-#: rewriting it is not a repair a contributor makes.
-RELEASED = "v0.0.9"
-
 
 def _git(*args: str) -> str:
     return subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
@@ -60,31 +56,38 @@ def _git(*args: str) -> str:
     ).stdout
 
 
-def _unreleased() -> list[str]:
-    """Every commit this branch adds to the released tag, or none if it is gone.
+def _released() -> str | None:
+    """Give the newest release tag `HEAD` reaches, or `None` if it reaches none.
 
-    A shallow clone, or one fetched without tags, carries no tag to measure
-    from. That is a shape of checkout rather than a defect in the history, so
-    the check skips rather than inventing a range.
+    A commit at or below it is released, so rewriting it is not a repair a
+    contributor makes. A shallow clone, or one fetched without tags, carries no
+    tag to measure from: a shape of checkout rather than a defect in the
+    history, so the check skips rather than inventing a range.
     """
-    if not _git("tag", "--list", RELEASED).strip():
-        return []
-    return _git("log", "--format=%H", f"{RELEASED}..HEAD").split()
+    return _git("describe", "--tags", "--abbrev=0", "HEAD").strip() or None
+
+
+def _unreleased(released: str) -> list[tuple[str, str, str]]:
+    """Give every commit since `released` as its short hash, subject and message."""
+    log = _git("log", "-z", "--format=%h%x1f%s%x1f%B", f"{released}..HEAD")
+    return [
+        (short, subject, message)
+        for short, subject, message in (
+            entry.split("\x1f", 2) for entry in log.split("\0") if entry
+        )
+    ]
 
 
 def test_no_commit_message_names_the_working_area() -> None:
-    commits = _unreleased()
-    if not commits:
-        pytest.skip(f"no {RELEASED} tag in this checkout, so there is no range to read")
+    released = _released()
+    if released is None:
+        pytest.skip("no release tag in this checkout, so there is no range to read")
 
-    named = []
-    for sha in commits:
-        message = _git("log", "-1", "--format=%B", sha)
-        subject = _git("log", "-1", "--format=%s", sha).strip()
-        named.extend(
-            f"{sha[:7]} names {name}: {subject}"
-            for name in sorted(set(INTERNAL.findall(message)))
-        )
+    named = [
+        f"{short} names {name}: {subject}"
+        for short, subject, message in _unreleased(released)
+        for name in sorted(set(INTERNAL.findall(message)))
+    ]
 
     assert not named, (
         "a commit message names the internal working area, which no reader "
