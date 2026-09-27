@@ -473,9 +473,15 @@ fn check_constraint<'py>(
             // Native fast path: the precompiled, anchored pattern matches the
             // borrowed string UTF-8 in Rust. A non-string never matches (the base
             // of a pattern refinement is a string, so this is reached only after
-            // a string base check, but stays defensive). A pattern absent from
-            // the per-validator cache (an incomplete build traversal) is compiled
-            // on the spot rather than silently passing.
+            // a string base check, but stays defensive).
+            //
+            // A pattern absent from the index is compiled here, per value. A
+            // validator's own walk never misses -- its index compiles every
+            // pattern the schema holds -- but the relation oracle walks schemas
+            // no validator owns, with an empty index, to ask whether a literal
+            // belongs; answering "no match" there refutes an inclusion that
+            // holds. `a_literal_is_asked_of_a_pattern_the_probe_compiles_itself`
+            // holds the case.
             let matched = value
                 .cast::<PyString>()
                 .ok()

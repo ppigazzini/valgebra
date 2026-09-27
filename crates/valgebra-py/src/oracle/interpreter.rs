@@ -91,6 +91,26 @@ fn a_literal_is_a_subtype_of_the_kind_and_the_class_that_hold_it() {
     });
 }
 
+/// A literal is asked of a pattern refinement by walking a schema no
+/// validator's index was built for: the probe carries an empty index, so the
+/// walk compiles each pattern where it meets one. A walk that read a pattern
+/// missing from the index as no match would refute an inclusion that holds.
+#[test]
+fn a_literal_is_asked_of_a_pattern_the_probe_compiles_itself() {
+    Python::attach(|py| {
+        let text = "abc".into_pyobject(py).unwrap().into_any().unbind();
+        asking(py, vec![text], |oracle| {
+            let literal = Schema::Literal(ConstIx::new(0));
+            let matching = |pattern: &str| Schema::Refine {
+                base: Schema::Str.into(),
+                constraints: vec![valgebra_core::Constraint::Regex(pattern.to_owned())].into(),
+            };
+            assert_eq!(oracle.leaf_subtype(&literal, &matching("a.*")), Some(true));
+            assert_eq!(oracle.leaf_subtype(&literal, &matching("z.*")), Some(false));
+        });
+    });
+}
+
 #[test]
 fn a_literal_reports_the_kind_its_value_has() {
     // `literal_kind` places a constant in the partition. A `bool` is its own
