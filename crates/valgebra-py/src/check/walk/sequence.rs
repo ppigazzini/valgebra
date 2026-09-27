@@ -14,6 +14,7 @@ use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyFrozenSet, PyIterator, PyList, PySet, PyTuple};
 use valgebra_core::{PathSegment, Schema, SeqKind, SeqShape, Violation};
 
+use super::scalar::Scalar;
 use super::{
     Base, Frame, Scan, held_iter, held_len, homogeneous_scalar, is_fatal, member, mutated,
     reads_its_elements, reads_its_length, record_fatal, record_if_fatal, scalar_admits, scalar_of,
@@ -53,59 +54,8 @@ pub(super) fn check_seq(
             if !SeqArity::of(prefix.len(), tail).admits(list.len()) {
                 return seq_length_fail(len_code, kind_word, prefix, tail, value, frame);
             }
-            // A list of one scalar kind -- `list[int]`, `list[str]` -- is the
-            // shape whose per-element cost is almost all bookkeeping: the walk's
-            // depth guard, its fatal-signal check and its dispatch, around a
-            // single type test. None of the three is needed per element here: a
-            // scalar cannot recurse, cannot run Python, and is the same schema at
-            // every position, so they are paid once for the list.
             if let Some(kind) = homogeneous_scalar(prefix, tail, ctx) {
-                // A snapshot of the list is a tuple, and a tuple's elements are
-                // read borrowed. The reading it answers about is the list as it
-                // was when the copy was taken, so the count is compared again
-                // afterwards and a value that moved reports the move, exactly as
-                // the in-place scan does. Only an exact list is copied: a
-                // subclass's copy goes through its own `__iter__`, which need not
-                // yield what it holds, and the walk reads what a list holds on
-                // every interpreter. Copying an exact list runs no Python, so
-                // the copy fails only where the tuple cannot be allocated, and
-                // that `MemoryError` is a fatal signal: recorded, never an
-                // answer.
-                if snapshot_pays(list.len()) && list.is_exact_instance_of::<PyList>() {
-                    match list.as_sequence().to_tuple() {
-                        Ok(snapshot) => {
-                            let ok = snapshot
-                                .iter_borrowed()
-                                .all(|item| scalar_admits(kind, &Value::Py(&item)));
-                            if !ok {
-                                return false;
-                            }
-                            return if list.len() == snapshot.len() {
-                                true
-                            } else {
-                                mutated(value, frame)
-                            };
-                        }
-                        Err(err) => {
-                            record_fatal(err, ctx);
-                            return false;
-                        }
-                    }
-                }
-                let mut ok = true;
-                let scan = scan_list(list, |_, item| {
-                    ok &= scalar_admits(kind, &Value::Py(item));
-                    if ok {
-                        ControlFlow::Continue(())
-                    } else {
-                        ControlFlow::Break(())
-                    }
-                });
-                return match scan {
-                    Scan::Complete => ok,
-                    Scan::Stopped => false,
-                    Scan::Unreadable => mutated(value, frame),
-                };
+                return scalar_list_matches(list, kind, value, frame);
             }
             let mut ok = true;
             let scan = scan_list(list, |i, item| {
@@ -268,6 +218,75 @@ fn seq_length_fail(
     false
 }
 
+/// Membership for a list whose every element is one scalar kind.
+///
+/// A list of one scalar kind -- `list[int]`, `list[str]` -- is the shape whose
+/// per-element cost is almost all bookkeeping: the walk's depth guard, its
+/// fatal-signal check and its dispatch, around a single type test. None of the
+/// three is needed per element here: a scalar cannot recurse, cannot run
+/// Python, and is the same schema at every position, so they are paid once for
+/// the list.
+///
+/// Out of line, so the loop's code is its own: held inside [`check_seq`], its
+/// register allocation follows every arm beside it, and `scripts/perf_gate.py
+/// --binding` reads a change to the tuple arm as a change to `list[int]`. The
+/// list pays one call.
+#[inline(never)]
+fn scalar_list_matches(
+    list: &Bound<'_, PyList>,
+    kind: Scalar,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let ctx = frame.ctx;
+    // A snapshot of the list is a tuple, and a tuple's elements are
+    // read borrowed. The reading it answers about is the list as it
+    // was when the copy was taken, so the count is compared again
+    // afterwards and a value that moved reports the move, exactly as
+    // the in-place scan does. Only an exact list is copied: a
+    // subclass's copy goes through its own `__iter__`, which need not
+    // yield what it holds, and the walk reads what a list holds on
+    // every interpreter. Copying an exact list runs no Python, so
+    // the copy fails only where the tuple cannot be allocated, and
+    // that `MemoryError` is a fatal signal: recorded, never an
+    // answer.
+    if snapshot_pays(list.len()) && list.is_exact_instance_of::<PyList>() {
+        match list.as_sequence().to_tuple() {
+            Ok(snapshot) => {
+                let ok = snapshot
+                    .iter_borrowed()
+                    .all(|item| scalar_admits(kind, &Value::Py(&item)));
+                if !ok {
+                    return false;
+                }
+                return if list.len() == snapshot.len() {
+                    true
+                } else {
+                    mutated(value, frame)
+                };
+            }
+            Err(err) => {
+                record_fatal(err, ctx);
+                return false;
+            }
+        }
+    }
+    let mut ok = true;
+    let scan = scan_list(list, |_, item| {
+        ok &= scalar_admits(kind, &Value::Py(item));
+        if ok {
+            ControlFlow::Continue(())
+        } else {
+            ControlFlow::Break(())
+        }
+    });
+    match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    }
+}
+
 /// Membership for a tuple, over the elements the value holds.
 fn tuple_matches(
     prefix: &[Schema],
@@ -288,20 +307,11 @@ fn tuple_matches(
         if tuple.is_exact_instance_of::<PyTuple>() || reads_its_length(tuple, Base::Tuple, ctx) {
             tuple
         } else {
-            // Reading the type may have raised a fatal signal, which ends the walk.
-            if ctx.fatal_seen.get() {
-                return false;
-            }
-            match storage_of(tuple) {
-                Ok(storage) => {
-                    copied = storage;
-                    &copied
-                }
-                Err(err) => {
-                    record_if_fatal(err, tuple.py(), ctx);
-                    return mutated(value, frame);
-                }
-            }
+            let Some(storage) = storage_of(tuple, ctx) else {
+                return mutated(value, frame);
+            };
+            copied = storage;
+            &copied
         };
     if !SeqArity::of(prefix.len(), tail).admits(tuple.len()) {
         return seq_length_fail(len_code, kind_word, prefix, tail, value, frame);
@@ -350,15 +360,30 @@ fn tuple_matches(
 /// gave all along. An exact tuple overrides nothing and is read where it lies,
 /// as before: this path costs the common case nothing.
 ///
-/// An error where the copy cannot be made, which the caller reports as a value
-/// it could not read rather than as a membership answer, unless it is fatal.
-fn storage_of<'py>(tuple: &Bound<'py, PyTuple>) -> PyResult<Bound<'py, PyTuple>> {
-    let held = held_len(tuple, Base::Tuple)?;
-    let mut items = Vec::with_capacity(held);
-    for at in 0..held {
-        items.push(tuple.get_borrowed_item(at)?);
+/// `None` where the copy cannot be made, which the caller reports as a value it
+/// could not read rather than as a membership answer. A fatal signal the copy
+/// raises is recorded, and one the type probe recorded before it stops the copy,
+/// so the entry point re-raises the signal in place of that report.
+///
+/// Cold and out of line: an exact tuple and a `NamedTuple` are read where they
+/// lie, and only a subclass that answers its own `__len__` is copied.
+#[cold]
+#[inline(never)]
+fn storage_of<'py>(tuple: &Bound<'py, PyTuple>, ctx: Ctx<'_>) -> Option<Bound<'py, PyTuple>> {
+    if ctx.fatal_seen.get() {
+        return None;
     }
-    PyTuple::new(tuple.py(), items)
+    let copy = || -> PyResult<Bound<'py, PyTuple>> {
+        let held = held_len(tuple, Base::Tuple)?;
+        let mut items = Vec::with_capacity(held);
+        for at in 0..held {
+            items.push(tuple.get_borrowed_item(at)?);
+        }
+        PyTuple::new(tuple.py(), items)
+    };
+    copy()
+        .map_err(|err| record_if_fatal(err, tuple.py(), ctx))
+        .ok()
 }
 
 /// Visit a list's items by position, refusing when the list resizes underneath.
