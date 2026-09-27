@@ -2,13 +2,12 @@
 
 `scripts/run_doc_examples.py` runs every fenced `python` block and reads the
 exit code, which is the example's truth and not its reading. A reader copies the
-block into a project that runs ty, pyright or ruff, and what those report on it
-is the first thing that reader sees: an import a later edit left unused, a
+block into a project that runs ty, mypy, pyright or ruff, and what those report
+on it is the first thing that reader sees: an import a later edit left unused, a
 return typed `str` handing back an `object`, an ignore comment written in one
-checker's dialect that the other two read as noise. Six of those stood in the
-pages while every example ran green.
+checker's dialect that the other three read as noise.
 
-`scripts/check_doc_examples.py` reads the same blocks with the three checkers
+`scripts/check_doc_examples.py` reads the same blocks with the four checkers
 and holds what they report to its ledger of expected rows -- the diagnostics
 that *are* the example, each with its reason. This runs it, and holds the ledger
 to its own shape:
@@ -18,7 +17,8 @@ to its own shape:
   sentence about the example rather than a shrug;
 * every rule an example is exempt from says why;
 * each checker reported something, so a parser that read nothing cannot pass
-  as a clean tree.
+  as a clean tree -- mypy only where it read at all, since it parses with the
+  running interpreter and an older one cannot parse every block.
 
 LEDGER: every checker diagnostic on a published example is expected with a reason
 """
@@ -28,7 +28,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 # none of which ships in a wheel. The checkers are the dev group's, and the PyPy
 # lane installs only what the product suite reads: there this has nothing to
 # run and says so.
-for _checker in ("ty", "pyright", "ruff"):
+for _checker in ("ty", "mypy", "pyright", "ruff"):
     pytest.importorskip(_checker)
 
 pytestmark = pytest.mark.repository
@@ -63,25 +63,24 @@ def checker() -> ModuleType:
 
 
 @pytest.fixture(scope="module")
-def found() -> Counter[tuple[str, str, str]]:
-    """Read the blocks once: three subprocesses for the whole module."""
-    count, diagnostics = checker().read()
-    assert count >= 100, f"the runner yields {count} blocks"
-    return diagnostics
+def reading() -> Any:
+    """Read the blocks once: one subprocess per checker for the whole module."""
+    read = checker().read()
+    assert read.count >= 100, f"the runner yields {read.count} blocks"
+    return read
 
 
-def test_every_diagnostic_is_expected_and_every_row_reported(
-    found: Counter[tuple[str, str, str]],
-) -> None:
-    wrong = checker().problems(found)
+def test_every_diagnostic_is_expected_and_every_row_reported(reading: Any) -> None:
+    wrong = checker().problems(reading.found, reading.checkers)
     assert not wrong, "\n".join(wrong)
 
 
-@pytest.mark.parametrize("name", ["ty", "pyright", "ruff"])
-def test_each_checker_reported_something(
-    found: Counter[tuple[str, str, str]], name: str
-) -> None:
+@pytest.mark.parametrize("name", ["ty", "mypy", "pyright", "ruff"])
+def test_each_checker_reported_something(reading: Any, name: str) -> None:
     """A parser that read nothing would pass the ledger vacuously."""
+    if name not in reading.checkers:
+        pytest.skip(f"{name} cannot read {', '.join(reading.unparsed)} here")
+    found: Counter[tuple[str, str, str]] = reading.found
     assert any(key[0] == name for key in found), sorted(found)
 
 

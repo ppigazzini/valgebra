@@ -194,7 +194,8 @@ from valgebra import Validator, complement, intersection
 def unenforced(declared: object, implied: object) -> list[object]:
     """Values the declaration admits and the body cannot survive."""
     breaking = intersection(Validator(declared), complement(Validator(implied)))
-    return [p for p in (None, 0, "", []) if breaking.is_valid(p)]
+    probes: list[object] = [None, 0, "", []]
+    return [p for p in probes if breaking.is_valid(p)]
 
 
 # `def make_grid(columns: int)` whose body computes `idx // columns`:

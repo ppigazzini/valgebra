@@ -48,7 +48,7 @@ from valgebra import Validator, complement, intersection
 def unenforced(declared: object, implied: object) -> list[object]:
     """Values the declaration admits and the body cannot survive."""
     breaking = intersection(Validator(declared), complement(Validator(implied)))
-    probes = [None, 0, 0.0, "", b"", [], {}, False, -1]
+    probes: list[object] = [None, 0, 0.0, "", b"", [], {}, False, -1]
     return [p for p in probes if breaking.is_valid(p)]
 
 

@@ -49,6 +49,9 @@ assert (Validator(int) | str | None).is_equivalent(union(int, str, None))
 assert (int | Validator(str)).is_equivalent(union(int, str))
 ```
 
+A static checker reads only the first order: mypy and pyright type a class on
+the left of `|` as a `types.UnionType` ([static checkers](18-static-checking.md)).
+
 ## The laws hold
 
 Because membership is Boolean and the combinators are exactly *or*, *and*, and

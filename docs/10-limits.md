@@ -90,7 +90,7 @@ from valgebra import ValidationError, Validator, recursive, union
 schema = Validator(recursive(lambda j: union(int, [j])))
 
 # A value nested far past the walk depth: a clean error, not a crash.
-deep = 0
+deep: object = 0
 for _ in range(5000):
     deep = [deep]
 assert not schema.is_valid(deep)
@@ -100,7 +100,7 @@ except ValidationError as error:
     assert error.code == "recursion_limit"
 
 # A value that contains itself: caught as a loop.
-cyclic = []
+cyclic: list[object] = []
 cyclic.append(cyclic)
 assert not schema.is_valid(cyclic)
 
@@ -114,7 +114,7 @@ growing schema can overflow the stack or exhaust memory on its next check:
 ```python
 from valgebra import Validator
 
-composed = Validator(int)
+composed: Validator = Validator(int)
 try:
     for _ in range(1000):
         composed = composed | str

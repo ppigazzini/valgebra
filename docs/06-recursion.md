@@ -95,7 +95,7 @@ Recursion is bounded so it always terminates cleanly:
 ```python
 from valgebra import recursive, union
 
-cyclic = []
+cyclic: list[object] = []
 cyclic.append(cyclic)
 assert not recursive(lambda s: union(int, [s])).is_valid(cyclic)  # recursion_loop
 ```

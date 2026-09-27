@@ -100,6 +100,24 @@ ROWS: tuple[Reading, ...] = (
         ),
     ),
     Reading(
+        "class_or_validator",
+        ty="bool",
+        mypy="Any; error[union-attr]; error[union-attr]",
+        pyright=(
+            "Unknown; error[reportAttributeAccessIssue]; "
+            "error[reportAttributeAccessIssue]"
+        ),
+        moves=(
+            "A class on the left of `|` is read by mypy and pyright through "
+            "`type.__or__`, as `types.UnionType | type[int]`, and a validator's "
+            "method on it is an error once per member. ty reads the validator's "
+            "`__ror__`, which is what runs: `type.__or__` declines a validator. "
+            "When mypy or pyright join ty, the class-on-the-left row of "
+            "`docs/18-static-checking.md` moves, and `docs/04-algebra.md`'s rows "
+            "in `scripts/check_doc_examples.py` go."
+        ),
+    ),
+    Reading(
         "newtype",
         ty="Validator[object]",
         mypy="Validator[UserId]",

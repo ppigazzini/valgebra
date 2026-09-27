@@ -108,6 +108,9 @@ def build() -> Validator[object]:
     # other two print as `object`, so the rows pair like with like.
     assert_type(scalars | Validator(str), Validator[int | str])
     assert_type(shapes | refined, Validator[object])
+    # A class on the right reads through the validator's own `__or__`, the order
+    # all three read alike; on the left, see `readings/class_or_validator.py`.
+    assert_type(scalars | str, Validator[object])
     assert_type(shapes.__ror__(refined), Validator[object])
     assert_type(anything, Validator[object])
     assert_type(nothing, Validator[Never])

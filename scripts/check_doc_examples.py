@@ -3,9 +3,9 @@
 `run_doc_examples.py` runs each fenced ```python block and reads the exit code,
 which says the example is true and nothing about how it reads: an unused
 import, a call a checker refuses, a spelling the page says a checker accepts. A
-reader who copies a block into a project that runs ty, pyright or ruff meets
-those first. So the same blocks, dedented the same way, are laid out one file
-each under a scratch directory and read once by each of the three, at the
+reader who copies a block into a project that runs ty, mypy, pyright or ruff
+meets those first. So the same blocks, dedented the same way, are laid out one
+file each under a scratch directory and read once by each of the four, at the
 newest release the package supports -- the release ty reads the suite at.
 
 Some diagnostics are the example's point: an argument of the wrong type the
@@ -16,18 +16,26 @@ many, and why. Anything else fails, and so does a row nothing reports any more,
 because a stale row is a claim about the pages that stopped being true. An
 expected diagnostic lives here rather than as an ignore comment in the block: a
 reader copies the block and not the reason, and an ignore written for one
-checker is noise to the other two.
+checker is noise to the other three.
 
 ruff reads a block under the project's own selection less the rules an example
-is exempt from, each named in `EXEMPT` with why.
+is exempt from, each named in `EXEMPT` with why. mypy reads it in its default
+mode: a snippet's unannotated `def` is how a reader writes one, and `--strict`
+reports every such line. And mypy parses with the interpreter that runs it,
+whatever release it is told to check, where the other three carry parsers of
+their own. A syntax error stops its whole run, so it reads the blocks only on an
+interpreter that parses every one -- the one the examples run on, or newer --
+and says so where it cannot.
 
 Exit 0 when every diagnostic is expected and every row is reported.
 """
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -57,6 +65,36 @@ class Expected(NamedTuple):
     reason: str
 
 
+# The deliberate diagnostics most pages draw from more than one checker, each
+# reason written once.
+_MUTATION = '`config.steps = "ten"` is the mutation the example shows caught'
+_WRONG_POINT = '`Point(1, "y")` is the wrong argument the block shows refused'
+_SHORT_TUPLE = (
+    "`tuple[str, int, ...]` is this library's shorter spelling of a prefix and a "
+    "tail, which 3.10's `typing` can write, shown beside the spec's `*tuple`"
+)
+_FORWARD_REFERENCE = (
+    '`list["Account"]` is the forward reference the frontend refuses to resolve'
+)
+_WRONG_JSON = (
+    "`validate_json(123)` is the wrong argument the table shows raise `TypeError`"
+)
+_UNDECLARED = (
+    "`Model.validator = ...` sets an attribute the class does not declare, "
+    "which is what the block shows"
+)
+_CLASS_ON_THE_LEFT = (
+    "`int | Validator(str)` shows the reflected operand at work: `type.__or__` "
+    "declines and the validator's `__ror__` builds the union. mypy and pyright "
+    "read the result as `types.UnionType | type[int]` and refuse the method "
+    "called on it, once per member; only ty reads the `__ror__`, and "
+    "`docs/18-static-checking.md` says to write the validator on the left"
+)
+_VALIDATOR_IN_A_TYPE = (
+    "a validator inside `list[...]`, this library's extension of the spelling; "
+    "mypy reads a variable there as no type, and passes a float `Literal`"
+)
+
 #: Every diagnostic the pages draw on purpose.
 EXPECTED: tuple[Expected, ...] = (
     Expected(
@@ -67,34 +105,17 @@ EXPECTED: tuple[Expected, ...] = (
         "the entries that introduced a float `Literal` and a validator inside "
         "`list[...]`, which are this library's extensions of the spelling",
     ),
+    Expected("ty", "README.md", "invalid-assignment", 1, _MUTATION),
     Expected(
-        "ty",
-        "README.md",
-        "invalid-assignment",
-        1,
-        '`config.steps = "ten"` is the mutation the example shows caught',
+        "ty", "docs/03-schema-language.md", "invalid-argument-type", 1, _WRONG_POINT
     ),
-    Expected(
-        "ty",
-        "docs/03-schema-language.md",
-        "invalid-argument-type",
-        1,
-        '`Point(1, "y")` is the wrong argument the block shows refused',
-    ),
-    Expected(
-        "ty",
-        "docs/03-schema-language.md",
-        "invalid-type-form",
-        1,
-        "`tuple[str, int, ...]` is the older spelling of a prefix and a tail, "
-        "kept beside the `*tuple` one for the floor",
-    ),
+    Expected("ty", "docs/03-schema-language.md", "invalid-type-form", 1, _SHORT_TUPLE),
     Expected(
         "ty",
         "docs/03-schema-language.md",
         "unresolved-reference",
         1,
-        '`list["Account"]` is the forward reference the frontend refuses to resolve',
+        _FORWARD_REFERENCE,
     ),
     Expected(
         "ty",
@@ -111,82 +132,49 @@ EXPECTED: tuple[Expected, ...] = (
         "float `Literal`s and validators inside `list[...]` and `dict[...]`, the "
         "two extensions of the spelling the page decides over",
     ),
+    Expected("ty", "docs/16-api.md", "invalid-argument-type", 1, _WRONG_JSON),
+    Expected("ty", "docs/17-boundaries.md", "unresolved-attribute", 1, _UNDECLARED),
+    Expected("mypy", "CHANGELOG.md", "valid-type", 2, _VALIDATOR_IN_A_TYPE),
+    Expected("mypy", "README.md", "assignment", 1, _MUTATION),
+    Expected("mypy", "docs/03-schema-language.md", "arg-type", 1, _WRONG_POINT),
+    Expected("mypy", "docs/03-schema-language.md", "misc", 1, _SHORT_TUPLE),
     Expected(
-        "ty",
-        "docs/16-api.md",
-        "invalid-argument-type",
-        1,
-        "`validate_json(123)` is the wrong argument the table shows raise `TypeError`",
+        "mypy", "docs/03-schema-language.md", "name-defined", 1, _FORWARD_REFERENCE
     ),
+    Expected("mypy", "docs/04-algebra.md", "union-attr", 2, _CLASS_ON_THE_LEFT),
+    Expected("mypy", "docs/15-decidability.md", "valid-type", 6, _VALIDATOR_IN_A_TYPE),
+    Expected("mypy", "docs/16-api.md", "arg-type", 1, _WRONG_JSON),
+    Expected("mypy", "docs/17-boundaries.md", "attr-defined", 1, _UNDECLARED),
+    Expected("pyright", "README.md", "reportAttributeAccessIssue", 1, _MUTATION),
     Expected(
-        "ty",
-        "docs/17-boundaries.md",
-        "unresolved-attribute",
-        1,
-        "`Model.validator = ...` sets an attribute the class does not declare, "
-        "which is what the block shows",
-    ),
-    Expected(
-        "pyright",
-        "README.md",
-        "reportAttributeAccessIssue",
-        1,
-        '`config.steps = "ten"` is the mutation the example shows caught',
-    ),
-    Expected(
-        "pyright",
-        "docs/03-schema-language.md",
-        "reportArgumentType",
-        1,
-        '`Point(1, "y")` is the wrong argument the block shows refused',
+        "pyright", "docs/03-schema-language.md", "reportArgumentType", 1, _WRONG_POINT
     ),
     Expected(
         "pyright",
         "docs/03-schema-language.md",
         "reportInvalidTypeForm",
         1,
-        "`tuple[str, int, ...]` is the older spelling of a prefix and a tail, "
-        "kept beside the `*tuple` one for the floor",
+        _SHORT_TUPLE,
     ),
     Expected(
         "pyright",
         "docs/03-schema-language.md",
         "reportUndefinedVariable",
         1,
-        '`list["Account"]` is the forward reference the frontend refuses to resolve',
+        _FORWARD_REFERENCE,
     ),
     Expected(
         "pyright",
         "docs/04-algebra.md",
         "reportAttributeAccessIssue",
         2,
-        "`int | Validator(str)` and `Validator(int) | str | None`: pyright "
-        "resolves a union written from a type through `type.__or__` to "
-        "`types.UnionType` and does not read the validator's `__ror__`; ty and "
-        "mypy do, and the example runs",
+        _CLASS_ON_THE_LEFT,
     ),
+    Expected("pyright", "docs/16-api.md", "reportArgumentType", 1, _WRONG_JSON),
     Expected(
-        "pyright",
-        "docs/16-api.md",
-        "reportArgumentType",
-        1,
-        "`validate_json(123)` is the wrong argument the table shows raise `TypeError`",
+        "pyright", "docs/17-boundaries.md", "reportAttributeAccessIssue", 1, _UNDECLARED
     ),
-    Expected(
-        "pyright",
-        "docs/17-boundaries.md",
-        "reportAttributeAccessIssue",
-        1,
-        "`Model.validator = ...` sets an attribute the class does not declare, "
-        "which is what the block shows",
-    ),
-    Expected(
-        "ruff",
-        "docs/03-schema-language.md",
-        "F821",
-        1,
-        '`list["Account"]` is the forward reference the frontend refuses to resolve',
-    ),
+    Expected("ruff", "docs/03-schema-language.md", "F821", 1, _FORWARD_REFERENCE),
     Expected(
         "ruff",
         "docs/03-schema-language.md",
@@ -201,8 +189,8 @@ EXPECTED: tuple[Expected, ...] = (
         "UP035",
         1,
         "`NotRequired` comes from `typing_extensions` beside the `TypedDict` that "
-        "takes `closed=True`, which `typing` has on no supported release; the "
-        "floor's `typing` has neither",
+        "takes `closed=True`, which `typing` has only from 3.15; the floor's "
+        "`typing` has neither",
     ),
     Expected(
         "ruff",
@@ -247,6 +235,26 @@ EXEMPT: dict[str, str] = {
 
 _TY_LINE = re.compile(r"^(?P<file>.+?):\d+:\d+: (?P<level>\w+)\[(?P<rule>[\w-]+)\]")
 _RUFF_LINE = re.compile(r"^(?P<file>.+?):\d+:\d+: (?P<rule>\S+)")
+_MYPY_LINE = re.compile(r"^(?P<file>.+?):\d+: error: .*\[(?P<rule>[\w-]+)\]$")
+
+
+class Blocks(NamedTuple):
+    """The blocks laid out one module each, and the page each was cut from.
+
+    Flat, with the page in the module's name: mypy names a module by its file
+    and refuses two of one name, so `block_1.py` under two page directories is
+    a duplicate to it, and a directory named for a page is no package name.
+    """
+
+    directory: Path
+    pages: dict[str, str]
+    """A module's name, and the page as the tree names it."""
+    unparsed: tuple[str, ...]
+    """The blocks the running interpreter cannot parse, by page and index."""
+
+    def page(self, reported: str) -> str:
+        """Give the page a checker's reported file was cut from."""
+        return self.pages[Path(reported).stem]
 
 
 def runner() -> ModuleType:
@@ -271,19 +279,18 @@ def newest_release() -> str:
     return found[1]
 
 
-def _page(scratch: Path, reported: str) -> str:
-    """Give the page a scratch file was cut from, as the tree names it."""
-    relative = Path(reported).resolve().relative_to(scratch.resolve())
-    return relative.parent.with_suffix(".md").as_posix()
-
-
-def _output(argv: list[str]) -> str:
+def _output(argv: list[str], **env: str) -> str:
     return subprocess.run(
-        argv, cwd=ROOT, capture_output=True, text=True, check=False
+        argv,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, **env},
     ).stdout
 
 
-def read_ty(scratch: Path) -> Counter[Key]:
+def read_ty(blocks: Blocks) -> Counter[Key]:
     """Read the blocks with ty, under the project's own configuration."""
     out = _output(
         [
@@ -295,17 +302,42 @@ def read_ty(scratch: Path) -> Counter[Key]:
             str(ROOT),
             "--output-format",
             "concise",
-            str(scratch),
+            str(blocks.directory),
         ]
     )
     found: Counter[Key] = Counter()
     for line in out.splitlines():
         if (match := _TY_LINE.match(line)) and match["level"] != "info":
-            found[("ty", _page(scratch, match["file"]), match["rule"])] += 1
+            found[("ty", blocks.page(match["file"]), match["rule"])] += 1
     return found
 
 
-def read_pyright(scratch: Path, release: str) -> Counter[Key]:
+def read_mypy(blocks: Blocks, release: str) -> Counter[Key]:
+    """Read the blocks with mypy, against the tree's stub rather than an install."""
+    out = _output(
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--python-version",
+            release,
+            "--no-error-summary",
+            # No cache: mypy replays a cached module's errors under the path of
+            # the run that wrote them, and each run lays the blocks out anew.
+            "--cache-dir",
+            os.devnull,
+            str(blocks.directory),
+        ],
+        MYPYPATH=str(ROOT / "python"),
+    )
+    found: Counter[Key] = Counter()
+    for line in out.splitlines():
+        if match := _MYPY_LINE.match(line):
+            found[("mypy", blocks.page(match["file"]), match["rule"])] += 1
+    return found
+
+
+def read_pyright(blocks: Blocks, release: str) -> Counter[Key]:
     out = _output(
         [
             sys.executable,
@@ -318,17 +350,17 @@ def read_pyright(scratch: Path, release: str) -> Counter[Key]:
             "--pythonversion",
             release,
             "--outputjson",
-            str(scratch),
+            str(blocks.directory),
         ]
     )
     found: Counter[Key] = Counter()
     for item in json.loads(out)["generalDiagnostics"]:
         if item["severity"] != "information":
-            found[("pyright", _page(scratch, item["file"]), str(item.get("rule")))] += 1
+            found[("pyright", blocks.page(item["file"]), str(item.get("rule")))] += 1
     return found
 
 
-def read_ruff(scratch: Path, release: str) -> Counter[Key]:
+def read_ruff(blocks: Blocks, release: str) -> Counter[Key]:
     out = _output(
         [
             sys.executable,
@@ -343,42 +375,68 @@ def read_ruff(scratch: Path, release: str) -> Counter[Key]:
             "concise",
             "--ignore",
             ",".join(EXEMPT),
-            str(scratch),
+            str(blocks.directory),
         ]
     )
     found: Counter[Key] = Counter()
     for line in out.splitlines():
         if match := _RUFF_LINE.match(line):
-            found[("ruff", _page(scratch, match["file"]), match["rule"])] += 1
+            found[("ruff", blocks.page(match["file"]), match["rule"])] += 1
     return found
 
 
-def read() -> tuple[int, Counter[Key]]:
-    """Lay the blocks out and read them: how many, and what each checker says."""
+def lay_out(directory: Path) -> Blocks:
+    """Write every block as a module of its own under `directory`."""
+    pages: dict[str, str] = {}
+    unparsed: list[str] = []
+    for page, index, block in runner().examples():
+        named = page.relative_to(ROOT).as_posix()
+        module = f"{re.sub(r'[^0-9a-z]+', '_', named.lower())}_block_{index}"
+        if module in pages:
+            message = f"{named} and {pages[module]} lay out as one module"
+            raise RuntimeError(message)
+        pages[module] = named
+        (directory / f"{module}.py").write_text(block, encoding="utf-8")
+        try:
+            ast.parse(block)
+        except SyntaxError:
+            unparsed.append(f"{named} block {index}")
+    return Blocks(directory, pages, tuple(unparsed))
+
+
+class Reading(NamedTuple):
+    """What the checkers said about the blocks, and which of them could read."""
+
+    count: int
+    found: Counter[Key]
+    checkers: tuple[str, ...]
+    unparsed: tuple[str, ...]
+    """The blocks that kept mypy from reading, if it did not."""
+
+
+def read() -> Reading:
+    """Lay the blocks out and read them with every checker that can."""
     release = newest_release()
     with tempfile.TemporaryDirectory() as directory:
-        scratch = Path(directory)
-        count = 0
-        for page, index, block in runner().examples():
-            target = (
-                scratch / page.relative_to(ROOT).with_suffix("") / f"block_{index}.py"
-            )
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(block, encoding="utf-8")
-            count += 1
-        found = (
-            read_ty(scratch)
-            + read_pyright(scratch, release)
-            + read_ruff(scratch, release)
-        )
-    return count, found
+        blocks = lay_out(Path(directory))
+        found = read_ty(blocks) + read_pyright(blocks, release)
+        found += read_ruff(blocks, release)
+        checkers = ("ty", "pyright", "ruff")
+        if not blocks.unparsed:
+            found += read_mypy(blocks, release)
+            checkers = ("ty", "mypy", "pyright", "ruff")
+    return Reading(len(blocks.pages), found, checkers, blocks.unparsed)
 
 
-def problems(found: Counter[Key]) -> list[str]:
-    """Name every diagnostic no row expects, and every row nothing reports."""
+def problems(found: Counter[Key], checkers: tuple[str, ...]) -> list[str]:
+    """Name every diagnostic no row expects, and every row nothing reports.
+
+    A row is held only where its checker read the blocks.
+    """
     expected: Counter[Key] = Counter()
     for row in EXPECTED:
-        expected[(row.checker, row.page, row.rule)] += row.count
+        if row.checker in checkers:
+            expected[(row.checker, row.page, row.rule)] += row.count
     return [
         f"{checker} reports {rule} on {page} {found[key]} time(s); the ledger "
         f"expects {expected[key]}. Fix the example, or add the row with its reason."
@@ -389,13 +447,19 @@ def problems(found: Counter[Key]) -> list[str]:
 
 
 def main() -> int:
-    count, found = read()
-    wrong = problems(found)
+    reading = read()
+    wrong = problems(reading.found, reading.checkers)
     for line in wrong:
         print(line)
+    if reading.unparsed:
+        print(
+            f"mypy did not read: Python {sys.version_info.major}."
+            f"{sys.version_info.minor} cannot parse {', '.join(reading.unparsed)}"
+        )
     print(
-        f"read {count} example(s) under ty, pyright and ruff: {sum(found.values())} "
-        f"diagnostic(s), {len(wrong)} unexpected or stale"
+        f"read {reading.count} example(s) under {', '.join(reading.checkers)}: "
+        f"{sum(reading.found.values())} diagnostic(s), "
+        f"{len(wrong)} unexpected or stale"
     )
     return 1 if wrong else 0
 

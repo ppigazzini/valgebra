@@ -56,6 +56,7 @@ What each spelling reads as:
 | a dict or list literal, a constant, a value typed `object` | `Validator[object]` |
 | `Any` | gradual: `Any` under mypy, `Unknown` under ty, `object` under pyright |
 | `a \| b` for two typed validators | the union of their types |
+| a class `\|` a validator, `int \| v` | `Validator[object]` under ty; under mypy and pyright a `types.UnionType`, on which a validator method is an error. Write the validator on the left: `v \| int` |
 | `union(a, b)` for validators of one type | that type; for two types ty reads their union, mypy and pyright `object` |
 | `intersection`, `complement`, `recursive` | `Validator[object]` |
 

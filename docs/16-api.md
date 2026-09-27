@@ -232,7 +232,7 @@ against, so a caller sizing a schema reads the number rather than repeating it.
 ```python
 from valgebra import MAX_SCHEMA_DEPTH, Validator, complement
 
-schema = Validator(int)
+schema: Validator = Validator(int)
 for _ in range(MAX_SCHEMA_DEPTH - 1):
     schema = complement(schema)
 # An odd number of complements is the complement of `int`, so `1` is outside.
