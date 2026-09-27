@@ -1,6 +1,7 @@
 import enum
 import functools
 import operator
+import re
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
@@ -9,7 +10,14 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import ValidationError, Validator, complement, intersection, union
+from valgebra import (
+    Regex,
+    ValidationError,
+    Validator,
+    complement,
+    intersection,
+    union,
+)
 
 
 def test_comparison_bounds() -> None:
@@ -144,18 +152,49 @@ def test_an_enum_class_is_metadata_rather_than_a_predicate() -> None:
     assert schema.is_valid(1)
 
 
-def test_a_constraint_class_is_ignored_rather_than_read_for_its_slots() -> None:
-    """A marker class exposes descriptors where an instance exposes values.
+@pytest.mark.parametrize(
+    ("annotation", "marker"),
+    [
+        (Annotated[int, at.Ge], at.Ge),
+        (Annotated[int, at.Predicate], at.Predicate),
+        (Annotated[list[int], at.Len], at.Len),
+        (Annotated[str, Regex], Regex),
+        (Annotated[str, re.Pattern], re.Pattern),
+        (Annotated[int, at.Timezone], at.Timezone),
+    ],
+    ids=["Ge", "Predicate", "Len", "Regex", "Pattern", "Timezone"],
+)
+def test_a_marker_class_is_refused_with_the_spelling_that_was_meant(
+    annotation: object, marker: type
+) -> None:
+    """A marker written without its parentheses is refused, not ignored.
 
     `at.Ge(0)` carries `ge = 0`; `at.Ge` carries the slot descriptor that would
-    read it. Taking the descriptor for a bound builds a comparison against an
-    object no value is ordered against, so the schema admits nothing — the same
-    trap as a class read as a predicate, one arm earlier.
+    read it, so the class holds no bound to read. Ignored, it would leave the
+    schema its base, admitting every value the marker was written to exclude.
+    A class of the vocabulary the frontend refuses is the same mistake.
     """
-    schema = Validator(Annotated[int, at.Ge])
-    assert repr(schema) == "int"
-    assert schema.is_valid(1)
-    assert schema.is_valid(-1)
+    with pytest.raises(
+        NotImplementedError,
+        match=rf"{marker.__name__} is a marker class, not a marker: "
+        rf"an instance carries the constraint, so write {marker.__name__}\(\.\.\.\)",
+    ):
+        Validator(annotation)
+
+
+def test_a_class_carrying_a_constraint_name_is_a_marker_class() -> None:
+    """The names a constraint is read through decide it, not the library.
+
+    A class holding a `pattern` is one whose instances this frontend reads as a
+    pattern, so the class is that marker without its parentheses.
+    """
+
+    class Email:
+        pattern = r".+@.+"
+
+    with pytest.raises(NotImplementedError, match="write Email"):
+        Validator(Annotated[str, Email])
+    assert Validator(Annotated[str, Email()]).is_valid("a@b")
 
 
 def test_a_class_marker_beside_a_real_constraint_leaves_it_standing() -> None:

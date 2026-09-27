@@ -295,8 +295,12 @@ pub(super) fn with_inline_flags(
 /// The one member carrying no constraint is the documentation marker, which says
 /// nothing about which values belong.
 pub(super) fn is_unhandled_constraint(marker: &Bound<'_, PyAny>) -> bool {
-    let py = marker.py();
-    let ty = marker.get_type();
+    is_constraint_vocabulary(&marker.get_type())
+}
+
+/// Whether `ty` is a class of the `annotated_types` constraint vocabulary.
+fn is_constraint_vocabulary(ty: &Bound<'_, PyType>) -> bool {
+    let py = ty.py();
     // Read through the string rather than into one: `extract::<String>` copies
     // the text out so the comparison can be made against a Rust literal, which
     // is an allocation and a free per marker for an answer that is a byte
@@ -312,6 +316,52 @@ pub(super) fn is_unhandled_constraint(marker: &Bound<'_, PyAny>) -> bool {
     // and asking what such a marker is *called* decides nothing.
     names(intern!(py, "__module__"), "annotated_types")
         && !names(intern!(py, "__name__"), "DocInfo")
+}
+
+/// A class written where a marker goes, which is never read as one.
+///
+/// A marker *class* exposes descriptors where an instance exposes values:
+/// `at.Ge(0)` carries `ge = 0`, while `at.Ge` carries the slot descriptor that
+/// reads it, and taking that for a bound builds a comparison no value is ordered
+/// against. Calling one is the same trap a step later -- `Kilograms(1.5)`
+/// constructs a unit marker rather than answering whether 1.5 belongs.
+///
+/// A class whose instances would be read or refused as a constraint is a marker
+/// written without its parentheses, and ignoring it would widen the schema to
+/// its base in silence, so it is refused with the spelling that was meant. Any
+/// other class is metadata this frontend does not recognise, which the typing
+/// spec says to ignore.
+fn read_a_class(class: &Bound<'_, PyType>) -> PyResult<()> {
+    if !is_a_marker_class(class)? {
+        return Ok(());
+    }
+    let name = class.name()?;
+    Err(not_implemented(&format!(
+        "{name} is a marker class, not a marker: an instance carries the \
+         constraint, so write {name}(...)"
+    )))
+}
+
+/// Whether a class written where a marker goes is the class of a marker.
+///
+/// Two answers make it one: the class is from the constraint vocabulary, whose
+/// instances are read or refused by name; or it carries a name a constraint is
+/// read through, which a `slots` marker class does as the descriptor for its
+/// instances' value. `flags` is not such a name, since it is read only beside
+/// `pattern`. The names are asked of the class itself, where the probe table
+/// asks them of a marker's type -- which for a class is its metaclass, and
+/// carries none of them.
+fn is_a_marker_class(class: &Bound<'_, PyType>) -> PyResult<bool> {
+    if is_constraint_vocabulary(class) {
+        return Ok(true);
+    }
+    let py = class.py();
+    for probe in Probe::ALL {
+        if !matches!(probe, Probe::Flags) && class.getattr_opt(probe.name(py))?.is_some() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// An optional attribute a refinement marker is read through.
@@ -595,18 +645,9 @@ fn parse_constraint_within<'py>(
         sets.push(marker.clone());
         return Ok(());
     }
-    // A class is metadata this frontend does not recognise, and the typing spec
-    // says to ignore what a consumer does not recognise.
-    //
-    // It has to be refused before any attribute is read, not only before the
-    // predicate arms. A marker *class* exposes descriptors where an instance
-    // exposes values: `at.Ge(0)` carries `ge = 0`, while `at.Ge` carries the
-    // slot descriptor that reads it, and taking that for a bound builds a
-    // comparison no value is ordered against. Calling one is the same trap a
-    // step later — `Kilograms(1.5)` constructs a unit marker rather than
-    // answering whether 1.5 belongs.
-    if marker.is_instance_of::<PyType>() {
-        return Ok(());
+    // A class is settled before any attribute of it is read as a value.
+    if let Ok(class) = marker.cast::<PyType>() {
+        return read_a_class(class);
     }
     let before = out.len();
     // How this marker answers, read once per marker and mostly once per type.

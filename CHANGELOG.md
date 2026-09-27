@@ -19,6 +19,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a fail-fast union report walks no branch past its first failure
 - fix: a fatal signal raised inside a key or a type probe propagates
 - fix: a list subclass is read for what it holds on every interpreter
+- fix: a marker class is refused with the spelling that was meant
 
 -->
 
@@ -65,6 +66,14 @@ answer of its own, or a repair to a change not yet released.
   copy that iterates it, so a subclass whose `__iter__` yields something other
   than what it holds was judged by what it yields there and by what it holds on
   3.14. Only an exact list is copied.
+- **A marker class is refused with the spelling that was meant.**
+  `Annotated[int, at.Ge]`, a marker written without its parentheses, was
+  ignored as unrecognised metadata, so the schema was `int` and admitted every
+  value the bound was written to exclude. A class whose instances would be read
+  or refused as a constraint -- one from `annotated_types`, or one carrying a
+  name a constraint is read through, such as `ge` or `pattern` -- is refused
+  with a message naming `Ge(...)`. Any other class, such as a unit or an
+  enumeration, is ignored as before.
 
 ## [0.0.14] - 2026-09-26
 

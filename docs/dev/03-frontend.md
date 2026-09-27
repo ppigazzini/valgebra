@@ -21,13 +21,21 @@ and never `annotated_types`. A marker carrying `pattern`, `min_length`,
 `max_length` or `multiple_of` contributes the matching constraint, so any
 library's marker of that shape works.
 
-**A class is never a marker**, and is ignored before any attribute is read. A
-marker *class* exposes descriptors where an instance exposes values: `at.Ge(0)`
-carries `ge = 0`, while `at.Ge` carries the slot descriptor that reads it, and
-taking that for a bound builds a comparison no value is ordered against. Calling
-one is the same trap a step later — `Kilograms(1.5)` constructs a unit marker
-rather than answering whether `1.5` belongs. Either way the schema ends up
-denoting nothing, so a class is metadata this frontend does not recognise.
+**A class is never read as a marker**, and is settled before any attribute of
+it is read as a value. A marker *class* exposes descriptors where an instance
+exposes values: `at.Ge(0)` carries `ge = 0`, while `at.Ge` carries the slot
+descriptor that reads it, and taking that for a bound builds a comparison no
+value is ordered against. Calling one is the same trap a step later —
+`Kilograms(1.5)` constructs a unit marker rather than answering whether `1.5`
+belongs.
+
+A class whose instances would be read or refused as a constraint — one from
+the vocabulary, or one carrying a name a constraint is read through — is a
+marker written without its parentheses, and is **refused** with the spelling
+that was meant: ignored, it would widen the schema to its base in silence. The
+names are asked of the class itself, since the probe table asks them of a
+marker's type, which for a class is its metaclass. Any other class is metadata
+this frontend does not recognise, and is ignored.
 
 **A compiled validator narrows by its set**, and is read before any attribute:
 `build_refine` meets the refined base with every validator the metadata holds,

@@ -71,6 +71,8 @@ fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
              class Timezone:\n\
              \x20   pass\n\
              Timezone.__module__ = 'annotated_types'\n\
+             class Kilograms:\n\
+             \x20   symbol = 'kg'\n\
              class grouped:\n\
              \x20   __is_annotated_types_grouped_metadata__ = True\n\
              \x20   def __init__(self, *items): self.items = items\n\
@@ -192,6 +194,9 @@ fn each_spelling_builds_its_own_schema() {
             // typing spec says to -- unless it is a constraint from the
             // vocabulary, which is the refusal below.
             ("typing.Annotated[int, 'a note']", "int"),
+            // And a class is such metadata, where it carries no name a
+            // constraint is read through: a unit, a tag, an enumeration.
+            ("typing.Annotated[float, Kilograms]", "float"),
             (
                 "typing.Annotated[int, types.SimpleNamespace(multiple_of=3)]",
                 "Annotated[int, MultipleOf(3)]",
@@ -300,6 +305,11 @@ fn each_refusal_says_what_it_refuses() {
             ("typing.Annotated[int, at.MinLen(1)]", "length"),
             ("[..., int]", "only as the last element"),
             ("typing.Annotated[int, Timezone()]", "does not check"),
+            // A marker written without its parentheses: the class of one the
+            // frontend reads, and the class of one it refuses. Both would widen
+            // the schema to its base if they were ignored.
+            ("typing.Annotated[int, slotted.Ge]", "write Ge(...)"),
+            ("typing.Annotated[int, Timezone]", "write Timezone(...)"),
             // A grouping that never bottoms out, and one nested past the bound:
             // following either to the end is a stack this library does not have.
             // A constraint put to a literal is put to the values of the kind

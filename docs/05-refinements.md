@@ -548,11 +548,27 @@ is harmless and carries no membership meaning. The carve-out is the
 *this* schema, so one valgebra does not check is refused rather than ignored. A
 validator is not unrecognized metadata at all: it narrows by its set, above.
 
-A **class** is among what is ignored. A marker carries its values on an
+A **class** is never read as a marker. A marker carries its values on an
 instance — `Ge(0)` holds `ge = 0` — so the class itself holds no value to read
-and calling it constructs rather than asks. A documentation marker written as a
-class therefore carries no constraint, exactly as one written as an instance does
-not.
+and calling it constructs rather than asks. A marker class written where its
+instance was meant is refused with the spelling that was meant, since ignoring
+it would leave the schema its base; any other class, such as a unit or an
+enumeration, is ignored:
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import Validator
+
+try:
+    Validator(Annotated[int, at.Ge])
+except NotImplementedError as err:
+    assert "so write Ge(...)" in str(err)
+else:
+    raise AssertionError("a marker class is refused")
+```
 
 ```python
 from typing import Annotated
