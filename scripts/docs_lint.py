@@ -49,15 +49,15 @@ other:
   test that declares no product fails. The ledger rule below is satisfied by a
   mention anywhere on the page; this one is about the table a reader counts.
 * **The table of ledgers.** A test carrying a ``LEDGER:`` marker with no row in
-  ``docs/dev/08-testing.md`` fails, a row naming a test that does not exist
-  fails, and a spelled count beside either the table or the glossary entry that
-  disagrees with the markers fails. The list *of* the lists was the one list
-  nothing held, and it drifted in both copies at once.
+  ``docs/dev/08-testing.md`` fails, and a row naming a test that does not exist
+  fails. The pages state no count of them: a count in prose is a second copy
+  of the table, and it drifts by one entry at a time.
 
-Two classes stay out of its reach, and they are the common ones: a real symbol
-attributed to the wrong file, and a behaviour described as absent from a build
-that has it. **It cannot tell you a sentence is false.** It buys the mechanical
-half so review can spend its attention on the half that needs a reader.
+Three classes stay out of its reach, and they are the common ones: a real
+symbol attributed to the wrong file, a list in prose with the wrong count or
+order, and a behaviour described as absent from a build that has it. **It cannot
+tell you a sentence is false.** It buys the mechanical half so review can spend
+its attention on the half that needs a reader.
 
 Usage:
     python scripts/docs_lint.py
@@ -468,65 +468,11 @@ def check_index(relative: str) -> list[str]:
     return problems
 
 
-#: The spellings a count takes in prose, by tens and by units.
-_TENS = (
-    "",
-    "",
-    "twenty",
-    "thirty",
-    "forty",
-    "fifty",
-    "sixty",
-    "seventy",
-    "eighty",
-    "ninety",
-)
-_UNITS = (
-    "zero",
-    "one",
-    "two",
-    "three",
-    "four",
-    "five",
-    "six",
-    "seven",
-    "eight",
-    "nine",
-    "ten",
-    "eleven",
-    "twelve",
-    "thirteen",
-    "fourteen",
-    "fifteen",
-    "sixteen",
-    "seventeen",
-    "eighteen",
-    "nineteen",
-)
-
-
-def _spell(count: int) -> str:
-    """Spell a count under a hundred, the way the prose spells it.
-
-    Derived rather than tabulated. A table of spellings is a universe, and a
-    universe that stops short is a detector that reports nothing past its end:
-    the table this replaces ran out at twenty-four while the tree held
-    twenty-seven ledgers, so a page could say any number above the ceiling and
-    every wrong spelling read as absent.
-    """
-    if count < len(_UNITS):
-        return _UNITS[count]
-    tens, units = divmod(count, 10)
-    return _TENS[tens] if units == 0 else f"{_TENS[tens]}-{_UNITS[units]}"
-
-
 def check_ledger_table() -> list[str]:
     """Hold the table of ledgers to the ledgers, in both directions.
 
-    Every list in this repository that could rot is held to the tree both ways
-    -- except, until this rule, the list *of* those lists. It carried a spelled
-    count in two places and neither was held to anything, so both drifted: the
-    table said five, the glossary said four, and the tree had six.
+    Every list in this repository that could rot is held to the tree both ways,
+    and this is the list *of* those lists.
 
     A ledger declares itself with a ``LEDGER:`` marker in its own docstring, so
     the universe is read from the tests rather than restated here. The marker is
@@ -564,36 +510,6 @@ def check_ledger_table() -> list[str]:
         for name in sorted(listed)
         if not (tests / name).exists()
     ]
-    # The count is prose beside the table, so it rots on its own schedule. The
-    # spellings run from four, as they always have: these pages say "the two
-    # ledgers that read the tree" about a named pair, and a number that small is
-    # never the table's. Every count above is generated rather than tabulated --
-    # see `_spell`, and the ceiling that used to end the table.
-    spelled = {count: _spell(count) for count in range(4, 100)}
-    want = _spell(len(declared))
-    counted = (
-        page,
-        ROOT / "docs" / "dev" / "13-glossary.md",
-        ROOT / "docs" / "dev" / "README.md",
-    )
-    for doc in counted:
-        if not doc.exists():
-            continue
-        for wrong, word in spelled.items():
-            if wrong == len(declared):
-                continue
-            # A hyphen is a word boundary, so a bare `\b` reads a compound
-            # spelling as one of its halves and reports the page wrong for
-            # saying the right thing -- `twenty` inside `twenty-one`, and
-            # `four` inside `twenty-four`. The separator is the hyphen, so a
-            # spelling is bounded by one on neither side.
-            bounded = rf"(?<!-)\b{word}\b(?!-)"
-            spelling = rf"{bounded} of them|There are {bounded}|the {bounded} ledgers"
-            if re.search(spelling, doc.read_text(encoding="utf-8"), re.IGNORECASE):
-                problems.append(
-                    f"{doc.relative_to(ROOT)}: says {word} ledgers; there are "
-                    f"{len(declared)} ({want})"
-                )
     # The scan is the detector: no ledgers at all would pass having read nothing.
     if not declared:
         problems.append("no test declares itself a ledger")

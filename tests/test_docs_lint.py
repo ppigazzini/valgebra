@@ -331,15 +331,8 @@ def test_the_bounds_ledger_is_held_in_both_directions() -> None:
     assert value
 
 
-def _synthetic_ledgers(root: Path, how_many: int, spelling: str) -> None:
-    """Write a tree of `how_many` ledgers and a page spelling the count.
-
-    The table of ledgers is held to the tree by name in both directions and by
-    a spelled count, and the count is the half that has no synthetic corpus of
-    its own: the names are checked against a directory the rule reads, so a
-    tree is what it takes to drive the spelling at a number the real tree does
-    not have.
-    """
+def _synthetic_ledgers(root: Path, how_many: int) -> None:
+    """Write a tree of `how_many` ledgers and a page tabling them."""
     tests = root / "tests"
     tests.mkdir(parents=True, exist_ok=True)
     names = [f"test_ledger_{index}.py" for index in range(how_many)]
@@ -351,33 +344,7 @@ def _synthetic_ledgers(root: Path, how_many: int, spelling: str) -> None:
     page = root / "docs" / "dev" / "08-testing.md"
     page.parent.mkdir(parents=True, exist_ok=True)
     rows = "\n".join(f"| `tests/{name}` | holds something |" for name in names)
-    page.write_text(f"# Testing\n\n{spelling} of them:\n\n{rows}\n")
-
-
-def test_a_page_spelling_the_wrong_ledger_count_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The count drifts by one, which is the only way it ever drifts.
-
-    Driven above twenty-four deliberately. The spellings the rule compares
-    against were a hand-written table, and a table that stops short reports
-    nothing past its end: the page could say any number above it and the rule
-    would read every wrong spelling as absent and pass.
-    """
-    monkeypatch.setattr(lint, "ROOT", tmp_path)
-    _synthetic_ledgers(tmp_path, 28, "Twenty-seven")
-    problems = lint.check_ledger_table()
-    assert problems, "a page one short of the tree's ledger count passed"
-    assert any("twenty-seven" in problem for problem in problems), problems
-    assert any("twenty-eight" in problem for problem in problems), problems
-
-
-def test_a_page_spelling_the_right_ledger_count_passes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(lint, "ROOT", tmp_path)
-    _synthetic_ledgers(tmp_path, 28, "Twenty-eight")
-    assert lint.check_ledger_table() == []
+    page.write_text(f"# Testing\n\nThe ledgers:\n\n{rows}\n")
 
 
 def test_a_ledger_named_in_prose_alone_has_no_row(
@@ -394,14 +361,14 @@ def test_a_ledger_named_in_prose_alone_has_no_row(
     in a comment is not a script anything runs.
     """
     monkeypatch.setattr(lint, "ROOT", tmp_path)
-    _synthetic_ledgers(tmp_path, 4, "Four")
+    _synthetic_ledgers(tmp_path, 4)
     page = tmp_path / "docs" / "dev" / "08-testing.md"
     marker = "LEDGER" + ":"
     (tmp_path / "tests" / "test_ledger_prose.py").write_text(
         f'"""A ledger.\n\n{marker} something\n"""\n'
     )
     page.write_text(
-        page.read_text().replace("Four of them:", "Five of them:")
+        page.read_text()
         + "\nThe fifth is `tests/test_ledger_prose.py`, discussed here only.\n"
     )
 
