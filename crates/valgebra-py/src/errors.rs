@@ -144,13 +144,6 @@ pub(crate) fn json_invalid_error(py: Python<'_>, description: &str) -> PyErr {
     into_pyerr(py, vec![violation])
 }
 
-/// Build the Python [`ValidationError`] for one or more violations.
-///
-/// The raised instance carries the structured, machine-readable error model:
-/// `errors` is a tuple of per-failure items, each a JSON-serializable dict with
-/// `code`/`path`/`message`/`expected`/`value`, so `json.dumps(err.errors)` is
-/// the JSON output mode. The scalar `message`/`code`/`path`/`expected`/`value`
-/// mirror the first item; `str(exc)` is a summary of every failure.
 /// The failures a raised [`ValidationError`] reports, carried until asked for.
 ///
 /// Populating the six documented attributes cost about four microseconds per
@@ -317,6 +310,13 @@ pub(crate) fn validation_error_reduce<'py>(
         .call1((instance,))
 }
 
+/// Build the Python [`ValidationError`] for one or more violations.
+///
+/// The raised instance carries the structured, machine-readable error model:
+/// `errors` is a tuple of per-failure items, each a JSON-serializable dict with
+/// `code`/`path`/`message`/`expected`/`value`, so `json.dumps(err.errors)` is
+/// the JSON output mode. The scalar `message`/`code`/`path`/`expected`/`value`
+/// mirror the first item; `str(exc)` is a summary of every failure.
 pub(crate) fn into_pyerr(py: Python<'_>, violations: Vec<Violation>) -> PyErr {
     debug_assert!(!violations.is_empty(), "into_pyerr needs a failure");
     // The caller always reports at least one failure, and the reader below takes

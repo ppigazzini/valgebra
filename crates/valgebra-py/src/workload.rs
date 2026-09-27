@@ -677,13 +677,6 @@ fn settle_the_heap(py: Python<'_>) {
     .expect("trimming the heap raises nothing it does not catch");
 }
 
-/// The JSON document parsed and walked once per iteration.
-///
-/// The document and the validator are built outside the loop, as every shape
-/// here builds what it reads: what is counted is one `matches_json`, which is
-/// the parse and the walk and the drop of the tree between them. That is the
-/// whole of what `is_valid_json` does after the argument is known to be bytes,
-/// and it is the entry the comparison gate times.
 /// What a JSON shape's document is, so the checksum counts the answer expected.
 #[derive(Clone, Copy)]
 enum Expect {
@@ -691,6 +684,13 @@ enum Expect {
     NonMember,
 }
 
+/// The JSON document parsed and walked once per iteration.
+///
+/// The document and the validator are built outside the loop, as every shape
+/// here builds what it reads: what is counted is one `matches_json`, which is
+/// the parse and the walk and the drop of the tree between them. That is the
+/// whole of what `is_valid_json` does after the argument is known to be bytes,
+/// and it is the entry the comparison gate times.
 fn json_walk(py: Python<'_>, iters: usize, source: &str, expect: Expect) -> u64 {
     let (spelling, document) = json_document(py, source);
     let mut literals = Pool::default();

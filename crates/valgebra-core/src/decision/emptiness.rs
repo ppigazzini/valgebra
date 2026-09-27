@@ -499,11 +499,6 @@ pub(super) fn class_with_attributes(members: &[Schema]) -> Option<ClassIx> {
     }
 }
 
-/// Whether a refinement's bound and length constraints cannot hold together: a
-/// required minimum length above the allowed maximum, or a numeric lower bound
-/// above the upper bound (or equal with a strict end). Sound: it reports
-/// unsatisfiable only when the ordering the oracle returns forces it, and stays
-/// conservative when the oracle cannot compare two bounds.
 /// What a refinement's emptiness is, read from its base and its constraints.
 ///
 /// A refinement is a subset of its base, so an empty base empties it and so
@@ -618,11 +613,6 @@ fn bounded_integer_verdict(constraints: &Constraints, oracle: &dyn LeafRelations
     }
 }
 
-/// The one element schema a container repeats, for the containers that repeat
-/// one: a sequence with no fixed position, a set, a frozenset.
-///
-/// A value of such a container is any number of values of that element, which
-/// is what lets a length bound be met by building one.
 /// Whether the container admits one value more than once.
 ///
 /// A list and a tuple do; a set and a frozenset hold each member once, which is
@@ -693,6 +683,11 @@ fn value_count_bounds(schema: &Schema, oracle: &dyn LeafRelations) -> (usize, us
     }
 }
 
+/// The one element schema a container repeats, for the containers that repeat
+/// one: a sequence with no fixed position, a set, a frozenset.
+///
+/// A value of such a container is any number of values of that element, which
+/// is what lets a length bound be met by building one.
 fn repeated_element(base: &Schema) -> Option<&Schema> {
     match base {
         Schema::Seq { shape, .. } if shape.prefix.is_empty() => shape.tail.as_deref(),

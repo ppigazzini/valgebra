@@ -116,13 +116,6 @@ pub(super) fn carries_order(base: &Schema, operand: &Bound<'_, PyAny>) -> Carrie
     valgebra_core::carries_order(base, order_group(operand))
 }
 
-/// Refuse a constraint no value of the base can answer.
-///
-/// A constraint that cannot be asked of a value is not a narrowing: reading a
-/// length off an `int` raises, and the walk reads a raise as a non-member, so
-/// `Annotated[int, MinLen(1)]` compiles to a schema that admits nothing at all
-/// and says nothing about why. That is a schema nobody writes on purpose, so it
-/// is refused where it is written rather than at the first value that meets it.
 /// The base with each literal read as the kind its constant belongs to.
 ///
 /// A constraint is refused where the base's values cannot be asked it, and the
@@ -173,6 +166,13 @@ fn kinded(base: &Schema, lits: &Pool) -> Schema {
     }
 }
 
+/// Refuse a constraint no value of the base can answer.
+///
+/// A constraint that cannot be asked of a value is not a narrowing: reading a
+/// length off an `int` raises, and the walk reads a raise as a non-member, so
+/// `Annotated[int, MinLen(1)]` compiles to a schema that admits nothing at all
+/// and says nothing about why. That is a schema nobody writes on purpose, so it
+/// is refused where it is written rather than at the first value that meets it.
 pub(super) fn check_constraint_fits(
     base: &Schema,
     constraint: &Constraint,

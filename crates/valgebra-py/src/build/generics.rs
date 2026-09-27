@@ -293,17 +293,6 @@ pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Un
     Ok(Some(Unpacked::Fixed(args.iter().collect())))
 }
 
-/// `tuple[...]`, in every shape typing spells it.
-///
-/// A trailing `...` repeats the element before it after a fixed prefix, and an
-/// unpacked variadic tuple — `tuple[A, *tuple[B, ...]]` — is that same shape said
-/// another way, so both compile to the prefix-and-tail form. An unpacked *fixed*
-/// tuple splices its elements in where it stands.
-///
-/// What a sequence carries is a fixed prefix and then a repeating tail, with
-/// nothing after it. An element following the tail is therefore refused: the set
-/// it names is one this algebra cannot spell, and reading it as anything else
-/// would admit a different one.
 /// Whether these type arguments spell `tuple[()]`.
 ///
 /// No arguments on 3.11 and later; one argument that is the empty tuple on
@@ -323,6 +312,17 @@ fn spells_the_empty_tuple(args: &Bound<'_, PyTuple>) -> PyResult<bool> {
     }
 }
 
+/// `tuple[...]`, in every shape typing spells it.
+///
+/// A trailing `...` repeats the element before it after a fixed prefix, and an
+/// unpacked variadic tuple — `tuple[A, *tuple[B, ...]]` — is that same shape said
+/// another way, so both compile to the prefix-and-tail form. An unpacked *fixed*
+/// tuple splices its elements in where it stands.
+///
+/// What a sequence carries is a fixed prefix and then a repeating tail, with
+/// nothing after it. An element following the tail is therefore refused: the set
+/// it names is one this algebra cannot spell, and reading it as anything else
+/// would admit a different one.
 pub(super) fn build_tuple(
     args: &Bound<'_, PyTuple>,
     lits: &mut Pool,

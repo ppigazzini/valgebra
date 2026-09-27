@@ -207,12 +207,6 @@ impl Drop for Descent<'_> {
 }
 
 impl<'a> Ctx<'a> {
-    /// Open one level of descent, or refuse when the walk already holds
-    /// [`MAX_WALK_DEPTH`] of them.
-    ///
-    /// The caller turns a refusal into a non-member with a `recursion_limit`
-    /// violation — the same answer an over-deep value gets from the unfolding
-    /// bound, because it is the same fact about the value.
     /// Whether one more level is available, without taking it.
     ///
     /// The question a *leaf* loop asks. A scalar element cannot descend, so the
@@ -225,6 +219,12 @@ impl<'a> Ctx<'a> {
         self.depth.get() < MAX_WALK_DEPTH
     }
 
+    /// Open one level of descent, or refuse when the walk already holds
+    /// [`MAX_WALK_DEPTH`] of them.
+    ///
+    /// The caller turns a refusal into a non-member with a `recursion_limit`
+    /// violation — the same answer an over-deep value gets from the unfolding
+    /// bound, because it is the same fact about the value.
     pub(crate) fn descend(self) -> Option<Descent<'a>> {
         let level = self.depth.get() + 1;
         if level > MAX_WALK_DEPTH {

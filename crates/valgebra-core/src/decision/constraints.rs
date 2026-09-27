@@ -17,7 +17,6 @@ use crate::ir::{Constraint, OperandIx};
 
 use super::LeafRelations;
 
-/// One end of an order bound: the constant, and whether the end is strict.
 /// Whether the values a bound cuts are countable between two points.
 ///
 /// The whole numbers are discrete, so a pair of bounds with no integer between
@@ -45,6 +44,7 @@ pub(super) enum End {
     Upper,
 }
 
+/// One end of an order bound: the constant, and whether the end is strict.
 type Bound = Option<(OperandIx, bool)>;
 
 /// The shortest length a conjunction of bounds admits, which is the largest

@@ -41,17 +41,6 @@ fn schema() -> impl Strategy<Value = Schema> {
     })
 }
 
-/// The Boolean fragment with the shapes a *rule* reads: sequences by arity, and
-/// the length-bounded refinements that denote the same sets a different way.
-///
-/// [`schema`] is the corpus the laws above are written over, and it reaches no
-/// rule that looks at a shape. That is where the two deciders can disagree: the
-/// arm reducing a refinement to its base answered a refutation it had no grounds
-/// for -- a list of at most zero elements is the empty list, and its base is
-/// nowhere near it -- and no pair drawn from atoms and connectives would have
-/// shown it. The laws are left over the fragment they were written for, because
-/// their claim is structural equality after simplification and a sequence is
-/// ordered into a normal form differently; the claim here is about answers.
 /// A set with no value that no rule proves empty.
 ///
 /// Two sequences of one position each whose positions share no value. Every
@@ -102,6 +91,17 @@ fn carriers() -> Vec<fn(Schema) -> Schema> {
     ]
 }
 
+/// The Boolean fragment with the shapes a *rule* reads: sequences by arity, and
+/// the length-bounded refinements that denote the same sets a different way.
+///
+/// [`schema`] is the corpus the laws above are written over, and it reaches no
+/// rule that looks at a shape. That is where the two deciders can disagree: the
+/// arm reducing a refinement to its base answered a refutation it had no grounds
+/// for -- a list of at most zero elements is the empty list, and its base is
+/// nowhere near it -- and no pair drawn from atoms and connectives would have
+/// shown it. The laws are left over the fragment they were written for, because
+/// their claim is structural equality after simplification and a sequence is
+/// ordered into a normal form differently; the claim here is about answers.
 fn shaped_schema() -> impl Strategy<Value = Schema> {
     let atom = prop_oneof![
         Just(Schema::ANYTHING),

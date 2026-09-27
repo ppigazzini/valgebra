@@ -403,15 +403,6 @@ impl Schema {
     }
 }
 
-/// A refinement below another: the base narrows and every constraint holds.
-///
-/// A refinement is a subset of its base. Against another refinement the base
-/// must subtype and every constraint of the supertype must hold of every
-/// subtype value: either it appears verbatim, or it is entailed by the
-/// subtype's bounds (a tighter lower, upper or length bound entails a looser
-/// one, decided through the ordering oracle). A bound the oracle cannot compare
-/// and a non-order constraint stay on the verbatim path, so a constraint
-/// neither written nor entailed leaves the pair unproven rather than refuted.
 /// Whether a direct instance of `class` has none of the kinds `other` admits.
 ///
 /// The kind half of the reading a meet of a class and its attributes gets,
