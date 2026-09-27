@@ -67,6 +67,28 @@ is one `is_subtype_of` pays for.
 | `Regex(p)` | the string fully matches the regex `p` | `string_pattern_mismatch` |
 | `Predicate(f)` | `f(value)` is truthy | `predicate_failed` |
 
+**A length bound is not a size guard.** The base is checked first, elements
+and all, and a constraint is asked only of a member of the base, so
+`Annotated[list[int], MaxLen(3)]` walks every element of a longer list before
+it reads the length, and a list that is too long and holds a wrong element is
+reported for the element alone. The answer is the same either way, since the
+value must satisfy both. To refuse an oversized value before its elements are
+read, check its length before handing it to the validator.
+
+```python
+from typing import Annotated
+
+import annotated_types as at
+
+from valgebra import ValidationError, Validator
+
+capped = Validator(Annotated[list[int], at.MaxLen(3)])
+try:
+    capped.validate([1, 2, "x", 4, 5])
+except ValidationError as err:
+    assert [item["code"] for item in err.errors] == ["int_type"]
+```
+
 ### Which base each marker can be asked of
 
 A marker narrows a base by asking its values a question, so the base has to be
