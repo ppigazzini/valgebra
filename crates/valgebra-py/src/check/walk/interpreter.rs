@@ -56,6 +56,18 @@ fn explain(
     pool: &[Py<PyAny>],
     defs: &[Schema],
 ) -> (bool, Vec<Violation>) {
+    explain_in(py, schema, value, pool, defs, WalkMode::Explain)
+}
+
+/// [`explain`] in a mode of the caller's choosing.
+fn explain_in(
+    py: Python<'_>,
+    schema: &Schema,
+    value: &Bound<'_, PyAny>,
+    pool: &[Py<PyAny>],
+    defs: &[Schema],
+    mode: WalkMode,
+) -> (bool, Vec<Violation>) {
     let index = build_index(py, schema, defs, pool);
     let state = WalkState::new();
     let ctx = Ctx {
@@ -69,7 +81,7 @@ fn explain(
         depth: &state.depth,
         fatal: &state.fatal,
         fatal_seen: &state.fatal_seen,
-        mode: WalkMode::Explain,
+        mode,
     };
     let mut out = Vec::new();
     let ok = member(
@@ -1640,10 +1652,8 @@ fn a_union_explains_the_branch_that_descended_furthest() {
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].code, "union_error");
 
-        // The probe runs with its own aggregating mode, so it measures how
-        // far each branch got even when the caller asked to stop at the
-        // first violation. Inheriting the caller's mode truncates a branch's
-        // report and can change which branch is judged closest.
+        // Stopping at the first violation, the branch is walked to its first
+        // failure, which is all the choice between branches reads.
         let index = build_index(py, &schema, &[], &[]);
         let deep_value = PyDict::new(py);
         deep_value
@@ -1674,14 +1684,10 @@ fn a_union_explains_the_branch_that_descended_furthest() {
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].location(), "x");
 
-        // The probe aggregates a branch's violations even when the caller
-        // asked to stop at the first, because the closest branch is chosen by
-        // how far each descended and a walk stopped early has not measured
-        // that. What the caller's mode decides is how much of the chosen branch
-        // is *reported*: `fail_fast` is one violation, which is what the error
+        // The caller's mode decides how much of the chosen branch is walked
+        // and reported: `fail_fast` is one violation, which is what the error
         // model promises at every site. A branch with two failing fields is
-        // what tells the two halves apart -- the probe walks both, and one is
-        // reported.
+        // what tells the two modes apart -- one is reported, then both.
         let wide = Schema::record(
             vec![field("p", Schema::Int, true), field("q", Schema::Int, true)],
             Openness::Closed,
@@ -1698,8 +1704,7 @@ fn a_union_explains_the_branch_that_descended_furthest() {
             run_mode(py, &union_wide, &wide_value, WalkMode::ExplainFailFast),
             (false, 1)
         );
-        // And the aggregating mode beside it reports both, which is what says
-        // the probe reached them.
+        // And the aggregating mode beside it reports both.
         assert_eq!(
             run_mode(py, &union_wide, &wide_value, WalkMode::Explain),
             (false, 2)
@@ -3519,15 +3524,17 @@ fn a_union_reports_a_branch_whose_walk_stopped_rather_than_a_summary() {
     });
 }
 
-/// The probe walks a branch whole where the caller asked to stop at the first
-/// violation, because how far a branch descended is what chooses between them.
+/// A branch is measured by where its first failure lies, which a walk stopped
+/// there has measured. So each branch is walked in the caller's mode, and a
+/// fail-fast report costs a fail-fast walk of each branch rather than the size
+/// of the value.
 ///
 /// A branch that fails shallowly and again deep inside is the case that tells
-/// the two apart: measured whole it is the closest branch, measured to its
-/// first violation it is the furthest from being one. Inheriting the caller's
-/// mode reports the other branch, which is a reader sent to the wrong field.
+/// the first failure from the deepest. Its first failure lies nearer than the
+/// other branch's only one, so the other branch is the closer, in either mode:
+/// the one failure fail-fast reports is the one the full report leads with.
 #[test]
-fn the_probe_measures_a_whole_branch_where_the_caller_stops_at_the_first() {
+fn a_branch_is_measured_by_its_first_failure_in_either_mode() {
     Python::attach(|py| {
         let inner = PyDict::new(py);
         inner.set_item("d", 1i64).expect("set");
@@ -3572,39 +3579,72 @@ fn the_probe_measures_a_whole_branch_where_the_caller_stops_at_the_first() {
         );
         let schema = Schema::Union(vec![near, far].into());
 
-        // Aggregating, the near branch is chosen and both its failures are
-        // reported.
+        // Aggregating, the far branch is chosen: its one failure lies deeper
+        // than the near branch's first.
         let (ok, violations) = explain(py, &schema, &value, &[], &[]);
         assert!(!ok);
-        assert_eq!(violations.len(), 2);
-        assert_eq!(violations[0].location(), "a");
-        assert_eq!(violations[1].location(), "b.c.d");
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].location(), "b.c");
 
-        // Stopping at the first, the same branch is chosen -- the probe
-        // measured it whole -- and one of its failures is reported.
-        let index = build_index(py, &schema, &[], &[]);
-        let state = WalkState::new();
-        let mut out = Vec::new();
-        let ctx = Ctx {
-            pool: &[],
-            defs: &[],
-            records: &index.records,
-            attrs: &index.attrs,
-            unions: &index.unions,
-            regexes: &index.regexes,
-            guard: &state.guard,
-            depth: &state.depth,
-            fatal: &state.fatal,
-            fatal_seen: &state.fatal_seen,
-            mode: WalkMode::ExplainFailFast,
-        };
-        let ok = member(
-            &schema,
-            &Value::Py(&value),
-            &mut Frame::new(&mut Vec::new(), &mut out, ctx),
-        );
+        // Stopping at the first, the same branch and the same failure.
+        let (ok, violations) = explain_in(py, &schema, &value, &[], &[], WalkMode::ExplainFailFast);
         assert!(!ok);
-        assert_eq!(out.len(), 1);
-        assert_eq!(out[0].location(), "a");
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].location(), "b.c");
+    });
+}
+
+/// A fail-fast report walks no branch past its first failure: a predicate on
+/// the elements after it never runs, where a full report runs it on each.
+#[test]
+fn a_fail_fast_report_walks_no_branch_past_its_first_failure() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new(
+                "calls = []\ndef counts(x):\n\x20   calls.append(x)\n\x20   return True\n",
+            )
+            .expect("no interior nul")
+            .as_c_str(),
+            std::ffi::CString::new("counter.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("counter")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+        let pool = vec![module.getattr("counts").expect("counts").unbind()];
+        let counted = Schema::Refine {
+            base: Arc::new(Schema::Int),
+            constraints: vec![Constraint::Predicate(PredIx::new(0))].into(),
+        };
+        let schema =
+            Schema::Union(vec![Schema::Int, Schema::list(SeqShape::homogeneous(counted))].into());
+        let value = PyList::new(py, [PyString::new(py, "x").into_any()])
+            .expect("builds")
+            .into_any();
+        let items = value.cast::<PyList>().expect("a list");
+        for n in 1i64..=3 {
+            items.append(n).expect("append");
+        }
+        let calls = || {
+            module
+                .getattr("calls")
+                .expect("calls")
+                .len()
+                .expect("a list")
+        };
+
+        let (ok, violations) =
+            explain_in(py, &schema, &value, &pool, &[], WalkMode::ExplainFailFast);
+        assert!(!ok);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].location(), "[0]");
+        assert_eq!(calls(), 0, "the branch walked past its first failure");
+
+        let (ok, _) = explain(py, &schema, &value, &pool, &[]);
+        assert!(!ok);
+        assert_eq!(calls(), 3, "a full report walks the branch whole");
     });
 }

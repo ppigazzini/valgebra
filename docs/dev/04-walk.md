@@ -90,15 +90,21 @@ one of them is invisible to a corpus that only raises `KeyboardInterrupt`.
 
 When no branch of a union matches, dumping every branch's errors buries the one
 the value was closest to. The walk instead reports the branch that **descended
-furthest** into the value before failing, measured as the greatest path depth
-past the union's own location, with a tie keeping the earliest branch so the
-choice is deterministic. When no branch makes progress — every branch a flat type
-mismatch — it falls back to one union error.
+furthest** into the value before failing, measured as the path depth, past the
+union's own location, of the branch's **first** failure -- the first violation
+its walk records -- with a tie keeping the earliest branch so the choice is
+deterministic. When no branch makes progress — every branch a flat type mismatch
+— it falls back to one union error.
 
-The probe aggregates **regardless of fail-fast**, so the whole of the closest
-branch is reported even to a caller that asked to stop at the first violation.
-That is the point: the caller asked for less noise, not for less of the one
-branch that matters.
+**Each branch is walked in the caller's mode.** The choice reads the first
+failure only, which a walk stopped there has measured, so under fail-fast a
+branch is walked to its first failure and no further: the report costs a
+fail-fast walk of each branch, not the size of the value it refuses. The full
+report walks every branch whole and chooses the same branch, so the one
+violation fail-fast reports is the one the full report leads with.
+`explain_union` in `check/walk.rs` owns both. Choosing by the deepest failure
+anywhere in a branch would need every branch walked whole in every mode, and a
+fail-fast report would then cost the size of the value.
 
 The probe asks a predicate again wherever it re-walks one, and keeps no memo
 over the answers. A predicate is user code, so each occurrence the walk

@@ -15,6 +15,7 @@ dropped.
 
 from __future__ import annotations
 
+import json
 from typing import Annotated, Literal
 
 import annotated_types as at
@@ -109,6 +110,32 @@ def test_a_union_with_no_progress_still_reports_one_summary() -> None:
     errors = _errors(union(int, str), 1.5)
     assert [item["code"] for item in errors] == ["union_error"]
     assert errors[0]["expected"] == "one of: int, str"
+
+
+def test_a_fail_fast_report_walks_no_branch_past_its_first_failure() -> None:
+    """Refusing a union costs a fail-fast walk of each branch, not the value's size.
+
+    A predicate on the elements after a branch's first failure never runs under
+    `fail_fast`, on either path; a full report runs it on each, since it reports
+    each.
+    """
+    calls: list[object] = []
+
+    def counts(value: object) -> bool:
+        calls.append(value)
+        return True
+
+    schema = Validator(union(int, [Annotated[int, at.Predicate(counts)]]))
+    value = ["x", *range(1_000)]
+    with pytest.raises(ValidationError) as caught:
+        schema.validate(value, fail_fast=True)
+    assert [item["path"] for item in caught.value.errors] == [(0,)]
+    with pytest.raises(ValidationError):
+        schema.load(json.dumps(value), fail_fast=True)
+    assert calls == []
+    with pytest.raises(ValidationError):
+        schema.validate(value)
+    assert len(calls) == 1_000
 
 
 def test_a_meet_branch_is_named_by_what_its_members_admit() -> None:

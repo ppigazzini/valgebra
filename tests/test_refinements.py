@@ -551,10 +551,11 @@ def test_a_predicate_runs_once_per_value_the_fast_walk_reaches() -> None:
     the page promises. The membership walk asks it once for each value it
     reaches and stops at the first failure. The explaining walk, on a union
     none of whose branches matched, re-walks the branches to find the one that
-    descended furthest, and that pass asks the predicate again -- regardless
-    of `fail_fast`, since the probe aggregates the closest branch whole. The
-    counts here are the derivation, not a budget: one call from the deciding
-    walk, one from the probe of each branch that reaches the predicate.
+    descended furthest, and that pass asks the predicate again: in the caller's
+    mode, so under `fail_fast` a branch stops at its first failure, which is
+    all the choice between branches reads. The counts here are the derivation,
+    not a budget: one call from the deciding walk, and one from the branch walk
+    for each value it reaches.
     """
     calls = {"n": 0}
 
@@ -577,12 +578,13 @@ def test_a_predicate_runs_once_per_value_the_fast_walk_reaches() -> None:
     calls["n"] = 0
     assert branches.is_valid(value) is False
     assert calls["n"] == 1, "the fast walk stops at the first failing field"
-    for fail_fast in (False, True):
+    for fail_fast, expected in ((False, 3), (True, 2)):
         calls["n"] = 0
         _refused(branches, value, fail_fast=fail_fast)
-        # The deciding walk asks once and stops at `a`; the probe of the record
-        # branch aggregates, so it asks at `a` and at `b`.
-        assert calls["n"] == 3, (fail_fast, calls["n"])
+        # The deciding walk asks once and stops at `a`. The full report walks
+        # the record branch whole, asking at `a` and at `b`; under `fail_fast`
+        # it stops at `a`, its first failure.
+        assert calls["n"] == expected, (fail_fast, calls["n"])
 
 
 def _refused(schema: Validator, value: object, *, fail_fast: bool = False) -> None:

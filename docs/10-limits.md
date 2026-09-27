@@ -79,8 +79,11 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   branches for the closest match, and `expected` names only a bounded number of
   **labels** before truncating with `...`. The two counts differ — a branch that
   is itself a union, such as a wide `Literal[...]`, contributes one branch and
-  many labels — so each carries its own bound. Building the explanation stays
-  bounded regardless of how wide the union is or how the value is shaped.
+  many labels — so each carries its own bound. With `fail_fast` the explanation
+  costs a fail-fast walk of each branch it searches, whatever the size of the
+  value. Without it every failure of the chosen branch is reported, so the
+  report grows with the value; a service answering untrusted input with the
+  report asks for it with `fail_fast`.
 
 ## Rejection is clean, not catastrophic
 

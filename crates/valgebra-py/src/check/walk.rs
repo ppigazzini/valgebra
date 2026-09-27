@@ -739,17 +739,17 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
     let ctx = frame.ctx;
     // The *closest* branch -- the one that descended furthest into the value
     // before failing -- is reported, rather than every branch. "Furthest" is the
-    // greatest path depth past the union's own location. Where no branch makes
-    // progress (`int | str` against a float, say) a single union error stands
-    // for all of them. Every branch is walked whole whatever the mode, since
-    // the depth each reached is what chooses between them and a walk stopped
-    // early has not measured it; the mode then decides how much of the chosen
-    // branch is reported. This runs only where a value is being explained.
+    // path depth, past the union's own location, of the branch's first failure,
+    // the one its walk records first. Where no branch makes progress (`int |
+    // str` against a float, say) a single union error stands for all of them.
+    //
+    // Each branch is walked in the caller's mode. A fail-fast walk stops at the
+    // first failure, which is all the choice reads, so a fail-fast report costs
+    // what a fail-fast walk of each branch costs rather than the size of the
+    // value; a full report walks each branch whole, and both modes choose the
+    // same branch, so the one failure fail-fast keeps is the one the full report
+    // leads with. This runs only where a value is being explained.
     let base_depth = frame.path.len();
-    let probe = Ctx {
-        mode: WalkMode::Explain,
-        ..ctx
-    };
     let mut best: Option<(usize, Vec<Violation>)> = None;
     // The first branch the walk could not answer for, kept aside. A branch that
     // ran out of levels, found the value inside itself, or raised inside a
@@ -773,19 +773,17 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
         }
         let mut branch = Vec::new();
         let matched = {
-            let mut probing = Frame::new(&mut *frame.path, &mut branch, probe);
+            let mut probing = Frame::new(&mut *frame.path, &mut branch, ctx);
             member(branch_schema, value, &mut probing)
         };
         if matched {
             return true;
         }
-        let progress = branch
-            .iter()
-            .map(|v| v.path.len())
-            .max()
-            .unwrap_or(base_depth)
+        let first = branch.first();
+        let progress = first
+            .map_or(base_depth, |v| v.path.len())
             .saturating_sub(base_depth);
-        if declined.is_none() && branch.iter().any(|v| walk_declined(v.code)) {
+        if declined.is_none() && first.is_some_and(|v| walk_declined(v.code)) {
             declined = Some(branch.clone());
         }
         // Strictly greater keeps the earliest branch on a tie.
@@ -806,11 +804,8 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
         return false;
     }
     match best {
-        // The branch is walked whole whatever the mode, because the *closest*
-        // one is chosen by how far each descended and a walk stopped early has
-        // not measured that. What the mode decides is how much of the chosen
-        // branch is reported: `fail_fast` promises one violation, and the one
-        // it keeps is the one the aggregate would lead with.
+        // A fail-fast walk recorded one violation, the one the full walk leads
+        // with; a full walk recorded every one, and all are reported.
         Some((progress, branch)) if progress > 0 => {
             let reported = if ctx.mode.stops_at_first() {
                 1

@@ -136,7 +136,8 @@ except ValidationError as err:
 
 When a value matches no branch of a union, valgebra does not dump every branch's
 failure. It reports the **closest** branch — the one that descended furthest into
-the value before failing — and that branch's own (aggregated) errors:
+the value before failing, which is the branch whose first failure lies deepest —
+and that branch's own (aggregated) errors:
 
 ```python
 from valgebra import ValidationError, union
@@ -154,11 +155,11 @@ When no branch makes any progress past the union's own location — for example
 is no closer branch, so a single `union_error` is the honest report. A
 `complement` likewise reports one failure at its location.
 
-Every branch is walked whole even under `fail_fast`, because *which* branch is
-closest is decided by how far each one descended and a walk stopped early has
-not measured that. What `fail_fast` decides is how much of the chosen branch is
-reported, and there it means what it means everywhere else: one failure, the one
-the aggregate leads with.
+Under `fail_fast` each branch is walked to its first failure and no further,
+since that is all the choice reads, so refusing a union costs a fail-fast walk
+of each branch rather than the size of the value. Without it every branch is
+walked whole, the same branch is chosen, and all of its failures are reported;
+`fail_fast` reports the one they lead with.
 
 A branch the walk could not answer for keeps its own report rather than the
 summary. `recursion_limit`, `recursion_loop`, `mutated_during_validation` and

@@ -16,6 +16,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a TypedDict is read against the sentinel its own implementation wrote
 - fix: a validator in Annotated metadata narrows the schema by its set
 - fix: a union's report names a meet by what its members admit
+- fix: a fail-fast union report walks no branch past its first failure
 
 -->
 
@@ -41,6 +42,15 @@ answer of its own, or a repair to a change not yet released.
   branch was listed as the word `intersection`, which names no set; it lists
   each member joined with `and`, as in `one of: str, int and not bool`, with a
   member that is itself a union in parentheses.
+- **Refusing a union under `fail_fast` costs a fail-fast walk of each branch.**
+  The report chose the closest branch by the deepest failure anywhere in it,
+  which walked every branch whole even under `fail_fast`: a 100,000-element
+  list refused inside a union branch took 350 ms where `is_valid` took none.
+  The closest branch is the one whose first failure lies deepest, which a walk
+  stopped there has measured, so under `fail_fast` each branch stops at its
+  first failure, and the full report chooses the same branch. Where one branch
+  fails shallowly and again deeper inside, the other branch may be the one
+  reported.
 
 ## [0.0.14] - 2026-09-26
 
