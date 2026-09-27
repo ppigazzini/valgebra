@@ -256,42 +256,50 @@ fn held_iter<'py>(value: &Bound<'py, PyAny>, base: Base) -> PyResult<Bound<'py, 
 ///
 /// A wrong answer here is safe in one direction only, and this errs that way: a
 /// type that cannot be read at all is treated as a liar and read through the
-/// base.
+/// base, and a fatal signal raised while reading it is recorded.
 #[inline]
-fn reads_its_length(value: &Bound<'_, PyAny>, base: Base) -> bool {
+fn reads_its_length(value: &Bound<'_, PyAny>, base: Base, ctx: Ctx<'_>) -> bool {
     let py = value.py();
     let name = intern!(py, "__len__");
-    let Ok(slots) = BASE_LENGTHS.get_or_try_init(py, || Slots::of(py, name)) else {
-        return false;
-    };
-    carries(value, name, slots.get(base))
+    match BASE_LENGTHS.get_or_try_init(py, || Slots::of(py, name)) {
+        Ok(slots) => carries(value, name, slots.get(base), ctx),
+        Err(err) => unread(err, py, ctx),
+    }
 }
 
 /// Whether this value's type yields the elements of its own storage.
 ///
 /// [`reads_its_length`]'s question, one slot over, and it is the one the set
 /// kinds turn on: they are read through an iterator rather than by position.
-fn reads_its_elements(value: &Bound<'_, PyAny>, base: Base) -> bool {
+fn reads_its_elements(value: &Bound<'_, PyAny>, base: Base, ctx: Ctx<'_>) -> bool {
     let py = value.py();
     let name = intern!(py, "__iter__");
-    let Ok(slots) = BASE_ITERS.get_or_try_init(py, || Slots::of(py, name)) else {
-        return false;
-    };
-    carries(value, name, slots.get(base))
+    match BASE_ITERS.get_or_try_init(py, || Slots::of(py, name)) {
+        Ok(slots) => carries(value, name, slots.get(base), ctx),
+        Err(err) => unread(err, py, ctx),
+    }
 }
 
-/// Whether the value's type carries `name` as the base's own slot.
+/// Whether the value's type carries `name` as the base's own slot. The lookup
+/// runs a metaclass's own attribute hook, so it can raise.
 fn carries(
     value: &Bound<'_, PyAny>,
     name: &Bound<'_, PyString>,
     of_base: &'static Py<PyAny>,
+    ctx: Ctx<'_>,
 ) -> bool {
-    value
-        .get_type()
-        .getattr_opt(name)
-        .ok()
-        .flatten()
-        .is_some_and(|found| found.is(of_base.bind(value.py())))
+    match value.get_type().getattr_opt(name) {
+        Ok(found) => found.is_some_and(|found| found.is(of_base.bind(value.py()))),
+        Err(err) => unread(err, value.py(), ctx),
+    }
+}
+
+/// Answer a type whose slot could not be read as one that overrides it, after
+/// recording a fatal signal the read raised.
+#[cold]
+fn unread(err: PyErr, py: Python<'_>, ctx: Ctx<'_>) -> bool {
+    record_if_fatal(err, py, ctx);
+    false
 }
 
 fn stop(ctx: Ctx<'_>) -> bool {
@@ -322,21 +330,26 @@ pub(super) fn record_fatal(err: PyErr, ctx: Ctx<'_>) {
     ctx.fatal_seen.set(true);
 }
 
+/// Record `err` if it is a fatal signal, for the walk to unwind and the entry
+/// point to re-raise. An ordinary error needs nothing recorded: the site that
+/// caught it answers for it.
+#[cold]
+pub(super) fn record_if_fatal(err: PyErr, py: Python<'_>, ctx: Ctx<'_>) {
+    if is_fatal(&err, py) {
+        record_fatal(err, ctx);
+    }
+}
+
 /// Fold a membership probe's result into a boolean. An ordinary exception means
 /// the value cannot answer "are you in this set?", so it is a non-member. A fatal
 /// interpreter signal is recorded in `ctx.fatal` so the walk unwinds and the
 /// entry point re-raises it, and reported locally as a non-member so the current
 /// frame returns.
-fn fold(result: PyResult<bool>, py: Python<'_>, ctx: Ctx<'_>) -> bool {
-    match result {
-        Ok(holds) => holds,
-        Err(err) => {
-            if is_fatal(&err, py) {
-                record_fatal(err, ctx);
-            }
-            false
-        }
-    }
+pub(super) fn fold(result: PyResult<bool>, py: Python<'_>, ctx: Ctx<'_>) -> bool {
+    result.unwrap_or_else(|err| {
+        record_if_fatal(err, py, ctx);
+        false
+    })
 }
 
 /// Bind a pooled object by slot, or `None` when the slot is out of range. Every

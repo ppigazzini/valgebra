@@ -126,6 +126,35 @@ def test_fatal_signal_in_a_predicate_propagates(signal: type[BaseException]) -> 
         validator.is_valid(5)
 
 
+def _key_raising_once(exc: BaseException) -> str:
+    """Build a `str` key that raises `exc` from its first `__eq__`, as a signal does."""
+
+    class Key(str):
+        __slots__ = ()
+        __hash__ = str.__hash__
+        raised = False
+
+        def __eq__(self, other: object) -> bool:
+            if not Key.raised:
+                Key.raised = True
+                raise exc
+            return str.__eq__(self, other)
+
+    return Key("a")
+
+
+@pytest.mark.parametrize("signal", FATAL)
+@pytest.mark.parametrize(
+    "schema", [{"a": int}, {"a": int, str: int}], ids=["closed", "clause"]
+)
+def test_fatal_signal_in_a_keys_eq_propagates(
+    signal: type[BaseException], schema: dict[object, object]
+) -> None:
+    """A dict asks its key's `__eq__` when a record looks a field up by name."""
+    with pytest.raises(signal):
+        Validator(schema).is_valid({_key_raising_once(signal()): 1})
+
+
 @pytest.mark.parametrize("signal", FATAL)
 def test_fatal_signal_propagates_through_the_json_entries(
     signal: type[BaseException],

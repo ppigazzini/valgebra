@@ -17,7 +17,7 @@ use valgebra_core::{ConstIx, Constraint, OperandIx, Schema, Violation};
 
 use super::{
     Base, Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at,
-    reads_its_length, record_fatal, stop,
+    reads_its_length, record_fatal, record_if_fatal, stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::index::compile_pattern;
@@ -226,8 +226,12 @@ pub(super) fn check_refine(
     if !member(base, value, frame) {
         return false;
     }
-    let Ok(obj) = value.to_python() else {
-        return false;
+    let obj = match value.to_python() {
+        Ok(obj) => obj,
+        Err(err) => {
+            record_if_fatal(err, value.py(), ctx);
+            return false;
+        }
     };
     let mut ok = true;
     for constraint in constraints {
@@ -309,13 +313,13 @@ const SIZED: [Sized; 7] = [
 /// An object that is none of these -- one with a `__len__` and no builtin
 /// container behind it -- answers for itself, because there is no storage to
 /// read past it and `__len__` is the whole of what it holds.
-fn stored_len(value: &Bound<'_, PyAny>) -> PyResult<usize> {
+fn stored_len(value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> PyResult<usize> {
     for sized in &SIZED {
         if (sized.is_exact)(value) {
             return value.len();
         }
         if (sized.is_kind)(value) {
-            return if reads_its_length(value, sized.base) {
+            return if reads_its_length(value, sized.base, ctx) {
                 value.len()
             } else {
                 held_len(value, sized.base)
@@ -421,12 +425,12 @@ fn check_constraint<'py>(
             t
         }
         Constraint::MinLen(n) => (
-            fold(stored_len(value).map(|len| len >= *n), py, ctx),
+            fold(stored_len(value, ctx).map(|len| len >= *n), py, ctx),
             TOO_SHORT,
             Expected::Length(">=", *n),
         ),
         Constraint::MaxLen(n) => (
-            fold(stored_len(value).map(|len| len <= *n), py, ctx),
+            fold(stored_len(value, ctx).map(|len| len <= *n), py, ctx),
             TOO_LONG,
             Expected::Length("<=", *n),
         ),

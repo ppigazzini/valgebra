@@ -16,7 +16,8 @@ use valgebra_core::{PathSegment, Schema, SeqKind, SeqShape, Violation};
 
 use super::{
     Base, Frame, Scan, held_iter, held_len, homogeneous_scalar, is_fatal, member, mutated,
-    reads_its_elements, reads_its_length, record_fatal, scalar_admits, scalar_of, stop,
+    reads_its_elements, reads_its_length, record_fatal, record_if_fatal, scalar_admits, scalar_of,
+    stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::violation::{summarize_value, type_fail};
@@ -64,21 +65,29 @@ pub(super) fn check_seq(
                 // was when the copy was taken, so the count is compared again
                 // afterwards and a value that moved reports the move, exactly as
                 // the in-place scan does. A copy the interpreter cannot make is
-                // not a verdict: the walk reads in place instead.
-                if snapshot_pays(list.len())
-                    && let Ok(snapshot) = list.as_sequence().to_tuple()
-                {
-                    let ok = snapshot
-                        .iter_borrowed()
-                        .all(|item| scalar_admits(kind, &Value::Py(&item)));
-                    if !ok {
-                        return false;
+                // not a verdict, and the walk reads in place instead, unless what
+                // stopped it is a fatal signal.
+                if snapshot_pays(list.len()) {
+                    match list.as_sequence().to_tuple() {
+                        Ok(snapshot) => {
+                            let ok = snapshot
+                                .iter_borrowed()
+                                .all(|item| scalar_admits(kind, &Value::Py(&item)));
+                            if !ok {
+                                return false;
+                            }
+                            return if list.len() == snapshot.len() {
+                                true
+                            } else {
+                                mutated(value, frame)
+                            };
+                        }
+                        Err(err) if is_fatal(&err, list.py()) => {
+                            record_fatal(err, ctx);
+                            return false;
+                        }
+                        Err(_) => {}
                     }
-                    return if list.len() == snapshot.len() {
-                        true
-                    } else {
-                        mutated(value, frame)
-                    };
                 }
                 let mut ok = true;
                 let scan = scan_list(list, |_, item| {
@@ -272,15 +281,25 @@ fn tuple_matches(
     // it -- which is every `NamedTuple`. Only a subclass that answers the
     // accessor for itself is copied; see `storage_of` and `reads_its_length`.
     let copied;
-    let tuple = if tuple.is_exact_instance_of::<PyTuple>() || reads_its_length(tuple, Base::Tuple) {
-        tuple
-    } else {
-        let Some(storage) = storage_of(tuple) else {
-            return mutated(value, frame);
+    let tuple =
+        if tuple.is_exact_instance_of::<PyTuple>() || reads_its_length(tuple, Base::Tuple, ctx) {
+            tuple
+        } else {
+            // Reading the type may have raised a fatal signal, which ends the walk.
+            if ctx.fatal_seen.get() {
+                return false;
+            }
+            match storage_of(tuple) {
+                Ok(storage) => {
+                    copied = storage;
+                    &copied
+                }
+                Err(err) => {
+                    record_if_fatal(err, tuple.py(), ctx);
+                    return mutated(value, frame);
+                }
+            }
         };
-        copied = storage;
-        &copied
-    };
     if !SeqArity::of(prefix.len(), tail).admits(tuple.len()) {
         return seq_length_fail(len_code, kind_word, prefix, tail, value, frame);
     }
@@ -328,15 +347,15 @@ fn tuple_matches(
 /// gave all along. An exact tuple overrides nothing and is read where it lies,
 /// as before: this path costs the common case nothing.
 ///
-/// `None` where the copy cannot be made, which the caller reports as a value it
-/// could not read rather than as a membership answer.
-fn storage_of<'py>(tuple: &Bound<'py, PyTuple>) -> Option<Bound<'py, PyTuple>> {
-    let held = held_len(tuple, Base::Tuple).ok()?;
+/// An error where the copy cannot be made, which the caller reports as a value
+/// it could not read rather than as a membership answer, unless it is fatal.
+fn storage_of<'py>(tuple: &Bound<'py, PyTuple>) -> PyResult<Bound<'py, PyTuple>> {
+    let held = held_len(tuple, Base::Tuple)?;
     let mut items = Vec::with_capacity(held);
     for at in 0..held {
-        items.push(tuple.get_borrowed_item(at).ok()?);
+        items.push(tuple.get_borrowed_item(at)?);
     }
-    PyTuple::new(tuple.py(), items).ok()
+    PyTuple::new(tuple.py(), items)
 }
 
 /// Visit a list's items by position, refusing when the list resizes underneath.
@@ -395,9 +414,17 @@ pub(super) fn scan_set<'py>(
     mut visit: impl FnMut(&Bound<'py, PyAny>) -> ControlFlow<()>,
 ) -> Scan {
     with_critical_section(set, || {
-        let Ok(iter) = storage_iter(set) else {
-            return Scan::Unreadable;
+        let iter = match storage_iter(set, ctx) {
+            Ok(iter) => iter,
+            Err(err) => {
+                record_if_fatal(err, set.py(), ctx);
+                return Scan::Unreadable;
+            }
         };
+        // Reading the type may have raised a fatal signal, which ends the walk.
+        if ctx.fatal_seen.get() {
+            return Scan::Unreadable;
+        }
         for item in iter {
             match item {
                 Ok(item) => {
@@ -430,13 +457,13 @@ pub(super) fn scan_set<'py>(
 /// inherits the slot is read where it lies. The iterator the base returns is the
 /// builtin one, so mutation during the scan still raises where the caller below
 /// expects it to.
-fn storage_iter<'py>(set: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyIterator>> {
+fn storage_iter<'py>(set: &Bound<'py, PyAny>, ctx: Ctx<'_>) -> PyResult<Bound<'py, PyIterator>> {
     for held in &HELD {
         if (held.is_exact)(set) {
             return set.try_iter();
         }
         if (held.is_kind)(set) {
-            return if reads_its_elements(set, held.base) {
+            return if reads_its_elements(set, held.base, ctx) {
                 set.try_iter()
             } else {
                 held_iter(set, held.base)?.try_iter()

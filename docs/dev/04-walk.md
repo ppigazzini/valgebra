@@ -83,6 +83,13 @@ The first such signal is recorded; the walk then short-circuits — every later
 of "has a signal been seen" is read per node with a plain load, so the fast path
 does not take a `RefCell` borrow on every step.
 
+**Every site that catches a Python error asks the classifier before it answers.**
+A membership probe folds through `fold`; a reading whose failure has a safe side
+-- a type's slot, a key's field name, a copy of a value -- takes that side and
+records a fatal signal through `record_if_fatal`. A key's `__eq__` or a
+metaclass runs caller code exactly as a predicate does, and a signal raised
+there is re-raised the same way.
+
 Each disjunct needs its own test case: a mutation collapsing the classifier to
 one of them is invisible to a corpus that only raises `KeyboardInterrupt`.
 

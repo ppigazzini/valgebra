@@ -290,9 +290,11 @@ gate only catches what it exercises:
   trust it for one that *inherits* the base's slot, which is every
   `NamedTuple`. Telling those apart by "is this exactly a tuple" copied every
   `NamedTuple` and cost 100 ns against a plain tuple's 57 on CPython 3.14,
-  under every green lane. The repair's own mutant is answer-equivalent -- the
-  copy holds the same elements, so it decides the same things -- so no test can
-  hold it and this count is what does: reverting the line reads +171.65%.
+  under every green lane. The repair's own mutant decides the same things for
+  every ordinary type -- the copy holds the same elements -- and only a
+  metaclass that raises when asked for `__len__` tells the two apart, which is
+  the test that kills it. What the line buys is the cost, and this count holds
+  that: reverting the line reads +171.65%.
 
   **And a shape that wins by a wide margin measures nothing.** The JSON
   document is the comparison gate's closest race, and its ratio moves by a tenth

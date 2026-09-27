@@ -17,7 +17,9 @@ use pyo3::types::{PyDict, PyString};
 use rustc_hash::{FxHashMap, FxHashSet};
 use valgebra_core::{Field, MapClause, PathSegment, Schema};
 
-use super::{Frame, Scan, fast, is_fatal, member, mutated, record_fatal, stop};
+use super::{
+    Frame, Scan, fast, fold, is_fatal, member, mutated, record_fatal, record_if_fatal, stop,
+};
 use crate::check::ctx::Ctx;
 use crate::check::index::RecordPlan;
 use crate::check::violation::{at_key, key_segment, located, summarize_value, type_mismatch};
@@ -194,16 +196,26 @@ fn covered(defaults: &[MapClause], key: &Value<'_, '_>, val: &Value<'_, '_>, ctx
 /// sits beside the field.
 ///
 /// The exact `str` is every key a caller writes and costs nothing extra; the
-/// subclass pays one temporary name and the two questions the dict asks.
-fn as_field_name<'a>(key: &'a Bound<'_, PyAny>) -> Option<&'a str> {
+/// subclass pays one temporary name and the two questions the dict asks, which
+/// run its own code: an error from either reads as no field name, and a fatal
+/// signal is recorded.
+fn as_field_name<'a>(key: &'a Bound<'_, PyAny>, ctx: Ctx<'_>) -> Option<&'a str> {
     let text = key.cast::<PyString>().ok()?;
-    let name = text.to_str().ok()?;
+    let name = match text.to_str() {
+        Ok(name) => name,
+        Err(err) => {
+            record_if_fatal(err, key.py(), ctx);
+            return None;
+        }
+    };
     if text.is_exact_instance_of::<PyString>() {
         return Some(name);
     }
     let plain = PyString::new(key.py(), name);
-    let resolves = text.hash().ok()? == plain.hash().ok()? && text.as_any().eq(&plain).ok()?;
-    resolves.then_some(name)
+    let resolves = text
+        .hash()
+        .and_then(|own| Ok(own == plain.hash()? && text.as_any().eq(&plain)?));
+    fold(resolves, key.py(), ctx).then_some(name)
 }
 
 /// What a record's clauses say about a key it does not declare, where that can
@@ -304,7 +316,13 @@ fn keyed_map_asks_for_its_keys(
                     return Some(false);
                 }
                 // A failed probe is not an answer -- an unhashable key cannot be
-                // in a dict, but a `__eq__` that raises can stop the lookup.
+                // in a dict, but a `__eq__` that raises can stop the lookup --
+                // and the scan answers instead, unless what stopped it is a fatal
+                // signal, which the scan would not see raised again.
+                Err(err) if is_fatal(&err, dict.py()) => {
+                    record_fatal(err, ctx);
+                    return Some(false);
+                }
                 Err(_) => return None,
             }
         }
@@ -407,7 +425,7 @@ fn keyed_map_scan(
         // A non-string key, or a string carrying a lone surrogate (which cannot
         // equal a field name, since names are valid UTF-8 by build-time check),
         // resolves to no field and must instead be covered by a default clause.
-        let index = as_field_name(key).and_then(&lookup);
+        let index = as_field_name(key, ctx).and_then(&lookup);
         match index.and_then(|i| fields.get(i)) {
             Some(field) => {
                 if !member(&field.schema, &Value::Py(val), &mut sub) {
@@ -731,7 +749,7 @@ pub(super) fn keyed_map_explain(
     // record that answers by count never reaches it.
     let declared: FxHashSet<&str> = fields.iter().map(|field| &*field.name).collect();
     let scan = scan_dict(dict, |key, val| {
-        if let Some(name) = as_field_name(key)
+        if let Some(name) = as_field_name(key, ctx)
             && declared.contains(name)
         {
             return ControlFlow::Continue(());
@@ -784,8 +802,12 @@ pub(super) fn check_attr_record(
     let ctx = frame.ctx;
     // Attributes are read off a Python object, so a value that will not
     // materialize into one carries none and belongs to no record.
-    let Ok(obj) = value.to_python() else {
-        return false;
+    let obj = match value.to_python() {
+        Ok(obj) => obj,
+        Err(err) => {
+            record_if_fatal(err, value.py(), ctx);
+            return false;
+        }
     };
     // The interned names, in field order. A schema absent from the index (an
     // incomplete build traversal) falls back to the field's own text, so

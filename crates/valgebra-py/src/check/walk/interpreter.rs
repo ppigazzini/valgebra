@@ -2092,6 +2092,123 @@ fn a_closed_record_reports_every_extra_key_unless_fail_fast_stops_it() {
     });
 }
 
+/// A fatal signal raised by a key's own `__eq__`, or by a type's metaclass when
+/// the walk asks for its `__len__` or `__iter__`, is kept for the entry point to re-raise, on
+/// every path that reads one; an ordinary error there answers as before. The key
+/// raises once, as an interrupt does, so a site that dropped it would find the
+/// next reading answer and nothing re-raised.
+#[test]
+fn a_fatal_signal_propagates_from_a_key_and_from_a_type() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new(
+                "class StoppingKey(str):\n\
+                 \x20   __hash__ = str.__hash__\n\
+                 \x20   def __eq__(self, other):\n\
+                 \x20       if not self.__dict__.get('raised'):\n\
+                 \x20           self.raised = True\n\
+                 \x20           raise KeyboardInterrupt\n\
+                 \x20       return str.__eq__(self, other)\n\
+                 class RudeKey(str):\n\
+                 \x20   __hash__ = str.__hash__\n\
+                 \x20   def __eq__(self, other):\n\
+                 \x20       raise ValueError('no')\n\
+                 class StoppingMeta(type):\n\
+                 \x20   def __getattribute__(cls, name):\n\
+                 \x20       if name == '__len__':\n\
+                 \x20           raise KeyboardInterrupt\n\
+                 \x20       return super().__getattribute__(name)\n\
+                 class RudeMeta(type):\n\
+                 \x20   def __getattribute__(cls, name):\n\
+                 \x20       if name == '__len__':\n\
+                 \x20           raise ValueError('no')\n\
+                 \x20       return super().__getattribute__(name)\n\
+                 class StoppingPair(tuple, metaclass=StoppingMeta):\n\
+                 \x20   pass\n\
+                 class RudePair(tuple, metaclass=RudeMeta):\n\
+                 \x20   pass\n\
+                 class StoppingIterMeta(type):\n\
+                 \x20   def __getattribute__(cls, name):\n\
+                 \x20       if name == '__iter__':\n\
+                 \x20           raise KeyboardInterrupt\n\
+                 \x20       return super().__getattribute__(name)\n\
+                 class RudeIterMeta(type):\n\
+                 \x20   def __getattribute__(cls, name):\n\
+                 \x20       if name == '__iter__':\n\
+                 \x20           raise ValueError('no')\n\
+                 \x20       return super().__getattribute__(name)\n\
+                 class StoppingBag(set, metaclass=StoppingIterMeta):\n\
+                 \x20   pass\n\
+                 class RudeBag(set, metaclass=RudeIterMeta):\n\
+                 \x20   pass\n",
+            )
+            .expect("no interior nul")
+            .as_c_str(),
+            std::ffi::CString::new("stops.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("stops")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+        let keyed = |class: &str| {
+            let dict = PyDict::new(py);
+            let key = module
+                .getattr(class)
+                .expect("class")
+                .call1(("a",))
+                .expect("key");
+            dict.set_item(key, 1i64).expect("set");
+            dict.into_any()
+        };
+        // A closed record asks the dict for its declared keys; a record beside a
+        // clause scans the entries and resolves each key to a field name.
+        let closed = Schema::record(vec![field("a", Schema::Int, true)], Openness::Closed);
+        let clausal = Schema::keyed_map(
+            vec![field("a", Schema::Int, true)],
+            vec![MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            }],
+        );
+        for schema in [&closed, &clausal] {
+            for (class, want_fatal) in [("RudeKey", false), ("StoppingKey", true)] {
+                assert_eq!(
+                    decide_with_fatal(py, schema, &keyed(class), &[]),
+                    (false, want_fatal),
+                    "{class} against {schema:?}"
+                );
+            }
+        }
+
+        // A tuple subclass is read where it lies only if its type's `__len__` is
+        // the tuple's own, and asking runs the metaclass.
+        let ints = Schema::tuple(SeqShape::homogeneous(Schema::Int));
+        for (class, want) in [("RudePair", (true, false)), ("StoppingPair", (false, true))] {
+            let pair = module
+                .getattr(class)
+                .expect("class")
+                .call1(((1i64, 2i64),))
+                .expect("pair");
+            assert_eq!(decide_with_fatal(py, &ints, &pair, &[]), want, "{class}");
+        }
+
+        // A set subclass is iterated where it lies only if its type's `__iter__`
+        // is the set's own, and asking runs the metaclass too.
+        let int_set = Schema::set(Schema::Int);
+        for (class, want) in [("RudeBag", (true, false)), ("StoppingBag", (false, true))] {
+            let bag = module
+                .getattr(class)
+                .expect("class")
+                .call1(((1i64, 2i64),))
+                .expect("bag");
+            assert_eq!(decide_with_fatal(py, &int_set, &bag, &[]), want, "{class}");
+        }
+    });
+}
+
 #[test]
 fn a_fatal_signal_propagates_from_an_attribute_and_from_a_predicate() {
     Python::attach(|py| {

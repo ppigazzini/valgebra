@@ -17,6 +17,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a validator in Annotated metadata narrows the schema by its set
 - fix: a union's report names a meet by what its members admit
 - fix: a fail-fast union report walks no branch past its first failure
+- fix: a fatal signal raised inside a key or a type probe propagates
 
 -->
 
@@ -51,6 +52,13 @@ answer of its own, or a repair to a change not yet released.
   first failure, and the full report chooses the same branch. Where one branch
   fails shallowly and again deeper inside, the other branch may be the one
   reported.
+- **A fatal signal raised by a key's `__eq__` or a type's metaclass
+  propagates.** An interrupt or a `MemoryError` raised while the walk looked a
+  record's field up by name, resolved a `str` subclass key to a field, asked a
+  tuple or set subclass's type for its `__len__` or `__iter__`, copied a value
+  through its storage or turned a JSON value into a Python object was read as a
+  failed probe, so the check answered and the signal was lost. Each is
+  re-raised, as one raised by a predicate is.
 
 ## [0.0.14] - 2026-09-26
 
