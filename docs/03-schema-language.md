@@ -324,7 +324,10 @@ with a matching value, and a closed record admits no key outside the declared
 names. The typing spelling is a `TypedDict`, open as the typing spec defines one
 or closed with `closed=True` (PEP 728; in `typing` from 3.15 and in
 `typing_extensions` before). A static checker reads it as its own type, so
-`is_valid` narrows to it ([static checkers](18-static-checking.md)).
+`is_valid` narrows to it ([static checkers](18-static-checking.md)). `close()`
+does not close one: its openness is the clause `str: anything` its reading
+carries, a region that clause claims, and `close` shuts only the keys no clause
+claims (below). The closed record is `closed=True`.
 
 ```python
 from typing_extensions import NotRequired, TypedDict
