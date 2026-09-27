@@ -232,7 +232,10 @@ a form that builds never reaches it.
 node. `Literal` interns each argument as a constant, and refuses a list, a dict
 or a set: the typing spec allows `None`, an enum member, or an `int`, `bool`,
 `str` or `bytes` value, and a container there would be read as a schema of its
-own rather than as a constant. The refusal names the spelling that was meant.
+own rather than as a constant. The refusal names the spelling that was meant. A
+constant the spec does not admit there -- a float, an instance -- is read all
+the same, as the constant `Validator(c)` reads it: the set is the same
+singleton, and a static checker is what refuses the spelling.
 
 A `tuple` reads its arguments as a *shape*: `tuple[int, str]` is a fixed
 sequence of two, `tuple[int, ...]` is a homogeneous one, and `tuple[()]` is the
