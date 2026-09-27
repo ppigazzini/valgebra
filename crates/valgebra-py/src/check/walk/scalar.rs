@@ -11,9 +11,10 @@
 //! see the note there for what routing the arms through here costs and what
 //! test holds the two statements together.
 
+use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
-use valgebra_core::{ConstIx, Constraint, OperandIx, Schema, Violation};
+use valgebra_core::{CollKind, ConstIx, Constraint, OperandIx, Schema, SeqKind, Violation};
 
 use super::{
     Base, Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at,
@@ -214,6 +215,19 @@ fn predicate_passes(value: &Bound<'_, PyAny>, predicate: &Bound<'_, PyAny>) -> P
     predicate.call1((value,))?.is_truthy()
 }
 
+/// Membership for a refinement: the base, and every constraint on a member of it.
+///
+/// Constraints narrow the base set, so they are asked only of a base member,
+/// with one exception: a length bound on a container, which
+/// [`lengths_before_elements`] asks before the elements. The loop below asks it
+/// again, where it holds and records nothing unless the walk ran code that
+/// changed the value.
+///
+/// Which bases have elements is a property of the node, so a refinement of a
+/// scalar -- asked once per element of a list of them -- pays one comparison
+/// of the base's variant. The loop is the one place [`check_constraint`] is
+/// called, which is what keeps it inlined here: a second call site moves it out
+/// of line and costs a list of refined elements 7% of its instructions.
 pub(super) fn check_refine(
     base: &Schema,
     constraints: &[Constraint],
@@ -221,8 +235,13 @@ pub(super) fn check_refine(
     frame: &mut Frame<'_, '_>,
 ) -> bool {
     let ctx = frame.ctx;
-    // Constraints narrow the base set, so they are meaningful only on a base
-    // member: if the base fails, report that and do not run the constraints.
+    if matches!(
+        base,
+        Schema::Seq { .. } | Schema::Coll { .. } | Schema::KeyedMap { .. }
+    ) && !lengths_before_elements(base, constraints, value, frame)
+    {
+        return false;
+    }
     if !member(base, value, frame) {
         return false;
     }
@@ -241,6 +260,108 @@ pub(super) fn check_refine(
         }
     }
     ok
+}
+
+/// Ask a container's length bounds where a fixed shape asks its arity: after
+/// the kind test the base makes first, and before any element.
+///
+/// `[int, int]` refuses five elements with `list_length` alone, and
+/// `Annotated[list[int], MinLen(1)]` is decided equal to `[int, int, ...]`, so
+/// the two spellings of one set are refused at the same step -- and a list too
+/// long for its bound is refused without reading what it holds, as a wrong
+/// length ends the walk of a fixed shape.
+#[inline(never)]
+fn lengths_before_elements(
+    base: &Schema,
+    constraints: &[Constraint],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let ctx = frame.ctx;
+    if !is_of_its_kind(base, value) {
+        return true;
+    }
+    // The length every bound reads, taken once and the way the constraint takes
+    // it. A JSON array holds its items as the list built from it would, so its
+    // count is read without building one; a JSON object may repeat a key, which
+    // the dict built from it does not, so it is built and asked.
+    let len = match value {
+        Value::Json(_, JsonValue::Array(items)) => Some(items.len()),
+        Value::Json(..) | Value::Py(_) => {
+            match value.to_python().and_then(|obj| stored_len(&obj, ctx)) {
+                Ok(len) => Some(len),
+                Err(err) => {
+                    record_if_fatal(err, value.py(), ctx);
+                    None
+                }
+            }
+        }
+    };
+    let mut ok = true;
+    for constraint in constraints {
+        ok &= length_holds(constraint, len, value, frame);
+        if !ok && stop(ctx) {
+            return false;
+        }
+    }
+    ok
+}
+
+/// Whether a length satisfies `constraint` where it bounds one, recorded as
+/// [`check_constraint`] records it; any other constraint holds here. A length
+/// that could not be read satisfies no bound.
+fn length_holds(
+    constraint: &Constraint,
+    len: Option<usize>,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> bool {
+    let ctx = frame.ctx;
+    let (ok, code, expected) = match constraint {
+        Constraint::MinLen(n) => (
+            len.is_some_and(|len| len >= *n),
+            TOO_SHORT,
+            Expected::Length(">=", *n),
+        ),
+        Constraint::MaxLen(n) => (
+            len.is_some_and(|len| len <= *n),
+            TOO_LONG,
+            Expected::Length("<=", *n),
+        ),
+        _ => return true,
+    };
+    if !ok && ctx.mode.explains() {
+        record_failure(code, &expected, summarize_value(value, ctx), frame);
+    }
+    ok
+}
+
+/// Whether `value` passes the kind test a container base makes before reading
+/// any element: a list or a JSON array, a tuple, a set, a frozenset, a dict or
+/// a JSON object. The tests are the ones each container's walk makes first. One
+/// that disagreed with its walk would move a report and never a verdict, since
+/// the value must satisfy the base and every bound either way.
+fn is_of_its_kind(base: &Schema, value: &Value<'_, '_>) -> bool {
+    match (base, value) {
+        (Schema::Seq { container, .. }, Value::Py(v)) => match container {
+            SeqKind::List => v.is_instance_of::<PyList>(),
+            SeqKind::Tuple => v.is_instance_of::<PyTuple>(),
+        },
+        (
+            Schema::Seq {
+                container: SeqKind::List,
+                ..
+            },
+            Value::Json(_, JsonValue::Array(_)),
+        )
+        | (Schema::KeyedMap { .. }, Value::Json(_, JsonValue::Object(_))) => true,
+        (Schema::Coll { container, .. }, Value::Py(v)) => match container {
+            CollKind::Set => v.is_instance_of::<PySet>(),
+            CollKind::FrozenSet => v.is_instance_of::<PyFrozenSet>(),
+        },
+        (Schema::KeyedMap { .. }, Value::Py(v)) => v.is_instance_of::<PyDict>(),
+        _ => false,
+    }
 }
 
 /// A builtin container the walk counts, with the tests that recognise one.
@@ -493,15 +614,26 @@ fn check_constraint<'py>(
             (matched, STRING_PATTERN_MISMATCH, Expected::Pattern(pattern))
         }
     };
-    // The message is rendered here and nowhere else: a check that passes never
-    // reads the operand it would have named.
     if !ok && ctx.mode.explains() {
-        frame.out.push(Violation {
-            code: code.as_str(),
-            path: frame.path.clone(),
-            expected: expected.render(),
-            value_summary: summarize(value),
-        });
+        record_failure(code, &expected, summarize(value), frame);
     }
     ok
+}
+
+/// Record a constraint's failure. The message is rendered here and nowhere
+/// else: a check that passes never reads the operand it would have named, and
+/// never calls this.
+#[cold]
+fn record_failure(
+    code: Code,
+    expected: &Expected<'_>,
+    value_summary: String,
+    frame: &mut Frame<'_, '_>,
+) {
+    frame.out.push(Violation {
+        code: code.as_str(),
+        path: frame.path.clone(),
+        expected: expected.render(),
+        value_summary,
+    });
 }

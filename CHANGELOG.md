@@ -20,6 +20,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a fatal signal raised inside a key or a type probe propagates
 - fix: a list subclass is read for what it holds on every interpreter
 - fix: a marker class is refused with the spelling that was meant
+- fix: a length bound is read before the elements it bounds
 
 -->
 
@@ -74,6 +75,13 @@ answer of its own, or a repair to a change not yet released.
   name a constraint is read through, such as `ge` or `pattern` -- is refused
   with a message naming `Ge(...)`. Any other class, such as a unit or an
   enumeration, is ignored as before.
+- **A length bound is read before the elements it bounds.** `Annotated[list[int],
+  MaxLen(3)]` walked every element of a longer list before reading its length,
+  so a list of a million elements cost a million checks to refuse, and one
+  holding a wrong element was reported for the element. On a list, tuple, set,
+  frozenset or dict, `MinLen` and `MaxLen` are read once the value is of the
+  base's kind and before any element, where a fixed shape reads its length: the
+  list is refused with `too_long` alone. Membership is unchanged.
 
 ## [0.0.14] - 2026-09-26
 

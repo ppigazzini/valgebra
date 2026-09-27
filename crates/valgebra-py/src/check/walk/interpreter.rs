@@ -927,6 +927,99 @@ fn a_sequence_of_a_container_element_is_walked_element_by_element() {
     });
 }
 
+/// A length bound on a container is read before the elements it bounds.
+///
+/// A container too long for its bound is refused by the bound alone, as a fixed
+/// shape refuses one by its arity: the wrong element inside it is never read.
+/// One row per kind the walk counts, through both inputs, and a value of another
+/// kind is refused by the base first, since a bound is asked only of a value
+/// the base would read.
+#[test]
+fn a_length_bound_is_read_before_the_elements_it_bounds() {
+    Python::attach(|py| {
+        let capped = |base: Schema| Schema::Refine {
+            base: Arc::new(base),
+            constraints: vec![Constraint::MaxLen(2)].into(),
+        };
+        let ints = || Schema::list(SeqShape::homogeneous(Schema::Int));
+        let mapping = || {
+            Schema::mapping(MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            })
+        };
+        let codes = |violations: &[Violation]| -> Vec<(&str, usize)> {
+            violations.iter().map(|v| (v.code, v.path.len())).collect()
+        };
+        let items = [
+            PyInt::new(py, 1i64).into_any(),
+            PyString::new(py, "x").into_any(),
+            PyInt::new(py, 3i64).into_any(),
+        ];
+        let dict = PyDict::new(py);
+        for (key, item) in ["a", "b", "c"].into_iter().zip(&items) {
+            dict.set_item(key, item).expect("a dict takes an item");
+        }
+        let rows = [
+            (ints(), PyList::new(py, &items).expect("a list").into_any()),
+            (
+                Schema::tuple(SeqShape::homogeneous(Schema::Int)),
+                PyTuple::new(py, &items).expect("a tuple").into_any(),
+            ),
+            (
+                Schema::set(Schema::Int),
+                PySet::new(py, &items).expect("a set").into_any(),
+            ),
+            (
+                Schema::frozen_set(Schema::Int),
+                PyFrozenSet::new(py, &items)
+                    .expect("a frozenset")
+                    .into_any(),
+            ),
+            (mapping(), dict.into_any()),
+        ];
+        for (base, value) in rows {
+            let schema = capped(base);
+            let (ok, violations) = explain(py, &schema, &value, &[], &[]);
+            assert!(!ok, "{value} is too long");
+            assert_eq!(codes(&violations), [("too_long", 0)], "{value}");
+            assert!(!holds(py, &schema, &value, &[], &[]));
+        }
+        let text = || JsonValue::Str("x".into());
+        let array = JsonValue::Array(Arc::new(vec![JsonValue::Int(1), text(), JsonValue::Int(3)]));
+        let object = json_object(vec![
+            ("a", JsonValue::Int(1)),
+            ("b", text()),
+            ("c", JsonValue::Int(3)),
+        ]);
+        for (base, json) in [(ints(), &array), (mapping(), &object)] {
+            let (ok, violations) = explain_json(py, &capped(base), json);
+            assert!(!ok);
+            assert_eq!(codes(&violations), [("too_long", 0)]);
+        }
+        // Another kind is the base's to refuse, and a container inside the
+        // bound has its elements read.
+        let long_text = PyString::new(py, "abcdef").into_any();
+        let (_, violations) = explain(py, &capped(ints()), &long_text, &[], &[]);
+        assert_eq!(codes(&violations), [("list_type", 0)]);
+        let short = PyList::new(py, &items[..2]).expect("a list").into_any();
+        let (_, violations) = explain(py, &capped(ints()), &short, &[], &[]);
+        assert_eq!(codes(&violations), [("int_type", 1)]);
+        let fits = PyList::new(py, [1i64, 2]).expect("a list").into_any();
+        assert!(decide(py, &capped(ints()), &fits, &[], &[]));
+        // A lower bound is read at the same step: a list too short for it is
+        // refused by the bound, whatever it holds.
+        let at_least = Schema::Refine {
+            base: Arc::new(ints()),
+            constraints: vec![Constraint::MinLen(4)].into(),
+        };
+        let (_, violations) = explain(py, &at_least, &short, &[], &[]);
+        assert_eq!(codes(&violations), [("too_short", 0)]);
+        let enough = PyList::new(py, [1i64, 2, 3, 4]).expect("a list").into_any();
+        assert!(decide(py, &at_least, &enough, &[], &[]));
+    });
+}
+
 /// A JSON array of one scalar kind takes the same loop as a Python list.
 #[test]
 fn a_json_array_of_one_scalar_kind_rejects_an_element_that_is_not_one() {
@@ -1422,6 +1515,21 @@ fn decide_with_fatal(
 
 /// Decide membership of a parsed JSON value, in the mode `is_valid_json` uses.
 fn holds_json(py: Python<'_>, schema: &Schema, json: &JsonValue<'_>) -> bool {
+    walk_json(py, schema, json, WalkMode::Fast).0
+}
+
+/// The same decision in explain mode, with the violations it aggregated.
+fn explain_json(py: Python<'_>, schema: &Schema, json: &JsonValue<'_>) -> (bool, Vec<Violation>) {
+    walk_json(py, schema, json, WalkMode::Explain)
+}
+
+/// Walk a parsed JSON value in `mode`.
+fn walk_json(
+    py: Python<'_>,
+    schema: &Schema,
+    json: &JsonValue<'_>,
+    mode: WalkMode,
+) -> (bool, Vec<Violation>) {
     let index = build_index(py, schema, &[], &[]);
     let state = WalkState::new();
     let ctx = Ctx {
@@ -1435,13 +1543,15 @@ fn holds_json(py: Python<'_>, schema: &Schema, json: &JsonValue<'_>) -> bool {
         depth: &state.depth,
         fatal: &state.fatal,
         fatal_seen: &state.fatal_seen,
-        mode: WalkMode::Fast,
+        mode,
     };
-    member(
+    let mut out = Vec::new();
+    let ok = member(
         schema,
         &Value::Json(py, json),
-        &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
-    )
+        &mut Frame::new(&mut Vec::new(), &mut out, ctx),
+    );
+    (ok, out)
 }
 
 fn json_object<'a>(pairs: Vec<(&'a str, JsonValue<'a>)>) -> JsonValue<'a> {

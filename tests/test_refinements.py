@@ -1,5 +1,6 @@
 import enum
 import functools
+import json
 import operator
 import re
 from dataclasses import dataclass
@@ -206,6 +207,56 @@ def test_a_class_marker_beside_a_real_constraint_leaves_it_standing() -> None:
     schema = Validator(Annotated[int, at.Ge(0), Kilograms])
     assert schema.is_valid(1)
     assert not schema.is_valid(-1)
+
+
+def test_a_length_bound_is_read_before_the_elements_it_bounds() -> None:
+    """A container too long for its bound is refused without reading an element.
+
+    A fixed shape refuses a list of the wrong length by its arity before any
+    element, and a length bound is asked at the same point, so a predicate on
+    the elements runs for none of them, in either mode and through either input.
+    """
+    calls: list[object] = []
+
+    def counted(value: object) -> bool:
+        calls.append(value)
+        return True
+
+    capped = Validator(
+        Annotated[list[Annotated[int, at.Predicate(counted)]], at.MaxLen(3)]
+    )
+    long = list(range(10))
+    assert not capped.is_valid(long)
+    assert not capped.is_valid_json(json.dumps(long))
+    for fail_fast in (False, True):
+        with pytest.raises(ValidationError) as info:
+            capped.validate(long, fail_fast=fail_fast)
+        assert [(e["code"], e["path"]) for e in info.value.errors] == [("too_long", ())]
+    assert calls == []
+    assert capped.is_valid([1, 2])
+    assert calls == [1, 2]
+
+
+BOUNDED = {most: Validator(Annotated[list[int], at.MaxLen(most)]) for most in range(4)}
+
+
+@given(
+    st.lists(st.one_of(st.integers(), st.text(max_size=1)), max_size=5),
+    st.sampled_from(sorted(BOUNDED)),
+)
+def test_a_bound_read_first_leaves_the_set_where_it_was(
+    items: list[int | str], most: int
+) -> None:
+    """The order moves the report and never the verdict: the set is a conjunction."""
+    capped = BOUNDED[most]
+    long = len(items) > most
+    assert capped.is_valid(items) == (
+        not long and all(isinstance(item, int) for item in items)
+    )
+    if long:
+        with pytest.raises(ValidationError) as info:
+            capped.validate(items)
+        assert [item["code"] for item in info.value.errors] == ["too_long"]
 
 
 def test_base_failure_takes_precedence_over_constraints() -> None:

@@ -158,7 +158,11 @@ patterns, built once with the validator and read by the walk that uses them.
 `walk/scalar.rs` answers what a value is **without descending into it**: a
 scalar kind, a literal, and the constraints that narrow one. A container's
 length is answered there too, for the same reason -- `MinLen` counts what a
-value holds without reading any of it. A constraint's operand is borrowed out
+value holds without reading any of it -- and it is asked where a fixed shape
+asks its arity: after the kind test the container's walk makes first, and before
+any element. `Annotated[list[int], MinLen(1)]` and `[int, int, ...]` are one
+set, so the two are refused at the same step, and a bound that fails ends the
+walk of the value as a wrong length does. A constraint's operand is borrowed out
 of the pool for as long as the walk runs, so a check that passes takes no
 reference to it: on a free-threaded interpreter a reference is an atomic write
 to a counter every thread sharing the validator touches.

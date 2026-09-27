@@ -6,7 +6,8 @@ description: Constraints and predicate refinements over a base schema.
 
 A refinement narrows a base type to the subset satisfying one or more
 constraints. Write it with `Annotated[T, ...markers]`; the base `T` is checked
-first, then each constraint. valgebra reads the
+first, then each constraint, except a length bound on a container, which is read
+before the elements it bounds (below). valgebra reads the
 [annotated-types](https://pypi.org/project/annotated-types/) markers
 structurally, so it has no runtime dependency on that library.
 
@@ -67,13 +68,13 @@ is one `is_subtype_of` pays for.
 | `Regex(p)` | the string fully matches the regex `p` | `string_pattern_mismatch` |
 | `Predicate(f)` | `f(value)` is truthy | `predicate_failed` |
 
-**A length bound is not a size guard.** The base is checked first, elements
-and all, and a constraint is asked only of a member of the base, so
-`Annotated[list[int], MaxLen(3)]` walks every element of a longer list before
-it reads the length, and a list that is too long and holds a wrong element is
-reported for the element alone. The answer is the same either way, since the
-value must satisfy both. To refuse an oversized value before its elements are
-read, check its length before handing it to the validator.
+**A length bound is read before the elements it bounds.** On a list, tuple,
+set, frozenset or dict, `MinLen` and `MaxLen` are asked once the value is of the
+base's kind and before any element is read, which is where a fixed shape such as
+`[int, int]` reads its length. A container too long for its bound is refused for
+its length alone, whatever it holds, and its elements are never walked, so the
+bound is a size guard too. The answer is the one either order gives, since a
+member satisfies both.
 
 ```python
 from typing import Annotated
@@ -86,7 +87,7 @@ capped = Validator(Annotated[list[int], at.MaxLen(3)])
 try:
     capped.validate([1, 2, "x", 4, 5])
 except ValidationError as err:
-    assert [item["code"] for item in err.errors] == ["int_type"]
+    assert [item["code"] for item in err.errors] == ["too_long"]
 ```
 
 ### Which base each marker can be asked of
