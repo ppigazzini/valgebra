@@ -12,10 +12,6 @@ use valgebra_core::{
     carries_through,
 };
 
-/// The namespace a row's expression is evaluated in.
-///
-/// `at` holds the marker doubles, named for the vocabulary they stand in
-/// for so a row reads as the line a caller would write.
 /// The release a corpus row needs, as `3.n`.
 ///
 /// A corpus reads *live* objects, so a row naming `typing.Required` or a star
@@ -39,6 +35,10 @@ impl Since {
     }
 }
 
+/// The namespace a row's expression is evaluated in.
+///
+/// `at` holds the marker doubles, named for the vocabulary they stand in
+/// for so a row reads as the line a caller would write.
 fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let namespace = PyDict::new(py);
     for module in ["typing", "dataclasses", "enum", "re", "types"] {

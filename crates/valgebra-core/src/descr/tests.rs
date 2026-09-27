@@ -8,20 +8,6 @@ use core::mem::size_of;
 use proptest::prelude::*;
 use std::sync::{Arc, LazyLock};
 
-/// A guard is held by handle, so an edge pays a pointer for it rather than a
-/// descriptor.
-///
-/// This is the property the nesting rests on. A `Descr` is one component per
-/// kind stored inline, so it is the same size whatever it describes; an edge
-/// holding one *by value* is that size again, and an edge's guard has its own
-/// automaton with its own edges. Held that way the size multiplied through
-/// the levels rather than adding, and a clone deep-copied every level --
-/// which is what a product of two automata does to their guards, once per
-/// pair of states.
-///
-/// Pinned by size because size is what regressed: a guard stored by value
-/// again would pass every behavioural law in this file and bring the growth
-/// back with it.
 /// A guard met or joined with itself is that guard, and the handle settles
 /// it without a walk or a third allocation.
 ///
@@ -47,6 +33,20 @@ fn a_guard_met_with_itself_is_shared_rather_than_rebuilt() {
     assert_eq!(*met, *guard);
 }
 
+/// A guard is held by handle, so an edge pays a pointer for it rather than a
+/// descriptor.
+///
+/// This is the property the nesting rests on. A `Descr` is one component per
+/// kind stored inline, so it is the same size whatever it describes; an edge
+/// holding one *by value* is that size again, and an edge's guard has its own
+/// automaton with its own edges. Held that way the size multiplied through
+/// the levels rather than adding, and a clone deep-copied every level --
+/// which is what a product of two automata does to their guards, once per
+/// pair of states.
+///
+/// Pinned by size because size is what regressed: a guard stored by value
+/// again would pass every behavioural law in this file and bring the growth
+/// back with it.
 #[test]
 fn an_edge_holds_its_guard_by_handle() {
     assert_eq!(size_of::<Arc<Descr>>(), size_of::<usize>());
@@ -1454,9 +1454,6 @@ fn a_coarse_kind_admits_all_of_its_values_or_none() {
     );
 }
 
-/// The two word kinds are exact and separate: a pattern over one says
-/// nothing about the other, which is what keeps `str` and `bytes` disjoint
-/// while sharing a representation.
 /// A kind's complement holds only the values that kind takes.
 ///
 /// One automaton carries both word kinds, and their universes are not one set:
@@ -1502,6 +1499,9 @@ fn a_kinds_complement_holds_only_the_values_that_kind_takes() {
     assert!(!others.admits(Value::word(b"a", Kind::Bytes)));
 }
 
+/// The two word kinds are exact and separate: a pattern over one says
+/// nothing about the other, which is what keeps `str` and `bytes` disjoint
+/// while sharing a representation.
 #[test]
 fn the_word_kinds_are_languages_and_stay_apart() {
     let text = Descr::pattern("ab?", Kind::Str).expect("a small pattern");

@@ -718,14 +718,6 @@ fn a_set_and_a_frozenset_are_distinct_containers() {
     });
 }
 
-/// A sequence whose elements are not one scalar kind is walked element by
-/// element, and that walk answers the same way.
-///
-/// The scalar loop covers the shapes it can, and everything else -- an element
-/// schema that is itself a container, a JSON array of them, a tuple of them --
-/// takes the general walk. The rules are the same rules: one element outside
-/// the schema makes the value a non-member, and a walk that stops at the first
-/// failure must not stop before it.
 /// A list wide enough to be read through a snapshot of it answers what a
 /// narrow one answers.
 ///
@@ -761,13 +753,6 @@ fn a_list_wide_enough_for_a_snapshot_answers_as_a_narrow_one_does() {
     });
 }
 
-/// A tuple's elements are borrowed rather than owned, and the walk runs Python
-/// between the borrow and the answer -- an `isinstance` reaches a metaclass that
-/// can run anything at all. What keeps the borrow good is the tuple: it is
-/// frozen, so an element cannot be replaced, and the caller's own handle holds
-/// it for the whole walk, so nothing it contains can be freed. The check here
-/// drops every other reference to the tuple and collects, which is the strongest
-/// form of that pressure the interpreter offers.
 /// A closed record holding exactly the keys it declares has no undeclared key
 /// to find, and the report reaches that by counting what the field walk found
 /// against the entries the value held. Checking a field runs Python, and Python
@@ -829,6 +814,13 @@ fn a_key_added_while_a_record_is_explained_is_still_reported() {
     });
 }
 
+/// A tuple's elements are borrowed rather than owned, and the walk runs Python
+/// between the borrow and the answer -- an `isinstance` reaches a metaclass that
+/// can run anything at all. What keeps the borrow good is the tuple: it is
+/// frozen, so an element cannot be replaced, and the caller's own handle holds
+/// it for the whole walk, so nothing it contains can be freed. The check here
+/// drops every other reference to the tuple and collects, which is the strongest
+/// form of that pressure the interpreter offers.
 #[test]
 fn a_tuple_element_survives_the_python_its_own_check_runs() {
     Python::attach(|py| {
@@ -887,6 +879,14 @@ fn a_tuple_element_survives_the_python_its_own_check_runs() {
     });
 }
 
+/// A sequence whose elements are not one scalar kind is walked element by
+/// element, and that walk answers the same way.
+///
+/// The scalar loop covers the shapes it can, and everything else -- an element
+/// schema that is itself a container, a JSON array of them, a tuple of them --
+/// takes the general walk. The rules are the same rules: one element outside
+/// the schema makes the value a non-member, and a walk that stops at the first
+/// failure must not stop before it.
 #[test]
 fn a_sequence_of_a_container_element_is_walked_element_by_element() {
     Python::attach(|py| {
