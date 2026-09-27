@@ -158,9 +158,6 @@ impl Drop for BuildGuard {
 struct Forms {
     any: Py<PyAny>,
     never: Option<Py<PyAny>>,
-    /// The sentinel a `TypedDict` carries in `__extra_items__` when its author
-    /// gave no `extra_items` at all -- absent on a runtime without PEP 728.
-    no_extra_items: Option<Py<PyAny>>,
     noreturn: Option<Py<PyAny>>,
     type_alias_type: Option<Py<PyAny>>,
     union: Py<PyAny>,
@@ -212,7 +209,6 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
         Ok(Forms {
             any: typing.getattr("Any")?.unbind(),
             never: optional_form(&typing, "Never"),
-            no_extra_items: optional_form(&typing, "NoExtraItems"),
             noreturn: optional_form(&typing, "NoReturn"),
             type_alias_type: optional_form(&typing, "TypeAliasType"),
             union: typing.getattr("Union")?.unbind(),

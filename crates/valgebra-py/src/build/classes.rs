@@ -503,27 +503,48 @@ pub(super) fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<boo
     Ok(None)
 }
 
-/// Whether `extra_items` carries the sentinel for "the author gave none".
+/// Whether `__extra_items__` says its author gave no `extra_items`.
 ///
-/// A runtime with PEP 728 fills `__extra_items__` in either way: with the type
-/// its author wrote, or with `NoExtraItems` to say there was none. The sentinel
-/// is not a type and reading it as one makes the record admit exactly the
-/// sentinel -- which is a closed record wearing an open one's spelling, and is
-/// what 3.15 turned this into before the check was here.
-pub(super) fn gave_no_extra_items(extra: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let Some(sentinel) = forms(extra.py())?.no_extra_items.as_ref() else {
-        return Ok(false);
-    };
-    Ok(extra.is(sentinel.bind(extra.py())))
+/// PEP 728 fills the attribute either way: with the type the author wrote, or
+/// with a `NoExtraItems` sentinel to say there was none. Each implementation
+/// writes its own -- `typing` from 3.15, `typing_extensions` on every release,
+/// two objects until 3.15 -- so the sentinel is the one the module defining the
+/// class's metaclass carries, which is the implementation that wrote it. The
+/// sentinel is not a type, and read as one it turns the open default into a
+/// record admitting exactly the sentinel.
+///
+/// An implementation with no sentinel predates it and wrote `None` for "none
+/// given". With one, `None` is a type the author gave: extra values are `None`.
+fn gave_no_extra_items(ty: &Bound<'_, PyType>, extra: &Bound<'_, PyAny>) -> PyResult<bool> {
+    Ok(match no_extra_items(ty)? {
+        Some(sentinel) => extra.is(&sentinel),
+        None => extra.is_none(),
+    })
+}
+
+/// The `NoExtraItems` sentinel of the implementation that built `ty`, if it has
+/// one.
+///
+/// Looked up in `sys.modules` rather than imported: the class exists, so its
+/// metaclass's module is loaded, and a lookup runs no module's code.
+fn no_extra_items<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let py = ty.py();
+    let module = ty.get_type().getattr(intern!(py, "__module__"))?;
+    let modules = py
+        .import(intern!(py, "sys"))?
+        .getattr(intern!(py, "modules"))?;
+    match modules.cast::<PyDict>()?.get_item(module)? {
+        Some(module) => module.getattr_opt(intern!(py, "NoExtraItems")),
+        None => Ok(None),
+    }
 }
 
 /// What a `TypedDict` says about the keys it does not name.
 ///
 /// `closed=True` shuts them and `extra_items=T` gives them a type -- PEP 728,
-/// which the typing spec carries. Neither marker is in `typing` yet, so both are
-/// read where a runtime that has them puts them and are absent otherwise:
-/// a `TypedDict` written for a runtime without PEP 728 cannot have said either,
-/// and the spec's default is what is left.
+/// which the typing spec carries. Both are read off the class, where the
+/// implementation that built it puts them: a `TypedDict` built without PEP 728
+/// cannot have said either, and the spec's default is what is left.
 pub(super) fn unnamed_keys(
     ty: &Bound<'_, PyType>,
     lits: &mut Pool,
@@ -536,8 +557,7 @@ pub(super) fn unnamed_keys(
         return Ok(Vec::new());
     }
     if let Some(extra) = ty.getattr_opt(intern!(py, "__extra_items__"))?
-        && !extra.is_none()
-        && !gave_no_extra_items(&extra)?
+        && !gave_no_extra_items(ty, &extra)?
     {
         // A `TypedDict`'s keys are strings, so the type it gives the extra ones
         // governs the string keys and leaves no other kind admitted.

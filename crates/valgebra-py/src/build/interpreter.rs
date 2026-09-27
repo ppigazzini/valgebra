@@ -996,6 +996,72 @@ fn a_typed_dict_says_which_other_keys_it_admits() {
     });
 }
 
+/// "No `extra_items` given" is written with the sentinel of the implementation
+/// that built the class, and read against that one: `typing` and
+/// `typing_extensions` carry two different objects before 3.15. Where the
+/// implementation has a sentinel, `None` is a type the author gave; where it
+/// has none, `None` is how it said nothing.
+#[test]
+fn a_typed_dict_is_read_against_the_sentinel_its_own_implementation_wrote() {
+    Python::attach(|py| {
+        let namespace = namespace(py).expect("the corpus namespace builds");
+        py.run(
+            &CString::new(
+                "import sys, types\n\
+                 with_sentinel = types.ModuleType('corpus_with_no_extra_items')\n\
+                 with_sentinel.NoExtraItems = object()\n\
+                 before_sentinel = types.ModuleType('corpus_before_no_extra_items')\n\
+                 for module in (with_sentinel, before_sentinel):\n\
+                 \x20   sys.modules[module.__name__] = module\n\
+                 class Meta(type):\n\
+                 \x20   pass\n\
+                 Meta.__module__ = with_sentinel.__name__\n\
+                 class OlderMeta(type):\n\
+                 \x20   pass\n\
+                 OlderMeta.__module__ = before_sentinel.__name__\n\
+                 def record(meta, extra):\n\
+                 \x20   class Record(metaclass=meta):\n\
+                 \x20       __required_keys__ = frozenset({'name'})\n\
+                 \x20       __extra_items__ = extra\n\
+                 \x20       name: str\n\
+                 \x20   return Record\n\
+                 Unsaid = record(Meta, with_sentinel.NoExtraItems)\n\
+                 NoneValued = record(Meta, None)\n\
+                 OlderUnsaid = record(OlderMeta, None)\n\
+                 OlderTyped = record(OlderMeta, int)\n",
+            )
+            .expect("a source with no interior nul"),
+            Some(&namespace),
+            None,
+        )
+        .expect("the corpus classes define");
+        for (name, wanted) in [
+            // The sentinel its own implementation wrote: the open default.
+            ("Unsaid", "{'name': str, str: anything}"),
+            // `extra_items=None` where a sentinel exists: extra values are None.
+            ("NoneValued", "{'name': str, str: None}"),
+            // An implementation older than the sentinel said nothing with None.
+            ("OlderUnsaid", "{'name': str, str: anything}"),
+            ("OlderTyped", "{'name': str, str: int}"),
+        ] {
+            let annotation = namespace
+                .get_item(name)
+                .expect("the namespace answers")
+                .expect("the class is in it");
+            let mut pool = Pool::default();
+            let mut defs = Vec::new();
+            let schema = build_schema(&annotation, &mut pool, &mut defs)
+                .unwrap_or_else(|error| panic!("{name} did not build: {error}"));
+            let active = RefCell::new(FxHashMap::default());
+            assert_eq!(
+                render(py, &schema, pool.items(), &defs, &active, 0),
+                wanted,
+                "{name}"
+            );
+        }
+    });
+}
+
 /// A class is read through its declared fields, and what it declares is not
 /// every annotation on it.
 #[test]

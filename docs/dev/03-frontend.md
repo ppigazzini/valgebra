@@ -146,7 +146,14 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    raw `__annotations__` (see the reading below): under `from __future__ import annotations` those are
    strings, so a `NotRequired[...]` is invisible to the class's own key sets and
    every optional key compiled required. A qualifier on the resolved hint wins
-   over the key sets, and a qualifier may wrap another.
+   over the key sets, and a qualifier may wrap another. The keys it does not
+   name are what PEP 728's two attributes say, read off the class:
+   `__closed__` shuts them, `__extra_items__` types them, and neither leaves
+   the record open over string keys. "No `extra_items` given" is written with
+   the `NoExtraItems` sentinel of the implementation that built the class, the
+   one in its metaclass's module -- `typing`'s and `typing_extensions`' are two
+   objects before 3.15. An implementation older than the sentinel writes `None`
+   for it; with one, `None` is the type the extra values have.
 5. **An enum** is an instance check against the enumeration class.
 6. **A dataclass or a `NamedTuple`** is an instance check *plus* a deep check
    of each declared field, so a value of the right class with a field of the

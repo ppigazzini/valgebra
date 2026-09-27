@@ -13,7 +13,21 @@ Every feat/fix commit this section accounts for, oldest first; held to
 a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
+- fix: a TypedDict is read against the sentinel its own implementation wrote
+
 -->
+
+### Fixed
+
+- **A `TypedDict` built by `typing_extensions` is open unless it says
+  otherwise.** PEP 728 writes "no `extra_items` given" with a sentinel, and
+  `typing_extensions` carries its own, a different object from `typing`'s
+  before Python 3.15. On 3.10 to 3.14 its open default, and `closed=False`,
+  were read as a record whose only admitted extra value was that sentinel, so
+  every extra key the class allows was refused. And on every release
+  `extra_items=None`, which gives the extra values the type `None`, was read as
+  no marker and admitted any extra value. Each spelling is read as it says,
+  whichever implementation built the class.
 
 ## [0.0.14] - 2026-09-26
 

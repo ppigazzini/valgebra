@@ -28,6 +28,7 @@ from hypothesis import strategies as st
 from valgebra import (
     ValidationError,
     Validator,
+    anything,
     complement,
     intersection,
     recursive,
@@ -73,12 +74,11 @@ def test_typeddict_is_open_and_a_dict_literal_is_not() -> None:
 def test_typeddict_closed_and_extra_items_are_obeyed() -> None:
     """PEP 728's two markers say what a `TypedDict` allows besides the keys it names.
 
-    Written as attributes on the class rather than through the functional
-    form's keyword arguments, which arrive in 3.15: the markers *are* those
+    Written as attributes on the class rather than through the keyword
+    arguments, which `typing` takes from 3.15: the markers *are* those
     attributes, the spec says a runtime fills them, and a consumer reads them.
-    Passing them to the constructor is one interpreter's way of setting them,
-    so a row written that way skipped on every interpreter this project
-    supports -- which is every interpreter a caller runs on.
+    The keywords themselves are read below, through each implementation that
+    takes them.
 
     The default is open, and open over the string keys: a `TypedDict` relates
     to `Mapping[str, object]` and nothing wider.
@@ -113,22 +113,35 @@ def test_typeddict_closed_and_extra_items_are_obeyed() -> None:
     assert Validator(Extra) != Validator(Plain)
 
 
-@pytest.mark.skipif(
-    not hasattr(typing, "NoExtraItems"), reason="the sentinel arrives in 3.15"
-)
-def test_the_no_extra_items_sentinel_is_not_a_type_to_admit() -> None:
-    """A runtime that has the sentinel fills `__extra_items__` with it.
+#: Each spelling PEP 728 gives a `TypedDict`, and the record literal it names.
+PEP_728_SPELLINGS: dict[str, tuple[dict[str, object], dict[object, object]]] = {
+    "unsaid": ({}, {"a": int, str: anything}),
+    "closed=False": ({"closed": False}, {"a": int, str: anything}),
+    "closed=True": ({"closed": True}, {"a": int}),
+    "extra_items=None": ({"extra_items": None}, {"a": int, str: None}),
+    "extra_items=int": ({"extra_items": int}, {"a": int, str: int}),
+}
 
-    It says there was no `extra_items`, and it is not a type. Read as one, the
-    open default becomes a record admitting exactly the sentinel -- a closed
-    record wearing an open one's spelling, which no value satisfies.
+
+@pytest.mark.parametrize("implementation", ["typing", "typing_extensions"])
+@pytest.mark.parametrize("spelling", PEP_728_SPELLINGS)
+def test_a_typeddict_is_the_record_its_pep_728_spelling_names(
+    implementation: str, spelling: str
+) -> None:
+    """Each implementation that takes the keywords is read as the spelling says.
+
+    `typing` takes them from 3.15 and `typing_extensions` on every release, and
+    each writes "no `extra_items` given" with a sentinel of its own: two objects
+    before 3.15. Read against `typing`'s alone, `typing_extensions`' open default
+    was a record admitting exactly its sentinel, and `extra_items=None`, which
+    says the extra values are `None`, was read as no marker at all.
     """
-
-    class Plain(typing.TypedDict):
-        a: int
-
-    Plain.__extra_items__ = typing.NoExtraItems  # type: ignore[attr-defined]
-    assert Validator(Plain).is_valid({"a": 1, "x": 2})
+    module = pytest.importorskip(implementation)
+    if not hasattr(module, "NoExtraItems"):
+        pytest.skip(f"{implementation} has no PEP 728 on this release")
+    keywords, literal = PEP_728_SPELLINGS[spelling]
+    record = module.TypedDict("Record", {"a": int}, **keywords)
+    assert Validator(record) == Validator(literal)
 
 
 def test_typeddict_total_false_makes_keys_optional() -> None:
