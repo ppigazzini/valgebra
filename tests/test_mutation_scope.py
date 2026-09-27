@@ -43,6 +43,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from _toml import load
+
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
@@ -81,9 +83,9 @@ def _swept() -> set[str]:
     while the lane swept it. Read from the workflow, the claim is about what
     runs.
 
-    Parsed with a regex rather than a YAML library, as `_excluded_globs` reads
-    the TOML: the wanted lines are the `--file` arguments inside one shell
-    block, and parsing the whole workflow to find them would be the larger tool.
+    Read with a regex rather than a YAML library: the wanted lines are the
+    `--file` arguments inside one shell block, which a YAML parser hands back as
+    one string to search all the same.
     """
     text = WORKFLOW.read_text(encoding="utf-8")
     swept = set(re.findall(r"--file (crates/valgebra-py/\S+\.rs)", text))
@@ -92,43 +94,17 @@ def _swept() -> set[str]:
 
 
 def _excluded_globs() -> list[str]:
-    """Read `exclude_globs` from the config.
-
-    Parsed with a regex rather than a TOML library: `tomllib` is 3.11+ and this
-    suite runs from 3.10, and a third-party parser would be a dependency added
-    for one array in one file this repository owns. The array's entries are
-    quoted strings, and a comment line is dropped before they are read -- an
-    entry named only in a comment is not an entry.
-    """
-    text = CONFIG.read_text(encoding="utf-8")
-    array = r"^exclude_globs\s*=\s*\[(.*?)^\]"
-    match = re.search(array, text, re.DOTALL | re.MULTILINE)
-    if match is None:
-        # A single-line form is also valid TOML; accept it rather than reporting
-        # an empty exclusion list, which would pass this file having read nothing.
-        match = re.search(r"^exclude_globs\s*=\s*\[(.*?)\]", text, re.MULTILINE)
-    assert match is not None, "exclude_globs is absent from the mutants config"
-    body = "\n".join(
-        line
-        for line in match.group(1).splitlines()
-        if not line.lstrip().startswith("#")
-    )
-    return re.findall(r'"([^"]+)"', body)
+    """Read `exclude_globs` from the config."""
+    globs = load(CONFIG).get("exclude_globs")
+    assert globs is not None, "exclude_globs is absent from the mutants config"
+    return globs
 
 
 def _excluded_regexes() -> list[str]:
-    """Read `exclude_re` from the config, by the same rule as the globs."""
-    text = CONFIG.read_text(encoding="utf-8")
-    match = re.search(r"^exclude_re\s*=\s*\[(.*?)^\]", text, re.DOTALL | re.MULTILINE)
-    assert match is not None, "exclude_re is absent from the mutants config"
-    body = "\n".join(
-        line
-        for line in match.group(1).splitlines()
-        if not line.lstrip().startswith("#")
-    )
-    # TOML escapes a backslash inside a basic string, so `\\(` on the page is the
-    # regex `\(`. Undo that one level to recover the pattern cargo-mutants reads.
-    return [entry.replace("\\\\", "\\") for entry in re.findall(r'"([^"]+)"', body)]
+    """Read `exclude_re` from the config: the patterns cargo-mutants reads."""
+    patterns = load(CONFIG).get("exclude_re")
+    assert patterns is not None, "exclude_re is absent from the mutants config"
+    return patterns
 
 
 def _every_mutant() -> list[str]:

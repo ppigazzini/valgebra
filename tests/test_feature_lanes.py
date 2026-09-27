@@ -37,6 +37,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from _toml import load
+
 # A repository check: it reads the workflows and the manifests, neither of
 # which ships in a wheel.
 pytestmark = pytest.mark.repository
@@ -71,27 +73,12 @@ _CARGO_TEST = re.compile(r"\bcargo\s+(?:\+\S+\s+)?test\b")
 
 
 def _features_declared() -> dict[str, str]:
-    """Every feature a workspace crate declares, with the manifest that does.
-
-    Parsed with a regex rather than a TOML library, as the sibling ledgers
-    read `.cargo/mutants.toml`: `tomllib` is 3.11+ and this suite runs from
-    3.10, and a third-party parser would be a dependency added for one table.
-    A feature is a bare key at the top of a line inside `[features]`; the
-    comments above each one are prose and carry no key.
-    """
-    declared: dict[str, str] = {}
-    for manifest in sorted(ROOT.glob("crates/*/Cargo.toml")):
-        inside = False
-        for line in manifest.read_text(encoding="utf-8").splitlines():
-            if line.startswith("["):
-                inside = line.strip() == "[features]"
-                continue
-            if not inside or line.startswith("#") or not line.strip():
-                continue
-            key = line.split("=", 1)[0].strip()
-            if key:
-                declared[key] = str(manifest.relative_to(ROOT))
-    return declared
+    """Every feature a workspace crate declares, with the manifest that does."""
+    return {
+        feature: str(manifest.relative_to(ROOT))
+        for manifest in sorted(ROOT.glob("crates/*/Cargo.toml"))
+        for feature in load(manifest).get("features", {})
+    }
 
 
 def _logical_lines(text: str) -> list[str]:

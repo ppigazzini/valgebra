@@ -28,11 +28,12 @@ LEDGER: every manifest is a workspace member or a named detached surface
 
 from __future__ import annotations
 
-import re
 import subprocess
 from pathlib import Path
 
 import pytest
+
+from _toml import load
 
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
@@ -93,10 +94,9 @@ def _manifests() -> set[str]:
 
 
 def _workspace_members() -> set[str]:
-    text = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
-    match = re.search(r"^members\s*=\s*\[(.*?)\]", text, re.DOTALL | re.MULTILINE)
-    assert match is not None, "the root manifest declares no workspace members"
-    return {f"{m}/Cargo.toml" for m in re.findall(r'"([^"]+)"', match.group(1))}
+    members = load(ROOT / "Cargo.toml").get("workspace", {}).get("members")
+    assert members, "the root manifest declares no workspace members"
+    return {f"{member}/Cargo.toml" for member in members}
 
 
 def test_every_manifest_is_a_member_or_detached_with_a_reason() -> None:
@@ -147,18 +147,13 @@ def test_the_local_gate_names_every_detached_surface() -> None:
 
 
 def _cache_key_patterns() -> list[str]:
-    """Return the `file` globs `[tool.uv] cache-keys` declares.
-
-    Read with a regex rather than parsed: `tomllib` is 3.11+ and this suite runs
-    from 3.10, which is the floor the package claims.
-    """
-    text = PYPROJECT.read_text(encoding="utf-8")
-    match = re.search(r"^cache-keys\s*=\s*\[(.*?)^\]", text, re.DOTALL | re.MULTILINE)
-    assert match is not None, (
+    """Return the `file` globs `[tool.uv] cache-keys` declares."""
+    keys = load(PYPROJECT).get("tool", {}).get("uv", {}).get("cache-keys")
+    assert keys, (
         "pyproject.toml declares no `[tool.uv] cache-keys`, so uv keys this "
         "project's cached build on pyproject.toml alone and notices no Rust change"
     )
-    return re.findall(r'file\s*=\s*"([^"]+)"', match.group(1))
+    return [key["file"] for key in keys if "file" in key]
 
 
 def _matches(pattern: str) -> set[str]:

@@ -27,6 +27,8 @@ from pathlib import Path
 
 import pytest
 
+from _toml import load
+
 # Reads the tree, the two configurations and the workflow; none ships in a wheel.
 pytestmark = pytest.mark.repository
 
@@ -43,24 +45,9 @@ VENV = "VALGEBRA_SWEEP_VENV"
 
 
 def _array(config: Path, name: str) -> list[str]:
-    """Read a TOML array of strings from a configuration, comments dropped.
-
-    A regex rather than `tomllib`, which is 3.11+ while this suite runs from
-    3.10, and by the same rule `tests/test_mutation_scope.py` reads the
-    exclusion list with: an entry named only in a comment is not an entry.
-    """
-    text = config.read_text(encoding="utf-8")
-    match = re.search(
-        rf"^{re.escape(name)}\s*=\s*\[(.*?)^\]", text, re.DOTALL | re.MULTILINE
-    )
-    assert match is not None, f"{name} is absent from {config.name}"
-    body = "\n".join(
-        line
-        for line in match.group(1).splitlines()
-        if not line.lstrip().startswith("#")
-    )
-    entries = re.findall(r'"([^"]+)"', body)
-    assert entries, f"{name} in {config.name} parsed empty"
+    """Read a TOML array of strings from a configuration."""
+    entries = load(config).get(name)
+    assert entries, f"{name} is absent from {config.name}, or empty"
     return entries
 
 
@@ -195,13 +182,11 @@ def test_the_workers_of_a_sweep_do_not_share_one_environment() -> None:
 
 
 def test_the_feature_is_declared_and_off_by_default() -> None:
-    manifest = MANIFEST.read_text(encoding="utf-8")
-    assert re.search(rf"^{re.escape(FEATURE)}\s*=\s*\[", manifest, re.MULTILINE), (
-        f"{FEATURE} is not declared in {MANIFEST.name}"
-    )
-    default = re.search(r"^default\s*=\s*\[([^\]]*)\]", manifest, re.MULTILINE)
+    features = load(MANIFEST).get("features", {})
+    assert FEATURE in features, f"{FEATURE} is not declared in {MANIFEST.name}"
+    default = features.get("default")
     if default is not None:
-        assert FEATURE not in default.group(1), (
+        assert FEATURE not in default, (
             f"{FEATURE} is on by default, so every `cargo test` runs the suite twice"
         )
 

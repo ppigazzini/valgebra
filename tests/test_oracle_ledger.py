@@ -26,6 +26,8 @@ from pathlib import Path
 
 import pytest
 
+from _toml import load
+
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "docs" / "dev" / "02-decision.md"
 TRAIT = ROOT / "crates" / "valgebra-core" / "src" / "oracle.rs"
@@ -106,7 +108,7 @@ def test_an_unkillable_default_is_one_the_sweep_excludes() -> None:
     exists for, and it has happened once.
     """
     page = PAGE.read_text(encoding="utf-8")
-    sweep = SWEEP.read_text(encoding="utf-8")
+    sweep = "\n".join(load(SWEEP)["exclude_re"])
     rows = _TABLE_ROW.findall(page)
     assert rows, "the page's table of unkillable defaults did not parse"
 
@@ -121,9 +123,8 @@ def test_an_unkillable_default_is_one_the_sweep_excludes() -> None:
             f"the table names {question}, which is not a question"
         )
         # The exclusion spells the mutant `cargo mutants --list` offers, with
-        # the parentheses escaped twice: once for the regex the sweep reads the
-        # entry as, and once more by TOML's own string escaping.
-        escaped = answer.replace("(", r"\\(").replace(")", r"\\)")
+        # the parentheses escaped for the regex the sweep reads the entry as.
+        escaped = answer.replace("(", r"\(").replace(")", r"\)")
         wanted = f"replace LeafRelations::{question} -> Option<bool> with {escaped}"
         assert wanted in sweep, (
             f"the page calls {question}'s {answer} default unkillable, "
@@ -132,7 +133,7 @@ def test_an_unkillable_default_is_one_the_sweep_excludes() -> None:
 
 
 def test_a_question_the_sweep_excuses_is_one_the_page_explains() -> None:
-    sweep = SWEEP.read_text(encoding="utf-8")
+    sweep = "\n".join(load(SWEEP)["exclude_re"])
     excluded = re.findall(
         r"replace LeafRelations::([a-z_]+) -> Option<bool> with (\w+)", sweep
     )

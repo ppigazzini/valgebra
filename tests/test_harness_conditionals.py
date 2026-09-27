@@ -29,6 +29,8 @@ from pathlib import Path
 
 import pytest
 
+from _toml import load
+
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
@@ -48,11 +50,7 @@ CFG_FEATURE = re.compile(
 
 
 def _declared_features() -> set[str]:
-    text = (BINDING / "Cargo.toml").read_text(encoding="utf-8")
-    match = re.search(r"^\[features\](.*?)(?=^\[|\Z)", text, re.DOTALL | re.MULTILINE)
-    if match is None:
-        return set()
-    return set(re.findall(r"^([a-z0-9-]+)\s*=", match.group(1), re.MULTILINE))
+    return set(load(BINDING / "Cargo.toml").get("features", {}))
 
 
 def _cfg_sites() -> list[tuple[str, str, str]]:

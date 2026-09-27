@@ -655,6 +655,9 @@
     "timeit": {
       "since": "3.10"
     },
+    "tomllib": {
+      "since": "3.11"
+    },
     "types": {
       "since": "3.10"
     },

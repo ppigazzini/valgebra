@@ -24,6 +24,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from _toml import load
+
 # A repository check: it reads the workflow, which ships in no wheel.
 pytestmark = pytest.mark.repository
 
@@ -282,8 +284,11 @@ def test_every_supported_interpreter_runs_on_every_event() -> None:
     matrix = job["strategy"]["matrix"]
     versions = [str(version) for version in matrix["python-version"]]
     versions += [str(row["python-version"]) for row in matrix.get("include", [])]
-    manifest = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    if "Programming Language :: Python :: Free Threading" in manifest:
+    classifiers = load(ROOT / "pyproject.toml")["project"]["classifiers"]
+    if any(
+        row.startswith("Programming Language :: Python :: Free Threading")
+        for row in classifiers
+    ):
         assert any(version.endswith("t") for version in versions), (
             "the classifiers promise free threading and no leg of the python job "
             f"is a free-threaded build: {versions}"

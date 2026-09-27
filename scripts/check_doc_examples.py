@@ -44,6 +44,11 @@ from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # the floor, where pytest's own dependency supplies the parser
+    import tomli as tomllib
+
 if TYPE_CHECKING:
     from types import ModuleType
 
@@ -270,13 +275,9 @@ def runner() -> ModuleType:
 
 def newest_release() -> str:
     """Give the release the examples are read at: the one ty reads the suite at."""
-    found = re.search(
-        r'^python-version = "(\d+\.\d+)"$', PYPROJECT.read_text("utf-8"), re.MULTILINE
-    )
-    if found is None:
-        message = "pyproject.toml names no [tool.ty.environment] python-version"
-        raise RuntimeError(message)
-    return found[1]
+    with PYPROJECT.open("rb") as handle:
+        manifest = tomllib.load(handle)
+    return manifest["tool"]["ty"]["environment"]["python-version"]
 
 
 def _output(argv: list[str], **env: str) -> str:

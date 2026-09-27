@@ -99,12 +99,3 @@ def test_every_exemption_says_why() -> None:
     module = checker()
     for rule, reason in module.EXEMPT.items():
         assert len(reason) > 25, f"{rule}: {reason!r}"
-
-
-def test_the_release_is_the_one_ty_reads_the_suite_at() -> None:
-    """One source for the release, so the two cannot drift apart."""
-    release = checker().newest_release()
-    assert release.count(".") == 1
-    assert f'python-version = "{release}"' in (ROOT / "pyproject.toml").read_text(
-        "utf-8"
-    )

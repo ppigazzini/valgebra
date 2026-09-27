@@ -35,6 +35,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from _toml import load
+
 # A repository check: it reads the workflows, which ship in no wheel.
 pytestmark = pytest.mark.repository
 
@@ -95,19 +97,11 @@ def _implementations_in(text: str) -> set[str]:
 
 
 def _stated_implementations() -> set[str]:
-    """Read the implementations the packaging metadata promises to support.
-
-    Every quoted string in the file, filtered by the classifier's own prefix,
-    rather than parsed: `tomllib` is 3.11+ and this suite runs from 3.10, which
-    `tests/test_mutation_scope.py` says beside the same decision. The prefix is
-    distinctive enough that a string carrying it anywhere in this file is that
-    classifier.
-    """
-    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    """Read the implementations the packaging metadata promises to support."""
     prefix = "Programming Language :: Python :: Implementation :: "
     return {
         row.removeprefix(prefix).lower()
-        for row in re.findall(r'"([^"]+)"', text)
+        for row in load(ROOT / "pyproject.toml")["project"]["classifiers"]
         if row.startswith(prefix)
     }
 

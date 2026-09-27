@@ -40,12 +40,14 @@ from typing import NamedTuple
 import pytest
 import yaml
 
+from _toml import load
+
 # A repository check: it reads the packaging metadata, the workflow and a table
 # under `tests/`, and none of them ships in a wheel.
 pytestmark = pytest.mark.repository
 
 ROOT = Path(__file__).resolve().parent.parent
-PYPROJECT = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+MANIFEST = load(ROOT / "pyproject.toml")
 WORKFLOW_TEXT = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 FLOOR_NAMES = json.loads(
     (ROOT / "tests" / "floor_names.json").read_text(encoding="utf-8")
@@ -145,10 +147,9 @@ def _matrix() -> dict[int, bool]:
 
 def _classifiers() -> set[int]:
     return {
-        int(minor)
-        for minor in re.findall(
-            r'"Programming Language :: Python :: 3\.(\d+)"', PYPROJECT
-        )
+        int(found.group(1))
+        for row in MANIFEST["project"]["classifiers"]
+        if (found := re.fullmatch(r"Programming Language :: Python :: 3\.(\d+)", row))
     }
 
 
@@ -159,12 +160,10 @@ def _name(minor: int) -> str:
 
 #: Every place the tree states its floor: the oldest release it supports.
 FLOORS = {
-    "requires-python in pyproject.toml": _one(
-        r'^requires-python = ">=(3\.\d+)"', PYPROJECT, "pyproject.toml"
+    "requires-python in pyproject.toml": _minor(
+        MANIFEST["project"]["requires-python"].removeprefix(">=")
     ),
-    "ruff's target-version": _one(
-        r'^target-version = "(py3\d+)"', PYPROJECT, "pyproject.toml"
-    ),
+    "ruff's target-version": _minor(MANIFEST["tool"]["ruff"]["target-version"]),
     "the ty floor leg in ci.yml": _one(
         r"ty check python/ --python-version (3\.\d+)$", WORKFLOW_TEXT, "ci.yml"
     ),
@@ -177,8 +176,8 @@ FLOORS = {
 
 #: Every place the tree states the newest release it supports.
 NEWEST = {
-    "[tool.ty.environment] python-version": _one(
-        r'^python-version = "(3\.\d+)"', PYPROJECT, "pyproject.toml"
+    "[tool.ty.environment] python-version": _minor(
+        MANIFEST["tool"]["ty"]["environment"]["python-version"]
     ),
     "the typed consumer's last mypy target in ci.yml": _one(
         r"for target in 3\.\d+ (3\.\d+); do$", WORKFLOW_TEXT, "ci.yml"
