@@ -193,12 +193,17 @@ package that nobody decided to lift, and nothing reports it: ruff flags an
 unused `noqa` and says nothing about a per-file ignore that matches no finding.
 
 **ty runs every stable rule it leaves off by default that the tree passes,
-raised to an error**, and `[tool.ty.rules]` names the ones left at the default
-with the reason for each: one declined, and two that report across the tests
-and scripts and wait for a change of their own. `[tool.ty.analysis]` turns
-strict equality on and says why strict generic narrowing stays off. A warning
-fails the run as an error does, so the level written is the intent, not the
-exit code.
+raised to an error**, and `[tool.ty.rules]` names the ones left at the default,
+each with its reason. `[tool.ty.analysis]` turns strict equality on and says
+why strict generic narrowing stays off. A warning fails the run as an error
+does, so the level written is the intent, not the exit code.
+
+**pyright runs in the profile `[tool.pyright]` names**, so a release that moves
+pyright's default moves nothing here. The type lane runs it and `mypy --strict`
+over the package as well as over the typed consumer, because a checker reports
+nothing inside an installed library's stub: a stub one of them refuses is
+refused nowhere a caller looks. An ignore in the stub is coded for the one
+checker that reports, with the reason beside the line it covers.
 
 **The limit.** ty's rule list moves with its releases, and a rule a release adds
 off by default stays off here until someone raises it; `ty explain rule` gives

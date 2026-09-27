@@ -228,6 +228,13 @@ fail_under = 100
 show_missing = true
 exclude_also = ["if TYPE_CHECKING:"]
 
+[tool.pyright]
+# The profile the type lane, the checker-reading ledger and the doc-example
+# checker run, named so that a pyright release moving its default moves nothing
+# here. It does not report a call to a deprecated method, which strict does: on
+# the consumer's `simplify` row that report is the stub's `@deprecated` at work.
+typeCheckingMode = "standard"
+
 [tool.ty.environment]
 # The newest interpreter the package supports, because the suite is what this
 # setting governs: `tests/` names `typing.Unpack`, `ReadOnly`, `TypeVarTuple`
@@ -246,10 +253,12 @@ python-version = "3.15"
 # error; `ty explain rule` gives each rule's default level. Three stay at
 # ty's default:
 #
-# - `missing-override-decorator`: the shipped package would import `override`
-#   at runtime, from `typing_extensions` below 3.12 -- a runtime dependency the
-#   package does not have -- or from `typing`, whose import `_markers.py` is
-#   written to avoid;
+# - `missing-override-decorator`: every method it reports overrides one of
+#   `object`, a builtin, the standard library or `annotated_types`. The
+#   decorator guards against a base method going away, and none of those bases
+#   is this tree's to change. In `_markers.py` it would also cost an import
+#   at runtime: from `typing_extensions` below 3.12, a dependency the package
+#   does not have, or from `typing`, which that module is written to avoid;
 # - `missing-type-argument`, and `unsound-return-statement` with its
 #   `unsound-yield` and `unsound-assignment` siblings: each reports across the
 #   tests and scripts -- a bare generic, or a value read from JSON, YAML or a

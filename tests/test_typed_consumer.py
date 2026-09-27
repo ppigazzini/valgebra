@@ -146,7 +146,7 @@ def test_every_accepted_reason_is_a_sentence() -> None:
 
 
 def test_the_consumer_reads_assert_type_on_the_floor_too() -> None:
-    """`assert_type` arrives in 3.11 and the floor is 3.10.
+    """`assert_type` and `Never` arrive in 3.11 and the floor is 3.10.
 
     The lane checks the file against both, so the import is version-gated and
     the older half comes from `typing_extensions`. Written as a check on the
@@ -158,4 +158,5 @@ def test_the_consumer_reads_assert_type_on_the_floor_too() -> None:
         "the consumer reads `assert_type` with no version gate, and the lane "
         "checks it against 3.10, where `typing` does not have it"
     )
-    assert "from typing_extensions import assert_type" in text
+    floor_import = r"^\s+from typing_extensions import .*\bassert_type\b"
+    assert re.search(floor_import, text, re.MULTILINE)

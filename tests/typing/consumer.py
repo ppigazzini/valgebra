@@ -29,12 +29,12 @@ from __future__ import annotations
 import copy
 import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, Literal, NoReturn, TypedDict
+from typing import TYPE_CHECKING, Annotated, Literal, TypedDict
 
 if sys.version_info >= (3, 11):
-    from typing import assert_type
-else:  # the floor, where `typing` does not carry it yet
-    from typing_extensions import assert_type
+    from typing import Never, assert_type
+else:  # the floor, where `typing` carries neither yet
+    from typing_extensions import Never, assert_type
 
 import annotated_types as at
 
@@ -68,8 +68,8 @@ class Row(TypedDict):
     name: str
 
 
-#: The three answers `relation_to` gives. Written out rather than `str`, which
-#: is what the stub declares and what a caller can exhaustively branch on.
+#: The three answers `relation_to` gives, as the stub declares them: what a
+#: caller can branch on exhaustively.
 Relation = Literal["subset", "not_subset", "undecided"]
 
 
@@ -110,7 +110,7 @@ def build() -> Validator[object]:
     assert_type(shapes | refined, Validator[object])
     assert_type(shapes.__ror__(refined), Validator[object])
     assert_type(anything, Validator[object])
-    assert_type(nothing, Validator[NoReturn])
+    assert_type(nothing, Validator[Never])
     return union(scalars, refined, anything, nothing)
 
 

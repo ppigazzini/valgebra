@@ -17,7 +17,7 @@ from collections.abc import Callable
 from types import GenericAlias
 from typing import Any, Generic, Literal, NoReturn, TypeGuard, final, overload
 
-from typing_extensions import TypeVar, deprecated
+from typing_extensions import Never, TypeVar, deprecated
 
 # The set a validator denotes, as a checker reads it: `Validator[int]` is a
 # validator whose members are ints. `Any` by default, so a bare `Validator` is
@@ -63,8 +63,16 @@ class Validator(Generic[_T]):
     # most the instances it names; `None` is `None`. Anything else -- a union
     # written with `|`, a `Literal`, an `Annotated`, a native form, a constant --
     # is `object`, since no overload before `TypeForm` can read it as a type.
+    #
+    # pyright reports the first overload as overlapping the last with a return
+    # that is not assignable to it: the parameter is invariant, so a
+    # `Validator[_S]` is not a `Validator[object]`. The answer the last overload
+    # gives is still true of every validator. A validator reached through a
+    # value typed `object` reads as `Validator[object]`, whose methods answer a
+    # `bool`, the argument's own type, or `object`, and each of those holds
+    # whatever set the validator has. mypy and ty report nothing here.
     @overload
-    def __new__(cls, schema: Validator[_S], /) -> Validator[_S]: ...
+    def __new__(cls, schema: Validator[_S], /) -> Validator[_S]: ...  # pyright: ignore[reportOverlappingOverload]
     @overload
     def __new__(cls, schema: type[_S], /) -> Validator[_S]: ...
     @overload
@@ -125,8 +133,7 @@ class Validator(Generic[_T]):
     def __eq__(self, other: object, /) -> bool: ...
     def __hash__(self) -> int: ...
     # Raises `TypeError`: a validator holds the classes and callables its
-    # schema names, so the schema is what travels. `NoReturn` rather than
-    # `Never`, which the floor interpreter's `typing` does not carry.
+    # schema names, so the schema is what travels.
     def __reduce__(self) -> NoReturn: ...
     def __copy__(self) -> Validator[_T]: ...
     def __deepcopy__(self, memo: object, /) -> Validator[_T]: ...
@@ -134,9 +141,11 @@ class Validator(Generic[_T]):
 # A union reads as its members' type where a checker solves one -- validators of
 # one type, for every checker -- and as `object` otherwise, which it always is
 # when a member is not a validator. A meet and a complement are sets the static
-# language does not spell, and a fixpoint is built by a call.
+# language does not spell, and a fixpoint is built by a call. The first
+# overload overlaps the last as the constructor's does, and its answer through
+# the last is true for the same reason.
 @overload
-def union(*schemas: Validator[_S]) -> Validator[_S]: ...
+def union(*schemas: Validator[_S]) -> Validator[_S]: ...  # pyright: ignore[reportOverlappingOverload]
 @overload
 def union(*schemas: object) -> Validator[object]: ...
 def intersection(*schemas: object) -> Validator[object]: ...
@@ -145,7 +154,7 @@ def recursive(builder: Callable[[Validator[Any]], object], /) -> Validator[objec
 
 anything: Validator[object]
 # The bottom: `is_valid` never answers `True` and `ensure` never returns.
-nothing: Validator[NoReturn]
+nothing: Validator[Never]
 
 MAX_SCHEMA_DEPTH: int
 MAX_DEFINITIONS: int

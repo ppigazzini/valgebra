@@ -608,7 +608,8 @@ PLANTS = (
         lambda tree: _edit(
             tree,
             "python/valgebra/_valgebra.pyi",
-            "@overload\ndef union(*schemas: Validator[_S]) -> Validator[_S]: ...\n"
+            "@overload\ndef union(*schemas: Validator[_S]) -> Validator[_S]: ..."
+            "  # pyright: ignore[reportOverlappingOverload]\n"
             "@overload\ndef union(*schemas: object)",
             "def union(*schemas: object)",
         ),
