@@ -17,6 +17,22 @@
 //!
 //! The mutation sweep skips it for the same reason, beside `lib.rs`, which it
 //! already skipped.
+//!
+//! **It is in the library because an example reaches only public items**, and a
+//! shape drives the walk and the frontend directly, which are the crate's own.
+//! A cargo feature could keep it out of the shipped extension and buys nothing:
+//! the release profile links with fat LTO and strips, and the library measures
+//! 3,526,472 bytes with this module and 3,524,136 without. The sweeps would
+//! still skip it by name, because `cargo mutants` reads the module tree from the
+//! source and offers a mutant in a file no build compiles.
+//!
+//! A shape that cannot build its value is a rig fault rather than a verdict, and
+//! a panic is how an instrument says so: the library's restriction lints admit
+//! `expect` here and nowhere else.
+#![expect(
+    clippy::expect_used,
+    reason = "a workload that cannot build its fixed value has measured nothing"
+)]
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyInt, PyList, PyModule, PyString};

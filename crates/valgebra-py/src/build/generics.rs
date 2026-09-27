@@ -421,21 +421,25 @@ pub(super) fn build_sequence(
     // a fixed prefix of the earlier elements. [T, ...] is the prefix-free case,
     // and [T, T, ...] is the non-empty list.
     if len >= 2 && is_ellipsis(&list.get_item(len - 1)?) {
-        let mut elements = Vec::with_capacity(len - 1);
-        for index in 0..len - 1 {
+        let mut element = |index| {
             let item = list.get_item(index)?;
             if is_ellipsis(&item) {
                 return Err(not_implemented(
                     "`...` may appear only as the last element of a list schema",
                 ));
             }
-            elements.push(build_schema(&item, lits, defs)?);
-        }
-        let tail = elements.pop().expect("at least one element precedes `...`");
-        let regex = if elements.is_empty() {
+            build_schema(&item, lits, defs)
+        };
+        // Built in order, prefix then tail, so the pool and the definitions
+        // fill as the annotation reads.
+        let prefix = (0..len - 2)
+            .map(&mut element)
+            .collect::<PyResult<Vec<_>>>()?;
+        let tail = element(len - 2)?;
+        let regex = if prefix.is_empty() {
             SeqShape::homogeneous(tail)
         } else {
-            SeqShape::prefix_tail(elements, tail)
+            SeqShape::prefix_tail(prefix, tail)
         };
         return Ok(Schema::list(regex));
     }
