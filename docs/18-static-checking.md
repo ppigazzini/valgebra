@@ -131,9 +131,12 @@ pyright accept.
 | `Literal[1.5]`, `Literal[(1, 2)]`, `Literal[obj]` | `Literal` takes an `int`, `str`, `bytes` or `bool` value, an enum member or `None` | the constant itself: `Validator(1.5)`, `union(1.5, "a")` |
 | `list[v]`, `dict[str, v]` for a validator `v` | a variable is not a type expression | the native forms `[v]` and `{str: v}` |
 | `{"name": str}` where a type is expected | a dict literal is not a type expression | a `TypedDict` class |
-| `tuple[int, v]` for a validator `v` | a variable is not a type expression | none; the line takes the checker's own ignore comment |
+| `count: v` for a validator `v`, as a class field | a variable is not a type expression | `count: Annotated[T, v]`, for a `T` holding every member of `v`: a checker reads `T` |
+| `tuple[int, v]` for a validator `v` | a variable is not a type expression | `tuple[int, Annotated[object, v]]`: `Annotated[object, v]` is `v` |
 
 ```python
+from typing import Annotated
+
 from valgebra import Validator, union
 
 v = Validator(int)
@@ -141,6 +144,8 @@ assert Validator(tuple[str, *tuple[int, ...]]).is_valid(("x", 1, 2))
 assert union(1.5, "a").is_valid(1.5)
 assert Validator([v]).is_valid([1, 2])
 assert Validator({str: v}).is_valid({"a": 1})
+assert Validator(Annotated[int, v]) == v
+assert Validator(tuple[int, Annotated[object, v]]).is_valid((1, 2))
 ```
 
 ## The ruff settings a validated class needs

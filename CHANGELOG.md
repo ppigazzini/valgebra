@@ -14,6 +14,7 @@ a caller cannot see: a step of the set representation that changed no
 answer of its own, or a repair to a change not yet released.
 
 - fix: a TypedDict is read against the sentinel its own implementation wrote
+- fix: a validator in Annotated metadata narrows the schema by its set
 
 -->
 
@@ -28,6 +29,13 @@ answer of its own, or a repair to a change not yet released.
   `extra_items=None`, which gives the extra values the type `None`, was read as
   no marker and admitted any extra value. Each spelling is read as it says,
   whichever implementation built the class.
+- **A validator in `Annotated` metadata narrows the schema.** `Annotated[int,
+  v]` for a compiled validator `v` was read as `int`: the validator was taken
+  for metadata nothing recognises and ignored, so a class field written to
+  refuse what `v` refuses admitted every `int`. It is the meet of the refined
+  base and `v`, the set `intersection(int, v)` builds, whether the validator is
+  written on its own, beside other markers or inside a grouped one; a static
+  checker reads the field as `int`.
 
 ## [0.0.14] - 2026-09-26
 

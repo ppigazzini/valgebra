@@ -1,12 +1,15 @@
 import enum
 import functools
 import operator
-from typing import Annotated
+from dataclasses import dataclass
+from typing import Annotated, Literal
 
 import annotated_types as at
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
-from valgebra import ValidationError, Validator, intersection, union
+from valgebra import ValidationError, Validator, complement, intersection, union
 
 
 def test_comparison_bounds() -> None:
@@ -194,6 +197,67 @@ def test_unrecognized_metadata_is_ignored() -> None:
     schema = Validator(Annotated[int, "documentation"])
     assert schema.is_valid(3)
     assert not schema.is_valid("x")
+
+
+#: Bases, validators and values whose memberships differ from one another.
+_BASES: tuple[object, ...] = (int, str, bool, float, list[int], type(None), object)
+_NARROWING = (
+    Validator(int),
+    Validator(str),
+    complement(bool),
+    intersection(int, complement(bool)),
+    union(int, str),
+    Validator(Literal[1, "a"]),
+)
+_VALUES: tuple[object, ...] = (0, 1, True, -1, 1.5, "a", "", None, [1], [], b"x")
+
+
+@given(
+    base=st.sampled_from(_BASES),
+    narrowing=st.sampled_from(_NARROWING),
+    value=st.sampled_from(_VALUES),
+)
+def test_a_validator_in_the_metadata_is_met_with_the_base(
+    base: object, narrowing: Validator, value: object
+) -> None:
+    """`Annotated[T, v]` denotes `T` met with `v`: metadata only narrows.
+
+    A validator is this library's own statement of a set, so it is not metadata
+    the typing spec says to ignore: ignored, it would widen the schema to `T` in
+    silence, which the refinements page refuses for any marker written to
+    narrow the schema it sits on.
+    """
+    annotated = Validator(Annotated[base, narrowing])  # ty: ignore[invalid-type-form]
+    assert annotated == intersection(base, narrowing)
+    assert annotated.is_valid(value) == (
+        Validator(base).is_valid(value) and narrowing.is_valid(value)
+    )
+
+
+def test_a_validator_in_a_type_has_a_spelling_a_checker_reads() -> None:
+    """The static-checking page's two replacements build the refused sets.
+
+    A validator where a type is expected is a variable to a checker. As
+    `Annotated` metadata it is not, and the set is the same: over a type holding
+    every member of `v` the meet is `v`, and over `object` it always is.
+    """
+    v = intersection(int, complement(bool))
+    assert Validator(Annotated[int, v]) == v
+    assert Validator(tuple[int, Annotated[object, v]]) == Validator(
+        tuple[int, v]  # ty: ignore[invalid-type-form]
+    )
+
+
+def test_a_field_narrowed_by_a_validator_keeps_its_type_and_its_set() -> None:
+    """A class field a checker reads as `int`, and a `bool` refused at runtime."""
+
+    @dataclass
+    class Row:
+        count: Annotated[int, intersection(int, complement(bool))]
+
+    rows = Validator(Row)
+    assert rows.is_valid(Row(3))
+    assert not rows.is_valid(Row(True))
 
 
 # --- What a decision query does to a predicate ---------------------------------

@@ -16,6 +16,7 @@ use valgebra_core::{
 };
 
 use super::{Pool, build_schema, not_implemented};
+use crate::validator::Validator;
 
 /// `numbers.Number`, the register a remainder's comparison and an order bound's
 /// both follow, resolved once per process.
@@ -45,13 +46,15 @@ pub(super) fn refuse_unordered_bound(attr: &str, bound: &Bound<'_, PyAny>) -> Py
     Ok(())
 }
 
-/// Build a Refine node from an `Annotated` base and its metadata markers.
+/// Build the schema an `Annotated` base and its metadata markers denote.
 ///
 /// Markers are read structurally (annotated-types style): an object exposing
 /// `ge`/`gt`/`le`/`lt` contributes a comparison bound, `min_length`/
 /// `max_length` contribute length bounds, and `func` (or a bare callable)
-/// contributes a predicate. Unrecognized metadata is ignored, per the typing
-/// spec. With no recognized constraint the base schema is returned as-is.
+/// contributes a predicate. A compiled validator contributes its set, and the
+/// schema is the meet of the refined base and every such set: metadata only
+/// narrows. Unrecognized metadata is ignored, per the typing spec. With no
+/// recognized constraint and no validator the base schema is returned as-is.
 pub(super) fn build_refine(
     base: &Bound<'_, PyAny>,
     metadata: &Bound<'_, PyTuple>,
@@ -60,13 +63,23 @@ pub(super) fn build_refine(
 ) -> PyResult<Schema> {
     let base_schema = build_schema(base, lits, defs)?;
     let mut constraints = Vec::new();
+    let mut sets = Vec::new();
     for marker in metadata.iter() {
-        parse_constraint(&marker, &mut constraints, lits)?;
+        parse_constraint(&marker, &mut constraints, &mut sets, lits)?;
     }
     for constraint in &constraints {
         check_constraint_fits(&base_schema, constraint, lits)?;
     }
-    Ok(Schema::refine(base_schema, constraints))
+    let refined = Schema::refine(base_schema, constraints);
+    if sets.is_empty() {
+        return Ok(refined);
+    }
+    let mut members = Vec::with_capacity(sets.len() + 1);
+    members.push(refined);
+    for set in &sets {
+        members.push(build_schema(set, lits, defs)?);
+    }
+    Ok(Schema::meet(members))
 }
 
 /// The group Python orders `operand` within, or `None` for a value of no group.
@@ -515,12 +528,13 @@ fn refuse_unnumbered_step(operand: &Bound<'_, PyAny>) -> PyResult<()> {
     )))
 }
 
-pub(super) fn parse_constraint(
-    marker: &Bound<'_, PyAny>,
+pub(super) fn parse_constraint<'py>(
+    marker: &Bound<'py, PyAny>,
     out: &mut Vec<Constraint>,
+    sets: &mut Vec<Bound<'py, PyAny>>,
     lits: &mut Pool,
 ) -> PyResult<()> {
-    parse_constraint_within(marker, out, lits, 0)
+    parse_constraint_within(marker, out, sets, lits, 0)
 }
 
 /// Whether this marker stands for the constraints it yields.
@@ -545,9 +559,10 @@ fn groups_other_markers(marker: &Bound<'_, PyAny>) -> bool {
 /// marker is several constraints, each read the way a marker written on its own
 /// is, so a group of groups terminates at [`MAX_GROUPING_DEPTH`] rather than at
 /// the stack.
-fn parse_grouped(
-    marker: &Bound<'_, PyAny>,
+fn parse_grouped<'py>(
+    marker: &Bound<'py, PyAny>,
     out: &mut Vec<Constraint>,
+    sets: &mut Vec<Bound<'py, PyAny>>,
     lits: &mut Pool,
     depth: u32,
 ) -> PyResult<()> {
@@ -559,17 +574,27 @@ fn parse_grouped(
         )));
     }
     for inner in marker.try_iter()? {
-        parse_constraint_within(&inner?, out, lits, depth + 1)?;
+        parse_constraint_within(&inner?, out, sets, lits, depth + 1)?;
     }
     Ok(())
 }
 
-fn parse_constraint_within(
-    marker: &Bound<'_, PyAny>,
+fn parse_constraint_within<'py>(
+    marker: &Bound<'py, PyAny>,
     out: &mut Vec<Constraint>,
+    sets: &mut Vec<Bound<'py, PyAny>>,
     lits: &mut Pool,
     depth: u32,
 ) -> PyResult<()> {
+    // A compiled validator is this library's own statement of a set, written to
+    // narrow the base. Read as metadata nothing recognises it would be ignored,
+    // and the schema would admit every value of the base in silence; it is kept
+    // for the caller to meet with the base, grouped or not. The class takes no
+    // subclass, so the exact type is the whole test.
+    if marker.is_exact_instance_of::<Validator>() {
+        sets.push(marker.clone());
+        return Ok(());
+    }
     // A class is metadata this frontend does not recognise, and the typing spec
     // says to ignore what a consumer does not recognise.
     //
@@ -724,7 +749,7 @@ fn parse_constraint_within(
         // Without the arm, a marker written this way is metadata the frontend
         // does not recognise, which the typing spec says to ignore -- leaving a
         // schema that admits everything the marker was written to exclude.
-        return parse_grouped(marker, out, lits, depth);
+        return parse_grouped(marker, out, sets, lits, depth);
     } else if out.len() == before && is_unhandled_constraint(marker) {
         return Err(not_implemented(&format!(
             "{} is a constraint this frontend does not check; a schema carrying \

@@ -915,6 +915,52 @@ fn a_protocol_is_read_only_where_it_carries_the_decorator() {
     });
 }
 
+/// A compiled validator in `Annotated` metadata narrows by its set: the schema is
+/// the meet of the refined base and the validator's set, written on its own,
+/// beside a bound, or yielded by a grouped marker.
+#[test]
+fn a_validator_in_the_metadata_is_met_with_the_base() {
+    Python::attach(|py| {
+        let namespace = namespace(py).expect("the corpus namespace builds");
+        let text = py
+            .get_type::<Validator>()
+            .call1((py.get_type::<pyo3::types::PyString>(),))
+            .expect("Validator(str) builds");
+        namespace
+            .set_item("text", text)
+            .expect("the namespace takes the validator");
+        for (expression, wanted) in [
+            ("typing.Annotated[int, text]", "intersection(int, str)"),
+            (
+                "typing.Annotated[int, at.Ge(0), text]",
+                "intersection(str, Annotated[int, Ge(0)])",
+            ),
+            (
+                "typing.Annotated[int, grouped(text)]",
+                "intersection(int, str)",
+            ),
+        ] {
+            let annotation = py
+                .eval(
+                    &CString::new(expression).expect("an expression with no interior nul"),
+                    Some(&namespace),
+                    None,
+                )
+                .unwrap_or_else(|error| panic!("{expression} did not evaluate: {error}"));
+            let mut pool = Pool::default();
+            let mut defs = Vec::new();
+            let schema = build_schema(&annotation, &mut pool, &mut defs)
+                .unwrap_or_else(|error| panic!("{expression} did not build: {error}"));
+            let active = RefCell::new(FxHashMap::default());
+            assert_eq!(
+                render(py, &schema, pool.items(), &defs, &active, 0),
+                wanted,
+                "{expression}"
+            );
+        }
+    });
+}
+
 /// `Validator[int]` is an annotation for a static checker, and a schema is refused
 /// it by name: the subscript is a `types.GenericAlias` whose origin is the class,
 /// which the dispatch reads as a parametrized form it does not know.

@@ -485,13 +485,44 @@ assert Validator(Account).is_valid({"balance": 100})
 assert not Validator(Account).is_valid({"balance": -1})
 ```
 
+## A validator narrows by its set
+
+A compiled validator in the metadata is a set, and `Annotated[T, v]` denotes the
+values of `T` that `v` admits: the meet of `T` and `v`, the set
+`intersection(T, v)` builds. Beside other markers it is met with the refined
+base, and a grouped marker that yields one is read the same way. This is the
+spelling for a class field whose set typing cannot express: a static checker
+reads the field as `T`, and the validator refuses what `v` refuses, in the Rust
+walk and not through a Python callback.
+
+```python
+from dataclasses import dataclass
+from typing import Annotated
+
+from valgebra import Validator, complement, intersection
+
+non_bool_int = intersection(int, complement(bool))
+
+
+@dataclass
+class Row:
+    count: Annotated[int, non_bool_int]
+
+
+rows = Validator(Row)
+assert rows.is_valid(Row(3))
+assert not rows.is_valid(Row(True))  # a bool is an int, and not a member
+assert Validator(Annotated[int, non_bool_int]) == intersection(int, non_bool_int)
+```
+
 ## Unrecognized markers
 
 Per the typing spec, metadata valgebra does not recognize as a constraint is
 ignored — so non-constraint `Annotated` metadata, such as a documentation string,
 is harmless and carries no membership meaning. The carve-out is the
 `annotated_types` vocabulary itself: a marker from there was written to narrow
-*this* schema, so one valgebra does not check is refused rather than ignored.
+*this* schema, so one valgebra does not check is refused rather than ignored. A
+validator is not unrecognized metadata at all: it narrows by its set, above.
 
 A **class** is among what is ignored. A marker carries its values on an
 instance — `Ge(0)` holds `ge = 0` — so the class itself holds no value to read

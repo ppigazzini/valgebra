@@ -29,6 +29,12 @@ one is the same trap a step later — `Kilograms(1.5)` constructs a unit marker
 rather than answering whether `1.5` belongs. Either way the schema ends up
 denoting nothing, so a class is metadata this frontend does not recognise.
 
+**A compiled validator narrows by its set**, and is read before any attribute:
+`build_refine` meets the refined base with every validator the metadata holds,
+grouped or not, so `Annotated[T, v]` is `intersection(T, v)`. It is this
+library's own statement of a set, written to narrow the base; ignored as
+unrecognised metadata, it would widen the schema to `T` in silence.
+
 The rest are read in this order:
 
 1. a marker that is itself callable — the marker becomes the predicate;
