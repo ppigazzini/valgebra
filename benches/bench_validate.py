@@ -3,7 +3,8 @@
 Each benchmark compiles a schema once and times a single boundary-crossing call
 (``is_valid``/``validate``) over a synthetic shape that stresses one cost
 dimension: large flat arrays, wide records, deep nesting, and union dispatch.
-Compilation cost is measured on its own.
+Compilation cost is measured on its own, and so is refusing a value, with its
+failures read and without.
 
 These are not collected by the default ``pytest`` run (``testpaths = tests``);
 run them with ``pytest benches/bench_validate.py`` after installing the
@@ -14,7 +15,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from valgebra import Validator, union
+from valgebra import ValidationError, Validator, union
 
 # Sizes chosen so each shape runs in microseconds-to-milliseconds and the
 # relative costs stay visible; they are recorded alongside results in the docs.
@@ -85,3 +86,27 @@ def test_union_dispatch(benchmark: object) -> None:
 def test_compile_wide_record(benchmark: object) -> None:
     schema = wide_record_schema(RECORD_WIDTH)
     benchmark(Validator, schema)
+
+
+def _refuse(validate: object, data: object, *, read: bool) -> object:
+    """Refuse `data`, then read the failures or only the summary."""
+    try:
+        validate(data)  # type: ignore[operator]
+    except ValidationError as err:
+        return len(err.errors) if read else str(err)
+    msg = "the value is refused"
+    raise AssertionError(msg)
+
+
+def test_error_summary_only(benchmark: object) -> None:
+    # Every element refused, and only the summary read: the rows are not built.
+    validate = Validator(list[int]).validate
+    data = [str(i) for i in range(ARRAY_LEN)]
+    benchmark(_refuse, validate, data, read=False)
+
+
+def test_error_rows_read(benchmark: object) -> None:
+    # The same refusal, with every row of the model read.
+    validate = Validator(list[int]).validate
+    data = [str(i) for i in range(ARRAY_LEN)]
+    assert benchmark(_refuse, validate, data, read=True) == ARRAY_LEN
