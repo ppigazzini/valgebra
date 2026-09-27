@@ -18,6 +18,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a union's report names a meet by what its members admit
 - fix: a fail-fast union report walks no branch past its first failure
 - fix: a fatal signal raised inside a key or a type probe propagates
+- fix: a list subclass is read for what it holds on every interpreter
 
 -->
 
@@ -59,6 +60,11 @@ answer of its own, or a repair to a change not yet released.
   through its storage or turned a JSON value into a Python object was read as a
   failed probe, so the check answered and the signal was lost. Each is
   re-raised, as one raised by a predicate is.
+- **A list subclass is judged by what it holds on every interpreter.** Below
+  Python 3.14, and on free-threaded builds, a list of scalars was read through a
+  copy that iterates it, so a subclass whose `__iter__` yields something other
+  than what it holds was judged by what it yields there and by what it holds on
+  3.14. Only an exact list is copied.
 
 ## [0.0.14] - 2026-09-26
 

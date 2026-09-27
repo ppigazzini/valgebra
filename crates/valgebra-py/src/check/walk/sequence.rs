@@ -64,10 +64,14 @@ pub(super) fn check_seq(
                 // read borrowed. The reading it answers about is the list as it
                 // was when the copy was taken, so the count is compared again
                 // afterwards and a value that moved reports the move, exactly as
-                // the in-place scan does. A copy the interpreter cannot make is
-                // not a verdict, and the walk reads in place instead, unless what
-                // stopped it is a fatal signal.
-                if snapshot_pays(list.len()) {
+                // the in-place scan does. Only an exact list is copied: a
+                // subclass's copy goes through its own `__iter__`, which need not
+                // yield what it holds, and the walk reads what a list holds on
+                // every interpreter. Copying an exact list runs no Python, so
+                // the copy fails only where the tuple cannot be allocated, and
+                // that `MemoryError` is a fatal signal: recorded, never an
+                // answer.
+                if snapshot_pays(list.len()) && list.is_exact_instance_of::<PyList>() {
                     match list.as_sequence().to_tuple() {
                         Ok(snapshot) => {
                             let ok = snapshot
@@ -82,11 +86,10 @@ pub(super) fn check_seq(
                                 mutated(value, frame)
                             };
                         }
-                        Err(err) if is_fatal(&err, list.py()) => {
+                        Err(err) => {
                             record_fatal(err, ctx);
                             return false;
                         }
-                        Err(_) => {}
                     }
                 }
                 let mut ok = true;

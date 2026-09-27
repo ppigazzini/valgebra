@@ -2209,6 +2209,40 @@ fn a_fatal_signal_propagates_from_a_key_and_from_a_type() {
     });
 }
 
+/// A list is read for what it holds on every interpreter, whatever its type's
+/// `__iter__` yields: the snapshot a narrow list is read through below 3.14 is
+/// taken of an exact list only.
+#[test]
+fn a_list_subclass_is_read_for_what_it_holds() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            std::ffi::CString::new(
+                "class Liar(list):\n\
+                 \x20   def __iter__(self):\n\
+                 \x20       return iter(['x'] * len(self))\n",
+            )
+            .expect("no interior nul")
+            .as_c_str(),
+            std::ffi::CString::new("liar.py")
+                .expect("no interior nul")
+                .as_c_str(),
+            std::ffi::CString::new("liar")
+                .expect("no interior nul")
+                .as_c_str(),
+        )
+        .expect("the module compiles");
+        let ints: Vec<i64> = (0..40).collect();
+        let liar = module
+            .getattr("Liar")
+            .expect("Liar")
+            .call1((ints,))
+            .expect("a list");
+        let schema = Schema::list(SeqShape::homogeneous(Schema::Int));
+        assert_eq!(decide_with_fatal(py, &schema, &liar, &[]), (true, false));
+    });
+}
+
 #[test]
 fn a_fatal_signal_propagates_from_an_attribute_and_from_a_predicate() {
     Python::attach(|py| {
