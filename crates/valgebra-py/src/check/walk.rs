@@ -630,16 +630,40 @@ fn push_branch_label_within(
         Schema::Instance(index) => out.push(class_name(*index, schema, ctx, py)),
         // A class with declared attributes is a meet of an atom and a record, and
         // the branch names the class the user wrote rather than the algebra's
-        // spelling of it.
-        Schema::Intersection(_) => match schema.object_class() {
+        // spelling of it. Any other meet names what each member admits.
+        Schema::Intersection(members) => match schema.object_class() {
             Some(class) => out.push(class_name(class, schema, ctx, py)),
-            None => out.push(schema.expected().to_owned()),
+            None => out.push(meet_label(members, ctx, py, unfolded)),
         },
         // A refinement's type is its base, matching `Schema::expected`; the
         // constraints report themselves when one of them is what failed.
         Schema::Refine { base, .. } => push_branch_label_within(base, ctx, py, out, unfolded),
         other => out.push(other.expected().to_owned()),
     }
+}
+
+/// Name a meet by what each of its members admits, joined with `and`:
+/// `int and not bool`, where the kind alone would say `intersection` and name no
+/// set. A member that is itself a union names its branches joined with `or`, in
+/// parentheses, so the meet stays one entry of the list it is a branch of.
+fn meet_label(members: &[Schema], ctx: Ctx<'_>, py: Python<'_>, unfolded: u32) -> String {
+    members
+        .iter()
+        .map(|member| {
+            let mut labels = BranchLabels::new();
+            push_branch_label_within(member, ctx, py, &mut labels, unfolded);
+            let mut joined = labels.rendered.join(" or ");
+            if labels.truncated {
+                joined.push_str(" or ...");
+            }
+            if labels.rendered.len() > 1 {
+                format!("({joined})")
+            } else {
+                joined
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" and ")
 }
 
 /// The pooled class's own name, falling back to the node's kind when the pool

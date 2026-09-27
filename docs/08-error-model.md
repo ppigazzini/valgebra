@@ -338,7 +338,7 @@ the only thing that failed:
 import enum
 from typing import Literal
 
-from valgebra import ValidationError, Validator, union
+from valgebra import ValidationError, Validator, complement, intersection, union
 
 
 class Backend(enum.Enum):
@@ -360,11 +360,15 @@ assert (
 assert expected_of(union(Backend, Literal["cpu"]), "arcfase") == (
     "one of: the literal 'cpu', Backend"
 )
+assert expected_of(union(str, intersection(int, complement(bool))), 1.5) == (
+    "one of: str, int and not bool"
+)
 ```
 
 A `Literal[...]` builds a union of its constants, so its branches are the
 constants and the message lists them. An `Enum` branch names the class, as it
-does alone.
+does alone. A meet names what each of its members admits, joined with `and`,
+and a class with declared attributes, which is a meet too, names the class.
 
 The list is bounded at 64 labels and ends in `...` beyond that, so a union wide
 enough to be a generated table reports a readable prefix. A branch that is itself

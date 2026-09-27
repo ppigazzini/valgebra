@@ -24,6 +24,7 @@ from valgebra import (
     ValidationError,
     Validator,
     complement,
+    intersection,
     recursive,
     union,
 )
@@ -108,6 +109,12 @@ def test_a_union_with_no_progress_still_reports_one_summary() -> None:
     errors = _errors(union(int, str), 1.5)
     assert [item["code"] for item in errors] == ["union_error"]
     assert errors[0]["expected"] == "one of: int, str"
+
+
+def test_a_meet_branch_is_named_by_what_its_members_admit() -> None:
+    """A branch names the set it expects; the word `intersection` names none."""
+    errors = _errors(union(str, intersection(int, complement(bool))), 1.5)
+    assert errors[0]["expected"] == "one of: str, int and not bool"
 
 
 def test_the_closest_branch_is_reported_where_one_descends() -> None:

@@ -15,6 +15,7 @@ answer of its own, or a repair to a change not yet released.
 
 - fix: a TypedDict is read against the sentinel its own implementation wrote
 - fix: a validator in Annotated metadata narrows the schema by its set
+- fix: a union's report names a meet by what its members admit
 
 -->
 
@@ -36,6 +37,10 @@ answer of its own, or a repair to a change not yet released.
   base and `v`, the set `intersection(int, v)` builds, whether the validator is
   written on its own, beside other markers or inside a grouped one; a static
   checker reads the field as `int`.
+- **A union's report names an intersection branch by what it admits.** The
+  branch was listed as the word `intersection`, which names no set; it lists
+  each member joined with `and`, as in `one of: str, int and not bool`, with a
+  member that is itself a union in parentheses.
 
 ## [0.0.14] - 2026-09-26
 

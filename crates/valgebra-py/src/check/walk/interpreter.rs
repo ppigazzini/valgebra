@@ -405,7 +405,7 @@ fn a_meet_stops_at_the_member_that_rejects_the_value() {
 /// A class branch names its class, and a class with declared attributes --
 /// the meet of an atom and a record -- names that same class rather than the
 /// algebra's spelling of it. A meet that is not an object has no class to
-/// name and falls back to its kind.
+/// name, and names each member instead: its kind would name no set.
 #[test]
 fn a_union_names_a_class_branch_by_its_class() {
     Python::attach(|py| {
@@ -429,6 +429,10 @@ fn a_union_names_a_class_branch_by_its_class() {
                 object,
                 Schema::Instance(ClassIx::new(1)),
                 Schema::meet([Schema::Int, Schema::Str]),
+                Schema::meet([
+                    Schema::union([Schema::Int, Schema::Str]),
+                    Schema::Bool.complement(),
+                ]),
             ]
             .into(),
         );
@@ -451,8 +455,8 @@ fn a_union_names_a_class_branch_by_its_class() {
         push_branch_label(&schema, ctx, py, &mut labels);
         assert_eq!(
             labels.render(),
-            "one of: Point, Other, intersection",
-            "an object meet names its class; any other meet names its kind"
+            "one of: Point, Other, int and str, (int or str) and not bool",
+            "an object meet names its class; any other meet names its members"
         );
     });
 }
