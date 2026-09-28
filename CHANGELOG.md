@@ -21,6 +21,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a list subclass is read for what it holds on every interpreter
 - fix: a marker class is refused with the spelling that was meant
 - fix: a length bound is read before the elements it bounds
+- fix: a reference nothing resolves is below a reference to the universe -- internal
 
 -->
 

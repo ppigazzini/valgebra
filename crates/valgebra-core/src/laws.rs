@@ -1804,6 +1804,64 @@ fn a_pair_only_the_supertype_settles() -> impl Strategy<Value = (Schema, Schema)
     })
 }
 
+/// A subject holding a reference past the end of the table, beside a literal.
+///
+/// **The reference** names a set no query can read, so the rule that unfolds
+/// the subject has no definition to descend into. **The literal** keeps the
+/// set reading out: lowering it takes a pool and `NoLeafRelations` has none,
+/// so the union as a whole goes to the rules. Without the literal the set
+/// reading decides the pair by itself -- it widens a reference it cannot
+/// resolve to the top, and the top is below the universe -- and the pair
+/// holds whatever the rules say, which is a law that cannot fail.
+///
+/// Each sits at a drawn depth of one-member unions, beside members that
+/// resolve or need no table, in a drawn order: the fuzzer's pair nested the
+/// reference three unions deep, and a rule that reads the top-level members
+/// alone is a rule about the spelling.
+fn a_subject_holding_a_reference_nothing_resolves() -> impl Strategy<Value = Schema> {
+    let nested = |leaf: BoxedStrategy<Schema>| {
+        (leaf, 0usize..4).prop_map(|(leaf, depth)| {
+            (0..depth).fold(leaf, |inner, _| Schema::Union(vec![inner].into()))
+        })
+    };
+    let unresolved = (2usize..6).prop_map(|i| Schema::Ref(DefIx::new(i)));
+    let literal = (0usize..3).prop_map(|i| Schema::Literal(ConstIx::new(i)));
+    let beside = prop_oneof![
+        Just(Schema::Str),
+        Just(Schema::Bool),
+        Just(Schema::Ref(DefIx::new(0))),
+        Just(Schema::Ref(DefIx::new(1))),
+    ];
+    (
+        nested(unresolved.boxed()),
+        nested(literal.boxed()),
+        prop::collection::vec(beside, 0..3),
+    )
+        .prop_flat_map(|(reference, literal, rest)| {
+            let mut members = vec![reference, literal];
+            members.extend(rest);
+            Just(members).prop_shuffle()
+        })
+        .prop_map(|members| Schema::Union(members.into()))
+}
+
+/// The universe as a definition spells it: the top, the gradual `Any`, and
+/// the top beside a member the fast region fold stops on, in either order.
+fn a_universe_spelling() -> impl Strategy<Value = Schema> {
+    let set_of_str = Schema::Coll {
+        container: CollKind::Set,
+        element: Arc::new(Schema::Str),
+    };
+    prop_oneof![
+        Just(Schema::ANYTHING),
+        Just(Schema::ANY),
+        Just(Schema::Union(
+            vec![Schema::ANYTHING, set_of_str.clone()].into()
+        )),
+        Just(Schema::Union(vec![set_of_str, Schema::ANYTHING].into())),
+    ]
+}
+
 /// A schema with a `Ref(0)` reachable somewhere inside it, for the
 /// guardedness property below: the reference is what the check looks for, so
 /// a generator that never produces one proves nothing.
@@ -1989,6 +2047,31 @@ proptest! {
             "the premise: {b:?} is the universe"
         );
         prop_assert!(a.is_subtype_of(&b), "{a:?} not below universal {b:?}");
+    }
+
+    /// The universe bound where the subject names a set **no table resolves**.
+    ///
+    /// The supertype is a reference whose definition is the universe, so the
+    /// bound is read by unfolding the *supertype*, and that reading needs
+    /// nothing from the subject -- every set is below the universe, one nobody
+    /// can read included. The premise is a proof of emptiness under the same
+    /// table, so the conclusion is the completeness claim the fuzz target
+    /// asserts of every pair it draws, where it found the reference declined.
+    #[test]
+    fn a_reference_to_the_universe_bounds_a_subject_no_table_resolves(
+        a in a_subject_holding_a_reference_nothing_resolves(),
+        universe in a_universe_spelling(),
+    ) {
+        let defs = [Schema::Int, universe];
+        let b = Schema::Ref(DefIx::new(1));
+        prop_assert!(
+            Schema::Complement(Arc::new(b.clone())).is_empty_under(&defs),
+            "the premise: {b:?} is the universe under {defs:?}"
+        );
+        prop_assert!(
+            a.is_subtype_of_under(&b, &NoLeafRelations, &defs),
+            "{a:?} not below universal {b:?} under {defs:?}"
+        );
     }
 
     #[test]

@@ -928,6 +928,19 @@ impl Schema {
             // than the reference being unfolded past it. A union member reaches
             // this arm on its own; a meet the member rule does not place reaches
             // the same reading from its arm above.
+            //
+            // A reference the table does not hold names a set this query cannot
+            // read, so no rule about the subject has anything to say -- and the
+            // supertype's rule still does. A reference on the right denotes
+            // exactly its definition, so a subject below the definition is below
+            // the reference whatever the subject is: every set is below the
+            // universe, one nobody can read included. A reference that resolves
+            // reaches that rule through its definition's own descent, so it is
+            // asked here only where the unfolding has no definition to descend
+            // into, and a pair of declines is not decided twice.
+            (Schema::Ref(id), _) if cx.defs.get(id.get()).is_none() => {
+                self.below_a_reference(other, cx, assumptions)
+            }
             (Schema::Ref(_), _) => self.left_reduces_below(other, cx, assumptions),
             (_, Schema::Ref(_)) => self.below_a_reference(other, cx, assumptions),
             // Set and frozenset inclusion reduces to element inclusion.

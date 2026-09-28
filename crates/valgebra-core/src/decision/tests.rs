@@ -74,6 +74,56 @@ fn every_set_is_below_the_universe_however_it_is_spelled() {
     }
 }
 
+/// A reference no definition resolves is below a reference to the universe.
+///
+/// The unresolved reference names a set this query cannot read, so the rule
+/// that unfolds the subject has nothing to unfold -- and the rule that unfolds
+/// the supertype needs nothing read: every set is below the universe. The set
+/// reading decided the pair alone and missed it beside a literal, which the
+/// pool has to lower and `NoLeafRelations` cannot, so the union came back
+/// undecided while the complement of its supertype was proven empty. The
+/// nightly fuzzer drew the union.
+#[test]
+fn an_unresolved_reference_is_below_a_reference_to_the_universe() {
+    let defs = [Schema::Int, Schema::ANYTHING];
+    let rules = |sub: &Schema, sup: &Schema| {
+        sub.is_subtype_rec(
+            sup,
+            SubtypeCx {
+                oracle: &NoLeafRelations,
+                defs: &defs,
+                budget: &Cell::new(DECISION_BUDGET),
+            },
+            &mut Vec::new(),
+        )
+    };
+    let unresolved = Schema::Ref(DefIx::new(2));
+    let universe = Schema::Ref(DefIx::new(1));
+    assert!(
+        Schema::Complement(Arc::new(universe.clone())).is_empty_under(&defs),
+        "the premise: the supertype is the universe"
+    );
+
+    // By the rules, since the set reading is not there to decide it beside a
+    // member it cannot lower.
+    assert_eq!(rules(&unresolved, &universe), Relation::Holds);
+    let drawn = Schema::Union(vec![Schema::Literal(ConstIx::new(1)), unresolved.clone()].into());
+    assert_eq!(
+        drawn.subtype_relation_under(&universe, &NoLeafRelations, &defs),
+        Relation::Holds
+    );
+
+    // A set nobody can read is below no set but the universe, and refuted by
+    // none: the supertype's rule reads the supertype, and an integer is not
+    // every set.
+    let int = Schema::Ref(DefIx::new(0));
+    assert_eq!(rules(&unresolved, &int), Relation::Unknown);
+    assert_eq!(
+        drawn.subtype_relation_under(&int, &NoLeafRelations, &defs),
+        Relation::Unknown
+    );
+}
+
 /// A refinement carrying no constraint is decided as the base it names, on
 /// whichever side of the pair it sits.
 ///

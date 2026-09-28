@@ -766,6 +766,24 @@ nightly laws lane drew the pair with a literal subject the descriptor cannot
 lower, and `a_union_of_complements_covers_the_universe_where_their_inners_are_disjoint`
 in `decision/tests.rs` keeps it.
 
+**The universe bound is read through a reference on the right even where the
+subject is a set nobody can read.** A reference past the end of the table names
+a set no query can read, so the rule a reference on the left takes -- unfold it
+-- has no definition to descend into. The rule for a reference on the right
+asks nothing of the subject: the reference denotes exactly its definition, and a
+definition that is the universe bounds every set. A reference that resolves
+reaches that rule through its definition's own descent, so it is asked directly
+only where the subject's unfolding has nothing to unfold, and a pair both rules
+decline is not decided twice against the shared budget. The set reading decided
+the pair alone, since it widens a reference it cannot resolve to the top, and
+missed it beside a literal it could not lower: `Literal[1] | R₂ ⊆ R₁`, with `R₁`
+the universe and `R₂` past the table, declined while `¬R₁` was proven empty.
+The nightly fuzzer drew it, `fuzz/seeds/decision/` keeps the input, and
+`a_reference_to_the_universe_bounds_a_subject_no_table_resolves` in `laws.rs`
+draws the family. A finished validator carries no such reference -- `pruned`
+keeps what the schema reaches and nothing it names is dropped -- so no answer a
+caller can ask for moves.
+
 ## Two more places a shape stood in for the question
 
 The bounds were not the only ones, and the same search found the rest.
