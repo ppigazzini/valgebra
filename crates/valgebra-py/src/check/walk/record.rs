@@ -764,7 +764,7 @@ pub(super) fn keyed_map_explain(
             // value violations against it (the homogeneous-mapping error). The
             // two are two failures, so a mode that stops at the first reports
             // the key alone.
-            frame.path.push(key_segment(key));
+            frame.path.push(key_segment(key, ctx));
             member(&clause.key, &Value::Py(key), frame);
             if !ctx.mode.stops_at_first() || frame.out.is_empty() {
                 member(&clause.value, &Value::Py(val), frame);
@@ -777,7 +777,7 @@ pub(super) fn keyed_map_explain(
             // one spelled like it.
             frame.out.push(at_key(
                 frame.path,
-                key_segment(key),
+                key_segment(key, ctx),
                 EXTRA_FORBIDDEN,
                 "no unexpected key".to_owned(),
                 summarize_value(&Value::Py(key), ctx),

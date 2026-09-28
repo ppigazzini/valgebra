@@ -28,6 +28,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a step dividing another is not read across kinds of number
 - fix: one dict key cannot witness two clauses of a union
 - fix: a pattern that parses only once anchored is refused
+- fix: a fatal signal from any part of a message propagates
 
 -->
 
@@ -127,6 +128,13 @@ answer of its own, or a repair to a change not yet released.
   escaped both anchors and admitted `"xxb"`. A pattern is parsed on its own
   before it is anchored, and one that does not parse raises the build's
   `invalid regular expression` error.
+- **A fatal signal from any part of a message propagates.** A
+  `KeyboardInterrupt` from the `__repr__` of the constant a literal names, of a
+  bound or step a value missed, of a value a constraint refused, of a key the
+  path names by its repr, or from a metaclass answering `__name__`, read as
+  `<unrepresentable>` in a `ValidationError`. The value refused by its kind was
+  the one site that carried it out. Every part of a message the walk renders
+  raises the signal out of `validate`.
 
 ## [0.0.14] - 2026-09-26
 

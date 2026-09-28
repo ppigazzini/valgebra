@@ -17,13 +17,17 @@ the sentence the page wrote the rule for.
 from __future__ import annotations
 
 import re
+import typing
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Literal
 
 import annotated_types as at
 import pytest
 
 from valgebra import ValidationError, Validator, union
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -172,6 +176,69 @@ def test_a_fatal_signal_raised_while_a_message_is_built_propagates() -> None:
     # signal has no site to arise at. That is the answer, not a fold: the
     # membership question was decided without the `__repr__` being called.
     assert Validator(int).is_valid(Unrepresentable()) is False
+
+
+class _Loud:
+    """An object whose `repr` is interrupted, as a Ctrl-C mid-message is."""
+
+    def __repr__(self) -> str:
+        raise KeyboardInterrupt
+
+
+class _LoudInt(int):
+    """An `int` whose `repr` is interrupted."""
+
+    def __repr__(self) -> str:
+        raise KeyboardInterrupt
+
+
+class _LoudMeta(type):
+    """A metaclass that answers `__name__` with an interrupt once asked to."""
+
+    def __getattribute__(cls, name: str) -> object:
+        if name == "__name__" and type.__getattribute__(cls, "loud"):
+            raise KeyboardInterrupt
+        return super().__getattribute__(name)
+
+
+class _LoudlyNamed(metaclass=_LoudMeta):
+    loud = False
+
+
+# Each case is built inside the test, since pytest prints a failing test's
+# arguments and printing one of these raises the signal the test is about.
+_MESSAGE_SITES: dict[str, Callable[[], tuple[object, object]]] = {
+    "the-constant-a-literal-names": lambda: (Literal[_Loud()], 1),  # ty: ignore[invalid-type-form]
+    "a-literal-branch-of-a-union": lambda: (union(Literal[_Loud()], str), 1),  # ty: ignore[invalid-type-form]
+    "the-value-a-bound-refuses": lambda: (Annotated[int, at.Ge(10)], _LoudInt(1)),
+    "the-bound-a-value-misses": lambda: (Annotated[int, at.Ge(_LoudInt(11))], 1),
+    "the-step-a-value-misses": lambda: (Annotated[int, at.MultipleOf(_LoudInt(3))], 1),
+    "a-key-the-path-names": lambda: (dict[object, int], {_Loud(): "x"}),
+}
+
+
+@pytest.mark.parametrize("site", _MESSAGE_SITES)
+def test_a_fatal_signal_from_any_part_of_a_message_propagates(site: str) -> None:
+    """The constant, the bound, the key and the value are all asked to render."""
+    # `typing` memoises `Annotated` by equality, and `Ge(_LoudInt(11))` equals
+    # `Ge(11)`, so a form another test built would stand in for this one.
+    for cleanup in getattr(typing, "_cleanups", ()):
+        cleanup()
+    schema, value = _MESSAGE_SITES[site]()
+    validator = Validator(schema)
+    with pytest.raises(KeyboardInterrupt):
+        validator.validate(value)
+
+
+def test_a_fatal_signal_from_a_class_name_propagates() -> None:
+    """A metaclass answering `__name__` runs code, and its signal is carried out."""
+    validator = Validator(_LoudlyNamed)
+    _LoudlyNamed.loud = True
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            validator.validate(1)
+    finally:
+        _LoudlyNamed.loud = False
 
 
 def test_an_ordinary_exception_from_a_repr_is_folded_into_the_summary() -> None:

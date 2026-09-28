@@ -2,14 +2,15 @@
 
 use std::sync::Arc;
 
+use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::{PyInt, PyString};
 use valgebra_core::{PathSegment, Schema, Violation};
 
 use crate::check::ctx::Ctx;
-use crate::check::walk::{is_fatal, record_fatal};
+use crate::check::walk::record_if_fatal;
 use crate::codes::Code;
-use crate::errors::{summarize, try_summarize};
+use crate::errors::try_summarize;
 use crate::input::Value;
 
 /// A type/value mismatch for a leaf schema.
@@ -92,21 +93,48 @@ pub(crate) fn at_key(
 
 /// A short repr-style summary of a value, materializing a JSON value first.
 pub(crate) fn summarize_value(value: &Value<'_, '_>, ctx: Ctx<'_>) -> String {
-    let Ok(obj) = value.to_python() else {
-        return "<unrepresentable>".to_owned();
-    };
-    match try_summarize(&obj) {
-        Ok(text) => text,
+    match value.to_python() {
+        Ok(obj) => summarize_in(&obj, ctx),
         Err(err) => {
-            // A `__repr__` that raises an ordinary exception is a value that
-            // cannot render, and the message says so. One that raises a fatal
-            // signal is the interpreter unwinding, and the walk carries it out
-            // rather than folding it into a summary -- which is the rule at
-            // every other site a value answers a question.
-            if is_fatal(&err, obj.py()) {
-                record_fatal(err, ctx);
-            }
-            "<unrepresentable>".to_owned()
+            record_if_fatal(err, value.py(), ctx);
+            UNREPRESENTABLE.to_owned()
+        }
+    }
+}
+
+/// What a message says of an object that cannot render.
+const UNREPRESENTABLE: &str = "<unrepresentable>";
+
+/// A short repr-style summary of an object a message the walk builds names:
+/// the value, a constant, a bound, a key.
+///
+/// A `__repr__` that raises an ordinary exception is an object that cannot
+/// render, and the message says so. One that raises a fatal signal is the
+/// interpreter unwinding, and the walk carries it out rather than folding it
+/// into a summary -- which is the rule at every other site an object answers a
+/// question.
+pub(crate) fn summarize_in(obj: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> String {
+    try_summarize(obj).unwrap_or_else(|err| {
+        record_if_fatal(err, obj.py(), ctx);
+        UNREPRESENTABLE.to_owned()
+    })
+}
+
+/// A class's name for a message the walk builds, or its summary where the
+/// name is not a string.
+///
+/// [`summarize_in`]'s rule for the name as well as the repr: a metaclass may
+/// answer `__name__` by running code, and a fatal signal it raises is carried
+/// out rather than read as a class with no name.
+pub(crate) fn class_label_in(class: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> String {
+    match class.getattr(intern!(class.py(), "__name__")) {
+        Ok(name) => match name.extract::<String>() {
+            Ok(text) => text,
+            Err(_) => summarize_in(class, ctx),
+        },
+        Err(err) => {
+            record_if_fatal(err, class.py(), ctx);
+            summarize_in(class, ctx)
         }
     }
 }
@@ -123,7 +151,7 @@ pub(crate) fn summarize_value(value: &Value<'_, '_>, ctx: Ctx<'_>) -> String {
 ///
 /// A `bool` is an `int` in Python and not a key anybody indexes by number, so it
 /// takes the repr path with the rest.
-pub(crate) fn key_segment(key: &Bound<'_, PyAny>) -> PathSegment {
+pub(crate) fn key_segment(key: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> PathSegment {
     if let Ok(text) = key.cast::<PyString>() {
         return PathSegment::Key(Arc::from(text.to_cow().unwrap_or_default().as_ref()));
     }
@@ -138,5 +166,5 @@ pub(crate) fn key_segment(key: &Bound<'_, PyAny>) -> PathSegment {
             return PathSegment::BigIntKey(digits.to_string());
         }
     }
-    PathSegment::Key(Arc::from(summarize(key).as_str()))
+    PathSegment::Key(Arc::from(summarize_in(key, ctx).as_str()))
 }

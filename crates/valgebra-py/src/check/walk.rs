@@ -41,12 +41,11 @@ use valgebra_core::{
 };
 
 use crate::check::ctx::{Ctx, Entered, MAX_RECURSION_DEPTH, MAX_WALK_DEPTH, WalkMode};
-use crate::check::violation::{summarize_value, type_mismatch};
+use crate::check::violation::{class_label_in, summarize_in, summarize_value, type_mismatch};
 use crate::codes::{
     Code, INSTANCE_TYPE, MUTATED_DURING_VALIDATION, PREDICATE_ERROR, RECURSION_LIMIT,
     RECURSION_LOOP, UNEXPECTED_MATCH, UNION_ERROR, UNRESOLVED_RECURSION,
 };
-use crate::errors::{class_label, summarize};
 use crate::input::Value;
 
 mod record;
@@ -639,7 +638,7 @@ fn push_branch_label_within(
         Schema::Literal(index) => {
             let label = const_at(ctx, *index, py).map_or_else(
                 || schema.expected().to_owned(),
-                |c| format!("the literal {}", summarize(c)),
+                |c| format!("the literal {}", summarize_in(c, ctx)),
             );
             out.push(label);
         }
@@ -685,7 +684,8 @@ fn meet_label(members: &[Schema], ctx: Ctx<'_>, py: Python<'_>, unfolded: u32) -
 /// The pooled class's own name, falling back to the node's kind when the pool
 /// cannot be read.
 fn class_name(index: ClassIx, schema: &Schema, ctx: Ctx<'_>, py: Python<'_>) -> String {
-    class_at(ctx, index, py).map_or_else(|| schema.expected().to_owned(), |c| class_label(c))
+    class_at(ctx, index, py)
+        .map_or_else(|| schema.expected().to_owned(), |c| class_label_in(c, ctx))
 }
 
 /// Whether this code says the *walk* stopped rather than that a value is outside
@@ -922,7 +922,7 @@ fn check_instance(index: ClassIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '
     if !ok && ctx.mode.explains() {
         frame.out.push(type_mismatch(
             INSTANCE_TYPE,
-            &class_label(class),
+            &class_label_in(class, ctx),
             value,
             frame.path,
             ctx,

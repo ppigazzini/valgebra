@@ -22,12 +22,12 @@ use super::{
 };
 use crate::check::ctx::Ctx;
 use crate::check::index::compile_pattern;
-use crate::check::violation::{mismatch, summarize_value};
+use crate::check::violation::{mismatch, summarize_in, summarize_value};
 use crate::codes::{
     Code, GREATER_THAN, GREATER_THAN_EQUAL, LESS_THAN, LESS_THAN_EQUAL, LITERAL_ERROR, MULTIPLE_OF,
     PREDICATE_ERROR, PREDICATE_FAILED, STRING_PATTERN_MISMATCH, TOO_LONG, TOO_SHORT,
 };
-use crate::errors::{SUMMARY_CHARS, shorten, summarize};
+use crate::errors::{SUMMARY_CHARS, shorten};
 use crate::input::Value;
 
 /// A schema whose membership is decided by the value alone.
@@ -170,7 +170,7 @@ pub(super) fn check_literal(
         frame.out.push(Violation {
             code: LITERAL_ERROR.as_str(),
             path: frame.path.clone(),
-            expected: format!("the literal {}", summarize(literal)),
+            expected: format!("the literal {}", summarize_in(literal, ctx)),
             value_summary: summarize_value(value, ctx),
         });
     }
@@ -473,11 +473,11 @@ enum Expected<'py> {
 
 impl Expected<'_> {
     /// Render the message. Called once per recorded violation, never per check.
-    fn render(&self) -> String {
+    fn render(&self, ctx: Ctx<'_>) -> String {
         match self {
-            Self::Order(symbol, operand) => format!("{symbol} {}", summarize(operand)),
+            Self::Order(symbol, operand) => format!("{symbol} {}", summarize_in(operand, ctx)),
             Self::Length(symbol, n) => format!("length {symbol} {n}"),
-            Self::Multiple(operand) => format!("a multiple of {}", summarize(operand)),
+            Self::Multiple(operand) => format!("a multiple of {}", summarize_in(operand, ctx)),
             Self::Pattern(pattern) => format!("a string matching {pattern:?}"),
             Self::Fixed(text) => (*text).to_owned(),
             Self::Raised(error) => {
@@ -615,7 +615,7 @@ fn check_constraint<'py>(
         }
     };
     if !ok && ctx.mode.explains() {
-        record_failure(code, &expected, summarize(value), frame);
+        record_failure(code, &expected, summarize_in(value, ctx), frame);
     }
     ok
 }
@@ -633,7 +633,7 @@ fn record_failure(
     frame.out.push(Violation {
         code: code.as_str(),
         path: frame.path.clone(),
-        expected: expected.render(),
+        expected: expected.render(frame.ctx),
         value_summary,
     });
 }

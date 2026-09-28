@@ -90,6 +90,14 @@ records a fatal signal through `record_if_fatal`. A key's `__eq__` or a
 metaclass runs caller code exactly as a predicate does, and a signal raised
 there is re-raised the same way.
 
+**A message is such a reading.** Explaining a failure renders the value, the
+constant a literal names, the bound or step a value missed, a key the path
+names by its repr, and a class's name, and each of those runs caller code.
+`summarize_in` and `class_label_in` in `check/violation.rs` are the walk's two
+ways to render one: an ordinary exception reads as `<unrepresentable>`, and a
+fatal signal is recorded for the entry point to raise. The `summarize` in
+`errors.rs` folds both, and is for the build and `repr`, where no walk runs.
+
 Each disjunct needs its own test case: a mutation collapsing the classifier to
 one of them is invisible to a corpus that only raises `KeyboardInterrupt`.
 

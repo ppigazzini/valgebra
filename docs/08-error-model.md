@@ -215,7 +215,10 @@ attribute access included. A base exception that is not an ordinary exception
 (`KeyboardInterrupt`, `SystemExit`, `GeneratorExit`), or a `MemoryError` or
 `RecursionError`, means the interpreter is unwinding, not that the value is a
 non-member, so it propagates out of `validate`/`is_valid` rather than being
-reported as "not a member" or a `predicate_error`.
+reported as "not a member" or a `predicate_error`. Building a message is one of
+those sites: a `__repr__` of the value, of a constant or bound the message
+names, or of a key in the path, and a class's `__name__`, raise the signal out
+of `validate` rather than reading as `<unrepresentable>`.
 
 ## The model is built when it is asked for
 
