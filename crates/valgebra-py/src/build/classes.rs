@@ -22,8 +22,8 @@ use super::generics::is_field_qualifier;
 use super::{MAX_BUILD_DEPTH, Pool, build_schema, forms, not_implemented};
 use crate::errors::summarize;
 
-/// `dataclasses.is_dataclass`, held apart from [`Forms`] and resolved on the
-/// first class node that reaches the question.
+/// `dataclasses.is_dataclass`, held apart from [`Forms`](super::Forms) and
+/// resolved on the first class node that reaches the question.
 ///
 /// Not in the cache beside the other forms, because that cache is built the
 /// first time anything is compiled and `dataclasses` is a module most programs
@@ -199,8 +199,9 @@ pub(super) fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &Bound<'_, PyString>)
 /// Resolve a class's type hints with `Annotated` metadata preserved.
 ///
 /// `include_extras=True` keeps `Annotated[...]` field types intact so a field's
-/// refinement markers reach [`build_refine`]; without it `get_type_hints` strips
-/// the metadata and the field's constraints are silently lost.
+/// refinement markers reach [`build_refine`](super::refine::build_refine);
+/// without it `get_type_hints` strips the metadata and the field's constraints
+/// are silently lost.
 ///
 /// **The annotations as written are the answer wherever evaluation would hand
 /// each one back unchanged**, and [`annotations_as_written`] reads them without

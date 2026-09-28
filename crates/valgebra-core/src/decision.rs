@@ -1137,7 +1137,9 @@ impl Schema {
             .holds()
     }
 
-    /// The three-valued form of [`is_equivalent_under`], on the caller's budget.
+    /// The three-valued form of
+    /// [`is_equivalent_under`](Self::is_equivalent_under), on the caller's
+    /// budget.
     ///
     /// Equivalence is the meet of two inclusions, taken in the vocabulary both
     /// of them answer in: mutual inclusion, and the conjunction's own short

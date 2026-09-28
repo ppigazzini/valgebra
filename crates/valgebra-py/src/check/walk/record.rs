@@ -94,9 +94,8 @@ pub(super) fn scan_dict<'py>(
 /// The guard is the one the deciding walk already applies to itself: the entry
 /// count. A value that changed size between the passes resumes from the start,
 /// and one that changed a *value* without changing its size is what
-/// [`mutated`](super::mutated) is for -- the explaining walk then finds nothing
-/// and says so, which is a truer report than a violation about a value that has
-/// moved on.
+/// [`mutated`] is for -- the explaining walk then finds nothing and says so,
+/// which is a truer report than a violation about a value that has moved on.
 #[derive(Default)]
 pub(super) struct Decided {
     /// The dict's entry count when the deciding walk read it.
@@ -370,9 +369,10 @@ fn keyed_map_asks_for_its_keys(
 /// undeclared key is rejected; an open record's `anything` clause covers it.
 ///
 /// The declared-field lookup comes from the validator's precomputed
-/// [`RecordIndex`] when present, so a wide record skips rebuilding its name map
-/// on every call; a record not in the index (an empty one, or a node the
-/// build-time traversal did not reach) falls back to building the map here.
+/// [`RecordIndex`](crate::check::index::RecordIndex) when present, so a wide
+/// record skips rebuilding its name map on every call; a record not in the
+/// index (an empty one, or a node the build-time traversal did not reach) falls
+/// back to building the map here.
 fn keyed_map_matches_py(
     fields: &[Field],
     defaults: &[MapClause],

@@ -200,8 +200,8 @@ fn base_iter(py: Python<'_>, base: Base) -> PyResult<&'static Py<PyAny>> {
 ///
 /// The walk counts what the value holds, which is the storage rather than the
 /// answer `__len__` gives -- a subclass may override it and say anything, and
-/// [`scalar::stored_len`] has refused to believe it since a length marker and
-/// the shape beside it described two different sets.
+/// [`stored_len`](scalar::stored_len) has refused to believe it since a length
+/// marker and the shape beside it described two different sets.
 ///
 /// The C accessor is not the way to read the storage either. `PyTuple_Size`
 /// reads it on `CPython`; `PyPy`'s `cpyext` implements it *through the object's
@@ -397,7 +397,8 @@ fn operand_at<'a, 'py>(
     pool_slot(ctx, index.get(), py)
 }
 
-/// The callable behind a [`Constraint::Predicate`].
+/// The callable behind a
+/// [`Constraint::Predicate`](valgebra_core::Constraint::Predicate).
 fn predicate_at<'a, 'py>(
     ctx: Ctx<'a>,
     index: PredIx,

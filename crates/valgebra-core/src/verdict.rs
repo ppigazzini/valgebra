@@ -221,7 +221,15 @@ impl Relation {
         }
     }
 
-    /// Any item, with [`Relation::or`]'s propagation of a decline.
+    /// Any item, proved by any one proof and refuted only by all of them.
+    ///
+    /// The items are alternatives for one claim about one pair -- a meet below
+    /// a supertype through any one of its members, a field covered by any one
+    /// of the clauses whose key admits it -- so a proof from any one of them
+    /// is a proof, whatever the others answer. A decline is not an answer, so
+    /// it cannot end the fold, and it keeps a fold that found no proof from
+    /// reading as a refutation: the alternative that declined may be the one
+    /// that holds.
     #[inline]
     pub(crate) fn any(items: impl IntoIterator<Item = Relation>) -> Relation {
         let mut declined = false;

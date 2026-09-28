@@ -100,10 +100,10 @@ pub(super) fn scalar_admits(kind: Scalar, value: &Value<'_, '_>) -> bool {
 ///
 /// **The depth is read, and the level is not held.** Every element sits one
 /// level below the container, and the explaining walk reaches each through
-/// [`member`](super::member), which takes that level and refuses at the bound.
-/// The two must refuse together, so this declines to the general path wherever
-/// no level is available and lets that path refuse. Holding one is what a
-/// caller that can descend needs, and a scalar cannot.
+/// [`member`], which takes that level and refuses at the bound. The two must
+/// refuse together, so this declines to the general path wherever no level is
+/// available and lets that path refuse. Holding one is what a caller that can
+/// descend needs, and a scalar cannot.
 #[inline]
 pub(super) fn homogeneous_scalar(
     prefix: &[Schema],
@@ -434,7 +434,7 @@ const SIZED: [Sized; 7] = [
 /// An object that is none of these -- one with a `__len__` and no builtin
 /// container behind it -- answers for itself, because there is no storage to
 /// read past it and `__len__` is the whole of what it holds.
-fn stored_len(value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> PyResult<usize> {
+pub(super) fn stored_len(value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> PyResult<usize> {
     for sized in &SIZED {
         if (sized.is_exact)(value) {
             return value.len();

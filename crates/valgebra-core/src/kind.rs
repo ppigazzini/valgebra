@@ -154,8 +154,9 @@ impl Regions {
     /// A region set is held only when the schema names it *exactly*, so an empty
     /// one is a proof of emptiness and a non-empty one is a proof of inhabitance.
     /// That is the whole payoff of the exactness condition
-    /// [`Schema::atom_region`] carries: on the scalar-decidable fragment the fold
-    /// answers both directions, not just the one.
+    /// [`Schema::atom_region`](crate::Schema::atom_region) carries: on the
+    /// scalar-decidable fragment the fold answers both directions, not just the
+    /// one.
     pub(crate) const fn verdict(self) -> Verdict {
         match self {
             Regions::Known(regions) if regions.is_empty() => Verdict::Empty,
@@ -248,11 +249,11 @@ impl Kind {
     /// The regions a value of a schema *tagged* this kind may be in.
     ///
     /// A kind's own region, with one exception, and it is the exception
-    /// [`Schema::atom_region`] already names from the other side: `bool`
-    /// subclasses `int`, so a schema whose values are integers admits both
-    /// regions and a refinement over `int` holds `False`. Reading `Int` as its
-    /// own region alone would refute `bool` against a bounded `int`, which is
-    /// a value the pair has.
+    /// [`Schema::atom_region`](crate::Schema::atom_region) already names from
+    /// the other side: `bool` subclasses `int`, so a schema whose values are
+    /// integers admits both regions and a refinement over `int` holds `False`.
+    /// Reading `Int` as its own region alone would refute `bool` against a
+    /// bounded `int`, which is a value the pair has.
     pub(crate) const fn admitted_regions(self) -> Region {
         match self {
             Kind::Int => Kind::Bool.region().union(Kind::Int.region()),

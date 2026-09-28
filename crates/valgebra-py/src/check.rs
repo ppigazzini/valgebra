@@ -2,18 +2,19 @@
 //!
 //! [`member`] is the single walk. It returns whether the value belongs to the
 //! schema's set, and in an *explain* mode (`ctx.mode`) it also aggregates a
-//! [`Violation`] for each independent failure into `out` (each record field,
-//! each sequence element, each mapping entry), unless the fail-fast mode stops it
-//! at the first. In *fast* mode it builds no violation, path or value summary and
-//! short-circuits as soon as membership is decided; storage a reading needs for
-//! itself is allocated at the site that says why. One walk serves both, so there
-//! is no second walk to keep in sync.
+//! [`Violation`](valgebra_core::Violation) for each independent failure into
+//! `out` (each record field, each sequence element, each mapping entry), unless
+//! the fail-fast mode stops it at the first. In *fast* mode it builds no
+//! violation, path or value summary and short-circuits as soon as membership is
+//! decided; storage a reading needs for itself is allocated at the site that
+//! says why. One walk serves both, so there is no second walk to keep in sync.
 //!
-//! The walk runs over a [`Value`], so the object path and the in-place JSON path
-//! share one traversal. The explain side only ever sees a Python value (the JSON
-//! entry points materialize before explaining), so building a violation always
-//! has a Python object in hand. The per-child path bookkeeping is gated on
-//! `ctx.mode`, constant for a whole walk, so the fast path pays nothing for it.
+//! The walk runs over a [`Value`](crate::input::Value), so the object path and
+//! the in-place JSON path share one traversal. The explain side only ever sees
+//! a Python value (the JSON entry points materialize before explaining), so
+//! building a violation always has a Python object in hand. The per-child path
+//! bookkeeping is gated on `ctx.mode`, constant for a whole walk, so the fast
+//! path pays nothing for it.
 
 pub(crate) mod ctx;
 mod index;

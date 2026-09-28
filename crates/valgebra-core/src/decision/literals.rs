@@ -9,7 +9,7 @@
 //! What makes the reading sound is that a literal pins `type(x)` exactly, so
 //! two constants are one value only where the oracle says so. The core cannot
 //! compare two Python objects, which is why every question here ends at
-//! [`LeafRelations`](super::LeafRelations).
+//! [`LeafRelations`].
 
 use std::borrow::Cow;
 use std::slice;

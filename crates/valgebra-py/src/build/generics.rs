@@ -197,10 +197,10 @@ pub(super) fn is_literal_origin(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// `include_extras` keeps in the resolved hints.
 ///
 /// `Required`/`NotRequired` say whether the key must be present, which
-/// [`qualified_required`] reads from here, and `ReadOnly` says whether a
-/// consumer may write the key back — a statement about use, not about which
-/// values belong. None of the three narrows the field's *set*, so each is
-/// unwrapped to the type it qualifies.
+/// [`qualified_required`](super::classes::qualified_required) reads from here,
+/// and `ReadOnly` says whether a consumer may write the key back — a statement
+/// about use, not about which values belong. None of the three narrows the
+/// field's *set*, so each is unwrapped to the type it qualifies.
 pub(super) fn is_field_qualifier(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = origin.py();
     let forms = forms(py)?;

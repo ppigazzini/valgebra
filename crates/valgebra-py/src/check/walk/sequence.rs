@@ -396,9 +396,9 @@ fn storage_of<'py>(tuple: &Bound<'py, PyTuple>, ctx: Ctx<'_>) -> Option<Bound<'p
 /// do, on the same argument, for the same reason.
 ///
 /// The count is read once and re-read before each item and after the last, which
-/// is [`scan_dict`]'s rule applied to positions instead of entries. A tuple needs
-/// none of this: it cannot be resized, so its arm walks the iterator directly
-/// over the storage [`tuple_matches`] hands it.
+/// is [`scan_dict`](super::record::scan_dict)'s rule applied to positions
+/// instead of entries. A tuple needs none of this: it cannot be resized, so its
+/// arm walks the iterator directly over the storage [`tuple_matches`] hands it.
 pub(super) fn scan_list<'py>(
     list: &Bound<'py, PyList>,
     mut visit: impl FnMut(usize, &Bound<'py, PyAny>) -> ControlFlow<()>,
@@ -480,11 +480,11 @@ pub(super) fn scan_set<'py>(
 /// value: `set[int]` admitted a subclass holding a `str` because its iterator
 /// answered with integers.
 ///
-/// Exactness first, then the slot, which is the rule [`super::stored_len`]
-/// applies to a length: an exact set overrides nothing, and a subclass that
-/// inherits the slot is read where it lies. The iterator the base returns is the
-/// builtin one, so mutation during the scan still raises where the caller below
-/// expects it to.
+/// Exactness first, then the slot, which is the rule
+/// [`stored_len`](super::scalar::stored_len) applies to a length: an exact set
+/// overrides nothing, and a subclass that inherits the slot is read where it
+/// lies. The iterator the base returns is the builtin one, so mutation during
+/// the scan still raises where the caller below expects it to.
 fn storage_iter<'py>(set: &Bound<'py, PyAny>, ctx: Ctx<'_>) -> PyResult<Bound<'py, PyIterator>> {
     for held in &HELD {
         if (held.is_exact)(set) {
@@ -502,8 +502,9 @@ fn storage_iter<'py>(set: &Bound<'py, PyAny>, ctx: Ctx<'_>) -> PyResult<Bound<'p
 }
 
 /// A set-like kind, its exact test and its base, in the order `storage_iter`
-/// asks them. The shape [`super::scalar::stored_len`] reads a length through,
-/// one slot over: a frozenset is not a set, so each is asked for itself.
+/// asks them. The shape [`stored_len`](super::scalar::stored_len) reads a
+/// length through, one slot over: a frozenset is not a set, so each is asked
+/// for itself.
 struct Held {
     is_exact: fn(&Bound<'_, PyAny>) -> bool,
     is_kind: fn(&Bound<'_, PyAny>) -> bool,

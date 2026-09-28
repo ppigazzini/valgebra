@@ -455,7 +455,7 @@ fn complement_atoms<G: Guard>(atoms: &[Atom<G>]) -> Option<Vec<Atom<G>>> {
 ///
 /// Every pair charges the build's allowance: the count is the product of the
 /// two, and a meet of a guard against a guard descends a level of nesting for
-/// each pair. See [`budget`](super::budget).
+/// each pair. See [`budget`].
 fn product<G: Guard>(left: &[Atom<G>], right: &[Atom<G>]) -> Option<Vec<Atom<G>>> {
     let mut atoms = Vec::new();
     for mine in left {

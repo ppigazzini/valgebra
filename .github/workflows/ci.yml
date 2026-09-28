@@ -162,6 +162,17 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --no-deps
+      # The same check over the private items, which are most of the prose:
+      # the walk, the decider and the builders are crate-private, and the build
+      # above renders none of them, so a link in their docs to an item that
+      # moved was never resolved at all. A second build rather than a flag on
+      # the first, because documenting private items also silences the lint
+      # that refuses a public doc linking to a private item -- which only the
+      # build above sees.
+      - name: Build the private-item rustdoc, denying warnings
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps --document-private-items
 
   rust-coverage:
     name: rust coverage

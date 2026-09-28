@@ -574,8 +574,8 @@ impl Schema {
     ///
     /// The children are already whatever they should be; only the node itself
     /// may have become a shape construction folds. Written as one step so a
-    /// transform can descend with [`map_children`] and still leave the tree in
-    /// the shape the constructors guarantee.
+    /// transform can descend with [`map_children`](Self::map_children) and
+    /// still leave the tree in the shape the constructors guarantee.
     fn refolded(self) -> Schema {
         match self {
             Schema::Union(members) => Schema::union(members.iter().cloned()),
