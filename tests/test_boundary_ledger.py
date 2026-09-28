@@ -41,6 +41,7 @@ import enum
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import (
     Annotated,
@@ -256,6 +257,18 @@ ROWS: dict[str, Row] = {
         beside=(
             Annotated[int, at.Ge(2**70 + 1)],
             Annotated[int, at.Ge(2**70)],
+            "subset",
+        ),
+    ),
+    "Two moduli `%` reads in different kinds of number.": Declines(
+        Annotated[Decimal, at.MultipleOf(4)],
+        Annotated[Decimal, at.MultipleOf(2)],
+        "a remainder read as the value's own kind of number, which for a "
+        "`Decimal` is a quotient bounded by the context's precision",
+        # The pair the page decides beside it: two `int` steps over `int`.
+        beside=(
+            Annotated[int, at.MultipleOf(10**30)],
+            Annotated[int, at.MultipleOf(10**10)],
             "subset",
         ),
     ),

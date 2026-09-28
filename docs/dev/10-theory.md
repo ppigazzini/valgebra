@@ -819,15 +819,16 @@ direction, so it refuses.
 
 What that bounds is narrower than the whole question, and the narrowing is the
 same under both operators. An **inclusion** is settled by the operands rather
-than by the sets they name: two steps by the oracle's `%`, two order bounds by
-the oracle's comparison. So `MultipleOf(5000)` is proved below
-`MultipleOf(2500)` and `Ge(2**70 + 1)` below `Ge(2**70)`, at any size, with no
-interval and no residue materialised to say so. What wants the representation
-is the **refutation**, which needs a value the two schemas disagree on, and the
-meet, whose period is the one the two steps share.
+than by the sets they name: two steps by the oracle's `%`, where the base and
+both steps meet in one kind of number, and two order bounds by the oracle's
+comparison. So `MultipleOf(5000)` is proved below `MultipleOf(2500)` and
+`Ge(2**70 + 1)` below `Ge(2**70)`, at any size, with no interval and no residue
+materialised to say so. What wants the representation is the **refutation**,
+which needs a value the two schemas disagree on, and the meet, whose period is
+the one the two steps share.
 **[DEVIATION: the-carriers-are-i64-and-f64]**
 
-HELD-BY: a_step_past_the_period_bound_is_refused, test_every_edge_of_the_integer_carrier_has_a_row, test_the_relation_is_the_one_recorded, test_a_multiple_is_a_remainder_of_zero, test_a_bound_past_the_carrier_is_proved_by_the_order
+HELD-BY: a_step_past_the_period_bound_is_refused, test_every_edge_of_the_integer_carrier_has_a_row, test_the_relation_is_the_one_recorded, test_a_multiple_is_a_remainder_of_zero, test_a_bound_past_the_carrier_is_proved_by_the_order, steps_entail_only_where_the_remainder_reads_them_alike
 
 **A class is described by what the frontend can read of it.** A class laying
 down a layout the frontend cannot read is its `isinstance` test and its kind and

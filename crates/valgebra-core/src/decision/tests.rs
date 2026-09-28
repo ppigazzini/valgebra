@@ -1625,6 +1625,113 @@ impl LeafRelations for ByIndex {
         let (step, multiple) = (step.get(), multiple.get());
         (step != 0).then(|| multiple.is_multiple_of(step))
     }
+    /// Every index is an `int`, which is the kind two steps have to share.
+    fn operand_kind(&self, _operand: OperandIx) -> Option<Kind> {
+        Some(Kind::Int)
+    }
+}
+
+/// Two steps that divide carry that to the values only where `%` reads the
+/// value and both steps as one kind of number.
+///
+/// Each row is a base and two steps, and the pairs that decline are the ones a
+/// value refutes: `2**53 + 1` is a multiple of `4.0` and not of `2`, `2.0**53`
+/// is a multiple of `2**53 + 1` and not of `3`, and `Decimal("2E+28")` is a
+/// multiple of `4` and raises against `2`.
+// THEORY: the-carriers-are-i64-and-f64
+#[test]
+fn steps_entail_only_where_the_remainder_reads_them_alike() {
+    const INT_2: usize = 0;
+    const INT_4: usize = 1;
+    const FLOAT_2: usize = 2;
+    const FLOAT_4: usize = 3;
+    const WIDE: usize = 4;
+    const WIDER: usize = 5;
+    const TRUE: usize = 6;
+    const DECIMAL_2: usize = 7;
+    const DECIMAL_4: usize = 8;
+    const PAST_THE_WORD: usize = 9;
+    // The steps by index: the kind, what the pool carries, and the number
+    // `divides` reads.
+    const STEPS: [(Option<Kind>, Option<Operand>, u128); 10] = [
+        (Some(Kind::Int), Some(Operand::Integer(2)), 2),
+        (Some(Kind::Int), Some(Operand::Integer(4)), 4),
+        (Some(Kind::Float), Some(Operand::Float(2.0)), 2),
+        (Some(Kind::Float), Some(Operand::Float(4.0)), 4),
+        (Some(Kind::Int), Some(Operand::Integer(1 << 60)), 1 << 60),
+        (Some(Kind::Int), Some(Operand::Integer(1 << 61)), 1 << 61),
+        (Some(Kind::Bool), Some(Operand::Boolean(true)), 1),
+        // A `Decimal`, which the pool declines to kind.
+        (None, None, 2),
+        (None, None, 4),
+        // An `int` past the machine word, which the pool kinds and cannot carry.
+        (Some(Kind::Int), None, 1 << 70),
+    ];
+    struct Steps;
+    impl Constants for Steps {
+        fn operand(&self, index: OperandIx) -> Option<Operand> {
+            STEPS.get(index.get())?.1.clone()
+        }
+    }
+    impl LeafRelations for Steps {
+        fn leaf_subtype(&self, _: &Schema, _: &Schema) -> Option<bool> {
+            None
+        }
+        fn operand_kind(&self, index: OperandIx) -> Option<Kind> {
+            STEPS.get(index.get())?.0
+        }
+        fn divides(&self, step: OperandIx, multiple: OperandIx) -> Option<bool> {
+            let step = STEPS.get(step.get())?.2;
+            Some(STEPS.get(multiple.get())?.2.is_multiple_of(step))
+        }
+    }
+    let entailed = |base: &Schema, step: usize, multiple: usize| {
+        constraint_entailed(
+            &Constraint::MultipleOf(OperandIx::new(step)),
+            base,
+            &[Constraint::MultipleOf(OperandIx::new(multiple))],
+            &Steps,
+        )
+    };
+    let (int, float) = (Schema::Int, Schema::Float);
+
+    // Over the integers: two integers of any size, or two floats.
+    assert!(entailed(&int, INT_2, INT_4));
+    assert!(entailed(&int, FLOAT_2, FLOAT_4));
+    assert!(entailed(&int, WIDE, WIDER));
+    assert!(entailed(&int, WIDE, PAST_THE_WORD));
+    assert!(entailed(&Schema::Bool, TRUE, INT_2));
+    assert!(!entailed(&int, INT_2, FLOAT_4));
+    assert!(!entailed(&int, FLOAT_2, INT_4));
+
+    // Over the floats: any two steps a float holds exactly.
+    assert!(entailed(&float, INT_2, INT_4));
+    assert!(entailed(&float, FLOAT_2, FLOAT_4));
+    assert!(entailed(&float, INT_2, FLOAT_4));
+    assert!(entailed(&float, FLOAT_2, INT_4));
+    // `True` is the integer 1 and a float holds it exactly, which a `bool`
+    // read as an integer past `2**53` would not be.
+    assert!(entailed(&float, TRUE, FLOAT_2));
+    assert!(!entailed(&float, WIDE, WIDER));
+    assert!(!entailed(&float, FLOAT_2, PAST_THE_WORD));
+
+    // Over both, what each of the two allows.
+    let both = Schema::union([Schema::Int, Schema::Float]);
+    assert!(entailed(&both, INT_2, INT_4));
+    assert!(entailed(&both, FLOAT_2, FLOAT_4));
+    assert!(!entailed(&both, INT_2, FLOAT_4));
+    assert!(!entailed(&both, WIDE, WIDER));
+
+    // A step the pool declines to kind, and a base holding other values.
+    assert!(!entailed(&int, DECIMAL_2, DECIMAL_4));
+    let class = Schema::Instance(ClassIx::new(0));
+    assert!(!entailed(&class, INT_2, INT_4));
+    assert!(!entailed(
+        &Schema::union([Schema::Int, class]),
+        INT_2,
+        INT_4
+    ));
+    assert!(!entailed(&Schema::Str, INT_2, INT_4));
 }
 
 /// A constraint of another kind entails nothing, in every family.
@@ -1652,7 +1759,7 @@ fn a_constraint_of_another_family_entails_nothing() {
         Constraint::MultipleOf(OperandIx::new(2)),
     ] {
         assert!(
-            !constraint_entailed(&wide, &foreign, o),
+            !constraint_entailed(&wide, &Schema::Int, &foreign, o),
             "{wide:?} read a constraint of another family as entailing it"
         );
     }
@@ -1661,11 +1768,13 @@ fn a_constraint_of_another_family_entails_nothing() {
     // and this is what tells the two apart.
     assert!(constraint_entailed(
         &Constraint::MultipleOf(OperandIx::new(2)),
+        &Schema::Int,
         &[Constraint::MultipleOf(OperandIx::new(4))],
         o
     ));
     assert!(!constraint_entailed(
         &Constraint::MultipleOf(OperandIx::new(4)),
+        &Schema::Int,
         &[Constraint::MultipleOf(OperandIx::new(2))],
         o
     ));
@@ -1677,91 +1786,115 @@ fn constraint_entailment_covers_every_ordering_arm() {
     // Ge(w): a tighter-or-equal lower bound, from Ge or Gt, entails a looser one.
     assert!(constraint_entailed(
         &Constraint::Ge(OperandIx::new(3)),
+        &Schema::Int,
         &[Constraint::Ge(OperandIx::new(5))],
         o
     ));
     assert!(constraint_entailed(
         &Constraint::Ge(OperandIx::new(3)),
+        &Schema::Int,
         &[Constraint::Gt(OperandIx::new(5))],
         o
     ));
     assert!(!constraint_entailed(
         &Constraint::Ge(OperandIx::new(5)),
+        &Schema::Int,
         &[Constraint::Ge(OperandIx::new(3))],
         o
     ));
     // Gt(w): Gt(n) with n >= w, or Ge(n) with n > w.
     assert!(constraint_entailed(
         &Constraint::Gt(OperandIx::new(3)),
+        &Schema::Int,
         &[Constraint::Gt(OperandIx::new(3))],
         o
     ));
     assert!(constraint_entailed(
         &Constraint::Gt(OperandIx::new(3)),
+        &Schema::Int,
         &[Constraint::Ge(OperandIx::new(5))],
         o
     ));
     assert!(!constraint_entailed(
         &Constraint::Gt(OperandIx::new(5)),
+        &Schema::Int,
         &[Constraint::Ge(OperandIx::new(5))],
         o
     ));
     // Le(w): Le(n) or Lt(n) with n <= w.
     assert!(constraint_entailed(
         &Constraint::Le(OperandIx::new(5)),
+        &Schema::Int,
         &[Constraint::Le(OperandIx::new(3))],
         o
     ));
     assert!(constraint_entailed(
         &Constraint::Le(OperandIx::new(5)),
+        &Schema::Int,
         &[Constraint::Lt(OperandIx::new(3))],
         o
     ));
     assert!(!constraint_entailed(
         &Constraint::Le(OperandIx::new(3)),
+        &Schema::Int,
         &[Constraint::Le(OperandIx::new(5))],
         o
     ));
     // Lt(w): Lt(n) with n <= w, or Le(n) with n < w.
     assert!(constraint_entailed(
         &Constraint::Lt(OperandIx::new(5)),
+        &Schema::Int,
         &[Constraint::Lt(OperandIx::new(5))],
         o
     ));
     assert!(constraint_entailed(
         &Constraint::Lt(OperandIx::new(5)),
+        &Schema::Int,
         &[Constraint::Le(OperandIx::new(3))],
         o
     ));
     assert!(!constraint_entailed(
         &Constraint::Lt(OperandIx::new(5)),
+        &Schema::Int,
         &[Constraint::Le(OperandIx::new(5))],
         o
     ));
+}
+
+/// The arms that are not an order between two pooled values: a length bound
+/// counts, and a step divides.
+#[test]
+fn constraint_entailment_covers_the_counting_arms() {
+    let o = &ByIndex;
     // Length bounds compare by their raw counts, no oracle needed.
     assert!(constraint_entailed(
         &Constraint::MinLen(3),
+        &Schema::Int,
         &[Constraint::MinLen(5)],
         o
     ));
     assert!(!constraint_entailed(
         &Constraint::MinLen(5),
+        &Schema::Int,
         &[Constraint::MinLen(3)],
         o
     ));
     assert!(constraint_entailed(
         &Constraint::MaxLen(5),
+        &Schema::Int,
         &[Constraint::MaxLen(3)],
         o
     ));
     assert!(!constraint_entailed(
         &Constraint::MaxLen(3),
+        &Schema::Int,
         &[Constraint::MaxLen(5)],
         o
     ));
     // A multiple-of or predicate bound has no order entailment.
     assert!(!constraint_entailed(
         &Constraint::MultipleOf(OperandIx::new(0)),
+        &Schema::Int,
         &[Constraint::MultipleOf(OperandIx::new(0))],
         o
     ));

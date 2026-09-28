@@ -1245,7 +1245,7 @@ fn refinement_subtype(
         .and(|| {
             Relation::proven(wide_cons.iter().all(|constraint| {
                 narrow_cons.contains(constraint)
-                    || constraint_entailed(constraint, narrow_cons, cx.oracle)
+                    || constraint_entailed(constraint, narrow_base, narrow_cons, cx.oracle)
             }))
         })
 }

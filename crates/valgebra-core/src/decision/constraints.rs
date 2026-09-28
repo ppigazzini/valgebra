@@ -2,8 +2,8 @@
 //! which one entails another.
 //!
 //! A refinement is a base set narrowed by predicates, and these are the
-//! questions a decision asks about the predicates alone -- without reading the
-//! base, and without an SMT solver to reason about them. A bound is compared
+//! questions a decision asks about the predicates -- reading the base only for
+//! the kind of number it holds, and without an SMT solver. A bound is compared
 //! through the oracle, because the values it orders are Python objects the core
 //! cannot see, and a user predicate is opaque to all of it.
 //!
@@ -13,7 +13,9 @@
 //! looser one, which is what makes a refinement a subtype of a weaker
 //! refinement of the same base.
 
-use crate::ir::{Constraint, OperandIx};
+use crate::descr::lower::Operand;
+use crate::ir::{Constraint, OperandIx, Schema};
+use crate::kind::Kind;
 
 use super::LeafRelations;
 
@@ -157,6 +159,7 @@ pub(super) fn bounds_unsatisfiable<'a>(
 /// entailed (conservative).
 pub(super) fn constraint_entailed(
     wide: &Constraint,
+    narrow_base: &Schema,
     narrow: &[Constraint],
     oracle: &dyn LeafRelations,
 ) -> bool {
@@ -195,17 +198,120 @@ pub(super) fn constraint_entailed(
         Constraint::MaxLen(w) => narrow
             .iter()
             .any(|c| matches!(c, Constraint::MaxLen(n) if n <= w)),
-        // Every multiple of `n` is a multiple of `w` exactly when `w` divides
-        // `n`, so the two steps settle this between them and neither's size
-        // enters into it. The question goes to the oracle because a step is a
-        // value a caller wrote -- `int`, `float`, `Decimal`, `Fraction` -- and
-        // `%` is what the walk asks of a value.
+        // Every multiple of `n` is a multiple of `w` when `w` divides `n`,
+        // wherever `%` reads the value and both steps as one kind of number.
+        // The question goes to the oracle because a step is a value a caller
+        // wrote, and `%` is what the walk asks of a value.
         Constraint::MultipleOf(w) => narrow.iter().any(|c| match c {
-            Constraint::MultipleOf(n) => oracle.divides(*w, *n) == Some(true),
+            Constraint::MultipleOf(n) => {
+                steps_read_alike(narrow_base, *w, *n, oracle)
+                    && oracle.divides(*w, *n) == Some(true)
+            }
             _ => false,
         }),
         // No sound value entailment without an exact match (handled by the caller).
         Constraint::Predicate(_) | Constraint::Regex(_) => false,
+    }
+}
+
+/// The numbers a base holds, as `%` reads them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Numbers {
+    /// `int` and `bool`, which `%` divides exactly by an integer.
+    Integers,
+    /// `float`, which `%` divides exactly by a float and by an integer that is
+    /// one.
+    Floats,
+    /// Both, where a pair of steps has to be read alike under each.
+    Both,
+}
+
+impl Numbers {
+    /// The numbers `base` holds, or `None` for a base holding anything else.
+    fn of(base: &Schema, oracle: &dyn LeafRelations) -> Option<Numbers> {
+        if let Schema::Union(members) = base {
+            return members
+                .iter()
+                .map(|member| Numbers::of(member, oracle))
+                .reduce(|left, right| Some(left?.join(right?)))?;
+        }
+        match base.type_tag_with(oracle)? {
+            Kind::Int | Kind::Bool => Some(Numbers::Integers),
+            Kind::Float => Some(Numbers::Floats),
+            _ => None,
+        }
+    }
+
+    fn join(self, other: Numbers) -> Numbers {
+        if self == other { self } else { Numbers::Both }
+    }
+}
+
+/// A step, as `%` reads it against a value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Step {
+    /// An `int` or a `bool` a float holds exactly: at most `2**53` from zero.
+    Integer,
+    /// An `int` past `2**53`, which `%` reads as the float nearest it against a
+    /// float value.
+    WideInteger,
+    /// A `float`, which `%` meets every number as.
+    Float,
+}
+
+impl Step {
+    fn of(step: OperandIx, oracle: &dyn LeafRelations) -> Option<Step> {
+        Some(match oracle.operand_kind(step)? {
+            Kind::Float => Step::Float,
+            Kind::Int | Kind::Bool => match oracle.operand(step) {
+                Some(Operand::Boolean(_)) => Step::Integer,
+                Some(Operand::Integer(value)) if value.unsigned_abs() <= 1 << 53 => Step::Integer,
+                _ => Step::WideInteger,
+            },
+            _ => return None,
+        })
+    }
+}
+
+/// Whether `%` reads every value of `base` against the two steps alike, so a
+/// step dividing the other carries to the values.
+///
+/// Dividing is a fact about numbers, and `%` asks it of a value in the kind of
+/// number the two operands meet in. Where the value and both steps meet in one
+/// kind, a multiple of `multiple` is a multiple of `step`. Where they do not,
+/// the steps' answer is about something else:
+///
+/// - `2**53 + 1` is a multiple of `2.0`, because `%` reads it as the float
+///   `2**53`, and not of `2`, which `2.0` divides;
+/// - `2.0**53` is a multiple of `2**53 + 1`, which `%` reads as the same float,
+///   and not of `3`, which divides the step;
+/// - a `Decimal` raises once a quotient outgrows its precision, and the smaller
+///   step's quotient does first.
+///
+/// So the kinds are read first: two float steps over any of the numbers, two
+/// integer steps over the integers, two a float holds exactly over the floats
+/// too, and one of each over the floats alone. A base holding any other value
+/// declines.
+fn steps_read_alike(
+    base: &Schema,
+    step: OperandIx,
+    multiple: OperandIx,
+    oracle: &dyn LeafRelations,
+) -> bool {
+    let (Some(numbers), Some(step), Some(multiple)) = (
+        Numbers::of(base, oracle),
+        Step::of(step, oracle),
+        Step::of(multiple, oracle),
+    ) else {
+        return false;
+    };
+    match (step, multiple) {
+        (Step::Float, Step::Float) | (Step::Integer, Step::Integer) => true,
+        (Step::Float | Step::Integer, Step::Float | Step::Integer) => numbers == Numbers::Floats,
+        (Step::Float, Step::WideInteger) | (Step::WideInteger, Step::Float) => false,
+        (Step::Integer | Step::WideInteger, Step::Integer | Step::WideInteger) => {
+            numbers == Numbers::Integers
+        }
     }
 }
 

@@ -321,10 +321,15 @@ corpus of its own driving every question below
 - `compare` — order two pooled refinement bounds;
 - `no_int_between` — does the open interval between two bounds admit no integer;
 - `divides` — does one pooled step divide another, which settles an inclusion
-  between two `MultipleOf` refinements between them: every multiple of `m` is a
-  multiple of `s` exactly when `s` divides `m`, whatever the size of either. The
-  operator is `%`, asked of the two steps as the walk asks it of a value, so a
-  divisor of any numeric type answers by its own rules;
+  between two `MultipleOf` refinements: every multiple of `m` is a multiple of
+  `s` when `s` divides `m`, whatever the size of either. The operator is `%`,
+  asked of the two steps as the walk asks it of a value, so a divisor of any
+  numeric type answers by its own rules. The answer carries to the values only
+  where `%` reads a value and both steps as one kind of number, which the rule
+  reads from the base and `operand_kind` before it asks;
+- `operand_kind` — which kind does this bound's or step's value have, read as
+  `literal_kind` reads a constant and at any size: an `int` past the machine
+  word is an `int`, which the pooled operand cannot carry;
 - `literal_kind` — which kind does this constant's value have, which is what
   puts a `Literal` on a kind's line at all;
 - `atom_denotes_a_set` — does this atom denote a set the order can read. A class

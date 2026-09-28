@@ -83,18 +83,24 @@ pub trait LeafRelations: Constants {
     /// Whether the pool value at `step` divides the one at `multiple`, or `None`
     /// when the core cannot ask or the two do not divide.
     ///
-    /// The relation between two moduli, and the whole of it: every multiple of
-    /// `m` is a multiple of `s` exactly when `s` divides `m`. So the steps
-    /// settle an inclusion between two `MultipleOf` refinements between them,
-    /// and the size of either is beside the point -- which is what separates
-    /// this from the residue representation, whose period is bounded and whose
-    /// answer therefore is not about the schema.
+    /// The relation between two moduli: every multiple of `m` is a multiple of
+    /// `s` when `s` divides `m`, and the size of either is beside the point --
+    /// which is what separates this from the residue representation, whose
+    /// period is bounded and whose answer therefore is not about the schema.
+    ///
+    /// That holds of numbers, and `%` holds it of a value only where it reads
+    /// the value and both steps as one kind of number. Python's `%` reads an
+    /// `int` as a float against a float step, and an `int` step past `2**53` as
+    /// the float nearest it against a float value, and a `Decimal` raises once
+    /// a quotient outgrows its precision. So the answer is about the steps
+    /// alone, and the rule that reads it asks [`operand_kind`](Self::operand_kind)
+    /// and the base before it trusts it.
     ///
     /// Asked of the *operands* rather than computed, for the reason
     /// [`compare`](Self::compare) is: a step is whatever a caller wrote, and
     /// `int`, `float`, `Decimal` and `Fraction` each divide by their own rules.
     /// `%` is the operator the walk uses on a value, so it is the operator this
-    /// uses on a step, and the two agree by construction.
+    /// uses on a step.
     ///
     /// The default decides nothing, so a core with no value oracle leaves every
     /// divisibility question conservative.
@@ -124,6 +130,20 @@ pub trait LeafRelations: Constants {
     /// literal in the partition, which is what decides it against another kind.
     /// The default declines, so a core with no value oracle stays conservative.
     fn literal_kind(&self, _constant: ConstIx) -> Option<Kind> {
+        None
+    }
+
+    /// The kind of the pooled value behind a refinement operand, or `None` when
+    /// the bindings decline to kind it.
+    ///
+    /// The same reading as [`literal_kind`](Self::literal_kind), asked of a
+    /// bound or a step: an exact builtin type is a kind, and anything else --
+    /// a subclass, a `Decimal`, a `Fraction` -- is declined. What `%` does with
+    /// a step turns on its kind and not only on its value, so the rule relating
+    /// two steps asks this before [`divides`](Self::divides) and reads an `int`
+    /// of any size, which [`Constants::operand`] cannot carry.
+    /// The default declines, so a core with no value oracle stays conservative.
+    fn operand_kind(&self, _operand: OperandIx) -> Option<Kind> {
         None
     }
 

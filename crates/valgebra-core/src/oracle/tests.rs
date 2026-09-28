@@ -261,6 +261,7 @@ fn the_default_oracle_declines_every_question() {
         None
     );
     assert_eq!(oracle.literal_kind(ConstIx::new(0)), None);
+    assert_eq!(oracle.operand_kind(one), None);
     assert_eq!(oracle.class_admits_kind(ClassIx::new(0), Kind::Int), None);
     assert_eq!(
         oracle.direct_instance_of_kind(ClassIx::new(0), Kind::Int),

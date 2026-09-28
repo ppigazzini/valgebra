@@ -141,6 +141,37 @@ fn a_literal_reports_the_kind_its_value_has() {
 }
 
 #[test]
+fn an_operand_reports_the_kind_its_value_has() {
+    // `operand_kind` reads a bound or a step as `literal_kind` reads a
+    // constant, and at any size: an `int` past the machine word is an `int`,
+    // which the pooled operand cannot carry. A number of no builtin kind
+    // declines, which is what keeps two steps apart that `%` reads apart.
+    Python::attach(|py| {
+        let values = vec![
+            true.into_pyobject(py)
+                .unwrap()
+                .to_owned()
+                .into_any()
+                .unbind(),
+            7i64.into_pyobject(py).unwrap().into_any().unbind(),
+            0.5f64.into_pyobject(py).unwrap().into_any().unbind(),
+            built(py, "2**70").unbind(),
+            built(py, "__import__('fractions').Fraction(1, 2)").unbind(),
+        ];
+        asking(py, values, |oracle| {
+            let kind = |slot| oracle.operand_kind(OperandIx::new(slot));
+            assert_eq!(kind(0), Some(Kind::Bool));
+            assert_eq!(kind(1), Some(Kind::Int));
+            assert_eq!(kind(2), Some(Kind::Float));
+            assert_eq!(kind(3), Some(Kind::Int));
+            assert_eq!(oracle.operand(OperandIx::new(3)), None, "past the word");
+            assert_eq!(kind(4), None, "a fraction has no builtin kind");
+            assert_eq!(kind(99), None, "an index the pool does not hold");
+        });
+    });
+}
+
+#[test]
 fn two_constants_are_disjoint_unless_they_are_the_same_value() {
     // `literals_disjoint`: do these two singletons share a value. Two `1`s do;
     // `1` and `True` do not, although `1 == True` -- the pool reads a constant
@@ -382,6 +413,7 @@ fn one_step_divides_another_by_the_operator_the_walk_uses() {
             0.125f64.into_pyobject(py).unwrap().into_any().unbind(),
             0.25f64.into_pyobject(py).unwrap().into_any().unbind(),
             "ab".into_pyobject(py).unwrap().into_any().unbind(),
+            2.5f64.into_pyobject(py).unwrap().into_any().unbind(),
         ];
         asking(py, values, |oracle| {
             let divides = |s, m| oracle.divides(OperandIx::new(s), OperandIx::new(m));
@@ -400,6 +432,10 @@ fn one_step_divides_another_by_the_operator_the_walk_uses() {
             // division rather than by a rule about integers.
             assert_eq!(divides(3, 4), Some(true));
             assert_eq!(divides(4, 3), Some(false));
+            // An `int` against a float step is answered by the float's
+            // reflected `%`, as the walk's operator answers it.
+            assert_eq!(divides(3, 1), Some(true));
+            assert_eq!(divides(6, 2), Some(false));
             // A pair `%` cannot be asked of declines rather than guessing: a
             // string and a number raise, and the inclusion stays unproven.
             assert_eq!(divides(0, 5), None);

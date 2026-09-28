@@ -7,14 +7,18 @@ admits invalid values, so every constraint is checked in both directions.
 
 from __future__ import annotations
 
+import typing
 from decimal import Decimal
 from fractions import Fraction
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import annotated_types as at
 import pytest
 
 from valgebra import Regex, ValidationError, Validator
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def _code(spec: object, value: object) -> str | None:
@@ -107,6 +111,92 @@ def test_a_divisor_of_another_type_divides(
     schema = Validator(spec)
     assert schema.is_valid(member)
     assert not schema.is_valid(non_member)
+
+
+def _fresh(build: Callable[[], object]) -> Validator:
+    """Build a validator of `build()` with `typing`'s memo of `Annotated` cleared.
+
+    `typing` memoises `Annotated[...]` by equality, and `MultipleOf(6.0)` equals
+    `MultipleOf(6)`, so a form built earlier would carry the other step.
+    """
+    for cleanup in getattr(typing, "_cleanups", ()):
+        cleanup()
+    return Validator(build())
+
+
+@pytest.mark.parametrize(
+    ("narrow", "wide", "witness"),
+    [
+        pytest.param(
+            lambda: Annotated[int, at.MultipleOf(6.0)],
+            lambda: Annotated[int, at.MultipleOf(3)],
+            2**53 + 5,
+            id="an-int-read-as-the-float-nearest-it",
+        ),
+        pytest.param(
+            lambda: Annotated[int, at.MultipleOf(4)],
+            lambda: Annotated[int, at.MultipleOf(0.5)],
+            2**1030,
+            id="an-int-no-float-holds",
+        ),
+        pytest.param(
+            lambda: Annotated[float, at.MultipleOf(2**53 + 1)],
+            lambda: Annotated[float, at.MultipleOf(3)],
+            2.0**53,
+            id="a-step-read-as-the-float-nearest-it",
+        ),
+        pytest.param(
+            lambda: Annotated[Decimal, at.MultipleOf(4)],
+            lambda: Annotated[Decimal, at.MultipleOf(2)],
+            Decimal("2E+28"),
+            id="a-quotient-past-the-decimal-precision",
+        ),
+        pytest.param(
+            lambda: Annotated[object, at.MultipleOf(4)],
+            lambda: Annotated[object, at.MultipleOf(2)],
+            Decimal("2E+28"),
+            id="a-base-holding-any-number",
+        ),
+    ],
+)
+def test_a_step_dividing_another_is_not_read_across_kinds_of_number(
+    narrow: Callable[[], object],
+    wide: Callable[[], object],
+    witness: object,
+) -> None:
+    """Dividing is about the steps, and `%` reads each value in its own kind."""
+    narrower, wider = _fresh(narrow), _fresh(wide)
+    assert narrower.is_valid(witness)
+    assert not wider.is_valid(witness)
+    assert narrower.relation_to(wider) == "undecided"
+
+
+@pytest.mark.parametrize(
+    ("narrow", "wide"),
+    [
+        pytest.param(
+            lambda: Annotated[int, at.MultipleOf(10**30)],
+            lambda: Annotated[int, at.MultipleOf(10**10)],
+            id="two-ints-past-the-machine-word",
+        ),
+        pytest.param(
+            lambda: Annotated[float, at.MultipleOf(4)],
+            lambda: Annotated[float, at.MultipleOf(0.5)],
+            id="an-int-and-a-float-over-the-floats",
+        ),
+        pytest.param(
+            lambda: Annotated[int | float, at.MultipleOf(4)],
+            lambda: Annotated[int | float, at.MultipleOf(2)],
+            id="two-ints-over-both",
+        ),
+    ],
+)
+def test_a_step_dividing_another_of_one_kind_of_number_is_below_it(
+    narrow: Callable[[], object],
+    wide: Callable[[], object],
+) -> None:
+    """Where `%` reads a value and both steps alike, dividing decides it."""
+    assert _fresh(narrow).relation_to(_fresh(wide)) == "subset"
 
 
 @pytest.mark.parametrize(

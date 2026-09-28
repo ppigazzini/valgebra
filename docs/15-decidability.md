@@ -115,12 +115,14 @@ answers `"undecided"`.
   Each stays the `isinstance` atom it was, which is sound for every enumeration
   and merely less complete.
 - **Divisibility between two moduli**, where it holds. Every multiple of `a` is
-  a multiple of `b` exactly when `b` divides `a`, so the two steps settle the
-  inclusion between them and the size of either is beside the point:
-  `MultipleOf(5000)` is decided below `MultipleOf(2500)`. The question is
-  Python's `%`, asked of the two steps, so a divisor of any numeric type reads
-  as the kind it is. The *other* direction is a refutation and needs a value
-  rather than a rule, which is the conservative entry below.
+  a multiple of `b` when `b` divides `a`, so the two steps settle the inclusion
+  between them and the size of either is beside the point: `MultipleOf(5000)`
+  is decided below `MultipleOf(2500)`. The question is Python's `%`, asked of
+  the two steps, and it carries to the values where `%` reads a value and both
+  steps as one kind of number: two `int` steps over `int`, two `float` steps
+  over `int` or `float`, and over `float` any two steps a float holds exactly.
+  The *other* direction is a refutation and needs a value rather than a rule,
+  which is the conservative entry below.
 - **Refinements.** A refinement is a subtype of its base and of a refinement with
   looser bounds — a tighter numeric or length bound entails a looser one, not only
   a verbatim-contained constraint set; a bound conjunction that cannot be satisfied
@@ -495,6 +497,16 @@ the shape. What is left below is what the descriptor cannot hold.
   the direction a value refutes, and `subset` in the direction the carrier
   proves. Python's integers are unbounded and the carrier is not, which is a
   property of the representation rather than of the schema.
+
+- **Two moduli `%` reads in different kinds of number.** Dividing is a fact
+  about the steps, and `%` asks it of a value in the kind the value and the
+  step meet in. `2**53 + 1` is a multiple of `4.0`, because `%` reads it as the
+  float `2**53`, and not of `2`, which divides `4.0`. `2.0**53` is a multiple of
+  `2**53 + 1`, which `%` reads as the same float, and not of `3`, which divides
+  that step. `Decimal("2E+28")` is a multiple of `4` and raises against `2`,
+  because its quotient by `2` outgrows the context's precision. So a pair of
+  steps of two kinds, a step past `2**53` over `float`, and a base holding
+  values of any other type -- a `Decimal`, a `Fraction`, `object` -- declines.
 
 - **A meet of two moduli the representation cannot hold.** A `MultipleOf`
   becomes a residue class, and a class is materialised per residue up to a
