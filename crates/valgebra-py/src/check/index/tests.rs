@@ -20,6 +20,21 @@ fn compile_pattern_rejects_an_invalid_pattern() {
     assert!(compile_pattern("(unclosed").is_err());
 }
 
+#[test]
+fn compile_pattern_refuses_a_pattern_that_parses_only_wrapped() {
+    // `a)|(b` closes the wrapper's group and opens one the wrapper closes, so
+    // the anchored form parses, and its alternation escapes both anchors: it
+    // matched `xxb`. The pattern alone does not parse, and neither does this.
+    for pattern in ["a)|(b", ")|(", "a)(b"] {
+        assert!(compile_pattern(pattern).is_err(), "{pattern} compiled");
+    }
+    // A verbose pattern ending in a comment parses alone and not wrapped, which
+    // is the other way round, and it compiles.
+    let commented = compile_pattern("(?x) a # a note").expect("a verbose pattern");
+    assert!(commented.is_match("a"));
+    assert!(!commented.is_match("xa"));
+}
+
 // Tests that need a live interpreter; compiled and run only under the
 // `interpreter-tests` feature, which links an embedded Python.
 #[cfg(feature = "interpreter-tests")]

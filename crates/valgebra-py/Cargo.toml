@@ -41,6 +41,11 @@ rustc-hash = { workspace = true }
 # stance that constructed sequence regexes are linear, and pydantic-core uses it
 # for the same `pattern` constraint.
 regex = "1.13"
+# The parser `regex` itself uses, to read a pattern on its own before the
+# anchors wrap it: a pattern that parses only once wrapped would match another
+# language than the one written. `regex` depends on it, so the version is the
+# one it already resolves.
+regex-syntax = "0.8"
 
 [features]
 # Enables an embedded interpreter (pyo3 `auto-initialize`) so the binding-internal

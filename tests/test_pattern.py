@@ -52,6 +52,19 @@ def test_invalid_pattern_raises_at_compile_time() -> None:
         Validator(Annotated[str, Regex(r"(unclosed")])
 
 
+@pytest.mark.parametrize("pattern", ["a)|(b", ")|(", "a)(b"])
+def test_a_pattern_that_parses_only_once_anchored_is_refused(pattern: str) -> None:
+    """The anchors wrap a pattern, and one that closes their group escapes them.
+
+    `a)|(b` does not parse, and neither `re` nor this engine compiles it. Wrapped
+    for a whole-string match it balances, and its alternation matched `"xxb"`.
+    """
+    with pytest.raises(re.error):
+        re.compile(pattern)
+    with pytest.raises(ValueError, match="invalid regular expression"):
+        Validator(Annotated[str, Regex(pattern)])
+
+
 def test_pattern_composes_and_reaches_json() -> None:
     oid = Annotated[str, Regex(r"[0-9a-f]{24}")]
     record = Validator({"id": oid, "name": str})

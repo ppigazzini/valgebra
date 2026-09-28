@@ -317,7 +317,9 @@ not agree on. The narrowing is the one user-visible removal of the map work.
 
 The same principle governs the regex: the pattern is compiled and anchored at
 build time, so an invalid expression fails at construction rather than at first
-validation.
+validation. The pattern is parsed on its own before the anchors wrap it: `a)|(b`
+does not parse, and wrapped it closes the anchors' group and opens one they
+close, so its alternation would escape both of them.
 
 ## Recursion needs an explicit fixpoint
 

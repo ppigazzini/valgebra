@@ -181,7 +181,9 @@ assert not narrowed.is_valid(5)
 string must match, like `re.fullmatch` — and runs natively in Rust with a
 linear-time engine (no catastrophic backtracking), so unlike a `Predicate` it
 stays on the fast path and never crosses into Python per value. An invalid
-pattern is rejected when the validator is built, not at first use. A compiled
+pattern is rejected when the validator is built, not at first use, and a pattern
+is read on its own before it is anchored, so `a)|(b` is invalid rather than an
+alternation of two halves. A compiled
 `re.Pattern` works as metadata too:
 
 ```python

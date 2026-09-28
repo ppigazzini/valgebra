@@ -27,6 +27,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: no float lies between a float and the next one
 - fix: a step dividing another is not read across kinds of number
 - fix: one dict key cannot witness two clauses of a union
+- fix: a pattern that parses only once anchored is refused
 
 -->
 
@@ -120,6 +121,12 @@ answer of its own, or a repair to a change not yet released.
   found the one key `a` and asked it for an `int` and a `str` at once. The
   constraints no fresh key can meet are read together, and so are the two keys
   of `bool` and the one of `None`, which a constraint can run out of.
+- **A pattern that parses only once anchored is refused.** `Regex("a)|(b")`
+  does not parse, and wrapped for a whole-string match it closes the anchors'
+  group and opens one they close, so it compiled into an alternation that
+  escaped both anchors and admitted `"xxb"`. A pattern is parsed on its own
+  before it is anchored, and one that does not parse raises the build's
+  `invalid regular expression` error.
 
 ## [0.0.14] - 2026-09-26
 

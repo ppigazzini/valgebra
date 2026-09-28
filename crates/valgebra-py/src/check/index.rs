@@ -120,7 +120,15 @@ pub(crate) type RegexIndex = FxHashMap<usize, Regex>;
 /// and is reached only where it does not. Outside extended mode nothing is
 /// line-terminated, so a pattern the first wrapper rejects the second rejects
 /// too, and the caller gets the first wrapper's message either way.
+///
+/// The pattern is parsed on its own first. One that does not parse alone can
+/// parse once wrapped -- `a)|(b` closes the wrapper's group and opens one the
+/// wrapper closes -- and its alternation then escapes both anchors, so the
+/// wrappers would compile a language the caller never wrote.
 pub(crate) fn compile_pattern(pattern: &str) -> Result<Regex, regex::Error> {
+    regex_syntax::Parser::new()
+        .parse(pattern)
+        .map_err(|err| regex::Error::Syntax(err.to_string()))?;
     Regex::new(&format!(r"\A(?:{pattern})\z"))
         .or_else(|anchored| Regex::new(&format!("\\A(?:{pattern}\n)\\z")).map_err(|_| anchored))
 }

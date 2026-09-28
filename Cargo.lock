@@ -955,6 +955,7 @@ dependencies = [
  "pyo3",
  "pyo3-build-config",
  "regex",
+ "regex-syntax",
  "rustc-hash",
  "valgebra-core",
 ]

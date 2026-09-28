@@ -257,6 +257,19 @@ fn a_pattern_is_anchored_at_both_ends() {
     assert!(!either.holds(b"abb") && !either.holds(b"ab"));
 }
 
+/// A pattern that parses only once wrapped is refused: `a)|(b` closes the
+/// wrapper's group and opens one the wrapper closes, and the language built
+/// would be one nobody wrote.
+#[test]
+fn a_pattern_that_parses_only_wrapped_is_refused() {
+    for pattern in ["a)|(b", ")|(", "a)(b"] {
+        assert!(
+            RegularSet::pattern(pattern, Alphabet::Text).is_none(),
+            "{pattern} built"
+        );
+    }
+}
+
 /// A length bound counts symbols, and which symbol depends on the alphabet:
 /// a code point for text, a byte for bytes.
 #[test]

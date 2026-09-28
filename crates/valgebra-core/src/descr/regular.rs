@@ -603,7 +603,12 @@ impl RegularSet {
         // of a string. So it compiles in UTF-8 mode for `str`, and its language
         // holds no surrogate -- as the kind's universe does and the walk's
         // answer says.
-        RegularSet::compile(&format!("(?:{pattern})"), alphabet == Alphabet::Text)
+        let utf8 = alphabet == Alphabet::Text;
+        // The pattern on its own first. One that does not parse alone can parse
+        // wrapped -- `a)|(b` closes the group and opens one the wrapper closes
+        // -- and would then be a language nobody wrote.
+        syntax::parse_with(pattern, &syntax::Config::new().utf8(utf8)).ok()?;
+        RegularSet::compile(&format!("(?:{pattern})"), utf8)
     }
 
     /// Build a language from a pattern the caller of this module wrote.
