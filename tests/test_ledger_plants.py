@@ -512,6 +512,18 @@ PLANTS = (
         lambda tree: _edit(tree, ".github/workflows/ci.yml", "jobs:\n", UNREQUIRED_JOB),
     ),
     Plant(
+        "tests/test_required_jobs.py",
+        (".github/workflows/ci.yml",),
+        # A sweep cut wider in its matrix and not in its divisor: the shards past
+        # the old count select no mutant and pass having swept nothing.
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            '20 --shard "${{ matrix.shard }}/24"',
+            '20 --shard "${{ matrix.shard }}/12"',
+        ),
+    ),
+    Plant(
         "tests/test_sweep_skips.py",
         ("crates/valgebra-core/src/decision/budget_tests.rs",),
         lambda tree: _edit(

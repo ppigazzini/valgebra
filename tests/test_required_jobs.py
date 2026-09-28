@@ -194,6 +194,40 @@ def test_every_merge_counts_the_shards_its_sweep_is_cut_into() -> None:
         )
 
 
+#: The divisor a sharded sweep passes, as its step spells it.
+DIVISOR = re.compile(r'--shard "\$\{\{ matrix\.shard \}\}/([0-9]+)"')
+
+
+def test_a_sharded_sweep_covers_every_shard() -> None:
+    """A shard index is zero-based, and an out-of-range one sweeps nothing.
+
+    `cargo mutants --shard k/n` numbers the shards `0..n-1`, so `--shard n/n`
+    selects no mutant at all -- and a sweep of no mutants is a job that passes
+    having tested nothing. The matrix and the divisor are written in two places,
+    so they are held to each other here: the shards a job runs are exactly the
+    range the divisor names. Cutting a sweep wider edits both, and the one left
+    behind either sweeps nothing past the old count or leaves the mutants past
+    the old matrix to no shard at all.
+    """
+    sharded = False
+    for name, job in sorted(_workflow()["jobs"].items()):
+        matrix = job.get("strategy", {}).get("matrix", {})
+        if "shard" not in matrix:
+            continue
+        sharded = True
+        runs = "\n".join(str(step.get("run", "")) for step in job["steps"])
+        divisors = {int(found) for found in DIVISOR.findall(runs)}
+        assert len(divisors) == 1, (
+            f"{name} shards its matrix and passes the divisors {sorted(divisors)}"
+        )
+        (count,) = divisors
+        assert sorted(matrix["shard"]) == list(range(count)), (
+            f"{name} runs shards {matrix['shard']}; a divisor of {count} covers "
+            f"{list(range(count))}, and anything else leaves mutants unswept"
+        )
+    assert sharded, "no job shards its sweep; this ledger has no subject"
+
+
 def test_both_binding_sweeps_read_the_same_files() -> None:
     """The nightly binding sweep covers what the push lane's ratchet judges.
 
