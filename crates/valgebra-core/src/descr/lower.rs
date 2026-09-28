@@ -128,10 +128,11 @@ pub const BUDGET: u32 = 64;
 ///
 /// # Errors
 ///
-/// Refuses rather than approximating. The forms it refuses are the ones with no
-/// component to land in -- a dict, an attribute record beside a builtin kind, a
-/// recursive reference, the gradual `Any` -- and the ones whose operand the pool
-/// could not read.
+/// Refuses rather than approximating. It refuses a recursive reference, which a
+/// finite descriptor has no room for; a predicate, which runs code the core
+/// cannot read; a key or a bound with no component to land in, such as a length
+/// over a set or a dict; an operand or a class the pool could not read; and a
+/// schema past the bounds one lowering spends.
 pub fn lower(schema: &Schema, pool: &dyn Constants) -> Option<Descr> {
     lower_within(Bounds::DEFAULT, schema, pool)
 }

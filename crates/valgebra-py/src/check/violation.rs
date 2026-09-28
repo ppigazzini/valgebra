@@ -149,8 +149,8 @@ pub(crate) fn class_label_in(class: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> String {
 /// `repr` -- which names the key without pretending to be it, and is why the
 /// error model says a path is walkable only when every key is one of the two.
 ///
-/// A `bool` is an `int` in Python and not a key anybody indexes by number, so it
-/// takes the repr path with the rest.
+/// A `bool` is an `int` in Python, and `d[True]` is the entry `d[1]` is, so a
+/// boolean key takes the integer path and reads as `1` or `0`.
 pub(crate) fn key_segment(key: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> PathSegment {
     if let Ok(text) = key.cast::<PyString>() {
         return PathSegment::Key(Arc::from(text.to_cow().unwrap_or_default().as_ref()));

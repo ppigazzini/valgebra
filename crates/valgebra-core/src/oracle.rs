@@ -230,8 +230,7 @@ impl Constants for NoLeafRelations {}
 /// Whether the intersection contains a schema and its complement (`A ∩ ¬A = ∅`).
 ///
 /// The law is a law **about sets**, and it is applied only where both sides are
-/// one. Two atoms are not: the gradual `Any`, whose complement is not its set
-/// complement, and an atom that runs a callback -- a predicate is arbitrary code
+/// one. An atom that runs a callback is not: a predicate is arbitrary code
 /// evaluated once per occurrence, so nothing makes the two occurrences agree.
 /// A predicate that alternates puts a value in `A` and in `¬A` at once, and the
 /// law would report the meet empty with that value as a witness against it.
@@ -269,8 +268,7 @@ pub(crate) fn has_complementary_pair_within(
 /// Sound rather than complete, and conservative in the direction that declines.
 /// A callback is the atom this rules out: `Predicate` runs user code, so two
 /// occurrences of one schema can disagree, and a law that assumes they agree is
-/// not a law about this. The gradual `Any` is ruled out because its complement
-/// is not its set complement.
+/// not a law about this.
 ///
 /// A class is referred to the `oracle`: `isinstance` against a metaclass that
 /// overrides `__instancecheck__` is a callback too, and telling a pure class from

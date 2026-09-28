@@ -1120,8 +1120,8 @@ impl Schema {
     /// holds leaves the fields where they are and drops them, and one it does
     /// not takes them.
     #[must_use]
-    // A `Vec` rather than a slice because canonicalising the fields deduplicates
-    // them, which a slice cannot do.
+    // A `Vec` rather than a slice because interning drains the fields into the
+    // shared list when the table does not hold them, which a slice cannot give.
     fn keyed_map_from(fields: &mut Vec<Field>, defaults: Clauses) -> Schema {
         canonical_fields(fields);
         Schema::KeyedMap {

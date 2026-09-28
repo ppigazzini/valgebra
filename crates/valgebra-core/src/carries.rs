@@ -21,8 +21,7 @@ use crate::ir::{Schema, SeqKind};
 /// A constraint is refused only where *no* value of the base can answer it,
 /// since that is the case where the refinement denotes the empty set and the
 /// marker was written to narrow rather than to empty. Where the base is opaque
-/// -- a class, the gradual atom, a literal, a recursive reference -- the check
-/// stands aside.
+/// -- a class, a literal, a recursive reference -- the check stands aside.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Carries {
     /// Every value of the base can answer the constraint.

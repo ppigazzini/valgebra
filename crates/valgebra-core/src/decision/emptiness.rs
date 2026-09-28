@@ -238,11 +238,6 @@ impl Schema {
             // narrows, and a narrowed region set is an over-approximation whose
             // complement would report an inhabited schema empty -- which is why
             // every other refinement stays unknown.
-            //
-            // The two spellings of the universe were decided differently without
-            // this: `Anything` is below `Refine { base: Anything }` through the
-            // refinement rule, and the gradual `Any` is below `Anything` but was
-            // not below the refinement, because only a region set says so.
             Schema::Refine { base, constraints } if constraints.is_empty() => {
                 base.empty_and_region(oracle, defs, visiting, budget)
             }
@@ -386,8 +381,9 @@ impl Schema {
                 },
                 Regions::Unknown,
             ),
-            // The gradual `Any` is not scalar-decidable and neither direction
-            // is proven of it.
+            // The marker a `recursive` body carries where its back edge will go.
+            // It denotes the empty set, and every decider reads it as a schema
+            // it cannot relate, so neither direction is proven of it.
             _ => (Verdict::Unknown, Regions::Unknown),
         }
     }

@@ -243,10 +243,9 @@ impl Schema {
     /// *scalar-decidable* — built only from the scalar atoms, `Nothing`,
     /// `Anything`, and the `Union`/`Intersection`/`Complement` combinators. On
     /// that fragment the set is **exact**, so emptiness and subtyping are decided
-    /// completely; elsewhere the caller stays conservative. The gradual `Any`,
-    /// literals, instances, refinements, content-bearing containers, and
-    /// references are not scalar-decidable, so any combination holding one is
-    /// `Unknown`.
+    /// completely; elsewhere the caller stays conservative. Literals, instances,
+    /// refinements, content-bearing containers, and references are not
+    /// scalar-decidable, so any combination holding one is `Unknown`.
     pub(crate) fn region_set(&self) -> Regions {
         if let Some(region) = self.atom_region() {
             return Regions::Known(region);
