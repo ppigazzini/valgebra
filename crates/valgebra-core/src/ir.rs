@@ -501,6 +501,10 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
         }
         merge_by_value(&mut kept);
     }
+    // In the constructor's order, since two orders of one clause list are one
+    // schema: the freed clause folds wherever its value first appears, and an
+    // opened map is equal to its own clauses written out again.
+    canonical_clauses(&mut kept);
     share_clauses(&mut kept)
 }
 
@@ -522,9 +526,8 @@ fn clauses_over(defaults: &[MapClause], open: Openness) -> Clauses {
 fn merge_by_value(clauses: &mut Vec<MapClause>) {
     let mut folded: Vec<MapClause> = Vec::with_capacity(clauses.len());
     for clause in clauses.drain(..) {
-        // First occurrence keeps the position, so the claimed regions stay in
-        // the order the term wrote them and the freed one lands where it was
-        // pushed -- which is what makes the shared open list recognisable.
+        // First occurrence keeps the position; the caller puts the list in
+        // the constructor's order afterwards, as every spelling of it is.
         match folded.iter_mut().find(|kept| kept.value == clause.value) {
             Some(kept) => kept.key = Schema::union([kept.key.clone(), clause.key]),
             None => folded.push(clause),

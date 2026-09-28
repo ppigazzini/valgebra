@@ -853,6 +853,37 @@ fn with_records_open_refolds_a_pair_it_creates() {
     );
 }
 
+/// An opened map carries its clauses in the constructor's order.
+///
+/// Opening folds the region no clause claims into the clause carrying the same
+/// value, wherever that clause stood. Two orders of one clause list are one
+/// schema, so the result must equal its own fields and clauses rebuilt by the
+/// constructor -- which is also what makes it render as they do.
+#[test]
+fn an_opened_map_is_its_clauses_in_the_constructors_order() {
+    let map = Schema::keyed_map(
+        vec![],
+        vec![
+            MapClause {
+                key: Schema::Int,
+                value: Schema::ANYTHING,
+            },
+            MapClause {
+                key: Schema::Str,
+                value: Schema::Int,
+            },
+        ],
+    );
+    let opened = map.with_records_open(Openness::Open);
+    let Schema::KeyedMap { fields, defaults } = &opened else {
+        panic!("a map opened into a non-map");
+    };
+    assert_eq!(
+        opened,
+        Schema::keyed_map(fields.to_vec(), defaults.to_vec())
+    );
+}
+
 // THEORY: open-and-close-are-term-rewrites
 #[test]
 fn with_records_open_keeps_the_region_a_mapping_claims() {

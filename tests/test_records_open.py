@@ -1,4 +1,4 @@
-from valgebra import Validator, anything
+from valgebra import Validator, anything, complement, union
 
 
 def test_records_are_closed_by_default() -> None:
@@ -40,3 +40,13 @@ def test_open_record_renders_as_the_record_that_rebuilds_it() -> None:
     assert repr(opened) == "{'name': str, anything: anything}"
     assert Validator({"name": str, anything: anything}) == opened
     assert repr(Validator({"name": str})) == "{'name': str}"
+
+
+def test_an_opened_mapping_renders_as_its_clauses_written_again() -> None:
+    # Opening folds the region no clause claims into the clause carrying the
+    # same value, and two orders of one clause list are one schema: the opened
+    # map renders as those clauses do when written out.
+    opened = Validator({int: object, str: int}).open()
+    written = Validator({union(int, complement(union(int, str))): object, str: int})
+    assert opened == written
+    assert repr(opened) == repr(written)

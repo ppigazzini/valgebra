@@ -22,6 +22,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a marker class is refused with the spelling that was meant
 - fix: a length bound is read before the elements it bounds
 - fix: a reference nothing resolves is below a reference to the universe -- internal
+- fix: an opened map carries its clauses in the constructor's order
 
 -->
 
@@ -83,6 +84,12 @@ answer of its own, or a repair to a change not yet released.
   frozenset or dict, `MinLen` and `MaxLen` are read once the value is of the
   base's kind and before any element, where a fixed shape reads its length: the
   list is refused with `too_long` alone. Membership is unchanged.
+- **An opened map lists its clauses as the same clauses written out do.**
+  `open()` folds the key region no clause claims into the clause carrying the
+  same value, and kept that clause where it stood, so
+  `Validator({int: object, str: int}).open()` rendered its clauses in another
+  order than the same clauses written out, though the two compare equal. The
+  opened list takes the order every spelling of it gets.
 
 ## [0.0.14] - 2026-09-26
 
