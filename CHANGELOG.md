@@ -34,6 +34,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a bare TypedDict or NamedTuple is refused
 - fix: a TypedDict subclass inherits what its base says about unnamed keys
 - fix: a space or a # inside a verbose class is refused
+- fix: the unsupported-form refusal names every subscripted form it reads
 
 -->
 
@@ -174,6 +175,10 @@ answer of its own, or a repair to a change not yet released.
   "unclosed character class". Under `re.VERBOSE`, `(?x)` or `(?x:...)`, either
   character in a class raises a `ValueError` naming it and the escape to write
   instead.
+- **The unsupported-form refusal names every subscripted form it reads.** It
+  ended "supported: list, set, dict, tuple, Union, Optional, Literal,
+  Callable", which left out `frozenset`, `Annotated` and the `TypedDict`
+  qualifiers, all of which build. The list names each of them.
 
 ## [0.0.14] - 2026-09-26
 

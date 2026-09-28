@@ -266,6 +266,22 @@ def test_a_bare_typed_dict_or_named_tuple_is_refused(module: str, name: str) -> 
         Validator(form)
 
 
+def test_the_unsupported_form_refusal_names_the_forms_it_reads() -> None:
+    """The fallback lists what the dispatch reads, and each of those builds.
+
+    The list left `frozenset` out, which `frozenset[int]` builds, so a reader
+    looking for the spelling that works was told there was none.
+    """
+    with pytest.raises(
+        NotImplementedError, match="the subscripted forms read"
+    ) as caught:
+        Validator(collections.abc.Mapping[str, int])
+    listed = str(caught.value).split("the subscripted forms read are ")[1]
+    for container in (list, set, frozenset, dict, tuple):
+        assert container.__name__ in listed
+        Validator(container[int] if container is not dict else dict[int, int])
+
+
 def test_a_pattern_that_is_not_text_says_what_it_is() -> None:
     """A refusal names the marker it read, not a kind it guessed."""
     with pytest.raises((TypeError, ValueError, NotImplementedError)) as caught:

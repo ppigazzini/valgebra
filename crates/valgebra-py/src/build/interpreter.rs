@@ -320,6 +320,11 @@ fn each_refusal_says_what_it_refuses() {
         for (expression, wanted) in [
             ("typing.TypeVar('T')", "TypeVar"),
             ("typing.TypedDict", "the base a class is declared from"),
+            // The fallback names every subscripted form the dispatch reads.
+            (
+                "typing.Mapping[str, int]",
+                "list, set, frozenset, dict, tuple",
+            ),
             ("typing.NamedTuple", "the base a class is declared from"),
             ("list['Account']", "get_type_hints"),
             ("typing.Annotated[int, at.MinLen(1)]", "length"),

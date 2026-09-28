@@ -124,8 +124,9 @@ pub(super) fn build_parametrized(
         return build_type_argument(&single_arg(args, alias, QUALIFIER_INSTEAD)?, lits, defs);
     }
     Err(not_implemented(&format!(
-        "unsupported typing form with origin {}; supported: list, set, dict, \
-         tuple, Union, Optional, Literal, Callable",
+        "unsupported typing form with origin {}; the subscripted forms read are \
+         list, set, frozenset, dict, tuple, Union, Optional, Literal, Annotated, \
+         Callable, and the TypedDict qualifiers Required, NotRequired and ReadOnly",
         summarize(origin)
     )))
 }
