@@ -101,10 +101,6 @@ fn run(program: &Path, args: &[&str], venv: &Path, at: &Path) -> Result<(), Stri
     if output.status.success() {
         return Ok(());
     }
-    let tail = |bytes: &[u8]| {
-        let text = String::from_utf8_lossy(bytes).to_string();
-        text.chars().rev().take(4000).collect::<String>()
-    };
     Err(format!(
         "{} failed ({}):\nstdout tail: {}\nstderr tail: {}",
         program.display(),
@@ -112,6 +108,38 @@ fn run(program: &Path, args: &[&str], venv: &Path, at: &Path) -> Result<(), Stri
         tail(&output.stdout),
         tail(&output.stderr),
     ))
+}
+
+/// The end of a stream, in the order it was written.
+///
+/// A tool that fails says why last, so the end is the part worth keeping, and a
+/// build's output runs to megabytes. Counted in characters, since a byte cut
+/// can land inside one.
+fn tail(bytes: &[u8]) -> String {
+    const KEPT: usize = 4000;
+    let text = String::from_utf8_lossy(bytes);
+    let start = text
+        .char_indices()
+        .rev()
+        .nth(KEPT - 1)
+        .map_or(0, |(at, _)| at);
+    text[start..].to_owned()
+}
+
+/// A failure's tail reads forwards, and keeps its end.
+///
+/// Taking the last characters by walking the text backwards and collecting
+/// the walk kept the right ones in the reverse order: the sweep's baseline
+/// failed on a registry outage, and the reason printed as
+/// `"2 :sutats tixe" htiw dehsinif`.
+#[test]
+fn a_failure_tail_reads_in_the_order_it_was_written() {
+    assert_eq!(tail(b"exit status: 2"), "exit status: 2");
+    let long = format!("{}é the reason", "x".repeat(5000));
+    let kept = tail(long.as_bytes());
+    assert_eq!(kept.chars().count(), 4000);
+    assert!(kept.ends_with("é the reason"), "the end is kept: {kept:?}");
+    assert!(kept.starts_with('x'));
 }
 
 /// The Python suite, against the extension built from this checkout.
