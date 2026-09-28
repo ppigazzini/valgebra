@@ -282,6 +282,24 @@ def test_the_unsupported_form_refusal_names_the_forms_it_reads() -> None:
         Validator(container[int] if container is not dict else dict[int, int])
 
 
+def test_an_annotation_python_cannot_evaluate_raises_what_evaluating_it_raises() -> (
+    None
+):
+    """A name the class's module does not define raises `NameError` at build.
+
+    The class's annotations are resolved when the validator is built, as
+    `docs/16-api.md` says, so a name imported only under `TYPE_CHECKING` -- the
+    name here, which is never defined -- is Python's error and not a refusal.
+    """
+
+    @dataclasses.dataclass
+    class Price:
+        amount: NeverDefined  # noqa: F821  # ty: ignore[unresolved-reference]
+
+    with pytest.raises(NameError, match="NeverDefined"):
+        Validator(Price)
+
+
 def test_a_pattern_that_is_not_text_says_what_it_is() -> None:
     """A refusal names the marker it read, not a kind it guessed."""
     with pytest.raises((TypeError, ValueError, NotImplementedError)) as caught:

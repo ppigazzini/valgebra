@@ -122,8 +122,12 @@ assert Validator(int).relation_to(nothing) == "not_subset"  # a value says so
 
 A failure at **build** time — when the schema is compiled — is a different kind
 of event from a failure at **validation** time, and it raises a different
-exception. `ValidationError` is only ever the second. Building raises one of
-three, and which one says what went wrong:
+exception. `ValidationError` is only ever the second. Building refuses with one
+of three, and which one says what went wrong. A class whose annotation Python
+cannot evaluate raises what evaluating it raises, before any of them: a
+`NameError` for a name its module does not define when the validator is built,
+such as an import moved under `if TYPE_CHECKING:` ([static
+checking](18-static-checking.md)).
 
 | Raised | When | Example |
 | --- | --- | --- |
