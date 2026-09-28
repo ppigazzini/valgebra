@@ -560,36 +560,102 @@ fn no_extra_items<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Bound<'py, Py
 ///
 /// `closed=True` shuts them and `extra_items=T` gives them a type -- PEP 728,
 /// which the typing spec carries. Both are read off the class, where the
-/// implementation that built it puts them: a `TypedDict` built without PEP 728
+/// implementation that built it puts them, and off its bases where the class
+/// says neither: the spec's open default holds "except when inheriting from
+/// another `TypedDict` that is not open". A `TypedDict` built without PEP 728
 /// cannot have said either, and the spec's default is what is left.
 pub(super) fn unnamed_keys(
     ty: &Bound<'_, PyType>,
     lits: &mut Pool,
     defs: &mut Vec<Schema>,
 ) -> PyResult<Vec<MapClause>> {
+    Ok(match inherited_tail(ty)? {
+        Tail::Closed => Vec::new(),
+        // A `TypedDict`'s keys are strings, so the type it gives the extra ones
+        // governs the string keys and leaves no other kind admitted.
+        Tail::Typed(extra) => vec![MapClause {
+            key: Schema::Str,
+            value: build_schema(&extra, lits, defs)?,
+        }],
+        // A `TypedDict`'s keys are strings -- the spec relates one to
+        // `Mapping[str, object]` and to nothing wider -- so being open is being
+        // open to further *string* keys, not to keys of every kind.
+        Tail::Open => vec![MapClause {
+            key: Schema::Str,
+            value: Schema::ANYTHING,
+        }],
+    })
+}
+
+/// What a `TypedDict` says about the keys it does not name.
+enum Tail<'py> {
+    /// `closed=True`: no other key.
+    Closed,
+    /// `extra_items=T`: every other string key maps into `T`.
+    Typed(Bound<'py, PyAny>),
+    /// Open over the string keys, which the spec reads as `ReadOnly[object]`.
+    Open,
+}
+
+/// What `ty` says about its unnamed keys, or `None` where it says nothing.
+///
+/// The runtime writes both attributes on every class, with the class's own
+/// keywords: `__closed__` is `None` and `__extra_items__` the `NoExtraItems`
+/// sentinel where the class gave neither, whatever its bases gave.
+fn stated_tail<'py>(ty: &Bound<'py, PyType>) -> PyResult<Option<Tail<'py>>> {
     let py = ty.py();
     if let Some(flag) = ty.getattr_opt(intern!(py, "__closed__"))?
-        && flag.is_truthy()?
+        && !flag.is_none()
     {
-        return Ok(Vec::new());
+        return Ok(Some(if flag.is_truthy()? {
+            Tail::Closed
+        } else {
+            Tail::Open
+        }));
     }
     if let Some(extra) = ty.getattr_opt(intern!(py, "__extra_items__"))?
         && !gave_no_extra_items(ty, &extra)?
     {
-        // A `TypedDict`'s keys are strings, so the type it gives the extra ones
-        // governs the string keys and leaves no other kind admitted.
-        return Ok(vec![MapClause {
-            key: Schema::Str,
-            value: build_schema(&extra, lits, defs)?,
-        }]);
+        return Ok(Some(Tail::Typed(extra)));
     }
-    // A `TypedDict`'s keys are strings -- the spec relates one to
-    // `Mapping[str, object]` and to nothing wider -- so being open is being open
-    // to further *string* keys, not to keys of every kind.
-    Ok(vec![MapClause {
-        key: Schema::Str,
-        value: Schema::ANYTHING,
-    }])
+    Ok(None)
+}
+
+/// What `ty` has for its unnamed keys: its own, or the first a `TypedDict` base
+/// states, depth first in the order the bases are written; open where none does.
+///
+/// The bases are `__orig_bases__`, since a `TypedDict`'s `__bases__` is `dict`
+/// alone. A base written generic, `Base[int]`, is read through its origin. The
+/// walk is bounded like the build, so a hierarchy past the bound reads open.
+fn inherited_tail<'py>(ty: &Bound<'py, PyType>) -> PyResult<Tail<'py>> {
+    let py = ty.py();
+    let mut pending = vec![ty.clone()];
+    for _ in 0..MAX_BUILD_DEPTH {
+        let Some(class) = pending.pop() else {
+            break;
+        };
+        if let Some(tail) = stated_tail(&class)? {
+            return Ok(tail);
+        }
+        let Some(bases) = class.getattr_opt(intern!(py, "__orig_bases__"))? else {
+            continue;
+        };
+        let mut typed = Vec::new();
+        for base in bases.try_iter()? {
+            let base = base?;
+            let base = match base.getattr_opt(intern!(py, "__origin__"))? {
+                Some(origin) => origin,
+                None => base,
+            };
+            if let Ok(base) = base.cast_into::<PyType>()
+                && base.hasattr(intern!(py, "__required_keys__"))?
+            {
+                typed.push(base);
+            }
+        }
+        pending.extend(typed.into_iter().rev());
+    }
+    Ok(Tail::Open)
 }
 
 /// The attribute names a class declares, in declaration order.

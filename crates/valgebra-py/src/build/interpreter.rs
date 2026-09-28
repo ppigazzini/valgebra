@@ -1138,6 +1138,65 @@ fn a_typed_dict_is_read_against_the_sentinel_its_own_implementation_wrote() {
     });
 }
 
+/// A `TypedDict` that says nothing about the keys it does not name says what
+/// its nearest base says, depth first through `__orig_bases__`; one that says
+/// `closed=False` itself is open whatever its base says.
+#[test]
+fn a_typed_dict_inherits_the_tail_its_base_states() {
+    Python::attach(|py| {
+        let namespace = namespace(py).expect("the corpus namespace builds");
+        py.run(
+            c"import sys, types\n\
+              module = types.ModuleType('corpus_inherited_tail')\n\
+              module.NoExtraItems = object()\n\
+              sys.modules[module.__name__] = module\n\
+              class Meta(type):\n\
+              \x20   pass\n\
+              Meta.__module__ = module.__name__\n\
+              def record(name, bases, closed, extra, keys):\n\
+              \x20   cls = Meta(name, (), {\n\
+              \x20       '__required_keys__': frozenset(keys),\n\
+              \x20       '__closed__': closed,\n\
+              \x20       '__extra_items__': extra,\n\
+              \x20       '__annotations__': {key: int for key in sorted(keys)},\n\
+              \x20   })\n\
+              \x20   cls.__orig_bases__ = bases\n\
+              \x20   return cls\n\
+              unsaid = module.NoExtraItems\n\
+              Shut = record('Shut', (), True, unsaid, {'a'})\n\
+              Typed = record('Typed', (), None, str, {'a'})\n\
+              Child = record('Child', (Shut,), None, unsaid, {'a', 'b'})\n\
+              Grandchild = record('Grandchild', (Child,), None, unsaid, {'a', 'b'})\n\
+              TypedChild = record('TypedChild', (object, Typed), None, unsaid, {'a', 'b'})\n\
+              Reopened = record('Reopened', (Shut,), False, unsaid, {'a'})\n",
+            Some(&namespace),
+            None,
+        )
+        .expect("the classes build");
+        for (name, wanted) in [
+            ("Child", "{'a': int, 'b': int}"),
+            ("Grandchild", "{'a': int, 'b': int}"),
+            ("TypedChild", "{'a': int, 'b': int, str: str}"),
+            ("Reopened", "{'a': int, str: anything}"),
+        ] {
+            let annotation = namespace
+                .get_item(name)
+                .expect("the namespace answers")
+                .expect("the class is in it");
+            let mut pool = Pool::default();
+            let mut defs = Vec::new();
+            let schema = build_schema(&annotation, &mut pool, &mut defs)
+                .unwrap_or_else(|error| panic!("{name} did not build: {error}"));
+            let active = RefCell::new(FxHashMap::default());
+            assert_eq!(
+                render(py, &schema, pool.items(), &defs, &active, 0),
+                wanted,
+                "{name}"
+            );
+        }
+    });
+}
+
 /// A class is read through its declared fields, and what it declares is not
 /// every annotation on it.
 #[test]

@@ -32,6 +32,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an object carrying metadata and no origin is a value
 - fix: a typing_extensions spelling reads as its typing one
 - fix: a bare TypedDict or NamedTuple is refused
+- fix: a TypedDict subclass inherits what its base says about unnamed keys
 
 -->
 
@@ -158,6 +159,13 @@ answer of its own, or a repair to a change not yet released.
   `NamedTuple` as every named tuple class and refuses `TypedDict` as a type.
   Both, from `typing` or `typing_extensions`, raise `NotImplementedError`
   naming the class to pass instead.
+- **A `TypedDict` subclass inherits what its base says about unnamed keys.**
+  The typing spec's open default holds "except when inheriting from another
+  TypedDict that is not open", and the runtime writes `closed` and
+  `extra_items` only on the class that gave them. A subclass of a
+  `closed=True` or `extra_items=T` `TypedDict` read as open and admitted any
+  extra key. It reads what its nearest base states, and a class that says
+  `closed=False` itself stays open.
 
 ## [0.0.14] - 2026-09-26
 

@@ -178,7 +178,11 @@ order of the questions, and each is asked of an attribute the runtime fills in:
    over the key sets, and a qualifier may wrap another. The keys it does not
    name are what PEP 728's two attributes say, read off the class:
    `__closed__` shuts them, `__extra_items__` types them, and neither leaves
-   the record open over string keys. "No `extra_items` given" is written with
+   the record open over string keys. The runtime writes both on every class
+   with that class's own keywords, and the spec's open default holds "except
+   when inheriting from another TypedDict that is not open", so a class that
+   gives neither reads its bases: `inherited_tail` walks `__orig_bases__`
+   depth first and takes the first base that states one. "No `extra_items` given" is written with
    the `NoExtraItems` sentinel of the implementation that built the class, the
    one in its metaclass's module -- `typing`'s and `typing_extensions`' are two
    objects before 3.15. An implementation older than the sentinel writes `None`

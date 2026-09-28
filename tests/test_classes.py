@@ -144,6 +144,40 @@ def test_a_typeddict_is_the_record_its_pep_728_spelling_names(
     assert Validator(record) == Validator(literal)
 
 
+@pytest.mark.parametrize("implementation", ["typing", "typing_extensions"])
+def test_a_typeddict_inherits_the_keys_its_base_does_not_name(
+    implementation: str,
+) -> None:
+    """A subclass says what its base says about the keys neither names.
+
+    The spec's open default holds "except when inheriting from another
+    TypedDict that is not open". The runtime writes `closed` and `extra_items`
+    on the class that gave them, so a subclass carries neither of its own, and
+    reading the class alone read it open.
+    """
+    module = pytest.importorskip(implementation)
+    if not hasattr(module, "NoExtraItems"):
+        pytest.skip(f"{implementation} has no PEP 728 on this release")
+    shut = module.TypedDict("Shut", {"a": int}, closed=True)
+    typed = module.TypedDict("Typed", {"a": int}, extra_items=str)
+    reopened = type(shut)("Reopened", (shut,), {"__annotations__": {}}, closed=False)
+    for base, extra, admitted in [
+        (shut, "x", False),
+        (typed, "x", True),
+        (typed, 1, False),
+    ]:
+        child = type(base)("Child", (base,), {"__annotations__": {"b": int}})
+        grandchild = type(base)("Grandchild", (child,), {"__annotations__": {}})
+        for record in (child, grandchild):
+            value = {"a": 1, "b": 2, "extra": extra}
+            assert Validator(record).is_valid(value) is admitted, (record, extra)
+        # The keys the classes name are read whatever the tail is.
+        assert Validator(child).is_valid({"a": 1, "b": 2})
+        assert not Validator(child).is_valid({"a": 1})
+    # A class that says `closed=False` itself is open, whatever its base says.
+    assert Validator(reopened).is_valid({"a": 1, "extra": object()})
+
+
 def test_typeddict_total_false_makes_keys_optional() -> None:
     schema = Validator(PartialUser)
     assert schema.is_valid({})
