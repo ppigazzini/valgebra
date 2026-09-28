@@ -1,6 +1,6 @@
-//! Sets of floats: intervals over the ordered line, and a bit for `nan`.
+//! Sets of floats: closed intervals of floats, and a bit for `nan`.
 //!
-//! A float is not an integer with more digits, and the two ways it differs are
+//! A float is not an integer with more digits, and the three ways it differs are
 //! exactly what a set of floats has to carry.
 //!
 //! **`nan` is outside the order.** Every comparison with it is false, so it sits
@@ -14,18 +14,20 @@
 //! value can distinguish. Every endpoint is normalised on the way in, and the
 //! negative zero never reaches the representation.
 //!
-//! The intervals carry their own inclusivity, because `Gt(0)` and `Ge(0)` differ
-//! by one value and both are things a caller writes. Endpoints are floats, so
-//! the infinities are *values* rather than open ends: `[-inf, inf]` is every
-//! float but `nan`.
+//! **The floats are discrete.** Every float but the largest has a next one, and
+//! nothing lies between the two: `Gt(1.0)` admits the floats from the one after
+//! `1.0` up, which is what `Ge(math.nextafter(1.0, inf))` admits too. So an
+//! interval holds both its ends, and an open end a caller writes is held as its
+//! neighbouring float. Two spellings of one set are then one interval, an
+//! interval between two adjacent floats is empty, and two intervals with no float
+//! between them are one. Endpoints are floats, so the infinities are *values*
+//! rather than open ends: `[-inf, inf]` is every float but `nan`.
 
-/// One interval of floats, with each end open or closed.
+/// The floats from `lo` to `hi`, both held.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Span {
     lo: f64,
-    lo_closed: bool,
     hi: f64,
-    hi_closed: bool,
 }
 
 /// Reflexive for the same reason [`FloatSet`]'s is: an endpoint is never `nan`.
@@ -41,9 +43,7 @@ impl Ord for Span {
     fn cmp(&self, other: &Span) -> core::cmp::Ordering {
         self.lo
             .total_cmp(&other.lo)
-            .then(self.lo_closed.cmp(&other.lo_closed))
             .then(self.hi.total_cmp(&other.hi))
-            .then(self.hi_closed.cmp(&other.hi_closed))
     }
 }
 
@@ -53,8 +53,18 @@ impl PartialOrd for Span {
     }
 }
 
+/// The span holding no float: the one an open end at an infinity leaves, since
+/// nothing lies above `inf` or below `-inf`.
+const EMPTY: Span = Span {
+    lo: f64::INFINITY,
+    hi: f64::NEG_INFINITY,
+};
+
 impl Span {
-    /// The interval between two normalised endpoints.
+    /// The floats between two endpoints, each held or not.
+    ///
+    /// An end that is not held is read as its neighbouring float, which is exact
+    /// rather than a rounding: no float lies between a float and the next one.
     ///
     /// Normalisation is the invariant every other method here rests on: the
     /// order compares endpoints with `total_cmp` and equality compares them
@@ -62,13 +72,18 @@ impl Span {
     /// reaching an endpoint would make `[0.0, -0.0]` a span that `is_empty`
     /// reads as crossed and `holds` reads as holding zero, which is not a
     /// canonicity cost but a wrong answer.
-    fn new(lo: f64, lo_closed: bool, hi: f64, hi_closed: bool) -> Span {
+    fn new(lo: f64, lo_held: bool, hi: f64, hi_held: bool) -> Span {
         let (lo, hi) = (normalise(lo), normalise(hi));
         debug_assert!(
             !lo.is_nan() && !hi.is_nan(),
             "an endpoint is never `nan`: the one value outside the order is held \
              in the bit beside the spans"
         );
+        let lo = if lo_held { Some(lo) } else { successor(lo) };
+        let hi = if hi_held { Some(hi) } else { predecessor(hi) };
+        let (Some(lo), Some(hi)) = (lo, hi) else {
+            return EMPTY;
+        };
         // The order and equality must agree on the endpoints, because one
         // decides whether a span is empty and the other whether two spans are
         // one. `-0.0` is the only pair they part on, and normalisation is what
@@ -84,74 +99,46 @@ impl Span {
                 "normalisation leaves the order and equality agreeing on {lo} and {hi}"
             );
         }
-        Span {
-            lo,
-            lo_closed,
-            hi,
-            hi_closed,
-        }
+        Span { lo, hi }
     }
 
-    /// Whether this interval holds no float: the ends crossed, or they met at a
-    /// point that at least one of them excludes.
+    /// Whether this interval holds no float: the ends crossed.
     fn is_empty(self) -> bool {
-        match self.lo.total_cmp(&self.hi) {
-            core::cmp::Ordering::Greater => true,
-            core::cmp::Ordering::Equal => !(self.lo_closed && self.hi_closed),
-            core::cmp::Ordering::Less => false,
-        }
+        self.lo.total_cmp(&self.hi) == core::cmp::Ordering::Greater
     }
 
     fn holds(self, value: f64) -> bool {
-        let above = if self.lo_closed {
-            self.lo <= value
-        } else {
-            self.lo < value
-        };
-        let below = if self.hi_closed {
-            value <= self.hi
-        } else {
-            value < self.hi
-        };
-        above && below
+        self.lo <= value && value <= self.hi
     }
 
     /// The floats in both intervals.
     fn intersect(self, other: Span) -> Span {
-        // At a shared endpoint the *stricter* inclusivity wins, which is what
-        // makes `[0, 1] & (0, 2]` start open rather than closed.
-        let (lo, lo_closed) = match self.lo.total_cmp(&other.lo) {
-            core::cmp::Ordering::Less => (other.lo, other.lo_closed),
-            core::cmp::Ordering::Greater => (self.lo, self.lo_closed),
-            core::cmp::Ordering::Equal => (self.lo, self.lo_closed && other.lo_closed),
-        };
-        let (hi, hi_closed) = match self.hi.total_cmp(&other.hi) {
-            core::cmp::Ordering::Less => (self.hi, self.hi_closed),
-            core::cmp::Ordering::Greater => (other.hi, other.hi_closed),
-            core::cmp::Ordering::Equal => (self.hi, self.hi_closed && other.hi_closed),
-        };
         Span {
-            lo,
-            lo_closed,
-            hi,
-            hi_closed,
+            lo: self.lo.max(other.lo),
+            hi: self.hi.min(other.hi),
         }
     }
 
-    /// Whether `other` starts before this interval ends, or exactly where it
-    /// ends with at least one of the two holding that point.
+    /// Whether `other` starts no later than the float after this interval's end,
+    /// so no float lies between the two and they are one interval.
     ///
-    /// The float line has no successor, so two intervals meeting at a point are
-    /// one interval when either side holds it -- `[0, 1]` and `(1, 2]` are
-    /// `[0, 2]` -- and two intervals when neither does, since the point itself
-    /// is then a hole.
+    /// `[0, 1]` and `[nextafter(1), 2]` meet that way although they share no
+    /// float, which a reading of the floats as a continuum would keep apart --
+    /// and would then answer `==` differently for two spellings of one set.
     fn reaches(self, other: Span) -> bool {
-        match self.hi.total_cmp(&other.lo) {
-            core::cmp::Ordering::Greater => true,
-            core::cmp::Ordering::Equal => self.hi_closed || other.lo_closed,
-            core::cmp::Ordering::Less => false,
-        }
+        successor(self.hi)
+            .is_none_or(|next| other.lo.total_cmp(&next) != core::cmp::Ordering::Greater)
     }
+}
+
+/// The least float above `value`, or `None` above the largest.
+fn successor(value: f64) -> Option<f64> {
+    (value != f64::INFINITY).then(|| normalise(value.next_up()))
+}
+
+/// The greatest float below `value`, or `None` below the least.
+fn predecessor(value: f64) -> Option<f64> {
+    (value != f64::NEG_INFINITY).then(|| normalise(value.next_down()))
 }
 
 /// `-0.0` read as the value it is equal to.
@@ -166,7 +153,8 @@ fn normalise(value: f64) -> f64 {
 /// A set of floats.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FloatSet {
-    /// Sorted, disjoint, non-touching intervals over the ordered floats.
+    /// Sorted intervals over the ordered floats, with a float between each two
+    /// that neither holds.
     spans: Vec<Span>,
     /// Whether the set holds `nan`, which no interval can say.
     nan: bool,
@@ -267,11 +255,11 @@ impl FloatSet {
     /// Every comparison with `nan` is false, so a bound of `nan` admits no
     /// float: `Annotated[float, Ge(float("nan"))]` is the empty set, and reading
     /// it as an unbounded end would make it every float instead.
-    fn ordered(lo: f64, lo_closed: bool, hi: f64, hi_closed: bool) -> FloatSet {
+    fn ordered(lo: f64, lo_held: bool, hi: f64, hi_held: bool) -> FloatSet {
         if lo.is_nan() || hi.is_nan() {
             return FloatSet::empty();
         }
-        FloatSet::from_span(Span::new(lo, lo_closed, hi, hi_closed))
+        FloatSet::from_span(Span::new(lo, lo_held, hi, hi_held))
     }
 
     fn from_span(span: Span) -> FloatSet {
@@ -332,35 +320,25 @@ impl FloatSet {
 
     /// Every float this set does not hold.
     ///
-    /// The ordered part complements by reading the gaps, each taking the
-    /// inclusivity the neighbouring end did not; the `nan` bit flips on its own,
-    /// which is what keeps the two halves independent.
+    /// The ordered part complements by reading the gaps: from the float after
+    /// one interval's end to the float before the next one's start. The `nan`
+    /// bit flips on its own, which is what keeps the two halves independent.
     #[must_use]
     pub fn complement(&self) -> FloatSet {
         let mut spans = Vec::new();
-        let mut lo = f64::NEG_INFINITY;
-        let mut lo_closed = true;
+        // The least float no interval so far holds, or `None` once `inf` is.
+        let mut next = Some(f64::NEG_INFINITY);
         for span in &self.spans {
-            let gap = Span {
-                lo,
-                lo_closed,
-                hi: span.lo,
-                hi_closed: !span.lo_closed,
-            };
-            if !gap.is_empty() {
-                spans.push(gap);
+            if let (Some(lo), Some(hi)) = (next, predecessor(span.lo)) {
+                spans.push(Span { lo, hi });
             }
-            lo = span.hi;
-            lo_closed = !span.hi_closed;
+            next = successor(span.hi);
         }
-        let tail = Span {
-            lo,
-            lo_closed,
-            hi: f64::INFINITY,
-            hi_closed: true,
-        };
-        if !tail.is_empty() {
-            spans.push(tail);
+        if let Some(lo) = next {
+            spans.push(Span {
+                lo,
+                hi: f64::INFINITY,
+            });
         }
         FloatSet {
             spans,
@@ -369,24 +347,14 @@ impl FloatSet {
         .canonical()
     }
 
-    /// Sort, drop the empties, and merge what meets.
+    /// Sort, drop the empties, and merge what no float separates.
     fn canonical(self) -> FloatSet {
         let mut spans: Vec<Span> = self.spans.into_iter().filter(|s| !s.is_empty()).collect();
-        // A closed end sorts before an open one at the same point, so a merge
-        // never has to look backwards for the wider start.
-        spans.sort_by(|a, b| a.lo.total_cmp(&b.lo).then(b.lo_closed.cmp(&a.lo_closed)));
+        spans.sort();
         let mut merged: Vec<Span> = Vec::with_capacity(spans.len());
         for span in spans {
             match merged.last_mut() {
-                Some(last) if last.reaches(span) => {
-                    let wider = match last.hi.total_cmp(&span.hi) {
-                        core::cmp::Ordering::Less => (span.hi, span.hi_closed),
-                        core::cmp::Ordering::Greater => (last.hi, last.hi_closed),
-                        core::cmp::Ordering::Equal => (last.hi, last.hi_closed || span.hi_closed),
-                    };
-                    last.hi = wider.0;
-                    last.hi_closed = wider.1;
-                }
+                Some(last) if last.reaches(span) => last.hi = last.hi.max(span.hi),
                 _ => merged.push(span),
             }
         }

@@ -1,31 +1,41 @@
 use super::FloatSet;
 use proptest::prelude::*;
 
-/// The floats a law is checked over.
-///
-/// Both zeros, both infinities, `nan`, and a point strictly inside every
-/// gap the generator's endpoints leave -- including the two unbounded ones,
-/// where a set like `(-inf, -2.0)` is inhabited by values no endpoint names.
-/// The three that make floats their own case are all here: a law that held
-/// over ordinary finite values alone would miss every one of them.
-fn universe() -> Vec<f64> {
-    vec![
+/// The endpoints the generator writes, the float after `1.0` among them, so an
+/// open end at one meets a closed end at its neighbour.
+fn points() -> [f64; 9] {
+    [
         f64::NEG_INFINITY,
-        -3.0,
         -2.0,
-        -1.5,
         -1.0,
-        -0.5,
         -0.0,
         0.0,
-        0.5,
         1.0,
-        1.5,
+        1.0f64.next_up(),
         2.0,
-        3.0,
         f64::INFINITY,
-        f64::NAN,
     ]
+}
+
+/// The floats a law is checked over.
+///
+/// Every endpoint a built set can have is a point or a neighbour of one: an
+/// open end is held as its neighbour, and a complement ends a gap one float
+/// short of the interval beside it. Each of those is here with its own
+/// neighbours, so every run of floats between two endpoints has a member here,
+/// the unbounded runs included. Both zeros, both infinities, and `nan` are here
+/// too: a law that held over ordinary finite values alone would miss every one
+/// of the three ways a float differs from an integer.
+fn universe() -> Vec<f64> {
+    let mut floats: Vec<f64> = points()
+        .into_iter()
+        .flat_map(|p| {
+            let (up, down) = (p.next_up(), p.next_down());
+            [p, up, down, up.next_up(), down.next_down()]
+        })
+        .collect();
+    floats.push(f64::NAN);
+    floats
 }
 
 /// Whether two sets hold the same floats. `nan` compares by membership, not
@@ -37,16 +47,7 @@ fn same(a: &FloatSet, b: &FloatSet) -> bool {
 /// Sets built from endpoints inside the universe, so agreement on it is
 /// agreement everywhere.
 fn float_set() -> impl Strategy<Value = FloatSet> {
-    let point = prop_oneof![
-        Just(-2.0f64),
-        Just(-1.0),
-        Just(-0.0),
-        Just(0.0),
-        Just(1.0),
-        Just(2.0),
-        Just(f64::INFINITY),
-        Just(f64::NEG_INFINITY),
-    ];
+    let point = proptest::sample::select(points().to_vec());
     let leaf = prop_oneof![
         Just(FloatSet::empty()),
         Just(FloatSet::all()),
@@ -205,8 +206,7 @@ fn the_two_zeros_are_one_value() {
     assert!(straddling.holds(0.0) && straddling.holds(-0.0));
 }
 
-/// An open and a closed end differ by one value, which is the reason the
-/// inclusivity is carried rather than rounded to the nearest float.
+/// An open and a closed end differ by one value, the end itself.
 #[test]
 fn an_open_end_excludes_exactly_its_own_point() {
     assert!(FloatSet::at_least(1.0).holds(1.0));
@@ -226,6 +226,43 @@ fn an_open_end_excludes_exactly_its_own_point() {
     let holed = FloatSet::below(1.0).union(&FloatSet::above(1.0));
     assert!(!holed.holds(1.0));
     assert!(holed.holds(0.5) && holed.holds(1.5));
+}
+
+/// No float lies between a float and the next one, so an open end is the
+/// closed end at its neighbour, and two intervals no float separates are one.
+#[test]
+fn no_float_lies_between_a_float_and_the_next() {
+    let next = 1.0f64.next_up();
+    assert!(
+        FloatSet::above(1.0)
+            .intersect(&FloatSet::below(next))
+            .is_empty()
+    );
+    assert_eq!(FloatSet::above(1.0), FloatSet::at_least(next));
+    assert_eq!(FloatSet::below(next), FloatSet::at_most(1.0));
+    assert_eq!(
+        FloatSet::at_most(1.0).union(&FloatSet::at_least(next)),
+        FloatSet::all().intersect(&FloatSet::nan().complement())
+    );
+    assert_eq!(
+        FloatSet::just(1.0).union(&FloatSet::just(next)),
+        FloatSet::at_least(1.0).intersect(&FloatSet::at_most(next))
+    );
+    // Across zero, where the neighbour of the least positive float is the
+    // zero both signs spell.
+    let least = f64::from_bits(1);
+    assert_eq!(FloatSet::above(0.0), FloatSet::at_least(least));
+    assert_eq!(FloatSet::below(least), FloatSet::at_most(0.0));
+    assert_eq!(FloatSet::above(-least), FloatSet::at_least(-0.0));
+    // At the ends of the line: nothing lies past an infinity, and the largest
+    // finite float is next to it.
+    assert!(FloatSet::above(f64::INFINITY).is_empty());
+    assert!(FloatSet::below(f64::NEG_INFINITY).is_empty());
+    assert_eq!(FloatSet::above(f64::MAX), FloatSet::just(f64::INFINITY));
+    assert_eq!(
+        FloatSet::just(f64::INFINITY).complement(),
+        FloatSet::at_most(f64::MAX).union(&FloatSet::nan())
+    );
 }
 
 /// The infinities are floats, not open ends: a set can hold them, exclude

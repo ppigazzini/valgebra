@@ -590,7 +590,7 @@ HELD-BY: the_complement_laws_hold_of_the_top_however_it_is_spelled, no_relation_
 **Each kind's representation is closed under the three operations, and its top
 denotes what the table says.** Union, intersection and complement stay inside
 each kind's representation -- interval sets with a residue class per step for
-integers, intervals with the three special points held apart for floats, a
+integers, closed intervals of floats with the three special points held apart, a
 minimal automaton per word kind, a symbolic automaton for sequences, a union of
 lines for sets, labelled fields with a default per key kind for dicts, a class
 lattice for instances -- and the lattice laws hold of each against membership.

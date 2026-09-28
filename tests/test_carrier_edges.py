@@ -23,6 +23,7 @@ wrong answer would not see it.
 
 from __future__ import annotations
 
+import math
 from typing import Annotated
 
 import annotated_types as at
@@ -216,6 +217,18 @@ def test_a_float_bound_written_as_an_integer_no_float_equals() -> None:
     assert Validator(subject).is_valid(witness) is True
     assert Validator(supertype).is_valid(witness) is False
     assert Validator(subject).relation_to(supertype) == "not_subset"
+
+
+def test_no_float_lies_between_a_float_and_the_next() -> None:
+    """An open float bound is the closed one at the neighbouring float."""
+    after_one = math.nextafter(1.0, math.inf)
+    strict = Validator(Annotated[float, at.Gt(1.0)])
+    assert strict.is_equivalent(Annotated[float, at.Ge(after_one)])
+    assert Validator(Annotated[float, at.Gt(1.0), at.Lt(after_one)]).is_empty()
+    # At 2**53 the float after an integer bound is two past it, so the
+    # integer between them is no float at all.
+    at_limit = Validator(Annotated[float, at.Gt(float(FLOAT_EXACT_LIMIT))])
+    assert at_limit.is_equivalent(Annotated[float, at.Gt(FLOAT_EXACT_LIMIT + 1)])
 
 
 def test_a_bool_base_is_decided_against_a_bound_it_meets() -> None:

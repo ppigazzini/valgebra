@@ -400,8 +400,8 @@ impl Schema {
 /// an [`Schema::Intersection`] of refinements -- so a rule that fires for one
 /// fires for the other. An intersection is a subset of every member, so one
 /// member bounded to the integers bounds the whole meet; a lone base bounds it by
-/// being one. `bool` counts because it subclasses `int`, and a float base does
-/// not because the reals between two bounds are dense.
+/// being one. `bool` counts because it subclasses `int`. A float base does not:
+/// the floats between two bounds are the set of floats' to count.
 ///
 /// Sound and not complete for `bool`: the rule counts the integers in the
 /// interval rather than the two values a boolean has, so an interval holding an

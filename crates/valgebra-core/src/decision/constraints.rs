@@ -19,15 +19,16 @@ use super::LeafRelations;
 
 /// Whether the values a bound cuts are countable between two points.
 ///
-/// The whole numbers are discrete, so a pair of bounds with no integer between
-/// them admits nothing; the floats are dense, so the same pair admits many.
+/// The whole numbers are counted here, so a pair of bounds with no integer
+/// between them admits nothing; the floats are not, and the set of floats is
+/// what decides a pair of float bounds.
 /// Named rather than spelled as a boolean, because the reading that separates
 /// them is the one this module exists for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Density {
     /// The base is the whole numbers, so the bounds count their values.
     Discrete,
-    /// The base admits more than the integers, so a gap holds values.
+    /// The base admits more than the integers, so this rule counts nothing.
     Dense,
 }
 

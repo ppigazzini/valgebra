@@ -695,7 +695,7 @@ fn refinement_subtyping_decides_bound_entailment() {
 
 /// An integer-discrete refinement is empty when its bounds leave no integer
 /// between them, even though the endpoints themselves are ordered. The rule is
-/// gated on the integer base and on the value oracle: a dense base, or a core
+/// gated on the integer base and on the value oracle: a float base, or a core
 /// with no value oracle, keeps the interval conservatively non-empty.
 #[test]
 fn refinement_emptiness_decides_integer_adjacency() {
@@ -749,7 +749,7 @@ fn refinement_emptiness_decides_integer_adjacency() {
         )
         .is_empty_with(&ByValue, &[])
     );
-    // A dense (float) base is not integer-discrete: the discreteness rule must
+    // A float base is not integer-discrete: the discreteness rule must
     // not fire, or it would unsoundly empty a populated interval.
     assert!(
         !refine(

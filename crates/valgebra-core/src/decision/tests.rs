@@ -1918,7 +1918,8 @@ fn a_boolean_base_counts_integers() {
         Constraint::Lt(OperandIx::new(1)),
     ];
     assert!(refine(Schema::Bool, open_unit.into()).is_empty_with(&Adjacent, &[]));
-    // A dense base is not bounded to the integers and stays inhabited.
+    // A float base is not bounded to the integers, and this rule leaves it
+    // inhabited.
     let dense = vec![
         Constraint::Gt(OperandIx::new(0)),
         Constraint::Lt(OperandIx::new(1)),

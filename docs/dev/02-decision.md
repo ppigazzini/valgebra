@@ -149,7 +149,7 @@ two kinds that hold their values alike share one:
 |---|---|---|---|
 | `Booleans` | `bool` | a two-bit subset, which is exact for a kind with two values | `descr/mod.rs` |
 | `Integers` | `int` | eventually periodic sets: an interval set per residue class, which is what holds a bound, a point *and* a step | `descr/integers.rs` |
-| `Floats` | `float` | intervals over the ordered line, plus a bit for `nan`, which sits outside the order | `descr/floats.rs` |
+| `Floats` | `float` | closed intervals of floats, an open end held as its neighbouring float, plus a bit for `nan`, which sits outside the order | `descr/floats.rs` |
 | `Words` | `str`, `bytes` | a minimal deterministic automaton, canonically numbered, so two spellings of one language are one table | `descr/regular.rs` |
 | `Sequences` | `list`, `tuple` | an automaton whose transitions are guarded by value sets -- the letters are descriptors, so the component recurses through the automaton's *states* | `descr/symbolic.rs` |
 | `Sets` | `set`, `frozenset` | a union of powerset lines: a set is its members and has no order for an automaton to walk | `descr/sets.rs` |

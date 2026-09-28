@@ -130,11 +130,15 @@ answers `"undecided"`.
   even though its endpoints are ordered. That holds however the meet is spelled:
   on one refinement, or across an intersection whose members bound it, since an
   intersection is a subset of every member. A `bool` base counts too, because it
-  subclasses `int`; a `float` base stays dense, so the same bounds are not empty.
+  subclasses `int`; a `float` base holds `0.5` between the same bounds, so they are
+  not empty.
   A bound over a **float** base is a set of floats and is decided as one: which
   side a bound lands on is chosen by the base rather than by the operand's type,
   so `Annotated[float, Gt(0)]` carries the integer zero and still orders the
   floats. `nan` is outside every interval, which is the comparison Python makes.
+  No float lies between a float and the next one, so `Gt(1.0)` is decided equal
+  to `Ge(math.nextafter(1.0, math.inf))`, and a pair of bounds with no float
+  between them is empty.
   A base that is neither the whole numbers nor the floats alone stays undecided,
   because narrowing it to one component would give a smaller set than the schema
   denotes.
@@ -252,9 +256,7 @@ assert Validator(Annotated[int, at.Ge(10), at.Le(0)]).is_empty()  # no such int
 assert Validator(
     Annotated[int, at.Gt(0), at.Lt(1)]
 ).is_empty()  # no int strictly between
-assert not Validator(
-    Annotated[float, at.Gt(0), at.Lt(1)]
-).is_empty()  # floats are dense
+assert not Validator(Annotated[float, at.Gt(0), at.Lt(1)]).is_empty()  # 0.5 is between
 assert Validator({str: int}).is_subtype_of({str: int, int: bool})  # mapping clauses
 assert Validator({str: int}).is_subtype_of(
     {"b?": int, str: int}

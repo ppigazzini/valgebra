@@ -24,6 +24,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a reference nothing resolves is below a reference to the universe -- internal
 - fix: an opened map carries its clauses in the constructor's order
 - fix: a step of -2**63 is past the period, not the set holding zero
+- fix: no float lies between a float and the next one
 
 -->
 
@@ -96,6 +97,12 @@ answer of its own, or a repair to a change not yet released.
   the set `{0}`, so it was proved below `Annotated[int, Ge(0)]` and proved
   empty beside `Gt(0)`. The step's magnitude is past the integer set's period,
   as every step that large is, and a relation that turns on it declines.
+- **No float lies between a float and the next one.** A set of floats was read
+  as a set of reals, so `Annotated[float, Gt(1.0)]` and `Annotated[float,
+  Ge(math.nextafter(1.0, math.inf))]` were proved to differ though they admit
+  the same floats, and a pair of bounds with no float between them was read as
+  inhabited. An open bound is held as the closed one at its neighbouring float,
+  and both relations are decided exactly.
 
 ## [0.0.14] - 2026-09-26
 
