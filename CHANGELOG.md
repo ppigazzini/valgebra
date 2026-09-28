@@ -29,6 +29,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: one dict key cannot witness two clauses of a union
 - fix: a pattern that parses only once anchored is refused
 - fix: a fatal signal from any part of a message propagates
+- fix: an object carrying metadata and no origin is a value
 
 -->
 
@@ -135,6 +136,11 @@ answer of its own, or a repair to a change not yet released.
   `<unrepresentable>` in a `ValidationError`. The value refused by its kind was
   the one site that carried it out. Every part of a message the walk renders
   raises the signal out of `validate`.
+- **An object carrying `__metadata__` and no `__origin__` is a value.** The
+  build read any object with `__metadata__` as `Annotated` and asked it for
+  `__origin__`, so an object without one failed with a bare `AttributeError`,
+  a type the build is documented never to raise. It is read as every other
+  object is, as the literal of itself.
 
 ## [0.0.14] - 2026-09-26
 

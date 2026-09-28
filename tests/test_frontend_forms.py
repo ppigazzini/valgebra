@@ -147,6 +147,24 @@ def test_a_literal_of_a_constant_builds() -> None:
     assert Validator(Literal[True]).is_valid(True) is True
 
 
+def test_an_object_carrying_metadata_and_no_origin_is_a_value() -> None:
+    """`__metadata__` alone is not an `Annotated` form.
+
+    The dispatch read any object carrying `__metadata__` as `Annotated` and then
+    asked it for `__origin__`, so an object without one failed with a bare
+    `AttributeError`, a type the build never raises. It is read as every other
+    object is: a value, admitting itself.
+    """
+
+    class Carrier:
+        __metadata__ = (1,)
+
+    carrier = Carrier()
+    validator = Validator(carrier)
+    assert validator.is_valid(carrier) is True
+    assert validator.is_valid(Carrier()) is False
+
+
 def test_a_pattern_that_is_not_text_says_what_it_is() -> None:
     """A refusal names the marker it read, not a kind it guessed."""
     with pytest.raises((TypeError, ValueError, NotImplementedError)) as caught:

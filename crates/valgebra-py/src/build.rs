@@ -288,9 +288,12 @@ pub(crate) fn build_schema(
     // already holds. Spelled `hasattr` then `getattr`, this read the metadata
     // twice and decoded three attribute names from UTF-8 and hashed them --
     // per node, on a path every non-class form crosses, whether or not it is
-    // annotated at all.
-    if let Some(metadata) = obj.getattr_opt(intern!(py, "__metadata__"))? {
-        let base = obj.getattr(intern!(py, "__origin__"))?;
+    // annotated at all. Both names are asked optionally: an object carrying
+    // `__metadata__` and no `__origin__` is not an `Annotated` form, and is
+    // read as whatever else it is rather than failing on the name it lacks.
+    if let Some(metadata) = obj.getattr_opt(intern!(py, "__metadata__"))?
+        && let Some(base) = obj.getattr_opt(intern!(py, "__origin__"))?
+    {
         return build_refine(&base, metadata.cast::<PyTuple>()?, lits, defs);
     }
 
