@@ -51,6 +51,27 @@ fn a_reserved_form_is_refused_by_the_operator_it_would_have_read() {
         // and the `&&` after it is reached with the cursor in the right place.
         (r"[\[&&x]", "set intersection"),
         (r"[\]&&x]", "set intersection"),
+        // Verbose mode, where `re` keeps a space and a `#` in a class as
+        // members and this engine ignores the one and starts a comment at the
+        // other -- turned on at the start, mid-pattern, or for one group.
+        ("(?x)[ a]", "whitespace inside a character class"),
+        ("(?x)[a\tb]", "whitespace inside a character class"),
+        ("(?x)[#a]", "`#` inside a character class"),
+        ("a(?x)[ b]", "whitespace inside a character class"),
+        ("(?x)(a)[ b]", "whitespace inside a character class"),
+        ("(?x:[ a])", "whitespace inside a character class"),
+        ("(?ix)[ a]", "whitespace inside a character class"),
+        ("(?x)(?-x:a)[ b]", "whitespace inside a character class"),
+        // Turned on inside a group, for the rest of it: the flags and their `)`
+        // are taken whole, and that `)` closes no group.
+        ("((?x)[ a])", "whitespace inside a character class"),
+        // A `(` and a `)` inside a class are members, which open, close and
+        // set nothing.
+        ("(?x)[(?-x) a]", "whitespace inside a character class"),
+        ("((?x)[)][ a])", "whitespace inside a character class"),
+        // Outside verbose mode a `#` is a member and starts no comment, so the
+        // operator after it is reached.
+        ("[#&&x]", "set intersection"),
     ] {
         let err = reject_reserved_class_syntax(pattern)
             .expect_err("a reserved form is refused rather than read");
@@ -98,6 +119,20 @@ fn a_form_the_two_engines_agree_on_is_left_alone() {
         r"\d{4}-\d{2}-\d{2}",
         r"\p{L}+",
         "",
+        // Outside verbose mode a space and a `#` are members to both engines,
+        // and so is an escaped one inside it.
+        "[ a]",
+        "[#a]",
+        r"(?x)[\ a]",
+        r"(?x)[\#a]",
+        // Verbose mode turned off for a group, or never turned on: `(?:` and a
+        // named group are groups, not flags.
+        "(?x)(?-x:[ a])",
+        "(?i)(?x:a)[ b]",
+        "(?:x)[ a]",
+        r"(?P<x>a)[ b]",
+        // A comment runs to the end of the line, and a `[` in it opens nothing.
+        "(?x) a # a comment [ that opens nothing\n b",
     ] {
         assert!(
             reject_reserved_class_syntax(pattern).is_ok(),

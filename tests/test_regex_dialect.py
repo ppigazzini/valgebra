@@ -147,6 +147,33 @@ def test_a_verbose_pattern_may_end_in_a_comment() -> None:
 
 
 @pytest.mark.parametrize(
+    ("pattern", "said"),
+    [
+        ("[ a]", "whitespace inside a character class"),
+        ("[#a]", "`#` inside a character class"),
+    ],
+    ids=["space", "hash"],
+)
+def test_a_verbose_class_member_is_refused_rather_than_dropped(
+    pattern: str, said: str
+) -> None:
+    """Under verbose mode `re` keeps a class's space and `#`; this engine does not.
+
+    It ignores the space, so `[ a]` admitted no space where `re` admits one, and
+    it starts a comment at the `#`, which swallowed the class's `]` and failed
+    with a parse error naming no cause. Both are refused by what the character
+    does here, and an escaped one is a member to both engines.
+    """
+    member = pattern[1]
+    assert re.fullmatch(pattern, member, re.VERBOSE) is not None
+    with pytest.raises(ValueError, match=said):
+        Validator(Annotated[str, re.compile(pattern, re.VERBOSE)])
+    escaped = pattern.replace(member, "\\" + member)
+    assert _matches("(?x)" + escaped, member)
+    assert re.fullmatch(escaped, member, re.VERBOSE) is not None
+
+
+@pytest.mark.parametrize(
     "topic",
     ["[[:alpha:]]", r"\p{L}", "case folding", "set symmetric difference"],
     ids=["posix-classes", "property-escapes", "case-folding", "class-set-operators"],

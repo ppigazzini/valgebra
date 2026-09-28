@@ -274,6 +274,12 @@ the characters to mean them literally — `[\w\~\~\d]` — or write the classes
 out. A POSIX class (`[[:alpha:]]`) is the one nested `[` that is read rather
 than refused, because it is the first divergence above and is documented there.
 
+Verbose mode parts the two the same quiet way inside a class. `re.VERBOSE`
+keeps a space and a `#` there as members, and this engine ignores the space and
+starts a comment at the `#`. So under verbose mode -- `re.VERBOSE`, `(?x)`, or
+`(?x:...)` for one group -- a class carrying either raises a `ValueError` naming
+it. Escape it as `\ ` or `\#` to mean it, which both engines read as a member.
+
 **A pattern Python spells and this engine does not is refused**, which is the
 loud direction and the one to prefer. A lookaround (`(?=...)`, `(?<=...)`), a
 backreference (`\1`, `(?P=name)`), an inline comment (`(?#...)`), a named

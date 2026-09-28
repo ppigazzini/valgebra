@@ -33,6 +33,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a typing_extensions spelling reads as its typing one
 - fix: a bare TypedDict or NamedTuple is refused
 - fix: a TypedDict subclass inherits what its base says about unnamed keys
+- fix: a space or a # inside a verbose class is refused
 
 -->
 
@@ -166,6 +167,13 @@ answer of its own, or a repair to a change not yet released.
   `closed=True` or `extra_items=T` `TypedDict` read as open and admitted any
   extra key. It reads what its nearest base states, and a class that says
   `closed=False` itself stays open.
+- **A space or a `#` inside a character class under verbose mode is
+  refused.** `re.VERBOSE` keeps both as members there, and this engine ignores
+  the space and starts a comment at the `#`. `re.compile("[ a]", re.VERBOSE)`
+  as a marker admitted no space where `re` admits one, and `[#a]` failed with
+  "unclosed character class". Under `re.VERBOSE`, `(?x)` or `(?x:...)`, either
+  character in a class raises a `ValueError` naming it and the escape to write
+  instead.
 
 ## [0.0.14] - 2026-09-26
 
