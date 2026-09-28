@@ -26,6 +26,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a step of -2**63 is past the period, not the set holding zero
 - fix: no float lies between a float and the next one
 - fix: a step dividing another is not read across kinds of number
+- fix: one dict key cannot witness two clauses of a union
 
 -->
 
@@ -112,6 +113,13 @@ answer of its own, or a repair to a change not yet released.
   counterexamples. The inclusion is proved where `%` reads a value and both
   steps as one kind of number, and declines elsewhere. An `int` step against a
   `float` step over `float` is decided, by the operator's reflected form.
+- **One dict key cannot witness two clauses of a union.** The closed record
+  `{"a": int | str}` was reported `not_subset` of `{str: ~int} | {str: ~str}`,
+  though `{"a": 1}` is in the second and `{"a": "x"}` in the first. Each "some
+  key maps into this" constraint of a map was read on its own, so two of them
+  found the one key `a` and asked it for an `int` and a `str` at once. The
+  constraints no fresh key can meet are read together, and so are the two keys
+  of `bool` and the one of `None`, which a constraint can run out of.
 
 ## [0.0.14] - 2026-09-26
 

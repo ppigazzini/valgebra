@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use super::{
-    Entry, KEY_KINDS, Label, MAX_ATOMS, MapAtom, MapLattice, Wanted, key_slot, tidy,
-    unordered_pairs,
+    Entry, KEY_KINDS, Label, MAX_ASSIGNMENTS, MAX_ATOMS, MapAtom, MapLattice, Pinned, Search,
+    Wanted, key_slot, tidy, unordered_pairs,
 };
 use crate::descr::budget;
 use crate::descr::integers::IntSet;
@@ -290,12 +290,13 @@ fn an_atom_requiring_a_key_and_its_boolean_holds_no_dict() {
 
 // THEORY: the-key-partition-is-by-kind
 /// A want with one candidate left names a key the atom requires, and the
-/// required set is read from the *viable* candidates.
+/// candidates are the *viable* ones.
 ///
 /// `S` asks for some key of a part to map into a type, and the candidates
 /// are the part's labels and its default. Where every candidate but one is
-/// empty, every dict of the atom carries the one left, so it joins the
-/// required set -- which is what the `1`/`True` reading consults. Built by
+/// empty, every dict of the atom carries the one left, so the want is given
+/// that key -- and the key must be one a dict can carry beside the keys the
+/// atom requires, which is what the `1`/`True` reading consults. Built by
 /// hand, because no public construction reaches an atom whose want is
 /// witnessed by exactly one label while its boolean twin is required: the
 /// generator's complements produce wants over defaults, and the lattice
@@ -364,6 +365,178 @@ fn a_want_with_one_viable_witness_requires_that_key() {
         },
     ];
     assert!(by_the_default.holds(&witness));
+}
+
+/// The dicts carrying some key of `kind` that maps to `value`: the complement
+/// of the dicts every one of whose keys of `kind` maps elsewhere.
+fn some_key(kind: Kind, value: i64) -> MapLattice<IntSet> {
+    MapLattice::keyed(kind, IntSet::just(value).complement()).complement()
+}
+
+/// Every key the booleans' part holds, and `None`'s, as a dict entry.
+fn key(label: Label, value: i64) -> Entry<i64> {
+    let kind = Some(label.kind());
+    Entry {
+        label: Some(label),
+        kind,
+        value,
+    }
+}
+
+// THEORY: pinned-wants-are-read-together
+/// Two constraints no fresh key can meet ask the one key left for a value in
+/// both.
+///
+/// A closed record `{a: 1 | 2}` carrying some `str` key that maps to 1 and
+/// some `str` key that maps to 2: the record's only `str` key is `a`, and `a`
+/// holds one value. Read one at a time, each constraint finds `a` and the atom
+/// reads inhabited, which proves the record outside a union it is inside. A
+/// second key makes room for both, and the atom holds a dict again.
+#[test]
+fn two_constraints_pinned_to_one_key_ask_it_for_both() {
+    let one_or_two = IntSet::just(1)
+        .union(&IntSet::just(2))
+        .expect("two points join");
+    let record = |labels: &[&str]| {
+        let fields = labels
+            .iter()
+            .map(|label| (Label::str(label), one_or_two.clone(), false));
+        MapLattice::record(fields, []).expect("a small record")
+    };
+    let both = |labels: &[&str]| {
+        record(labels)
+            .intersect(&some_key(Kind::Str, 1))
+            .and_then(|met| met.intersect(&some_key(Kind::Str, 2)))
+            .expect("the meet builds")
+    };
+
+    let one_key = both(&["a"]);
+    assert_eq!(one_key.emptiness(), Verdict::Empty);
+    for value in [1, 2] {
+        assert!(!one_key.holds(&[at("a", value)]));
+    }
+    let two_keys = both(&["a", "b"]);
+    assert_eq!(two_keys.emptiness(), Verdict::Inhabited);
+    assert!(two_keys.holds(&[at("a", 1), at("b", 2)]));
+}
+
+// THEORY: pinned-wants-are-read-together
+/// A boolean key the integer label already is witnesses nothing.
+///
+/// Key `1` maps to 1 and key `False` maps to 1, and some boolean key maps to
+/// 2. `False` is named, so the witness is `True` -- and `True` is the key `1`
+/// is, which the atom requires. The booleans' part has two keys and no third
+/// to spare, so no dict is in the set. With `1` optional, a dict drops it and
+/// carries `True` instead.
+#[test]
+fn a_boolean_the_integer_label_occupies_witnesses_nothing() {
+    let named = |optional: bool| {
+        MapLattice::label(Label::Int(1), IntSet::just(1), optional)
+            .intersect(&MapLattice::label(
+                Label::Bool(false),
+                IntSet::just(1),
+                false,
+            ))
+            .and_then(|met| met.intersect(&some_key(Kind::Bool, 2)))
+            .expect("the meet builds")
+    };
+    assert_eq!(named(false).emptiness(), Verdict::Empty);
+    let dropped = named(true);
+    assert_eq!(dropped.emptiness(), Verdict::Inhabited);
+    assert!(dropped.holds(&[key(Label::Bool(false), 1), key(Label::Bool(true), 2)]));
+}
+
+// THEORY: pinned-wants-are-read-together
+/// `None`'s part has one key, so a constraint on it is met by that key or not
+/// at all.
+///
+/// Key `None` maps to 1, and some `None` key maps to 2: the one key is taken,
+/// and the set is empty. Some `None` key mapping to 1 is met by the same key.
+#[test]
+fn the_one_none_key_cannot_witness_against_its_own_label() {
+    let named = || MapLattice::label(Label::NoneType, IntSet::just(1), false);
+    let against = |value| {
+        named()
+            .intersect(&some_key(Kind::NoneType, value))
+            .expect("the meet builds")
+    };
+    assert_eq!(against(2).emptiness(), Verdict::Empty);
+    assert_eq!(against(1).emptiness(), Verdict::Inhabited);
+    assert!(against(1).holds(&[key(Label::NoneType, 1)]));
+}
+
+// THEORY: pinned-wants-are-read-together
+/// The search gives up at [`MAX_ASSIGNMENTS`] keys tried, and a search it gave
+/// up is unknown rather than an answer.
+///
+/// Three constraints wanting 1, 2 and 3 of two keys cannot all be met, and the
+/// search proves that in a handful of steps. In front of them, a dozen
+/// constraints any key meets multiply the ways to reach the three past the
+/// bound.
+#[test]
+fn the_search_for_keys_past_its_bound_is_unknown() {
+    let str_slot = key_slot(Some(Kind::Str)).expect("the strings are a part");
+    let atom = |free: usize| {
+        let mut atom: MapAtom<IntSet> = MapAtom::top();
+        atom.defaults[str_slot] = Field {
+            ty: Values::none(),
+            absent: true,
+        };
+        for label in ["a", "b"] {
+            atom.labels.insert(Label::str(label), Field::top());
+        }
+        // A want is met by `a` or by `b`, and the exclusion sets name keys the
+        // atom does not, so each of these is its own constraint.
+        for n in 0..free {
+            atom.wanted.push(Wanted {
+                slot: str_slot,
+                ty: Values::Every,
+                besides: BTreeSet::from([Label::str(&format!("x{n}"))]),
+            });
+        }
+        for value in 1..=3 {
+            atom.wanted.push(Wanted {
+                slot: str_slot,
+                ty: Values::Only(IntSet::just(value)),
+                besides: BTreeSet::new(),
+            });
+        }
+        atom
+    };
+    assert_eq!(atom(0).emptiness(), Verdict::Empty);
+    assert!(2usize.pow(12) * 3 > MAX_ASSIGNMENTS);
+    assert_eq!(atom(12).emptiness(), Verdict::Unknown);
+}
+
+/// The search decides at exactly [`MAX_ASSIGNMENTS`] keys tried, and declines
+/// one key past it.
+///
+/// One constraint with that many keys, none of which can hold what it asks,
+/// is empty once every key is tried, and the last try is the bound's own. The
+/// row above reaches the bound by a product far past it, which a bound read
+/// one key early passes as well.
+#[test]
+fn the_search_decides_at_its_bound_and_declines_past_it() {
+    let one = Values::Only(IntSet::just(1));
+    let two = Values::Only(IntSet::just(2));
+    let decide = |count: usize| {
+        let keys = (0..count)
+            .map(|n| (Label::str(&format!("k{n}")), &one))
+            .collect();
+        let pinned = [Pinned {
+            ty: &two,
+            fresh: false,
+            keys,
+        }];
+        let mut search = Search {
+            required: Vec::new(),
+            held: Vec::new(),
+            steps: 0,
+        };
+        (search.assign(&pinned), search.steps)
+    };
+    assert_eq!(decide(MAX_ASSIGNMENTS), (Verdict::Empty, MAX_ASSIGNMENTS));
+    assert_eq!(decide(MAX_ASSIGNMENTS + 1).0, Verdict::Unknown);
 }
 
 /// An optional key is not a required one, so the pair above is only empty

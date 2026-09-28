@@ -812,6 +812,19 @@ holds no dict, and the descriptor reads it that way. **[DEVIATION: the-key-parti
 
 HELD-BY: an_atom_requiring_a_key_and_its_boolean_holds_no_dict, a_want_with_one_viable_witness_requires_that_key, a_labelled_key_witnesses_a_wanted_key
 
+**A constraint no fresh key meets is read beside the others.** ICFP 2023's (11)
+reads each constraint of a map atom's `S` on its own, against the default, on
+the strength of Lemma 4.7: every key type is infinite, so each constraint takes
+a key no label names and no other constraint wants. Two things break that here.
+The parts of `bool` and `None` hold two keys and one, and a constraint the
+default cannot meet is left to the keys the labels name. Those constraints are
+given keys together: a key holds one value, which every constraint given it
+asks for, and the keys a dict then carries must be keys one dict can hold -- so
+the one-key record `{"a": int | str}` is below `{str: ~int} | {str: ~str}`. The
+search is bounded by `MAX_ASSIGNMENTS` and declines past it. **[DEVIATION: pinned-wants-are-read-together]**
+
+HELD-BY: two_constraints_pinned_to_one_key_ask_it_for_both, a_boolean_the_integer_label_occupies_witnesses_nothing, the_one_none_key_cannot_witness_against_its_own_label, the_search_for_keys_past_its_bound_is_unknown, test_one_key_cannot_witness_two_clauses_of_a_union
+
 **The integer and float carriers are `i64` and `f64`.** Membership is exact --
 the walk reads the Python object -- and a relation *declines* where deciding it
 takes a value the carrier cannot spell. A rounded carrier would be wrong in one

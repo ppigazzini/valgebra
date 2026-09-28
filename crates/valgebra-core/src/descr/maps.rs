@@ -193,6 +193,119 @@ fn unordered_pairs<T>(items: &[T]) -> impl Iterator<Item = (&T, &T)> {
     })
 }
 
+/// The most keys the search for a dict meeting an atom's pinned constraints
+/// tries, before it declines.
+///
+/// Each constraint of `S` is given one of the keys that could meet it, so the
+/// search is a product of those counts. It is small wherever an atom came out
+/// of the schemas a caller writes, and past the bound the atom is *unknown*,
+/// which is sound: nothing is proved empty or inhabited.
+pub const MAX_ASSIGNMENTS: usize = 4096;
+
+/// Every key of a part with finitely many, or `None` for a part with
+/// infinitely many.
+///
+/// `bool`'s part has two keys and `None`'s one, and those are the parts where
+/// a key no label names is not always there to meet a constraint.
+fn finite_keys(slot: usize) -> Option<Vec<Label>> {
+    match KEY_KINDS.get(slot)? {
+        Kind::Bool => Some(vec![Label::Bool(false), Label::Bool(true)]),
+        Kind::NoneType => Some(vec![Label::NoneType]),
+        _ => None,
+    }
+}
+
+/// A constraint of `S` no fresh key is known to meet, and the keys that could.
+struct Pinned<'a, G> {
+    /// What the key's value must be in.
+    ty: &'a Values<G>,
+    /// Whether a fresh key might meet it, which the default could not settle.
+    fresh: bool,
+    /// Each key the constraint may be met by, with the type the atom gives it.
+    keys: Vec<(Label, &'a Values<G>)>,
+}
+
+/// The search for keys meeting every pinned constraint of one atom.
+struct Search<'a, G> {
+    /// The keys every dict of the atom carries.
+    required: Vec<&'a Label>,
+    /// The keys given a constraint so far, with what each must hold by now.
+    held: Vec<(Label, Values<G>)>,
+    /// The keys tried, against [`MAX_ASSIGNMENTS`].
+    steps: usize,
+}
+
+impl<G: Guard> Search<'_, G> {
+    /// What is known about some dict meeting every constraint in `pinned`,
+    /// with the keys held so far.
+    fn assign(&mut self, pinned: &[Pinned<'_, G>]) -> Verdict {
+        let Some((want, rest)) = pinned.split_first() else {
+            return Verdict::Inhabited;
+        };
+        // A fresh key, where the default could not say whether one meets it.
+        let mut verdict = if want.fresh {
+            Verdict::every([Verdict::Unknown, self.assign(rest)].into_iter())
+        } else {
+            Verdict::Empty
+        };
+        for (key, ty) in &want.keys {
+            if verdict == Verdict::Inhabited {
+                break;
+            }
+            self.steps += 1;
+            if self.steps > MAX_ASSIGNMENTS {
+                return Verdict::any([verdict, Verdict::Unknown].into_iter());
+            }
+            let held = self.held.iter().position(|(other, _)| other == key);
+            // A key new to the dict must be one it can carry beside the rest.
+            if held.is_none()
+                && self
+                    .required
+                    .iter()
+                    .copied()
+                    .chain(self.held.iter().map(|(other, _)| other))
+                    .any(|other| one_key(other, key))
+            {
+                continue;
+            }
+            let before = held.and_then(|at| self.held.get(at)).map(|(_, now)| now);
+            let Some(shared) = before.unwrap_or(ty).meet(want.ty) else {
+                verdict = Verdict::any([verdict, Verdict::Unknown].into_iter());
+                continue;
+            };
+            let here = shared.emptiness();
+            if here == Verdict::Empty {
+                continue;
+            }
+            let after = if let Some(at) = held {
+                self.within(at, shared, rest)
+            } else {
+                self.held.push((key.clone(), shared));
+                let after = self.assign(rest);
+                self.held.pop();
+                after
+            };
+            verdict =
+                Verdict::any([verdict, Verdict::every([here, after].into_iter())].into_iter());
+        }
+        verdict
+    }
+
+    /// [`assign`](Self::assign) with the key held at `at` asked for `shared`
+    /// instead of what it held, and given it back after.
+    fn within(&mut self, at: usize, shared: Values<G>, rest: &[Pinned<'_, G>]) -> Verdict {
+        let Some((_, now)) = self.held.get_mut(at) else {
+            return Verdict::Unknown;
+        };
+        let before = core::mem::replace(now, shared);
+        let after = self.assign(rest);
+        if let Some((_, now)) = self.held.get_mut(at) {
+            *now = before;
+        }
+        after
+    }
+}
+
 /// One map atom, `⟨(τ_ℓ)_{ℓ∈L} ; t₀ ; S⟩`.
 ///
 /// Both collections are ordered, so two ways of writing one atom compare equal.
@@ -266,91 +379,79 @@ impl<G: Guard> MapAtom<G> {
 
     /// (11): what is known about this atom holding a dict.
     ///
-    /// Empty as soon as a named key's type is, or no key can satisfy a
-    /// constraint of `S`.
+    /// Empty as soon as a named key's type is, or no dict can satisfy every
+    /// constraint of `S` at once.
     ///
-    /// The paper's (11) reads `S` against the default alone, because its labels
-    /// are fixed and `S` is always about a key outside them. Here a constraint
-    /// carries its own exclusion set, so a label the set does not cover is a
-    /// witness too, and both are read -- and so is whether the part has a key
-    /// left at all. Two parts are finite: `bool` has two keys and `None` has
-    /// one, so an exclusion set naming every one of them leaves the default
-    /// governing nothing, and reading it as a witness reports an atom inhabited
-    /// that holds no dict.
+    /// The paper's (11) reads each constraint of `S` against the default alone,
+    /// and each on its own. Both rest on its Lemma 4.7, which assumes every
+    /// key type is infinite: a constraint is met by a key no label names, and
+    /// a second constraint by a second such key. That holds here of a part
+    /// with infinitely many keys, and a constraint its default can meet is met
+    /// by a fresh key of its own. The rest are **pinned** to keys the atom
+    /// can name -- a label of the part, or a key of `bool`'s part or `None`'s,
+    /// which have two keys and one -- and two pinned to one key ask that key
+    /// for a value in both. So those are read together: each is given a key,
+    /// every key a value in what each of its constraints asks, and the keys
+    /// the dict then carries must be keys one dict can hold.
     fn emptiness(&self) -> Verdict {
-        let labels = self.labels.values().map(Field::emptiness);
-        // The keys the atom requires a dict to carry, which is what the check
-        // after the loop is about: a label the atom does not let go missing, and
-        // a label that is the only thing a want could be satisfied by.
-        let mut required: Vec<&Label> = self
+        let labels = Verdict::every(self.labels.values().map(Field::emptiness));
+        if labels == Verdict::Empty {
+            return Verdict::Empty;
+        }
+        // The keys every dict of the atom carries: a label it does not let go
+        // missing. `True` hashes as `1` and equals it, so a dict has one entry
+        // for the two and no dict carries both -- the parts are separate here,
+        // because `Literal[1]` and `Literal[True]` are disjoint *sets*, but an
+        // atom requiring both keys describes a dict Python cannot build.
+        let required: Vec<&Label> = self
             .labels
             .iter()
             .filter(|(_, field)| !field.absent)
             .map(|(label, _)| label)
             .collect();
-        // A want asks for *some* key of its part, outside its exclusion set, to
-        // map into `ty`. Any such key can be the witness, so the verdict is the
-        // union over the candidates: the part's default, which governs the keys
-        // no label names, and every label of the part the exclusion set leaves
-        // out. Reading the default alone reports an atom empty that
-        // [`holds`](Self::holds) admits a dict for -- a labelled key satisfies a
-        // want there -- and an atom wrongly empty is a complement wrongly wide.
-        let mut wanted = Vec::with_capacity(self.wanted.len());
-        for want in &self.wanted {
-            let Some(default) = self.defaults.get(want.slot) else {
-                wanted.push(Verdict::Empty);
-                continue;
-            };
-            let free_key_left = match KEY_KINDS.get(want.slot) {
-                Some(Kind::Bool) => {
-                    !(want.besides.contains(&Label::Bool(true))
-                        && want.besides.contains(&Label::Bool(false)))
-                }
-                Some(Kind::NoneType) => !want.besides.contains(&Label::NoneType),
-                _ => true,
-            };
-            let witnesses = self
-                .labels
-                .iter()
-                .filter(|(label, _)| {
-                    key_slot(Some(label.kind())) == Some(want.slot)
-                        && !want.besides.contains(*label)
-                })
-                .map(|(label, field)| (Some(label), &field.ty))
-                .chain(free_key_left.then_some((None, &default.ty)));
-            // The candidates a dict could satisfy this want with, kept as well
-            // as folded: a want with one candidate left is a want that names a
-            // key, and the atom requires that key to be there.
-            let mut open: Vec<Option<&Label>> = Vec::new();
-            let verdict = Verdict::any(witnesses.map(|(label, ty)| {
-                let verdict = match ty.meet(&want.ty) {
-                    Some(shared) => shared.emptiness(),
-                    // Past a guard's own bound there is no set to read, so
-                    // nothing is proved either way.
-                    None => Verdict::Unknown,
-                };
-                // An undecided candidate is still a candidate: it may be what
-                // satisfies the want, so a key is only *required* where nothing
-                // else could be.
-                if verdict != Verdict::Empty {
-                    open.push(label);
-                }
-                verdict
-            }));
-            if let [Some(only)] = open[..] {
-                required.push(only);
-            }
-            wanted.push(verdict);
-        }
-        // `True` hashes as `1` and equals it, so a dict has one entry for the
-        // two and no dict carries both. The parts are separate here, because
-        // `Literal[1]` and `Literal[True]` are disjoint *sets* -- a key is one
-        // value or the other -- but an atom requiring both keys at once
-        // describes a dict Python cannot build.
         if unordered_pairs(&required).any(|(a, b)| one_key(a, b)) {
             return Verdict::Empty;
         }
-        Verdict::every(labels.chain(wanted))
+        let mut pinned = Vec::new();
+        for want in &self.wanted {
+            let Some(default) = self.defaults.get(want.slot) else {
+                return Verdict::Empty;
+            };
+            let finite = finite_keys(want.slot);
+            let fresh = if finite.is_some() {
+                Verdict::Empty
+            } else {
+                // Past a guard's own bound there is no set to read, so nothing
+                // is proved either way.
+                default
+                    .ty
+                    .meet(&want.ty)
+                    .map_or(Verdict::Unknown, |shared| shared.emptiness())
+            };
+            if fresh == Verdict::Inhabited {
+                continue;
+            }
+            let named = self.labels.iter().filter(|(label, _)| {
+                key_slot(Some(label.kind())) == Some(want.slot) && !want.besides.contains(*label)
+            });
+            let named = named.map(|(label, field)| (label.clone(), &field.ty));
+            let unnamed = finite
+                .into_iter()
+                .flatten()
+                .filter(|key| !self.labels.contains_key(key) && !want.besides.contains(key));
+            let keys = named.chain(unnamed.map(|key| (key, &default.ty))).collect();
+            pinned.push(Pinned {
+                ty: &want.ty,
+                fresh: fresh == Verdict::Unknown,
+                keys,
+            });
+        }
+        let mut search = Search {
+            required,
+            held: Vec::new(),
+            steps: 0,
+        };
+        Verdict::every([labels, search.assign(&pinned)].into_iter())
     }
 
     /// (12): the dicts in both atoms.

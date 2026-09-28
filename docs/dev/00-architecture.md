@@ -217,6 +217,7 @@ table's length is outside the scan: it is the table's size, in one place.
 | `crates/valgebra-core/src/descr/lines.rs` | `MAX_LINES` | `256` | limit | the lines one kind carries, which a meet multiplies and a complement doubles | `crates/valgebra-core/src/descr/mod.rs` tests |
 | `crates/valgebra-core/src/descr/sets.rs` | `MAX_LINES` | `256` | limit | the lines a set lattice holds | its own tests |
 | `crates/valgebra-core/src/descr/maps.rs` | `MAX_ATOMS` | `256` | limit | the atoms a map union holds | its own tests |
+| `crates/valgebra-core/src/descr/maps.rs` | `MAX_ASSIGNMENTS` | `4096` | cost | the keys one map atom's emptiness tries when it gives each constraint no fresh key meets a key of its own, a search that is a product of the keys each could take | its own tests |
 | `crates/valgebra-core/src/descr/records.rs` | `MAX_ATOMS` | `256` | limit | the atoms a record union holds, which a complement multiplies | its own tests |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_STATES` | `4096` | limit | a product of two automata multiplying past memory | its own tests |
 | `crates/valgebra-core/src/descr/symbolic.rs` | `MAX_ROW` | `MAX_STATES` | limit | one row of a product growing past the alternatives a shape has | its own tests |

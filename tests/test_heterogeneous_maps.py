@@ -14,7 +14,14 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from valgebra import ValidationError, Validator, anything, recursive, union
+from valgebra import (
+    ValidationError,
+    Validator,
+    anything,
+    complement,
+    recursive,
+    union,
+)
 
 
 # THEORY: a-clause-is-a-region, clauses-are-unordered
@@ -340,3 +347,17 @@ def test_a_wide_object_and_a_narrow_one_read_their_repeats_the_same_way() -> Non
         rest = ", ".join(f'"k{i}": {i}' for i in range(width))
         assert mixed.is_valid_json('{"n": "s", ' + rest + "}")
         assert not mixed.is_valid_json('{"n": 1, ' + rest + "}")
+
+
+# THEORY: pinned-wants-are-read-together
+def test_one_key_cannot_witness_two_clauses_of_a_union() -> None:
+    """A key holds one value, so a one-key record meets one clause per value."""
+    cover = Validator(union({str: complement(int)}, {str: complement(str)}))
+    for value in (1, "x"):
+        assert cover.is_valid({"a": value})
+    assert Validator({"a": int | str}).relation_to(cover) == "subset"
+    # A second key holds the second value, and the record leaves the union.
+    assert not cover.is_valid({"a": 1, "b": "x"})
+    assert (
+        Validator({"a": int | str, "b": int | str}).relation_to(cover) == "not_subset"
+    )
