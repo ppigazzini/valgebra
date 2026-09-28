@@ -53,6 +53,9 @@ dev = [
     "ruff>=0.16.9",
     "syrupy>=6.1.1",
     "ty>=0.0.84",
+    # The suite reads a PEP 728 `TypedDict` from each implementation that takes
+    # its keywords, and `typing_extensions` takes them on every release.
+    "typing-extensions>=4.16.0",
 ]
 # The wall-clock harness and the external comparison points: the libraries the
 # benchmarks time valgebra against, and the same libraries the boundary suite

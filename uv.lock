@@ -2144,6 +2144,7 @@ dev = [
     { name = "ruff" },
     { name = "syrupy" },
     { name = "ty" },
+    { name = "typing-extensions" },
 ]
 docs = [
     { name = "mkdocs" },
@@ -2174,6 +2175,7 @@ dev = [
     { name = "ruff", specifier = ">=0.16.9" },
     { name = "syrupy", specifier = ">=6.1.1" },
     { name = "ty", specifier = ">=0.0.84" },
+    { name = "typing-extensions", specifier = ">=4.16.0" },
 ]
 docs = [
     { name = "mkdocs", specifier = ">=1.6.1,<2" },

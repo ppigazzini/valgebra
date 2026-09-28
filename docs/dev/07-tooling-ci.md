@@ -753,7 +753,14 @@ first, which imports it and builds the annotation forms whose compilation
 reaches a type object: that is the *link*, and it fails with one line naming the
 form rather than in a stack of test output.
 
-Then it runs the suite. The link is not the only property that differs there,
+Then it runs the suite, with the packages it reads installed by a list in the
+step rather than by the dev group, which carries the checkers and the build
+tools too. `tests/test_suite_installs.py` holds that list, and the release
+smoke's, to the dev group less the tools it excuses by name: a package left
+off would not redden the lane, because a row reading an optional
+implementation skips where it is absent.
+
+The link is not the only property that differs there,
 which the lane learned the first time it ran one: `cpyext` implements
 `PyTuple_Size` through the object's own `__len__`, so a `tuple` subclass that
 overrode it walked past the end of its storage and killed the process — an

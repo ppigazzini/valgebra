@@ -160,6 +160,18 @@ UNREQUIRED_JOB = """jobs:
 
 PLANTS = (
     Plant(
+        # A package the suite reads, gone from the PyPy leg's list: the rows
+        # reading it skip there, and nothing else in the lane goes red.
+        "tests/test_suite_installs.py",
+        (".github/workflows/ci.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/ci.yml",
+            ' "typing-extensions>=4.16.0"\n      - name: pytest',
+            "\n      - name: pytest",
+        ),
+    ),
+    Plant(
         # A seed file at the path of a source file with no property test in it,
         # which is where a test module's seeds stay when the module moves.
         # Every test passes, and the seeds are replayed by nothing.
