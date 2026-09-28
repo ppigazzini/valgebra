@@ -264,9 +264,6 @@ fn a_degenerate_step_is_read_as_the_set_it_names() {
     assert_eq!(IntSet::multiple_of(0), Some(IntSet::just(0)));
     assert_eq!(IntSet::multiple_of(-3), IntSet::multiple_of(3));
     assert_eq!(IntSet::multiple_of(1), Some(IntSet::all()));
-    // The magnitude of the smallest integer is not representable, and it is
-    // read as the step that divides nothing rather than wrapping to itself.
-    assert_eq!(IntSet::multiple_of(i64::MIN), Some(IntSet::just(0)));
 }
 
 // THEORY: the-carriers-are-i64-and-f64
@@ -280,6 +277,9 @@ fn a_step_past_the_period_bound_is_refused() {
     assert!(IntSet::multiple_of(MAX_PERIOD + 1).is_none());
     assert!(IntSet::multiple_of(-(MAX_PERIOD + 1)).is_none());
     assert!(IntSet::multiple_of(i64::MAX).is_none());
+    // The smallest integer's magnitude is no `i64`, and it is past the bound
+    // too: `-2**63` is one of its own multiples, which `{0}` leaves out.
+    assert!(IntSet::multiple_of(i64::MIN).is_none());
 }
 
 /// Two steps inside the bound can meet past it, and the meet is refused.

@@ -143,10 +143,12 @@ impl IntSet {
     /// The multiples of `step`, or `None` for a step past [`MAX_PERIOD`].
     ///
     /// The one constructor that needs a modulus: `MultipleOf(3)` is the residue
-    /// class of zero, which no union of intervals holds. A step of zero divides
-    /// nothing and a negative step names the same multiples as its magnitude, so
-    /// both are read as their absolute value, and zero gives the singleton `{0}`
-    /// -- the only integer that is a multiple of nothing.
+    /// class of zero, which no union of intervals holds. A negative step names
+    /// the same multiples as its magnitude, so it is read as its absolute value,
+    /// and zero gives the singleton `{0}` -- the only integer that is a multiple
+    /// of nothing. `i64::MIN` has a magnitude no `i64` holds, and it is past the
+    /// bound like every step that large: its multiples are `0` and `±2**63`, a
+    /// set of values `{0}` would leave out.
     ///
     /// The refusal is in the return type rather than in an assertion, because it
     /// is a decision the caller has to make. There is no sound approximation to
@@ -156,15 +158,16 @@ impl IntSet {
     #[must_use]
     pub fn multiple_of(step: i64) -> Option<IntSet> {
         match step.checked_abs() {
-            Some(0) | None => Some(IntSet::just(0)),
-            Some(step) if step > MAX_PERIOD => None,
-            Some(step) => Some(IntSet::build(step, |residue| {
+            Some(0) => Some(IntSet::just(0)),
+            Some(step) if step <= MAX_PERIOD => Some(IntSet::build(step, |residue| {
                 if residue == 0 {
                     IntervalSet::all()
                 } else {
                     IntervalSet::empty()
                 }
             })),
+            // Past the bound, and `i64::MIN`, whose magnitude has no `i64`.
+            _ => None,
         }
     }
 

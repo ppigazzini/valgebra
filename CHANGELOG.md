@@ -23,6 +23,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a length bound is read before the elements it bounds
 - fix: a reference nothing resolves is below a reference to the universe -- internal
 - fix: an opened map carries its clauses in the constructor's order
+- fix: a step of -2**63 is past the period, not the set holding zero
 
 -->
 
@@ -90,6 +91,11 @@ answer of its own, or a repair to a change not yet released.
   `Validator({int: object, str: int}).open()` rendered its clauses in another
   order than the same clauses written out, though the two compare equal. The
   opened list takes the order every spelling of it gets.
+- **A step of `-2**63` is not read as zero alone.** `Annotated[int,
+  MultipleOf(-2**63)]` admits `-2**63` and `2**63`, and its steps were read as
+  the set `{0}`, so it was proved below `Annotated[int, Ge(0)]` and proved
+  empty beside `Gt(0)`. The step's magnitude is past the integer set's period,
+  as every step that large is, and a relation that turns on it declines.
 
 ## [0.0.14] - 2026-09-26
 

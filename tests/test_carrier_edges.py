@@ -145,6 +145,21 @@ def test_a_bound_past_the_carrier_is_proved_by_the_order() -> None:
     assert Validator(Annotated[int, at.Gt(2**70), at.Lt(2**70 + 1)]).is_empty()
 
 
+def test_a_step_no_machine_word_holds_the_magnitude_of_is_not_zero_alone() -> None:
+    """`MultipleOf(-2**63)` holds `-2**63` and `2**63`, not only `0`.
+
+    The step's magnitude is `2**63`, one past the largest `i64`, so the carrier
+    cannot hold its residues and the relation declines, as it does for every step
+    past the period. Read as `{0}`, the refinement is proved below `Ge(0)` and
+    empty beside `Gt(0)`, and both values refute the two.
+    """
+    step = Validator(Annotated[int, at.MultipleOf(-(2**63))])
+    assert step.is_valid(-(2**63))
+    assert step.is_valid(2**63)
+    assert step.relation_to(Annotated[int, at.Ge(0)]) != "subset"
+    assert not Validator(Annotated[int, at.MultipleOf(-(2**63)), at.Gt(0)]).is_empty()
+
+
 def test_a_step_past_the_period_bound_declines() -> None:
     """What the period still bounds, and what the two steps settle without it.
 
