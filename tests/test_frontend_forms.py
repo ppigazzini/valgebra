@@ -19,6 +19,7 @@ from __future__ import annotations
 import builtins
 import collections.abc
 import dataclasses
+import subprocess
 import sys
 import typing
 import warnings
@@ -27,7 +28,7 @@ from typing import Annotated, Literal
 import annotated_types as at
 import pytest
 
-from valgebra import Regex, Validator
+from valgebra import Regex, Validator, nothing
 
 #: PEP 814's frozen dict, which arrives in 3.15; `None` below it.
 FROZENDICT = getattr(builtins, "frozendict", None)
@@ -163,6 +164,85 @@ def test_an_object_carrying_metadata_and_no_origin_is_a_value() -> None:
     validator = Validator(carrier)
     assert validator.is_valid(carrier) is True
     assert validator.is_valid(Carrier()) is False
+
+
+def test_a_typing_extensions_form_reads_as_its_typing_spelling() -> None:
+    """`typing_extensions` spells a form with an object of its own before a release.
+
+    On 3.10 that is `Any`, `Never`, `Self`, `LiteralString`, the field
+    qualifiers and `Unpack`, and before 3.15 `TypeAliasType`. Read against
+    `typing` alone, `Never` was a literal of the form object, `Any` a class
+    nothing is an instance of, `Required[int]` an unsupported form, and an alias
+    a literal of itself. Where a release spells the form in `typing` the two are
+    one object, and this reads the same.
+    """
+    extensions = pytest.importorskip("typing_extensions")
+    assert Validator(extensions.Never) == Validator(nothing)
+    assert Validator(extensions.Any) == Validator(typing.Any)
+    assert Validator(list[extensions.Any]).is_valid([1, "a"])
+    for qualifier in (extensions.Required, extensions.NotRequired, extensions.ReadOnly):
+        assert Validator(qualifier[int]) == Validator(int)
+    ints = extensions.TypeAliasType("Ints", list[int])
+    assert Validator(ints) == Validator(list[int])
+    tail = Validator(tuple[int, extensions.Unpack[tuple[str, ...]]])
+    assert tail.is_valid((1, "a", "b"))
+    assert not tail.is_valid((1, 2))
+    for construct in (extensions.Self, extensions.LiteralString):
+        with pytest.raises(NotImplementedError, match="typing construct"):
+            Validator(construct)
+
+    account = Validator(
+        extensions.TypedDict(
+            "Account",
+            {"owner": extensions.Required[str], "balance": extensions.ReadOnly[int]},
+            total=False,
+        )
+    )
+    assert account.is_valid({"owner": "Ada"})
+    assert not account.is_valid({"balance": 1})
+
+
+#: A validator built on one thread while another imports `typing_extensions`,
+#: with the interpreter switching threads as often as it can.
+_BUILT_WHILE_IMPORTING = """
+import sys
+import threading
+from typing import Literal
+
+from valgebra import Validator
+
+sys.setswitchinterval(1e-6)
+importing = True
+
+
+def build():
+    while importing:
+        Validator(Literal["a", 3])
+
+
+thread = threading.Thread(target=build)
+thread.start()
+import typing_extensions as extensions
+
+importing = False
+thread.join()
+assert Validator(extensions.ReadOnly[int]) == Validator(int)
+assert Validator(extensions.TypeAliasType("Ints", list[int])) == Validator(list[int])
+"""
+
+
+def test_a_typing_extensions_form_read_while_the_module_imports_is_not_lost() -> None:
+    """A module is in `sys.modules` before its body has run.
+
+    A validator built on another thread while `typing_extensions` imports read
+    the module's forms half-defined, and kept the ones the body had not reached
+    as absent: `ReadOnly[int]` was an unsupported form for the rest of the
+    process. Run in a fresh interpreter, where the module is not yet loaded.
+    """
+    pytest.importorskip("typing_extensions")
+    subprocess.run(  # noqa: S603 - this interpreter, a fixed script, no shell
+        [sys.executable, "-c", _BUILT_WHILE_IMPORTING], check=True
+    )
 
 
 def test_a_pattern_that_is_not_text_says_what_it_is() -> None:

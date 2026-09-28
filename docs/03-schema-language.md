@@ -6,7 +6,9 @@ description: Every schema form with its denotation as a set of Python values.
 
 A schema denotes a **set of Python values**. This page lists every form valgebra
 reads and the set it denotes. The primary notation is standard typing; compact
-native forms and the combinators are alternatives for the same sets.
+native forms and the combinators are alternatives for the same sets. A form
+spelled from `typing_extensions` reads as its `typing` spelling does, on every
+supported release, including those where the two are different objects.
 
 ## A form this page does not list
 

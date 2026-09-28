@@ -1265,3 +1265,112 @@ fn a_qualifier_states_required_ness_only_from_the_outside() {
         }
     });
 }
+
+/// A form `typing_extensions` spells with an object of its own reads as its
+/// `typing` spelling does: `Any` the top, `Never` the bottom, an alias its
+/// aliased type, a qualifier the type it qualifies, `Unpack` a tuple's tail,
+/// and `Self` a construct to refuse.
+///
+/// The module is the installed one where there is one. The corpora run on an
+/// interpreter's own standard library, so where there is none a stand-in
+/// carries the spellings the frontend asks for, under the module's name, for as
+/// long as the row builds.
+#[test]
+fn a_typing_extensions_form_reads_as_its_typing_spelling() {
+    Python::attach(|py| {
+        let namespace = namespace(py).expect("the corpus namespace builds");
+        py.run(
+            c"import sys, types\n\
+              try:\n\
+              \x20   import typing_extensions as extensions\n\
+              \x20   stand_in = False\n\
+              except ImportError:\n\
+              \x20   extensions = types.ModuleType('typing_extensions')\n\
+              \x20   class _SpecialForm:\n\
+              \x20       pass\n\
+              \x20   class Any:\n\
+              \x20       pass\n\
+              \x20   class TypeAliasType:\n\
+              \x20       def __init__(self, name, value):\n\
+              \x20           self.__name__ = name\n\
+              \x20           self.__value__ = value\n\
+              \x20   for name in ('Never', 'Self', 'Required', 'NotRequired', 'ReadOnly', 'Unpack'):\n\
+              \x20       setattr(extensions, name, _SpecialForm())\n\
+              \x20   extensions._SpecialForm = _SpecialForm\n\
+              \x20   extensions.Any = Any\n\
+              \x20   extensions.TypeAliasType = TypeAliasType\n\
+              \x20   sys.modules['typing_extensions'] = extensions\n\
+              \x20   stand_in = True\n\
+              def qualified(form, *args):\n\
+              \x20   return typing._GenericAlias(form, args)\n",
+            Some(&namespace),
+            None,
+        )
+        .expect("the module or its stand-in is in place");
+        let schema_of = |expression: &str| -> PyResult<Schema> {
+            let form = py.eval(&CString::new(expression)?, Some(&namespace), None)?;
+            build_schema(&form, &mut Pool::default(), &mut Vec::new())
+        };
+        let read = |expression: &str| schema_of(expression).expect(expression);
+        assert_eq!(read("extensions.Any"), Schema::ANY);
+        assert_eq!(read("extensions.Never"), Schema::Nothing);
+        let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+        assert_eq!(read("extensions.TypeAliasType('Ints', list[int])"), ints);
+        for qualifier in ["Required", "NotRequired", "ReadOnly"] {
+            assert_eq!(
+                read(&format!("qualified(extensions.{qualifier}, int)")),
+                Schema::Int,
+                "{qualifier}"
+            );
+        }
+        // And the two that say whether the key is required say it, alone and
+        // behind the qualifier that says nothing.
+        for (expression, wanted) in [
+            ("qualified(extensions.Required, int)", Some(true)),
+            ("qualified(extensions.NotRequired, int)", Some(false)),
+            (
+                "qualified(extensions.ReadOnly, qualified(extensions.NotRequired, int))",
+                Some(false),
+            ),
+        ] {
+            let hint = py
+                .eval(
+                    &CString::new(expression).expect("no interior nul"),
+                    Some(&namespace),
+                    None,
+                )
+                .expect(expression);
+            assert_eq!(
+                qualified_required(&hint).expect(expression),
+                wanted,
+                "{expression}"
+            );
+        }
+        assert_eq!(
+            read("tuple[int, qualified(extensions.Unpack, tuple[str, ...])]"),
+            Schema::tuple(SeqShape::prefix_tail([Schema::Int], Schema::Str)),
+        );
+        // An element whose origin is a form, or a class, is no `Unpack`: it is
+        // read as an element, and only the tail is spliced.
+        assert_eq!(
+            read(
+                "tuple[typing.Literal[1], list[int], qualified(extensions.Unpack, tuple[str, ...])]"
+            ),
+            Schema::tuple(SeqShape::prefix_tail(
+                [read("typing.Literal[1]"), ints.clone()],
+                Schema::Str
+            )),
+        );
+        assert!(
+            schema_of("extensions.Self")
+                .is_err_and(|err| err.is_instance_of::<PyNotImplementedError>(py)),
+            "Self is a construct, not a value"
+        );
+        py.run(
+            c"if stand_in:\n    del sys.modules['typing_extensions']\n",
+            Some(&namespace),
+            None,
+        )
+        .expect("the stand-in is gone");
+    });
+}

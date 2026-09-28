@@ -30,6 +30,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a pattern that parses only once anchored is refused
 - fix: a fatal signal from any part of a message propagates
 - fix: an object carrying metadata and no origin is a value
+- fix: a typing_extensions spelling reads as its typing one
 
 -->
 
@@ -141,6 +142,15 @@ answer of its own, or a repair to a change not yet released.
   `__origin__`, so an object without one failed with a bare `AttributeError`,
   a type the build is documented never to raise. It is read as every other
   object is, as the literal of itself.
+- **A `typing_extensions` spelling reads as its `typing` one.** Before the
+  release that adds a form to `typing`, `typing_extensions` defines it with an
+  object of its own, and the frontend asked `typing` alone. On 3.10
+  `typing_extensions.Never` read as a literal of the form object and admitted
+  it, `Any` read as a class nothing is an instance of, `Self` and
+  `LiteralString` read as literals, and `Required`, `NotRequired`, `ReadOnly`
+  and `Unpack` were refused, so a `TypedDict` using them did not build. Before
+  3.15 an alias built with `typing_extensions.TypeAliasType` read as a literal
+  of the alias. Each reads as its `typing` spelling does.
 
 ## [0.0.14] - 2026-09-26
 

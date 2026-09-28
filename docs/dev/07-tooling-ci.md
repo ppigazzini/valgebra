@@ -676,7 +676,13 @@ six ways and is scheduled only.
 the interpreter `ci.yml` names for that lane (CPython 3.12), and a survivor's
 note in `scripts/mutation_baseline_walk.json` is an argument about *that*
 interpreter: a mutant two spellings of `typing.Union` cannot tell apart on 3.14
-is caught where they are two objects, and the ratchet reads it as caught.
+is caught where they are two objects, and the ratchet reads it as caught. The
+same holds for what the lane's environment installs. The embedded interpreter
+imports from the lane's venv, where the lock puts `typing_extensions`, and on
+3.12 that module's `Required`, `NotRequired` and `Unpack` are `typing`'s own
+objects. So the frontend's arms for the module's own objects are killable only
+where it defines them -- 3.10, or the corpus row's stand-in on an interpreter
+that cannot import it -- and three notes in the baseline say so.
 
 **A reading compiled per interpreter names what it answers, and is measured on
 one side.** `crates/valgebra-py/build.rs` re-emits the interpreter's `Py_3_x`

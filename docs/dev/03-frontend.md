@@ -140,6 +140,21 @@ symmetry:
 Moving a branch earlier is a behaviour change, not a refactor. `Any` above the
 type branch is the sharp one.
 
+**A `typing_extensions` spelling reads as its `typing` one.** Before the release
+that adds a form to `typing`, `typing_extensions` defines it with an object of
+its own, and an identity check against `typing` alone reads it as something
+else: on 3.10 `Never` became a literal of the form object, `Any` a class
+nothing is an instance of, and `Required[int]` an unsupported form, and before
+3.15 a `TypeAliasType` became a literal of the alias. `Extensions` in `build.rs`
+holds those objects, looked up in `sys.modules` once the module has finished
+loading -- a module is in `sys.modules` while its body runs, and a form read
+then would be kept as absent -- and is asked only where a form would otherwise
+be misread: the class fallback
+(`Any`), the literal fallback (`Never`, `TypeAliasType`, and its own
+`_SpecialForm` for `Self` and `LiteralString`), and an origin no other arm reads
+(the three field qualifiers and `Unpack`). A schema naming none of them pays
+nothing for it.
+
 ## What a class declares
 
 Dispatch step 4 takes any plain type, and what it builds depends on what the

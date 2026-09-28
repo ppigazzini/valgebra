@@ -19,7 +19,7 @@ use pyo3::types::{
 use valgebra_core::{Field, MapClause, Schema, SeqShape};
 
 use super::generics::is_field_qualifier;
-use super::{MAX_BUILD_DEPTH, Pool, build_schema, forms, not_implemented};
+use super::{MAX_BUILD_DEPTH, Pool, build_schema, forms, is_extension, not_implemented};
 use crate::errors::summarize;
 
 /// `dataclasses.is_dataclass`, held apart from [`Forms`](super::Forms) and
@@ -157,6 +157,12 @@ pub(super) fn build_type_object(
         return Err(not_implemented(
             "a Protocol must be @runtime_checkable to be used as a schema",
         ));
+    }
+    // `typing_extensions.Any` is a class of its own on 3.10, which is the one
+    // release where `Any` is a class there and not in `typing`. Read as one, it
+    // is an instance check nothing passes.
+    if is_extension(ty.as_any(), |held| &held.any)? {
+        return Ok(Schema::ANY);
     }
     // Any other class names its instances: a bare class is an isinstance check.
     // This covers the remaining builtins (complex, bytearray, memoryview, range,
@@ -488,6 +494,16 @@ pub(super) fn qualified_required(hint: &Bound<'_, PyAny>) -> PyResult<Option<boo
                 && origin.is(marker.bind(py))
             {
                 return Ok(Some(answer));
+            }
+        }
+        // `typing_extensions`' spellings, which are forms: the origin of an
+        // `Annotated` or a generic field is a class, and asks nothing.
+        if !origin.is_instance_of::<PyType>() {
+            if is_extension(&origin, |held| &held.required)? {
+                return Ok(Some(true));
+            }
+            if is_extension(&origin, |held| &held.not_required)? {
+                return Ok(Some(false));
             }
         }
         if !is_field_qualifier(&origin)? {

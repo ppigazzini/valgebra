@@ -16,7 +16,9 @@ use rustc_hash::FxHashSet;
 use valgebra_core::{Field, MapClause, Schema, SeqShape};
 
 use super::classes::{field_name, is_truthy_attr};
-use super::{Pool, build_schema, checked_key, forms, is_forward_reference, not_implemented};
+use super::{
+    Pool, build_schema, checked_key, forms, is_extension, is_forward_reference, not_implemented,
+};
 use crate::errors::summarize;
 use crate::validator::Validator;
 
@@ -84,12 +86,6 @@ pub(super) fn build_parametrized(
     if origin.is(py.get_type::<PyTuple>()) {
         return build_tuple(args, lits, defs);
     }
-    if is_field_qualifier(origin)? {
-        // A field qualifier survives hint resolution because field metadata is
-        // kept (include_extras), so the frontend unwraps it and compiles the type
-        // it qualifies.
-        return build_type_argument(&single_arg(args, alias, QUALIFIER_INSTEAD)?, lits, defs);
-    }
     if is_union_origin(origin)? {
         let mut members = Vec::with_capacity(args.len());
         for arg in args.iter() {
@@ -119,6 +115,13 @@ pub(super) fn build_parametrized(
              schema: pass the schema itself, or a compiled Validator",
             summarize(alias)
         )));
+    }
+    // A field qualifier survives hint resolution because field metadata is kept
+    // (include_extras), so the frontend unwraps it and compiles the type it
+    // qualifies. Asked after the forms above, which is where a union or a
+    // literal stops, because a `typing_extensions` spelling costs a lookup.
+    if is_field_qualifier(origin)? {
+        return build_type_argument(&single_arg(args, alias, QUALIFIER_INSTEAD)?, lits, defs);
     }
     Err(not_implemented(&format!(
         "unsupported typing form with origin {}; supported: list, set, dict, \
@@ -211,7 +214,16 @@ pub(super) fn is_field_qualifier(origin: &Bound<'_, PyAny>) -> PyResult<bool> {
             return Ok(true);
         }
     }
-    Ok(false)
+    // The same three from `typing_extensions`, which is where a release older
+    // than the one that adds a qualifier to `typing` spells it. A qualifier is
+    // a form and never a class, and the origin of every other annotated field
+    // is one, so a class is answered without asking.
+    if origin.is_instance_of::<PyType>() {
+        return Ok(false);
+    }
+    Ok(is_extension(origin, |held| &held.required)?
+        || is_extension(origin, |held| &held.not_required)?
+        || is_extension(origin, |held| &held.read_only)?)
 }
 
 /// Compile a *type argument* of a typing form.
@@ -268,10 +280,18 @@ pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Un
     let inner = if is_truthy_attr(arg, intern!(py, "__unpacked__")) {
         arg.clone()
     } else {
-        let Some(unpack) = &forms.unpack else {
-            return Ok(None);
-        };
-        if !origin_of(arg)?.is(unpack.bind(py)) {
+        // `typing.Unpack`, or `typing_extensions.Unpack` where it is its own
+        // object: 3.10 has only the second. An argument with no origin is an
+        // ordinary element, and asks neither.
+        let origin = origin_of(arg)?;
+        let unpacks = !origin.is_none()
+            && !origin.is_instance_of::<PyType>()
+            && (forms
+                .unpack
+                .as_ref()
+                .is_some_and(|unpack| origin.is(unpack.bind(py)))
+                || is_extension(&origin, |held| &held.unpack)?);
+        if !unpacks {
             return Ok(None);
         }
         let wrapped = forms.get_args.bind(py).call1((arg,))?;

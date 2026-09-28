@@ -236,6 +236,126 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
     })
 }
 
+/// The special forms `typing_extensions` spells with objects of its own.
+///
+/// Before the release that adds a form to `typing`, `typing_extensions` defines
+/// it itself, so the name is a different object from anything [`Forms`] holds:
+/// `Any`, `Never`, `Self` and the `TypedDict` qualifiers on 3.10, and
+/// `TypeAliasType` before 3.15. Asked against `typing` alone, such a form reads
+/// as something it is not -- `Never` as a literal of the form object, `Any` as
+/// a class nothing is an instance of, `Required[int]` as an unsupported form.
+/// Where a release spells the form in `typing`, the two names are one object
+/// and nothing here changes a reading.
+///
+/// Asked only where a form would otherwise be read as something else, so a
+/// schema that names none of them pays nothing for it.
+pub(crate) struct Extensions {
+    any: Option<Py<PyAny>>,
+    never: Option<Py<PyAny>>,
+    type_alias_type: Option<Py<PyAny>>,
+    /// The class `Self`, `LiteralString` and `Never` are instances of below
+    /// 3.11, which is not `typing._SpecialForm`.
+    special_form: Option<Py<PyAny>>,
+    pub(crate) required: Option<Py<PyAny>>,
+    pub(crate) not_required: Option<Py<PyAny>>,
+    pub(crate) read_only: Option<Py<PyAny>>,
+    pub(crate) unpack: Option<Py<PyAny>>,
+}
+
+static EXTENSIONS: PyOnceLock<Extensions> = PyOnceLock::new();
+
+/// `sys.modules`, held so that asking whether a module is loaded is one
+/// dictionary lookup rather than an import of `sys` per question.
+static MODULES: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
+
+/// The `typing_extensions` forms, once the module is loaded.
+///
+/// Looked up in `sys.modules` rather than imported: an object of the module
+/// exists only once the module is loaded, and a lookup runs no module's code.
+/// Held once found loaded; until then every call looks again, since a program
+/// may import the module after its first validator, or on another thread
+/// while one is built.
+pub(crate) fn extensions(py: Python<'_>) -> PyResult<Option<&'static Extensions>> {
+    if let Some(held) = EXTENSIONS.get(py) {
+        return Ok(Some(held));
+    }
+    let modules = MODULES.get_or_try_init(py, || -> PyResult<Py<PyDict>> {
+        Ok(py
+            .import(intern!(py, "sys"))?
+            .getattr(intern!(py, "modules"))?
+            .cast_into::<PyDict>()?
+            .unbind())
+    })?;
+    let Some(module) = modules
+        .bind(py)
+        .get_item(intern!(py, "typing_extensions"))?
+    else {
+        return Ok(None);
+    };
+    // A module is in `sys.modules` before its body has run, and another thread
+    // may be running it: a form the body has not reached yet would be held as
+    // absent for good. `importlib` marks the module's spec while it loads, and
+    // until the mark is gone the module is read as not loaded.
+    if let Some(spec) = module.getattr_opt(intern!(py, "__spec__"))?
+        && let Some(loading) = spec.getattr_opt(intern!(py, "_initializing"))?
+        && loading.is_truthy()?
+    {
+        return Ok(None);
+    }
+    let form = |name: &str| -> PyResult<Option<Py<PyAny>>> {
+        Ok(module.getattr_opt(name)?.map(Bound::unbind))
+    };
+    let found = Extensions {
+        any: form("Any")?,
+        never: form("Never")?,
+        type_alias_type: form("TypeAliasType")?,
+        special_form: form("_SpecialForm")?,
+        required: form("Required")?,
+        not_required: form("NotRequired")?,
+        read_only: form("ReadOnly")?,
+        unpack: form("Unpack")?,
+    };
+    Ok(Some(EXTENSIONS.get_or_init(py, || found)))
+}
+
+/// Whether `obj` is the `typing_extensions` form `pick` names.
+pub(crate) fn is_extension(
+    obj: &Bound<'_, PyAny>,
+    pick: fn(&Extensions) -> &Option<Py<PyAny>>,
+) -> PyResult<bool> {
+    let py = obj.py();
+    Ok(extensions(py)?
+        .and_then(|held| pick(held).as_ref())
+        .is_some_and(|form| obj.is(form.bind(py))))
+}
+
+/// What a `typing_extensions` form with no `typing` counterpart here reads as:
+/// `Never` is the bottom and a `TypeAliasType` its aliased type, as their
+/// `typing` spellings are.
+fn read_extension(
+    obj: &Bound<'_, PyAny>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Option<Schema>> {
+    let py = obj.py();
+    let Some(held) = extensions(py)? else {
+        return Ok(None);
+    };
+    if held
+        .never
+        .as_ref()
+        .is_some_and(|never| obj.is(never.bind(py)))
+    {
+        return Ok(Some(Schema::Nothing));
+    }
+    if let Some(alias_type) = &held.type_alias_type
+        && obj.is_instance(alias_type.bind(py))?
+    {
+        return build_alias(obj, lits, defs).map(Some);
+    }
+    Ok(None)
+}
+
 /// Build the IR from a native Python schema description.
 ///
 /// Recognized forms: the scalar types and `None`/`type(None)`; `object` as the
@@ -401,6 +521,16 @@ pub(crate) fn build_schema(
         return Ok(inner.schema.reindexed(&lit_map, offset));
     }
 
+    build_unrecognised(obj, lits, defs)
+}
+
+/// An object [`build_schema`] has no other reading for: a literal of itself,
+/// unless it is a typing form that a literal would misread.
+fn build_unrecognised(
+    obj: &Bound<'_, PyAny>,
+    lits: &mut Pool,
+    defs: &mut Vec<Schema>,
+) -> PyResult<Schema> {
     // A type variable or typing special form reaches the constant fallthrough
     // only because it has no typing origin and is not a value. Reject it with a
     // clear message rather than interning it as a literal that would match
@@ -416,6 +546,10 @@ pub(crate) fn build_schema(
              ..., include_extras=True), or write the type rather than its name",
             summarize(obj)
         )));
+    }
+
+    if let Some(schema) = read_extension(obj, lits, defs)? {
+        return Ok(schema);
     }
 
     if is_typing_construct(obj)? {
@@ -449,7 +583,10 @@ fn is_typing_construct(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
             return Ok(true);
         }
     }
-    Ok(false)
+    match extensions(py)?.and_then(|held| held.special_form.as_ref()) {
+        Some(class) => obj.is_instance(class.bind(py)),
+        None => Ok(false),
+    }
 }
 
 /// Compile arguments into one shared pool and combine them with `make`.
