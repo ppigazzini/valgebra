@@ -3909,3 +3909,195 @@ fn a_fail_fast_report_walks_no_branch_past_its_first_failure() {
         assert_eq!(calls(), 3, "a full report walks the branch whole");
     });
 }
+
+/// A module whose objects run caller code when a message renders them: two
+/// whose `repr` is interrupted, one whose `repr` fails the ordinary way, and a
+/// class whose metaclass answers `__name__` with an interrupt.
+fn loud(py: Python<'_>) -> Bound<'_, PyAny> {
+    PyModule::from_code(
+        py,
+        c"class Loud:\n    def __repr__(self):\n        raise KeyboardInterrupt\n\
+          class LoudInt(int):\n    def __repr__(self):\n        raise KeyboardInterrupt\n\
+          class Awkward:\n    def __repr__(self):\n        raise ValueError('no repr')\n\
+          class Meta(type):\n    def __getattribute__(cls, name):\n\
+          \x20       if name == '__name__':\n            raise KeyboardInterrupt\n\
+          \x20       return super().__getattribute__(name)\n\
+          class LoudlyNamed(metaclass=Meta):\n    pass\n",
+        c"loud.py",
+        c"loud",
+    )
+    .expect("the module compiles")
+    .into_any()
+}
+
+/// The first fatal signal an explaining walk of `value` recorded, and what it
+/// reported.
+fn recorded(
+    py: Python<'_>,
+    schema: &Schema,
+    value: &Bound<'_, PyAny>,
+    pool: &[Py<PyAny>],
+) -> (Option<PyErr>, Vec<Violation>) {
+    let index = build_index(py, schema, &[], pool);
+    let state = WalkState::new();
+    let ctx = Ctx {
+        pool,
+        defs: &[],
+        records: &index.records,
+        attrs: &index.attrs,
+        unions: &index.unions,
+        regexes: &index.regexes,
+        guard: &state.guard,
+        depth: &state.depth,
+        fatal: &state.fatal,
+        fatal_seen: &state.fatal_seen,
+        mode: WalkMode::Explain,
+    };
+    let mut out = Vec::new();
+    member(
+        schema,
+        &Value::Py(value),
+        &mut Frame::new(&mut Vec::new(), &mut out, ctx),
+    );
+    (state.fatal.take(), out)
+}
+
+/// A message renders the constant a literal names, the bound or step a value
+/// missed, the value a constraint refused, a key the path names by its repr,
+/// and a class's name, and each of those runs caller code. A fatal signal
+/// raised there is recorded for the entry point to raise.
+#[test]
+fn a_fatal_signal_from_any_part_of_a_message_is_recorded() {
+    use pyo3::exceptions::PyKeyboardInterrupt;
+    Python::attach(|py| {
+        let module = loud(py);
+        let make = |name: &str, arg: Option<i64>| -> Py<PyAny> {
+            let class = module.getattr(name).expect("the class");
+            match arg {
+                Some(n) => class.call1((n,)),
+                None => class.call0(),
+            }
+            .expect("an instance")
+            .unbind()
+        };
+        let int = |n: i64| PyInt::new(py, n).into_any();
+        let refine = |constraint| Schema::Refine {
+            base: Arc::new(Schema::Int),
+            constraints: vec![constraint].into(),
+        };
+        let first = OperandIx::new(0);
+        let loud_key = PyDict::new(py);
+        loud_key
+            .set_item(make("Loud", None), "x")
+            .expect("a hashable key");
+        let named = module.getattr("LoudlyNamed").expect("the class").unbind();
+
+        let cases = [
+            (
+                "the constant a literal names",
+                Schema::Literal(ConstIx::new(0)),
+                int(1),
+                vec![make("Loud", None)],
+            ),
+            (
+                "the bound a value missed",
+                refine(Constraint::Ge(first)),
+                int(1),
+                vec![make("LoudInt", Some(11))],
+            ),
+            (
+                "the step a value missed",
+                refine(Constraint::MultipleOf(first)),
+                int(1),
+                vec![make("LoudInt", Some(3))],
+            ),
+            (
+                "the value a bound refused",
+                refine(Constraint::Ge(first)),
+                make("LoudInt", Some(1)).into_bound(py),
+                vec![int(10).unbind()],
+            ),
+            (
+                "a key the path names by its repr",
+                Schema::mapping(MapClause {
+                    key: Schema::ANYTHING,
+                    value: Schema::Int,
+                }),
+                loud_key.into_any(),
+                Vec::new(),
+            ),
+            (
+                "a class's name",
+                Schema::Instance(ClassIx::new(0)),
+                int(1),
+                vec![named.clone_ref(py)],
+            ),
+        ];
+        for (site, schema, value, pool) in cases {
+            let (fatal, _) = recorded(py, &schema, &value, &pool);
+            assert!(
+                fatal.is_some_and(|err| err.is_instance_of::<PyKeyboardInterrupt>(py)),
+                "{site} was not carried out"
+            );
+        }
+    });
+}
+
+/// A union's branch label, read on its own, renders the literal it names and
+/// the class it names, and carries out a fatal signal from either. An ordinary
+/// error is a value that cannot render, and reads as `<unrepresentable>`.
+#[test]
+fn a_fatal_signal_from_a_branch_label_is_recorded() {
+    Python::attach(|py| {
+        let module = loud(py);
+        let make = |name: &str| -> Py<PyAny> {
+            module
+                .getattr(name)
+                .and_then(|class| class.call0())
+                .expect("an instance")
+                .unbind()
+        };
+        let named = module.getattr("LoudlyNamed").expect("the class").unbind();
+        for (site, branch, pool) in [
+            (
+                "a literal branch",
+                Schema::Literal(ConstIx::new(0)),
+                vec![make("Loud")],
+            ),
+            (
+                "a class branch",
+                Schema::Instance(ClassIx::new(0)),
+                vec![named.clone_ref(py)],
+            ),
+        ] {
+            let schema = Schema::union([branch, Schema::Str]);
+            let index = build_index(py, &schema, &[], &pool);
+            let state = WalkState::new();
+            let ctx = Ctx {
+                pool: &pool,
+                defs: &[],
+                records: &index.records,
+                attrs: &index.attrs,
+                unions: &index.unions,
+                regexes: &index.regexes,
+                guard: &state.guard,
+                depth: &state.depth,
+                fatal: &state.fatal,
+                fatal_seen: &state.fatal_seen,
+                mode: WalkMode::Explain,
+            };
+            push_branch_label(&schema, ctx, py, &mut BranchLabels::new());
+            assert!(state.fatal.take().is_some(), "{site} was not carried out");
+        }
+
+        // The control: an ordinary error is a value that cannot render.
+        let pool = vec![PyInt::new(py, 10).into_any().unbind()];
+        let awkward = make("Awkward").into_bound(py);
+        let (fatal, out) = recorded(py, &Schema::Int, &awkward, &pool);
+        assert!(fatal.is_none());
+        assert_eq!(
+            out.first().map(|v| v.value_summary.as_str()),
+            Some("<unrepresentable>")
+        );
+    });
+}

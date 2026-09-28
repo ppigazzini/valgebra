@@ -251,6 +251,24 @@ fn each_spelling_builds_its_own_schema() {
 /// these are read by fewer lanes: the release each needs rides on the row and
 /// [`Since`] says what that means. Together they are one table -- a spelling
 /// belongs to the frontend's dispatch whether or not the floor can write it.
+/// An object carrying `__metadata__` and no `__origin__` is not an `Annotated`
+/// form. It is read as every other object is, the literal of itself, rather
+/// than failing on the name it lacks; with both names it is the refinement.
+#[test]
+fn metadata_without_an_origin_is_not_annotated() {
+    Python::attach(|py| {
+        let alone =
+            built(py, "types.SimpleNamespace(__metadata__=(at.Ge(0),))").expect("an object builds");
+        assert!(alone.starts_with("Literal["), "{alone}");
+        let both = built(
+            py,
+            "types.SimpleNamespace(__metadata__=(at.Ge(0),), __origin__=int)",
+        )
+        .expect("a form builds");
+        assert_eq!(both, "Annotated[int, Ge(0)]");
+    });
+}
+
 #[test]
 fn each_spelling_a_release_adds_builds_where_that_release_has_it() {
     Python::attach(|py| {
