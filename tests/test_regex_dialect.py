@@ -12,6 +12,7 @@ A reader porting patterns from `re` has no other way to find out.
 from __future__ import annotations
 
 import re
+import sys
 import warnings
 from pathlib import Path
 from typing import Annotated
@@ -147,6 +148,43 @@ def test_a_verbose_pattern_may_end_in_a_comment() -> None:
 
 
 @pytest.mark.parametrize(
+    ("pattern", "text", "ours"),
+    [
+        (r"\s", "\x1c", False),
+        (r"\s", "\x1f", False),
+        (r"\w", "\u0301", True),
+        (r"\w", "\u00b2", False),
+        ("a\\b\u0301", "a\u0301", False),
+        ("a$\n", "a\n", False),
+    ],
+    ids=[
+        "file-separator",
+        "unit-separator",
+        "combining-mark",
+        "superscript-two",
+        "boundary-before-a-mark",
+        "dollar-before-a-newline",
+    ],
+)
+def test_a_class_or_an_anchor_the_engines_read_apart(
+    pattern: str, text: str, *, ours: bool
+) -> None:
+    r"""Both engines build these, and each admits what the other refuses.
+
+    The Unicode tables behind `\s` and `\w` are not `re`'s, and `re`'s `$`
+    also matches before a final newline. Each is named on the refinements page.
+    """
+    assert _matches(pattern, text) is ours
+    assert (re.fullmatch(pattern, text) is not None) is not ours
+
+
+def test_a_non_boundary_matches_the_empty_string() -> None:
+    r"""`\B` matches the empty string here, and in `re` only from 3.14."""
+    assert _matches(r"\B", "")
+    assert (re.fullmatch(r"\B", "") is not None) == (sys.version_info >= (3, 14))
+
+
+@pytest.mark.parametrize(
     ("pattern", "said"),
     [
         ("[ a]", "whitespace inside a character class"),
@@ -175,8 +213,28 @@ def test_a_verbose_class_member_is_refused_rather_than_dropped(
 
 @pytest.mark.parametrize(
     "topic",
-    ["[[:alpha:]]", r"\p{L}", "case folding", "set symmetric difference"],
-    ids=["posix-classes", "property-escapes", "case-folding", "class-set-operators"],
+    [
+        "[[:alpha:]]",
+        r"\p{L}",
+        "case folding",
+        "set symmetric difference",
+        "under verbose mode",
+        r"\x1c",
+        "combining mark",
+        "before a final newline",
+        r"\B` on the empty string",
+    ],
+    ids=[
+        "posix-classes",
+        "property-escapes",
+        "case-folding",
+        "class-set-operators",
+        "verbose-classes",
+        "separators",
+        "word-characters",
+        "dollar",
+        "non-boundary",
+    ],
 )
 def test_the_page_names_the_divergence(topic: str) -> None:
     """Each class a reader can hit is one the refinements page names.

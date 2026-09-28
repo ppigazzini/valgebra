@@ -215,7 +215,7 @@ the pattern, which is how this engine spells them.
 Running natively is what buys the linear-time guarantee, and it is also what
 makes the dialect the Rust engine's. The two languages are close but not equal,
 and **a pattern both engines accept can denote different sets**. Compiling
-successfully is therefore not a test of which language a pattern is in. Four
+successfully is therefore not a test of which language a pattern is in. The
 places the two engines part, which a ported pattern should be checked against —
 this is where they differ, not a complete audit of what a pattern denotes:
 
@@ -258,8 +258,49 @@ except ValueError as err:
     assert "nested set" in str(err)
 ```
 
-The third is the loud case: `re.compile(r"\p{L}+")` raises, so a pattern that
-works here fails there and a reader finds out at once. The first two are the
+Four more are quiet, and each is in a class or an anchor a ported pattern is
+likely to carry:
+
+- **`\s`**: `re` counts the separators `\x1c` to `\x1f` as whitespace, as
+  `str.isspace` does, and this engine follows Unicode's `White_Space`, which
+  does not.
+- **`\w` and `\b`**: this engine counts a combining mark as a word character
+  and `re` does not, and `re` counts a numeric character that is not a decimal
+  digit, such as `²`, and this engine does not.
+- **`$`**: outside `MULTILINE`, `re` also matches `$` before a final newline,
+  so `a$\n` admits `"a\n"` there and nothing here. `\z` is the end of the text
+  in both, from Python 3.14.
+- **`\B` on the empty string**: it matches here, and in `re` only from 3.14.
+
+```python
+import re
+import sys
+from typing import Annotated
+
+from valgebra import Regex, Validator
+
+
+def admits(pattern: str, text: str) -> bool:
+    return Validator(Annotated[str, Regex(pattern)]).is_valid(text)
+
+
+assert not admits(r"\s", "\x1c")
+assert re.fullmatch(r"\s", "\x1c") is not None
+
+assert admits(r"\w", "\u0301")  # a combining acute accent
+assert re.fullmatch(r"\w", "\u0301") is None
+assert not admits(r"\w", "²")
+assert re.fullmatch(r"\w", "²") is not None
+
+assert not admits("a$\n", "a\n")
+assert re.fullmatch("a$\n", "a\n") is not None
+
+assert admits(r"\B", "")
+assert (re.fullmatch(r"\B", "") is not None) == (sys.version_info >= (3, 14))
+```
+
+The third of the first four is the loud case: `re.compile(r"\p{L}+")` raises,
+so a pattern that works here fails there and a reader finds out at once. The first two are the
 quiet ones — both engines build the pattern and answer differently — and they
 are the reason a library holding itself to `re`'s decisions cannot adopt `Regex`
 behind a fallback that triggers on compile failure.
