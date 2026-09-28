@@ -160,6 +160,19 @@ UNREQUIRED_JOB = """jobs:
 
 PLANTS = (
     Plant(
+        # A seed file at the path of a source file with no property test in it,
+        # which is where a test module's seeds stay when the module moves.
+        # Every test passes, and the seeds are replayed by nothing.
+        "tests/test_proptest_seeds.py",
+        ("crates/valgebra-core/proptest-regressions/lib.txt",),
+        lambda tree: _write(
+            tree,
+            "crates/valgebra-core/proptest-regressions/lib.txt",
+            "cc 0000000000000000000000000000000000000000000000000000000000000000"
+            " # planted\n",
+        ),
+    ),
+    Plant(
         "tests/test_module_placement.py",
         ("crates/valgebra-core/src/descr/budget.rs",),
         # The drift the bar exists to catch, in its smallest form: the shortest

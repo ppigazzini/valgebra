@@ -112,6 +112,7 @@ for and misses the other. The ledgers:
 | `tests/test_fuzz_lane.py` | the fuzz soak names its allocation ceiling and forks its batches |
 | `tests/test_floor_names.py` | every typing and enum name read at import time, and every stdlib module imported, exists on the floor |
 | `tests/test_module_placement.py` | no inline test module is longer than a screen |
+| `tests/test_proptest_seeds.py` | every persisted proptest seed sits beside the property tests that replay it |
 | `tests/test_theory_ledger.py` | every load-bearing theory result names a test, and every name is one; the rows that read the argument itself skip where it is absent, which is every lane |
 | `tests/test_use_case_ledger.py` | every public name and every error code is named by the suite, or accepted with a reason |
 | `tests/test_bound_ledger.py` | every declared bound is driven by a test, or accepted with a reason |
@@ -196,6 +197,14 @@ than this page. The bar is generous, and three modules sit under it and stay whe
 are: a module short enough to read past is in nobody's way. What the bar catches
 is the drift, one case at a time, until a file is mostly not the thing it is
 named for.
+
+**A module's seeds move with it.** proptest persists the seed of a failing case
+at the path of the source file whose `proptest!` block drew it, under
+`proptest-regressions/`, and replays the seeds at that path before it draws. So
+moving a module moves its seed file to the sibling's path --
+`proptest-regressions/decision/tests.txt` for `decision/tests.rs` -- or the
+seeds are replayed by nothing. `tests/test_proptest_seeds.py` holds every seed
+file to a property test beside it.
 
 The two ledgers that read the tree know the shape: `tests/test_mutation_scope.py`
 does not ask a test module to be swept, and `tests/test_harness_conditionals.py`
