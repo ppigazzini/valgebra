@@ -245,6 +245,27 @@ def test_a_typing_extensions_form_read_while_the_module_imports_is_not_lost() ->
     )
 
 
+@pytest.mark.parametrize(
+    ("module", "name"),
+    [
+        ("typing", "TypedDict"),
+        ("typing", "NamedTuple"),
+        ("typing_extensions", "TypedDict"),
+        ("typing_extensions", "NamedTuple"),
+    ],
+)
+def test_a_bare_typed_dict_or_named_tuple_is_refused(module: str, name: str) -> None:
+    """The base a class is declared from is not a type, and not a literal either.
+
+    Each is a function or a form at runtime, and read as a literal it admitted
+    that one object and nothing a caller has. A checker reads `NamedTuple` as
+    every named tuple class and refuses `TypedDict` as a type.
+    """
+    form = getattr(pytest.importorskip(module), name)
+    with pytest.raises(NotImplementedError, match="the base a class is declared from"):
+        Validator(form)
+
+
 def test_a_pattern_that_is_not_text_says_what_it_is() -> None:
     """A refusal names the marker it read, not a kind it guessed."""
     with pytest.raises((TypeError, ValueError, NotImplementedError)) as caught:

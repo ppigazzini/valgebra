@@ -190,6 +190,9 @@ struct Forms {
     object: Py<PyAny>,
     /// `builtins.frozendict` (PEP 814), absent below 3.15.
     frozendict: Option<Py<PyAny>>,
+    /// `typing.TypedDict` and `typing.NamedTuple`, the bases a class is
+    /// declared from, which a bare annotation names in place of a class.
+    class_factories: Vec<Py<PyAny>>,
     enum_class: Py<PyAny>,
     callable: Py<PyAny>,
     ellipsis: Py<PyAny>,
@@ -229,6 +232,10 @@ fn forms(py: Python<'_>) -> PyResult<&'static Forms> {
             get_type_hints: typing.getattr("get_type_hints")?.unbind(),
             object: builtins.getattr("object")?.unbind(),
             frozendict: optional_form(&builtins, "frozendict"),
+            class_factories: ["TypedDict", "NamedTuple"]
+                .iter()
+                .filter_map(|name| optional_form(&typing, name))
+                .collect(),
             enum_class: py.import("enum")?.getattr("Enum")?.unbind(),
             callable: py.import("collections.abc")?.getattr("Callable")?.unbind(),
             ellipsis: builtins.getattr("Ellipsis")?.unbind(),
@@ -260,6 +267,8 @@ pub(crate) struct Extensions {
     pub(crate) not_required: Option<Py<PyAny>>,
     pub(crate) read_only: Option<Py<PyAny>>,
     pub(crate) unpack: Option<Py<PyAny>>,
+    /// Its `TypedDict` and `NamedTuple`, which are its own on some releases.
+    class_factories: Vec<Py<PyAny>>,
 }
 
 static EXTENSIONS: PyOnceLock<Extensions> = PyOnceLock::new();
@@ -314,6 +323,11 @@ pub(crate) fn extensions(py: Python<'_>) -> PyResult<Option<&'static Extensions>
         not_required: form("NotRequired")?,
         read_only: form("ReadOnly")?,
         unpack: form("Unpack")?,
+        class_factories: ["TypedDict", "NamedTuple"]
+            .into_iter()
+            .map(form)
+            .filter_map(Result::transpose)
+            .collect::<PyResult<_>>()?,
     };
     Ok(Some(EXTENSIONS.get_or_init(py, || found)))
 }
@@ -552,6 +566,15 @@ fn build_unrecognised(
         return Ok(schema);
     }
 
+    if is_class_factory(obj)? {
+        return Err(not_implemented(&format!(
+            "{} is the base a class is declared from, not a type: pass the \
+             TypedDict or named tuple class itself, or tuple[...] for the fields a \
+             named tuple lays out",
+            summarize(obj)
+        )));
+    }
+
     if is_typing_construct(obj)? {
         return Err(not_implemented(&format!(
             "{} is a typing construct, not a value: a type variable, ParamSpec, \
@@ -562,6 +585,19 @@ fn build_unrecognised(
     }
 
     Ok(Schema::Literal(lits.intern_const(obj)))
+}
+
+/// True if `obj` is `TypedDict` or `NamedTuple` itself, from either module.
+///
+/// Each is a function or a form at runtime, so the literal fallback would read
+/// it as the one object it is, which no value a caller has belongs to. A
+/// checker reads `NamedTuple` as every named tuple class and refuses
+/// `TypedDict` as a type; neither is a question `isinstance` can ask.
+fn is_class_factory(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = obj.py();
+    let named = |factories: &[Py<PyAny>]| factories.iter().any(|factory| obj.is(factory.bind(py)));
+    Ok(named(&forms(py)?.class_factories)
+        || extensions(py)?.is_some_and(|held| named(&held.class_factories)))
 }
 
 /// True if `obj` is a `typing.ForwardRef`, on a runtime that has one.

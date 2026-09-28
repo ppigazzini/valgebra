@@ -293,6 +293,12 @@ FORMS: dict[str, Reads | Refuses] = {
     "`Validator[T]`": Refuses(
         lambda: Validator[int], "is the annotation a static checker reads"
     ),
+    "bare `TypedDict`": Refuses(
+        lambda: typing.TypedDict, "the base a class is declared from"
+    ),
+    "bare `NamedTuple`": Refuses(
+        lambda: typing.NamedTuple, "the base a class is declared from"
+    ),
 }
 
 #: The second spelling of a cell that names two forms, so the row is not held by

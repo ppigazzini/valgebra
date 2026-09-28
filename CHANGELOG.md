@@ -31,6 +31,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a fatal signal from any part of a message propagates
 - fix: an object carrying metadata and no origin is a value
 - fix: a typing_extensions spelling reads as its typing one
+- fix: a bare TypedDict or NamedTuple is refused
 
 -->
 
@@ -151,6 +152,12 @@ answer of its own, or a repair to a change not yet released.
   and `Unpack` were refused, so a `TypedDict` using them did not build. Before
   3.15 an alias built with `typing_extensions.TypeAliasType` read as a literal
   of the alias. Each reads as its `typing` spelling does.
+- **A bare `TypedDict` or `NamedTuple` is refused.** Each is a function or a
+  form at runtime, and `Validator(NamedTuple)` read it as a literal of that one
+  object, a schema that admitted nothing a caller has. A checker reads
+  `NamedTuple` as every named tuple class and refuses `TypedDict` as a type.
+  Both, from `typing` or `typing_extensions`, raise `NotImplementedError`
+  naming the class to pass instead.
 
 ## [0.0.14] - 2026-09-26
 
