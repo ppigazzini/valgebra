@@ -111,8 +111,10 @@ def _every_mutant() -> list[str]:
     """List every mutant in the workspace, with the exclusions turned off."""
     cargo = shutil.which("cargo")
     assert cargo is not None, "cargo is on the path wherever cargo-mutants is"
+    # Plain names: a workflow forcing colour through `CARGO_TERM_COLOR` wraps
+    # each part of a name in escape codes, and no baseline key matches those.
     listing = subprocess.run(  # noqa: S603  # fixed argv, no shell, test-only
-        [cargo, "mutants", "--list", "--no-config"],
+        [cargo, "mutants", "--list", "--no-config", "--colors=never"],
         cwd=ROOT,
         capture_output=True,
         text=True,

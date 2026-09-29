@@ -388,6 +388,15 @@ jobs:
       - uses: $/.github/actions/setup-uv
         with:
           python-version: ${{ matrix.python-version }}
+      # The two liveness checks in `tests/test_mutation_scope.py` list the
+      # mutants the sweep is offered, and skip where cargo-mutants is absent.
+      # The sweeps that carry it run `-m "not repository"`, so without it here
+      # no lane runs them. One leg is enough: the listing is the source's,
+      # not the interpreter's. Pinned as the sweeps pin it.
+      - uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10' }}
+        with:
+          tool: cargo-mutants@27.1.0
       - name: Install dev dependencies
         run: uv sync --locked --no-install-project
       - name: Build the extension into the venv
