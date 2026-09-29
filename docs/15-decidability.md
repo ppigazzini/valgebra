@@ -154,7 +154,9 @@ answers `"undecided"`.
   fixed-length ones it splits across, where no single branch contains it:
   `tuple[int | str, int]` is below `tuple[int, int] | tuple[str, int]`. The rule
   needs a fixed component count, so a homogeneous or variadic sequence — a star,
-  matching every length — is not decomposed.
+  matching every length — is not decomposed. The split multiplies one choice per
+  component and runs under the work budget: six components each `int | str` are
+  decided below their sixty-four corners, and seven decline against their 128.
 - **Sets and frozensets.** By element inclusion.
 - **Records and mappings.** Closed-record width, depth, and required-ness; pure
   mappings with several key-pattern clauses (each subtype clause subsumed by a
@@ -578,9 +580,9 @@ the shape. What is left below is what the descriptor cannot hold.
 lands: it enumerates what the procedure must *decide* and fails in both
 directions, so a relation that regresses to conservatism fails there and one
 that becomes decided is added there. It also carries a strict expected-failure
-mark for a relation that holds and is not decided, which names none today --
-the last, a fixpoint every unfolding of which needs one more element, became a
-row of the decided list.
+mark for a relation that holds and is not decided, so the row fails on the day
+it decides. It names one today: the four-field record against its corners,
+above, whose number is the width the sets decide.
 
 ```python
 from typing import Annotated, Literal, NamedTuple
@@ -644,9 +646,10 @@ Two instruments hold this list to the tree. `tests/test_completeness_ledger.py`
 carries each relation above as a decided one, written the way a caller writes it
 rather than built from the other operand — a distinction that matters, because
 the shortcuts the procedure takes are keyed on two schemas sharing their
-constants. Its strict expected-failure mark is for a relation that *regresses*
-to conservatism, and it names none: the list above is what the procedure
-decides, so an entry that stops holding is a defect rather than a known gap. `tests/test_completeness_probe.py` searches a fixed
+constants. An entry of the list above that stops deciding fails there as a
+defect rather than a known gap; its strict expected-failure mark is for the
+other direction, a relation that holds and is not decided, and names the one
+this page describes. `tests/test_completeness_probe.py` searches a fixed
 universe for relations answered `False` that no value refutes and fails when one
 appears without a written reason, so a gap nobody thought of cannot arrive
 unnoticed. It reaches a gap only where some atom in its universe reaches it,

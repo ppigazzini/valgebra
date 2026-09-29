@@ -28,6 +28,7 @@ the relation.
 
 import dataclasses
 import enum
+import itertools
 from typing import (
     Annotated,
     Any,
@@ -216,8 +217,28 @@ def _check(operation: str, left: object, right: object) -> None:
         raise AssertionError(msg)
 
 
+def _split(width: int) -> tuple[object, object]:
+    """Build a tuple of `width` components each `int | str`, and its corners.
+
+    The union of the `2 ** width` tuples fixing every component *is* the tuple,
+    and no single one contains it, so the product rule splits the subject across
+    them -- one choice per component, multiplied.
+    """
+    subject = tuple[tuple([union(int, str)] * width)]  # ty: ignore[invalid-type-form]
+    corners = union(
+        *[
+            tuple[choice]  # ty: ignore[invalid-type-form]
+            for choice in itertools.product((int, str), repeat=width)
+        ]
+    )
+    return subject, corners
+
+
 _DECIDED = [
     pytest.param("subtype", bool, int, id="bool<=int"),
+    # The product rule's width: six components against their sixty-four
+    # corners is decided, which is the number the decidability page gives.
+    pytest.param("subtype", *_split(6), id="tuple:six-components<=its-corners"),
     pytest.param("subtype", 1, int, id="Literal[1]<=int"),
     pytest.param("subtype", int, union(int, str), id="int<=int|str"),
     pytest.param("subtype", list[bool], list[int], id="list[bool]<=list[int]"),
@@ -933,6 +954,15 @@ _LEDGERED: list[object] = [
             "the difference reads more schema nodes than a lowering builds, "
             "and costs more work than one spends"
         ),
+    ),
+    # The product rule's width from the other side: seven components against
+    # their 128 corners spends the decision budget before the split finishes.
+    # True, and the decline is sound; the number is what this row carries.
+    pytest.param(
+        "subtype",
+        *_split(7),
+        id="tuple:seven-components<=its-corners",
+        marks=_missed("the split multiplies past the work a decision may spend"),
     ),
 ]
 
