@@ -5343,7 +5343,9 @@ fn scalar_triple() -> impl Strategy<Value = Vec<Schema>> {
 }
 
 /// Two definitions drawn from the structural fragment, each with a reference
-/// under a container so the body is guarded, and each reaching the other.
+/// under a container so the body is guarded. A reference names either
+/// definition, so a pair draws self-recursion, mutual recursion -- each
+/// reaching the other -- or one of each.
 ///
 /// The fixed pair in [`fixpoint_defs`] is two shapes; the fixpoint laws are
 /// about every recursive definition a caller can write, so the bodies are
@@ -5354,9 +5356,9 @@ fn scalar_triple() -> impl Strategy<Value = Vec<Schema>> {
 /// promise the pages make to a caller, and a body holding a refinement the
 /// frontend refuses is one no caller can observe the promise on.
 pub(crate) fn drawn_defs() -> impl Strategy<Value = Vec<Schema>> {
-    let guarded = |index: usize| {
-        (buildable_schema(), 0usize..4).prop_map(move |(leaf, shape)| {
-            let reference = Schema::Ref(DefIx::new(index));
+    let guarded = || {
+        (buildable_schema(), 0usize..4, 0usize..2).prop_map(|(leaf, shape, target)| {
+            let reference = Schema::Ref(DefIx::new(target));
             let guard = match shape {
                 0 => Schema::list(SeqShape::homogeneous(reference)),
                 1 => Schema::tuple(SeqShape::fixed([Schema::Int, reference])),
@@ -5373,7 +5375,76 @@ pub(crate) fn drawn_defs() -> impl Strategy<Value = Vec<Schema>> {
             union(leaf, guard)
         })
     };
-    (guarded(0), guarded(1)).prop_map(|(a, b)| vec![a, b])
+    (guarded(), guarded()).prop_map(|(a, b)| vec![a, b])
+}
+
+/// The universe a pair over drawn definitions is read over, and the two
+/// schemas that read it.
+///
+/// The values are drawn from each side's unfolding at [`ORACLE_UNFOLDS`] and
+/// read one unfolding deeper. A reference at the top of a schema costs an
+/// unfolding and no container, and every reference a drawn body holds sits
+/// under one, so a value drawn from one side reaches one unfolding past where
+/// the other side's reading at the same depth has cut its reference to the
+/// empty set. Read one deeper, every value the universe holds is inside both
+/// readings, as the reference law reads its reference.
+fn drawn_reading(a: &Schema, b: &Schema, defs: &[Schema]) -> (Vec<Obj>, Schema, Schema) {
+    let values = boundary_values(&[
+        &unfold_for_oracle(a, defs, ORACLE_UNFOLDS),
+        &unfold_for_oracle(b, defs, ORACLE_UNFOLDS),
+    ]);
+    let read = |schema: &Schema| unfold_for_oracle(schema, defs, ORACLE_UNFOLDS + 1);
+    (values, read(a), read(b))
+}
+
+/// A value one side's unfolding reaches is read by the other side's.
+///
+/// `list[bool, D1]` against `D0`, where `D0 = {"b": ¬bytes} | list[D1]` and
+/// `D1 = list[None] | bytes | bool | list[D1]`, is an inclusion: both elements
+/// are values of `D1`, so the list is one of `list[D1]`. The reference `D0`
+/// costs the oracle an unfolding the subject's `D1` does not, and read at one
+/// depth the universe held a list of `D1` nested as deep as the subject's
+/// unfolding reaches, which the other side's had cut to nothing -- a
+/// counterexample of the oracle's making. The pair came out of the push lane.
+#[test]
+fn a_value_one_unfolding_reaches_is_read_by_the_other() {
+    let d1 = Schema::Ref(DefIx::new(1));
+    let defs = vec![
+        union(
+            Schema::record(
+                vec![Field {
+                    name: "b".into(),
+                    schema: not(Schema::Bytes),
+                    required: true,
+                }],
+                Openness::Closed,
+            ),
+            Schema::list(SeqShape::homogeneous(d1.clone())),
+        ),
+        union(
+            union(
+                Schema::list(SeqShape::homogeneous(Schema::NoneType)),
+                union(Schema::Bytes, Schema::Bool),
+            ),
+            Schema::list(SeqShape::homogeneous(d1.clone())),
+        ),
+    ];
+    let a = Schema::list(SeqShape::fixed([Schema::Bool, d1]));
+    let b = Schema::Ref(DefIx::new(0));
+    // The premise the law carries: a pair that is not proved asserts nothing.
+    assert!(
+        a.is_subtype_of_under(&b, &NoLeafRelations, &defs),
+        "the pair is not proved"
+    );
+    let pool = const_pool();
+    let (values, subject, other) = drawn_reading(&a, &b, &defs);
+    let counterexample = values
+        .iter()
+        .find(|value| member_full(&subject, value, &pool) && !member_full(&other, value, &pool));
+    assert!(
+        counterexample.is_none(),
+        "{counterexample:?} is in the subject and outside the other side"
+    );
 }
 
 proptest! {
@@ -5511,9 +5582,7 @@ proptest! {
         defs in drawn_defs(),
     ) {
         let pool = const_pool();
-        let subject = unfold_for_oracle(&a, &defs, ORACLE_UNFOLDS);
-        let other = unfold_for_oracle(&b, &defs, ORACLE_UNFOLDS);
-        let values = boundary_values(&[&subject, &other]);
+        let (values, subject, other) = drawn_reading(&a, &b, &defs);
         if a.is_subtype_of_under(&b, &NoLeafRelations, &defs) {
             for value in &values {
                 prop_assert!(
