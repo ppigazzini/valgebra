@@ -42,7 +42,8 @@ confirm the compiler rejects it:
 
 **It cost nothing measurable.** The core workload's instruction count is
 identical across the split, to the instruction, and the binding walk moved under
-a hundredth of a percent. Five newtypes over `usize`, all `#[repr(transparent)]`,
+a hundredth of a percent. Seven newtypes over `usize` -- five index spaces and
+two shifts -- all `#[repr(transparent)]`,
 carried and consumed one at a time: the free shape.
 
 ## The maps
@@ -171,24 +172,24 @@ residual hazard in the tree and it is worth naming precisely:
 
 | site | transposing it gives |
 |---|---|
-| `Schema::mapping(key, value)` | `dict[V, K]` — a valid schema, wrong |
+| `MapClause::of(key, value)` | a clause with its key and value sets swapped — a valid schema, wrong |
 | `located(_, key, _, expected, summary)` | the two halves of an error message |
 | `compare(left, right)` | the inverse ordering |
 | `literal_matches(value, literal)` | a literal tested against a value |
 | `is_multiple_of(value, operand)` | the reciprocal test |
-| `predicate_passes(predicate, value)` | a value called on a predicate |
+| `predicate_passes(value, predicate)` | a value called on a predicate |
 
-`Schema::mapping` is the sharpest: the frontend mints one from `dict[K, V]`'s two
-type arguments and either order typechecks and validates real values. The
-technique that closes such a pair elsewhere — moving the discriminator into the
-value so no call site carries one to transpose — does not apply, because a key
-schema and a value schema are genuinely two schemas. What does apply is giving
-the constructor one named argument instead of two positional ones: a struct
-literal cannot be transposed.
+`MapClause::of` is the sharpest: either order typechecks and validates real
+values. The technique that closes such a pair elsewhere — moving the
+discriminator into the value so no call site carries one to transpose — does not
+apply, because a key schema and a value schema are genuinely two schemas. What
+does apply is a struct literal, which cannot be transposed: `Schema::mapping`
+takes one `MapClause { key, value }`, the frontend spells every clause that way,
+and `MapClause::of` is crate-private, called at the one pass that rebuilds a
+clause from its parts.
 
-Note also that the last three take the value in **different positions**. All
-three are `&Bound<'_, PyAny>`, so a reader who has just read two of them has the
-wrong prior for the third.
+The last three take the value first, and all three are `&Bound<'_, PyAny>`, so
+an operand passed first typechecks.
 
 **Overflow, though the policy makes the shape safe.** Overflow is a program
 error and which behaviour a build gets is a per-profile choice, so `Cargo.toml`

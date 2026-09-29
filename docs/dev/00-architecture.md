@@ -229,8 +229,8 @@ table's length is outside the scan: it is the table's size, in one place.
 | `crates/valgebra-core/src/descr/regular.rs` | `BUILD_SIZE_LIMIT` | `8 * 1024 * 1024` | limit | a pattern whose determinisation is exponential, which reaches `MAX_STATES` only after the table it refuses has been built | its own tests |
 | `crates/valgebra-core/src/descr/integers.rs` | `MAX_PERIOD` | `4096` | limit | a step set holding one interval set per residue, and the period two steps share | its own tests |
 
-Two of them are the same number for different reasons, and the difference
-matters when one moves: `MAX_SCHEMA_DEPTH` is what a *caller* may build, and
+Two of them bound a depth for different reasons, and the difference matters
+when one moves: `MAX_SCHEMA_DEPTH` is what a *caller* may build, and
 `DEPTH` is what a *lowering* will descend. A schema at the first is refused by
 the second, and answered by the structural rules instead.
 

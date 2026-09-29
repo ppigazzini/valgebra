@@ -58,9 +58,10 @@ doc = '[{"a": 1}, {"b": "x"}]'
 assert v.is_valid_json(doc) == v.is_valid(json.loads(doc))
 ```
 
-Two documents are held to the JSON grammar where `json.loads` is looser, so the
-two paths part on those and nowhere else: the non-standard float tokens (below),
-and an escape naming a **lone surrogate**. `"\ud800"` is a half of a pair that
+Three kinds of document are held to the JSON grammar, or to the parser's limit,
+where `json.loads` is looser, so the two paths part on those and nowhere else:
+the non-standard float tokens (below), a document nested past the parser's
+recursion limit (below), and an escape naming a **lone surrogate**. `"\ud800"` is a half of a pair that
 encodes no character, and the parser reports `json_invalid` where `json.loads`
 builds a `str` the object path admits.
 
@@ -150,7 +151,9 @@ except ValidationError as err:
     assert err.code == "json_invalid"
 ```
 
-A non-`str`, non-`bytes` argument is a `TypeError`, not a validation failure.
+A non-`str`, non-`bytes` argument is a `TypeError` from `validate_json` and
+`load`, not a validation failure; `is_valid_json` answers `False` for it, as it
+does for anything that is not a document.
 
 **A leading byte-order mark makes the input malformed.** RFC 8259 says a JSON
 text does not begin with one, and the parser holds to that, so a document
@@ -232,20 +235,17 @@ ten thousand and parses slower. A representation that wins the document and
 loses the array is a trade and not an improvement, so the reading in place is
 the one that never loses.
 
-**A walk over the parser's events**, building nothing at all, would pay the
-pull parse and the walk's own reading -- about half of today's call on this
-shape. It needs a value the walk can read *twice*: a union tries its members
-against one value, an intersection every member, a complement the inner
-schema, and a pull parser has moved on. So it is a walk with a buffer for the
-rules that backtrack rather than a walk with no tree, and it is a JSON arm for
-every container rule rather than an edit to one. Until it exists, the document
-shape is a tree the walk reads once and drops.
+**A walk over the parser's events** is refused
+([dev/04-walk.md](dev/04-walk.md)): a union, a meet, a complement and a
+refinement read their value again, which a pull parser has moved past, and a
+stream answers differently from the tree on documents the tests hold. The
+document shape is a tree the walk reads once and drops.
 `benches/bench_json.py` measures a strict `TypeAdapter.validate_json` over the
 same three shapes; that column is not recorded above, so read the comparison
 from the benchmark rather than from this page.
 
 Nodes that compare against a Python object — literals, refinements, instance and
 object checks, and predicates — materialize just the value at that node, since
-the comparison runs in Python. The `validate_json` explain path still
-materializes the whole document (it reports Python-level value summaries in its
-errors); only the `is_valid_json` fast path is fully in place.
+the comparison runs in Python. `validate_json` and `load` materialize the whole
+document, since each hands back what a caller reads -- a report of Python-level
+value summaries, or the value itself; only `is_valid_json` is fully in place.

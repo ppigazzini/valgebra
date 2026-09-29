@@ -17,7 +17,7 @@ disk. None is vendored into this tree, and none is a dependency.
   boundary crossings named. It is also a differential oracle: the same schemas
   and values run through both over the fragment where the semantics agree.
 - **jiter** — <https://github.com/pydantic/jiter>. The JSON parser valgebra
-  uses, and the reason the JSON path can validate in place rather than
+  uses, and the reason `is_valid_json` can decide in place rather than
   materialising Python objects first.
 - **ruff and ty** — <https://github.com/astral-sh/ruff>. ty's semantic crates are
   a set-theoretic type system in Rust, read for how a lattice of types is
@@ -68,7 +68,7 @@ is where they are applied.
   type per collection, constructed in one place. This is the five index spaces.
 - **`rustc_index::newtype_index!`** — the same pattern at compiler scale, named
   as the reference implementation and not as a dependency: valgebra writes the
-  four-line struct by hand.
+  struct with a macro of its own, `pool_index!` in `ir.rs`.
 - **Wlaschin, "Designing with types: making illegal states unrepresentable"** —
   <https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/>.
   The sealed walk mode, where a pair of booleans admitted a fourth state nothing

@@ -169,7 +169,8 @@ on five targets none of which is this one, so it is a reason to measure your own
 build rather than a ranking. `scripts/compare_gate.py` against each wheel is how.
 
 **Every wall-clock figure on this page, and in the changelog, is a release
-build on an idle machine, read as the best of five runs and taken twice.** The
+build on an idle machine, read over repeated runs -- a median of five for a
+table, the comparison gate's minimum for a ratio -- and taken twice.** The
 two guards above hold the first of those and neither holds the other two: a
 timing taken while something else has the CPU reads slow, and one taken once
 reads whatever that run did. Either is enough to put a published figure out by a
@@ -205,10 +206,10 @@ uv run --group bench python scripts/compare_gate.py
 
 That script owns the per-shape ratio **ceilings** (`scripts/perf_compare.json`)
 -- what the project claims it stays under rather than what it once measured --
-and the table below is the absolute record. The two estimators
-do not agree to the last digit — a minimum sits below a median by however much
-the run was disturbed — so read a cell here against the same cell, not against
-the gate's output.
+and the table below is the absolute record. The two estimators can part by a
+quarter of a multiplier — a minimum sits below a median by however much the run
+was disturbed, and the 3.14 results below read both — so read a cell here
+against the same cell, not against the gate's output.
 
 ### The cheapest door, and where the floor is
 
@@ -236,9 +237,11 @@ End-to-end validation of a value that passes (lower is better):
 | Nested `list[...]`, depth 25 | 0.201 +/- 0.021 us | 1.97 +/- 0.031 us | 75.1 +/- 2.0 us |
 
 valgebra relative to pydantic on this machine, under the CPython 3.14 the matrix
-above names: **9.8x** faster on deep nesting, **8.0x** on the large flat array,
-**2.7x** on the wide record. It is consistently far ahead of pure-Python
-jsonschema — 2,600x on the array, 374x on the nesting and 185x on the record.
+above names, as the medians above divide: **9.8x** faster on deep nesting,
+**8.0x** on the large flat array, **2.7x** on the wide record. The comparison
+gate's minimums read the same three at 7.2x, 6.6x and 2.9x (the 3.14 column
+below). It is consistently far ahead of pure-Python jsonschema — 2,600x on the
+array, 374x on the nesting and 185x on the record.
 pydantic does strictly more work on the record (it constructs output), so read
 that shape as a margin over a heavier operation, not a like-for-like loss for
 pydantic.

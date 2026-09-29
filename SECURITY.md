@@ -14,14 +14,15 @@ earlier one.
 ## What is a security issue
 
 valgebra's load-bearing security property is **soundness of acceptance**: if
-`is_valid` (or a non-raising `validate`/`validate_json`) reports a value as
-valid, that value genuinely belongs to the schema's set. Downstream code trusts
+`is_valid`, `in` or `is_valid_json` (or a non-raising `validate`,
+`validate_json`, `ensure` or `load`) reports a value as valid, that value genuinely belongs to the schema's set. Downstream code trusts
 that contract, so a value that is **wrongly accepted** is a vulnerability.
 
 Please report, privately:
 
 - **Unsound acceptance.** A value that is *not* a member of a schema's set is
-  accepted — `is_valid` returns `True`, or `validate` does not raise, for a value
+  accepted — `is_valid` returns `True`, or `validate`, `ensure` or `load` does not
+  raise, for a value
   the schema's denotation excludes.
 - **A crash or unbounded resource use** on an input that is *within* the
   documented [resource limits](docs/10-limits.md): a native stack overflow, an abort,

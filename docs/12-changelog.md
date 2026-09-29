@@ -6,7 +6,9 @@ description: Every released version, what it changed, and what to do on upgrade.
 
 The version follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html),
 and while the line is `0.x` the **minor** number is the breaking one: `0.1.0` to
-`0.2.0` may break, `0.1.0` to `0.1.1` may not.
+`0.2.0` may break, `0.1.0` to `0.1.1` may not. Below `0.1.0` there is no minor
+number to carry a break, so every `0.0.x` release may break, and its notes say
+where.
 
 What a break means here is specific, because a validator has two surfaces and
 only one of them is the API:

@@ -365,8 +365,10 @@ jsonschema over the fragment where the semantics agree, with the divergences
 enumerated in `tests/test_differential.py`, and that is the closest thing to an
 external judge.
 
-**A transposition inside one call is not closed by a type.** `Schema::mapping`
-takes a key schema and a value schema, both `Schema`; `dict[K, V]` compiled with
-them swapped typechecks and validates real values.
-[06-type-design.md](06-type-design.md) records that as the sharpest residual
-hazard in the tree.
+**A transposition inside one call is not closed by a type.** A clause's key
+schema and value schema are both `Schema`, so `dict[K, V]` compiled with them
+swapped would typecheck and validate real values. The frontend spells each
+clause as the struct literal `MapClause { key, value }`, where a swap has to be
+written out at the call site; [06-type-design.md](06-type-design.md) records the
+positional constructor the core keeps as the sharpest residual hazard in the
+tree.
