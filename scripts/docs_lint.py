@@ -71,9 +71,11 @@ not run.
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 EXIT_OK = 0
@@ -760,7 +762,13 @@ def check_llms_manifest() -> list[str]:
     return problems
 
 
-def main() -> int:
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.parse_args(argv)
     files = tracked_markdown()
     if len(files) < MIN_TRACKED_PAGES:
         print(f"docs_lint: found only {len(files)} tracked Markdown files")
@@ -854,4 +862,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

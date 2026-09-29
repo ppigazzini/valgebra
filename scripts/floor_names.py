@@ -25,6 +25,7 @@ question could not be asked, which is not the same as an answer.
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import subprocess
@@ -235,11 +236,21 @@ def _survey(table: dict, versions: list[str]) -> dict[str, dict[str, list[str]]]
     return seen
 
 
-def main() -> int:
-    args = sys.argv[1:]
-    if not ({"--check", "--update"} & set(args)):
-        print(__doc__)
-        return EXIT_CANNOT_RUN
+def _arguments(argv: list[str]) -> argparse.Namespace:
+    """Read the command line: `--check` or `--update`; anything else exits 2."""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--check", action="store_true", help="hold the table")
+    mode.add_argument("--update", action="store_true", help="rewrite the table")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str]) -> int:
+    args = _arguments(argv)
     table = json.loads(TABLE.read_text(encoding="utf-8"))
     versions = _versions(table)
 
@@ -250,7 +261,7 @@ def main() -> int:
     rebuilt = dict(table)
     rebuilt["modules"] = _spans(seen, versions)
     rebuilt["stdlib"] = _stdlib(seen, versions, _imported(ROOT))
-    if "--update" in args:
+    if args.update:
         TABLE.write_text(json.dumps(rebuilt, indent=2) + "\n", encoding="utf-8")
         print(f"floor_names: table rewritten from {len(versions)} interpreters")
         return EXIT_OK
@@ -270,4 +281,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

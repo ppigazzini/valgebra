@@ -39,6 +39,7 @@ could not run has proven nothing and must not read as one that passed.
 
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
@@ -431,11 +432,27 @@ def _report(title: str, failures: list[str]) -> None:
         print(f"  ... and {len(failures) - REPORTED} more")
 
 
+def _arguments(argv: list[str]) -> argparse.Namespace:
+    """Read the command line before building anything; an unknown flag exits 2."""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.add_argument(
+        "--record",
+        action="store_true",
+        help="write this tree's reading as the reference",
+    )
+    return parser.parse_args(argv)
+
+
 def main(argv: list[str]) -> int:
+    args = _arguments(argv)
     measured = record()
     if measured is None:
         return EXIT_CANNOT_RUN
-    if "--record" in argv:
+    if args.record:
         REFERENCE_FILE.write_text(
             json.dumps(measured, indent=1, sort_keys=True) + "\n", encoding="utf-8"
         )

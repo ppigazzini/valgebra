@@ -21,13 +21,20 @@ job's log names the form rather than the file.
 
 from __future__ import annotations
 
+import argparse
 import sys
 import typing
 
 import valgebra as vg
 
 
-def main() -> int:
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.parse_args(argv)
     print(f"valgebra {vg.__version__} imported on {sys.implementation.name}")
 
     # The pair the parametrized check is about: a *bare* legacy alias is the
@@ -65,4 +72,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

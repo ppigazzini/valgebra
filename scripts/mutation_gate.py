@@ -45,11 +45,16 @@ Three outcomes, three exit codes, so a caller can dispatch on them:
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # Three outcomes, three exit codes; see the module docstring.
 EXIT_OK = 0
@@ -138,13 +143,24 @@ def _require_run(out: Path) -> None:
         _cannot_run(f"{out.name}/ holds no results; the sweep did not run")
 
 
-def _option(args: list[str], name: str, default: str) -> str:
-    if name in args:
-        index = args.index(name)
-        if index + 1 < len(args):
-            return args[index + 1]
-        sys.exit(f"mutation_gate: {name} needs a value")
-    return default
+def _arguments(argv: Sequence[str]) -> argparse.Namespace:
+    """Read the command line, refusing a flag it does not know.
+
+    An unknown flag, a missing value and an unknown baseline are each a gate
+    that could not run, so each exits 2 -- `argparse`'s own code for them.
+    """
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.add_argument("--update", action="store_true", help="re-record the baseline")
+    parser.add_argument("--baseline", choices=sorted(BASELINES), default="core")
+    parser.add_argument(
+        "--new-only", action="store_true", help="gate a partial sweep's new survivors"
+    )
+    parser.add_argument("--out", default="mutants.out", help="the sweep's output")
+    return parser.parse_args(argv)
 
 
 def _stale_entries(recorded: dict, baseline: set[str]) -> bool:
@@ -223,17 +239,13 @@ def _orphan_notes(recorded: dict, baseline: set[str]) -> bool:
     return bool(orphans)
 
 
-def main() -> int:
-    args = sys.argv[1:]
-    update = "--update" in args
-    which = _option(args, "--baseline", "core")
-    if which not in BASELINES:
-        sys.exit(
-            f"mutation_gate: unknown baseline {which!r}; one of {sorted(BASELINES)}"
-        )
+def main(argv: Sequence[str] = ()) -> int:
+    args = _arguments(argv)
+    update = args.update
+    which = args.baseline
     baseline_file = BASELINES[which]
-    new_only = "--new-only" in args
-    out = ROOT / _option(args, "--out", "mutants.out")
+    new_only = args.new_only
+    out = ROOT / args.out
     _require_run(out)
     _refuse_a_rig_fault(out)
     measured = _measured(out)
@@ -319,4 +331,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

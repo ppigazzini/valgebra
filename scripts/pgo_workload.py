@@ -24,6 +24,8 @@ counts.
 
 from __future__ import annotations
 
+import argparse
+import sys
 from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
@@ -57,7 +59,13 @@ def _explain(validate: Check, samples: Sequence[object], rounds: int) -> None:
                 validate(value)
 
 
-def main() -> None:
+def main(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.parse_args(argv)
     # Closed records of a few widths, with optional keys, valid and invalid.
     for width in (4, 16, 50):
         spec: dict[str, object] = {f"f{i}": int for i in range(width)}
@@ -189,4 +197,4 @@ def _relations() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

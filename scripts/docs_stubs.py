@@ -35,6 +35,7 @@ looked for as edited rather than as remembered here.
 
 from __future__ import annotations
 
+import argparse
 import html
 import importlib
 import re
@@ -97,9 +98,14 @@ def missing(page: str) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    if argv != ["--check"]:
-        print(__doc__)
-        return 2
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.add_argument("--check", action="store_true", help="hold the built page")
+    if not parser.parse_args(argv).check:
+        parser.error("--check is the one mode")
     if not PAGE.exists():
         print(
             f"{PAGE.relative_to(ROOT)} is not built: run `mkdocs build --strict` first"

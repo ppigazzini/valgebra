@@ -19,6 +19,7 @@ most needs to trust.
 
 from __future__ import annotations
 
+import argparse
 import re
 import subprocess
 import sys
@@ -82,7 +83,13 @@ def run_block(block: str, doc_name: str, index: int) -> bool:
     return True
 
 
-def main() -> int:
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.parse_args(argv)
     checked = 0
     failures = 0
     for doc, index, block in examples():
@@ -94,4 +101,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

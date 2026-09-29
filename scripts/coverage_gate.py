@@ -45,10 +45,14 @@ in:
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
-from typing import NoReturn
+from typing import TYPE_CHECKING, NoReturn
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 EXIT_OK = 0
 EXIT_FAIL = 1
@@ -106,14 +110,18 @@ def _cannot_run(message: str) -> NoReturn:
     raise SystemExit(EXIT_CANNOT_RUN)
 
 
-def _option(args: list[str], name: str, default: str) -> str:
-    """Read `--name value`, or give the default."""
-    if name not in args:
-        return default
-    index = args.index(name)
-    if index + 1 >= len(args):
-        _cannot_run(f"{name} needs a value")
-    return args[index + 1]
+def _arguments(argv: Sequence[str]) -> argparse.Namespace:
+    """Read the command line; an unknown flag or scope cannot run, exit 2."""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.add_argument("--json", type=Path, default=Path("coverage.json"))
+    parser.add_argument("--scope", choices=sorted(FLOORS), default="core")
+    parser.add_argument("--lines", type=float, help="the line floor, in percent")
+    parser.add_argument("--regions", type=float, help="the region floor, in percent")
+    return parser.parse_args(argv)
 
 
 def _relative(filename: str) -> str:
@@ -189,15 +197,14 @@ def failures(
     return problems
 
 
-def main() -> int:
-    args = sys.argv[1:]
-    report = Path(_option(args, "--json", "coverage.json"))
-    scope = _option(args, "--scope", "core")
-    if scope not in FLOORS or scope not in BELOW_THE_FLOOR:
-        _cannot_run(f"--scope {scope} names no lane; try {sorted(FLOORS)}")
+def main(argv: Sequence[str] = ()) -> int:
+    args = _arguments(argv)
+    report, scope = args.json, args.scope
+    if scope not in BELOW_THE_FLOOR:
+        _cannot_run(f"--scope {scope} has no table of excuses")
     lines, regions = FLOORS[scope]
-    floor_lines = float(_option(args, "--lines", str(lines)))
-    floor_regions = float(_option(args, "--regions", str(regions)))
+    floor_lines = lines if args.lines is None else args.lines
+    floor_regions = regions if args.regions is None else args.regions
     excused = BELOW_THE_FLOOR[scope]
 
     measured = read_report(report)
@@ -230,4 +237,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

@@ -832,7 +832,7 @@ def show_plan(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--list", action="store_true", help="show the plan and stop")
     parser.add_argument("--job", help="run one job's steps")
     parser.add_argument(

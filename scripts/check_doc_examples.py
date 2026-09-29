@@ -32,6 +32,7 @@ Exit 0 when every diagnostic is expected and every row is reported.
 
 from __future__ import annotations
 
+import argparse
 import ast
 import importlib.util
 import json
@@ -455,7 +456,13 @@ def problems(found: Counter[Key], checkers: tuple[str, ...]) -> list[str]:
     ]
 
 
-def main() -> int:
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.parse_args(argv)
     reading = read()
     wrong = problems(reading.found, reading.checkers)
     for line in wrong:
@@ -474,4 +481,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

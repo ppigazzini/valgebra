@@ -31,24 +31,39 @@ regress".
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 ROOT = Path(__file__).resolve().parent.parent
 RECORD = ROOT / "scripts" / "branch_coverage.json"
 
 
-def _record(args: list[str]) -> Path:
-    """Give the file the floors are read from and written to.
+def _arguments(argv: Sequence[str]) -> argparse.Namespace:
+    """Read the command line; an unknown flag or a missing report exits 2.
 
-    Overridable so a test can put the gate to a record of its own: the per-file
-    floors are a scope, and a synthesised report of one file against the tree's
-    thirty is a scope mismatch rather than a regression.
+    `--record` is overridable so a test can put the gate to a record of its own:
+    the per-file floors are a scope, and a synthesised report of one file
+    against the tree's thirty is a scope mismatch rather than a regression.
     """
-    if "--record" in args:
-        return Path(args[args.index("--record") + 1])
-    return RECORD
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.add_argument("report", type=Path, help="llvm-cov's JSON export")
+    parser.add_argument(
+        "--record", type=Path, default=RECORD, help="the floors to read and write"
+    )
+    parser.add_argument(
+        "--update", action="store_true", help="re-record the floors from the report"
+    )
+    return parser.parse_args(argv)
 
 
 EXIT_OK = 0
@@ -110,28 +125,13 @@ def _measured(report: Path) -> tuple[float, int, int]:
     return 100 * covered / count, count, covered
 
 
-def _report_paths(args: list[str]) -> list[str]:
-    """Give the positional arguments, with `--record`'s value not among them."""
-    skip = args.index("--record") + 1 if "--record" in args else -1
-    return [
-        arg
-        for index, arg in enumerate(args)
-        if not arg.startswith("-") and index != skip
-    ]
-
-
-def _reading(args: list[str]) -> tuple[float, int, int] | None:
+def _reading(report: Path) -> tuple[float, int, int] | None:
     """Give the measurement, or say why it could not be read.
 
     Separate from the gate below because an unreadable measurement is not a
     verdict: it has its own exit code, and a caller must not be able to reach
     "did not regress" by way of "did not measure".
     """
-    paths = _report_paths(args)
-    if not paths:
-        print("branch_coverage: name the JSON report to read", file=sys.stderr)
-        return None
-    report = Path(paths[0])
     if not report.is_file():
         print(f"branch_coverage: {report} is not a file", file=sys.stderr)
         return None
@@ -183,19 +183,18 @@ def _files_verdict(measured: dict[str, float], floors: dict[str, float]) -> int:
     return EXIT_OK
 
 
-def main() -> int:
-    args = sys.argv[1:]
-    record_path = _record(args)
-    reading = _reading(args)
+def main(argv: Sequence[str] = ()) -> int:
+    args = _arguments(argv)
+    record_path = args.record
+    reading = _reading(args.report)
     if reading is None:
         return EXIT_CANNOT_RUN
     percent, count, covered = reading
-    paths = _report_paths(args)
-    measured = _per_file(Path(paths[0]))
+    measured = _per_file(args.report)
 
     print(f"branches: {covered} of {count} covered ({percent:.2f}%)")
 
-    if "--update" in args:
+    if args.update:
         floor = round(percent - SLACK, 2)
         record_path.write_text(
             json.dumps(
@@ -247,4 +246,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

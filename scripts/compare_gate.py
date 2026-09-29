@@ -56,6 +56,7 @@ not read as one that passed.
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 import timeit
@@ -63,7 +64,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, TypedDict
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
 # Three outcomes, three exit codes; see the module docstring.
 EXIT_OK = 0
@@ -349,7 +350,21 @@ def warm_up(shapes: dict[str, Shape]) -> bool:
     return True
 
 
-def main() -> int:
+def _arguments(argv: Sequence[str]) -> argparse.Namespace:
+    """Read the command line before measuring anything; an unknown flag exits 2."""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.add_argument(
+        "--update", action="store_true", help="record the ratios and the ceilings"
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] = ()) -> int:
+    args = _arguments(argv)
     prepared = _prepare()
     if prepared is None:
         return EXIT_CANNOT_RUN
@@ -374,7 +389,7 @@ def main() -> int:
     stored = _recorded_block()
     moved, unarmed = drifted(measured, stored)
     _report(rows, ceilings, stored, over, moved)
-    if "--update" in sys.argv[1:]:
+    if args.update:
         _record(measured)
         return EXIT_OK
     if unarmed is not None:
@@ -570,4 +585,4 @@ def judge(
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

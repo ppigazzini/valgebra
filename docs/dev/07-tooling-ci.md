@@ -24,6 +24,13 @@ passed. `scripts/perf_gate.py` exits 2 on cachegrind output it cannot parse,
 `scripts/compare_gate.py` without its benchmark dependency,
 `scripts/docs_lint.py` on a tree it cannot read.
 
+**A command line it cannot read is one it could not run.** Every script reads
+its flags through `argparse` before doing any work: `--help` prints the usage
+and exits 0, and an unknown flag, a missing value or an unknown choice exits 2.
+Read by substring, a mistyped flag is no flag at all, and a gate asked for one
+measurement answers for another. `tests/test_script_arguments.py` holds every
+file under `scripts/` to it.
+
 ## The local gate, and the contract inventory
 
 **`scripts/gate.py` runs the lane's steps, not a list that resembles them.** It

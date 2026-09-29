@@ -30,6 +30,7 @@ Two outcomes, two exit codes: **0** the recorded set matches what the tree has,
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import re
@@ -434,7 +435,21 @@ def report(
     )
 
 
-def main() -> int:
+def _arguments(argv: list[str]) -> argparse.Namespace:
+    """Read the command line before reading the tree; an unknown flag exits 2."""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.add_argument(
+        "--update", action="store_true", help="record the empty cells, reasons kept"
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str]) -> int:
+    args = _arguments(argv)
     every = universe()
     reached = names_reached(every, product_sources()) | markers()
     # A marker is a claim that a test drives the cell, which is the stronger of
@@ -454,7 +469,7 @@ def main() -> int:
     ):
         report(label, cells, reached, asserted, set(empty))
 
-    if "--update" in sys.argv[1:]:
+    if args.update:
         RECORD.write_text(
             json.dumps(
                 {
@@ -498,4 +513,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

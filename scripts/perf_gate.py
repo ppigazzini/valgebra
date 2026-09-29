@@ -95,6 +95,7 @@ interpreter's library directory on the loader path.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
@@ -107,7 +108,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
 # Three outcomes, three exit codes: 0 within budget, 1 outside it or the wrong
 # workload, 2 could not measure.
@@ -918,20 +919,38 @@ def run_binding(budget: dict, mode: str, *, update: bool) -> int:
     )
 
 
-def main() -> int:
-    args = sys.argv[1:]
+def _arguments(argv: Sequence[str]) -> argparse.Namespace:
+    """Read the command line, refusing a flag it does not know.
+
+    A mistyped shape read as no shape measured the core workload instead, and
+    answered for a measurement nobody asked for. `argparse` refuses it with exit
+    2, which is this gate's "could not run".
+    """
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    for name, (_, label) in MODES.items():
+        parser.add_argument(f"--{name}", action="store_true", help=f"the {label}")
+    parser.add_argument("--against", metavar="REV", help="measure against REV")
+    parser.add_argument(
+        "--update", action="store_true", help="record the measurement as the budget"
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] = ()) -> int:
+    args = _arguments(argv)
     # `--binding` keeps its meaning -- the walk -- so an existing invocation and
     # the budget recorded under it still name the same measurement.
-    flagged = [name for name in MODES if f"--{name}" in args] or ["core"]
-    if "--against" in args:
-        at = args.index("--against")
-        if at + 1 >= len(args):
-            print("--against needs a revision: --against origin/main")
-            return EXIT_CANNOT_RUN
+    chosen = vars(args)
+    flagged = [name for name in MODES if chosen[name.replace("-", "_")]] or ["core"]
+    if args.against is not None:
         # Every flagged shape against one base build, since the build is the
         # expensive half and the shapes share it.
-        return run_relative(flagged, args[at + 1])
-    update = "--update" in args
+        return run_relative(flagged, args.against)
+    update = args.update
     budget = json.loads(BUDGET_FILE.read_text(encoding="utf-8"))
     outcomes = []
     for mode in flagged:
@@ -949,4 +968,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
