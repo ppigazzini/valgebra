@@ -314,9 +314,11 @@ the bound. Every job carries one.
 inherits, so a deep profile that names neither replays the same examples every
 night. `ci` is derandomised on purpose, so a red merge gate is the same red on a
 re-run; `nightly` draws at random and keeps what fails in `.hypothesis/examples`,
-which the nightly lane uploads on failure. `tests/test_property_profiles.py`
-reads each profile in a child interpreter with `CI` set, where the inheritance
-happens.
+which the nightly lane restores before its deep suite and saves after it, red or
+green, so a kept failure is replayed first on the next night; a red night also
+uploads it. `tests/test_property_profiles.py` reads each profile in a child
+interpreter with `CI` set, where the inheritance happens, and the lane's steps
+around the deep suite.
 
 ## What a use case is, and how many there are
 

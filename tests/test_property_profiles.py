@@ -17,12 +17,16 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
+from hypothesis import settings
+from hypothesis.database import DirectoryBasedExampleDatabase
 
-# A repository check: it reads the suite's own `conftest.py`, which ships in no
-# wheel.
+# A repository check: it reads the suite's own `conftest.py` and the workflow,
+# neither of which ships in a wheel.
 pytestmark = pytest.mark.repository
 
 TESTS = Path(__file__).resolve().parent
+ROOT = TESTS.parent
 
 #: Load `conftest.py` under one profile and print the settings it selected.
 READ = (
@@ -64,3 +68,38 @@ def test_a_merge_gate_profile_is_the_same_red_on_a_rerun(profile: str) -> None:
     selected = _selected(profile)
     assert selected["derandomize"] is True
     assert selected["database"] is False
+
+
+def test_the_nightly_lane_hands_its_database_back_each_night() -> None:
+    """What a red night keeps is replayed on the next, so a red stays red.
+
+    A runner starts empty, and ``actions/cache`` saves after a green job only,
+    while the database matters after a red one. So the lane restores the
+    directory the ``nightly`` profile names before the deep suite and saves it
+    after, whatever the suite answered.
+    """
+    database = settings.get_profile("nightly").database
+    assert isinstance(database, DirectoryBasedExampleDatabase)
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["nightly-fuzz"]["steps"]
+    (deep,) = (
+        i
+        for i, step in enumerate(steps)
+        if step.get("env", {}).get("HYPOTHESIS_PROFILE") == "nightly"
+    )
+
+    def carries(step: dict[str, object], action: str) -> bool:
+        with_ = step.get("with", {})
+        return (
+            str(step.get("uses", "")).startswith(f"actions/cache/{action}@")
+            and isinstance(with_, dict)
+            and Path(with_.get("path", "")) == Path(database.path)
+        )
+
+    assert any(carries(step, "restore") for step in steps[:deep])
+    assert any(
+        carries(step, "save") and step.get("if") == "always()"
+        for step in steps[deep + 1 :]
+    )

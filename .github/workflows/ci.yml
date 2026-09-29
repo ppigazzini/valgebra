@@ -1337,6 +1337,18 @@ jobs:
         run: uv sync --locked --no-install-project
       - name: Build the extension into the venv
         run: uv run --no-sync maturin develop --uv
+      # The `nightly` profile keeps what fails in its example database and
+      # replays it first, so a red night stays red until the fix lands rather
+      # than turning green on a new draw -- if the runner is handed the database
+      # back. `actions/cache` saves after a green job only, and the database
+      # matters after a red one: it is restored here and saved whatever the
+      # suite answers. Keyed per run, restored from the newest prior run.
+      - name: Restore the example database
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .hypothesis/examples
+          key: hypothesis-examples-${{ github.run_id }}
+          restore-keys: hypothesis-examples-
       - name: Deep property suite
         env:
           HYPOTHESIS_PROFILE: nightly
@@ -1353,9 +1365,14 @@ jobs:
           tests/test_equivalence.py
           tests/test_json_semantics.py
           tests/test_surrogate_strings.py
-      # The `nightly` profile draws at random and keeps what fails in its
-      # example database, so a red night is replayable from the database rather
-      # than from a seed nobody recorded. Hidden, so it is asked for by name.
+      - name: Keep the example database
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .hypothesis/examples
+          key: hypothesis-examples-${{ github.run_id }}
+      # A red night is replayable locally from the same database rather than
+      # from a seed nobody recorded. Hidden, so it is asked for by name.
       - if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
