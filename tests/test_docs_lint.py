@@ -56,22 +56,66 @@ def test_a_dead_internal_link_fails(tmp_path: Path) -> None:
     assert not lint.check_links(page, page.read_text())
 
 
-def test_a_url_and_an_anchor_are_not_links_to_resolve(tmp_path: Path) -> None:
-    # The rule is about paths in this tree. An external URL, a mailto and a bare
-    # anchor are all outside it, and treating them as paths would make the check
-    # fire on every reference page.
+def test_a_url_is_not_a_link_to_resolve(tmp_path: Path) -> None:
+    # The rule is about paths in this tree. An external URL and a mailto are
+    # outside it, and treating them as paths would make the check fire on every
+    # reference page. A bare anchor is inside it: the page it names is this one.
     page = tmp_path / "page.md"
-    text = "[a](https://example.com) [b](mailto:x@example.com) [c](#heading)\n"
+    text = (
+        "## Heading\n\n"
+        "[a](https://example.com) [b](mailto:x@example.com) [c](#heading)\n"
+    )
     page.write_text(text)
     assert not lint.check_links(page, text)
 
 
-def test_an_anchor_on_a_real_page_resolves_to_the_page(tmp_path: Path) -> None:
-    # The anchor itself is NOT verified -- a link to a heading that no longer
-    # exists passes. Pinned so the boundary is on the record.
-    (tmp_path / "there.md").write_text("# heading\n")
+def test_an_anchor_resolves_to_a_heading_of_the_page_it_names(tmp_path: Path) -> None:
+    (tmp_path / "there.md").write_text("# A heading\n\n## Twice\n\n## Twice\n")
     page = tmp_path / "page.md"
+    page.write_text("[c](there.md#a-heading) [d](there.md#twice-1)\n")
+    assert not lint.check_links(page, page.read_text())
+    # A heading renamed and the link left behind: the page exists and the
+    # anchor names nothing on it.
     page.write_text("[c](there.md#no-such-heading)\n")
+    assert lint.check_links(page, page.read_text())
+    page.write_text("[c](#no-such-heading)\n")
+    assert lint.check_links(page, page.read_text())
+
+
+def test_a_heading_inside_a_fence_is_no_anchor(tmp_path: Path) -> None:
+    (tmp_path / "there.md").write_text("```bash\n# not a heading\n```\n")
+    page = tmp_path / "page.md"
+    page.write_text("[c](there.md#not-a-heading)\n")
+    assert lint.check_links(page, page.read_text())
+
+
+def test_a_snippet_carries_its_headings_into_the_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The changelog page is a snippet of CHANGELOG.md, whose headings are the
+    # page's anchors on the site.
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    (tmp_path / "CHANGELOG.md").write_text("## [0.1.0] - 2026-01-01\n")
+    (tmp_path / "log.md").write_text('--8<-- "CHANGELOG.md"\n')
+    page = tmp_path / "page.md"
+    page.write_text("[c](log.md#010---2026-01-01)\n")
+    assert not lint.check_links(page, page.read_text())
+
+
+def test_a_site_link_resolves_under_both_renderers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A site page is read on the site and on GitHub, whose slugs part on a
+    # heading spelling `==`: `what-compares` on one, `what--compares` on the
+    # other. A link that follows one of them fails half its readers.
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "there.md").write_text("## What `==` compares\n\n## Plain\n")
+    page = tmp_path / "docs" / "page.md"
+    for anchor in ("what-compares", "what--compares"):
+        page.write_text(f"[c](there.md#{anchor})\n")
+        assert lint.check_links(page, page.read_text()), anchor
+    page.write_text("[c](there.md#plain)\n")
     assert not lint.check_links(page, page.read_text())
 
 

@@ -5,9 +5,13 @@ reader can be expected to catch by eye. A count of them belongs here about as
 well as a budget belongs in a page, so there is not one. Most are per-file
 claims:
 
-* **A dead internal link.** Any ``[text](target)`` that is not a URL, a
-  ``mailto:`` or a bare ``#anchor`` must resolve relative to the linking file;
-  its ``#anchor`` is not read.
+* **A dead internal link.** Any ``[text](target)`` that is not a URL or a
+  ``mailto:`` must resolve relative to the linking file, and its ``#anchor`` to a
+  heading of the page it names -- under GitHub's slugs, which render every page,
+  and under the site's too where both pages are on the site. A heading whose two
+  slugs differ, such as one spelling ``==``, cannot be linked from the site, and
+  that is the point: a link that works on one renderer is a link half the
+  readers follow into nothing.
 * **A named path that does not exist.** A ``crates/...``, ``scripts/...``,
   ``tests/...`` or ``.github/...`` path written in prose is a claim about this
   tree. A path holding a placeholder (``*``, ``<``, ``>``, ``...``) is skipped,
@@ -72,10 +76,12 @@ not run.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import re
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 EXIT_OK = 0
@@ -133,14 +139,99 @@ def tracked_markdown() -> list[Path]:
     return tracked_files("*.md")
 
 
+#: A fence opening or closing a code block, whose lines hold no heading.
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
+
+#: An ATX heading, and a snippet line pulling another file's text into a page.
+HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*#*\s*$")
+SNIPPET = re.compile(r'^--8<--\s+"([^"]+)"\s*$')
+
+
+def _heading_texts(path: Path) -> list[str]:
+    """Give a page's headings as rendered text, snippets followed, fences skipped."""
+    texts: list[str] = []
+    fence = ""
+    for line in path.read_text(encoding="utf-8").splitlines():
+        opening = FENCE.match(line)
+        if fence:
+            if (
+                opening
+                and opening.group(1)[0] == fence[0]
+                and len(opening.group(1)) >= len(fence)
+            ):
+                fence = ""
+            continue
+        if opening:
+            fence = opening.group(1)
+        elif heading := HEADING.match(line):
+            texts.append(heading.group(1))
+        elif (snippet := SNIPPET.match(line)) and (ROOT / snippet.group(1)).is_file():
+            texts += _heading_texts(ROOT / snippet.group(1))
+    return texts
+
+
+def _rendered(text: str) -> str:
+    """Drop the inline markup a heading's rendered text does not carry."""
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"<[^>]+>", "", text).replace("`", "")
+    return re.sub(r"(\*\*|__|\*|_)(.+?)\1", r"\2", text)
+
+
+def _github_slug(text: str) -> str:
+    return re.sub(r"[^\w\- ]", "", _rendered(text).strip().lower()).replace(" ", "-")
+
+
+def _site_slug(text: str) -> str:
+    """Python-Markdown's `toc` slug, which the site renders its anchors with."""
+    ascii_text = unicodedata.normalize("NFKD", _rendered(text))
+    ascii_text = ascii_text.encode("ascii", "ignore").decode()
+    return re.sub(r"[-\s]+", "-", re.sub(r"[^\w\s-]", "", ascii_text).strip().lower())
+
+
+@functools.cache
+def _anchors(path: Path, flavour: str) -> frozenset[str]:
+    """Give the anchors a page's headings render to, repeats numbered as each does."""
+    slug, suffix = (_github_slug, "-") if flavour == "github" else (_site_slug, "_")
+    seen: dict[str, int] = {}
+    anchors = set()
+    for text in _heading_texts(path):
+        base = slug(text)
+        count = seen.get(base)
+        seen[base] = 0 if count is None else count + 1
+        anchors.add(base if count is None else f"{base}{suffix}{count + 1}")
+    return frozenset(anchors)
+
+
+def _on_the_site(path: Path) -> bool:
+    """Answer whether mkdocs renders the page: under `docs/`, outside `docs/dev/`."""
+    try:
+        parts = path.resolve().relative_to(ROOT).parts
+    except ValueError:
+        return False
+    return len(parts) > 1 and parts[0] == "docs" and parts[1] != "dev"
+
+
 def check_links(path: Path, text: str) -> list[str]:
     problems = []
     for raw in LINK.findall(text):
         target = raw.split(" ")[0].strip()
-        if target.startswith(("http://", "https://", "mailto:", "#")):
+        if target.startswith(("http://", "https://", "mailto:")):
             continue
-        if not (path.parent / target.split("#")[0]).resolve().exists():
+        name, _, anchor = target.partition("#")
+        page = (path.parent / name).resolve() if name else path.resolve()
+        if not page.exists():
             problems.append(f"dead link {target!r}")
+            continue
+        if not anchor or page.suffix != ".md":
+            continue
+        flavours = ["github"]
+        if _on_the_site(path) and _on_the_site(page):
+            flavours.append("site")
+        missing = [f for f in flavours if anchor not in _anchors(page, f)]
+        if missing:
+            problems.append(
+                f"dead anchor {target!r} under {' and '.join(missing)} slugs"
+            )
     return problems
 
 
