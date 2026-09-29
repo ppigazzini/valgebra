@@ -165,11 +165,16 @@ steps with `not runnable(name) and name not in NEEDS_A_RUNNER`, which is `X and
 not X` -- a list empty for every possible workflow, so the assertion passes on
 any tree, including one that breaks the claim, and reads exactly like one that
 checked something. `tests/test_ledger_plants.py`
-plants, for each ledger, the defect that ledger exists to catch: a schema variant
-in no column, a gate script in no lane, a job the merge gate does not require, a
-`feat` commit off the roll. Each is planted in a throwaway clone, that ledger is
-run there, and it must **fail**. A ledger with no plant fails the list, so the
-next one arrives with the evidence that it works.
+plants the defects the ledgers exist to catch: a schema variant in no column, a
+gate script in no lane, a job the merge gate does not require, a `feat` commit
+off the roll. Each is planted in a throwaway clone of the working tree, the
+tests the plant names are run there, and each must **fail by name**: a ledger
+file holds several independent assertions, and a plant that trips the first
+says nothing of the rest. Every test function of every ledger file is named by
+a plant or excused with its reason -- it builds the violating input itself, it
+holds an answer of the installed extension, which no edit to the clone's source
+moves, or it reads notes a clone does not carry. A ledger with no plant fails
+the list, so the next one arrives with the evidence that it works.
 
 `tests/test_node_matrix.py` is the same shape one level in: it reads the `Schema`
 variants out of the IR and fails when one carries no row, so the universe is
