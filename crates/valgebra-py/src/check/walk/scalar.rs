@@ -14,7 +14,7 @@
 use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
-use valgebra_core::{CollKind, ConstIx, Constraint, OperandIx, Schema, SeqKind, Violation};
+use valgebra_core::{CollKind, ConstIx, Constraint, OperandIx, Schema, SeqKind, Violation, quoted};
 
 use super::{
     Base, Frame, const_at, fold, held_len, is_fatal, member, operand_at, predicate_at,
@@ -478,7 +478,7 @@ impl Expected<'_> {
             Self::Order(symbol, operand) => format!("{symbol} {}", summarize_in(operand, ctx)),
             Self::Length(symbol, n) => format!("length {symbol} {n}"),
             Self::Multiple(operand) => format!("a multiple of {}", summarize_in(operand, ctx)),
-            Self::Pattern(pattern) => format!("a string matching {pattern:?}"),
+            Self::Pattern(pattern) => format!("a string matching {}", quoted(pattern)),
             Self::Fixed(text) => (*text).to_owned(),
             Self::Raised(error) => {
                 format!("a predicate that does not raise (raised {error})")

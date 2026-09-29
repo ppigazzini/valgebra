@@ -94,8 +94,8 @@
       'message': 'expected set, got [1] [set_type]',
     }),
     'string_pattern_mismatch': dict({
-      'expected': 'a string matching "\\\\\\\\d+"',
-      'message': 'expected a string matching "\\\\\\\\d+", got \'ab\' [string_pattern_mismatch]',
+      'expected': "a string matching '\\\\\\\\d+'",
+      'message': "expected a string matching '\\\\\\\\d+', got 'ab' [string_pattern_mismatch]",
     }),
     'string_type': dict({
       'expected': 'str',

@@ -43,6 +43,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: validate explains no union branch that refuses a value by its kind
 - fix: a PyPy dict scan survives a key swapped mid-scan
 - fix: a key that is not a bare name is quoted in a message's location
+- fix: the pattern and depth labels name the set a value missed
 
 -->
 
@@ -234,6 +235,13 @@ answer of its own, or a repair to a change not yet released.
   key holding a newline split `message`, and its line of `str(exc)`, in two.
   Such a key is written as a subscript of its Python literal, `at ['a.b']:`;
   the structured `path` is unchanged.
+- **A pattern's and a depth bound's `expected` name the set a value missed.** A
+  pattern was spelled in Rust's escaping, `a string matching "\\d+"`, beside
+  labels spelling a constant as Python's `repr`; it is the pattern's Python
+  literal, `a string matching '\\d+'`. The depth bounds read `at most 512
+  levels of nesting, got [[...]]`, which reads the value as a count; they are
+  `a value at most 512 levels deep` and `a value at most 128 recursive levels
+  deep`.
 
 ## [0.0.14] - 2026-09-26
 

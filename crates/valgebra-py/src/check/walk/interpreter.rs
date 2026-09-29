@@ -1260,7 +1260,7 @@ fn a_violation_names_the_constraint_the_value_failed() {
             (
                 refine(Schema::Str, Constraint::Regex("[0-9]+".to_owned())),
                 text("x"),
-                "a string matching \"[0-9]+\"",
+                "a string matching '[0-9]+'",
             ),
         ] {
             let (ok, violations) = explain(py, &schema, &value, &pool, &[]);

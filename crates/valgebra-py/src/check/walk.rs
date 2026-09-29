@@ -459,7 +459,7 @@ pub(crate) fn member(schema: &Schema, value: &Value<'_, '_>, frame: &mut Frame<'
             frame.out.push(Violation {
                 code: RECURSION_LIMIT.as_str(),
                 path: frame.path.clone(),
-                expected: format!("at most {MAX_WALK_DEPTH} levels of nesting"),
+                expected: format!("a value at most {MAX_WALK_DEPTH} levels deep"),
                 value_summary: summarize_value(value, ctx),
             });
         }
@@ -1029,7 +1029,9 @@ fn check_ref(id: DefIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '_>) -> boo
                 frame.out.push(Violation {
                     code: RECURSION_LIMIT.as_str(),
                     path: frame.path.clone(),
-                    expected: format!("at most {MAX_RECURSION_DEPTH} levels of recursion"),
+                    expected: format!(
+                        "a value at most {MAX_RECURSION_DEPTH} recursive levels deep"
+                    ),
                     value_summary: summarize_value(value, ctx),
                 });
             }
