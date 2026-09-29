@@ -34,6 +34,7 @@ here, which is the check on whoever writes one.
 from __future__ import annotations
 
 import datetime
+import itertools
 import math
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Protocol, runtime_checkable
@@ -687,3 +688,46 @@ def test_a_multiple_is_a_remainder_of_zero() -> None:
     assert (span(seconds=6) % span(seconds=2) == 0) is False
     with pytest.raises(ValueError, match=r"number"):
         Validator(Annotated[span, at.MultipleOf(span(seconds=2))])
+
+
+#: The values the triangle is about: `1 == True == 1.0` and `0 == False == 0.0 ==
+#: -0.0`, one value to `==` and several to a `Literal`, and the float equal to
+#: nothing.
+_TRIANGLE = [1, True, 1.0, 0, False, 0.0, -0.0, math.nan]
+#: A value of every class the schemas below tell apart, and one they all refuse.
+_CLASSES = [True, False, 0, 1, 2, 0.0, -0.0, 1.0, math.nan, 2.5, "x"]
+
+
+def test_the_cross_kind_triangle_is_decided_and_sound() -> None:
+    """Every relation over the kinds and literals the triangle spans.
+
+    `bool` is its own kind inside `int`'s values, `int` and `float` share no
+    value although `1 == 1.0`, a literal pins its constant's type, and `nan`
+    equals nothing. The schemas are the three kinds, a literal of each value,
+    the complement of each, and the union of every two, and the truth is read
+    off the walk over one value per class, since no schema here tells two
+    members of a class apart. Literals and kinds are decided exactly, so a
+    decline fails here as a wrong answer does.
+    """
+    atoms = [Validator(atom) for atom in (int, bool, float)]
+    atoms += [Validator(Literal[value]) for value in _TRIANGLE]  # ty: ignore[invalid-type-form]
+    schemas = [
+        *atoms,
+        *[complement(atom) for atom in atoms],
+        *[union(left, right) for left, right in itertools.combinations(atoms, 2)],
+    ]
+    admitted = [
+        frozenset(i for i, value in enumerate(_CLASSES) if schema.is_valid(value))
+        for schema in schemas
+    ]
+    wrong = []
+    for (left, held), (right, over) in itertools.product(
+        zip(schemas, admitted, strict=True), repeat=2
+    ):
+        truth = "subset" if held <= over else "not_subset"
+        if (answer := left.relation_to(right)) != truth:
+            wrong.append(f"{left!r} <= {right!r}: {answer}, the values say {truth}")
+    for schema, held in zip(schemas, admitted, strict=True):
+        if schema.is_empty() != (not held):
+            wrong.append(f"{schema!r}: is_empty() is {schema.is_empty()}")
+    assert not wrong, wrong[:10]
