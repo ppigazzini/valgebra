@@ -349,8 +349,10 @@ laws and not others is neither: `union(int, int)` rendered `int | int` and
 compared unequal to `int` while `union(int, complement(int))` rendered
 `anything`, so `==` was equality of nothing in particular and `repr` showed a
 shape no rule was written for. Normalising at construction makes `==` equality of
-a canonical form -- which is what the API reference already calls it -- and makes
-the shape every rule downstream may assume the shape it gets.
+a normal form -- which is what the API reference calls it -- and makes the shape
+every rule downstream may assume the shape it gets. The form is one per
+spelling, not one per set: two spellings of one set can still compare unequal,
+and the set question is `is_equivalent`.
 
 The code that decides it is `crates/valgebra-py/src/equality.rs`, which reads
 two validators through their constant pools rather than slot for slot: a pool
@@ -699,8 +701,9 @@ justified by what neither typing nor the algebra can express. `open` and `close`
 rewrite **every record a schema declares, at any depth, inside its recursive
 definitions** -- the sets they produce are spellable one at a time
 (`{"a": int, anything: anything}`), and the traversal is not. They are the
-whole-schema operations the contract admits, and they are functions on sets: two
-records denoting one set open to one set, which is a law with a test.
+whole-schema operations the contract admits. `close` is a function of the set,
+which is a law with a test; `open` is a term rewrite, declared as one, and two
+spellings of one set can open into two ([10-theory.md](10-theory.md)).
 
 `ensure` is `validate(x); return x` and is kept for what it reads as, typed as
 the identity it is. That is a judgement about the surface rather than about the
