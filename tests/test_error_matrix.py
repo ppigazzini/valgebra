@@ -615,6 +615,41 @@ def test_every_code_renders_the_same_way(snapshot: object) -> None:
     assert rendered == snapshot
 
 
+def test_every_code_is_summarized_the_same_way_where_it_sits(snapshot: object) -> None:
+    """`str(exc)` per code, at the root and under a key, in both modes.
+
+    The snapshot above holds one item's `expected` and message at the root.
+    `str(exc)` is what a log line holds -- every failure, each with its
+    location -- and no snapshot held it, nor the located message a failure
+    under a key carries. A document reaching the code is summarized as the
+    value it parses to is, so the JSON path is asserted equal rather than
+    captured twice.
+    """
+    summaries = {}
+    for code in sorted(CASES):
+        case = CASES[code]
+        placed = [("root", case.spec, case.value, case.document)]
+        placed.append(
+            (
+                "under a key",
+                {"k": case.spec},
+                {"k": case.value},
+                None if case.document is None else '{"k": ' + case.document + "}",
+            )
+        )
+        for where, spec, value, document in placed:
+            for fail_fast in (True, False):
+                mode = "fail fast" if fail_fast else "aggregate"
+                with pytest.raises(ValidationError) as caught:
+                    Validator(spec).validate(value, fail_fast=fail_fast)
+                summary = _ADDRESS.sub("0xADDRESS", str(caught.value))
+                summaries[f"{code}, {where}, {mode}"] = summary
+                if document is not None and json.loads(document) == value:
+                    parsed = _from_json(spec, document, fail_fast=fail_fast)
+                    assert str(parsed) == str(caught.value), (code, where, mode)
+    assert summaries == snapshot
+
+
 def test_ensure_refuses_by_raising_rather_than_by_answering() -> None:
     """`ensure` gives the value back, so its refusal is the only answer it has.
 
