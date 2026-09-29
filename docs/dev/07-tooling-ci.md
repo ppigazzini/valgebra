@@ -765,6 +765,13 @@ holds the depth and the name to the **same** condition, since a name that
 advertises a history the leg no longer takes answers the reader's question
 wrongly, which is worse than not answering it.
 
+**The manylinux wheel is installed on every push.** The `wheel (linux)` job
+builds the manylinux wheels from the image a release builds them in, then
+installs each CPython wheel on the interpreter its ABI tag names and imports it
+with every warning an error; the PyPy wheel the image also builds is the
+`pypy 3.11` lane's, which builds and runs one of its own. The lanes test the extension `maturin develop` builds, so a
+wheel that builds and does not load would otherwise wait for the release smoke.
+
 **PyPy builds, links, and runs the suite.** The release matrix publishes four
 PyPy 3.11 wheels, and a push that does not link against PyPy cannot see what
 breaks there: `cpyext` carries the limited API and not every static type object

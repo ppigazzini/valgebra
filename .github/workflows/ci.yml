@@ -998,6 +998,25 @@ jobs:
           # no tag trigger; release wheels are built by release.yml, so there is no
           # tag-push case to disable the cache for here.)
           sccache: true
+      # The manylinux wheel is the build a user installs, and the lanes test the
+      # extension `maturin develop` builds instead. Each CPython wheel is
+      # installed on the interpreter its ABI tag names and imported with every
+      # warning an error, so a wheel that builds and does not load fails the
+      # push rather than the release smoke. The PyPy wheel the image also builds
+      # is the `pypy 3.11` lane's, which builds and runs one of its own.
+      - uses: $/.github/actions/setup-uv
+        with:
+          python-version: "3.14"
+      - name: Install each built wheel and import it
+        run: |
+          for wheel in dist/*-cp3*-*.whl; do
+            abi=$(basename "$wheel" .whl | cut -d- -f4)
+            version=${abi#cp}
+            py="${version:0:1}.${version:1}"
+            uv venv --python "$py" ".venv-$abi"
+            uv pip install --python ".venv-$abi" --no-index --find-links dist valgebra
+            ".venv-$abi/bin/python" -W error -c "import sys, valgebra as v; assert v.Validator(list[int]).is_valid([1, 2]); print('wheel ok', sys.version.split()[0], v.__version__)"
+          done
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheel-linux
