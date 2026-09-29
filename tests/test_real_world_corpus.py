@@ -33,7 +33,13 @@ from hypothesis import strategies as st
 from valgebra import Validator
 
 # A spread of values to smoke each compiled validator's membership check.
-_SAMPLES = [None, 0, 1, True, "x", b"y", 1.5, [1], {"a": 1}, (1, "x"), {1}, [], {}]
+_SAMPLES = [
+    *(None, 0, 1, True, "x", b"y", 1.5, [1], {"a": 1}, (1, "x"), {1}, [], {}),
+    # A member and an outsider of `frozenset[int]`, whose elements no other
+    # sample is ever read as.
+    frozenset({1}),
+    frozenset({"x"}),
+]
 
 # Annotation shapes that appear in everyday typed Python and build a validator.
 _BUILDS = {
@@ -206,13 +212,10 @@ _annotations = st.recursive(_leaf, _compose, max_leaves=6)
 
 @given(annotation=_annotations)
 def test_generated_annotation_agrees_with_its_denotation(annotation: object) -> None:
-    # A generated typing expression either builds and agrees with its independent
-    # denotation on every sample, or is rejected cleanly; it never panics and never
-    # yields a validator whose verdict diverges from the meaning.
-    try:
-        compiled = Validator(annotation)
-    except (NotImplementedError, TypeError, ValueError):
-        return
+    # Every form `_compose` writes is one the frontend reads, so a generated
+    # expression builds and agrees with its independent denotation on every
+    # sample. A refusal here is a supported form refused, not a clean rejection.
+    compiled = Validator(annotation)
     predicate = _denote(annotation)
     for sample in _SAMPLES:
         assert compiled.is_valid(sample) == predicate(sample), (

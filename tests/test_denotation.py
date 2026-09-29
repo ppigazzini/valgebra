@@ -31,7 +31,8 @@ from types import GenericAlias
 from typing import Annotated, Any, Literal, NoReturn, TypeGuard
 
 import annotated_types as at
-from hypothesis import given
+import pytest
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from valgebra import (
@@ -787,6 +788,22 @@ BOUNDARIES: list[object] = [
     {"next": None},
     {"next": {"next": None}},
     {"next": None, "extra": 1},
+    # A member and an outsider for each reading a drawn value meets only when
+    # the case and the value happen to agree on a kind: the elements of a set
+    # and of a frozenset, the prefix and the tail of a sequence, the required
+    # fields of a record beside a clause, and a length over a container.
+    {1},
+    {1, "a"},
+    {0, 1, 2, 3},
+    frozenset({1}),
+    frozenset({1, "a"}),
+    [1],
+    [1, "a"],
+    [1, 1, 1, 1],
+    ("a", 1),
+    (1, 1, 1, 1),
+    {},
+    {"f0": 1, "z": "a"},
     b"\n",
     True,
     False,
@@ -812,5 +829,29 @@ def test_walk_matches_denotation(case: tuple[Validator, Pred], value: object) ->
     compiled, predicate = case
     _agrees(compiled, predicate, value)
     # And the boundaries, every case, whatever the draw gave.
+    for boundary in BOUNDARIES:
+        _agrees(compiled, predicate, boundary)
+
+
+@pytest.mark.parametrize(
+    "leaf",
+    [strategy for _, strategy in _REFINED],
+    ids=[kind for kind, _ in _REFINED],
+)
+@settings(max_examples=50)
+@given(data=st.data())
+def test_every_refinement_leaf_matches_its_denotation(
+    leaf: st.SearchStrategy[Spec], data: st.DataObject
+) -> None:
+    """Each refinement kind judged at the root, where the boundaries reach it.
+
+    The recursive draw places a leaf under a container or a connective far more
+    often than at the root, and a kind drawn only nested is a reading no
+    boundary value is asked about: under the `ci` profile the length of a
+    `set[int]` was never read at all.
+    """
+    spec, predicate = data.draw(leaf)
+    compiled = Validator(spec)
+    _agrees(compiled, predicate, data.draw(_values()))
     for boundary in BOUNDARIES:
         _agrees(compiled, predicate, boundary)
