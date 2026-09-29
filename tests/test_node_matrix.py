@@ -473,9 +473,9 @@ def test_the_node_table_covers_every_ir_variant() -> None:
     variants = _ir_variants()
     # The parse itself is a detector, so it must be shown to have read something:
     # a table that "covers" an empty universe covers nothing.
-    assert len(variants) >= 20, f"the IR parse found only {sorted(variants)}"
-    assert "KeyedMap" in variants
-    assert "Complement" in variants
+    assert {"KeyedMap", "Complement", "Anything", "Nothing"} <= variants, sorted(
+        variants
+    )
 
     covered = {_LABEL_TO_VARIANT.get(label, label.split(":")[0]) for label in _NODES}
     missing = variants - covered - _NOT_IN_A_COMPILED_SCHEMA

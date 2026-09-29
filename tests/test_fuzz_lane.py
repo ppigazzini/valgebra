@@ -132,7 +132,7 @@ def test_the_generator_draws_every_node_the_ir_has() -> None:
     body = ir[ir.index("pub enum Schema") :]
     body = body[: body.index("\n}")]
     variants = set(re.findall(r"^    ([A-Z]\w+)", body, re.MULTILINE))
-    assert len(variants) >= 15, sorted(variants)
+    assert {"Anything", "Nothing", "Union", "Complement"} <= variants, sorted(variants)
 
     generator = (ROOT / "fuzz" / "src" / "lib.rs").read_text(encoding="utf-8")
     # The constructors count as well as the bare variants: a sequence is built

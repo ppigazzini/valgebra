@@ -406,7 +406,9 @@ def _schema_variants() -> set[str]:
     body = _SCHEMA.search(IR.read_text(encoding="utf-8"))
     assert body, "ir.rs has no Schema enum this ledger reads"
     found = set(_VARIANT.findall(body.group(1)))
-    assert len(found) >= 19, f"the scan found only {sorted(found)}"
+    assert {"Anything", "Nothing", "Union", "Complement"} <= found, (
+        f"the scan found only {sorted(found)}"
+    )
     return found
 
 

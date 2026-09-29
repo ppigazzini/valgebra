@@ -226,7 +226,9 @@ def _variants() -> set[str]:
     found = set(_VARIANT.findall(body.group(1)))
     # The scan is the detector: an empty variant set would pass both directions
     # having read nothing at all.
-    assert len(found) >= 19, f"the variant scan found only {sorted(found)}"
+    assert {"Anything", "Nothing", "Union", "Complement"} <= found, (
+        f"the variant scan found only {sorted(found)}"
+    )
     return found
 
 
