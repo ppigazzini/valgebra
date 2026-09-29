@@ -267,7 +267,10 @@ subclass whose `__iter__` yielded one item over two took `validate` down, and a
 dict subclass overriding `__len__` was refused by a closed record it belongs
 to. One whose `__iter__` yields *more* than it stores never reaches the walk:
 `cpyext` refuses it at the call. CPython reads the storage in every case, and
-asks the type nothing more.
+asks the type nothing more. `scan_dict` reads its entries from a copy on PyPy
+for a reason of the same kind: a key swapped for another while the scan runs
+Python makes `cpyext`'s `PyDict_Next` fail fatally rather than report it, and
+the copy is a dict nothing else can reach.
 
 **Every container the walk reads answers this way, and for one reason.** A
 schema over a container denotes what the value *holds*, so the reading of it

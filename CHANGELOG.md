@@ -41,6 +41,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a signal an element's repr raises once propagates from a summary
 - fix: building a validator and asking a relation carry a fatal signal out
 - fix: validate explains no union branch that refuses a value by its kind
+- fix: a PyPy dict scan survives a key swapped mid-scan
 
 -->
 
@@ -221,6 +222,11 @@ answer of its own, or a repair to a change not yet released.
   repr raising `MemoryError` made it raise for a member. The branch is decided
   without being explained; the report for a value no branch admits is
   unchanged.
+- **A dict whose key is swapped mid-scan is answered on PyPy.** A predicate or a
+  key hook replacing one key with another at the same size, while
+  `dict[str, T]` or a record with `extra_items` scanned the dict, made PyPy's C
+  API fail fatally and took the process down. The scan reads a copy there, and
+  the change is the one the walk does not see, as on CPython.
 
 ## [0.0.14] - 2026-09-26
 

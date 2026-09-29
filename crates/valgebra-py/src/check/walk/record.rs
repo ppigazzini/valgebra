@@ -46,12 +46,26 @@ use crate::input::Value;
 /// reads one `PyCriticalSection_Begin` per scan and no more. Folding the loop
 /// into `Iterator::all`, which holds a single section for the whole loop, would
 /// hold nothing longer than this does.
+///
+/// `PyPy`'s `PyDict_Next` does not survive the change at all: a key replaced by
+/// another at the same size, while the scan runs Python, is a fatal error inside
+/// `cpyext` and takes the process with it. There the entries are read from a
+/// copy taken before the first visit, which nothing else can reach, while the
+/// size check still reads the value itself. `dict.copy` asks no key for its
+/// hash, so taking it runs no code of the value's.
 pub(super) fn scan_dict<'py>(
     dict: &Bound<'py, PyDict>,
     mut visit: impl FnMut(&Bound<'py, PyAny>, &Bound<'py, PyAny>) -> ControlFlow<()>,
 ) -> Scan {
     with_critical_section(dict.as_any(), || {
         let entries = dict.len();
+        #[cfg(PyPy)]
+        let Ok(copied) = held_dict(dict) else {
+            return Scan::Unreadable;
+        };
+        #[cfg(PyPy)]
+        let mut iter = copied.iter();
+        #[cfg(not(PyPy))]
         let mut iter = dict.iter();
         let mut seen = 0;
         while seen < entries {

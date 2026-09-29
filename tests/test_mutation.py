@@ -187,6 +187,28 @@ def test_a_set_grown_by_a_predicate_is_reported_not_a_panic() -> None:
     assert info.value.code == MUTATED
 
 
+def test_a_key_swapped_at_the_same_size_mid_scan_is_answered() -> None:
+    """A dict whose key is replaced by another while it is scanned gets an answer.
+
+    The change keeps the size, so it is the one the walk does not see, and
+    either answer is one. What is held is that there is an answer: PyPy's
+    `PyDict_Next` failed fatally inside `cpyext` and took the process down.
+    """
+    value = {"a": 1, "b": 2, "c": 3}
+    swapped: list[bool] = []
+
+    def swap(item: object) -> bool:
+        if not swapped:
+            swapped.append(True)
+            del value["c"]
+            value["z"] = 7
+        return True
+
+    schema = dict[str, Annotated[int, at.Predicate(swap)]]
+    assert Validator(schema).is_valid(value) in (True, False)
+    assert swapped
+
+
 def test_replacing_a_value_leaves_the_reading_intact() -> None:
     # Only a change in *size* costs the reading. A predicate that rewrites a value
     # in place leaves the entries where they are, so the walk still answers about
