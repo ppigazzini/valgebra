@@ -133,7 +133,7 @@ EXPECTED: tuple[Expected, ...] = (
         "ty",
         "docs/15-decidability.md",
         "invalid-type-form",
-        10,
+        11,
         "float `Literal`s and validators inside `list[...]` and `dict[...]`, the "
         "two extensions of the spelling the page decides over",
     ),
@@ -147,7 +147,15 @@ EXPECTED: tuple[Expected, ...] = (
         "mypy", "docs/03-schema-language.md", "name-defined", 1, _FORWARD_REFERENCE
     ),
     Expected("mypy", "docs/04-algebra.md", "union-attr", 2, _CLASS_ON_THE_LEFT),
-    Expected("mypy", "docs/15-decidability.md", "valid-type", 6, _VALIDATOR_IN_A_TYPE),
+    Expected(
+        "mypy",
+        "docs/15-decidability.md",
+        "valid-type",
+        7,
+        "validators inside `list[...]`, and a float `Literal` as a type argument, "
+        "which mypy refuses there: the two extensions of the spelling the page "
+        "decides over",
+    ),
     Expected("mypy", "docs/16-api.md", "arg-type", 1, _WRONG_JSON),
     Expected("mypy", "docs/17-boundaries.md", "attr-defined", 1, _UNDECLARED),
     Expected("pyright", "README.md", "reportAttributeAccessIssue", 1, _MUTATION),

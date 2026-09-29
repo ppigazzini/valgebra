@@ -231,6 +231,14 @@ ROWS: dict[str, Row] = {
         # complement, and the relation stays decided.
         beside=(Validator({"a": int}).open(), dict, "subset"),
     ),
+    "A clause keyed by a float literal.": Declines(
+        dict[int, int],
+        dict[Literal[1.0], int],  # ty: ignore[invalid-type-form]
+        "a label of the key partition for a float value",
+        # The entry's own contrast: a literal key of another kind lands in its
+        # part, and the relation is decided.
+        beside=(dict[Literal[1], int], dict[int, int], "subset"),
+    ),
     "Recursion, past one unfolding.": Declines(
         complement(int),
         _CHAIN,

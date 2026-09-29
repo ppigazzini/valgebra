@@ -423,6 +423,21 @@ the shape. What is left below is what the descriptor cannot hold.
     its clauses claim cover every key with one value between them, which is one
     catch-all clause rather than two.
 
+- **A clause keyed by a float literal.** The partition names a literal key by
+  its value, and it holds no float value: the typing spec admits none in a
+  `Literal`. A map keyed by `Literal[1.0]` is left to the rules, and a pair they
+  do not decide comes back "not proven" although `{0: 0}` refutes it. A key
+  literal of any other kind lands in its part.
+
+    ```python
+    from typing import Literal
+
+    from valgebra import Validator
+
+    assert Validator(dict[int, int]).relation_to(dict[Literal[1.0], int]) == "undecided"
+    assert Validator(dict[Literal[1], int]).relation_to(dict[int, int]) == "subset"
+    ```
+
 - **Recursion, past one unfolding.** A fixpoint as the **supertype** costs a
   *refutation* rather than an inclusion, and that is the sharper half. `a ≤ b`
   is `a ∧ ¬b = ∅`, so the supertype is where a schema stands under a
