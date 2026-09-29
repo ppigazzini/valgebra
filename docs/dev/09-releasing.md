@@ -209,7 +209,9 @@ after that unless `UNSAFE_PYO3_SKIP_VERSION_CHECK=1` is set.
 `tests/test_python_lifecycle.py` holds all of it against the day the suite runs,
 from a table of the schedule PEPs' dates. It turns red on the calendar, with no
 commit, and its message names the edit. It does not read the wheels
-`release.yml` builds, whose per-platform lists carry gaps the platforms set.
+`release.yml` builds: `tests/test_release_matrix.py` holds each platform's list
+to the classifiers the calendar moves, with the gaps the platforms set named
+and a row that leaves its interpreters to the build image named too.
 
 ## What this does not cover
 

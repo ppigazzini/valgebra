@@ -536,6 +536,44 @@ def _import_an_unshipped_module(tree: Path) -> None:
     _write(tree, "tests/_planted_import.py", "import _planted_stdlib\n")
 
 
+#: The linux x86_64 build row's interpreter list, as `release.yml` spells it.
+LINUX_ROW = re.compile(r"(target: x86_64, pgo: true, interpreter: )(python3\.\d+ )")
+
+
+def _release_yml(tree: Path) -> Path:
+    return tree / ".github" / "workflows" / "release.yml"
+
+
+def _drop_a_release(tree: Path) -> None:
+    """Take the first release off the linux x86_64 row, whichever it is."""
+    path = _release_yml(tree)
+    text, count = LINUX_ROW.subn(r"\1", path.read_text(encoding="utf-8"), count=1)
+    assert count == 1, "the plant did not land: no linux x86_64 build row"
+    path.write_text(text, encoding="utf-8")
+
+
+def _build_an_unclassified_release(tree: Path) -> None:
+    """Add a release no classifier names to the linux x86_64 row."""
+    path = _release_yml(tree)
+    text, count = LINUX_ROW.subn(
+        r"\1python3.99 \2", path.read_text(encoding="utf-8"), count=1
+    )
+    assert count == 1, "the plant did not land: no linux x86_64 build row"
+    path.write_text(text, encoding="utf-8")
+
+
+def _unclassify_every_release(tree: Path) -> None:
+    """Drop every `Python :: 3.N` classifier, leaving the ledger nothing to read."""
+    path = tree / "pyproject.toml"
+    text, count = re.subn(
+        r'^    "Programming Language :: Python :: 3\.\d+",\n',
+        "",
+        path.read_text(encoding="utf-8"),
+        flags=re.MULTILINE,
+    )
+    assert count, "the plant did not land: no release classifier"
+    path.write_text(text, encoding="utf-8")
+
 
 #: The marker the bound ledger reads, spelled from its pieces: the ledger reads
 #: every test file, this one included, and would take a plant's marker for a
@@ -2608,6 +2646,53 @@ PLANTS = (
             '"$bin/python" -c',
         ),
         trips=("test_every_smoke_import_fails_on_a_warning",),
+    ),
+    Plant(
+        # A classified release dropped from a platform's row: every installer
+        # there builds from source.
+        "tests/test_release_matrix.py",
+        (".github/workflows/release.yml",),
+        _drop_a_release,
+        trips=("test_every_platform_builds_every_release_the_classifiers_name",),
+    ),
+    Plant(
+        # A wheel built for a release the classifiers do not name.
+        "tests/test_release_matrix.py",
+        (".github/workflows/release.yml",),
+        _build_an_unclassified_release,
+        trips=("test_no_platform_builds_a_release_the_classifiers_do_not_name",),
+    ),
+    Plant(
+        # A gap recorded for a platform the release does not build for.
+        "tests/test_release_matrix.py",
+        ("tests/test_release_matrix.py",),
+        lambda tree: _edit(
+            tree,
+            "tests/test_release_matrix.py",
+            "GAPS: dict[tuple[str, str], str] = {\n",
+            "GAPS: dict[tuple[str, str], str] = {\n"
+            '    ("ubuntu-latest sparc64", "3.12"): "a platform no row builds",\n',
+        ),
+        trips=("test_every_gap_is_one_the_matrix_has",),
+    ),
+    Plant(
+        # A musllinux row that names its interpreters, its excuse left behind.
+        "tests/test_release_matrix.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            "target: x86_64, manylinux: musllinux_1_2 }",
+            "target: x86_64, manylinux: musllinux_1_2, interpreter: python3.12 }",
+        ),
+        trips=("test_every_row_names_its_interpreters_or_says_why",),
+    ),
+    Plant(
+        # The classifiers gone: every check over them compares nothing.
+        "tests/test_release_matrix.py",
+        ("pyproject.toml",),
+        _unclassify_every_release,
+        trips=("test_the_matrix_and_the_classifiers_were_read",),
     ),
     Plant(
         # A job every push runs, accepted by the gate as `skipped`.
