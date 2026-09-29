@@ -18,6 +18,7 @@ __pycache__/
 *.so
 *.dylib
 *.dll
+*.pdb
 
 # Virtual environments, including the one the PyPy lane builds beside it
 /.venv/

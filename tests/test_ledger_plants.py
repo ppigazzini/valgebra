@@ -2695,6 +2695,27 @@ PLANTS = (
         trips=("test_the_matrix_and_the_classifiers_were_read",),
     ),
     Plant(
+        # A crate that stops packaging a directory it tracks: the build from
+        # source reads what the archive left out.
+        "tests/test_sdist.py",
+        ("crates/valgebra-core/Cargo.toml",),
+        lambda tree: _edit(
+            tree,
+            "crates/valgebra-core/Cargo.toml",
+            "publish = false\n",
+            'publish = false\nexclude = ["benches/"]\n',
+        ),
+        trips=("test_the_sdist_carries_every_build_input",),
+    ),
+    Plant(
+        # A scratch file beside the package, untracked and unignored: it ships
+        # to everyone who builds from source.
+        "tests/test_sdist.py",
+        ("python/valgebra/_scratch.py",),
+        lambda tree: _write(tree, "python/valgebra/_scratch.py", "PLANTED = True\n"),
+        trips=("test_the_sdist_carries_nothing_else",),
+    ),
+    Plant(
         # A job every push runs, accepted by the gate as `skipped`.
         "tests/test_required_jobs.py",
         (".github/workflows/ci.yml",),
