@@ -45,6 +45,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a key that is not a bare name is quoted in a message's location
 - fix: the pattern and depth labels name the set a value missed
 - fix: a record below the complement of two records is decided
+- fix: equality, hash, repr and a build refusal carry a fatal signal out
 
 -->
 
@@ -249,6 +250,13 @@ answer of its own, or a repair to a change not yet released.
   complement of the complement, and where a field spanned two kinds that
   rebuilt set cost more than a relation may spend. It meets the record with
   the union itself.
+- **`==`, `hash`, `repr` and a build refusal carry a fatal signal out.** A
+  constant whose `__eq__`, `__hash__` or `__repr__` raised `KeyboardInterrupt`
+  read as unequal, as adding nothing to the hash and as `<unrepresentable>`. A
+  length bound whose `__index__` raised one was refused as no length, and a
+  refusal naming an object whose `__repr__` raised one named it
+  `<unrepresentable>`. Each raises the signal; an ordinary exception reads as
+  before.
 
 ## [0.0.14] - 2026-09-26
 

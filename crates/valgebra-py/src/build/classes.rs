@@ -118,7 +118,7 @@ pub(super) fn build_type_object(
             return Err(not_implemented(&format!(
                 "{} is a typing special form, not a value; write a concrete type \
                  (for a union, X | Y or Union[X, Y])",
-                summarize(ty.as_any())
+                summarize(ty.as_any())?
             )));
         }
     }
@@ -151,7 +151,7 @@ pub(super) fn build_type_object(
                 "{} inherits @runtime_checkable from a base rather than carrying it, \
                  and Python refuses isinstance against such a protocol from 3.20: \
                  decorate the class itself with @runtime_checkable",
-                summarize(ty.as_any())
+                summarize(ty.as_any())?
             )));
         }
         return Err(not_implemented(

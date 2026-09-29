@@ -21,7 +21,7 @@ use crate::validator::Validator;
 /// `numbers.Number`, the register a remainder's comparison and an order bound's
 /// both follow, resolved once per process.
 static NUMBER: PyOnceLock<Py<PyType>> = PyOnceLock::new();
-use crate::errors::{summarize, unless_fatal};
+use crate::errors::{is_fatal, summarize, unless_fatal};
 use crate::oracle::kind_of;
 
 /// Refuse an order bound against `nan`, which orders nothing.
@@ -574,7 +574,7 @@ fn refuse_unnumbered_step(operand: &Bound<'_, PyAny>) -> PyResult<()> {
         "MultipleOf({}) is not a valid constraint: a multiple is `value % n == 0`, \
          and the remainder of a value that is not a number equals no zero, so no \
          value would belong. Write the step as a number",
-        summarize(operand)
+        summarize(operand)?
     )))
 }
 
@@ -620,13 +620,30 @@ fn parse_grouped<'py>(
         return Err(PyValueError::new_err(format!(
             "{} groups markers nested too deeply: a marker stands for the \
              constraints it yields, and following this one does not bottom out",
-            summarize(marker)
+            summarize(marker)?
         )));
     }
     for inner in marker.try_iter()? {
         parse_constraint_within(&inner?, out, sets, lits, depth + 1)?;
     }
     Ok(())
+}
+
+/// The length a length bound names, or the refusal of one that names none.
+///
+/// `__index__` answers the extraction, and a fatal signal it raises is the
+/// interpreter unwinding rather than a bound that is no length.
+fn length_bound(probe: Probe, bound: &Bound<'_, PyAny>) -> PyResult<usize> {
+    let py = bound.py();
+    match bound.extract::<usize>() {
+        Ok(n) => Ok(n),
+        Err(err) if is_fatal(&err, py) => Err(err),
+        Err(_) => Err(PyValueError::new_err(format!(
+            "{} must be a length a value can have, and {} is not",
+            probe.name(py),
+            summarize(bound)?
+        ))),
+    }
 }
 
 fn parse_constraint_within<'py>(
@@ -671,7 +688,7 @@ fn parse_constraint_within<'py>(
             let what = if attr.is_instance_of::<PyBytes>() {
                 "a bytes pattern".to_owned()
             } else {
-                format!("the pattern {}", summarize(&attr))
+                format!("the pattern {}", summarize(&attr)?)
             };
             return Err(not_implemented(&format!(
                 "{what} cannot constrain a schema: a pattern is matched against \
@@ -731,14 +748,7 @@ fn parse_constraint_within<'py>(
             // first is the one every later spelling gets. A refusal would fail
             // correct `MinLen(0)` code because of a `MinLen(False)` somewhere
             // else, which is worse than reading the value the marker holds.
-            let n = bound.extract::<usize>().map_err(|_| {
-                PyValueError::new_err(format!(
-                    "{} must be a length a value can have, and {} is not",
-                    probe.name(py),
-                    summarize(&bound)
-                ))
-            })?;
-            out.push(make(n));
+            out.push(make(length_bound(probe, &bound)?));
         }
     }
     // Numeric multiple-of bound. A zero divisor is rejected here: no value is a
@@ -797,7 +807,7 @@ fn parse_constraint_within<'py>(
             "{} is a constraint this frontend does not check; a schema carrying \
              it would admit the values it excludes, so it is refused rather than \
              ignored",
-            summarize(marker)
+            summarize(marker)?
         )));
     }
     Ok(())

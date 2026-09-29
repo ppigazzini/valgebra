@@ -13,12 +13,19 @@
 //! admit the same dicts -- are not equal here, and `is_equivalent` is the
 //! question for that. This is the syntactic equality the constructors settle,
 //! read modulo an accident of construction order.
+//!
+//! A constant is compared and hashed by its own `__eq__` and `__hash__`. One
+//! raising an ordinary exception reads as unequal and adds nothing to the
+//! digest; a fatal signal propagates, as it does from every other question
+//! valgebra asks of user code.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use pyo3::prelude::*;
 use valgebra_core::{Constraint, Field, MapClause, Schema};
+
+use crate::errors::unless_fatal;
 
 /// One side of a comparison: the schema's definitions and the pool it indexes.
 pub(crate) struct Side<'a> {
@@ -37,17 +44,25 @@ pub(crate) fn schemas_equal(
     left: &Side<'_>,
     right_schema: &Schema,
     right: &Side<'_>,
-) -> bool {
-    if left.definitions.len() != right.definitions.len() {
-        return false;
+) -> PyResult<bool> {
+    Ok(left.definitions.len() == right.definitions.len()
+        && equal(py, left_schema, left, right_schema, right)?
+        && every(left.definitions.iter().zip(right.definitions), |(a, b)| {
+            equal(py, a, left, b, right)
+        })?)
+}
+
+/// Whether `test` holds of every item, stopping at the first it fails or raises.
+fn every<T>(
+    items: impl IntoIterator<Item = T>,
+    mut test: impl FnMut(T) -> PyResult<bool>,
+) -> PyResult<bool> {
+    for item in items {
+        if !test(item)? {
+            return Ok(false);
+        }
     }
-    if !equal(py, left_schema, left, right_schema, right) {
-        return false;
-    }
-    left.definitions
-        .iter()
-        .zip(right.definitions)
-        .all(|(a, b)| equal(py, a, left, b, right))
+    Ok(true)
 }
 
 /// Whether two pooled objects are one constant.
@@ -57,15 +72,19 @@ pub(crate) fn schemas_equal(
 /// `==` alone would make `v == v` false. Type then value after that, because the
 /// literal rule is typed: `1` and `True` are equal in Python and name different
 /// singletons here.
-fn objects_equal(py: Python<'_>, left: Option<&Py<PyAny>>, right: Option<&Py<PyAny>>) -> bool {
+fn objects_equal(
+    py: Python<'_>,
+    left: Option<&Py<PyAny>>,
+    right: Option<&Py<PyAny>>,
+) -> PyResult<bool> {
     match (left, right) {
         (Some(a), Some(b)) => {
             let (a, b) = (a.bind(py), b.bind(py));
-            a.is(b) || (a.get_type().is(b.get_type()) && a.eq(b).unwrap_or(false))
+            Ok(a.is(b) || (a.get_type().is(b.get_type()) && unless_fatal(a.eq(b), py, false)?))
         }
         // A slot that is not in the pool is a schema the frontend could not have
         // built. Two of them are not evidence of anything, so they are not equal.
-        _ => false,
+        _ => Ok(false),
     }
 }
 
@@ -77,25 +96,31 @@ fn objects_equal(py: Python<'_>, left: Option<&Py<PyAny>>, right: Option<&Py<PyA
 /// orders. Quadratic in the member count and paid only by `==`, which is not on
 /// any hot path; the lists a schema builds are short, and the long ones -- a
 /// wide `Literal` -- are the case this exists for.
-fn same_multiset<T>(items: &[T], others: &[T], mut equal_item: impl FnMut(&T, &T) -> bool) -> bool {
+fn same_multiset<T>(
+    items: &[T],
+    others: &[T],
+    mut equal_item: impl FnMut(&T, &T) -> PyResult<bool>,
+) -> PyResult<bool> {
     if items.len() != others.len() {
-        return false;
+        return Ok(false);
     }
     let mut taken = vec![false; others.len()];
     for item in items {
-        let found = others.iter().enumerate().position(|(at, other)| {
-            !taken.get(at).copied().unwrap_or(true) && equal_item(item, other)
-        });
-        match found {
-            Some(at) => {
-                if let Some(slot) = taken.get_mut(at) {
-                    *slot = true;
-                }
+        let mut found = None;
+        for (at, other) in others.iter().enumerate() {
+            if !taken.get(at).copied().unwrap_or(true) && equal_item(item, other)? {
+                found = Some(at);
+                break;
             }
-            None => return false,
+        }
+        let Some(at) = found else {
+            return Ok(false);
+        };
+        if let Some(slot) = taken.get_mut(at) {
+            *slot = true;
         }
     }
-    true
+    Ok(true)
 }
 
 fn fields_equal(
@@ -104,16 +129,16 @@ fn fields_equal(
     left: &Side<'_>,
     b: &[Field],
     right: &Side<'_>,
-) -> bool {
+) -> PyResult<bool> {
     // Ordered rather than matched: construction sorts a record's fields by name,
     // which is a key no pool slot reaches, so two equal records are already in
     // the same order.
-    a.len() == b.len()
-        && a.iter().zip(b).all(|(x, y)| {
-            x.name == y.name
+    Ok(a.len() == b.len()
+        && every(a.iter().zip(b), |(x, y)| {
+            Ok(x.name == y.name
                 && x.required == y.required
-                && equal(py, &x.schema, left, &y.schema, right)
-        })
+                && equal(py, &x.schema, left, &y.schema, right)?)
+        })?)
 }
 
 fn clause_equal(
@@ -122,8 +147,8 @@ fn clause_equal(
     left: &Side<'_>,
     b: &MapClause,
     right: &Side<'_>,
-) -> bool {
-    equal(py, &a.key, left, &b.key, right) && equal(py, &a.value, left, &b.value, right)
+) -> PyResult<bool> {
+    Ok(equal(py, &a.key, left, &b.key, right)? && equal(py, &a.value, left, &b.value, right)?)
 }
 
 fn constraint_equal(
@@ -132,11 +157,11 @@ fn constraint_equal(
     left: &Side<'_>,
     b: &Constraint,
     right: &Side<'_>,
-) -> bool {
+) -> PyResult<bool> {
     // The discriminants agree before anything is read: `Ge(0)` and `Le(0)` name
     // one constant and bound nothing alike.
     if core::mem::discriminant(a) != core::mem::discriminant(b) {
-        return false;
+        return Ok(false);
     }
     let pooled = |i: usize, j: usize| objects_equal(py, left.pool.get(i), right.pool.get(j));
     match (a, b) {
@@ -148,7 +173,7 @@ fn constraint_equal(
         (Constraint::Predicate(i), Constraint::Predicate(j)) => pooled(i.get(), j.get()),
         // A length and a pattern carry their operand inline, so the derived
         // comparison is the whole of it.
-        (x, y) => x == y,
+        (x, y) => Ok(x == y),
     }
 }
 
@@ -159,22 +184,20 @@ fn equal(
     left: &Side<'_>,
     right_schema: &Schema,
     right: &Side<'_>,
-) -> bool {
+) -> PyResult<bool> {
     let recur = |a: &Schema, b: &Schema| equal(py, a, left, b, right);
-    match (left_schema, right_schema) {
+    Ok(match (left_schema, right_schema) {
         // The pooled leaves: read through the slot to the object it names.
         (Schema::Literal(a), Schema::Literal(b)) => {
-            objects_equal(py, left.pool.get(a.get()), right.pool.get(b.get()))
+            objects_equal(py, left.pool.get(a.get()), right.pool.get(b.get()))?
         }
         (Schema::Instance(a), Schema::Instance(b)) => {
-            objects_equal(py, left.pool.get(a.get()), right.pool.get(b.get()))
+            objects_equal(py, left.pool.get(a.get()), right.pool.get(b.get()))?
         }
         // The set-shaped lists: matched rather than zipped.
         (Schema::Union(a), Schema::Union(b))
-        | (Schema::Intersection(a), Schema::Intersection(b)) => {
-            same_multiset(a, b, |x, y| recur(x, y))
-        }
-        (Schema::Complement(a), Schema::Complement(b)) => recur(a, b),
+        | (Schema::Intersection(a), Schema::Intersection(b)) => same_multiset(a, b, recur)?,
+        (Schema::Complement(a), Schema::Complement(b)) => recur(a, b)?,
         (
             Schema::Coll {
                 container: a_kind,
@@ -184,7 +207,7 @@ fn equal(
                 container: b_kind,
                 element: b,
             },
-        ) => a_kind == b_kind && recur(a, b),
+        ) => a_kind == b_kind && recur(a, b)?,
         (
             Schema::Seq {
                 container: a_kind,
@@ -198,12 +221,9 @@ fn equal(
             // A sequence's elements are positional, so this one is a zip.
             a_kind == b_kind
                 && a.prefix.len() == b.prefix.len()
-                && a.prefix
-                    .iter()
-                    .zip(b.prefix.iter())
-                    .all(|(x, y)| recur(x, y))
+                && every(a.prefix.iter().zip(b.prefix.iter()), |(x, y)| recur(x, y))?
                 && match (&a.tail, &b.tail) {
-                    (Some(x), Some(y)) => recur(x, y),
+                    (Some(x), Some(y)) => recur(x, y)?,
                     (None, None) => true,
                     _ => false,
                 }
@@ -218,13 +238,13 @@ fn equal(
                 defaults: b_defaults,
             },
         ) => {
-            fields_equal(py, a_fields, left, b_fields, right)
+            fields_equal(py, a_fields, left, b_fields, right)?
                 && same_multiset(a_defaults, b_defaults, |x, y| {
                     clause_equal(py, x, left, y, right)
-                })
+                })?
         }
         (Schema::AttrRecord { fields: a }, Schema::AttrRecord { fields: b }) => {
-            fields_equal(py, a, left, b, right)
+            fields_equal(py, a, left, b, right)?
         }
         (
             Schema::Refine {
@@ -236,14 +256,14 @@ fn equal(
                 constraints: b,
             },
         ) => {
-            recur(a_base, b_base)
-                && same_multiset(a, b, |x, y| constraint_equal(py, x, left, y, right))
+            recur(a_base, b_base)?
+                && same_multiset(a, b, |x, y| constraint_equal(py, x, left, y, right))?
         }
         // Everything left carries no pool slot and no set-shaped list, so the
         // derived comparison is the whole of it: the scalars, the two bounds,
         // and the two reference forms.
         (a, b) => a == b,
-    }
+    })
 }
 
 /// Fold the constant a pool slot names into the digest, where it has a hash.
@@ -263,17 +283,23 @@ fn equal(
 /// which is what the one case needing it asks for: a validator is usable as a
 /// key whatever it pools, and refusing to hash would be worse than a
 /// collision.
-fn hash_constant<H: Hasher>(py: Python<'_>, slot: usize, pool: &[Py<PyAny>], hasher: &mut H) {
+fn hash_constant<H: Hasher>(
+    py: Python<'_>,
+    slot: usize,
+    pool: &[Py<PyAny>],
+    hasher: &mut H,
+) -> PyResult<()> {
     let Some(object) = pool.get(slot) else {
-        return;
+        return Ok(());
     };
     let bound = object.bind(py);
-    if let Ok(hash) = bound.hash() {
+    if let Some(hash) = unless_fatal(bound.hash().map(Some), py, None)? {
         hash.hash(hasher);
-        if let Ok(kind) = bound.get_type().hash() {
+        if let Some(kind) = unless_fatal(bound.get_type().hash().map(Some), py, None)? {
             kind.hash(hasher);
         }
     }
+    Ok(())
 }
 
 /// Digest a schema, reading the constants its pool slots name.
@@ -287,7 +313,7 @@ pub(crate) fn hash_shape<H: Hasher>(
     schema: &Schema,
     pool: &[Py<PyAny>],
     hasher: &mut H,
-) {
+) -> PyResult<()> {
     core::mem::discriminant(schema).hash(hasher);
     match schema {
         // The lists whose order is not part of the schema fold commutatively,
@@ -295,36 +321,36 @@ pub(crate) fn hash_shape<H: Hasher>(
         Schema::Union(members) | Schema::Intersection(members) => {
             members.len().hash(hasher);
             unordered(members, hasher, |member, one| {
-                hash_shape(py, member, pool, one);
-            });
+                hash_shape(py, member, pool, one)
+            })?;
         }
-        Schema::Complement(inner) => hash_shape(py, inner, pool, hasher),
+        Schema::Complement(inner) => hash_shape(py, inner, pool, hasher)?,
         Schema::Coll { container, element } => {
             container.hash(hasher);
-            hash_shape(py, element, pool, hasher);
+            hash_shape(py, element, pool, hasher)?;
         }
         Schema::Seq { container, shape } => {
             container.hash(hasher);
             shape.prefix.len().hash(hasher);
             for element in shape.prefix.iter() {
-                hash_shape(py, element, pool, hasher);
+                hash_shape(py, element, pool, hasher)?;
             }
             shape.tail.is_some().hash(hasher);
             if let Some(tail) = &shape.tail {
-                hash_shape(py, tail, pool, hasher);
+                hash_shape(py, tail, pool, hasher)?;
             }
         }
         Schema::KeyedMap { fields, defaults } => {
-            hash_fields(py, fields, pool, hasher);
+            hash_fields(py, fields, pool, hasher)?;
             defaults.len().hash(hasher);
             unordered(defaults, hasher, |clause, one| {
-                hash_shape(py, &clause.key, pool, one);
-                hash_shape(py, &clause.value, pool, one);
-            });
+                hash_shape(py, &clause.key, pool, one)?;
+                hash_shape(py, &clause.value, pool, one)
+            })?;
         }
-        Schema::AttrRecord { fields } => hash_fields(py, fields, pool, hasher),
+        Schema::AttrRecord { fields } => hash_fields(py, fields, pool, hasher)?,
         Schema::Refine { base, constraints } => {
-            hash_shape(py, base, pool, hasher);
+            hash_shape(py, base, pool, hasher)?;
             constraints.len().hash(hasher);
             unordered(constraints, hasher, |constraint, one| {
                 core::mem::discriminant(constraint).hash(one);
@@ -339,29 +365,37 @@ pub(crate) fn hash_shape<H: Hasher>(
                     | Constraint::Gt(i)
                     | Constraint::Le(i)
                     | Constraint::Lt(i)
-                    | Constraint::MultipleOf(i) => hash_constant(py, i.get(), pool, one),
-                    Constraint::Predicate(i) => hash_constant(py, i.get(), pool, one),
+                    | Constraint::MultipleOf(i) => hash_constant(py, i.get(), pool, one)?,
+                    Constraint::Predicate(i) => hash_constant(py, i.get(), pool, one)?,
                 }
-            });
+                Ok(())
+            })?;
         }
         Schema::Ref(index) => index.hash(hasher),
         // The pooled leaves: the constant behind the slot, not the slot.
-        Schema::Literal(index) => hash_constant(py, index.get(), pool, hasher),
-        Schema::Instance(index) => hash_constant(py, index.get(), pool, hasher),
+        Schema::Literal(index) => hash_constant(py, index.get(), pool, hasher)?,
+        Schema::Instance(index) => hash_constant(py, index.get(), pool, hasher)?,
         // The scalars, the two bounds and the build-time marker: the
         // discriminant above is the whole of their shape.
         _ => {}
     }
+    Ok(())
 }
 
-fn hash_fields<H: Hasher>(py: Python<'_>, fields: &[Field], pool: &[Py<PyAny>], hasher: &mut H) {
+fn hash_fields<H: Hasher>(
+    py: Python<'_>,
+    fields: &[Field],
+    pool: &[Py<PyAny>],
+    hasher: &mut H,
+) -> PyResult<()> {
     // Ordered, because construction orders them by name.
     fields.len().hash(hasher);
     for field in fields {
         field.name.hash(hasher);
         field.required.hash(hasher);
-        hash_shape(py, &field.schema, pool, hasher);
+        hash_shape(py, &field.schema, pool, hasher)?;
     }
+    Ok(())
 }
 
 /// Fold each item's own digest into one that does not depend on their order.
@@ -372,15 +406,16 @@ fn hash_fields<H: Hasher>(py: Python<'_>, fields: &[Field], pool: &[Py<PyAny>], 
 fn unordered<T, H: Hasher>(
     items: &[T],
     hasher: &mut H,
-    mut each: impl FnMut(&T, &mut DefaultHasher),
-) {
+    mut each: impl FnMut(&T, &mut DefaultHasher) -> PyResult<()>,
+) -> PyResult<()> {
     let mut total: u64 = 0;
     for item in items {
         let mut one = DefaultHasher::new();
-        each(item, &mut one);
+        each(item, &mut one)?;
         total = total.wrapping_add(one.finish());
     }
     total.hash(hasher);
+    Ok(())
 }
 
 #[cfg(test)]

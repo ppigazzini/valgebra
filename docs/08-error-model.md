@@ -225,12 +225,14 @@ reported as "not a member" or a `predicate_error`. Building a message is one of
 those sites: a `__repr__` of the value, of a constant or bound the message
 names, or of a key in the path, and a class's `__name__`, raise the signal out
 of `validate` rather than reading as `<unrepresentable>`. Building a validator
-and asking a relation are two more: a marker's attributes and a bound's
-conversion, and the predicate, `__eq__` or comparison a relation probes a
-literal or a bound with, raise the signal rather than answering `undecided` or
-a verdict. Comparing, hashing and printing a validator are the exception: a
-constant whose `__eq__`, `__hash__` or `__repr__` raises reads as unequal, as
-adding nothing to the hash, and as `<unrepresentable>`, whatever it raised.
+and asking a relation are two more: a marker's attributes, a bound's conversion
+and length, the repr a refusal names, and the predicate, `__eq__` or comparison
+a relation probes a literal or a bound with, raise the signal rather than
+answering `undecided`, a verdict or a refusal. Comparing, hashing and printing
+a validator are the last: a constant whose `__eq__`, `__hash__` or `__repr__`
+raises an ordinary exception reads as unequal, as adding nothing to the hash,
+and as `<unrepresentable>`, and one raising a fatal signal raises it out of
+`==`, `hash` or `repr`.
 
 ## The model is built when it is asked for
 

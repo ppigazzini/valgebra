@@ -358,3 +358,111 @@ def test_a_fatal_signal_while_a_validator_is_built_propagates(
     annotation = _BUILT[question](raised)
     with pytest.raises(signal):
         Validator(annotation)
+
+
+class _Loud(int):
+    """An integer constant whose `==`, `hash` and `repr` raise once armed.
+
+    Armed after the build, so the build and `typing`'s memo read it as the
+    integer it is, and only the question under test meets the signal.
+    """
+
+    raised: BaseException | None = None
+
+    def _raise(self) -> None:
+        if self.raised is not None:
+            raise self.raised
+
+    def __eq__(self, other: object) -> bool:
+        self._raise()
+        return int.__eq__(self, other)
+
+    def __hash__(self) -> int:
+        self._raise()
+        return int.__hash__(self)
+
+    def __repr__(self) -> str:
+        self._raise()
+        return int.__repr__(self)
+
+
+_ASKED: dict[str, Callable[[Validator, Validator], object]] = {
+    "==": lambda left, right: left == right,
+    "hash": lambda left, _: hash(left),
+    "repr": lambda left, _: repr(left),
+}
+
+
+@pytest.mark.usefixtures("forgetting_annotated")
+@pytest.mark.parametrize("question", list(_ASKED))
+@pytest.mark.parametrize("signal", FATAL)
+def test_a_fatal_signal_from_a_constant_propagates_from_eq_hash_and_repr(
+    signal: type[BaseException], question: str
+) -> None:
+    """Comparing, hashing and printing a validator read each constant it pools."""
+    left, right = _Loud(0), _Loud(0)
+    built = Validator(Annotated[int, at.Ge(left)])
+    _forget_annotated()
+    other = Validator(Annotated[int, at.Ge(right)])
+    left.raised = right.raised = signal()
+    with pytest.raises(signal):
+        _ASKED[question](built, other)
+
+
+@pytest.mark.usefixtures("forgetting_annotated")
+def test_an_ordinary_exception_from_a_constant_folds_in_eq_hash_and_repr() -> None:
+    """A constant that cannot answer is unequal, hashless, and unrepresentable.
+
+    Each check is one the answering constants would fail: two zeros are equal,
+    and a zero and a one hash apart.
+    """
+    constants = _Loud(0), _Loud(0), _Loud(1)
+    validators = []
+    for constant in constants:
+        _forget_annotated()
+        validators.append(Validator(Annotated[int, at.Ge(constant)]))
+    built, same, apart = validators
+    for constant in constants:
+        constant.raised = ValueError("boom")
+    assert built != same
+    assert hash(built) == hash(apart)
+    assert repr(built) == "Annotated[int, Ge(<unrepresentable>)]"
+
+
+class _Index:
+    """A length bound whose `__index__` raises what it was given."""
+
+    def __init__(self, raised: BaseException) -> None:
+        self.raised = raised
+
+    def __index__(self) -> int:
+        raise self.raised
+
+    def __repr__(self) -> str:
+        return "_Index()"
+
+
+class _Repr:
+    """An object whose `__repr__` raises what it was given."""
+
+    def __init__(self, raised: BaseException) -> None:
+        self.raised = raised
+
+    def __repr__(self) -> str:
+        raise self.raised
+
+
+@pytest.mark.usefixtures("forgetting_annotated")
+@pytest.mark.parametrize("signal", FATAL)
+@pytest.mark.parametrize("carrier", [_Index, _Repr])
+def test_a_fatal_signal_while_a_refusal_is_written_propagates(
+    signal: type[BaseException], carrier: type[_Index | _Repr]
+) -> None:
+    """A refused bound is read for its length and its repr, and either may raise.
+
+    An ordinary exception is the refusal the bound earns, naming it as it can.
+    """
+    with pytest.raises(signal):
+        Validator(Annotated[list[int], at.MinLen(carrier(signal()))])  # ty: ignore[invalid-argument-type]
+    with pytest.raises(ValueError, match="must be a length a value can have"):
+        Validator(Annotated[list[int], at.MinLen(carrier(ValueError("boom")))])  # ty: ignore[invalid-argument-type]

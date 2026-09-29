@@ -558,7 +558,7 @@ fn build_unrecognised(
             "{} is a forward reference, and a schema is built from the types \
              themselves: resolve the annotation first with typing.get_type_hints(\
              ..., include_extras=True), or write the type rather than its name",
-            summarize(obj)
+            summarize(obj)?
         )));
     }
 
@@ -571,7 +571,7 @@ fn build_unrecognised(
             "{} is the base a class is declared from, not a type: pass the \
              TypedDict or named tuple class itself, or tuple[...] for the fields a \
              named tuple lays out",
-            summarize(obj)
+            summarize(obj)?
         )));
     }
 
@@ -580,7 +580,7 @@ fn build_unrecognised(
             "{} is a typing construct, not a value: a type variable, ParamSpec, \
              TypeVarTuple, or special form (such as Final or ClassVar) cannot be a \
              schema; use a concrete type",
-            summarize(obj)
+            summarize(obj)?
         )));
     }
 
@@ -840,7 +840,7 @@ fn checked_key(schema: &Schema, spelling: &Bound<'_, PyAny>) -> PyResult<()> {
          Literal: write dict[str, V] to key every string, or dict[Literal[\"a\"], V] \
          (or {{\"a\": V}}) to key one. To constrain the keys themselves, check them \
          beside the mapping rather than inside it",
-        summarize(spelling)
+        summarize(spelling)?
     )))
 }
 

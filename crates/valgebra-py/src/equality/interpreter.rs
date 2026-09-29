@@ -10,6 +10,24 @@ use pyo3::types::{PyDict, PyInt};
 use std::ffi::CString;
 use valgebra_core::ConstIx;
 
+/// [`super::schemas_equal`] over constants that answer `==` without raising,
+/// which is every constant a case here pools but the one that asks.
+fn schemas_equal(
+    py: Python<'_>,
+    left_schema: &Schema,
+    left: &Side<'_>,
+    right_schema: &Schema,
+    right: &Side<'_>,
+) -> bool {
+    super::schemas_equal(py, left_schema, left, right_schema, right)
+        .expect("no constant here raises")
+}
+
+/// [`super::hash_shape`] over constants that hash without raising.
+fn hash_shape<H: Hasher>(py: Python<'_>, schema: &Schema, pool: &[Py<PyAny>], hasher: &mut H) {
+    super::hash_shape(py, schema, pool, hasher).expect("no constant here raises");
+}
+
 /// Build a schema from an annotation, with the pool it indexes.
 fn compile(py: Python<'_>, expression: &str) -> (Schema, Vec<Py<PyAny>>) {
     let namespace = PyDict::new(py);
@@ -471,5 +489,71 @@ fn a_schema_over_a_nan_equals_itself() {
             "typing.Literal[float('nan')]",
             "typing.Literal[float('nan')]"
         ));
+    });
+}
+
+/// A constant's `__eq__` and `__hash__` run user code. An ordinary exception
+/// from either reads as unequal and as adding nothing to the digest; a fatal
+/// signal is the interpreter unwinding, and comes back out of both.
+#[test]
+fn a_fatal_signal_from_a_constant_propagates_and_an_ordinary_one_folds() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Loud:\n\
+              \x20   def __init__(self, raised):\n\
+              \x20       self.raised = raised\n\
+              \x20   def __eq__(self, other):\n\
+              \x20       raise self.raised\n\
+              \x20   def __hash__(self):\n\
+              \x20       raise self.raised\n",
+            c"loud.py",
+            c"loud",
+        )
+        .expect("the module compiles");
+        let loud = |raised: &str| {
+            let raised = py.eval(&CString::new(raised).expect("no nul"), None, None);
+            vec![
+                module
+                    .getattr("Loud")
+                    .and_then(|class| class.call1((raised.expect("the exception evaluates"),)))
+                    .expect("the constant builds")
+                    .unbind(),
+            ]
+        };
+        let literal = Schema::Literal(ConstIx::new(0));
+        let asked = |left: &[Py<PyAny>], right: &[Py<PyAny>]| {
+            super::schemas_equal(
+                py,
+                &literal,
+                &Side {
+                    definitions: &[],
+                    pool: left,
+                },
+                &literal,
+                &Side {
+                    definitions: &[],
+                    pool: right,
+                },
+            )
+        };
+        let digest = |pool: &[Py<PyAny>]| {
+            let mut hasher = DefaultHasher::new();
+            super::hash_shape(py, &literal, pool, &mut hasher).map(|()| hasher.finish())
+        };
+
+        let (left, right) = (loud("KeyboardInterrupt()"), loud("KeyboardInterrupt()"));
+        let raised = asked(&left, &right).expect_err("the signal comes out of ==");
+        assert!(raised.is_instance_of::<pyo3::exceptions::PyKeyboardInterrupt>(py));
+        let raised = digest(&left).expect_err("the signal comes out of the hash");
+        assert!(raised.is_instance_of::<pyo3::exceptions::PyKeyboardInterrupt>(py));
+
+        let (left, right) = (loud("ValueError()"), loud("ValueError()"));
+        assert!(!asked(&left, &right).expect("an ordinary exception folds"));
+        assert_eq!(
+            digest(&left).expect("an ordinary exception folds"),
+            digest(&[]).expect("an empty pool hashes"),
+            "a constant whose hash raises adds nothing"
+        );
     });
 }

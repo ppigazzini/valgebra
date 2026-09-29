@@ -12,13 +12,21 @@ use crate::codes::{JSON_INVALID, VALIDATION_ERROR};
 use crate::exception::ValidationError;
 
 /// The class name for an error label, falling back to its repr.
-pub(crate) fn class_label(class: &Bound<'_, PyAny>) -> String {
-    class
-        .getattr(intern!(class.py(), "__name__"))
-        .ok()
-        .and_then(|name| name.extract::<String>().ok())
-        .unwrap_or_else(|| summarize(class))
+///
+/// [`summarize`]'s rule for the name as well as the repr: a metaclass may
+/// answer `__name__` by running code, and a fatal signal it raises propagates
+/// rather than reading as a class with no name.
+pub(crate) fn class_label(class: &Bound<'_, PyAny>) -> PyResult<String> {
+    let py = class.py();
+    let name = unless_fatal(class.getattr(intern!(py, "__name__")).map(Some), py, None)?;
+    match name.and_then(|name| name.extract::<String>().ok()) {
+        Some(text) => Ok(text),
+        None => summarize(class),
+    }
 }
+
+/// What a message says of an object whose `__repr__` raises.
+pub(crate) const UNREPRESENTABLE: &str = "<unrepresentable>";
 
 /// The characters of a value a summary keeps.
 pub(crate) const SUMMARY_CHARS: usize = 80;
@@ -101,17 +109,20 @@ pub(crate) fn unless_fatal<T>(result: PyResult<T>, py: Python<'_>, fallback: T) 
 ///
 /// A scalar keeps the direct path: its repr is its size, there is nothing to
 /// bound, and it is the common case in an error message.
-pub(crate) fn summarize(value: &Bound<'_, PyAny>) -> String {
-    try_summarize(value).unwrap_or_else(|_| "<unrepresentable>".to_owned())
+///
+/// A `__repr__` raising an ordinary exception is an object that cannot render,
+/// and the summary says so. A fatal signal propagates: the interpreter is
+/// unwinding, and a message that read it as [`UNREPRESENTABLE`] would carry on
+/// as if it were not.
+pub(crate) fn summarize(value: &Bound<'_, PyAny>) -> PyResult<String> {
+    unless_fatal(try_summarize(value), value.py(), UNREPRESENTABLE.to_owned())
 }
 
-/// [`summarize`], handing back the error a `__repr__` raised.
+/// [`summarize`], handing back every error a `__repr__` raised.
 ///
-/// The walk needs the error rather than the fallback text: a `__repr__` raising
-/// `KeyboardInterrupt` is the interpreter unwinding, and folding it into
-/// `<unrepresentable>` reports a non-member where the contract says the signal
-/// propagates. Every caller outside the walk has no signal to carry and takes
-/// the fallback.
+/// For the walk, which carries a fatal signal out through its context rather
+/// than its return value, and reads what it does not carry as
+/// [`UNREPRESENTABLE`] itself.
 pub(crate) fn try_summarize(value: &Bound<'_, PyAny>) -> PyResult<String> {
     if !value.is_instance_of::<PyList>()
         && !value.is_instance_of::<PyTuple>()

@@ -4,6 +4,7 @@ use super::classes::*;
 use super::refine::*;
 use super::*;
 use crate::render::render;
+use pyo3::exceptions::PyKeyboardInterrupt;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::ffi::CString;
@@ -83,7 +84,20 @@ fn namespace(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
              def nest(depth):\n\
              \x20   marker = at.Ge(0)\n\
              \x20   for _ in range(depth): marker = grouped(marker)\n\
-             \x20   return marker\n",
+             \x20   return marker\n\
+             class loud:\n\
+             \x20   def index(raised):\n\
+             \x20       class Index:\n\
+             \x20           def __index__(self): raise raised\n\
+             \x20       return Index()\n\
+             \x20   def repr(raised):\n\
+             \x20       class Repr:\n\
+             \x20           def __repr__(self): raise raised\n\
+             \x20       return Repr()\n\
+             \x20   def kind(raised):\n\
+             \x20       class Meta(type):\n\
+             \x20           def __repr__(cls): raise raised\n\
+             \x20       return Meta('Kind', (), {})\n",
         )?,
         Some(&namespace),
         None,
@@ -99,7 +113,7 @@ fn built(py: Python<'_>, expression: &str) -> PyResult<String> {
     let mut defs = Vec::new();
     let schema = build_schema(&annotation, &mut pool, &mut defs)?;
     let active = RefCell::new(FxHashMap::default());
-    Ok(render(py, &schema, pool.items(), &defs, &active, 0))
+    render(py, &schema, pool.items(), &defs, &active, 0)
 }
 
 /// Every spelling the frontend dispatches on, and the schema it must reach.
@@ -393,6 +407,49 @@ fn each_refusal_says_what_it_refuses() {
         )] {
             if since.met(py) {
                 refuses(expression, wanted);
+            }
+        }
+    });
+}
+
+/// Building asks a length bound for its `__index__`, and a refusal asks what it
+/// refuses for its `__repr__`. An ordinary exception from either is the refusal
+/// the bound or the object earns; a fatal signal is the interpreter unwinding,
+/// and comes back out of the build in its place.
+#[test]
+fn a_fatal_signal_while_a_refusal_is_written_propagates() {
+    Python::attach(|py| {
+        for (expression, fatal) in [
+            (
+                "typing.Annotated[list, at.MinLen(loud.index(KeyboardInterrupt))]",
+                true,
+            ),
+            (
+                "typing.Annotated[list, at.MinLen(loud.index(ValueError))]",
+                false,
+            ),
+            (
+                "typing.Annotated[list, at.MinLen(loud.repr(KeyboardInterrupt))]",
+                true,
+            ),
+            (
+                "typing.Annotated[list, at.MinLen(loud.repr(ValueError))]",
+                false,
+            ),
+            ("typing.Literal[loud.kind(KeyboardInterrupt)]", true),
+            ("typing.Literal[loud.kind(ValueError)]", false),
+        ] {
+            let error = match built(py, expression) {
+                Err(error) => error,
+                Ok(schema) => panic!("{expression} built {schema} instead of refusing"),
+            };
+            assert_eq!(
+                error.is_instance_of::<PyKeyboardInterrupt>(py),
+                fatal,
+                "{expression} raised {error}"
+            );
+            if !fatal && expression.contains("repr") {
+                assert!(error.to_string().contains("<unrepresentable>"), "{error}");
             }
         }
     });
@@ -988,7 +1045,7 @@ fn a_validator_in_the_metadata_is_met_with_the_base() {
                 .unwrap_or_else(|error| panic!("{expression} did not build: {error}"));
             let active = RefCell::new(FxHashMap::default());
             assert_eq!(
-                render(py, &schema, pool.items(), &defs, &active, 0),
+                render(py, &schema, pool.items(), &defs, &active, 0).expect("it renders"),
                 wanted,
                 "{expression}"
             );
@@ -1069,7 +1126,7 @@ fn a_typed_dict_says_which_other_keys_it_admits() {
                 .unwrap_or_else(|error| panic!("{name} did not build: {error}"));
             let active = RefCell::new(FxHashMap::default());
             assert_eq!(
-                render(py, &schema, pool.items(), &defs, &active, 0),
+                render(py, &schema, pool.items(), &defs, &active, 0).expect("it renders"),
                 wanted,
                 "{name}"
             );
@@ -1135,7 +1192,7 @@ fn a_typed_dict_is_read_against_the_sentinel_its_own_implementation_wrote() {
                 .unwrap_or_else(|error| panic!("{name} did not build: {error}"));
             let active = RefCell::new(FxHashMap::default());
             assert_eq!(
-                render(py, &schema, pool.items(), &defs, &active, 0),
+                render(py, &schema, pool.items(), &defs, &active, 0).expect("it renders"),
                 wanted,
                 "{name}"
             );
@@ -1194,7 +1251,7 @@ fn a_typed_dict_inherits_the_tail_its_base_states() {
                 .unwrap_or_else(|error| panic!("{name} did not build: {error}"));
             let active = RefCell::new(FxHashMap::default());
             assert_eq!(
-                render(py, &schema, pool.items(), &defs, &active, 0),
+                render(py, &schema, pool.items(), &defs, &active, 0).expect("it renders"),
                 wanted,
                 "{name}"
             );
@@ -1260,7 +1317,7 @@ fn a_class_is_read_through_what_it_declares() {
                 .unwrap_or_else(|error| panic!("{name} did not build: {error}"));
             let active = RefCell::new(FxHashMap::default());
             assert_eq!(
-                render(py, &schema, pool.items(), &defs, &active, 0),
+                render(py, &schema, pool.items(), &defs, &active, 0).expect("it renders"),
                 wanted,
                 "{name}"
             );

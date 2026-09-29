@@ -47,6 +47,10 @@ const GAVE_UP: &str = "<...>";
 /// the frontend refuses past `MAX_SCHEMA_DEPTH`, which is lower -- but a chain
 /// of definitions composes: the render descends into each in turn, so a hundred
 /// shallow links reach a depth no one annotation can.
+///
+/// A constant or a class is printed by its own `__repr__` or `__name__`, and a
+/// fatal signal one of them raises propagates, as it does from every other
+/// question valgebra asks of user code.
 pub(crate) fn render(
     py: Python<'_>,
     schema: &Schema,
@@ -54,12 +58,12 @@ pub(crate) fn render(
     defs: &[Schema],
     active: &RefCell<FxHashMap<DefIx, String>>,
     depth: usize,
-) -> String {
+) -> PyResult<String> {
     if depth > MAX_RENDER_DEPTH {
-        return GAVE_UP.to_owned();
+        return Ok(GAVE_UP.to_owned());
     }
     let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
-    match schema {
+    Ok(match schema {
         // The one place the spelling is read: `typing.Any` and `anything` are
         // the same set and the same node, and this gives back what was written.
         Schema::Anything(Spelling::Any) => "Any".to_owned(),
@@ -71,16 +75,16 @@ pub(crate) fn render(
         Schema::Float => "float".to_owned(),
         Schema::Str => "str".to_owned(),
         Schema::Bytes => "bytes".to_owned(),
-        Schema::Literal(i) => format!("Literal[{}]", pool_repr(py, pool, i.get())),
+        Schema::Literal(i) => format!("Literal[{}]", pool_repr(py, pool, i.get())?),
         Schema::Seq { container, shape } => {
             let list = matches!(container, SeqKind::List);
             match (&shape.prefix[..], shape.tail.as_deref()) {
                 // Homogeneous: list[T] / tuple[T, ...].
-                ([], Some(t)) if list => format!("list[{}]", r(t)),
-                ([], Some(t)) => format!("tuple[{}, ...]", r(t)),
+                ([], Some(t)) if list => format!("list[{}]", r(t)?),
+                ([], Some(t)) => format!("tuple[{}, ...]", r(t)?),
                 // Fixed positional: [A, B] / tuple[A, B].
                 (ps, None) => {
-                    let body = ps.iter().map(r).collect::<Vec<_>>().join(", ");
+                    let body = ps.iter().map(r).collect::<PyResult<Vec<_>>>()?.join(", ");
                     if list {
                         format!("[{body}]")
                     } else if ps.is_empty() {
@@ -94,8 +98,8 @@ pub(crate) fn render(
                 }
                 // Fixed prefix then a repeated tail.
                 (ps, Some(t)) => {
-                    let mut parts: Vec<String> = ps.iter().map(r).collect();
-                    parts.push(r(t));
+                    let mut parts: Vec<String> = ps.iter().map(r).collect::<PyResult<_>>()?;
+                    parts.push(r(t)?);
                     parts.push("...".to_owned());
                     let body = parts.join(", ");
                     if list {
@@ -107,22 +111,24 @@ pub(crate) fn render(
             }
         }
         Schema::Coll { container, element } => match container {
-            CollKind::Set => format!("set[{}]", r(element)),
-            CollKind::FrozenSet => format!("frozenset[{}]", r(element)),
+            CollKind::Set => format!("set[{}]", r(element)?),
+            CollKind::FrozenSet => format!("frozenset[{}]", r(element)?),
         },
         Schema::KeyedMap { fields, defaults } => {
-            render_keyed_map(py, fields, defaults, pool, defs, active, depth)
+            render_keyed_map(py, fields, defaults, pool, defs, active, depth)?
         }
-        Schema::Union(members) => render_union(members, &r),
+        Schema::Union(members) => render_union(members, &r)?,
         Schema::Intersection(members) => {
-            render_meet(py, schema, members, pool, defs, active, depth)
+            render_meet(py, schema, members, pool, defs, active, depth)?
         }
-        Schema::Complement(inner) => format!("complement({})", r(inner)),
-        Schema::Instance(i) => pool_class_name(py, pool, i.get()),
-        Schema::AttrRecord { fields } => render_attr_record(py, fields, pool, defs, active, depth),
+        Schema::Complement(inner) => format!("complement({})", r(inner)?),
+        Schema::Instance(i) => pool_class_name(py, pool, i.get())?,
+        Schema::AttrRecord { fields } => render_attr_record(py, fields, pool, defs, active, depth)?,
         Schema::Refine { base, constraints } => {
-            let mut parts = vec![r(base)];
-            parts.extend(constraints.iter().map(|c| render_constraint(py, c, pool)));
+            let mut parts = vec![r(base)?];
+            for constraint in constraints.iter() {
+                parts.push(render_constraint(py, constraint, pool)?);
+            }
             format!("Annotated[{}]", parts.join(", "))
         }
         Schema::Ref(id) => {
@@ -130,20 +136,22 @@ pub(crate) fn render(
             // lambda's parameter, which is what makes the form finite without
             // an ellipsis nothing can rebuild.
             if let Some(name) = active.borrow().get(id) {
-                return name.clone();
+                return Ok(name.clone());
             }
             let name = binder(active.borrow().len());
             active.borrow_mut().insert(*id, name.clone());
-            let body = defs.get(id.get()).map_or_else(|| GAVE_UP.to_owned(), &r);
+            let body = defs
+                .get(id.get())
+                .map_or_else(|| Ok(GAVE_UP.to_owned()), &r);
             active.borrow_mut().remove(id);
-            format!("recursive(lambda {name}: {body})")
+            format!("recursive(lambda {name}: {})", body?)
         }
         // The transient marker `recursive` uses while its own body is being
         // built. A compiled validator holds no such node, so nothing a caller
         // can print reaches this; it renders as an ellipsis because there is no
         // definition to name yet.
         Schema::SelfRef(_) => GAVE_UP.to_owned(),
-    }
+    })
 }
 
 /// The name a recursive definition's back edge is bound to, by how many are
@@ -177,11 +185,14 @@ fn binder(open: usize) -> String {
 /// leaves every other member exactly where it was. The rendering is the sort
 /// key because it is what the reader sees: two members that print the same
 /// print the same wherever they sit.
-fn render_union(members: &[Schema], render: &impl Fn(&Schema) -> String) -> String {
+fn render_union(
+    members: &[Schema],
+    render: &impl Fn(&Schema) -> PyResult<String>,
+) -> PyResult<String> {
     let mut rendered: Vec<(bool, String)> = members
         .iter()
-        .map(|member| (matches!(member, Schema::Literal(_)), render(member)))
-        .collect();
+        .map(|member| Ok((matches!(member, Schema::Literal(_)), render(member)?)))
+        .collect::<PyResult<_>>()?;
     if let Some(start) = rendered.iter().position(|(literal, _)| *literal) {
         let end = rendered
             .iter()
@@ -192,11 +203,11 @@ fn render_union(members: &[Schema], render: &impl Fn(&Schema) -> String) -> Stri
             run.sort_by(|a, b| a.1.cmp(&b.1));
         }
     }
-    rendered
+    Ok(rendered
         .into_iter()
         .map(|(_, text)| text)
         .collect::<Vec<_>>()
-        .join(" | ")
+        .join(" | "))
 }
 
 /// Render a meet, reading a class's `isinstance` atom beside its attribute
@@ -215,13 +226,17 @@ fn render_meet(
     defs: &[Schema],
     active: &RefCell<FxHashMap<DefIx, String>>,
     depth: usize,
-) -> String {
+) -> PyResult<String> {
     let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
     let Some(class) = schema.object_class() else {
-        let kids = members.iter().map(r).collect::<Vec<_>>().join(", ");
-        return format!("intersection({kids})");
+        let kids = members
+            .iter()
+            .map(r)
+            .collect::<PyResult<Vec<_>>>()?
+            .join(", ");
+        return Ok(format!("intersection({kids})"));
     };
-    let name = pool_class_name(py, pool, class.get());
+    let name = pool_class_name(py, pool, class.get())?;
     let mut parts = vec![name];
     // The atom, and the deep check of what the class declares: both are what
     // the name already says. The declaration is named where the fields have
@@ -230,22 +245,19 @@ fn render_meet(
     // exactly the member it read the class out of. Keeping the positional one
     // printed a `NamedTuple` as `intersection(Point, tuple[int, str])` beside a
     // dataclass printing as `DC`.
-    parts.extend(
-        members
-            .iter()
-            .filter(|m| {
-                !matches!(
-                    m,
-                    Schema::Instance(_) | Schema::AttrRecord { .. } | Schema::Seq { .. }
-                )
-            })
-            .map(r),
-    );
-    if parts.len() == 1 {
+    for member in members {
+        if !matches!(
+            member,
+            Schema::Instance(_) | Schema::AttrRecord { .. } | Schema::Seq { .. }
+        ) {
+            parts.push(r(member)?);
+        }
+    }
+    Ok(if parts.len() == 1 {
         parts.remove(0)
     } else {
         format!("intersection({})", parts.join(", "))
-    }
+    })
 }
 
 /// Render an attribute record on its own: `object(x=int)`.
@@ -262,16 +274,16 @@ fn render_attr_record(
     defs: &[Schema],
     active: &RefCell<FxHashMap<DefIx, String>>,
     depth: usize,
-) -> String {
+) -> PyResult<String> {
     let entries: Vec<String> = fields
         .iter()
         .map(|field| {
             let suffix = if field.required { "" } else { "?" };
-            let schema = render(py, &field.schema, pool, defs, active, depth + 1);
-            format!("{}{}={}", field.name, suffix, schema)
+            let schema = render(py, &field.schema, pool, defs, active, depth + 1)?;
+            Ok(format!("{}{}={}", field.name, suffix, schema))
         })
-        .collect();
-    format!("object({})", entries.join(", "))
+        .collect::<PyResult<_>>()?;
+    Ok(format!("object({})", entries.join(", ")))
 }
 
 fn render_keyed_map(
@@ -282,45 +294,49 @@ fn render_keyed_map(
     defs: &[Schema],
     active: &RefCell<FxHashMap<DefIx, String>>,
     depth: usize,
-) -> String {
+) -> PyResult<String> {
     let r = |s: &Schema| render(py, s, pool, defs, active, depth + 1);
     // A pure mapping — no named fields, one clause — is dict[K, V].
     if fields.is_empty()
         && let [clause] = defaults
     {
-        return format!("dict[{}, {}]", r(&clause.key), r(&clause.value));
+        return Ok(format!("dict[{}, {}]", r(&clause.key)?, r(&clause.value)?));
     }
     // Otherwise a record/struct: named fields, then any catch-all clauses.
     let mut entries: Vec<String> = fields
         .iter()
         .map(|field| {
             let suffix = if field.required { "" } else { "?" };
-            format!("'{}{}': {}", field.name, suffix, r(&field.schema))
+            Ok(format!("'{}{}': {}", field.name, suffix, r(&field.schema)?))
         })
-        .collect();
+        .collect::<PyResult<_>>()?;
     for clause in defaults {
         // Every clause renders as the key-to-value entry it is, the catch-all
         // included. `{'a': int, ...}` read better and rebuilt a *different*
         // schema: `...` is a dict key like any other, so the frontend reads it
         // back as `Literal[Ellipsis]` and the record is closed with an odd
         // field rather than open.
-        entries.push(format!("{}: {}", r(&clause.key), r(&clause.value)));
+        entries.push(format!("{}: {}", r(&clause.key)?, r(&clause.value)?));
     }
-    format!("{{{}}}", entries.join(", "))
+    Ok(format!("{{{}}}", entries.join(", ")))
 }
 
-fn render_constraint(py: Python<'_>, constraint: &Constraint, pool: &[Py<PyAny>]) -> String {
-    match constraint {
-        Constraint::Ge(i) => format!("Ge({})", pool_repr(py, pool, i.get())),
-        Constraint::Gt(i) => format!("Gt({})", pool_repr(py, pool, i.get())),
-        Constraint::Le(i) => format!("Le({})", pool_repr(py, pool, i.get())),
-        Constraint::Lt(i) => format!("Lt({})", pool_repr(py, pool, i.get())),
+fn render_constraint(
+    py: Python<'_>,
+    constraint: &Constraint,
+    pool: &[Py<PyAny>],
+) -> PyResult<String> {
+    Ok(match constraint {
+        Constraint::Ge(i) => format!("Ge({})", pool_repr(py, pool, i.get())?),
+        Constraint::Gt(i) => format!("Gt({})", pool_repr(py, pool, i.get())?),
+        Constraint::Le(i) => format!("Le({})", pool_repr(py, pool, i.get())?),
+        Constraint::Lt(i) => format!("Lt({})", pool_repr(py, pool, i.get())?),
         Constraint::MinLen(n) => format!("MinLen({n})"),
         Constraint::MaxLen(n) => format!("MaxLen({n})"),
-        Constraint::MultipleOf(i) => format!("MultipleOf({})", pool_repr(py, pool, i.get())),
+        Constraint::MultipleOf(i) => format!("MultipleOf({})", pool_repr(py, pool, i.get())?),
         Constraint::Predicate(_) => "Predicate(...)".to_owned(),
         Constraint::Regex(pattern) => format!("Regex({})", python_repr(py, pattern)),
-    }
+    })
 }
 
 /// A string spelled the way Python spells it.
@@ -345,20 +361,20 @@ fn python_repr(py: Python<'_>, text: &str) -> String {
 // the FFI boundary, matching the defensive `.get` posture in the walk. The index
 // is pool-valid by construction, so the miss is an invariant break — loud in
 // debug, a recognisable placeholder in release.
-fn pool_repr(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> String {
+fn pool_repr(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<String> {
     if let Some(constant) = pool.get(index) {
         summarize(constant.bind(py))
     } else {
         debug_assert!(false, "pool index {index} out of range");
-        "<unknown>".to_owned()
+        Ok("<unknown>".to_owned())
     }
 }
 
-fn pool_class_name(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> String {
+fn pool_class_name(py: Python<'_>, pool: &[Py<PyAny>], index: usize) -> PyResult<String> {
     if let Some(class) = pool.get(index) {
         class_label(class.bind(py))
     } else {
         debug_assert!(false, "pool index {index} out of range");
-        "<unknown>".to_owned()
+        Ok("<unknown>".to_owned())
     }
 }

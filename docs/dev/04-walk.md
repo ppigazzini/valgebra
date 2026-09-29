@@ -95,8 +95,9 @@ constant a literal names, the bound or step a value missed, a key the path
 names by its repr, and a class's name, and each of those runs caller code.
 `summarize_in` and `class_label_in` in `check/violation.rs` are the walk's two
 ways to render one: an ordinary exception reads as `<unrepresentable>`, and a
-fatal signal is recorded for the entry point to raise. The `summarize` in
-`errors.rs` folds both, and is for the build and `repr`, where no walk runs.
+fatal signal is recorded for the entry point to raise. The `summarize` and
+`class_label` in `errors.rs` are the same reading for the build and `repr`,
+where no walk runs: they return the signal rather than record it.
 
 Each disjunct needs its own test case: a mutation collapsing the classifier to
 one of them is invisible to a corpus that only raises `KeyboardInterrupt`.

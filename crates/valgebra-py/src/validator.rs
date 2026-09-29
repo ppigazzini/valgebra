@@ -727,7 +727,7 @@ impl Validator {
 
     /// Render the compiled schema back as the annotation expression that
     /// produces it.
-    fn __repr__(&self, py: Python<'_>) -> String {
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let active = RefCell::new(FxHashMap::default());
         render(
             py,
@@ -898,10 +898,10 @@ impl Validator {
     /// A non-validator gets `NotImplemented` rather than `False`: the data model
     /// asks the other operand next, and it may know something about validators
     /// that validators do not know about it.
-    fn __eq__<'py>(&self, other: &Bound<'py, PyAny>) -> Bound<'py, PyAny> {
+    fn __eq__<'py>(&self, other: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let py = other.py();
         let Ok(bound) = other.cast::<Validator>() else {
-            return py.NotImplemented().into_bound(py);
+            return Ok(py.NotImplemented().into_bound(py));
         };
         let other = bound.get();
         let equal = crate::equality::schemas_equal(
@@ -916,8 +916,8 @@ impl Validator {
                 definitions: &other.definitions,
                 pool: &other.literals,
             },
-        );
-        PyBool::new(py, equal).to_owned().into_any()
+        )?;
+        Ok(PyBool::new(py, equal).to_owned().into_any())
     }
 
     /// A hash consistent with equality, which is equality modulo the pool.
@@ -936,15 +936,15 @@ impl Validator {
     /// part of the schema, and a constant with no hash contributes nothing:
     /// that is a collision, so a validator stays usable as a key whatever it
     /// pools.
-    fn __hash__(&self, py: Python<'_>) -> u64 {
+    fn __hash__(&self, py: Python<'_>) -> PyResult<u64> {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        crate::equality::hash_shape(py, &self.schema, &self.literals, &mut hasher);
+        crate::equality::hash_shape(py, &self.schema, &self.literals, &mut hasher)?;
         self.definitions.len().hash(&mut hasher);
         for definition in &self.definitions {
-            crate::equality::hash_shape(py, definition, &self.literals, &mut hasher);
+            crate::equality::hash_shape(py, definition, &self.literals, &mut hasher)?;
         }
-        hasher.finish()
+        Ok(hasher.finish())
     }
 }
 

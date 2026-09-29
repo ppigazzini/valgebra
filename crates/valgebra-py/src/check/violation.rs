@@ -10,7 +10,7 @@ use valgebra_core::{PathSegment, Schema, Violation};
 use crate::check::ctx::Ctx;
 use crate::check::walk::record_if_fatal;
 use crate::codes::Code;
-use crate::errors::try_summarize;
+use crate::errors::{UNREPRESENTABLE, try_summarize};
 use crate::input::Value;
 
 /// A type/value mismatch for a leaf schema.
@@ -101,9 +101,6 @@ pub(crate) fn summarize_value(value: &Value<'_, '_>, ctx: Ctx<'_>) -> String {
         }
     }
 }
-
-/// What a message says of an object that cannot render.
-const UNREPRESENTABLE: &str = "<unrepresentable>";
 
 /// A short repr-style summary of an object a message the walk builds names:
 /// the value, a constant, a bound, a key.

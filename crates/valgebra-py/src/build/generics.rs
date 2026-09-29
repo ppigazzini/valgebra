@@ -113,7 +113,7 @@ pub(super) fn build_parametrized(
         return Err(not_implemented(&format!(
             "{} is the annotation a static checker reads for a validator, not a \
              schema: pass the schema itself, or a compiled Validator",
-            summarize(alias)
+            summarize(alias)?
         )));
     }
     // A field qualifier survives hint resolution because field metadata is kept
@@ -127,7 +127,7 @@ pub(super) fn build_parametrized(
         "unsupported typing form with origin {}; the subscripted forms read are \
          list, set, frozenset, dict, tuple, Union, Optional, Literal, Annotated, \
          Callable, and the TypedDict qualifiers Required, NotRequired and ReadOnly",
-        summarize(origin)
+        summarize(origin)?
     )))
 }
 
@@ -158,7 +158,7 @@ pub(super) fn refuse_unhashable_literal(arg: &Bound<'_, PyAny>) -> PyResult<()> 
              argument: the typing spec allows None, an enum member, or an int, \
              bool, str or bytes value. Write the type on its own to admit its \
              values, or a constant to admit one",
-            summarize(arg)
+            summarize(arg)?
         )));
     }
     let (kind, instead) = if arg.is_instance_of::<PyList>() {
@@ -249,7 +249,7 @@ pub(super) fn build_type_argument(
             "{} is a forward reference, and a schema is built from the types \
              themselves: resolve the annotation first with typing.get_type_hints(\
              ..., include_extras=True), or write the type rather than its name",
-            summarize(arg)
+            summarize(arg)?
         )));
     }
     build_schema(arg, lits, defs)
@@ -302,7 +302,7 @@ pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Un
         return Err(not_implemented(&format!(
             "only a tuple can be unpacked into a tuple schema; {} binds no \
              element types at runtime",
-            summarize(&inner)
+            summarize(&inner)?
         )));
     }
     let args = forms.get_args.bind(py).call1((&inner,))?;
@@ -422,7 +422,7 @@ pub(super) fn single_arg<'py>(
     Err(not_implemented(&format!(
         "{} takes exactly one type argument, and this one is written with {}: \
          {instead}",
-        summarize(form),
+        summarize(form)?,
         args.len()
     )))
 }
