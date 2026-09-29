@@ -5237,8 +5237,8 @@ proptest! {
 }
 
 /// Every way of assigning each branch to one of `arity` positions, as a
-/// digit string: the `k^|N|` enumeration JACM Lemma 6.5 states over the
-/// negative atoms of a clause, which at arity two is its `2^|N|` subsets.
+/// digit string: the `2^|N|` subsets JACM Lemma 6.5 states over the negative
+/// atoms of a clause, generalised to `k^|N|` at arity `k`.
 fn assignments(count: usize, arity: usize) -> impl Iterator<Item = Vec<usize>> {
     (0..arity.pow(u32::try_from(count).unwrap_or(0))).map(move |mut code| {
         (0..count)

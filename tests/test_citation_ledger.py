@@ -12,9 +12,14 @@ surface and the file that holds it. A work cited on the page and missing from
 the table is a citation with no paper behind it; a file on the shelf with no
 row is a paper nothing says the use of.
 
-So both are read here. A numbered result is attributed to the **nearest work
-named at or above it**, which is how a reader attributes it, and that work has
-to be one the table names and a file the shelf holds.
+So both are read here, over the theory page and the decision page. A numbered
+result is attributed to the **work named nearest at or before it in its
+paragraph**, or in the paragraph before where its own names none -- which is how
+a reader attributes it -- and a work is named by its authors, its venue or the
+shorthand the pages use. That work has to be one the table names and a file the
+shelf holds, and the number has to be one the paper states: the shelf's own
+rule is to verify a theorem number and trust a citation chain, and a wrong
+number resolved to a real paper passed before.
 
 The shelf is not redistributed, so a clone has none: these rows skip where it is
 absent rather than failing, and say so. What does not skip is the direction that
@@ -22,7 +27,7 @@ lives entirely in the tree -- every citation attributable to some work at all --
 because a numbered result under no work is unresolvable to every reader, with a
 shelf or without one.
 
-LEDGER: every numbered result the theory page cites names a work on the shelf
+LEDGER: every numbered result the theory pages cite is one a paper on the shelf states
 """
 
 from __future__ import annotations
@@ -58,14 +63,88 @@ _ROW = re.compile(r"^\|(?P<surface>[^|]+)\|(?P<work>[^|]+)\|(?P<file>[^|]+)\|$")
 #: page names a work the same way, so this is what ties the two together.
 _AUTHORS = re.compile(r"^(.*?),\s*\*")
 
-#: A work as the *page* names it: a bold run opening with an author list. The
-#: page opens a claim in bold too, so the run has to be told from a sentence,
-#: and what tells them apart is that an author list is names and connectives
-#: only -- "Frisch, Castagna & Benzaken" against "Subtyping is inclusion".
-_NAMED = re.compile(r"\*\*([A-Z][A-Za-z\u2019'&.\- ]+?),")
+#: The pages whose citations are held: the design rationale, and the decision
+#: procedure's own page.
+PAGES = (THEORY, ROOT / "docs" / "dev" / "02-decision.md")
 
-#: The words an author list may carry that are not a name.
-_CONNECTIVES = frozenset({"&", "and", "et", "al."})
+#: Every way the pages name a work, and the stem of the shelf's file for it.
+#: Longest first at one position, so "Frisch, Castagna & Benzaken" is not read as
+#: the "Castagna" inside it. `None` is a work the shelf does not hold, named so
+#: that a citation of it is declared rather than resolved to the nearest paper.
+_JACM = "frisch-castagna-benzaken-2008-semantic-subtyping-JACM"
+_HVP = "hosoya-vouillon-pierce-2005-regular-expression-types-xml"
+ALIASES: dict[str, str | None] = {
+    "Frisch, Castagna & Benzaken": _JACM,
+    "JACM": _JACM,
+    "Castagna & Duboc": "castagna-duboc-2024-guard-analysis-safe-erasure-elixir",
+    "Castagna & Peyrot": "castagna-peyrot-2025-polymorphic-records",
+    "ICFP 2023": "castagna-2023-typing-records-maps-structs-ICFP",
+    "ICFP": "castagna-2023-typing-records-maps-structs-ICFP",
+    "UIN": "castagna-2021-union-intersection-negation",
+    "Amadio & Cardelli": "amadio-cardelli-1993-subtyping-recursive-types",
+    "Hosoya, Vouillon & Pierce": _HVP,
+    "TOPLAS 2005": _HVP,
+    "Nakano": "nakano-2000-modality-for-recursion",
+    # Cited for the family that makes a trail keeping nothing exponential, and
+    # held by no file here: the shelf carries it through the papers that cite
+    # it, so its section numbers are the one thing this cannot check.
+    "Gapeyev, Levin & Pierce": None,
+}
+
+#: A section of the project's own notes, which number from 13 and which no paper
+#: on the shelf reaches; a `SOURCE:` line quotes those notes.
+_NOTES = re.compile(r"§1[3-5](?:\.\d+)*")
+
+
+def _paragraphs(text: str) -> list[tuple[int, str]]:
+    """Each paragraph of `text`, with the line it starts on."""
+    found, line = [], 1
+    for block in re.split(r"(\n\s*\n)", text):
+        if block.strip():
+            found.append((line, block))
+        line += block.count("\n")
+    return found
+
+
+def _citations(page: Path) -> list[tuple[str, str, str | None]]:
+    """Each numbered result on `page`: where, what, and the alias it is of."""
+    found: list[tuple[str, str, str | None]] = []
+    last: str | None = None
+    for start, paragraph in _paragraphs(page.read_text(encoding="utf-8")):
+        marks = sorted(
+            (match.start(), -len(alias), alias)
+            for alias in ALIASES
+            for match in re.finditer(re.escape(alias), paragraph)
+        )
+        if not paragraph.lstrip().startswith("SOURCE:"):
+            for cited in _CITATION.finditer(paragraph):
+                if _NOTES.fullmatch(cited.group(0)):
+                    continue
+                before = [alias for at, _, alias in marks if at <= cited.start()]
+                line = start + paragraph[: cited.start()].count("\n")
+                work = before[-1] if before else last
+                found.append((f"{page.name}:{line}", cited.group(0), work))
+        if marks:
+            last = marks[-1][2]
+    return found
+
+
+def _states(text: str, cited: str) -> bool:
+    """Whether the extraction `text` *states* the numbered result `cited`.
+
+    A statement opens a line: `LEMMA 6.5.`, `Lemma 4.7 (Map Containment).`,
+    number-first as Amadio & Cardelli print one (`5.2.2 LEMMA`), and a section
+    as `6.9. TITLE`, `1.5 Algorithm Outline` or its number alone. Case is folded,
+    so a ligature the extraction split (`DEfiNITION`) still reads. A mention --
+    "(Definition 6.9)" mid-sentence -- does not answer for a statement.
+    """
+    if cited.startswith("§"):
+        number = re.escape(cited[1:])
+        return re.search(rf"(?mi)^\s*{number}\.?(?:\s|$)", text) is not None
+    kind, number = cited.split()
+    number = re.escape(number)
+    stated = rf"(?mi)^\s*(?:{kind}\s+{number}\b|{number}\.?\s+{kind}\b)"
+    return re.search(stated, text) is not None
 
 
 def _table() -> list[tuple[str, str]]:
@@ -89,50 +168,6 @@ def _table() -> list[tuple[str, str]]:
             continue
         rows.append((authors[1].strip(), name))
     return rows
-
-
-def _files_by_author(rows: list[tuple[str, str]]) -> dict[str, list[str]]:
-    """Group the table by its author list, which is what the page names."""
-    found: dict[str, list[str]] = {}
-    for authors, name in rows:
-        found.setdefault(authors, []).append(name)
-    return found
-
-
-def _works_the_page_names() -> list[str]:
-    """Give the author lists the theory page itself writes.
-
-    Read from the page rather than from the shelf, because attribution is what a
-    reader does with the page in hand and a clone has no shelf to consult. The
-    shelf then holds these names in its own direction below.
-    """
-    found: list[str] = []
-    for run in _NAMED.findall(THEORY.read_text(encoding="utf-8")):
-        words = run.split()
-        if words and all(word in _CONNECTIVES or word[:1].isupper() for word in words):
-            found.append(run.strip())
-    return sorted(set(found))
-
-
-def _citations(authors: list[str]) -> list[tuple[str, str | None]]:
-    """Each numbered result on the page, with the work it is attributed to.
-
-    Attributed to the nearest name at or above it, which is how the page reads:
-    a paragraph opening with a work's authors carries every result it cites, and
-    one that opens with none belongs to the work above it.
-    """
-    text = THEORY.read_text(encoding="utf-8")
-    marks: list[tuple[int, str]] = [
-        (match.start(), name)
-        for name in authors
-        for match in re.finditer(re.escape(name), text)
-    ]
-    marks.sort()
-    found: list[tuple[str, str | None]] = []
-    for cited in _CITATION.finditer(text):
-        above = [name for at, name in marks if at < cited.start()]
-        found.append((cited.group(0), above[-1] if above else None))
-    return found
 
 
 def _on_the_shelf() -> list[str]:
@@ -160,17 +195,17 @@ def test_every_numbered_result_is_attributed_to_a_work() -> None:
     """A result under no work is one no reader can resolve, shelf or no shelf.
 
     The direction that holds without the papers, which is why it does not skip:
-    the page is the tracked record of what the design rests on, and "Lemma 6.5"
-    with nothing above it saying whose lemma is a sentence that cannot be
+    the pages are the tracked record of what the design rests on, and "Lemma
+    6.5" with nothing before it saying whose lemma is a sentence that cannot be
     checked by anybody.
     """
-    named = _works_the_page_names()
-    # The scan is the detector: no names is no attribution for anything.
-    assert len(named) >= 5, named
-    orphaned = [cited for cited, work in _citations(named) if work is None]
+    cited = [row for page in PAGES for row in _citations(page)]
+    # The scan is the detector: no citations is no attribution for anything.
+    assert len(cited) >= 8, cited
+    orphaned = [f"{where} {what}" for where, what, work in cited if work is None]
     assert not orphaned, (
-        f"numbered results with no work named above them: {orphaned}. Name the "
-        "authors in the paragraph, or move the citation under the one it is of."
+        f"numbered results with no work named before them: {orphaned}. Name the "
+        "work in the paragraph, or move the citation under the one it is of."
     )
 
 
@@ -178,16 +213,49 @@ def test_every_cited_work_is_a_paper_the_shelf_holds() -> None:
     """The work a citation resolves to is a file somebody can open."""
     if not SHELF.is_dir():
         pytest.skip(_ABSENT)
-    by_author, held = _files_by_author(_table()), _on_the_shelf()
-    named = [work for work in _works_the_page_names() if work in by_author]
-    cited = {work for _, work in _citations(named) if work is not None}
-    missing = sorted(
-        f"{work} -> {name}"
-        for work in cited
-        for name in by_author[work]
-        if name not in held
-    )
-    assert not missing, f"works the page cites whose file the shelf lacks: {missing}"
+    rowed = {Path(name).stem for _, name in _table()}
+    cited = {ALIASES[work] for page in PAGES for _, _, work in _citations(page) if work}
+    missing = sorted(stem for stem in cited if stem is not None and stem not in rowed)
+    assert not missing, f"works the pages cite that the shelf's table lacks: {missing}"
+
+
+def test_every_numbered_result_is_one_its_paper_states() -> None:
+    """The number a citation gives is one the cited paper prints.
+
+    Read against the shelf's text extractions. A citation of a work the shelf
+    does not hold is declared in `ALIASES` rather than checked.
+    """
+    texts = SHELF / "text"
+    if not texts.is_dir():
+        pytest.skip(_ABSENT)
+    unstated, checked = [], 0
+    for page in PAGES:
+        for where, what, work in _citations(page):
+            stem = ALIASES.get(work) if work else None
+            if stem is None:
+                continue
+            checked += 1
+            text = (texts / f"{stem}.txt").read_text(encoding="utf-8")
+            if not _states(text, what):
+                unstated.append(f"{where} {what}, which {work} does not state")
+    assert checked >= 8, checked
+    assert not unstated, unstated
+
+
+def test_the_reader_of_a_statement_tells_it_from_a_mention() -> None:
+    """The matcher answers both ways over the shapes the shelf prints."""
+    jacm = "we introduce (Definition 6.9) which\nLEMMA 6.5.\nLet P\n6.9. DECIDABILITY\n"
+    assert _states(jacm, "Lemma 6.5")
+    assert _states(jacm, "§6.9")
+    assert not _states(jacm, "Definition 6.9"), "a mention is not a statement"
+    assert not _states(jacm, "Lemma 6.4")
+    amadio = "5.2.2 LEMMA (A system of contractile equations).\n1.5 Algorithm Outline\n"
+    assert _states(amadio, "Lemma 5.2.2")
+    assert _states(amadio, "§1.5")
+    assert not _states(amadio, "§4.1")
+    icfp = "2.1.4\nImplementation.\nLemma 4.7 (Map Containment). Let\n"
+    assert _states(icfp, "§2.1.4")
+    assert _states(icfp, "Lemma 4.7")
 
 
 def test_the_table_and_the_shelf_name_the_same_papers() -> None:

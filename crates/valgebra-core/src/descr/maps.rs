@@ -383,8 +383,8 @@ impl<G: Guard> MapAtom<G> {
     /// constraint of `S` at once.
     ///
     /// The paper's (11) reads each constraint of `S` against the default alone,
-    /// and each on its own. Both rest on its Lemma 4.7, which assumes every
-    /// key type is infinite: a constraint is met by a key no label names, and
+    /// and each on its own. Both rest on the hypothesis its §4.4 states for
+    /// Lemma 4.7, that every key type is infinite: a constraint is met by a key no label names, and
     /// a second constraint by a second such key. That holds here of a part
     /// with infinitely many keys, and a constraint its default can meet is met
     /// by a fresh key of its own. The rest are **pinned** to keys the atom

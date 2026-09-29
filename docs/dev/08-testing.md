@@ -125,7 +125,7 @@ for and misses the other. The ledgers:
 | `tests/test_relation_ledger.py` | every ordered pair of schema variants is decided or declined with a reason |
 | `tests/test_form_ledger.py` | every form the schema-language pages tabulate is driven by a test |
 | `tests/test_surface_outcomes.py` | every outcome the binding's docstrings name is asserted by a test |
-| `tests/test_citation_ledger.py` | every numbered result the theory page cites names a work on the shelf |
+| `tests/test_citation_ledger.py` | every numbered result the theory pages cite is one a paper on the shelf states |
 | `tests/test_boundary_ledger.py` | every entry of the published decidability boundary is driven by a test |
 | `tests/test_constraint_matrix.py` | every constraint is driven against every kind, narrowing it or refused |
 | `tests/test_python_lifecycle.py` | every supported interpreter is one CPython's calendar supports today |
