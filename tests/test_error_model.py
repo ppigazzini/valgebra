@@ -1,7 +1,9 @@
 import copy
 import json
 import pickle
+from typing import Annotated, Literal
 
+import annotated_types as at
 import pytest
 
 from valgebra import ValidationError, Validator
@@ -158,6 +160,40 @@ def test_a_string_key_with_no_text_is_named_not_read_as_empty() -> None:
         Validator(dict[str, int]).validate({"\ud800": "x", "": "y"})
     paths = {error["path"] for error in info.value.errors}
     assert paths == {("",), (repr("\ud800"),)}
+
+
+def test_a_value_a_union_admits_is_never_summarized() -> None:
+    """A member builds no report, so nothing reads its repr.
+
+    `validate` explained a union by walking each branch in explaining mode, and
+    a branch refusing the value by its kind summarized it -- running the
+    value's `__repr__` once for each branch before the one that matched. A repr
+    that raised `MemoryError` made `validate` raise for a member.
+    """
+    reprs = []
+
+    class Seen:
+        def __repr__(self) -> str:
+            reprs.append(self)
+            return "Seen()"
+
+    class Unrepresentable:
+        def __repr__(self) -> str:
+            raise MemoryError
+
+    for schema, value in [
+        (int | Seen, Seen()),
+        (list[int | Seen], [Seen(), Seen()]),
+        (Literal[1, "a"] | Seen, Seen()),
+        (Annotated[list[int], at.MinLen(1)] | Seen, Seen()),
+        (dict[str, int] | Seen, Seen()),
+        (int | Unrepresentable, Unrepresentable()),
+    ]:
+        compiled = Validator(schema)
+        compiled.validate(value)
+        compiled.validate(value, fail_fast=True)
+        assert compiled.ensure(value) is value
+    assert reprs == []
 
 
 def test_the_error_model_is_built_when_it_is_asked_for() -> None:

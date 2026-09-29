@@ -473,6 +473,70 @@ fn a_union_names_a_class_branch_by_its_class() {
     });
 }
 
+/// A value a union admits is never summarized.
+///
+/// Explaining a union walked every branch in explain mode, and a branch that
+/// refused the value by its kind built a violation nothing kept, summarizing
+/// the value in it -- which ran the value's `__repr__` once for each branch
+/// before the one that matched. The repr here counts. Each union below admits
+/// the value through its last branch and must leave the count at zero, in both
+/// explaining modes; a union the value does not belong to summarizes it, which
+/// is what the count is able to see.
+#[test]
+fn a_value_a_union_admits_is_never_summarized() {
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Seen:\n\
+              \x20   reprs = 0\n\
+              \x20   def __repr__(self):\n\
+              \x20       Seen.reprs += 1\n\
+              \x20       return 'Seen()'\n",
+            c"seen.py",
+            c"seen",
+        )
+        .expect("the module compiles");
+        let seen = module.getattr("Seen").expect("the class");
+        let value = seen.call0().expect("an instance");
+        let one = 1i64.into_pyobject(py).unwrap().into_any().unbind();
+        let pool: Vec<Py<PyAny>> = vec![seen.clone().unbind(), one];
+        let reprs = || {
+            seen.getattr("reprs")
+                .and_then(|count| count.extract::<i64>())
+                .expect("the count reads")
+        };
+        let ints = Schema::list(SeqShape::homogeneous(Schema::Int));
+        let refused = [
+            Schema::Int,
+            Schema::Str,
+            Schema::Literal(ConstIx::new(1)),
+            ints.clone(),
+            Schema::Refine {
+                base: Arc::new(ints),
+                constraints: vec![Constraint::MinLen(1)].into(),
+            },
+        ];
+        for branch in refused {
+            let union = Schema::Union(vec![branch, Schema::Instance(ClassIx::new(0))].into());
+            for mode in [WalkMode::Explain, WalkMode::ExplainFailFast] {
+                let (admitted, violations) = explain_in(py, &union, &value, &pool, &[], mode);
+                assert!(admitted, "{union:?} admits the instance");
+                assert!(violations.is_empty(), "{union:?} reports nothing");
+            }
+        }
+        assert_eq!(reprs(), 0, "no branch summarized a value the union admits");
+        let (admitted, _) = explain(
+            py,
+            &Schema::Union(vec![Schema::Int, Schema::Str].into()),
+            &value,
+            &pool,
+            &[],
+        );
+        assert!(!admitted);
+        assert!(reprs() > 0, "a union the value is outside summarizes it");
+    });
+}
+
 /// `(schema, value, expected)` over an empty pool and no definitions.
 fn case(py: Python<'_>, schema: &Schema, value: &Bound<'_, PyAny>, expected: bool) {
     assert_eq!(

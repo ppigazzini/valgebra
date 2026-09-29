@@ -40,6 +40,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: an error path names each key by what it holds
 - fix: a signal an element's repr raises once propagates from a summary
 - fix: building a validator and asking a relation carry a fatal signal out
+- fix: validate explains no union branch that refuses a value by its kind
 
 -->
 
@@ -213,6 +214,13 @@ answer of its own, or a repair to a change not yet released.
   ordinary exception gets, and an interrupted `isinstance(bound, Number)` as a
   bound with no order, refused with a `NotImplementedError` about the wrong
   cause. Each raises the signal.
+- **`validate` explains no union branch that refuses a value by its kind.** Such
+  a branch fails at the union's own location, where a report reads only the
+  union's label, and explaining it summarized the value: `validate` ran a
+  member's `__repr__` once for each branch before the one that matched, and a
+  repr raising `MemoryError` made it raise for a member. The branch is decided
+  without being explained; the report for a value no branch admits is
+  unchanged.
 
 ## [0.0.14] - 2026-09-26
 

@@ -111,6 +111,17 @@ its walk records -- with a tie keeping the earliest branch so the choice is
 deterministic. When no branch makes progress — every branch a flat type mismatch
 — it falls back to one union error.
 
+**A branch whose failure no report reads is not explained.** A scalar kind, a
+literal, and any branch whose kind refuses the value before its constraints or
+contents are read fail at the union's own location with a mismatch, and such a
+failure reaches a report only as the union's label. `decided_quietly` settles
+those branches without explaining them, so a value the union admits builds no
+violation and its `__repr__` never runs. Explained, `int | Foo` summarized a
+`Foo` for the `int` branch before the `Foo` branch matched, and a repr that
+raised made `validate` raise for a member. It holds each level the branch's own
+walk would enter, so at the depth bound the branch is explained and reports the
+bound, as it did.
+
 **Each branch is walked in the caller's mode.** The choice reads the first
 failure only, which a walk stopped there has measured, so under fail-fast a
 branch is walked to its first failure and no further: the report costs a

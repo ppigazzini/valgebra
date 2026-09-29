@@ -52,7 +52,10 @@ mod scalar;
 mod sequence;
 
 use record::{Decided, check_attr_record, keyed_map_explain, keyed_map_matches};
-use scalar::{admit, check_literal, check_refine, homogeneous_scalar, scalar_admits, scalar_of};
+use scalar::{
+    admit, check_literal, check_refine, homogeneous_scalar, is_of_its_kind, scalar_admits,
+    scalar_of,
+};
 use sequence::{check_frozenset, check_seq, check_set};
 
 /// Where a walk is, and what it has found there, beside the context it reads.
@@ -812,6 +815,11 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
             }
             continue;
         }
+        match decided_quietly(branch_schema, value, ctx) {
+            Some(true) => return true,
+            Some(false) => continue,
+            None => {}
+        }
         let mut branch = Vec::new();
         let matched = {
             let mut probing = Frame::new(&mut *frame.path, &mut branch, ctx);
@@ -869,6 +877,43 @@ fn explain_union(members: &[Schema], value: &Value<'_, '_>, frame: &mut Frame<'_
         }
     }
     false
+}
+
+/// A union branch whose failure, if it fails, is one no report reads: its
+/// answer, decided without explaining it, or `None` for a branch to explain.
+///
+/// A scalar kind or a literal fails at the union's own location, with a
+/// mismatch, and so does any branch whose kind refuses the value before its
+/// constraints or contents are read. [`explain_union`] reports such a failure
+/// only through the union's label, so explaining the branch built a violation
+/// nothing kept -- and summarizing the value in it ran the value's `__repr__`.
+/// A value a union *admits* had its repr run once for each branch before the
+/// one that matched, and a repr that raised a fatal signal made `validate`
+/// raise for a member.
+///
+/// Each level the branch's own walk would enter is held while it is decided,
+/// as [`member`] holds it: at the walk's depth bound the branch records the
+/// bound instead, which a report does read, so there it is explained.
+fn decided_quietly(schema: &Schema, value: &Value<'_, '_>, ctx: Ctx<'_>) -> Option<bool> {
+    if ctx.fatal_seen.get() {
+        return Some(false);
+    }
+    let _level = ctx.descend()?;
+    if let Some(kind) = scalar_of(schema) {
+        return Some(scalar_admits(kind, value));
+    }
+    match schema {
+        Schema::Literal(index) => Some(check_literal(
+            *index,
+            value,
+            &mut Frame::new(&mut Vec::new(), &mut Vec::new(), fast(ctx)),
+        )),
+        Schema::Refine { base, .. } => decided_quietly(base, value, ctx).filter(|admits| !admits),
+        Schema::Seq { .. } | Schema::Coll { .. } | Schema::KeyedMap { .. } => {
+            (!is_of_its_kind(schema, value)).then_some(false)
+        }
+        _ => None,
+    }
 }
 
 fn check_intersection(

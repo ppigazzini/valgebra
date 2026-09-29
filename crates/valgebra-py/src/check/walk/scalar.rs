@@ -338,10 +338,10 @@ fn length_holds(
 
 /// Whether `value` passes the kind test a container base makes before reading
 /// any element: a list or a JSON array, a tuple, a set, a frozenset, a dict or
-/// a JSON object. The tests are the ones each container's walk makes first. One
-/// that disagreed with its walk would move a report and never a verdict, since
-/// the value must satisfy the base and every bound either way.
-fn is_of_its_kind(base: &Schema, value: &Value<'_, '_>) -> bool {
+/// a JSON object. The tests are the ones each container's walk makes first, and
+/// they have to stay those: a union decides a branch refused here without
+/// walking it, so a test refusing a value the walk admits would move a verdict.
+pub(super) fn is_of_its_kind(base: &Schema, value: &Value<'_, '_>) -> bool {
     match (base, value) {
         (Schema::Seq { container, .. }, Value::Py(v)) => match container {
             SeqKind::List => v.is_instance_of::<PyList>(),
