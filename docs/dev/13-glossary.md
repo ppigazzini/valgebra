@@ -58,6 +58,7 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **gate** | a step that **asserts** and exits non-zero when the assertion breaks. A step that only builds, measures or records is not one |
 | **lane** | one independently driven run: a CI job, or one target inside a step that drives several |
 | **the oracle** (in testing) | a judge of a claim that does not go through the code under test. The denotation predicate, pydantic-core, jsonschema |
+| **sweep** | one cargo-mutants run over a scope -- the core, the binding's walk, or the binding under the Python suite -- whose survivors are held to that scope's baseline in `scripts/`; a push sweeps the core's and the walk's files a change touches, and the nightly lanes each whole scope |
 | **survivor** | a mutation of the source the tests did not notice. A signal about the tests, never about the mutation |
 | **equivalent mutant** | a mutation that provably cannot change any result, so no test can kill it. Excluded with its argument, never counted as a gap |
 | **rig fault** | a run that produced no verdict — a timeout, an empty corpus, a mutation whose experiment cannot finish. Neither a pass nor a failure, and reported as itself |
