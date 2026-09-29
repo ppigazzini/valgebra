@@ -44,6 +44,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a PyPy dict scan survives a key swapped mid-scan
 - fix: a key that is not a bare name is quoted in a message's location
 - fix: the pattern and depth labels name the set a value missed
+- fix: a record below the complement of two records is decided
 
 -->
 
@@ -242,6 +243,12 @@ answer of its own, or a repair to a change not yet released.
   levels of nesting, got [[...]]`, which reads the value as a count; they are
   `a value at most 512 levels deep` and `a value at most 128 recursive levels
   deep`.
+- **A record below the complement of two records is decided.** `{"t": int}`
+  against `complement({"t": str} | {"t": bytes})` answered `undecided`, where a
+  union of one record or of three decided: the set representation took the
+  complement of the complement, and where a field spanned two kinds that
+  rebuilt set cost more than a relation may spend. It meets the record with
+  the union itself.
 
 ## [0.0.14] - 2026-09-26
 

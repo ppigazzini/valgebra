@@ -179,11 +179,27 @@ impl Schema {
         if mine.emptiness() == Verdict::Empty {
             return Relation::Holds;
         }
-        let Some(theirs) = lower_unfolded(other, defs, Polarity::Narrow, pool) else {
+        // `¬other` is what the difference meets, and a complement's is its
+        // inner set, read on the widened side: `self ⊆ ¬inner` asks `self ∧
+        // inner = ∅`. Complementing the lowered `¬inner` would rebuild that set
+        // from a double negation, and where the negation expands -- a record
+        // whose field spans two kinds expands into more atoms than it began
+        // with -- the meet with the rebuilt form spends past the allowance a
+        // meet with the inner set fits in: `{"t": int} ⊆ ¬({"t": str} ∪
+        // {"t": bytes})` declines that way, while three field kinds, whose
+        // complement stays negated, decide.
+        let (theirs, negate) = match other {
+            Schema::Complement(inner) => {
+                (lower_unfolded(inner, defs, Polarity::Widen, pool), false)
+            }
+            _ => (lower_unfolded(other, defs, Polarity::Narrow, pool), true),
+        };
+        let Some(theirs) = theirs else {
             return Relation::Unknown;
         };
         budget::under(WORK, || {
-            mine.intersect(&theirs.complement())
+            let outside = if negate { theirs.complement() } else { theirs };
+            mine.intersect(&outside)
                 .map(|difference| difference.emptiness())
         })
         .map_or(Relation::Unknown, |emptiness| {

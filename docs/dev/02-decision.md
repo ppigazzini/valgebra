@@ -179,6 +179,14 @@ fragment the sets decide, and `decision/tests.rs` carries the two record splits
 either side of it: a record over eight corners decides, one over sixteen
 declines, and a decline is "not proven within what a build may spend".
 
+**Against a complement, the difference meets the inner set.** `a ∧ ¬¬x` is
+`a ∧ x`, and `x` is lowered on the widened side in place of complementing the
+lowered `¬x`. The double negation is not free: where `¬x` expands -- a record
+whose field spans two kinds expands into more atoms than it began with -- the
+meet with the rebuilt set spends past the allowance a meet with `x` fits in, so
+`{"t": int} ⊆ ¬({"t": str} ∪ {"t": bytes})` would decline while one and three
+field kinds decide. `decision/tests.rs` holds the widths from one to four.
+
 **A ceiling reached by one spelling of a set and not another is a ceiling that
 decides relations.** The three lattices built from atoms -- maps, objects, sets
 -- carry a polarity, so a complement that does not fit as a union is held as the

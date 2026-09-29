@@ -889,6 +889,15 @@ _DECIDED = [
         complement(intersection(dict[str, int], complement({"a": int}))),
         id="tuple<=~(dict&~{a:int})",
     ),
+    # Two records, the width at which a field spanning two kinds expands the
+    # complement taken of the complement; the set representation meets the
+    # subject with the union itself.
+    pytest.param(
+        "subtype",
+        {"t": int},
+        complement(union({"t": str}, {"t": bytes})),
+        id="map:record<=the-complement-of-two-records",
+    ),
 ]
 
 # Known decision-completeness misses: true relations neither the rules nor the

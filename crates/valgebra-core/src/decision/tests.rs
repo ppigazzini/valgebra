@@ -2725,6 +2725,34 @@ fn a_refutation_about_a_part_with_no_value_is_not_one() {
     );
 }
 
+/// A record below the complement of a union of records is decided at every
+/// width.
+///
+/// The difference meets the subject with the complement's inner set.
+/// Complementing the lowered complement instead expands the double negation
+/// where a field spans two kinds, and the meet with the expansion spends past
+/// the allowance: that path declines a union of two records, where one and
+/// three decide.
+#[test]
+fn a_record_below_the_complement_of_a_record_union_is_decided_at_every_width() {
+    let kinds = [Schema::Str, Schema::Bytes, Schema::Float, Schema::NoneType];
+    let subject = closed(vec![field("t", Schema::Int, true)]);
+    let member = closed(vec![field("t", Schema::Str, true)]);
+    for width in 1..=kinds.len() {
+        let records = kinds[..width]
+            .iter()
+            .map(|kind| closed(vec![field("t", kind.clone(), true)]));
+        let outside = Schema::complement(Schema::union(records));
+        assert_eq!(
+            subject.descriptor_contained_in(&outside, &NoLeafRelations, &[]),
+            Relation::Holds,
+            "a record against the complement of {width} records"
+        );
+        assert!(subject.is_subtype_of(&outside), "width {width}");
+        assert!(!member.is_subtype_of(&outside), "a member, width {width}");
+    }
+}
+
 /// A key the supertype requires and the subject does not declare refutes the
 /// inclusion, whatever the subject's clauses say.
 ///
