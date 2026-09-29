@@ -31,7 +31,6 @@
 //! [`member`] call returns at once) and the entry point re-raises it, so an
 //! interrupted check stops instead of being silently reported as a non-member.
 
-use pyo3::exceptions::{PyException, PyMemoryError, PyRecursionError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
@@ -344,18 +343,7 @@ fn stop(ctx: Ctx<'_>) -> bool {
     ctx.mode.stops_at_first()
 }
 
-/// Whether a raised error is a *fatal* interpreter signal that must propagate
-/// rather than fold to non-membership. Two disjoint cases: a base exception that
-/// is not an ordinary exception (`KeyboardInterrupt`, `SystemExit`,
-/// `GeneratorExit`), and `MemoryError`/`RecursionError` — which *are* ordinary
-/// exceptions, so the `PyException` test alone misses them, yet they mean "the
-/// interpreter cannot continue", not "this value is not a member". Any other
-/// exception is an ordinary failed comparison and folds to a non-member.
-pub(super) fn is_fatal(err: &PyErr, py: Python<'_>) -> bool {
-    !err.is_instance_of::<PyException>(py)
-        || err.is_instance_of::<PyMemoryError>(py)
-        || err.is_instance_of::<PyRecursionError>(py)
-}
+pub(crate) use crate::errors::is_fatal;
 
 /// Record the first fatal signal so the walk unwinds (every later `member` call
 /// returns at once) and the entry point re-raises it.

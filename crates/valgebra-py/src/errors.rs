@@ -1,6 +1,7 @@
 //! Error construction: violation summaries, value labels, and the Python
 //! `ValidationError` raised from a [`valgebra_core::Violation`].
 
+use pyo3::exceptions::{PyException, PyMemoryError, PyRecursionError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
@@ -60,6 +61,20 @@ fn bounded_repr(py: Python<'_>) -> Option<&Py<PyAny>> {
         .ok()
 }
 
+/// Whether a raised error is a *fatal* interpreter signal that must propagate
+/// rather than fold to an answer. Two disjoint cases: a base exception that is
+/// not an ordinary exception (`KeyboardInterrupt`, `SystemExit`,
+/// `GeneratorExit`), and `MemoryError`/`RecursionError` — which *are* ordinary
+/// exceptions, so the `PyException` test alone misses them, yet they mean "the
+/// interpreter cannot continue", not "this value is not a member". Any other
+/// exception is an ordinary failed comparison, and the site that caught it
+/// answers for it.
+pub(crate) fn is_fatal(err: &PyErr, py: Python<'_>) -> bool {
+    !err.is_instance_of::<PyException>(py)
+        || err.is_instance_of::<PyMemoryError>(py)
+        || err.is_instance_of::<PyRecursionError>(py)
+}
+
 /// A short repr-style summary of a value for error messages.
 ///
 /// A container is rendered under a bound rather than rendered and then cut. The
@@ -92,13 +107,19 @@ pub(crate) fn try_summarize(value: &Bound<'_, PyAny>) -> PyResult<String> {
     {
         return Ok(shorten(value.repr()?.to_string(), SUMMARY_CHARS));
     }
-    let rendered = bounded_repr(value.py())
-        .and_then(|repr| {
-            repr.bind(value.py())
-                .call_method1(intern!(value.py(), "repr"), (value,))
-                .ok()
-        })
-        .and_then(|text| text.extract::<String>().ok());
+    let py = value.py();
+    let rendered = match bounded_repr(py) {
+        Some(repr) => match repr.bind(py).call_method1(intern!(py, "repr"), (value,)) {
+            Ok(text) => text.extract::<String>().ok(),
+            // `reprlib` catches what an element's `__repr__` raises and prints a
+            // placeholder, so what reaches here is a signal it let through --
+            // `KeyboardInterrupt` among them -- and the plain repr below would
+            // run the element again and read it as a value with a repr.
+            Err(err) if is_fatal(&err, py) => return Err(err),
+            Err(_) => None,
+        },
+        None => None,
+    };
     match rendered {
         Some(text) => Ok(shorten(text, SUMMARY_CHARS)),
         // `reprlib` is a standard-library module and the call is total, so this

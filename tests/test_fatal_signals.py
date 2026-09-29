@@ -173,3 +173,46 @@ def test_fatal_signal_propagates_through_the_json_entries(
         validator.validate_json("1")
     with pytest.raises(signal):
         validator.load("1")
+
+
+def test_an_ordinary_exception_from_reprlib_leaves_the_plain_repr() -> None:
+    """A container `reprlib` cannot render is summarized by its own `repr`.
+
+    `reprlib` reads a class by its name and module, so a `list` subclass named
+    `list` in `builtins` is read as the builtin, through its own `__len__`. One
+    that raises reaches the summary as an ordinary exception, which is no
+    signal: the value's `repr` still names it, where reading the raise as a
+    signal would print it as `<unrepresentable>`.
+    """
+
+    def no_length(_: object) -> int:
+        raise ValueError
+
+    impostor = type("list", (list,), {"__module__": "builtins", "__len__": no_length})
+    with pytest.raises(ValidationError) as caught:
+        Validator(int).validate(impostor([1, 2]))
+    assert caught.value.errors[0]["value"] == "[1, 2]"
+
+
+@pytest.mark.parametrize("signal", [KeyboardInterrupt, SystemExit])
+def test_a_signal_an_elements_repr_raises_once_propagates_from_the_summary(
+    signal: type[BaseException],
+) -> None:
+    """A container's summary is `reprlib`'s, and it lets a signal through.
+
+    Once through, the plain `repr` behind it ran the element a second time and
+    read the answer as the value's summary, so a signal delivered once -- as a
+    real interrupt is -- vanished into a `ValidationError`. `reprlib` catches
+    `MemoryError` and `RecursionError` itself, which is the standard library's
+    reading of them and not this one's.
+    """
+    shots = [signal]
+
+    class Once:
+        def __repr__(self) -> str:
+            if shots:
+                raise shots.pop()
+            return "Once()"
+
+    with pytest.raises(signal):
+        Validator(int).validate([Once()])

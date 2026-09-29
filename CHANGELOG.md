@@ -38,6 +38,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a length bound past a sequence's own lengths is empty -- internal
 - fix: a PyPy tuple or dict subclass is read for what it holds
 - fix: an error path names each key by what it holds
+- fix: a signal an element's repr raises once propagates from a summary
 
 -->
 
@@ -197,6 +198,11 @@ answer of its own, or a repair to a change not yet released.
   integer's value is. A `str` key holding a lone surrogate read as the empty
   string and named the entry `d[""]` is; it appears as its `repr`, like any
   key a path cannot spell.
+- **A signal an element's `__repr__` raises once propagates from a summary.** A
+  container is summarized through `reprlib`, which lets a `KeyboardInterrupt`
+  through; the plain `repr` behind it then ran the element again and read its
+  answer as the summary, so a signal delivered once, as an interrupt is,
+  became a `ValidationError`.
 
 ## [0.0.14] - 2026-09-26
 
