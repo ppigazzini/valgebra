@@ -55,26 +55,35 @@ BUDGET = 1_000_000
 TOLERANCE = 0.10
 
 
-def test_a_recorded_step_applies_to_its_own_base_and_no_other() -> None:
+def test_every_recorded_step_names_a_shape_and_says_why() -> None:
+    budget = json.loads((ROOT / "scripts" / "perf_budget.json").read_text("utf-8"))
+    for step in budget.get("steps", []):
+        assert step["shape"] in gate.MODES, step["shape"]
+        assert step["why"].strip(), step
+        assert 0 < float(step["ceiling"]) < 5
+
+
+def test_a_recorded_step_applies_to_its_own_base_and_no_other(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A step excuses the one comparison it was written for.
 
     It is recorded against the base count it steps from, so a base at or past
     the step measures the new count, stops matching the record, and is held to
     the ordinary ceiling again. That is what keeps a step from becoming a
-    standing excuse for a shape.
+    standing excuse for a shape. Driven from a record of its own: read off the
+    tree's file, the case held only while that file carried a `binding` step,
+    and it has carried none since.
     """
-    budget = json.loads((ROOT / "scripts" / "perf_budget.json").read_text("utf-8"))
-    steps = budget.get("steps", [])
-    for step in steps:
-        assert step["shape"] in gate.MODES, step["shape"]
-        assert step["why"].strip(), step
-        assert 0 < float(step["ceiling"]) < 5
+    record = tmp_path / "perf_budget.json"
+    step = {"shape": "binding", "base_irefs": 181_424_346, "ceiling": 0.5, "why": "x"}
+    record.write_text(json.dumps({"steps": [step]}), encoding="utf-8")
+    monkeypatch.setattr(gate, "BUDGET_FILE", record)
 
     stepped = gate.Measurement(irefs=181_424_346, checksum=1)
     moved_on = gate.Measurement(irefs=266_911_896, checksum=1)
-    if any(s["shape"] == "binding" for s in steps):
-        assert gate.recorded_step("binding", stepped) is not None
-        assert gate.recorded_step("binding", moved_on) is None
+    assert gate.recorded_step("binding", stepped) == step
+    assert gate.recorded_step("binding", moved_on) is None
     assert gate.recorded_step("core", stepped) is None
 
 
