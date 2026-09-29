@@ -11,9 +11,11 @@ late and for the wrong reason.
 Held here, both ways: every build row on a runner that can run its own output
 has a smoke row for its artifact, and every smoke row names an artifact a build
 row uploads. The musllinux wheels are the one accepted gap, with the reason the
-workflow gives beside them. And the PyPy wheel is built in a row of its own,
-without the profile: the rows that carry the profile name their interpreters,
-and none of them names PyPy.
+workflow gives beside them. A smoke is the product suite rather than an import,
+for the wheels and for the build from source, and the import it starts with
+fails on a warning. And the PyPy wheel is built in a row of its own, without
+the profile: the rows that carry the profile name their interpreters, and none
+of them names PyPy.
 
 LEDGER: every wheel the release builds on a runner is smoked there; PyPy's is plain
 """
@@ -76,7 +78,7 @@ def test_every_smoke_row_names_a_wheel_set_the_release_builds() -> None:
     assert not phantom, f"smoke rows naming an artifact no build row uploads: {phantom}"
 
 
-def test_pypy_is_built_plain_and_smoked_with_the_suite() -> None:
+def test_pypy_is_built_plain() -> None:
     """A profiled extension dies on PyPy at the depth bound; the plain one does not."""
     profiled = [row for row in BUILDS if row.get("pgo")]
     assert profiled, "no build row carries the profile"
@@ -89,9 +91,45 @@ def test_pypy_is_built_plain_and_smoked_with_the_suite() -> None:
         if not row.get("pgo") and "pypy" in str(row.get("interpreter", ""))
     ]
     assert plain_pypy, "no plain build row names PyPy"
-    for row in plain_pypy:
-        smoke = [smoke for smoke in SMOKES if smoke["artifact"] == _artifact(row)]
-        assert smoke, f"the PyPy wheel {_artifact(row)} has no smoke row"
-        assert all(item.get("suite") for item in smoke), (
-            f"the PyPy wheel {_artifact(row)} is not smoked with the product suite"
-        )
+    unsmoked = [
+        _artifact(row)
+        for row in plain_pypy
+        if not any(smoke["artifact"] == _artifact(row) for smoke in SMOKES)
+    ]
+    assert not unsmoked, f"PyPy wheel sets with no smoke row: {unsmoked}"
+
+
+def _steps(job: str) -> list[dict[str, str]]:
+    return WORKFLOW["jobs"][job]["steps"]
+
+
+@pytest.mark.parametrize("job", ["smoke", "sdist-smoke"])
+def test_every_smoke_runs_the_product_suite(job: str) -> None:
+    """An import is not a smoke: the crash that shipped showed only in the suite.
+
+    A profiled PyPy build died at the walk's depth bound, which no import
+    reaches. Every row of the job runs the suite, so the step carries no
+    condition a row could leave unset.
+    """
+    runs = [
+        step
+        for step in _steps(job)
+        if '-m "not repository"' in str(step.get("run", ""))
+    ]
+    assert runs, f"{job} runs no product suite"
+    conditional = [str(step.get("name")) for step in runs if "if" in step]
+    assert not conditional, (
+        f"{job} runs the suite only where a row says so: {conditional}"
+    )
+
+
+@pytest.mark.parametrize("job", ["smoke", "sdist-smoke"])
+def test_every_smoke_import_fails_on_a_warning(job: str) -> None:
+    imports = [
+        str(step["run"])
+        for step in _steps(job)
+        if "import" in str(step.get("run", "")) and "valgebra as v" in str(step["run"])
+    ]
+    assert imports, f"{job} imports nothing"
+    silent = [run for run in imports if "-W error" not in run]
+    assert not silent, f"{job} imports with warnings left as warnings"

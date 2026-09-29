@@ -41,9 +41,10 @@ job condition in `release.yml` rather than a convention:
 
 - **The smoke must pass.** Each wheel set is imported on its own platform, on
   the floor, the newest release and the free-threaded builds where the set
-  carries a wheel for them, with the free-threaded import required to leave the
-  GIL off; the sdist is compiled from source and imported before the publish job
-  runs. A version cannot be replaced on an index once uploaded, only yanked, so
+  carries a wheel for them, with every warning an error and the free-threaded
+  import required to leave the GIL off, and the product suite runs on each; the
+  sdist is compiled from source, imported and put through the same suite before
+  the publish job runs. A version cannot be replaced on an index once uploaded, only yanked, so
   a broken wheel has to fail before the upload rather than after it.
 - **`confirm_version` must equal the version in the built wheels**, and an empty
   input aborts. A dispatch cannot publish a version the run did not build.
@@ -91,7 +92,8 @@ release waits for whatever reviewers those environments require.
 
 ## Checking an index (steps 3 and 5)
 
-The workflow's smoke jobs prove each **artifact** imports. They cannot prove the
+The workflow's smoke jobs prove each **artifact** imports and passes the product
+suite. They cannot prove the
 **index** serves it: resolution, the wheel a real interpreter selects, and the
 metadata a caller reads are all downstream of the upload. That is what these steps
 check, and they are the only steps that do.
@@ -131,8 +133,9 @@ wheels are different builds: plain rather than profile-guided, since a
 profiled extension crashes there at the walk's depth bound (`release.yml`
 says how), one per ABI tag since PyPy 8.0 changed it, and the push lane's PyPy
 leg runs the suite on a wheel it builds itself. The release smoke runs the
-product suite on each PyPy wheel that ships, and `tests/test_release_smoke.py`
-holds every wheel the release builds on a runner to a smoke row there.
+product suite on every wheel set that ships, PyPy's included, and
+`tests/test_release_smoke.py` holds every wheel the release builds on a runner
+to a smoke row there that runs it.
 
 **Do not add PyPI as a second index while checking TestPyPI.** uv resolves a name
 from the first index that carries it, so `--extra-index-url https://pypi.org/simple/`
@@ -176,7 +179,7 @@ free-threaded build can fail to co-install in one step. On macOS a free-threaded
 install also answers to the release's name, and `--find-interpreter` found it
 there in the release's place, so the macOS builds find each interpreter in the
 tool cache `setup-python` records it in, under the runner's architecture, and
-ask it which build it is -- a framework path holds only some releases. The Windows arm64 smoke imports
+ask it which build it is -- a framework path holds only some releases. The Windows arm64 smoke runs
 on the arm64 interpreters `setup-python` installs, because uv's own build of a
 release candidate can be x64 alone. The maturin a release builds with is the one `uv.lock`
 resolves, pinned in the workflow rather than taken as the newest. A version
@@ -213,9 +216,10 @@ commit, and its message names the edit. It does not read the wheels
 - **A platform outside the smoke matrix.** The musllinux wheels are built and not
   imported by CI — running them needs a musl interpreter, a lane that does not
   exist — so the first musl install is a user's.
-- **A source install.** `uv pip install` takes the wheel; the sdist path is
-  compiled once by the workflow, on Linux, and `--no-binary valgebra` locally is
-  the only way to reach it on another platform.
+- **A source install off Linux.** `uv pip install` takes the wheel; the sdist
+  path is compiled and tested once by the workflow, on Linux, and
+  `--no-binary valgebra` locally is the only way to reach it on another
+  platform.
 - **A published version that is wrong.** It cannot be replaced, only yanked, and
   the workflow refuses a version the index already serves. The remedy is the next
   patch version, which is why step 3 exists before step 4.

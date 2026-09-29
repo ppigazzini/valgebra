@@ -51,9 +51,9 @@ wheels are plain release builds, where the CPython wheels are profile-guided:
 a profiled extension runs out of the native stack budget `cpyext` sizes from
 the recursion limit before the walk reaches its own depth bound, and the
 process dies where the plain build reports the bound. The release runs the
-whole suite on each manylinux PyPy wheel it ships, on the PyPy it is built for,
-not only on the one the push lane builds; the musllinux one, like every
-musllinux wheel, is built and never run
+product suite on every wheel it ships but the musllinux ones -- each PyPy wheel
+on the PyPy it is built for, not only on the one the push lane builds -- and
+the musllinux wheels are built and never run
 ([dev/09-releasing.md](dev/09-releasing.md)). There is no PyPy wheel for macOS
 or Windows, where the source distribution is the install.
 

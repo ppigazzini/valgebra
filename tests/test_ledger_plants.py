@@ -536,6 +536,7 @@ def _import_an_unshipped_module(tree: Path) -> None:
     _write(tree, "tests/_planted_import.py", "import _planted_stdlib\n")
 
 
+
 #: The marker the bound ledger reads, spelled from its pieces: the ledger reads
 #: every test file, this one included, and would take a plant's marker for a
 #: test driving the bound.
@@ -1160,7 +1161,7 @@ PLANTS = (
         ),
         trips=(
             "test_every_built_wheel_set_is_smoked_or_excused",
-            "test_pypy_is_built_plain_and_smoked_with_the_suite",
+            "test_pypy_is_built_plain",
         ),
     ),
     Plant(
@@ -2582,6 +2583,33 @@ PLANTS = (
         trips=("test_the_matrices_were_read",),
     ),
     Plant(
+        # The suite made a row's choice: the rows that do not say so ship on
+        # an import alone.
+        "tests/test_release_smoke.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            "      - name: Run the product suite on the built wheel\n",
+            "      - name: Run the product suite on the built wheel\n"
+            "        if: ${{ matrix.wheel.suite }}\n",
+        ),
+        trips=("test_every_smoke_runs_the_product_suite",),
+    ),
+    Plant(
+        # The import's warnings left as warnings: a deprecation at import time
+        # reaches a user's log rather than failing the release.
+        "tests/test_release_smoke.py",
+        (".github/workflows/release.yml",),
+        lambda tree: _edit(
+            tree,
+            ".github/workflows/release.yml",
+            '"$bin/python" -W error -c',
+            '"$bin/python" -c',
+        ),
+        trips=("test_every_smoke_import_fails_on_a_warning",),
+    ),
+    Plant(
         # A job every push runs, accepted by the gate as `skipped`.
         "tests/test_required_jobs.py",
         (".github/workflows/ci.yml",),
@@ -3390,11 +3418,11 @@ PLANTS = (
         trips=("test_every_excused_tool_is_in_the_dev_group",),
     ),
     Plant(
-        # A pin respelled so the scan's key stops matching: one of the two
-        # installs drops out of the ledger, which reads the other as all there is.
+        # A pin respelled so the scan's key stops matching: the release's
+        # installs drop out of the ledger, which reads the rest as all there is.
         "tests/test_suite_installs.py",
         (".github/workflows/release.yml",),
-        lambda tree: _edit(
+        lambda tree: _replace_all(
             tree, ".github/workflows/release.yml", '"pytest>=', '"pytest~='
         ),
         trips=("test_the_scan_reads_the_installs_that_are_there",),

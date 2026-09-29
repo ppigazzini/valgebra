@@ -769,9 +769,9 @@ wrongly, which is worse than not answering it.
 PyPy 3.11 wheels, and a push that does not link against PyPy cannot see what
 breaks there: `cpyext` carries the limited API and not every static type object
 CPython exports, so an extension naming one links on CPython and fails at
-`import` on PyPy. The release smoke runs the suite on the PyPy wheel it
-ships, but a release is where a break is dearest to find, so the push runs
-one first. The `pypy 3.11`
+`import` on PyPy. The release smoke runs the suite on every wheel it ships,
+the PyPy ones included, but a release is where a break is dearest to find, so
+the push runs one first. The `pypy 3.11`
 job builds a release wheel against PyPy and runs `scripts/pypy_import_check.py`
 first, which imports it and builds the annotation forms whose compilation
 reaches a type object: that is the *link*, and it fails with one line naming the

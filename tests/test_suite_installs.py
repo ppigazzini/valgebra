@@ -58,17 +58,29 @@ def _dev_group() -> set[str]:
     return {_name(entry) for entry in groups["dev"] if isinstance(entry, str)}
 
 
+def _jobs() -> list[tuple[str, dict]]:
+    return [
+        (f"{path.name}: {name}", job)
+        for path in sorted(WORKFLOWS.glob("*.yml"))
+        for name, job in yaml.safe_load(path.read_text(encoding="utf-8"))
+        .get("jobs", {})
+        .items()
+    ]
+
+
+def _is_suite_install(run: str) -> bool:
+    return "uv pip install" in run and '"pytest>=' in run
+
+
 def _installs() -> dict[str, set[str]]:
     """Every step installing a suite's packages by hand, by where it is."""
     found: dict[str, set[str]] = {}
-    for path in sorted(WORKFLOWS.glob("*.yml")):
-        workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
-        for job_name, job in workflow.get("jobs", {}).items():
-            for step in job.get("steps", []):
-                run = step.get("run", "")
-                if "uv pip install" in run and '"pytest>=' in run:
-                    where = f"{path.name}: {job_name}: {step.get('name', run[:40])}"
-                    found[where] = {_name(name) for name in REQUIREMENT.findall(run)}
+    for job_name, job in _jobs():
+        for step in job.get("steps", []):
+            run = step.get("run", "")
+            if _is_suite_install(run):
+                where = f"{job_name}: {step.get('name', run[:40])}"
+                found[where] = {_name(name) for name in REQUIREMENT.findall(run)}
     return found
 
 
@@ -95,8 +107,29 @@ def test_every_excused_tool_is_in_the_dev_group() -> None:
 
 
 def test_the_scan_reads_the_installs_that_are_there() -> None:
-    """The other direction: a scan finding nothing would pass having read nothing."""
-    installs = _installs()
-    assert len(installs) >= 2, sorted(installs)
-    for where, installed in installs.items():
+    """The other direction: a job the scan misses would pass having read nothing.
+
+    Held to the jobs that run the suite with no `uv sync` -- the ones that must
+    install it by hand -- rather than to a count, which a job added beside the
+    others clears while one of them drops out.
+    """
+    by_hand = {
+        name
+        for name, job in _jobs()
+        if any("-m pytest" in str(step.get("run", "")) for step in job.get("steps", []))
+        and not any(
+            "uv sync" in str(step.get("run", "")) for step in job.get("steps", [])
+        )
+    }
+    assert by_hand, "no job runs the suite on a hand install"
+    scanned = {
+        name
+        for name, job in _jobs()
+        if any(
+            _is_suite_install(str(step.get("run", ""))) for step in job.get("steps", [])
+        )
+    }
+    unread = sorted(by_hand - scanned)
+    assert not unread, f"jobs running the suite whose install the scan misses: {unread}"
+    for where, installed in _installs().items():
         assert "pytest" in installed, where
