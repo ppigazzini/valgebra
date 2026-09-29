@@ -37,6 +37,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the unsupported-form refusal names every subscripted form it reads
 - fix: a length bound past a sequence's own lengths is empty -- internal
 - fix: a PyPy tuple or dict subclass is read for what it holds
+- fix: an error path names each key by what it holds
 
 -->
 
@@ -189,6 +190,13 @@ answer of its own, or a repair to a change not yet released.
   and one overriding `__getitem__` by `dict[str, int]`. Such a value is copied
   through the base type's own methods and the copy is walked, which reads what
   CPython read all along.
+- **An error path names each key by what it holds.** A big integer key was
+  spelled by its own `__str__`, so an `int` subclass answering `"7"` named
+  another key, and one raising `KeyboardInterrupt` lost the signal and was
+  spelled as a string. Its digits are read from its storage, as a small
+  integer's value is. A `str` key holding a lone surrogate read as the empty
+  string and named the entry `d[""]` is; it appears as its `repr`, like any
+  key a path cannot spell.
 
 ## [0.0.14] - 2026-09-26
 

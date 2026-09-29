@@ -122,6 +122,44 @@ def test_a_key_that_is_neither_a_string_nor_an_integer_is_named_not_spelled() ->
     assert info.value.errors[0]["path"] == ("2",)
 
 
+def test_a_big_integer_key_is_named_by_its_stored_digits() -> None:
+    """The digits come from the storage, as a small integer's value does.
+
+    A subclass's `__str__` answers what it likes: a spelling of another key, or
+    a raise the path folded into the key's `repr` -- a string, which indexes
+    nothing.
+    """
+
+    class Lying(int):
+        __hash__ = int.__hash__
+
+        def __str__(self) -> str:
+            return "7"
+
+    class Raising(int):
+        __hash__ = int.__hash__
+
+        def __str__(self) -> str:
+            raise KeyboardInterrupt
+
+    for key in (Lying(2**70), Raising(2**70)):
+        with pytest.raises(ValidationError) as info:
+            Validator(dict[int, int]).validate({key: "x"})
+        assert info.value.errors[0]["path"] == (2**70,)
+
+
+def test_a_string_key_with_no_text_is_named_not_read_as_empty() -> None:
+    """A lone surrogate has no UTF-8 spelling, so the key appears as its repr.
+
+    Read as the empty string, it named the entry `d[""]` is, and the two
+    failures below carried one path.
+    """
+    with pytest.raises(ValidationError) as info:
+        Validator(dict[str, int]).validate({"\ud800": "x", "": "y"})
+    paths = {error["path"] for error in info.value.errors}
+    assert paths == {("",), (repr("\ud800"),)}
+
+
 def test_the_error_model_is_built_when_it_is_asked_for() -> None:
     """A caller that logs `str(error)` should not pay for the whole model.
 

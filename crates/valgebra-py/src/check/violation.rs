@@ -150,21 +150,37 @@ pub(crate) fn class_label_in(class: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> String {
 /// error model says a path is walkable only when every key is one of the two.
 ///
 /// A `bool` is an `int` in Python, and `d[True]` is the entry `d[1]` is, so a
-/// boolean key takes the integer path and reads as `1` or `0`.
+/// boolean key takes the integer path and reads as `1` or `0`. A string holding
+/// a lone surrogate has no UTF-8 text to spell, so it appears as its `repr` too:
+/// read as the empty string, it named the entry `d[""]` is.
 pub(crate) fn key_segment(key: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> PathSegment {
     if let Ok(text) = key.cast::<PyString>() {
-        return PathSegment::Key(Arc::from(text.to_cow().unwrap_or_default().as_ref()));
-    }
-    if let Ok(number) = key.cast::<PyInt>() {
+        if let Ok(text) = text.to_cow() {
+            return PathSegment::Key(Arc::from(text.as_ref()));
+        }
+    } else if let Ok(number) = key.cast::<PyInt>() {
         // Every `int`, whatever its size, and `bool` with them: `d[True]` and
         // `d[1]` are one entry in Python, so the integer indexes back down to
         // the value while `'True'` indexed nothing at all.
         if let Ok(small) = number.extract::<i64>() {
             return PathSegment::IntKey(small);
         }
-        if let Ok(digits) = number.str() {
-            return PathSegment::BigIntKey(digits.to_string());
+        match stored_digits(number) {
+            Ok(digits) => return PathSegment::BigIntKey(digits),
+            Err(err) => record_if_fatal(err, key.py(), ctx),
         }
     }
     PathSegment::Key(Arc::from(summarize_in(key, ctx).as_str()))
+}
+
+/// An integer's decimal digits, read from its storage: `int.__repr__`, the
+/// base's own method, called on it. A subclass's `__str__` answers what it
+/// likes, which is a spelling of some other key or a raise; the small-integer
+/// path above reads the storage too, so both halves name the same entry.
+fn stored_digits(number: &Bound<'_, PyInt>) -> PyResult<String> {
+    let py = number.py();
+    py.get_type::<PyInt>()
+        .getattr(intern!(py, "__repr__"))?
+        .call1((number,))?
+        .extract()
 }
