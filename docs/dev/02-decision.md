@@ -697,9 +697,9 @@ those describe. They stop there, and the line is the cost: a law that needs a
 *containment* to see is a decision, and running one wherever a schema is built
 is the price this design refuses everywhere else.
 
-Absorption is the law on the far side of that line. `A | (A & B)` is `A` exactly
-when `A` contains `A & B`, so the two are one set and two terms: `is_equivalent`
-proves it and `==` does not. `is_empty` on a structural schema is true in places
+Absorption is the law on the far side of that line. It is one case of `A | B`
+folding to `A` wherever `A` contains `B`, so `A | (A & B)` and `A` are one set
+and two terms: `is_equivalent` proves it and `==` does not. `is_empty` on a structural schema is true in places
 construction leaves standing, for the same reason.
 
 (`simplify` was a pass that folded a little more than construction does. It is

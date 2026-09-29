@@ -333,9 +333,10 @@ All of them: a schema is built in the lattice normal form. Members of a union or
 a meet are flattened, ordered and deduplicated; the two identities are applied
 (`A | nothing` is `A`, `A & anything` is `A`) and the two absorbing elements too;
 `~~A` is `A`, `A | ~A` is the top, and `A & ~A` is the bottom. **Absorption is
-not among them**: `A | (A & B)` is `A` exactly when `A` contains `A & B`, and a
-containment is what the decision procedures answer rather than what a
-constructor folds ([02-decision.md](02-decision.md) draws the line).
+not among them**: `A | (A & B)` and `A` are one set and two terms. Absorption is
+one case of `A | B` folding to `A` wherever `A` contains `B`, and a containment
+is what the decision procedures answer rather than what a constructor folds
+([02-decision.md](02-decision.md) draws the line).
 
 The three complement laws differ from the rest in what they need. `~~A` holds of
 anything, because a complement is evaluated by negating what is under it, so

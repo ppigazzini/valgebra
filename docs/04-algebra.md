@@ -249,7 +249,8 @@ assert repr(Validator(Literal[2, 1])) == repr(Validator(Literal[1, 2]))
 ```
 
 **`==` is not `is_equivalent`.** Equality is what the constructors settle:
-flattening, identities, absorption, the complement laws, and the orders above.
+flattening, identities, the absorbing elements, the complement laws, and the
+orders above.
 Equivalence is what the decision procedures *prove*, and it decides a great deal
 more — `bool` and `Literal[True, False]` are one set and two terms.
 

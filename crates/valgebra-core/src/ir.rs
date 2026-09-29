@@ -676,28 +676,36 @@ pub enum Schema {
     /// Because `bool` is a subclass of `int`, this set is a subset of
     /// [`Schema::Int`]: `Bool` is a subtype of `Int`.
     Bool,
-    /// Denotes every `int` instance: `isinstance(x, int)`.
+    /// Denotes every value whose type is `int` or a subclass of it:
+    /// `issubclass(type(x), int)`. The type is the real one, not what a
+    /// `__class__` property answers, so a proxy `isinstance` admits is not a
+    /// member (`docs/14-soundness.md`).
     ///
     /// In Python `bool` is a subclass of `int`, so `True` and `False` are
     /// integers and are members of this set. No value is carved out: subtyping
     /// is subset inclusion, so [`Schema::Bool`] is a subtype of `Int` rather
     /// than disjoint from it.
     Int,
-    /// Denotes every `float` instance: `isinstance(x, float)`.
+    /// Denotes every value whose type is `float` or a subclass of it:
+    /// `issubclass(type(x), float)`, read as [`Schema::Int`] reads it.
     ///
     /// `int` does not subclass `float`, so `Int` and `Float` are disjoint and
     /// an integer is not a member.
     Float,
-    /// Denotes the `str` instances.
+    /// Denotes every value whose type is `str` or a subclass of it, read as
+    /// [`Schema::Int`] reads it.
     Str,
-    /// Denotes the `bytes` instances.
+    /// Denotes every value whose type is `bytes` or a subclass of it, read as
+    /// [`Schema::Int`] reads it.
     Bytes,
-    /// Denotes the typed singleton `{c}` for a fixed constant `c`: a value is a
-    /// member iff it has the *same type* as `c` and is equal to it. Same-type is
-    /// what makes this a singleton — Python's `==` conflates across types
-    /// (`1 == True == 1.0`), so equality alone would make `Literal[1]` also
-    /// admit `True` and `1.0`. Requiring `type(x) is type(c)` keeps the typing
-    /// spec's distinction between `Literal[1]`, `Literal[True]`, and
+    /// Denotes the values of `c`'s exact type that equal it, for a fixed
+    /// constant `c`: a value is a member iff it has the *same type* as `c` and is
+    /// equal to it. That is the typed singleton `{c}` for a constant whose `==`
+    /// is Python's usual one, and the empty set for `nan`, which equals nothing.
+    /// Same-type is what makes this a singleton — Python's `==` conflates across
+    /// types (`1 == True == 1.0`), so equality alone would make `Literal[1]`
+    /// also admit `True` and `1.0`. Requiring `type(x) is type(c)` keeps the
+    /// typing spec's distinction between `Literal[1]`, `Literal[True]`, and
     /// `Literal[1.0]`.
     ///
     /// The constant itself is not stored here — the core stays free of Python
@@ -938,10 +946,12 @@ impl Schema {
     /// was written in and the message a failed union reports lists its branches
     /// that way.
     ///
-    /// **Absorption is not applied.** `A | (A & B)` is `A` only when `A` contains
-    /// `A & B`, and containment is the decision procedure -- running it wherever
-    /// a schema is built is the cost this design refuses everywhere else. A rule
-    /// downstream may assume the form below and no more.
+    /// **Absorption is not applied.** `A | (A & B)` and `A` are one set and stay
+    /// two terms. Absorption is one case of `A | B` folding to `A` wherever `A`
+    /// contains `B`; that fold needs a containment, and containment is the
+    /// decision procedure -- running it wherever a schema is built is the cost
+    /// this design refuses everywhere else. A rule downstream may assume the form
+    /// below and no more.
     #[must_use]
     pub fn union(members: impl IntoIterator<Item = Schema>) -> Schema {
         Schema::union_within(members, &[])
@@ -1231,19 +1241,23 @@ pub enum Constraint {
     Le(OperandIx),
     /// `value < pool[i]`.
     Lt(OperandIx),
-    /// `len(value) >= n`.
+    /// The value holds at least `n` items: the count a builtin container
+    /// stores, and `len(value)` for any other value.
     MinLen(usize),
-    /// `len(value) <= n`.
+    /// The value holds at most `n` items, counted as [`Constraint::MinLen`]
+    /// counts them.
     MaxLen(usize),
     /// `value % pool[i] == 0`: a numeric multiple of the operand.
     MultipleOf(OperandIx),
     /// `pool[i](value)` is truthy. The documented Python-callback slow path.
     Predicate(PredIx),
-    /// The string fully matches this regular expression (anchored, `re.fullmatch`
-    /// semantics). The pattern is held inline rather than pooled; the bindings
-    /// compile it once and match natively. Like [`Constraint::Predicate`] it is a
-    /// leaf the decision procedure treats opaquely: two regex constraints relate
-    /// only when their patterns are identical.
+    /// The string fully matches this regular expression, anchored at both ends
+    /// as `re.fullmatch` anchors, in the Rust engine's dialect rather than `re`'s
+    /// (`docs/05-refinements.md`). The pattern is held inline rather than pooled;
+    /// the bindings compile it once and match natively. The structural rules
+    /// relate two patterns only when they are written identically; the set
+    /// representation reads a pattern as the regular language it denotes
+    /// (`descr/regular.rs`), so `Regex("a+")` is below `Regex("a*")`.
     Regex(String),
 }
 

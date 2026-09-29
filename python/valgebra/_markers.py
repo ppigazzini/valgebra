@@ -16,8 +16,10 @@ class Regex:
     Use as `Annotated[str, Regex(r"[0-9a-f]{24}")]`. The match is anchored — the
     whole string must match, as `re.fullmatch` does — and runs natively on the
     Rust path (a linear-time engine), so a pattern check stays on the validation
-    fast path rather than crossing into Python like a predicate. A bare
-    `re.Pattern` (from `re.compile`) is accepted as metadata too.
+    fast path rather than crossing into Python like a predicate. The pattern is
+    read in that engine's dialect, which differs from `re`'s where the
+    refinements guide lists. A `re.Pattern` is accepted as metadata too, with
+    its flags but for the few that guide refuses; a `bytes` pattern is refused.
 
     Immutable, because it is hashable: a marker whose `pattern` can be rebound
     after it is written into an `Annotated` is one whose hash changes while a

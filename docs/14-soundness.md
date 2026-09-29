@@ -44,7 +44,7 @@ S                accepts x  ⟺  x ∈ ⟦S⟧, by:
 Anything         always                         (⟦Anything⟧ = all values;
                                                  `Any` is this node, spelled)
 Nothing          never                          (⟦Nothing⟧ = ∅)
-Bool/Int/...     isinstance(x, T)               (the scalar region)
+Bool/Int/...     issubclass(type(x), T)         (the scalar region)
 Literal(c)       type(x) is type(c) and x == c  (typed singleton)
 Union(A_i)       some A_i accepts x             (∃: set union)
 Intersection     every A_i accepts x            (∀: set intersection)
@@ -71,9 +71,10 @@ For the Boolean nodes the equivalence is the definition of the set operation, so
 the step is immediate given the hypothesis on the children. For the structural
 nodes (`Seq`, `Coll`, `KeyedMap`) the walk evaluates the children exactly by
 hypothesis and combines them by the same connective the denotation uses. The
-scalar and `Instance` leaves reduce to `isinstance`, which is Python's own
-membership test for those sets, and `Literal` adds the same-type guard that keeps
-the constants `1`, `True` and `1.0` distinct.
+scalar leaves read the value's real type, not the `__class__` it declares (the
+trust base below says why); `Instance` reduces to `isinstance`, which is
+Python's own membership test for a class; and `Literal` adds the same-type guard
+that keeps the constants `1`, `True` and `1.0` distinct.
 
 ### Recursion terminates and stays exact
 

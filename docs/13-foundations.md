@@ -43,12 +43,14 @@ The laws hold of the schema a caller **builds**, not of a pass over it
 afterwards: `union`, `intersection` and `complement` produce the lattice normal
 form, so `union(int, int)` *is* `Validator(int)`, a member written twice in
 either order is one member, and a schema beside its own complement folds to a
-bound. Absorption is the law construction does **not** apply: `A | (A & B)` is
-`A` only when `A` contains `A & B`, and containment is the decision procedure
-rather than a shape -- so the two are equivalent sets and two terms.
-`repr` shows that form and `==` compares it. The deprecated `simplify` method
-folds nothing construction has not already folded; [the algebra
-guide](04-algebra.md) says what remains of it.
+bound. Absorption is the law construction does **not** apply: `A | (A & B)` and
+`A` are one set and two terms. Absorption is one case of `A | B` folding to `A`
+wherever `A` contains `B`, and that fold needs a containment, which is a
+decision rather than a shape. `repr` shows the built form and `==` compares it.
+The deprecated `simplify` method folds a few decisions more -- a meet of
+disjoint kinds to the bottom, a join covering every region to the top -- and the
+relations decide all of them; [the algebra guide](04-algebra.md) says what
+remains of it.
 
 ## Semantic (set-theoretic) subtyping
 

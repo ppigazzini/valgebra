@@ -656,15 +656,15 @@ Membership is unaffected — the walk reads the value.
 
 ## Classes
 
-| Form | How it validates |
+| Form | Denotes |
 | --- | --- |
-| `TypedDict` | a record, **open** as the typing spec defines one; `Required`/`NotRequired`/`ReadOnly` honored, `closed=True`/`extra_items` obeyed and inherited by a subclass that gives neither |
-| dataclass | `isinstance` plus a deep check of each declared field |
-| `NamedTuple` | `isinstance` plus the tuple its fields lay out, checked by position |
-| `Enum` | an instance of the enumeration (any member) |
-| `Protocol` decorated `@runtime_checkable` | `isinstance` against the protocol |
-| `NewType` | validates the supertype it wraps |
-| PEP 695 `type` alias | validates the aliased type, and ties the fixpoint where the alias names itself ([recursion](06-recursion.md)) |
+| `TypedDict` | the dicts a record admits, **open** as the typing spec defines one; `Required`/`NotRequired`/`ReadOnly` honored, `closed=True`/`extra_items` obeyed and inherited by a subclass that gives neither |
+| dataclass | the instances of the class whose every declared field holds a value of its type |
+| `NamedTuple` | the instances of the class whose fields, by position, hold values of their types |
+| `Enum` | the members of the enumeration |
+| `Protocol` decorated `@runtime_checkable` | the values `isinstance` admits against the protocol |
+| `NewType` | the set of the supertype it wraps |
+| PEP 695 `type` alias | the set of the aliased type, and ties the fixpoint where the alias names itself ([recursion](06-recursion.md)) |
 
 ```python
 import enum
@@ -807,8 +807,8 @@ no such footgun.
 
 ## Refinements
 
-`Annotated[T, ...markers]` narrows `T` with constraints — bounds, lengths,
-multiples, and predicates. See the [refinements guide](05-refinements.md).
+`Annotated[T, ...markers]` denotes the values of `T` that satisfy every marker —
+bounds, lengths, multiples, patterns and predicates. See the [refinements guide](05-refinements.md).
 
 ## Stable repr
 

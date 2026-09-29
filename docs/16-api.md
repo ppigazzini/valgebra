@@ -20,16 +20,21 @@ from the top-level `valgebra` namespace.
 ::: valgebra.complement
 
 The whole-schema transforms `open` and `close` are methods on the compiled
-validator (`Validator.open`/`close`), documented above. What they move is the
-**key-type region no clause claims**: opening frees it and closing refuses it,
-and neither touches a region a clause already claims. A record claims none,
-which is why opening one admits every key; a `dict[str, int]` claims the `str`
-region, so opening it keeps `str` keys mapping to integers and frees the rest.
-So is
-`simplify`, which is **deprecated**: a schema is built in the lattice normal
-form, so the reduction it promised is the schema a caller already holds
-([the algebra guide](04-algebra.md)). A fixed-length list is
-the native `[A, B]` literal (see the [schema language](03-schema-language.md)).
+validator (`Validator.open`/`close`), documented above, and so is `simplify`,
+which is **deprecated**: a schema is built in the lattice normal form, and what
+`simplify` folds beyond it the relations decide ([the algebra
+guide](04-algebra.md)).
+
+What `open` and `close` move is the **key-type region no clause claims**:
+opening frees it and closing refuses it, and neither touches a region a clause
+already claims. A closed record claims none, which is why opening one admits
+every key its fields do not name. A `dict[str, int]` claims the `str` region, so
+opening it keeps `str` keys mapping to integers and frees the rest, and an open
+`TypedDict` claims it too, through the `str: anything` clause its reading
+carries.
+
+A fixed-length list is the native `[A, B]` literal (see the [schema
+language](03-schema-language.md)).
 
 ## Refinement markers
 

@@ -648,8 +648,9 @@ assert Validator({"a": int}).is_subtype_of(dict[Literal["a"], int])
 
 # A respelling denotes the same set, and the sets are what the relation reads --
 # even though the laws construction settles do not reach this one. `A | (A & B)`
-# is `A` by absorption, which needs a containment to see, and containment is the
-# decision rather than a law.
+# is `A` by absorption, one case of `A | B` folding to `A` wherever `A` contains
+# `B`; that fold needs a containment, and containment is the decision rather
+# than a law.
 record = Validator({"a": int})
 respelled = union(record, intersection(record, Validator(str)))
 assert respelled != record
