@@ -29,6 +29,7 @@ use valgebra_core::descr::lower::{Constants, Operand};
 use valgebra_core::{ClassIx, ConstIx, Kind, LeafRelations, OperandIx, Schema};
 
 use crate::check::{Ctx, Frame, ValidatorIndex, WalkMode, WalkState, member};
+use crate::errors::is_fatal;
 use crate::input::Value;
 
 /// A [`LeafRelations`] oracle backed by a validator's constant pool. It decides
@@ -48,6 +49,14 @@ pub(crate) struct PoolRelations<'py, 'pool> {
     /// class it names alive, so an address cannot be reused while an id for it
     /// is outstanding.
     classes: RefCell<FxHashMap<usize, u32>>,
+    /// The first fatal signal a probe raised, for the query to re-raise.
+    ///
+    /// A probe runs user code -- a predicate, an `__eq__`, a rich comparison, a
+    /// metaclass hook -- and one interrupted there has answered nothing. It
+    /// reads as a decline to the core, like any probe that raised, and the
+    /// signal itself is carried to [`Self::answer`], which hands it back in
+    /// place of whatever the core decided without it.
+    fatal: RefCell<Option<PyErr>>,
 }
 
 impl<'py, 'pool> PoolRelations<'py, 'pool> {
@@ -67,6 +76,27 @@ impl<'py, 'pool> PoolRelations<'py, 'pool> {
             literals,
             definitions,
             classes: RefCell::default(),
+            fatal: RefCell::default(),
+        }
+    }
+
+    /// The query's answer, or the fatal signal a probe raised while it was
+    /// decided. The one way a relation leaves the bindings.
+    pub(crate) fn answer<T>(self, decided: T) -> PyResult<T> {
+        self.fatal.into_inner().map_or(Ok(decided), Err)
+    }
+
+    /// A probe's result, or `None` where it raised: a check that raised has
+    /// answered nothing, and reading it as a refutation is the unsound
+    /// direction. A fatal signal is kept for [`Self::answer`].
+    fn heard<T>(&self, result: PyResult<T>) -> Option<T> {
+        result.map_err(|err| self.keep_if_fatal(err)).ok()
+    }
+
+    /// Keep `err` if it is the query's first fatal signal.
+    fn keep_if_fatal(&self, err: PyErr) {
+        if is_fatal(&err, self.py) {
+            self.fatal.borrow_mut().get_or_insert(err);
         }
     }
 }
@@ -168,25 +198,24 @@ impl PoolRelations<'_, '_> {
     ///
     /// A class failing any of them stays the `isinstance` atom it was, which is
     /// sound for every enumeration and merely less complete.
-    fn enum_members<'py>(class: &Bound<'py, PyAny>) -> Option<Vec<Bound<'py, PyAny>>> {
+    fn enum_members<'py>(&self, class: &Bound<'py, PyAny>) -> Option<Vec<Bound<'py, PyAny>>> {
         let py = class.py();
         let class = class.cast::<PyType>().ok()?;
         let (meta, flag) = enum_types(py)?;
-        if !class.is_instance(meta.bind(py)).ok()? {
+        if !self.heard(class.is_instance(meta.bind(py)))? {
             return None;
         }
-        if class.is_subclass(flag.bind(py)).ok()? {
+        if self.heard(class.is_subclass(flag.bind(py)))? {
             return None;
         }
         if !compares_by_identity(class) {
             return None;
         }
-        let members: Vec<Bound<'py, PyAny>> = class
-            .try_iter()
-            .ok()?
-            .take(MAX_ENUM_MEMBERS + 1)
-            .collect::<Result<_, _>>()
-            .ok()?;
+        let members: Vec<Bound<'py, PyAny>> = self.heard(
+            class
+                .try_iter()
+                .and_then(|members| members.take(MAX_ENUM_MEMBERS + 1).collect()),
+        )?;
         (!members.is_empty() && members.len() <= MAX_ENUM_MEMBERS).then_some(members)
     }
 
@@ -194,8 +223,11 @@ impl PoolRelations<'_, '_> {
         // These leaf-subtype probes run on transient schemas during compilation,
         // not on a finished validator, so they carry no precomputed index; the
         // walk falls back to its general path for any record or union here. A
-        // fatal signal in a probe folds to non-membership here (the decision
-        // procedure is not the interruptible hot path); the state is local.
+        // fatal signal the walk records is kept for the query, and a query
+        // already interrupted runs no more of them.
+        if self.fatal.borrow().is_some() {
+            return false;
+        }
         let state = WalkState::new();
         let index = ValidatorIndex::default();
         let ctx = Ctx {
@@ -211,11 +243,15 @@ impl PoolRelations<'_, '_> {
             fatal_seen: &state.fatal_seen,
             mode: WalkMode::Fast,
         };
-        member(
+        let admitted = member(
             schema,
             &Value::Py(value),
             &mut Frame::new(&mut Vec::new(), &mut Vec::new(), ctx),
-        )
+        );
+        if let Some(err) = state.fatal.take() {
+            self.keep_if_fatal(err);
+        }
+        admitted
     }
 }
 
@@ -372,13 +408,11 @@ impl PoolRelations<'_, '_> {
             return None;
         }
         let mut bases = Vec::new();
-        for base in ty
-            .getattr(intern!(ty.py(), "__mro__"))
-            .ok()?
-            .try_iter()
-            .ok()?
-        {
-            let base = base.ok()?;
+        for base in self.heard(
+            ty.getattr(intern!(ty.py(), "__mro__"))
+                .and_then(|mro| mro.try_iter()),
+        )? {
+            let base = self.heard(base)?;
             let base = base.cast_into::<PyType>().ok()?;
             // A base need not denote a set for the order to hold: what `is_a`
             // reads is which classes an instance is one of, and `__mro__` answers
@@ -452,7 +486,10 @@ impl PoolRelations<'_, '_> {
         let metaclass = class.get_type();
         let plain = self.py.get_type::<PyType>();
         let untouched = |hook: &Bound<'_, PyString>| -> Option<bool> {
-            Some(metaclass.getattr(hook).ok()?.is(&plain.getattr(hook).ok()?))
+            Some(
+                self.heard(metaclass.getattr(hook))?
+                    .is(&plain.getattr(hook).ok()?),
+            )
         };
         Some(
             untouched(intern!(self.py, "__instancecheck__"))?
@@ -564,7 +601,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
             return None;
         }
         let builtin = builtin_of(self.py, kind)?;
-        builtin.is_subclass(class).ok()
+        self.heard(builtin.is_subclass(class))
     }
 
     /// Whether the class behind an `Instance` atom denotes a set, on the test
@@ -607,7 +644,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
                     return class
                         .cast::<PyType>()
                         .ok()
-                        .and_then(|class| class.is_subclass(superclass).ok());
+                        .and_then(|class| self.heard(class.is_subclass(superclass)));
                 }
                 // An enumeration whose members compare by identity is the union
                 // of them: the members are fixed when the class is defined, a
@@ -615,7 +652,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
                 // instance. So the inclusion is asked of each member, which is
                 // what makes `Color` and `Literal[Color.RED, Color.GREEN]` one
                 // set rather than two the procedure cannot relate.
-                let members = Self::enum_members(class)?;
+                let members = self.enum_members(class)?;
                 Some(members.iter().all(|member| self.is_member(sup, member)))
             }
             _ => None,
@@ -644,7 +681,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
         if self.literal_kind(left).is_none() && !compares_by_identity(&left_value.get_type()) {
             return None;
         }
-        left_value.eq(right_value).ok().map(|equal| !equal)
+        self.heard(left_value.eq(right_value)).map(|equal| !equal)
     }
 
     fn literal_sets_disjoint(&self, left: &[ConstIx], right: &[ConstIx]) -> Option<bool> {
@@ -668,14 +705,14 @@ impl LeafRelations for PoolRelations<'_, '_> {
             if self.literal_kind(*index).is_none() && !compares_by_identity(&value.get_type()) {
                 return None;
             }
-            seen.add((value.get_type(), value)).ok()?;
+            self.heard(seen.add((value.get_type(), value)))?;
         }
         for index in probe {
             let value = self.literals.get(index.get())?.bind(self.py);
             if self.literal_kind(*index).is_none() && !compares_by_identity(&value.get_type()) {
                 return None;
             }
-            if seen.contains((value.get_type(), value)).ok()? {
+            if self.heard(seen.contains((value.get_type(), value)))? {
                 return Some(false);
             }
         }
@@ -688,7 +725,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
         // pair (a TypeError) leaves the bound undecided.
         let left = self.literals.get(left.get())?.bind(self.py);
         let right = self.literals.get(right.get())?.bind(self.py);
-        left.compare(right).ok()
+        self.heard(left.compare(right))
     }
 
     fn divides(&self, step: OperandIx, multiple: OperandIx) -> Option<bool> {
@@ -707,7 +744,7 @@ impl LeafRelations for PoolRelations<'_, '_> {
         // what makes this comparison the one the build already made.
         let step = self.literals.get(step.get())?.bind(self.py);
         let multiple = self.literals.get(multiple.get())?.bind(self.py);
-        multiple.rem(step).ok()?.eq(0i64).ok()
+        self.heard(multiple.rem(step).and_then(|rest| rest.eq(0i64)))
     }
 
     fn operand_kind(&self, operand: OperandIx) -> Option<Kind> {
@@ -735,26 +772,22 @@ impl LeafRelations for PoolRelations<'_, '_> {
         // A non-real bound (`math.floor` raises a `TypeError`) or a non-finite one
         // (an `OverflowError`) leaves the rule undecided rather than guessing.
         let one = 1i64;
-        let least = if lo_strict {
+        let least = self.heard(if lo_strict {
             floor
                 .call1((&lo,))
-                .ok()?
-                .call_method1(intern!(self.py, "__add__"), (one,))
-                .ok()?
+                .and_then(|low| low.call_method1(intern!(self.py, "__add__"), (one,)))
         } else {
-            ceil.call1((&lo,)).ok()?
-        };
-        let greatest = if hi_strict {
+            ceil.call1((&lo,))
+        })?;
+        let greatest = self.heard(if hi_strict {
             ceil.call1((&hi,))
-                .ok()?
-                .call_method1(intern!(self.py, "__sub__"), (one,))
-                .ok()?
+                .and_then(|high| high.call_method1(intern!(self.py, "__sub__"), (one,)))
         } else {
-            floor.call1((&hi,)).ok()?
-        };
+            floor.call1((&hi,))
+        })?;
         // `least > greatest` means the interval skips every integer.
         Some(matches!(
-            least.compare(&greatest).ok()?,
+            self.heard(least.compare(&greatest))?,
             core::cmp::Ordering::Greater
         ))
     }

@@ -75,6 +75,20 @@ pub(crate) fn is_fatal(err: &PyErr, py: Python<'_>) -> bool {
         || err.is_instance_of::<PyRecursionError>(py)
 }
 
+/// `result`, reading an ordinary exception as `fallback`, and raising a fatal
+/// signal rather than reading it.
+///
+/// For a question the frontend asks of user code -- a marker's attribute, a
+/// bound's conversion -- where an ordinary exception has a documented reading
+/// and an interrupted one has none.
+pub(crate) fn unless_fatal<T>(result: PyResult<T>, py: Python<'_>, fallback: T) -> PyResult<T> {
+    match result {
+        Err(err) if is_fatal(&err, py) => Err(err),
+        Err(_) => Ok(fallback),
+        answered => answered,
+    }
+}
+
 /// A short repr-style summary of a value for error messages.
 ///
 /// A container is rendered under a bound rather than rendered and then cut. The

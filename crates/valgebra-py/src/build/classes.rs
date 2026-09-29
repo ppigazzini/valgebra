@@ -20,7 +20,7 @@ use valgebra_core::{Field, MapClause, Schema, SeqShape};
 
 use super::generics::is_field_qualifier;
 use super::{MAX_BUILD_DEPTH, Pool, build_schema, forms, is_extension, not_implemented};
-use crate::errors::summarize;
+use crate::errors::{summarize, unless_fatal};
 
 /// `dataclasses.is_dataclass`, held apart from [`Forms`](super::Forms) and
 /// resolved on the first class node that reaches the question.
@@ -142,11 +142,11 @@ pub(super) fn build_type_object(
     // check against one and 3.20 refuses it; the walk reads a warning raised as
     // an error as a non-member, so under `-W error` such a schema would admit
     // nothing and say nothing.
-    if is_truthy_attr(ty, intern!(py, "_is_protocol")) {
+    if is_truthy_attr(ty, intern!(py, "_is_protocol"))? {
         if declares_runtime_checkable(ty)? {
             return Ok(Schema::Instance(lits.intern_class(ty.as_any())));
         }
-        if is_truthy_attr(ty, intern!(py, "_is_runtime_protocol")) {
+        if is_truthy_attr(ty, intern!(py, "_is_runtime_protocol"))? {
             return Err(not_implemented(&format!(
                 "{} inherits @runtime_checkable from a base rather than carrying it, \
                  and Python refuses isinstance against such a protocol from 3.20: \
@@ -187,19 +187,20 @@ fn declares_runtime_checkable(ty: &Bound<'_, PyType>) -> PyResult<bool> {
         .is_truthy()
 }
 
-/// True if `obj.<name>` exists and is truthy; false on absence or error.
+/// True if `obj.<name>` exists and is truthy; false on absence or an ordinary
+/// error, and a fatal signal raised.
 ///
 /// The name arrives interned and the attribute is asked for *optionally*, which
 /// is what absence costs here: every one of these names is absent on an
 /// ordinary class, and a bare `getattr` answers that by building an
 /// `AttributeError`, raising it and dropping it -- per class node, for an answer
 /// that is `false`.
-pub(super) fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &Bound<'_, PyString>) -> bool {
-    obj.getattr_opt(name)
-        .ok()
-        .flatten()
-        .and_then(|value| value.is_truthy().ok())
-        .unwrap_or(false)
+pub(super) fn is_truthy_attr(obj: &Bound<'_, PyAny>, name: &Bound<'_, PyString>) -> PyResult<bool> {
+    let py = obj.py();
+    match unless_fatal(obj.getattr_opt(name), py, None)? {
+        Some(value) => unless_fatal(value.is_truthy(), py, false),
+        None => Ok(false),
+    }
 }
 
 /// Resolve a class's type hints with `Annotated` metadata preserved.
@@ -395,7 +396,7 @@ fn evaluates(value: &Bound<'_, PyAny>, names: &Evaluation, depth: usize) -> PyRe
     let args = value.getattr(intern!(py, "__args__"))?;
     let args = args.cast::<PyTuple>()?;
     if value.is_instance(names.generic_alias.bind(py))?
-        && (is_truthy_attr(value, intern!(py, "__unpacked__"))
+        && (is_truthy_attr(value, intern!(py, "__unpacked__"))?
             || value
                 .getattr(intern!(py, "__origin__"))?
                 .is(forms(py)?.callable.bind(py))

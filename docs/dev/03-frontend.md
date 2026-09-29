@@ -52,6 +52,15 @@ The rest are read in this order:
 Metadata matching neither is ignored, which the typing spec requires of any
 consumer for metadata it does not recognise.
 
+**A question the frontend asks of user code carries a fatal signal out.** A
+marker's attributes, a bound's conversion to a float, a step's comparison with
+zero, the class a bound says it is, and a class's protocol and unpacking flags
+each read an ordinary exception as a documented fallback -- a marker from
+somewhere else, a bound that is not a float, a flag that is not set.
+`errors::unless_fatal` is that reading, and it raises a fatal signal rather than
+reading it: an interrupted `isinstance(bound, Number)` read as a bound with no
+order, and the build refused the marker with a sentence about the wrong cause.
+
 **A constraint no value of the base can answer is refused where it is
 written.** Reading a length off an `int` raises, and the walk reads a raise as
 a non-member, so `Annotated[int, MinLen(1)]` would compile to a set that

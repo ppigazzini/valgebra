@@ -560,7 +560,7 @@ fn each_base_answers_the_constraints_its_values_can() {
             (Schema::ANY, five.as_any(), Carries::Maybe),
         ] {
             assert!(
-                carries_order(&base, operand) == answer,
+                carries_order(&base, operand).expect("the group reads") == answer,
                 "order of {base:?} against {operand}"
             );
         }

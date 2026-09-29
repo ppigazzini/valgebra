@@ -613,9 +613,10 @@ impl Validator {
     ///
     /// Returns:
     ///     `True` if the schema denotes the empty set, else `False`.
-    fn is_empty(&self, py: Python<'_>) -> bool {
+    fn is_empty(&self, py: Python<'_>) -> PyResult<bool> {
         let oracle = PoolRelations::new(py, &self.literals, &self.definitions);
-        self.schema.is_empty_with(&oracle, &self.definitions)
+        let empty = self.schema.is_empty_with(&oracle, &self.definitions);
+        oracle.answer(empty)
     }
 
     /// Whether every value of this schema is also a value of `other` — set
@@ -648,9 +649,10 @@ impl Validator {
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations::new(py, literals.items(), &definitions);
-        Ok(self
+        let holds = self
             .schema
-            .is_subtype_of_under(&other, &oracle, &definitions))
+            .is_subtype_of_under(&other, &oracle, &definitions);
+        oracle.answer(holds)
     }
 
     /// The inclusion in three answers rather than two.
@@ -684,16 +686,14 @@ impl Validator {
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations::new(py, literals.items(), &definitions);
-        Ok(
-            match self
-                .schema
-                .subtype_relation_under(&other, &oracle, &definitions)
-            {
-                Relation::Holds => "subset",
-                Relation::Fails => "not_subset",
-                Relation::Unknown => "undecided",
-            },
-        )
+        let relation = self
+            .schema
+            .subtype_relation_under(&other, &oracle, &definitions);
+        oracle.answer(match relation {
+            Relation::Holds => "subset",
+            Relation::Fails => "not_subset",
+            Relation::Unknown => "undecided",
+        })
     }
 
     /// Whether this schema and `other` denote the same set — mutual inclusion.
@@ -719,9 +719,10 @@ impl Validator {
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations::new(py, literals.items(), &definitions);
-        Ok(self
+        let equivalent = self
             .schema
-            .is_equivalent_under(&other, &oracle, &definitions))
+            .is_equivalent_under(&other, &oracle, &definitions);
+        oracle.answer(equivalent)
     }
 
     /// Render the compiled schema back as the annotation expression that

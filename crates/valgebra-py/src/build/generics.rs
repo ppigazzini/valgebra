@@ -278,7 +278,7 @@ pub(super) fn unpacked_tuple<'py>(arg: &Bound<'py, PyAny>) -> PyResult<Option<Un
     let py = arg.py();
     let forms = forms(py)?;
     let origin_of = |of: &Bound<'py, PyAny>| forms.get_origin.bind(py).call1((of,));
-    let inner = if is_truthy_attr(arg, intern!(py, "__unpacked__")) {
+    let inner = if is_truthy_attr(arg, intern!(py, "__unpacked__"))? {
         arg.clone()
     } else {
         // `typing.Unpack`, or `typing_extensions.Unpack` where it is its own

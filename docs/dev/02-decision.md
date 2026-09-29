@@ -357,6 +357,15 @@ corpus of its own driving every question below
   order. The dual of the question above, with the kind and the class swapping
   sides.
 
+**A probe that raised has answered nothing.** Every question above that runs
+user code -- a predicate or an `__eq__` a literal is probed with, a comparison,
+`%`, a metaclass hook, an enumeration's iteration -- reads a raise as a decline,
+which the core folds conservatively. The first fatal signal is kept as well,
+and `PoolRelations::answer` hands it back in place of the verdict: a predicate
+interrupted while `Literal[5]` was probed read as a non-member, and the query
+answered `not_subset` about a refinement it never finished asking. `is_empty`,
+`is_subtype_of`, `relation_to` and `is_equivalent` each return through it.
+
 **A layout is the class that laid it down.** The snapshot a class enters the
 core with carries, beside its ancestors, the class whose instance layout it
 has: the first on its `__mro__` that lays one down, which is one of the nine

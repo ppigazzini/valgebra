@@ -456,15 +456,94 @@ fn an_enumeration_lists_its_members_up_to_the_bound() {
         let small = built(py, "enum.Enum('Small', {'A': 1, 'B': 2})").unbind();
         let wide = built(py, "enum.Enum('Wide', {f'M{n}': n for n in range(600)})").unbind();
         let plain = built(py, "type('Plain', (), {})").unbind();
-        let listed =
-            |held: &Py<PyAny>| PoolRelations::enum_members(held.bind(py)).map(|got| got.len());
-        assert_eq!(listed(&small), Some(2), "two members, listed");
+        asking(py, Vec::new(), |oracle| {
+            let listed = |held: &Py<PyAny>| oracle.enum_members(held.bind(py)).map(|got| got.len());
+            assert_eq!(listed(&small), Some(2), "two members, listed");
+            assert_eq!(
+                listed(&wide),
+                None,
+                "past MAX_ENUM_MEMBERS the class stays an instance check"
+            );
+            assert_eq!(listed(&plain), None, "a plain class lists nothing");
+        });
+    });
+}
+
+#[test]
+fn a_fatal_signal_a_probe_raises_is_the_querys_answer() {
+    // A probe runs user code, and one interrupted there has answered nothing:
+    // the core reads it as a decline, like any probe that raised, and `answer`
+    // hands the signal back in place of whatever was decided without it. An
+    // ordinary exception is a decline and nothing more, so the verdict stands.
+    // The literal probe runs the walk, whose own slot is the one kept there.
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Order:\n\
+              \x20   def __init__(self, raised):\n\
+              \x20       self.raised = raised\n\
+              \x20   def compared(self, other):\n\
+              \x20       raise self.raised\n\
+              \x20   __eq__ = __lt__ = __gt__ = compared\n\
+              \x20   __hash__ = object.__hash__\n\
+              def interrupted(value):\n\
+              \x20   raise KeyboardInterrupt\n",
+            c"probes.py",
+            c"probes",
+        )
+        .expect("the module compiles");
+        let order = |raised: &str| {
+            let raised = py.eval(&CString::new(raised).expect("no nul"), None, None);
+            module
+                .getattr("Order")
+                .and_then(|class| class.call1((raised.expect("the exception evaluates"),)))
+                .expect("the operand builds")
+                .unbind()
+        };
+        let one = 1i64.into_pyobject(py).unwrap().into_any().unbind();
+        let first = OperandIx::new(0);
+        let second = OperandIx::new(1);
+
+        let held = pooled(vec![order("KeyboardInterrupt()"), one.clone_ref(py)]);
+        let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
+        assert_eq!(oracle.compare(first, second), None, "a decline to the core");
+        let raised = oracle
+            .answer("decided")
+            .expect_err("the signal is the answer");
+        assert!(raised.is_instance_of::<pyo3::exceptions::PyKeyboardInterrupt>(py));
+
+        let held = pooled(vec![order("ValueError()"), one.clone_ref(py)]);
+        let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
+        assert_eq!(oracle.compare(first, second), None);
         assert_eq!(
-            listed(&wide),
-            None,
-            "past MAX_ENUM_MEMBERS the class stays an instance check"
+            oracle.answer("decided").expect("a decline alone"),
+            "decided"
         );
-        assert_eq!(listed(&plain), None, "a plain class lists nothing");
+
+        let five = 5i64.into_pyobject(py).unwrap().into_any().unbind();
+        let predicate = module
+            .getattr("interrupted")
+            .expect("the predicate")
+            .unbind();
+        let held = pooled(vec![five, predicate]);
+        let oracle = PoolRelations::new(py, &held.literals, &held.definitions);
+        let refined = Schema::Refine {
+            base: std::sync::Arc::new(Schema::Int),
+            constraints: vec![valgebra_core::Constraint::Predicate(
+                valgebra_core::PredIx::new(1),
+            )]
+            .into(),
+        };
+        // The walk folds the interrupted predicate to a non-member, which is a
+        // refutation to the core; the kept signal is what stops it standing.
+        assert_eq!(
+            oracle.leaf_subtype(&Schema::Literal(ConstIx::new(0)), &refined),
+            Some(false)
+        );
+        let raised = oracle
+            .answer("not_subset")
+            .expect_err("the signal, not the refutation");
+        assert!(raised.is_instance_of::<pyo3::exceptions::PyKeyboardInterrupt>(py));
     });
 }
 

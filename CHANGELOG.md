@@ -39,6 +39,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a PyPy tuple or dict subclass is read for what it holds
 - fix: an error path names each key by what it holds
 - fix: a signal an element's repr raises once propagates from a summary
+- fix: building a validator and asking a relation carry a fatal signal out
 
 -->
 
@@ -203,6 +204,15 @@ answer of its own, or a repair to a change not yet released.
   through; the plain `repr` behind it then ran the element again and read its
   answer as the summary, so a signal delivered once, as an interrupt is,
   became a `ValidationError`.
+- **Building a validator and asking a relation carry a fatal signal out.** A
+  relation runs user code -- a predicate or an `__eq__` it probes a literal
+  with, a bound's comparison -- and read a fatal signal raised there as
+  `undecided`, as `False` from `is_empty`, or, through a literal, as the
+  verdict `not_subset`. Building read one raised by a marker's attributes, a
+  bound's conversion or a step's comparison with zero as the fallback an
+  ordinary exception gets, and an interrupted `isinstance(bound, Number)` as a
+  bound with no order, refused with a `NotImplementedError` about the wrong
+  cause. Each raises the signal.
 
 ## [0.0.14] - 2026-09-26
 

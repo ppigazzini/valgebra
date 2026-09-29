@@ -21,7 +21,7 @@ use crate::validator::Validator;
 /// `numbers.Number`, the register a remainder's comparison and an order bound's
 /// both follow, resolved once per process.
 static NUMBER: PyOnceLock<Py<PyType>> = PyOnceLock::new();
-use crate::errors::summarize;
+use crate::errors::{summarize, unless_fatal};
 use crate::oracle::kind_of;
 
 /// Refuse an order bound against `nan`, which orders nothing.
@@ -35,7 +35,7 @@ use crate::oracle::kind_of;
 /// is empty because the order says so, which is an answer. `nan` is the absence
 /// of an order.
 pub(super) fn refuse_unordered_bound(attr: &str, bound: &Bound<'_, PyAny>) -> PyResult<()> {
-    let unordered = bound.extract::<f64>().is_ok_and(f64::is_nan);
+    let unordered = unless_fatal(bound.extract::<f64>().map(f64::is_nan), bound.py(), false)?;
     if unordered {
         return Err(PyValueError::new_err(format!(
             "{attr} cannot be nan: every comparison with nan is false, so the \
@@ -89,11 +89,12 @@ pub(super) fn build_refine(
 /// decoding `Number` again. Spelled as an import this ran the module lookup and
 /// two attribute names per order bound, and a fifty-field record of
 /// `Annotated[int, Ge(0)]` carries fifty of them.
-fn order_group(operand: &Bound<'_, PyAny>) -> Option<OrderGroup> {
+fn order_group(operand: &Bound<'_, PyAny>) -> PyResult<Option<OrderGroup>> {
+    let py = operand.py();
     let number = NUMBER
-        .import(operand.py(), "numbers", "Number")
-        .is_ok_and(|class| operand.is_instance(class).unwrap_or(false));
-    if number {
+        .import(py, "numbers", "Number")
+        .and_then(|class| operand.is_instance(class));
+    Ok(if unless_fatal(number, py, false)? {
         Some(OrderGroup::Number)
     } else if operand.is_instance_of::<PyString>() {
         Some(OrderGroup::Text)
@@ -107,13 +108,13 @@ fn order_group(operand: &Bound<'_, PyAny>) -> Option<OrderGroup> {
         Some(OrderGroup::Set)
     } else {
         None
-    }
+    })
 }
 
 /// Whether the base's values are ordered against `operand`: the core's rule,
 /// asked with the operand's group.
-pub(super) fn carries_order(base: &Schema, operand: &Bound<'_, PyAny>) -> Carries {
-    valgebra_core::carries_order(base, order_group(operand))
+pub(super) fn carries_order(base: &Schema, operand: &Bound<'_, PyAny>) -> PyResult<Carries> {
+    Ok(valgebra_core::carries_order(base, order_group(operand)?))
 }
 
 /// The base with each literal read as the kind its constant belongs to.
@@ -194,7 +195,7 @@ pub(super) fn check_constraint_fits(
         | Constraint::Le(index)
         | Constraint::Lt(index) => match operand(*index) {
             Some(bound) => (
-                Python::attach(|py| carries_order(base, bound.bind(py))),
+                Python::attach(|py| carries_order(base, bound.bind(py)))?,
                 "order against that bound",
             ),
             None => (Carries::Maybe, ""),
@@ -294,28 +295,27 @@ pub(super) fn with_inline_flags(
 /// ignoring it leaves a validator that admits everything the marker excludes.
 /// The one member carrying no constraint is the documentation marker, which says
 /// nothing about which values belong.
-pub(super) fn is_unhandled_constraint(marker: &Bound<'_, PyAny>) -> bool {
+pub(super) fn is_unhandled_constraint(marker: &Bound<'_, PyAny>) -> PyResult<bool> {
     is_constraint_vocabulary(&marker.get_type())
 }
 
 /// Whether `ty` is a class of the `annotated_types` constraint vocabulary.
-fn is_constraint_vocabulary(ty: &Bound<'_, PyType>) -> bool {
+fn is_constraint_vocabulary(ty: &Bound<'_, PyType>) -> PyResult<bool> {
     let py = ty.py();
     // Read through the string rather than into one: `extract::<String>` copies
     // the text out so the comparison can be made against a Rust literal, which
     // is an allocation and a free per marker for an answer that is a byte
     // compare. The names are interned, so neither `getattr` builds a `str`.
-    let names = |attr: &Bound<'_, PyString>, want: &str| {
-        ty.getattr(attr)
-            .ok()
+    let names = |attr: &Bound<'_, PyString>, want: &str| -> PyResult<bool> {
+        Ok(unless_fatal(ty.getattr(attr).map(Some), py, None)?
             .and_then(|value| value.cast_into::<PyString>().ok())
-            .is_some_and(|text| text.to_str().is_ok_and(|text| text == want))
+            .is_some_and(|text| text.to_str().is_ok_and(|text| text == want)))
     };
     // The second name is asked only where the first says the marker is from the
     // vocabulary: every marker written for someone else answers `false` here,
     // and asking what such a marker is *called* decides nothing.
-    names(intern!(py, "__module__"), "annotated_types")
-        && !names(intern!(py, "__name__"), "DocInfo")
+    Ok(names(intern!(py, "__module__"), "annotated_types")?
+        && !names(intern!(py, "__name__"), "DocInfo")?)
 }
 
 /// A class written where a marker goes, which is never read as one.
@@ -352,7 +352,7 @@ fn read_a_class(class: &Bound<'_, PyType>) -> PyResult<()> {
 /// asks them of a marker's type -- which for a class is its metaclass, and
 /// carries none of them.
 fn is_a_marker_class(class: &Bound<'_, PyType>) -> PyResult<bool> {
-    if is_constraint_vocabulary(class) {
+    if is_constraint_vocabulary(class)? {
         return Ok(true);
     }
     let py = class.py();
@@ -594,13 +594,13 @@ pub(super) fn parse_constraint<'py>(
 /// starts on the base prefix and sees no virtual environment, so importing the
 /// package to ask `isinstance` would make the answer depend on how the process
 /// was launched.
-fn groups_other_markers(marker: &Bound<'_, PyAny>) -> bool {
+fn groups_other_markers(marker: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = marker.py();
-    marker
-        .getattr_opt(intern!(py, "__is_annotated_types_grouped_metadata__"))
-        .ok()
-        .flatten()
-        .is_some_and(|flag| flag.is_truthy().unwrap_or(false))
+    let flag = marker.getattr_opt(intern!(py, "__is_annotated_types_grouped_metadata__"));
+    match unless_fatal(flag, py, None)? {
+        Some(flag) => unless_fatal(flag.is_truthy(), py, false),
+        None => Ok(false),
+    }
 }
 
 /// Read a marker that stands for the constraints it yields.
@@ -747,14 +747,15 @@ fn parse_constraint_within<'py>(
     if let Some(multiple) = probes.get(marker, Probe::MultipleOf)?
         && !multiple.is_none()
     {
-        if multiple.extract::<f64>().is_ok_and(f64::is_nan) {
+        let py = multiple.py();
+        if unless_fatal(multiple.extract::<f64>().map(f64::is_nan), py, false)? {
             return Err(PyValueError::new_err(
                 "MultipleOf(nan) is not a valid constraint: no value is a multiple \
                  of nan, because every comparison with nan is false. Write the \
                  step you mean",
             ));
         }
-        if multiple.eq(0).unwrap_or(false) {
+        if unless_fatal(multiple.eq(0), py, false)? {
             return Err(PyValueError::new_err(
                 "MultipleOf(0) is not a valid constraint: no value is a multiple of \
                  zero. Use a nonzero divisor.",
@@ -777,7 +778,7 @@ fn parse_constraint_within<'py>(
         && func.is_callable()
     {
         out.push(Constraint::Predicate(lits.intern_predicate(&func)));
-    } else if out.len() == before && groups_other_markers(marker) {
+    } else if out.len() == before && groups_other_markers(marker)? {
         // A marker standing for several constraints answers with them, which is
         // the protocol `annotated_types` documents and what a caller writes
         // their own against. `Interval` and `Len` carry their bounds as
@@ -791,7 +792,7 @@ fn parse_constraint_within<'py>(
         // does not recognise, which the typing spec says to ignore -- leaving a
         // schema that admits everything the marker was written to exclude.
         return parse_grouped(marker, out, sets, lits, depth);
-    } else if out.len() == before && is_unhandled_constraint(marker) {
+    } else if out.len() == before && is_unhandled_constraint(marker)? {
         return Err(not_implemented(&format!(
             "{} is a constraint this frontend does not check; a schema carrying \
              it would admit the values it excludes, so it is refused rather than \

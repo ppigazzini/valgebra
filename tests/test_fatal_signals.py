@@ -13,12 +13,16 @@ resource-exhausted check stops rather than continuing.
 from __future__ import annotations
 
 import dataclasses
-from typing import Annotated
+import typing
+from typing import TYPE_CHECKING, Annotated, Literal
 
 import annotated_types as at
 import pytest
 
 from valgebra import ValidationError, Validator
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
 
 # The signals that must propagate. KeyboardInterrupt/SystemExit are base
 # exceptions that are not ordinary exceptions; MemoryError/RecursionError *are*
@@ -216,3 +220,141 @@ def test_a_signal_an_elements_repr_raises_once_propagates_from_the_summary(
 
     with pytest.raises(signal):
         Validator(int).validate([Once()])
+
+
+def _forget_annotated() -> None:
+    for cleanup in getattr(typing, "_cleanups", ()):
+        cleanup()
+
+
+@pytest.fixture
+def forgetting_annotated() -> Iterator[None]:
+    """Forget `typing`'s memo of `Annotated` before the test and after it.
+
+    `typing` memoises `Annotated[...]` by equality, and a hostile operand here
+    equals the ordinary one another test spells: `Ge(B(0))` is `Ge(0)`. Left in
+    the memo, it is handed to that test, and before this one it hands back the
+    previous signal's operand.
+    """
+    _forget_annotated()
+    yield
+    _forget_annotated()
+
+
+class _LoudBound(int):
+    """An integer bound whose order comparisons raise the signal it was given."""
+
+    signal: type[BaseException] = KeyboardInterrupt
+
+    def _compared(self, _other: object) -> bool:
+        raise self.signal
+
+    __lt__ = __gt__ = __le__ = __ge__ = _compared
+    __hash__ = int.__hash__
+
+
+@pytest.mark.usefixtures("forgetting_annotated")
+@pytest.mark.parametrize("signal", FATAL)
+def test_a_fatal_signal_in_a_relation_query_propagates(
+    signal: type[BaseException],
+) -> None:
+    """A relation runs user code to decide, and an interrupted run is no verdict.
+
+    Deciding `Literal[5]` against a refinement asks whether 5 belongs, which
+    runs the predicate; deciding a bound conjunction orders the two bounds. An
+    interrupted probe read as a decline -- `undecided`, or `False` from
+    `is_empty` -- or, through the literal, as the refutation `not_subset`.
+    """
+
+    def interrupted(value: object) -> bool:
+        raise signal
+
+    probe = Validator(Literal[5])
+    refined = Annotated[int, at.Predicate(interrupted)]
+    for query in (probe.relation_to, probe.is_subtype_of, probe.is_equivalent):
+        with pytest.raises(signal):
+            query(refined)
+
+    loud = type("Loud", (_LoudBound,), {"signal": signal})
+    with pytest.raises(signal):
+        Validator(Annotated[int, at.Gt(loud(5)), at.Lt(1)]).is_empty()
+
+
+def _raising_zero(raised: Callable[..., object]) -> Callable[[int, object], bool]:
+    """Build an `__eq__` raising for the build's own question, comparison with zero.
+
+    Only that one: `typing` compares a new `Annotated` with a cached one of equal
+    hash, and that comparison is not the build's.
+    """
+
+    def equal(self: int, other: object) -> bool:
+        if other == 0:
+            raised()
+        return int.__eq__(self, other)
+
+    return equal
+
+
+# Each question building asks of user code, spelled with the hook that answers
+# it by raising.
+_BUILT: dict[str, Callable[[Callable[..., object]], object]] = {
+    "a bound's float": lambda raised: Annotated[
+        int, at.Ge(type("B", (int,), {"__float__": raised})(0))
+    ],
+    "a step's comparison with zero": lambda raised: Annotated[
+        int,
+        at.MultipleOf(
+            type(
+                "S", (int,), {"__eq__": _raising_zero(raised), "__hash__": int.__hash__}
+            )(3)
+        ),
+    ],
+    "the class a bound says it is": lambda raised: Annotated[
+        int,
+        at.Ge(type("Liar", (), {"__class__": property(raised)})()),  # ty: ignore[invalid-argument-type]
+    ],
+    "a marker class's module": lambda raised: Annotated[
+        int,
+        type("Meta", (type,), {"__module__": property(raised)})("Unknown", (), {})(),
+    ],
+    "the grouped-metadata flag": lambda raised: Annotated[
+        int,
+        type(
+            "Grouped",
+            (),
+            {
+                "__is_annotated_types_grouped_metadata__": type(
+                    "Flag", (), {"__bool__": raised}
+                )()
+            },
+        )(),
+    ],
+    "a class's protocol flag": lambda raised: type(
+        "P", (), {"_is_protocol": type("Flag", (), {"__bool__": raised})()}
+    ),
+    "an element's unpacked flag": lambda raised: tuple[
+        type("U", (), {"__unpacked__": type("Flag", (), {"__bool__": raised})()})()  # ty: ignore[invalid-type-form]
+    ],
+}
+
+
+@pytest.mark.usefixtures("forgetting_annotated")
+@pytest.mark.parametrize("question", list(_BUILT))
+@pytest.mark.parametrize("signal", FATAL)
+def test_a_fatal_signal_while_a_validator_is_built_propagates(
+    signal: type[BaseException], question: str
+) -> None:
+    """Building asks user code about each marker, and an interrupted answer is none.
+
+    Each question reads an ordinary exception as a documented fallback -- a
+    bound that is not a float, a marker from somewhere else, a flag that is not
+    set -- and read an interrupted one the same way, or, for the class a bound
+    says it is, as a different refusal.
+    """
+
+    def raised(*_: object) -> object:
+        raise signal
+
+    annotation = _BUILT[question](raised)
+    with pytest.raises(signal):
+        Validator(annotation)
