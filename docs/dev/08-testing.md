@@ -485,6 +485,15 @@ is built to exceed.
 direction is assertable, so enumeration is the instrument: the ledger lists
 relations true by construction and asserts the procedure decides each.
 
+**Another language's type system is not a differential oracle.** Elixir's
+`Module.Types.Descr` decides the same algebra over BEAM values, where a boolean
+is an atom rather than an integer and nothing is a class, a refinement, a
+pattern or a length bound. A lane asking it needs a translator from Python's
+values into the BEAM's -- a second model that must be right before any
+disagreement means anything -- and its answer is about a different set. The
+procedure is judged against its own denotation instead: the value model, the
+witness each refutation stands on, and the enumerated universes.
+
 ## The limit
 
 **Adequacy is measured per harness, and every file has one.** Two of the three
