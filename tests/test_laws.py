@@ -102,6 +102,13 @@ VALUES = [
     2**70,
     "\n",
     "a\nb",
+    # The empty tuple, and a field holding an empty container: the values that
+    # part `nothing` from a tuple of tuples, or one record from another, and a
+    # drawn value almost never builds. Without them a fifth of wrongly stated
+    # laws passed on the values alone.
+    (),
+    {"a": {}},
+    {"a": ()},
 ]
 
 
@@ -217,7 +224,12 @@ def equivalent(left: Validator, right: Validator, extra: list[object]) -> bool:
     # equal would be caught by the witnessing values.
     if left.is_equivalent(right):
         assert sample_agree, "is_equivalent claimed equality the values refute"
-    return sample_agree
+    # The refutation is a claim too. A law's two sides are one set, so a
+    # `not_subset` in either direction names a value the two part on that the
+    # sample did not hold, and the law fails on it rather than passing on the
+    # values it happened to be given.
+    refuted = "not_subset" in (left.relation_to(right), right.relation_to(left))
+    return sample_agree and not refuted
 
 
 # THEORY: open-and-close-read-the-region
