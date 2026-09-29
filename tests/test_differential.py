@@ -60,6 +60,7 @@ if TYPE_CHECKING:
 # cleanly when the group is absent.
 _REQUIRED = os.environ.get("VALGEBRA_REQUIRE_DIFFERENTIAL") == "1"
 try:
+    import pydantic
     from jsonschema import Draft202012Validator
     from pydantic import TypeAdapter
 except ImportError:  # pragma: no cover - exercised by dependency presence, not branch
@@ -213,7 +214,7 @@ _OBJECT_VALIDATORS = {case.name: Validator(case.schema) for case in OBJECT_CASES
 def _pydantic_accepts(adapter: TypeAdapter, value: object) -> bool:
     try:
         adapter.validate_python(value, strict=True)
-    except Exception:  # noqa: BLE001 - any validation failure is a reject verdict
+    except pydantic.ValidationError:
         return False
     return True
 
