@@ -141,12 +141,12 @@ assert not Validator(Annotated[float, at.Ge(0)]).is_valid(nan)
 assert not Validator(Annotated[float, at.Le(0)]).is_valid(nan)
 ```
 
-**A value has one length.** For a `list` and a `tuple` it is the number of
-elements the value *holds* — the same number a sequence schema counts when it
-walks them. For everything else it is `__len__`, which is how a `str`, `bytes`,
-`set` and `dict` are read anyway. The distinction is visible only for a `list` or
-`tuple` subclass that overrides `__len__`: its `MinLen` is measured against what
-it stores, not against what it reports, so `Annotated[list[int], MinLen(5)]` and
+**A value has one length.** For a builtin container — a `list`, `tuple`, `str`,
+`bytes`, `set`, `frozenset` or `dict` — it is the number of items the value
+*holds*: the same number a sequence schema counts when it walks one. For any
+other value it is `__len__`. The distinction is visible only for a container
+subclass that overrides `__len__`: its `MinLen` is measured against what it
+stores, not against what it reports, so `Annotated[list[int], MinLen(5)]` and
 the shape `[int, int, int, int, int]` narrow by the same count. A length two
 parts of one schema disagreed about would not be a property of the value, and a
 set defined by one would not be a set.
