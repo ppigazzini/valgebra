@@ -1,8 +1,8 @@
 """The node set is minimal, and this is where that stops being a slogan.
 
 `AGENTS.md` says valgebra is "the smallest set of schema nodes whose Boolean
-closure is consistent and complete for its domain", and nothing checked it. Five
-of the twenty-one variants denote sets the others already reach -- `Bool` is
+closure is consistent and complete for its domain", and nothing checked it. Four
+of the twenty variants denote sets the others already reach -- `Bool` is
 `Literal[True] | Literal[False]`, `Nothing` is `complement(anything)` -- so read
 literally the claim was false, and read charitably it was a claim nobody had
 written down.
