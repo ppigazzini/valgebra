@@ -86,8 +86,8 @@ Those are the fast ones, and they run in **your** clone. Before pushing, run the
 merge gate's own steps in a clone shaped like the runner's:
 
 ```bash
-uv run python scripts/gate.py           # the runnable steps, shallow clone, no tags
-uv run python scripts/gate.py --list    # what it runs, and what needs a runner
+uv run --no-sync python scripts/gate.py           # the runnable steps, shallow clone, no tags
+uv run --no-sync python scripts/gate.py --list    # what it runs, and what needs a runner
 ```
 
 It reads the commands out of `.github/workflows/ci.yml` rather than restating

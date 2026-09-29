@@ -39,14 +39,14 @@ Requirements: stable Rust (edition 2024, MSRV 1.88), Python >= 3.10, and
 
 ```bash
 uv sync                     # create .venv and install dev dependencies
-uv run maturin develop      # build the Rust extension into the venv
-uv run pre-commit install   # enable the git hooks
+uv run maturin develop                # build the Rust extension into the venv
+uv run --no-sync pre-commit install   # enable the git hooks
 ```
 
 Verify the build:
 
 ```bash
-uv run python -c "from valgebra import Validator; print(Validator(int).is_valid(7))"
+uv run --no-sync python -c "from valgebra import Validator; print(Validator(int).is_valid(7))"
 ```
 
 Building the docs site locally needs the extension built first
@@ -65,16 +65,20 @@ cargo clippy --all-targets --all-features -- -D warnings
 # The workspace links libpython: a virtual environment's interpreter is not on
 # the default loader path, and a test binary that cannot find it does not start.
 # `scripts/gate.py` sets the same two variables for the steps it runs.
-export PYO3_PYTHON="$(uv run python -c 'import sys; print(sys.executable)')"
-export LD_LIBRARY_PATH="$(uv run python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):${LD_LIBRARY_PATH:-}"
+export PYO3_PYTHON="$(uv run --no-sync python -c 'import sys; print(sys.executable)')"
+export LD_LIBRARY_PATH="$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))'):${LD_LIBRARY_PATH:-}"
 cargo test
 cargo check --manifest-path fuzz/Cargo.toml --all-targets
-uv run python scripts/docs_lint.py
-uv run maturin develop --uv
-uv run ruff check . && uv run ruff format --check .
-uv run ty check
-uv run pytest
+uv run --no-sync python scripts/docs_lint.py
+uv run --no-sync maturin develop --uv
+uv run --no-sync ruff check . && uv run --no-sync ruff format --check .
+uv run --no-sync ty check
+uv run --no-sync pytest
 ```
+
+Every `uv run` after the first build carries `--no-sync`: a bare one re-syncs the
+environment first, which replaces the build `maturin develop` installed, so the
+commands after it would test a module other than the one just built.
 
 The binding's four corpora sit behind `--features interpreter-tests`, which
 links an **embedded** interpreter -- one with no virtual environment around it,
@@ -87,7 +91,7 @@ the command because exporting it would send every later `uv run` to the same
 prefix and past the environment:
 
 ```bash
-PYTHONHOME="$(uv run python -c 'import sys; print(sys.base_prefix)')" \
+PYTHONHOME="$(uv run --no-sync python -c 'import sys; print(sys.base_prefix)')" \
   cargo test -p valgebra-py --features interpreter-tests
 ```
 
@@ -258,7 +262,7 @@ collide with an unrelated sense used nearby. Say which one you mean.
 | **survivor** | a mutation of the source that the tests did not notice. A signal about the tests, never about the mutation |
 | **equivalent mutant** | a mutation that provably cannot change any result, so no test can kill it. Excluded from the sweep with its argument, never counted as a gap |
 | **ratchet** | a committed floor that may only move one way. The mutation baseline is one; a budget is not |
-| **budget** | a committed ceiling a measurement is held to |
+| **budget** | a committed two-sided band a measurement is held to, in `scripts/perf_budget.json` |
 | **ledger** | an enumerated list held to the tree in both directions, so an entry that stops being true fails and a subject with no entry fails too |
 | **probe** | an instrument that *searches* for a defect rather than checking an enumerated list of them. A ledger confirms the rules it was built from; only a search reports a rule nobody wrote |
 | **suspected gap** | a relation the decision procedure answers `False` that no value refutes, so it looks true and was not seen. Accepted only with a reason and a route to deciding it |
