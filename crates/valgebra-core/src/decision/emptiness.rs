@@ -21,7 +21,7 @@ use crate::ir::{ClassIx, Constraint, Constraints, DefIx, Polarity, Schema};
 use crate::kind::{Kind, Region, Regions};
 use crate::verdict::Verdict;
 
-use super::constraints::{Density, bounds_unsatisfiable, shortest, tightest_bounds};
+use super::constraints::{Density, bounds_unsatisfiable, longest, shortest, tightest_bounds};
 use super::records::keyed_map_meet_empty;
 use super::{
     DECISION_BUDGET, LeafRelations, NoLeafRelations, has_complementary_pair, has_disjoint_pair,
@@ -521,6 +521,7 @@ fn refinement_verdict(
     let density = density_of([base]);
     if base.is_empty_rec(oracle, defs, visiting, budget)
         || bounds_unsatisfiable(constraints.iter(), oracle, density)
+        || lengths_miss_the_shape(base, constraints, oracle, defs, visiting, budget)
     {
         return Verdict::Empty;
     }
@@ -677,6 +678,36 @@ fn value_count_bounds(schema: &Schema, oracle: &dyn LeafRelations) -> (usize, us
             }),
         _ => (0, usize::MAX),
     }
+}
+
+/// Whether a sequence base's own lengths and the refinement's length bounds
+/// share none.
+///
+/// A sequence is never shorter than its fixed positions, and never longer where
+/// its tail admits nothing -- no tail, or one that is empty, which repeats zero
+/// times. So `MinLen(5)` over a list of exactly three elements, or `MaxLen(1)`
+/// over one of at least two, admits no sequence, whatever the conjunction's
+/// other constraints say.
+fn lengths_miss_the_shape(
+    base: &Schema,
+    constraints: &Constraints,
+    oracle: &dyn LeafRelations,
+    defs: &[Schema],
+    visiting: &mut Vec<DefIx>,
+    budget: &Cell<u32>,
+) -> bool {
+    let Schema::Seq { shape, .. } = base else {
+        return false;
+    };
+    let fixed = shape.prefix.len();
+    if longest(constraints.iter()).is_some_and(|most| most < fixed) {
+        return true;
+    }
+    let open = shape
+        .tail
+        .as_deref()
+        .is_some_and(|tail| !tail.is_empty_rec(oracle, defs, visiting, budget));
+    !open && shortest(constraints.iter()) > fixed
 }
 
 /// The one element schema a container repeats, for the containers that repeat

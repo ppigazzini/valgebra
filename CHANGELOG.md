@@ -35,6 +35,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a TypedDict subclass inherits what its base says about unnamed keys
 - fix: a space or a # inside a verbose class is refused
 - fix: the unsupported-form refusal names every subscripted form it reads
+- fix: a length bound past a sequence's own lengths is empty -- internal
 
 -->
 

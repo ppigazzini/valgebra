@@ -62,6 +62,17 @@ pub(super) fn shortest<'a>(constraints: impl Iterator<Item = &'a Constraint>) ->
         .unwrap_or(0)
 }
 
+/// The longest length a conjunction of bounds admits, which is the smallest
+/// `MaxLen` among them, or `None` where none is written.
+pub(super) fn longest<'a>(constraints: impl Iterator<Item = &'a Constraint>) -> Option<usize> {
+    constraints
+        .filter_map(|c| match c {
+            Constraint::MaxLen(n) => Some(*n),
+            _ => None,
+        })
+        .min()
+}
+
 /// The tightest lower and upper bound a conjunction names, and whether every
 /// comparison it took was answered.
 ///

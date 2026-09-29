@@ -1734,6 +1734,61 @@ fn steps_entail_only_where_the_remainder_reads_them_alike() {
     assert!(!entailed(&Schema::Str, INT_2, INT_4));
 }
 
+/// Every set is below the complement of an empty set.
+///
+/// The fuzz target's case: a subject nothing can read -- it holds an
+/// unresolved back edge -- against the complement of a three-element list
+/// refinement bounded to five elements or more, which is empty. The rules ask
+/// the universe bound of any pair they decline, and read the refinement as
+/// inhabited because its length rule compared `MinLen` with `MaxLen` alone and
+/// not with the three lengths the list's shape fixes. The set representation
+/// read it empty, and declined on the subject first.
+#[test]
+fn every_set_is_below_the_complement_of_an_empty_set() {
+    let refine = |base: Schema, constraints: Vec<Constraint>| Schema::Refine {
+        base: Arc::new(base),
+        constraints: constraints.into(),
+    };
+    let subject = refine(
+        refine(
+            refine(Schema::SelfRef(2).complement(), Vec::new()),
+            vec![Constraint::MinLen(5)],
+        ),
+        vec![Constraint::MinLen(2)],
+    );
+    let three = Schema::list(SeqShape::fixed([Schema::Bool, Schema::Bool, Schema::Bool]));
+    let empty = refine(three, vec![Constraint::MinLen(5)]);
+    assert!(empty.is_empty());
+    let universe = Schema::Complement(Arc::new(empty));
+    assert!(subject.is_subtype_of(&universe));
+}
+
+/// A sequence is never shorter than its fixed positions, and never longer where
+/// its tail admits nothing, so a length bound past either end empties it.
+#[test]
+fn a_length_bound_past_a_shapes_own_lengths_is_empty() {
+    let refine = |base: Schema, constraint: Constraint| Schema::Refine {
+        base: Arc::new(base),
+        constraints: vec![constraint].into(),
+    };
+    let pair = || [Schema::Int, Schema::Str];
+    let exact = Schema::list(SeqShape::fixed(pair()));
+    let at_least = Schema::tuple(SeqShape::prefix_tail(pair(), Schema::Int));
+    let closed_tail = Schema::list(SeqShape::prefix_tail(pair(), Schema::Nothing));
+    for (schema, empty) in [
+        (refine(exact.clone(), Constraint::MinLen(3)), true),
+        (refine(exact.clone(), Constraint::MaxLen(1)), true),
+        (refine(closed_tail, Constraint::MinLen(3)), true),
+        (refine(at_least.clone(), Constraint::MaxLen(1)), true),
+        // The ends themselves, and a tail that reaches past the prefix.
+        (refine(exact.clone(), Constraint::MinLen(2)), false),
+        (refine(exact, Constraint::MaxLen(2)), false),
+        (refine(at_least, Constraint::MinLen(9)), false),
+    ] {
+        assert_eq!(schema.verdict() == Verdict::Empty, empty, "{schema:?}");
+    }
+}
+
 /// A constraint of another kind entails nothing, in every family.
 ///
 /// Each arm of the entailment reads the subtype's set for a constraint of the

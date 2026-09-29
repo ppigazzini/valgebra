@@ -789,6 +789,19 @@ draws the family. A finished validator carries no such reference -- `pruned`
 keeps what the schema reaches and nothing it names is dropped -- so no answer a
 caller can ask for moves.
 
+**A length bound reads the lengths a sequence's shape can take.** A sequence
+is never shorter than its fixed positions and never longer where its tail
+admits nothing, so `MinLen(5)` over a list of exactly three elements is empty.
+Compared with `MaxLen` alone, the refinement read as inhabited, and its
+complement as short of the universe. The nightly fuzzer drew a subject holding
+an unresolved back edge against that complement: the set representation proved
+the refinement empty and declined on the subject, and the rules, asked next,
+answered that the subject was not below it.
+`lengths_miss_the_shape` in `decision/emptiness.rs` reads the shape, the
+seed `below-the-complement-of-a-length-the-shape-cannot-take` keeps the input,
+and `every_set_is_below_the_complement_of_an_empty_set` in `decision/tests.rs`
+keeps the pair.
+
 ## Two more places a shape stood in for the question
 
 The bounds were not the only ones, and the same search found the rest.

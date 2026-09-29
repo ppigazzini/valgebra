@@ -126,14 +126,14 @@ answers `"undecided"`.
 - **Refinements.** A refinement is a subtype of its base and of a refinement with
   looser bounds — a tighter numeric or length bound entails a looser one, not only
   a verbatim-contained constraint set; a bound conjunction that cannot be satisfied
-  — a lower bound above an upper bound, or a minimum length above a maximum — is
-  empty. Where the values are bounded to the integers the bounds count them, so an
-  interval that skips every integer — `Annotated[int, Gt(0), Lt(1)]` — is empty
-  even though its endpoints are ordered. That holds however the meet is spelled:
-  on one refinement, or across an intersection whose members bound it, since an
-  intersection is a subset of every member. A `bool` base counts too, because it
-  subclasses `int`; a `float` base holds `0.5` between the same bounds, so they are
-  not empty.
+  — a lower bound above an upper bound, a minimum length above a maximum, or a
+  length a sequence's shape cannot take — is empty. Where the values are bounded
+  to the integers the bounds count them, so an interval that skips every integer
+  — `Annotated[int, Gt(0), Lt(1)]` — is empty even though its endpoints are
+  ordered. That holds however the meet is spelled: on one refinement, or across
+  an intersection whose members bound it, since an intersection is a subset of
+  every member. A `bool` base counts too, because it subclasses `int`; a `float`
+  base holds `0.5` between the same bounds, so they are not empty.
   A bound over a **float** base is a set of floats and is decided as one: which
   side a bound lands on is chosen by the base rather than by the operand's type,
   so `Annotated[float, Gt(0)]` carries the integer zero and still orders the
