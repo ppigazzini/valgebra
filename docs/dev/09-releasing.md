@@ -59,8 +59,9 @@ release waits for whatever reviewers those environments require.
 ## The order
 
 1. **Bump, in one commit.** The workspace version, both lockfiles, and the
-   changelog: roll the `Unreleased` entries into a dated section for the version
-   and add its compare and tag links. Land it on `main`, so the merge gates run
+   changelog: roll the `Unreleased` entries into a section for the version,
+   dated the day of this commit rather than the day the tag lands, and add its
+   compare and tag links. Land it on `main`, so the merge gates run
    against the tree that is about to be published.
 
    The changelog ledger (`tests/test_changelog_ledger.py`) reads the *page* for

@@ -269,8 +269,8 @@ assert valgebra.__version__
 Every name above is public and is reached from the top-level `valgebra`
 namespace. `valgebra.__all__` lists the schema surface — `Validator`, the
 combinators, `Regex`, `recursive`, the two lattice bounds, the three
-construction limits, and `ValidationError`; `__version__` is public too and is
-not in it, being metadata rather than part of the algebra.
+construction limits and `ValidationError` — and `__version__`, the one name in
+it that is metadata rather than part of the algebra.
 
 The compiled extension underneath, `valgebra._valgebra`, is private: its layout,
 its module name, and which names it carries are free to change in any release.

@@ -29,10 +29,12 @@ run them as printed:
 pip install annotated-types
 ```
 
-Wheels are published for Linux (manylinux and musllinux, x86_64 and aarch64),
-macOS (Intel and Apple silicon) and Windows x64 for every supported CPython,
-3.10 through 3.15, Windows arm64 from 3.12, and free-threaded CPython 3.14 and
-3.15 on Linux, macOS and Windows x64. Free-threaded support starts at 3.14t; the
+Wheels are published for Linux (manylinux, x86_64 and aarch64), macOS (Intel and
+Apple silicon) and Windows x64 for every supported CPython, 3.10 through 3.15,
+Windows arm64 from 3.12, and free-threaded CPython 3.14 and 3.15 on Linux, macOS
+and Windows x64. musllinux (x86_64 and aarch64) gets a wheel for each
+interpreter its build image carries: in 0.0.14, CPython 3.10 through 3.14 and
+3.14t. Free-threaded support starts at 3.14t; the
 earlier 3.13 free-threaded build is not a target.
 
 **PyPy 3.11 is a target, on Linux.** Wheels are published for PyPy 7.3 and
@@ -49,9 +51,11 @@ wheels are plain release builds, where the CPython wheels are profile-guided:
 a profiled extension runs out of the native stack budget `cpyext` sizes from
 the recursion limit before the walk reaches its own depth bound, and the
 process dies where the plain build reports the bound. The release runs the
-whole suite on each PyPy wheel it ships, on the PyPy it is built for, not
-only on the one the push lane builds. There is no PyPy wheel for macOS or Windows, where the source
-distribution is the install.
+whole suite on each manylinux PyPy wheel it ships, on the PyPy it is built for,
+not only on the one the push lane builds; the musllinux one, like every
+musllinux wheel, is built and never run
+([dev/09-releasing.md](dev/09-releasing.md)). There is no PyPy wheel for macOS
+or Windows, where the source distribution is the install.
 
 One promise this page makes holds differently there. A validator releases the
 classes, enums and predicates its schema names when nothing else holds them, and

@@ -66,14 +66,16 @@ constants pool. The result is wrapped in an immutable `Validator`.
 or a JSON document — is presented through one `Value` abstraction
 ([`input.rs`](crates/valgebra-py/src/input.rs)), and a **single membership walk**
 ([`check/walk.rs`](crates/valgebra-py/src/check/walk.rs)) decides it. The walk runs in one
-of two modes: a *fast* mode that returns a bool and allocates nothing, and an
+of two modes: a *fast* mode that returns a bool and allocates nothing but what a
+measured reading pays for ([docs/dev/04-walk.md](docs/dev/04-walk.md)), and an
 *explain* mode that builds a `Violation` with the path, the expected label, and a
 value summary. A `Violation` becomes the `ValidationError`
 ([`errors.rs`](crates/valgebra-py/src/errors.rs)) that `validate` raises.
 
-The JSON path validates the parsed document in place against the same walk, so a
-JSON document is judged exactly as `json.loads` of it would be — same decision,
-same errors.
+`is_valid_json` walks the parsed document in place, and `validate_json` and
+`load` walk the Python value the parser builds, so a document gets the decision
+and the errors `json.loads` of it would, except where the JSON grammar is
+stricter ([docs/07-json.md](docs/07-json.md)).
 
 ## How two schemas are compared
 
@@ -173,7 +175,7 @@ trade-off.
   lives in the bindings, and the constants pool keeps the IR language-agnostic.
 - **Immutable validators.** A compiled validator never mutates after it is
   built, so one validator is shared across threads. Free-threaded (no-GIL)
-  CPython 3.14 is supported: the extension declares `gil_used = false`, imports
+  CPython 3.14 and 3.15 are supported: the extension declares `gil_used = false`, imports
   without re-enabling the GIL, and the concurrency suite exercises true parallel
   validation there.
 
@@ -188,20 +190,21 @@ The extension ships as a **per-interpreter-version** module, not a stable-ABI
   `abi3` wheel would forfeit that and pin the build to the `abi3` floor. The
   recorded hot-path speedup is on the [performance page](docs/11-performance.md).
 - **The cost it imposes.** One wheel per supported CPython minor. The release
-  matrix must therefore cover every minor in `requires-python` (`>=3.10`, so
-  3.10 through 3.14, matching the `classifiers` in `pyproject.toml`); an
-  uncovered minor would get no wheel.
-- **How the matrix covers it.** The release workflow builds with maturin
-  `--find-interpreter`, which builds for every CPython the build image exposes
-  that satisfies `requires-python`, across manylinux and musllinux, macOS (Intel
-  and Apple silicon), and Windows. PGO applies on the hosts that run their own
-  output; the musllinux cross-builds and the Windows arm64 target ship plain
-  release builds with the same compatibility. A dispatch with no publish target
+  matrix must therefore cover every minor in `requires-python` (`>=3.10`, and
+  3.10 through 3.15 in the `classifiers` in `pyproject.toml`); an uncovered
+  minor would get no wheel.
+- **How the matrix covers it.** The release workflow names each interpreter it
+  builds for on manylinux and macOS, and on Windows installs them before
+  maturin's `--find-interpreter` runs; only the musllinux rows build for
+  whatever their image carries. PGO applies on the hosts that run their own
+  output; the musllinux cross-builds, the PyPy wheels and the Windows arm64
+  target ship plain release builds with the same compatibility. A dispatch with no publish target
   builds the whole matrix as a dry run, which is how matrix coverage is verified
   before a release.
-- **Free-threaded wheels ship where available.** Where the image exposes a
-  free-threaded interpreter, `--find-interpreter` also builds a free-threaded
-  `cp314t` wheel. That wheel is part of the published set.
+- **Free-threaded wheels ship by name.** The Linux, macOS and Windows x64 rows
+  name `3.14t` and `3.15t`, so `cp314t` and `cp315t` are part of the published
+  set there; musllinux gets the free-threaded build its image carries, and
+  Windows arm64 none.
 
 The interpreter is never embedded in the shipped wheel: maturin builds the
 extension module, and the `pyo3` `extension-module` feature is injected at

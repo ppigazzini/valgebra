@@ -80,9 +80,9 @@ valgebra as a bare class and is not deep-checked.
   silent fallback.
 - **JSON on the Rust path.** `validate_json` parses and validates JSON in Rust,
   consistent with the object path.
-- **Immutable and thread-safe** by design. Free-threaded CPython 3.14 is
-  supported with a dedicated `cp314t` wheel where the release image exposes that
-  interpreter.
+- **Immutable and thread-safe** by design. Free-threaded CPython 3.14 and 3.15
+  are supported, with `cp314t` and `cp315t` wheels for Linux, macOS and Windows
+  x64.
 
 ## The set
 

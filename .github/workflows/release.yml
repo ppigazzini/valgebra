@@ -294,7 +294,7 @@ jobs:
           - { name: windows-arm64, runner: windows-11-arm, artifact: wheels-windows-11-arm-aarch64-native, pythons: "3.12 3.15", host: "3.12\n3.15" }
     runs-on: ${{ matrix.wheel.runner }}
     timeout-minutes: 30
-    # The two musllinux wheels are not smoked here: running them needs a musl
+    # The musllinux wheels are not smoked here: running them needs a musl
     # (Alpine) container with a musl interpreter, a separate lane. The glibc
     # Linux, macOS, and Windows wheels — the platforms with no other functional
     # coverage — are all exercised below.

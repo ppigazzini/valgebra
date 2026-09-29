@@ -322,9 +322,9 @@ other; the release runs the whole product suite on each PyPy wheel it ships.
 
 A support and correctness release: ten entries, one addition and nine fixes.
 
-Python 3.15 is supported, and every platform a wheel ships for gets one for
-every interpreter the classifiers name: 0.0.12 left Apple silicon without 3.10
-and every platform but Linux without free-threaded 3.14.
+Python 3.15 is supported, and every platform a wheel ships for but musllinux
+gets one for every interpreter the classifiers name: 0.0.12 left Apple silicon
+without 3.10 and every platform but Linux without free-threaded 3.14.
 
 Two fixes are about a process rather than an answer. A recursive meet of
 records overflowed the native stack from `is_empty()` and `is_subtype_of()` and
@@ -342,8 +342,8 @@ literal is refused as a `frozenset` literal is, rather than read as a constant.
 
 - **Python 3.15 is supported.** The package names it in its classifiers, every
   push runs the suite on 3.15 as a merge gate, and a release ships `cp315` and
-  free-threaded `cp315t` wheels for Linux, macOS and Windows x64, and `cp315`
-  for Windows arm64. Until 3.15.0 is published the wheels build against its
+  free-threaded `cp315t` wheels for manylinux, macOS and Windows x64, and
+  `cp315` for Windows arm64. Until 3.15.0 is published the wheels build against its
   release candidate, whose ABI the final release keeps. 3.10 stays the floor.
 
 ### Fixed
