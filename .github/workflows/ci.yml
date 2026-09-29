@@ -721,22 +721,11 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        # A force-push leaves `before` on no branch, and measuring a commit
+        # against itself passes whatever it did; the script says how it reads
+        # the base past both, and the mutation sweeps read it the same way.
         run: |
-          base="$BASE_SHA"
-          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            # The event named no reachable base: a force-push discards the
-            # `before` commit, and a fresh branch has none.
-            git fetch --no-tags origin "$DEFAULT_BRANCH"
-            base="$(git rev-parse FETCH_HEAD)"
-          fi
-          if [ "$base" = "$(git rev-parse HEAD)" ]; then
-            # Measuring a commit against itself passes whatever it did. That is
-            # what a force-push to the default branch produces, since the
-            # fallback above then fetches the very commit being tested.
-            git fetch --no-tags --deepen=1 origin HEAD || true
-            base="$(git rev-parse HEAD~1)"
-            echo "the base resolved to HEAD; using its parent instead"
-          fi
+          base="$(python3 scripts/change_base.py)"
           echo "sha=$base" >> "$GITHUB_OUTPUT"
           echo "measuring against $base"
       # Deterministic instruction-count regression gate: cachegrind over the
@@ -1118,13 +1107,9 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          base="$BASE_SHA"
-          # A first push to a branch, or a force-push, can leave no usable base;
-          # fall back to the default branch rather than sweeping the whole tree.
-          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            git fetch --no-tags origin "$DEFAULT_BRANCH"
-            base="$(git rev-parse FETCH_HEAD)"
-          fi
+          # The bench gate's base, read the same way: past a force-push, which
+          # otherwise measures an amended commit from itself and sweeps nothing.
+          base="$(python3 scripts/change_base.py)"
           # WHOLE FILES, not the diff's lines. `--in-diff` would sweep only the
           # lines the change touches, and the miss that matters is the other
           # direction: an edit that stops an EXISTING test from killing a mutant
@@ -1245,13 +1230,9 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          base="$BASE_SHA"
-          # A first push to a branch, or a force-push, can leave no usable base;
-          # fall back to the default branch rather than sweeping the whole tree.
-          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            git fetch --no-tags origin "$DEFAULT_BRANCH"
-            base="$(git rev-parse FETCH_HEAD)"
-          fi
+          # The bench gate's base, read the same way: past a force-push, which
+          # otherwise measures an amended commit from itself and sweeps nothing.
+          base="$(python3 scripts/change_base.py)"
           # WHOLE FILES, not the diff's lines. `--in-diff` would sweep only the
           # lines the change touches, and the miss that matters is the other
           # direction: an edit that stops an EXISTING test from killing a mutant

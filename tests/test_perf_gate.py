@@ -16,6 +16,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -442,8 +443,12 @@ def _run_step(tree: Path, base_sha: str, branch: str) -> str:
     """Run the step and read the `sha=` it recorded.
 
     A fresh output file per run: a step appends to `GITHUB_OUTPUT`, as the
-    runner's does, so a shared one would hold every earlier answer too.
+    runner's does, so a shared one would hold every earlier answer too. The
+    script the step calls is laid into the synthetic checkout, where the step
+    finds it on a runner.
     """
+    (tree / "scripts").mkdir(exist_ok=True)
+    shutil.copy2(ROOT / "scripts" / "change_base.py", tree / "scripts")
     with tempfile.NamedTemporaryFile("w+", delete=False) as output:
         recorded = Path(output.name)
     try:

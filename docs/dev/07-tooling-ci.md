@@ -826,6 +826,18 @@ Whole files, not the diff's lines: the miss that matters is an edit that stops a
 **existing** test from killing a mutant elsewhere in the same file, and that
 mutant is not in the diff.
 
+**A change starts where its commits leave the history they replace.** The
+bench gate's `rev` and the sweeps' file list come from one base, which
+`scripts/change_base.py` names: the event's base (a pull request's, or the
+`before` of a push) taken to its merge base with `HEAD`. A force-push names a
+`before` no branch reaches; the script fetches it by id where the host still
+serves it, so a rewritten history is measured from its fork point, and falls
+back to the default branch's tip -- which, pushed to, is `HEAD` itself -- and
+from there to `HEAD`'s parent. Measured from itself, an amended commit sweeps
+`core files: none` and passes. `tests/test_change_base.py` drives each case
+over a synthetic history, and holds every step reading the event's base to the
+script.
+
 **A slow network is not a red lane.** `astral-sh/setup-uv` reads its version
 manifest from `raw.githubusercontent.com` under a hard five-second timeout and
 never retries, so a slow response there does not make a job slow — it fails it,
