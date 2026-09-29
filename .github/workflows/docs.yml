@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: "3.12"
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-      - run: uv sync --group docs
+      - run: uv sync --locked --group docs
       # mkdocstrings imports the package to read its docstrings.
       - run: uv run --no-sync maturin develop --uv
       # --strict fails the build on a broken link or an unresolved reference.

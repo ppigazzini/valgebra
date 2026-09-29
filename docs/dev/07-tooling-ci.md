@@ -853,8 +853,9 @@ files on disk.
 the environment again first, which uninstalls the editable build `maturin
 develop` put there and installs the wheel from the lock, so every command after
 it tests a module the lane did not build. Every lane installs what it needs with
-one `uv sync`, the dependency groups it names included, and runs every later
-command under `uv run --no-sync`. Dependabot proposes a release seven days
+one `uv sync --locked`, the dependency groups it names included, and runs every
+later command under `uv run --no-sync`; `tests/test_workflow_syncs.py` holds both
+halves over every workflow, the Pages deploy included. Dependabot proposes a release seven days
 after it is published, so a version pulled in its first week never reaches a
 pull request, and `zizmor` audits the whole of `.github/`, where that setting
 lives.
