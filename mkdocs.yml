@@ -119,21 +119,21 @@ plugins:
       full_output: llms-full.txt
       sections:
         Getting started:
-          - README.md: Overview, positioning against pydantic and msgspec, and a first example.
+          - README.md: What valgebra is, how it is positioned, and the index to this guide.
           - 00-installation.md: Install the package and its build toolchain.
           - 01-tutorial.md: Guided learning path from a scalar schema to an inspected failure.
           - 02-quickstart.md: Condensed feature tour for readers who know the domain.
         Guides:
           - 03-schema-language.md: Every schema form with its denotation as a set of Python values.
-          - 04-algebra.md: The Boolean lattice — union, intersection, complement — the normal form construction builds, and the recipes derived from it.
+          - 04-algebra.md: The Boolean lattice (union, intersection, complement), the normal form construction builds, and the recipes derived from them.
           - 05-refinements.md: Constraints and predicate refinements over a base schema.
           - 06-recursion.md: The recursive fixpoint for self-referential schemas.
           - 07-json.md: Parsing and validating JSON on the Rust path.
           - 08-error-model.md: Exception type, error codes, and the violation path format.
-          - 09-inspection.md: Recipes for interrogating a codebase that has no schemas of its own.
+          - 09-inspection.md: Using valgebra to interrogate a codebase that has no schemas of its own.
           - 10-limits.md: Resource limits and the bounds the validator enforces.
           - 11-performance.md: Measured benchmarks, datasets, and compared versions.
-          - 18-static-checking.md: What ty, mypy and pyright read from a schema, the spellings they refuse, and the ruff settings a validated class needs.
+          - 18-static-checking.md: What ty, mypy and pyright read from a schema, the spellings they refuse, and the ruff settings a project that validates its own classes needs.
         Explanation:
           - 13-foundations.md: The denotational frame and the sourced set-theoretic and lattice theory.
           - 14-soundness.md: Why membership checking is sound on its own terms.

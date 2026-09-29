@@ -6,8 +6,8 @@ well as a budget belongs in a page, so there is not one. Most are per-file
 claims:
 
 * **A dead internal link.** Any ``[text](target)`` that is not a URL, a
-  ``mailto:`` or a bare ``#anchor`` must resolve, relative to the linking file or
-  to the repository root.
+  ``mailto:`` or a bare ``#anchor`` must resolve relative to the linking file;
+  its ``#anchor`` is not read.
 * **A named path that does not exist.** A ``crates/...``, ``scripts/...``,
   ``tests/...`` or ``.github/...`` path written in prose is a claim about this
   tree. A path holding a placeholder (``*``, ``<``, ``>``, ``...``) is skipped,
@@ -52,6 +52,9 @@ other:
   ``docs/dev/08-testing.md`` fails, and a row naming a test that does not exist
   fails. The pages state no count of them: a count in prose is a second copy
   of the table, and it drifts by one entry at a time.
+* **The llms.txt manifest.** A page in the site's ``nav`` that the ``llmstxt``
+  sections of ``mkdocs.yml`` do not name fails, and the reverse; so does a
+  manifest line whose summary is not its page's ``description:``.
 
 Three classes stay out of its reach, and they are the common ones: a real
 symbol attributed to the wrong file, a list in prose with the wrong count or
@@ -709,6 +712,10 @@ def check_bounds_ledger() -> list[str]:
     return problems
 
 
+#: A page's one-line summary in its front matter.
+DESCRIPTION = re.compile(r"^description: (.+)$", re.MULTILINE)
+
+
 def check_llms_manifest() -> list[str]:
     """Hold the machine-readable manifest to the nav, in both directions.
 
@@ -717,6 +724,10 @@ def check_llms_manifest() -> list[str]:
     reader that is not a browser. Nothing else compares them, so a page added to
     one is silently absent from the other -- and the half that goes missing is the
     half no human opens.
+
+    A manifest line also carries its page's summary, which is a copy of the
+    page's own ``description:``, and is held to it: a copy that moves apart
+    describes to that reader a page the site no longer has.
     """
     config = ROOT / "mkdocs.yml"
     if not config.exists():
@@ -725,18 +736,28 @@ def check_llms_manifest() -> list[str]:
     body = text.partition("  - llmstxt:")
     if not body[1]:
         return []
-    nav = set(re.findall(r"^ +- [^:\n]+: ([a-z0-9-]+\.md)$", body[0], re.MULTILINE))
-    manifest = set(re.findall(r"^ +- ([a-z0-9-]+\.md):", body[2], re.MULTILINE))
-    if not nav or not manifest:
+    nav = set(re.findall(r"^ +- [^:\n]+: ([A-Za-z0-9-]+\.md)$", body[0], re.MULTILINE))
+    lines = dict(re.findall(r"^ +- ([A-Za-z0-9-]+\.md): (.+)$", body[2], re.MULTILINE))
+    if not nav or not lines:
         return ["mkdocs.yml: the nav or the llms.txt manifest reads as empty"]
-    return [
+    problems = [
         f"mkdocs.yml: {page} is in the {here} but not the {there}"
         for pages, here, there in (
-            (nav - manifest, "nav", "llms.txt manifest"),
-            (manifest - nav, "llms.txt manifest", "nav"),
+            (nav - lines.keys(), "nav", "llms.txt manifest"),
+            (lines.keys() - nav, "llms.txt manifest", "nav"),
         )
         for page in sorted(pages)
     ]
+    for page, summary in sorted(lines.items()):
+        source = ROOT / "docs" / page
+        if not source.exists():
+            continue
+        described = DESCRIPTION.search(source.read_text(encoding="utf-8"))
+        if described is None or described.group(1).strip() != summary.strip():
+            problems.append(
+                f"mkdocs.yml: the llms.txt line for {page} is not its description"
+            )
+    return problems
 
 
 def main() -> int:

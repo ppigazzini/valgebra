@@ -450,3 +450,39 @@ def test_a_products_table_the_page_does_not_have_is_reported(
     page.write_text("# Testing\n\nNo table at all.\n")
     problems = lint.check_product_table()
     assert problems, "a page with no products table passed"
+
+
+def _synthetic_manifest(root: Path, summary: str) -> None:
+    """Write a site of one page, named in the nav and in the llms.txt manifest."""
+    (root / "docs").mkdir()
+    (root / "docs" / "README.md").write_text(
+        "---\ndescription: What the page is.\n---\n\n# Home\n"
+    )
+    (root / "mkdocs.yml").write_text(
+        "nav:\n"
+        "  - Home: README.md\n"
+        "plugins:\n"
+        "  - llmstxt:\n"
+        "      sections:\n"
+        "        Start:\n"
+        f"          - README.md: {summary}\n"
+    )
+
+
+def test_an_llms_line_that_is_not_its_page_description_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The manifest's summary is a second copy of the page's front matter, and
+    # the one no human reads, so nothing but this rule sees it move apart.
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    _synthetic_manifest(tmp_path, "What the page was.")
+    problems = lint.check_llms_manifest()
+    assert any("README.md" in problem for problem in problems), problems
+
+
+def test_an_llms_line_that_is_its_page_description_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(lint, "ROOT", tmp_path)
+    _synthetic_manifest(tmp_path, "What the page is.")
+    assert lint.check_llms_manifest() == []
