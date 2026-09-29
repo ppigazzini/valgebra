@@ -6,8 +6,8 @@ description: Resource limits and the bounds the validator enforces.
 
 A validator runs against untrusted values, so every recursive descent and every
 error-reporting probe is bounded. A pathological input meets a gated limit and is
-rejected cleanly; it never overflows the native stack, raises a Python
-`RecursionError`, or hangs. The limits bound work driven by the *value* — the
+rejected cleanly; on a thread with the stack its platform gives one, it never
+overflows the native stack, raises a Python `RecursionError`, or hangs. The limits bound work driven by the *value* — the
 untrusted part. A schema's own size (the width of a union, the number of declared
 fields) is written by the developer and is trusted.
 
@@ -54,10 +54,14 @@ assert (MAX_SCHEMA_DEPTH, MAX_DEFINITIONS, MAX_SCHEMA_NODES) == (128, 128, 100_0
   unfolding**, and at most 512 levels of **descent** in total. The second is what
   binds for a deep definition, because a recursive definition descends its whole
   body once per level of the value — so the frames a value can ask for are the
-  product of the two, not either one. A level costs well under a kilobyte of
-  native stack, which puts the deepest walk inside the stack a platform gives a
-  thread. This holds on both the object path and the JSON path; an over-deep JSON
-  document is rejected by the parser as `json_invalid`.
+  product of the two, not either one. A level costs about 0.6 KiB of native
+  stack in a release build, which puts the deepest walk inside the 512 KiB the
+  smallest platform default gives a thread. A thread started with less can run
+  out before the bound does, and the process ends with it: a 240-level value
+  overflowed a 128 KiB thread on CPython 3.14, and a 480-level one a 256 KiB
+  thread on PyPy. Give a thread that validates deep values the platform's
+  default stack or more. This holds on both the object path and the JSON path;
+  an over-deep JSON document is rejected by the parser as `json_invalid`.
 
     The parser has a bound of its own — a couple of hundred levels of arrays and
     objects — and it sits **between** the two: wider than the unfolding bound and

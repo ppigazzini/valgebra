@@ -182,10 +182,12 @@ impl Default for WalkState {
 /// makes "a value never overflows the native stack" a statement about the walk
 /// rather than about the values a caller happens to pass.
 ///
-/// The figure is the stack a walk needs. A level costs under a kilobyte of
-/// native stack in an unoptimized build, so 512 of them sit inside the smallest
-/// stack a platform gives a thread (512 KiB) and far inside the megabytes a main
-/// thread gets. A schema at the construction depth bound reaches 128 of them
+/// The figure is the stack a walk needs. A level costs about 0.6 KiB of native
+/// stack in a release build, so 512 of them sit inside the smallest stack a
+/// platform gives a thread (512 KiB) and far inside the megabytes a main thread
+/// gets. An unoptimized build spends about 3 KiB a level and fits no such
+/// bound on a thread, which is a build nothing ships. A thread given less than
+/// the platform's default can overflow first; `docs/10-limits.md` says so. A schema at the construction depth bound reaches 128 of them
 /// against a flat value, so the ceiling is four times the depth any
 /// non-recursive schema can ask for.
 pub(crate) const MAX_WALK_DEPTH: usize = 512;

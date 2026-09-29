@@ -252,8 +252,10 @@ Membership reads a container entry by entry and runs Python at almost every one,
 so the container can move underneath the reading: a predicate that writes to the
 dict it is checking, and — on a free-threaded interpreter — another thread
 writing to a shared value. A reading interrupted that way decides nothing about
-the contents, so it is reported rather than guessed: the value is a non-member
-and `validate` names it `mutated_during_validation`.
+the contents, so it is reported rather than guessed: the value is a non-member.
+`validate` names a list or a set that moved `mutated_during_validation`, and
+reads a dict a second time and reports what it finds there -- the violation the
+dict carries by then, or `mutated_during_validation` where it carries none.
 
 ```python
 from typing import Annotated
@@ -279,10 +281,13 @@ except ValidationError as error:
 ```
 
 A **dict, a set and a list** are all read this way — each against a count taken
-once — so each reports rather than guesses; a tuple cannot be resized and needs
-no guard. Only a change in the container's **size** costs the reading; a value
-rewritten in place leaves the entries where they are and the check answers
-normally. The
+once, while it is read — so each reports rather than guesses; a tuple cannot be
+resized and needs no guard. Only a change in the container's **size** costs the
+reading, and only while that container is being read. A change that keeps the
+size — a value rewritten in place, one key swapped for another, a `pop` and an
+`append` — is not seen, and the check answers about what it read; neither is a
+change to a container whose own reading has already finished, such as the first
+element of a list while the second is walked. The
 same code also reports the rarer case of a value that answers two readings
 differently — a predicate or an `__eq__` that is not a function of the value —
 because it is the same failure: the check has no stable value to decide about.
