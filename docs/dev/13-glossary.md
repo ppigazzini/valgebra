@@ -19,6 +19,7 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **the lattice bounds** | `Anything` (top, every value) and `Nothing` (bottom, no value) |
 | **the spelling** | how the top was written — `typing.Any` or `anything` — carried by `Anything` and read by `repr` alone. It is not part of the set: two schemas differing only in it are equal, and `Spelling` compares, orders and hashes alike, so every rule keyed on those — which is every rule — sees one value |
 | **region** | one part of the mutually disjoint partition of the value universe that `Region` computes over. Six scalar regions plus one non-scalar remainder |
+| **clause** | one key-schema/value-schema pair of a mapping, `MapClause` in `crates/valgebra-core/src/ir.rs`. A dict literal's `{str: int}` is one; an open `TypedDict`'s reading carries a `str` clause for the keys its fields do not name |
 | **pool** | the validator's `Vec<Py<PyAny>>`, holding four kinds of object addressed by four index types ([06-type-design.md](06-type-design.md)) |
 | **definition** | an entry in the validator's definitions table; the target of a `Ref` back edge, produced by `recursive` |
 | **contractive** | a recursive definition whose every self-reference sits under a structural constructor. `Schema::occurs_unguarded` decides it |
@@ -71,7 +72,7 @@ file or symbol that owns the thing, so a rename dates the entry.
 | **witness** | a value that settles a relation by example: one inside the subtype and outside the supertype disproves inclusion. A `False` with no witness is the probe's subject |
 | **detached surface** | a `Cargo.toml` outside the root workspace, which no workspace-wide command reaches ([07-tooling-ci.md](07-tooling-ci.md)) |
 
-## Six collisions, and both senses are live
+## Eight collisions, and both senses are live
 
 Say which one you mean.
 
@@ -82,6 +83,8 @@ Say which one you mean.
 | **budget** | the committed instruction count a workload is held to | `DECISION_BUDGET`, the work ceiling one decision query may spend. Not `Bounds`, which holds a *build* rather than a query |
 | **ledger** | a list held to the tree in both directions | the completeness ledger, which is that shape but about *relations* rather than about files |
 | **snapshot** | a recorded expected output a test compares against, held by `syrupy` under `tests/__snapshots__` | the copy a container walk takes of a value's storage before reading it, so a `__len__` that lies or a mutation mid-walk cannot change what was measured |
+| **floor** | the oldest interpreter release the package supports, which `ci.yml` names and `scripts/gate.py` builds beside the caller's | a committed minimum a figure may not fall below: a coverage scope's, or a ratchet's |
+| **region** | one part of the scalar partition `Region` computes | the key-type region a mapping's clauses leave unclaimed, which `open` frees and `close` refuses |
 | **witness** | the value a probe looks for: one inside the subtype and outside the supertype, which disproves inclusion | the value a *refutation* stands on, which the `witnessed` guard reads against the subject's own emptiness before believing a mismatch |
 
 ## Words this set avoids
