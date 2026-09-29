@@ -96,6 +96,13 @@ impl<'a, 'ctx> Frame<'a, 'ctx> {
 static BASE_LENGTHS: PyOnceLock<Slots> = PyOnceLock::new();
 static BASE_ITERS: PyOnceLock<Slots> = PyOnceLock::new();
 
+/// `dict.__getitem__` and `dict.copy`, resolved once per process: the slot
+/// `PyPy` reads a dict's values through, and the method that reads its storage.
+#[cfg(PyPy)]
+static DICT_GETITEM: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+#[cfg(PyPy)]
+static DICT_COPY: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
 /// Which builtin container a storage question is about.
 ///
 /// The helpers below each ask the same question of one of these, and a `bool`
@@ -279,6 +286,36 @@ fn reads_its_elements(value: &Bound<'_, PyAny>, base: Base, ctx: Ctx<'_>) -> boo
         Ok(slots) => carries(value, name, slots.get(base), ctx),
         Err(err) => unread(err, py, ctx),
     }
+}
+
+/// Whether this dict's type reads its values from its own storage.
+///
+/// [`reads_its_length`]'s question for the slot `PyPy`'s `cpyext` reads a
+/// dict's values through: see `record::stored`.
+#[cfg(PyPy)]
+fn reads_its_values(value: &Bound<'_, PyAny>, ctx: Ctx<'_>) -> bool {
+    let py = value.py();
+    let name = intern!(py, "__getitem__");
+    let own = DICT_GETITEM.get_or_try_init(py, || {
+        py.get_type::<PyDict>().getattr(name).map(Bound::unbind)
+    });
+    match own {
+        Ok(own) => carries(value, name, own, ctx),
+        Err(err) => unread(err, py, ctx),
+    }
+}
+
+/// What a dict holds, as an exact dict nothing else reaches: `dict.copy`, the
+/// base's own method, called on the value.
+#[cfg(PyPy)]
+fn held_dict<'py>(value: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyDict>> {
+    let py = value.py();
+    let copy = DICT_COPY.get_or_try_init(py, || {
+        py.get_type::<PyDict>()
+            .getattr(intern!(py, "copy"))
+            .map(Bound::unbind)
+    })?;
+    Ok(copy.bind(py).call1((value,))?.cast_into::<PyDict>()?)
 }
 
 /// Whether the value's type carries `name` as the base's own slot. The lookup

@@ -75,6 +75,16 @@ exclude_globs = [
 # target that does not exist, which reads as coverage and is not.
 exclude_re = [
     "has_disjoint_complement_pair",
+    # A function compiled for PyPy alone -- `#[cfg(PyPy)]`, where `cpyext`
+    # reads a container subclass through the methods it overrides -- is not
+    # compiled on the interpreter the binding sweep links. Every mutant of it
+    # builds and passes there, which says nothing about a test. The PyPy lane's
+    # product suite holds them: read in place, the tuple rows of
+    # `tests/test_storage_readings.py` crash and its dict rows answer wrong, and
+    # a key swapped mid-scan in `tests/test_mutation.py` takes the process down.
+    "check/walk/record\\.rs:.*: (replace stored(_copy)? -> .*|.* in stored(_copy)?)$",
+    "check/walk\\.rs:.*: (replace (held_dict|reads_its_values) -> .*|.* in (held_dict|reads_its_values))$",
+    "check/walk/sequence\\.rs:.*: delete ! in reads_where_it_lies$",
     # The explain pass over a keyed map runs only where the map did not match.
     # Running it always reports nothing extra -- a value that matched has no
     # violation to find -- and in the fast mode the violations go to a buffer

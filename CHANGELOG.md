@@ -36,6 +36,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: a space or a # inside a verbose class is refused
 - fix: the unsupported-form refusal names every subscripted form it reads
 - fix: a length bound past a sequence's own lengths is empty -- internal
+- fix: a PyPy tuple or dict subclass is read for what it holds
 
 -->
 
@@ -180,6 +181,14 @@ answer of its own, or a repair to a change not yet released.
   ended "supported: list, set, dict, tuple, Union, Optional, Literal,
   Callable", which left out `frozenset`, `Annotated` and the `TypedDict`
   qualifiers, all of which build. The list names each of them.
+- **A `tuple` or `dict` subclass is read for what it holds on PyPy.** PyPy's C
+  API reads a subclass through the methods it overrides. A `tuple` subclass
+  whose `__iter__` yields fewer items than it holds crashed `validate` and
+  `ensure`, and `is_valid` answered about items it does not hold; a `dict`
+  subclass overriding `__len__` was refused by a closed record it belongs to,
+  and one overriding `__getitem__` by `dict[str, int]`. Such a value is copied
+  through the base type's own methods and the copy is walked, which reads what
+  CPython read all along.
 
 ## [0.0.14] - 2026-09-26
 

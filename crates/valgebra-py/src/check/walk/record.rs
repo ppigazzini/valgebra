@@ -17,6 +17,8 @@ use pyo3::types::{PyDict, PyString};
 use rustc_hash::{FxHashMap, FxHashSet};
 use valgebra_core::{Field, MapClause, PathSegment, Schema};
 
+#[cfg(PyPy)]
+use super::{Base, held_dict, reads_its_length, reads_its_values};
 use super::{
     Frame, Scan, fast, fold, is_fatal, member, mutated, record_fatal, record_if_fatal, stop,
 };
@@ -70,6 +72,49 @@ pub(super) fn scan_dict<'py>(
             Scan::Unreadable
         }
     })
+}
+
+/// A dict the C-level reads reach the storage of, on `PyPy`: the value itself,
+/// or a copy of a subclass `cpyext` would read through its own methods.
+///
+/// `CPython` answers `PyDict_Size`, `PyDict_Next` and `PyDict_GetItem` from the
+/// storage of any dict. `PyPy`'s `cpyext` answers the first through the
+/// object's own `__len__`, and reads each value `PyDict_Next` yields through
+/// its own `__getitem__`, so a subclass overriding either was another dict to
+/// the walk than the one it holds: an overridden `__len__` read as an extra key
+/// and refused `{"a": 1}` from a closed record, and an overridden `__getitem__`
+/// refused it from `dict[str, int]`. The base's own `dict.copy` reads the
+/// storage there, and the walk reads the copy. An exact dict, and a subclass
+/// overriding neither, are read where they lie. Compiled for `PyPy` alone: the
+/// walk on `CPython` reads the value itself.
+///
+/// `None` where the copy cannot be made, which the caller reports as a value it
+/// could not read; a fatal signal the copy raised is recorded.
+#[cfg(PyPy)]
+pub(super) fn stored<'a, 'py>(
+    dict: &'a Bound<'py, PyDict>,
+    ctx: Ctx<'_>,
+) -> Option<Cow<'a, Bound<'py, PyDict>>> {
+    if dict.is_exact_instance_of::<PyDict>()
+        || (reads_its_length(dict, Base::Dict, ctx) && reads_its_values(dict, ctx))
+    {
+        return Some(Cow::Borrowed(dict));
+    }
+    stored_copy(dict, ctx).map(Cow::Owned)
+}
+
+/// The copy [`stored`] walks, out of line: only a `PyPy` subclass overriding
+/// what `cpyext` reads reaches it.
+#[cfg(PyPy)]
+#[cold]
+#[inline(never)]
+fn stored_copy<'py>(dict: &Bound<'py, PyDict>, ctx: Ctx<'_>) -> Option<Bound<'py, PyDict>> {
+    if ctx.fatal_seen.get() {
+        return None;
+    }
+    held_dict(dict)
+        .map_err(|err| record_if_fatal(err, dict.py(), ctx))
+        .ok()
 }
 
 /// Where the deciding walk stopped, so the explaining walk need not redo what it
@@ -383,6 +428,10 @@ fn keyed_map_matches_py(
     let Ok(dict) = dict.cast::<PyDict>() else {
         return false;
     };
+    #[cfg(PyPy)]
+    let Some(ref dict) = stored(dict, ctx) else {
+        return false;
+    };
     if let Some(plan) = ctx.records.get(&(fields.as_ptr() as usize)) {
         if let Some(answered) =
             keyed_map_asks_for_its_keys(fields, defaults, dict, ctx, plan, decided)
@@ -675,6 +724,11 @@ pub(super) fn keyed_map_explain(
         frame
             .out
             .push(type_mismatch(DICT_TYPE, "dict", value, frame.path, ctx));
+        return;
+    };
+    #[cfg(PyPy)]
+    let Some(ref dict) = stored(dict, ctx) else {
+        mutated(value, frame);
         return;
     };
     // The interned keys, in field order. Asking the dict by Rust text decodes a

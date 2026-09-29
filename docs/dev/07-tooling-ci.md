@@ -688,7 +688,12 @@ imports from the lane's venv, where the lock puts `typing_extensions`, and on
 3.12 that module's `Required`, `NotRequired` and `Unpack` are `typing`'s own
 objects. So the frontend's arms for the module's own objects are killable only
 where it defines them -- 3.10, or the corpus row's stand-in on an interpreter
-that cannot import it -- and three notes in the baseline say so.
+that cannot import it -- and three notes in the baseline say so. A reading only
+PyPy takes is compiled for PyPy alone, `#[cfg(PyPy)]`, so the sweep's build does
+not compile it: every mutant of it builds and passes and says nothing, and
+`exclude_re` names them in `.cargo/mutants.toml` beside the PyPy lane's rows
+that hold them. Compiled everywhere, the same code was regions the binding's
+coverage floor counted and no CPython test could reach.
 
 **A reading compiled per interpreter names what it answers, and is measured on
 one side.** `crates/valgebra-py/build.rs` re-emits the interpreter's `Py_3_x`

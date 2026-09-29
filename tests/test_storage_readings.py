@@ -100,6 +100,29 @@ class LyingTupleLen(tuple):
         return 9
 
 
+class LyingTupleIter(tuple):
+    """A tuple whose `__iter__` yields one integer whatever it holds.
+
+    One, and so never more than it holds: PyPy refuses to hand a C extension a
+    tuple subclass whose `__iter__` yields more items than its storage, at the
+    call and before the walk runs.
+    """
+
+    __slots__ = ()
+
+    def __iter__(self) -> Iterator[int]:
+        return iter([1])
+
+
+class LyingDictGetItem(dict):
+    """A dict whose `__getitem__` answers one whatever it holds."""
+
+    __slots__ = ()
+
+    def __getitem__(self, key: object) -> int:
+        return 1
+
+
 class QuietSet(set):
     """A subclass that overrides neither slot: read where it lies."""
 
@@ -135,6 +158,8 @@ _OUTSIDE: list[tuple[str, object, object]] = [
     ("bytes __len__", Annotated[bytes, at.MinLen(3)], LyingBytesLen(b"a")),
     ("list __len__", Annotated[list[int], at.MinLen(3)], LyingListLen([1])),
     ("tuple __len__", Annotated[tuple[int, ...], at.MinLen(3)], LyingTupleLen((1,))),
+    ("tuple __iter__", tuple[int, ...], LyingTupleIter(("a", "b"))),
+    ("dict __getitem__", dict[str, int], LyingDictGetItem({"a": "x"})),
 ]
 
 
@@ -157,6 +182,13 @@ _INSIDE: list[tuple[str, object, object]] = [
     ("dict __len__", Annotated[dict[str, int], at.MaxLen(1)], LyingDictLen({"a": 1})),
     ("str __len__", Annotated[str, at.MaxLen(1)], LyingStrLen("a")),
     ("bytes __len__", Annotated[bytes, at.MaxLen(1)], LyingBytesLen(b"a")),
+    # PyPy's C API reads a subclass through the three methods below, so these
+    # are where a walk reading in place goes wrong there -- the tuples by
+    # reading past the one item their `__iter__` yields.
+    ("tuple __iter__", tuple[str, str], LyingTupleIter(("a", "b"))),
+    ("tuple __iter__ over more", tuple[int, ...], LyingTupleIter((4, 5, 6, 7, 8))),
+    ("dict __len__ in a closed record", {"a": int}, LyingDictLen({"a": 1})),
+    ("dict __getitem__", dict[str, str], LyingDictGetItem({"a": "x"})),
 ]
 
 

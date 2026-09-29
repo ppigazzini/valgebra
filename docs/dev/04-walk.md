@@ -245,6 +245,19 @@ exactly a tuple" instead copied every `NamedTuple`: on CPython 3.14 that was
 100 ns against the 57 a plain tuple takes, which is what the repair above cost
 before this one was found.
 
+**On PyPy a subclass's contents come through its own methods too.** `cpyext`
+fills a tuple subclass's C-level items from its own `__iter__`, and answers a
+dict subclass's length through its own `__len__` and each value `PyDict_Next`
+yields through its own `__getitem__`. So there a tuple subclass is read where it
+lies only if it inherits `tuple.__iter__` as well as `tuple.__len__`, and a dict
+subclass only if it inherits `dict.__len__` and `dict.__getitem__`. Any other is
+copied through `tuple.__iter__` or `dict.copy`, and the copy is walked. A tuple
+subclass whose `__iter__` yielded one item over two took `validate` down, and a
+dict subclass overriding `__len__` was refused by a closed record it belongs
+to. One whose `__iter__` yields *more* than it stores never reaches the walk:
+`cpyext` refuses it at the call. CPython reads the storage in every case, and
+asks the type nothing more.
+
 **Every container the walk reads answers this way, and for one reason.** A
 schema over a container denotes what the value *holds*, so the reading of it
 cannot be a method the value chooses: a `str`, `bytes`, `list`, `tuple`, `set`,
