@@ -406,6 +406,17 @@ a depth rather than a total because the level is released when the frame that
 took it returns, so a wide value pays for its widest child and not for all of
 them.
 
+**A stack probe is refused.** Levels are not bytes, so a thread started with
+less stack than its platform's default can overflow before the bound does, and
+[the limits page](../10-limits.md) says so. Reading the stack itself --
+`stacker::remaining_stack()` beside `descend` -- would turn that overflow into
+`recursion_limit`, and it is not in: it adds a crate that assembles for every
+wheel target, a call on every level of every walk, and a reading of each
+platform's thread-stack bounds that no lane measures, musl, Windows arm64 and
+PyPy among them. A proposal starts from the test it must pass: a value at the
+depth bound on a 128 KiB thread raises `recursion_limit` on every wheel
+platform, and the walk shapes stay inside the perf gate's band.
+
 ## The limit
 
 **JSON has no tuple.** `json.loads` produces a list, so the JSON path has no
