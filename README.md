@@ -71,9 +71,10 @@ assert intersection(int, complement(int)).is_empty()  # provably no value
   composition would make a standard library, not a schema algebra.
 - **Schemas are comparable values.** `is_subtype_of` (inclusion),
   `is_equivalent` (mutual inclusion), and `is_empty` (unsatisfiable) form a
-  **sound** decision procedure: a `True` is always correct, and the procedure
-  decides a wide fragment completely and stays conservative beyond it — never a
-  wrong answer. Keep `is_equivalent` (semantic) distinct from `==` (the schema's
+  **sound** decision procedure: a `True` is correct for every value that answers
+  Python's questions consistently ([the trust base](docs/14-soundness.md#what-this-argument-assumes)),
+  and the procedure decides a wide fragment completely and stays conservative
+  beyond it. Keep `is_equivalent` (semantic) distinct from `==` (the schema's
   normal form).
 - **A normal form by construction.** A schema is built in the lattice normal
   form, so `repr` shows it and `==` compares it: `union(int, int)` is `int` and
