@@ -46,7 +46,7 @@ Because membership is Boolean, `union`, `intersection`, and `complement` are
 exactly *or*, *and*, and *not*, and they compose any schema into a lattice:
 
 ```python
-from valgebra import Validator, complement, intersection, union
+from valgebra import Validator, complement, intersection
 
 non_bool_int = intersection(int, complement(bool))  # an int that is not a bool
 assert non_bool_int.is_valid(5)
@@ -54,7 +54,7 @@ assert not non_bool_int.is_valid(True)
 
 # Schemas are first-class values you can compare as sets — soundly.
 assert Validator(bool).is_subtype_of(int)  # subtyping is set inclusion
-assert union(bool, int).is_equivalent(int)  # same set, different syntax
+assert Validator(bool | int).is_equivalent(int)  # same set, different syntax
 assert intersection(int, complement(int)).is_empty()  # provably no value
 ```
 
@@ -209,14 +209,14 @@ arm another already covers, an annotation that admits nothing, an override that
 narrows its base, and which arms of a union a test run never reached:
 
 ```python
-from valgebra import Validator, intersection, union
+from valgebra import Validator, intersection
 
 # `if isinstance(key, bytes)` inside `def __setitem__(self, key: str, ...)`.
 # The branch is dead, so the code and its annotation disagree about what arrives.
 assert intersection(Validator(str), Validator(bytes)).is_empty()
 
 # `bool | int` is `int`: bool is a subclass, so the arm adds nothing.
-assert union(bool, int).is_equivalent(int)
+assert Validator(bool | int).is_equivalent(int)
 
 # `except (OSError, TimeoutError)` names one class that contains the other.
 assert Validator(TimeoutError).is_subtype_of(OSError)

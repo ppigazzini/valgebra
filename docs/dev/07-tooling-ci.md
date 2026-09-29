@@ -105,7 +105,7 @@ reproduces; the count is the table's rather than this sentence's:
 The first four are closed. Named rather than numbered from here, since the
 table grows: *the interpreter the lane names* is a row rather than a fix
 because the gate runs the caller's toolchain by design, and the gate's own
-closing line now names it; *the release of the interpreter* is closed at the
+closing line names it; *the release of the interpreter* is closed at the
 floor, which is the end of the range a difference lands at; *the build of the
 interpreter* is answered by a rule rather than by the gate; the rest are
 differences a local gate cannot remove, and naming them is what keeps a green

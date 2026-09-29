@@ -471,8 +471,8 @@ shape the record atom already has, so the code exists once.
 Its one precondition holds: guards are held by handle, so a component may be a
 union without multiplying the memory of every automaton that carries one.
 
-What is *not* a precondition, and once read as one, is the descriptor replacing
-the decision procedure. That caution is about **consulting** a DNF descriptor
+What is *not* a precondition is the descriptor replacing the decision
+procedure. That caution is about **consulting** a DNF descriptor
 beside a procedure that already answers — paying twice for one verdict — and it
 is the rule that withdrew the shadowing widening. It says nothing about building
 the representation, which is asked where the rules decline and is checked
@@ -645,7 +645,7 @@ because a subclass keeps it.
 `class Both(Plain, MyStr)` builds and its instances are strings, so a plain
 class's instances are not confined to the kindless slot -- a subclass may add any
 layout. Placing such a class narrowly would be the one direction that is unsound:
-claiming a value does not exist. It stays on every line, which is what it was.
+claiming a value does not exist. It stays on every line.
 
 ## Which representation decides
 

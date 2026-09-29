@@ -493,9 +493,9 @@ The third sweep is those seven files, with a test command that loads the
 extension. `crates/valgebra-py/tests/pytest_sweep.rs` rebuilds it from the
 mutated copy and runs the Python suite against it, so a mutant one of them
 carries is caught by that suite or by nothing, and the survivors are ratcheted
-against a baseline of their own. The excuse those files were excluded under is
-a number now: `tests/test_pytest_sweep_scope.py` holds the two configurations to
-a partition of the binding, so a file excused to the suite and examined nowhere
+against a baseline of their own. Their scope is held rather than excused:
+`tests/test_pytest_sweep_scope.py` holds the two configurations to a partition
+of the binding, so a file excused to the suite and examined nowhere
 fails.
 
 **What a coverage figure leaves over, and why.** Reading the annotated report
@@ -563,9 +563,9 @@ Those two measure the code that **ships**, and did not always. The core's
 property suites and the binding's four interpreter corpora are compiled into
 their crates because they reach private items, so a coverage report counts
 them — and a corpus is a table and a loop, so it runs by construction, arrives
-at full coverage, and lifts the figure for the code around it. Nearly half the
-lines the binding's figure was computed over were corpus. Both lanes exclude
-them now, and `tests/test_coverage_scope.py` holds that scope to the corpus
+at full coverage, and lifts the figure for the code around it. Counted, the
+corpora would be nearly half the lines the binding's figure is computed over, so
+both lanes exclude them, and `tests/test_coverage_scope.py` holds that scope to the corpus
 files the tree has, in both directions.
 
 **A coverage figure read on a developer's box is not the lane's, and the

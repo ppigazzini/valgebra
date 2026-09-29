@@ -190,11 +190,10 @@ answers `"undecided"`.
   A meet against such a union removes one part at a time, so the width the bound
   sees is the width of the answer rather than of the widest intermediate.
 
-    The bound is still there. A difference wide enough to reach it reaches it,
-    and which of two spellings gets there first depends on the order the parts
+    The bound stands. A difference wide enough to reach it reaches it, and
+    which of two spellings gets there first depends on the order the parts
     multiply, so a relation the sets decline under one spelling may be decided
-    under another. What no longer happens is one spelling being *systematically*
-    the one that declines.
+    under another. No spelling is *systematically* the one that declines.
 - **A length bound over a base that takes any length.** A string and a bytes
   take any, so a bound their lengths admit is met by a value: `Annotated[str,
   MinLen(1)]` is the non-empty string and is decided to have one. A container
@@ -273,7 +272,7 @@ assert Validator(list[int]).is_subtype_of(
     complement(int)
 )  # inside a complement: a list shares no value with an int
 assert Validator(tuple[int | str, int]).is_subtype_of(
-    union(tuple[int, int], tuple[str, int])
+    tuple[int, int] | tuple[str, int]
 )  # a product splits across branches
 assert Validator(
     recursive(lambda t: Annotated[list[t], at.MinLen(1)])
@@ -282,7 +281,7 @@ assert intersection({"a": int}, {"a": str}).is_empty()  # 'a' cannot hold both
 assert not intersection(
     {"a?": int}, {"a?": str}
 ).is_empty()  # the empty dict is in both
-assert union(bool, int).is_equivalent(int)  # bool | int is just int
+assert Validator(bool | int).is_equivalent(int)  # bool | int is just int
 assert intersection(int, complement(int)).is_empty()  # the complement law
 assert intersection(
     list[int], complement(list[int])
@@ -563,7 +562,7 @@ the shape. What is left below is what the descriptor cannot hold.
   ```python
   from valgebra import Validator, union
 
-  pair = {"a": union(int, str), "b": union(int, str), "c": union(int, str)}
+  pair = {"a": int | str, "b": int | str, "c": int | str}
   corners = union(
       *[
           {"a": a, "b": b, "c": c}

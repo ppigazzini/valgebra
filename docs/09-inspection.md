@@ -122,11 +122,11 @@ assert Validator(bytes).is_subtype_of(bytes)  # the guard can never fire
 the arms says so; a type checker accepts the annotation as written.
 
 ```python
-from valgebra import Validator, union
+from valgebra import Validator
 
 assert Validator(bool).is_subtype_of(int)  # the `bool` arm adds nothing
-assert union(bool, int).is_equivalent(int)
-assert union(object, None).is_equivalent(object)
+assert Validator(bool | int).is_equivalent(int)
+assert Validator(object | None).is_equivalent(object)
 ```
 
 ## An exception a sibling already catches
