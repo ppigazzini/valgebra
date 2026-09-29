@@ -102,13 +102,17 @@ def test_every_script_runs_in_a_lane() -> None:
     )
 
 
-def test_no_excuse_is_stale() -> None:
+def _stale(excused: dict[str, str]) -> tuple[list[str], list[str]]:
+    """Give the excuses naming a script that is gone, and those naming a driven one."""
     scripts = {p.name for p in SCRIPTS.glob("*.py")}
+    gone = sorted(set(excused) - scripts)
+    driven = sorted(name for name in excused if _drivers_of(name))
+    return gone, driven
 
-    gone = sorted(set(EXCUSED) - scripts)
+
+def test_no_excuse_is_stale() -> None:
+    gone, driven = _stale(EXCUSED)
     assert not gone, f"excuses naming a script that no longer exists: {gone}"
-
-    driven = sorted(name for name in EXCUSED if _drivers_of(name))
     assert not driven, (
         f"excused scripts that are in fact driven: {driven}. "
         "Remove the excuse; it claims a hole the tree does not have."
@@ -142,9 +146,7 @@ def test_the_stale_excuse_rules_fire() -> None:
     # The excused list is empty today, so its two failure directions are driven
     # against synthetic inputs rather than left unexercised until the first
     # excuse is written.
-    scripts = {p.name for p in SCRIPTS.glob("*.py")}
-    fictional = "no_such_script.py"
-    assert fictional not in scripts  # would be caught by test_no_excuse_is_stale
-    real = "perf_gate.py"
-    assert real in scripts
-    assert _drivers_of(real), "a driven script must be seen to be driven"
+    gone, _ = _stale({"no_such_script.py": "an excuse for a script that is gone"})
+    assert gone == ["no_such_script.py"], "an excuse outliving its script passed"
+    _, driven = _stale({"perf_gate.py": "an excuse for a script a lane drives"})
+    assert driven == ["perf_gate.py"], "an excuse for a driven script passed"

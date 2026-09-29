@@ -446,7 +446,7 @@ def test_every_variable_a_sweep_lane_sets_is_one_the_recipe_sets() -> None:
     unset = sorted(
         variable
         for variable in wanted
-        if not any(variable in recipe for recipe in recipes)
+        if not any(re.search(rf"\b{variable}\b", recipe) for recipe in recipes)
     )
     assert not unset, (
         f"variables the sweep lanes set that no by-hand recipe does: {unset}. "

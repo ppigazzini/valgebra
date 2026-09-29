@@ -92,13 +92,18 @@ def _test_module_files() -> set[str]:
 
 
 def _inside_test_module(path: str, feature: str) -> bool:
-    """Whether every site of `feature` in `path` sits under a `#[cfg(test)]`.
+    """Whether every site of `feature` in `path` sits under a `#[cfg(test)]`."""
+    return _reads_as_test_only((ROOT / path).read_text(encoding="utf-8"), feature)
+
+
+def _reads_as_test_only(source: str, feature: str) -> bool:
+    """Whether every site of `feature` in `source` sits under a `#[cfg(test)]`.
 
     Two shapes count: the site itself says `all(test, feature = ..)`, or it sits
     below a `#[cfg(test)] mod` in the same file. The second is what lets a nested
     interpreter module inside a test module carry the feature alone.
     """
-    lines = (ROOT / path).read_text(encoding="utf-8").splitlines()
+    lines = source.splitlines()
     test_module_at = [
         i for i, line in enumerate(lines) if line.strip().startswith("#[cfg(test)]")
     ]
@@ -154,12 +159,20 @@ def test_the_manifest_says_the_feature_never_ships() -> None:
 
 
 def test_the_test_module_detector_distinguishes_the_two_shapes() -> None:
-    # `check/index.rs` carries the feature alone, nested inside a `#[cfg(test)]`
-    # module; the others say `all(test, feature = ..)`. Both must read as
-    # test-only, and the detector is what decides.
-    assert _inside_test_module(
-        "crates/valgebra-py/src/check/index.rs", "interpreter-tests"
+    """Both test-only shapes read as test-only, and a site above them does not.
+
+    Driven on text rather than on a file of the tree: the nested shape has no
+    instance today -- the feature-only sites sit in sibling test files, which
+    `_test_module_files` reads -- so a file named here would be read as holding
+    no site, and pass on a detector that had stopped reading the shape at all.
+    """
+    feature = 'feature = "interpreter-tests"'
+    nested = (
+        "fn shipped() {}\n\n#[cfg(test)]\nmod tests {\n"
+        f"    #[cfg({feature})]\n    mod corpus;\n}}\n"
     )
-    assert _inside_test_module(
-        "crates/valgebra-py/src/check/walk.rs", "interpreter-tests"
-    )
+    gated = f"fn shipped() {{}}\n\n#[cfg(all(test, {feature}))]\nmod corpus;\n"
+    leaked = f"#[cfg({feature})]\nfn shipped() {{}}\n\n#[cfg(test)]\nmod tests;\n"
+    assert _reads_as_test_only(nested, "interpreter-tests")
+    assert _reads_as_test_only(gated, "interpreter-tests")
+    assert not _reads_as_test_only(leaked, "interpreter-tests")

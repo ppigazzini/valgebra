@@ -175,7 +175,10 @@ def test_no_stand_in_repeats_a_step_the_gate_runs() -> None:
     """
     spec = gate.workflow()
     plan, _ = gate.build_plan(spec, gate.required_jobs(spec))
-    scripts = [script for _, _, script, _ in plan]
+    # The plan carries each stand-in's own row, which runs its command by
+    # construction; the question is whether a step of the workflow does.
+    stood_in = {f"{step} (the part that runs here)" for step in gate.STANDINS}
+    scripts = [script for _, name, script, _ in plan if name not in stood_in]
     repeated = sorted(
         step
         for step, (command, _) in gate.STANDINS.items()
@@ -294,8 +297,34 @@ def test_the_python_suite_is_one_of_the_steps_it_runs() -> None:
 
 
 def test_the_gate_runs_in_a_shallow_clone_with_no_tags(tmp_path: Path) -> None:
-    """The property the gate exists for, checked on a real clone."""
-    tree = gate.shallow_clone(tmp_path)
+    """The property the gate exists for, checked on a real clone.
+
+    Of a history built here, with three commits and a tag, rather than of the
+    tree the suite runs in: a runner's checkout is itself one commit with no
+    tags, and a clone of it is shallow whether the gate asks for that or not.
+    """
+    upstream = tmp_path / "upstream"
+    upstream.mkdir()
+    identity = {
+        "GIT_AUTHOR_NAME": "gate",
+        "GIT_AUTHOR_EMAIL": "gate@example.invalid",
+        "GIT_COMMITTER_NAME": "gate",
+        "GIT_COMMITTER_EMAIL": "gate@example.invalid",
+    }
+
+    def git(*args: str) -> None:
+        subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
+            ["git", "-C", str(upstream), *args],  # noqa: S607
+            check=True,
+            capture_output=True,
+            env={**os.environ, **identity},
+        )
+
+    git("init", "--quiet")
+    for step in range(3):
+        git("commit", "--quiet", "--allow-empty", "-m", f"commit {step}")
+    git("tag", "v0.0.1", "HEAD~1")
+    tree = gate.shallow_clone(tmp_path, source=upstream)
     depth = subprocess.run(  # noqa: S603 - fixed argv, no shell, test-only
         ["git", "-C", str(tree), "rev-list", "--count", "HEAD"],  # noqa: S607
         capture_output=True,

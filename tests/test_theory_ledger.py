@@ -200,6 +200,28 @@ def _held() -> list[Claim]:
     return [claim for claim in _claims() if claim.names]
 
 
+def _held_at_collection() -> list[Claim]:
+    """Give the held claims to parametrise over, or none where the page does not parse.
+
+    Read at import, so a page the parse refuses would fail the module as a
+    collection error that names no test. `test_the_page_parses` names it.
+    """
+    try:
+        return _held()
+    except AssertionError:
+        return []
+
+
+def test_the_page_parses() -> None:
+    """A malformed page fails a test that says so, not the module's collection.
+
+    The parse asserts the page's shape as it reads it -- a holding line before
+    any claim, two tags in one paragraph, a tag with no id -- so reading the
+    page is the check.
+    """
+    _claims()
+
+
 def _must_be_held(claims: Sequence[Claim]) -> list[Claim]:
     """Give the claims a holding line is asked of, which is not the context."""
     return [claim for claim in claims if claim.tag in CLAIMS]
@@ -384,8 +406,8 @@ def test_an_owed_test_does_not_already_exist() -> None:
 
 @pytest.mark.parametrize(
     ("claim", "names"),
-    [(c.text, c.names) for c in _held()],
-    ids=[_summarise(c.text)[:40] for c in _held()],
+    [(c.text, c.names) for c in _held_at_collection()],
+    ids=[_summarise(c.text)[:40] for c in _held_at_collection()],
 )
 def test_every_named_test_exists(claim: str, names: list[str]) -> None:
     """A name that resolves to no test is a claim with no evidence left."""
@@ -634,6 +656,12 @@ SOURCE = "SOURCE:"
 #: modality is argued in two places and lands here as one sentence.
 _SOURCE_ENTRY = re.compile(r'§(\d+(?:\.\d+[a-z]?)?) "([^"]{12,})"')
 
+#: A whole `SOURCE:` line: every entry of that form, so one malformed entry
+#: beside a readable one is refused rather than dropped.
+_SOURCE_LINE = re.compile(
+    rf"{SOURCE} {_SOURCE_ENTRY.pattern}(?:; {_SOURCE_ENTRY.pattern})*"
+)
+
 #: Where the argument's results are tagged, and where its obligations are whole
 #: numbered sections rather than tagged paragraphs.
 #:
@@ -677,12 +705,15 @@ def _sources() -> list[tuple[str, str, str]]:
         if not paragraph.startswith(SOURCE):
             continue
         assert last is not None, f"a SOURCE line before any claim: {paragraph!r}"
-        entries = _SOURCE_ENTRY.findall(paragraph.replace("\n", " "))
-        assert entries, (
+        line = paragraph.replace("\n", " ")
+        assert _SOURCE_LINE.fullmatch(line), (
             f"a SOURCE line this ledger cannot read: {paragraph!r}. The form is "
             f'`SOURCE: §13.3 "a fragment of the sentence"`, entries separated by `;`.'
         )
-        cited += [(last.identifier, section, fragment) for section, fragment in entries]
+        cited += [
+            (last.identifier, section, fragment)
+            for section, fragment in _SOURCE_ENTRY.findall(line)
+        ]
     return cited
 
 

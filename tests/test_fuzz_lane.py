@@ -45,11 +45,21 @@ ALLOCATION_CEILING_MB = 64
 
 
 def _soak_step() -> str:
+    """Give the soak's commands, with the shell's comments cut.
+
+    A comment naming a flag is not the flag: the step explains `-fork=1` in a
+    comment, and a search over the whole block reads it there after the
+    command stops passing it.
+    """
     spec = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     for job in spec["jobs"].values():
         for step in job.get("steps", []):
             if step.get("name") == SOAK:
-                return str(step["run"])
+                return "\n".join(
+                    line
+                    for line in str(step["run"]).splitlines()
+                    if not line.lstrip().startswith("#")
+                )
     message = f"the workflow has no {SOAK!r} step"
     raise AssertionError(message)
 
@@ -100,12 +110,16 @@ def test_the_soak_has_a_floor_beneath_its_budget() -> None:
     rather than a clean sheet.
     """
     step = _soak_step()
-    assert "MIN_SECONDS" in step, (
+    # The comparisons, not the words: the step prints `MIN_SECONDS` and
+    # `exec/s` in lines that decide nothing, and those outlive a deleted floor.
+    assert re.search(r'"\$seconds" -lt "\$MIN_SECONDS"', step), (
         "the soak names a time budget and no floor, so a target that dies on "
         "its first input reads exactly like one that explored for the whole "
         "budget. Read what the soak printed and refuse a run beneath a floor."
     )
-    assert "exec/s" in step, "the floor reads no rate, so a stalled run passes it"
+    assert re.search(r'"\$rate" -le 0', step), (
+        "the floor reads no rate, so a stalled run passes it"
+    )
     assert "RIG FAULT" in step, (
         "a run beneath the floor measured nothing, which is the glossary's rig "
         "fault rather than a failure of the tests"

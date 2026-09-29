@@ -146,18 +146,35 @@ def _sites() -> dict[str, str]:
     return found
 
 
+def _is_repository_check(tree: ast.Module) -> bool:
+    """Whether a module marks itself a repository check, read off its code.
+
+    Read from the assignment rather than searched for as text: this file spells
+    the marker in its own filter, so a text search excluded it whether or not
+    it carried the marker, and the check below could not fail on it.
+    """
+    return any(
+        isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "pytestmark"
+            for target in node.targets
+        )
+        and "repository" in ast.unparse(node.value)
+        for node in tree.body
+    )
+
+
 @functools.cache
 def _product_files() -> list[tuple[Path, ast.Module]]:
     """Give the product suite, parsed. A repository check is not part of it."""
     parsed = []
     for path in sorted((ROOT / "tests").rglob("*.py")):
-        text = path.read_text(encoding="utf-8")
-        if "pytestmark = pytest.mark.repository" in text:
-            continue
         try:
-            parsed.append((path, ast.parse(text)))
+            tree = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError:  # pragma: no cover - the suite parses
             continue
+        if not _is_repository_check(tree):
+            parsed.append((path, tree))
     return parsed
 
 
@@ -301,7 +318,6 @@ def test_the_product_suite_is_what_is_searched() -> None:
     """
     patterns = _patterns()
     assert len(patterns) >= 15, sorted(patterns)
-    assert "every frontend refusal message" not in patterns
     read = {path.name for path, _ in _product_files()}
     assert "test_refusal_messages.py" in read
     assert "test_frontend_refusals.py" not in read

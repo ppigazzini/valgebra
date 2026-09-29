@@ -135,11 +135,23 @@ def test_every_detached_surface_is_built_by_a_lane() -> None:
         assert entry["lane"] in workflows, f"{path}: no workflow runs {entry['lane']!r}"
 
 
+def _gate_block() -> str:
+    """Give the commands of CONTRIBUTING.md's gate: the first fence under its heading.
+
+    The block rather than the page, because the page names each command twice --
+    in the gate and in the contract inventory -- and the inventory's row would
+    answer for a gate that lost the line.
+    """
+    text = CONTRIBUTING.read_text(encoding="utf-8")
+    section = text.split("\n## The gate\n", 1)[1]
+    return section.split("```bash\n", 1)[1].split("```", 1)[0]
+
+
 def test_the_local_gate_names_every_detached_surface() -> None:
     # The point of the ledger: a contributor running the documented gate compiles
     # every crate the tree holds, so a public-API change cannot pass locally and
     # fail on a lane.
-    gate = CONTRIBUTING.read_text(encoding="utf-8")
+    gate = _gate_block()
     for path, entry in DETACHED.items():
         assert entry["local"] in gate, (
             f"{path}: the contributor gate in CONTRIBUTING.md does not run "

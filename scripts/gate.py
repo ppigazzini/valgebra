@@ -230,8 +230,8 @@ def runnable(name: str) -> bool:
     return name not in NEEDS_A_RUNNER
 
 
-def shallow_clone(into: Path) -> Path:
-    """Make a clone of `HEAD` with one commit and no tags, as a checkout does.
+def shallow_clone(into: Path, source: Path = ROOT) -> Path:
+    """Clone `source`'s `HEAD` with one commit and no tags, as a checkout does.
 
     The difference this exists for. A local clone carries every tag and the
     whole history, so a check that reads either passes here and fails there --
@@ -246,7 +246,7 @@ def shallow_clone(into: Path) -> Path:
             "1",
             "--no-tags",
             "--quiet",
-            f"file://{ROOT}",
+            f"file://{source}",
             str(tree),
         ],
         check=True,
