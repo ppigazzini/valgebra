@@ -577,6 +577,16 @@ the shape. What is left below is what the descriptor cannot hold.
   A fourth field answers `undecided`, which is the conservative answer and not
   a claim about the relation: it holds, and proving it takes a larger bound.
 
+  A chain of differences meets the same bound through its length. An open
+  record whose key takes twelve constants, minus the record of each constant,
+  is proved empty; at thirteen the chain reads more nodes than a lowering
+  builds and is declined, since each link adds five.
+
+  **Depth bites a mapping.** The rules refute a list by its elements at any
+  depth, and a mapping only through the sets, whose lowering descends a bounded
+  nesting. `dict[str, ...]` four levels deep over `int` is `not_subset` of the
+  same chain over `str`; five levels deep answers `undecided`.
+
 - **A predicate.** Its satisfiability is undecidable (below), so neither
   representation reasons about one -- and that is a statement about the
   *predicate*, not about every pair carrying one. A refinement is a subset of

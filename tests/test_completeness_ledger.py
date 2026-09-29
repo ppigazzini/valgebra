@@ -234,6 +234,26 @@ def _split(width: int) -> tuple[object, object]:
     return subject, corners
 
 
+def _nested(leaf: object, depth: int, *, mapping: bool) -> object:
+    """Nest `leaf` `depth` containers deep: `dict[str, dict[str, int]]` at two."""
+    for _ in range(depth):
+        leaf = dict[str, leaf] if mapping else list[leaf]  # ty: ignore[invalid-type-form]
+    return leaf
+
+
+def _chain(width: int) -> object:
+    """Build an open record whose key takes `width` constants, minus each one.
+
+    Every constant is taken away, so the chain is empty. Each link adds five
+    schema nodes to what the lowering reads -- a constant in the key and a
+    record complemented -- which is what puts the width against the node budget.
+    """
+    return intersection(
+        {"a": union(*range(width)), str: Any},
+        *[complement({"a": i, str: Any}) for i in range(width)],
+    )
+
+
 _DECIDED = [
     pytest.param("subtype", bool, int, id="bool<=int"),
     # The product rule's width: six components against their sixty-four
@@ -889,6 +909,23 @@ _DECIDED = [
         complement(intersection(dict[str, int], complement({"a": int}))),
         id="tuple<=~(dict&~{a:int})",
     ),
+    # The shapes a decision budget hides a regression behind: wide unions of
+    # tagged records, the complement of a union of records with gradual
+    # members, and a chain of differences against open records. Each is
+    # decided at the width here, so a change that turns one into a decline
+    # fails its row; the chain's first width past the bound is ledgered below.
+    pytest.param(
+        "subtype",
+        {"t": 16, "v": bool},
+        union(*[{"t": i, "v": int} for i in range(32)]),
+        id="map:tagged-record<=a-union-of-32-tagged-records",
+    ),
+    pytest.param(
+        "subtype",
+        {"t": 16, "v": int},
+        complement(union(*[{"t": i, "v": Any} for i in range(16)])),
+        id="map:record<=the-complement-of-16-gradual-records",
+    ),
     # Two records, the width at which a field spanning two kinds expands the
     # complement taken of the complement; the set representation meets the
     # subject with the union itself.
@@ -897,6 +934,26 @@ _DECIDED = [
         {"t": int},
         complement(union({"t": str}, {"t": bytes})),
         id="map:record<=the-complement-of-two-records",
+    ),
+    pytest.param(
+        "empty",
+        _chain(12),
+        None,
+        id="empty:open-record-minus-a-chain-of-12",
+    ),
+    # A list is refuted by its rules at any depth, a mapping through the sets,
+    # whose lowering descends a bounded nesting: four mappings deep is inside it.
+    pytest.param(
+        "refutes",
+        _nested(int, 127, mapping=False),
+        _nested(str, 127, mapping=False),
+        id="refute:lists-127-deep-over-int<=over-str",
+    ),
+    pytest.param(
+        "refutes",
+        _nested(int, 4, mapping=True),
+        _nested(str, 4, mapping=True),
+        id="refute:mappings-4-deep-over-int<=over-str",
     ),
 ]
 
@@ -972,6 +1029,26 @@ _LEDGERED: list[object] = [
         *_split(7),
         id="tuple:seven-components<=its-corners",
         marks=_missed("the split multiplies past the work a decision may spend"),
+    ),
+    # The difference chain one link past the rows above: thirteen links read
+    # more schema nodes than a lowering builds (`BUDGET`, `descr/lower.rs`),
+    # and a budget of twice that decides it.
+    pytest.param(
+        "empty",
+        _chain(13),
+        None,
+        id="empty:open-record-minus-a-chain-of-13",
+        marks=_missed("the chain reads more schema nodes than a lowering builds"),
+    ),
+    # The mapping chain one level past the row above: the rules refute a
+    # mapping only through the set representation, and five levels is past the
+    # nesting a lowering descends (`DEPTH`, `descr/lower.rs`).
+    pytest.param(
+        "refutes",
+        _nested(int, 5, mapping=True),
+        _nested(str, 5, mapping=True),
+        id="refute:mappings-5-deep-over-int<=over-str",
+        marks=_missed("the chain nests deeper than a lowering descends"),
     ),
 ]
 
