@@ -420,8 +420,14 @@ verdict:
   nine percent while its loop executed the same instructions. `settle_the_heap`
   in `crates/valgebra-py/src/workload.rs` calls `malloc_trim(0)` before every
   shape's loop, which took the JSON and recursive shapes from 8.2% and 7.2%
-  apart between two environments to 0.06% and 0.36%. A shape whose reading
-  moves with the environment has lost this call:
+  apart between two environments to 0.06% and 0.36%. Trimming does not reach
+  what the *binary's* layout decides: one commit built in two directories read
+  the JSON shape 458M and 528M, all of it in `malloc_consolidate`, and the
+  merge gate builds its base in a directory of its own. So every measurement
+  runs with `GLIBC_TUNABLES=glibc.malloc.mxfast=0` (`MALLOC_TUNABLES` in
+  `perf_gate.py`), which turns off the fastbins that consolidation empties,
+  and the same two builds read 0.02% apart. A shape whose reading moves with
+  the environment has lost one of the two:
 
   ```bash
   b=target/release/examples/binding_workload   # built by perf_gate.py

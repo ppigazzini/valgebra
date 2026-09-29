@@ -180,8 +180,15 @@ def test_a_workload_runs_without_the_callers_environment() -> None:
         "LD_LIBRARY_PATH": "/opt/python/lib",
         "PYTHONHOME": "/opt/python",
         "PYTHONHASHSEED": "0",
+        "GLIBC_TUNABLES": "glibc.malloc.mxfast=0",
     }
-    assert gate.workload_environment({}) == {"PYTHONHASHSEED": "0"}
+    assert gate.workload_environment({}) == {
+        "PYTHONHASHSEED": "0",
+        "GLIBC_TUNABLES": "glibc.malloc.mxfast=0",
+    }
+    # A caller's own allocator setting is the caller's, and is replaced.
+    tuned = gate.workload_environment({"GLIBC_TUNABLES": "glibc.malloc.tcache_count=0"})
+    assert tuned["GLIBC_TUNABLES"] == "glibc.malloc.mxfast=0"
 
 
 def test_the_budget_file_names_the_toolchain_its_counts_were_taken_with() -> None:

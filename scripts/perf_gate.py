@@ -237,6 +237,11 @@ def parse_measurement(stdout: str, stderr: str) -> Measurement:
 PASSED_THROUGH = ("LD_LIBRARY_PATH", "PYTHONHOME", "VALGRIND_LIB")
 
 
+#: The glibc allocator setting every measurement runs under: no fastbins, so the
+#: heap a loop starts from does not decide what its allocations cost.
+MALLOC_TUNABLES = "glibc.malloc.mxfast=0"
+
+
 def workload_environment(caller: Mapping[str, str]) -> dict[str, str]:
     """Return the environment a measurement runs in: the few names it needs.
 
@@ -249,9 +254,18 @@ def workload_environment(caller: Mapping[str, str]) -> dict[str, str]:
     `PATH`, virtual environment and tool variables are the caller's; the
     measurement runs without them, with the hash seed fixed, so the same binary
     reads the same count from any shell.
+
+    **glibc's fastbins are turned off.** Whether a large request first
+    consolidates the small chunks freed before it follows from where the setup's
+    blocks landed, and that follows from the binary's own layout: one commit
+    built in two directories read the JSON shape 458,071,250 and 527,858,866,
+    all of the difference in `_int_malloc` and `malloc_consolidate`. With
+    `mxfast=0` the two read 535,119,725 and 534,992,150. A count taken this
+    way is a count of the tree's work rather than of where the linker put it.
     """
     kept = {name: caller[name] for name in PASSED_THROUGH if name in caller}
     kept["PYTHONHASHSEED"] = "0"
+    kept["GLIBC_TUNABLES"] = MALLOC_TUNABLES
     return kept
 
 
