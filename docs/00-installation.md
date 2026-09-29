@@ -66,6 +66,12 @@ process that compiles a schema over a *throwaway* class per request grows there
 and does not on CPython. Nothing in valgebra can change this, and the suite's
 three lifetime cases say so on PyPy rather than claiming to pass.
 
+And one call CPython refuses, PyPy answers. `object.__new__(Validator)` makes a
+validator whose schema was never compiled, which on PyPy 8.0 admits every
+value. CPython's `object.__new__` refuses a class with a constructor of its
+own; PyPy's does not ask, and no code of valgebra's runs to refuse it. Build a
+validator by calling `Validator`.
+
 On a free-threaded interpreter a validator is immutable and shares no mutable
 walk state, so object validation runs in parallel with the interpreter lock
 disabled. The JSON path is the one exception: its string parser draws on a
