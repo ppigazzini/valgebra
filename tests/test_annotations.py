@@ -198,10 +198,13 @@ def test_the_empty_tuple_is_still_the_empty_tuple() -> None:
 
 
 def test_a_parametrized_legacy_alias_is_unaffected() -> None:
-    assert Validator(list[int]) == Validator(list[int])
-    assert Validator(dict[str, int]) == Validator(dict[str, int])
-    assert Validator(tuple[int, str]) == Validator(tuple[int, str])
-    assert Validator(tuple[int, ...]) == Validator(tuple[int, ...])
+    # The legacy spellings are the subject, so UP006 is kept off each row: its
+    # fix rewrites the left side into the right and leaves a schema compared
+    # with itself.
+    assert Validator(typing.List[int]) == Validator(list[int])  # noqa: UP006
+    assert Validator(typing.Dict[str, int]) == Validator(dict[str, int])  # noqa: UP006
+    assert Validator(typing.Tuple[int, str]) == Validator(tuple[int, str])  # noqa: UP006
+    assert Validator(typing.Tuple[int, ...]) == Validator(tuple[int, ...])  # noqa: UP006
 
 
 REFUSED_LITERAL_ARGUMENTS = [
