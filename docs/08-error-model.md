@@ -25,7 +25,12 @@ A `ValidationError` exposes:
     neither, and a string holding a lone surrogate, has no spelling here and
     appears as its `repr` — naming the key rather than being one a caller can
     index back with.
-  - `message` — the rendered one-line human message.
+  - `message` — the rendered one-line human message, `at <location>: expected
+    <expected>, got <value> [<code>]`. The location writes a key as itself and
+    an index or an integer key in brackets, `items[2].id`; a key that is not a
+    bare name — empty, or holding a `.`, a bracket, whitespace or a control
+    character — is written as a subscript of its Python literal, `['a.b']`, so
+    no two paths read alike and the message stays on one line.
   - `expected` — a short label of the expected set (e.g. `int`).
   - `value` — a repr-style summary of the offending value.
 - `message`, `code`, `path`, `expected`, `value` — scalar convenience

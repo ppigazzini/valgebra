@@ -46,7 +46,11 @@ built with a code spelled out fails.
 `PathSegment` in `crates/valgebra-core/src/ir.rs` is one step of a location, and
 `Violation::location` renders a sequence of them as `name[2].id`. Keeping the
 steps apart is what lets a consumer walk down to the offending value rather than
-parse a string back into steps.
+parse a string back into steps. The rendering is for a reader, and it keeps two
+paths apart too: a key that is not a bare name is written as a subscript of its
+`quoted` literal, `['a.b']`. Written bare, the key `"a.b"` read as the path `a`
+then `b` and `"[0]"` as an index, and a key holding a newline split the
+one-line message.
 
 There are **four** variants, and the split between the first three is the whole
 reason the path is usable on a dict:

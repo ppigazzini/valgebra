@@ -459,6 +459,55 @@ fn location_renders_keys_indices_and_their_mix() {
     );
 }
 
+/// A key that is not a bare name is written as a subscript of its quoted text.
+///
+/// Bare, the key `"a.b"` read as the path `a` then `b`, `"[0]"` as the index 0,
+/// the empty key as nothing at all, and a key holding a newline broke the
+/// one-line message across two. Each row is a path that would collide with
+/// another, or leave its line, written bare, and the spelling it has.
+#[test]
+fn a_key_that_is_not_a_bare_name_is_quoted_in_the_location() {
+    let at = |path: Vec<PathSegment>| {
+        Violation {
+            code: "x",
+            path,
+            expected: String::new(),
+            value_summary: String::new(),
+        }
+        .location()
+    };
+    let key = |text: &str| PathSegment::Key(text.into());
+    assert_eq!(at(vec![key("a"), key("b")]), "a.b");
+    assert_eq!(at(vec![key("a.b")]), "['a.b']");
+    assert_eq!(at(vec![key("[0]")]), "['[0]']");
+    assert_eq!(at(vec![PathSegment::Index(0)]), "[0]");
+    assert_eq!(at(vec![key("")]), "['']");
+    assert_eq!(at(vec![key("a b")]), "['a b']");
+    assert_eq!(at(vec![key("a\nb")]), "['a\\nb']");
+    assert_eq!(at(vec![key("x"), key("a.b"), key("y")]), "x['a.b'].y");
+    assert_eq!(at(vec![key("a]"), PathSegment::IntKey(3)]), "['a]'][3]");
+    // A name is any text without the grammar's own characters, and stays bare.
+    assert_eq!(at(vec![key("user-id"), key("é")]), "user-id.é");
+}
+
+/// `quoted` spells text as a Python string literal reading back as the text.
+#[test]
+fn quoted_text_is_a_python_literal_of_itself() {
+    for (text, literal) in [
+        ("", "''"),
+        ("a.b", "'a.b'"),
+        ("it's", "\"it's\""),
+        ("'\"", "'\\'\"'"),
+        ("\\d+", "'\\\\d+'"),
+        ("a\tb\rc\nd", "'a\\tb\\rc\\nd'"),
+        ("\u{0}\u{7f}", "'\\x00\\x7f'"),
+        ("\u{a0} \u{2028}", "'\\xa0 \\u2028'"),
+        ("é", "'é'"),
+    ] {
+        assert_eq!(quoted(text), literal, "{text:?}");
+    }
+}
+
 #[test]
 fn mapping_and_record_share_the_dict_label() {
     let mapping = Schema::mapping(MapClause {

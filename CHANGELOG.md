@@ -42,6 +42,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: building a validator and asking a relation carry a fatal signal out
 - fix: validate explains no union branch that refuses a value by its kind
 - fix: a PyPy dict scan survives a key swapped mid-scan
+- fix: a key that is not a bare name is quoted in a message's location
 
 -->
 
@@ -227,6 +228,12 @@ answer of its own, or a repair to a change not yet released.
   `dict[str, T]` or a record with `extra_items` scanned the dict, made PyPy's C
   API fail fatally and took the process down. The scan reads a copy there, and
   the change is the one the walk does not see, as on CPython.
+- **A key that is not a bare name is quoted in a message's location.** The
+  location wrote every string key as itself, so the key `"a.b"` read as the
+  path `a` then `b`, `"[0]"` as the index 0 and the empty key as nothing, and a
+  key holding a newline split `message`, and its line of `str(exc)`, in two.
+  Such a key is written as a subscript of its Python literal, `at ['a.b']:`;
+  the structured `path` is unchanged.
 
 ## [0.0.14] - 2026-09-26
 

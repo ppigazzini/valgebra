@@ -18,6 +18,12 @@ pub struct Violation {
 
 impl Violation {
     /// Render the path as a location string (`name[2].id`); empty at the root.
+    ///
+    /// A string key that reads as a bare name is written as one. Any other --
+    /// empty, or holding a `.`, a bracket, whitespace or a control character --
+    /// is written as a subscript of its [`quoted`] text, `name['a.b']`: bare,
+    /// the key `"a.b"` read as the path `a` then `b`, `"[0]"` as the index 0,
+    /// and a key holding a newline broke the one-line message across two.
     #[must_use]
     pub fn location(&self) -> String {
         let mut out = String::new();
@@ -36,11 +42,16 @@ impl Violation {
         let mut first = true;
         for segment in &self.path {
             match segment {
-                PathSegment::Key(key) => {
+                PathSegment::Key(key) if is_bare(key) => {
                     if !first {
                         out.write_char('.')?;
                     }
                     out.write_str(key)?;
+                }
+                PathSegment::Key(key) => {
+                    out.write_char('[')?;
+                    write_quoted(out, key)?;
+                    out.write_char(']')?;
                 }
                 PathSegment::IntKey(key) => write!(out, "[{key}]")?,
                 PathSegment::BigIntKey(key) => write!(out, "[{key}]")?,
@@ -50,6 +61,58 @@ impl Violation {
         }
         Ok(())
     }
+}
+
+/// Whether a key reads as itself in a location: it has a character, and none the
+/// location's grammar uses or that ends a line.
+fn is_bare(key: &str) -> bool {
+    !key.is_empty()
+        && !key
+            .chars()
+            .any(|c| matches!(c, '.' | '[' | ']') || c.is_whitespace() || c.is_control())
+}
+
+/// `text` as a Python string literal, the spelling a caller writes it in.
+///
+/// Quoted as `repr` quotes: single quotes, or double where the text holds a
+/// single quote and no double one. The backslash, the quote, and every control
+/// or whitespace character but the space are escaped, so the literal is one
+/// line and reads back as `text`.
+#[must_use]
+pub fn quoted(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    // Infallible: a `String` writer never errors.
+    let _ = write_quoted(&mut out, text);
+    out
+}
+
+fn write_quoted(out: &mut impl core::fmt::Write, text: &str) -> core::fmt::Result {
+    let quote = if text.contains('\'') && !text.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    out.write_char(quote)?;
+    for c in text.chars() {
+        match c {
+            '\\' => out.write_str("\\\\")?,
+            '\n' => out.write_str("\\n")?,
+            '\r' => out.write_str("\\r")?,
+            '\t' => out.write_str("\\t")?,
+            c if c == quote => {
+                out.write_char('\\')?;
+                out.write_char(c)?;
+            }
+            // Every control and whitespace character lies in the first plane,
+            // so the four-digit escape is the widest one needed.
+            c if c != ' ' && (c.is_control() || c.is_whitespace()) => match u32::from(c) {
+                code @ 0..=0xff => write!(out, "\\x{code:02x}")?,
+                code => write!(out, "\\u{code:04x}")?,
+            },
+            c => out.write_char(c)?,
+        }
+    }
+    out.write_char(quote)
 }
 
 impl std::fmt::Display for Violation {

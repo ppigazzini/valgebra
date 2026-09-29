@@ -196,6 +196,28 @@ def test_a_value_a_union_admits_is_never_summarized() -> None:
     assert reprs == []
 
 
+def test_a_message_names_each_key_on_one_line() -> None:
+    """A key that is not a bare name is written as a subscript of its literal.
+
+    Bare, the key `"a.b"` read as the path `a` then `b`, `"[0]"` as the index 0,
+    and a key holding a newline broke the one-line message across two. The
+    path itself was always exact; the message is what a log line keeps.
+    """
+    cases = [
+        ({"a.b": "x"}, dict[str, int], "at ['a.b']: "),
+        ({"a": {"b": "x"}}, {"a": {"b": int}}, "at a.b: "),
+        ({"[0]": "x"}, dict[str, int], "at ['[0]']: "),
+        ({"": "x"}, dict[str, int], "at ['']: "),
+        ({"a\nb": "x"}, dict[str, int], "at ['a\\nb']: "),
+        ({"user-id": "x"}, dict[str, int], "at user-id: "),
+    ]
+    for value, schema, location in cases:
+        with pytest.raises(ValidationError) as info:
+            Validator(schema).validate(value)
+        assert info.value.message.startswith(location), info.value.message
+        assert "\n" not in info.value.message
+
+
 def test_the_error_model_is_built_when_it_is_asked_for() -> None:
     """A caller that logs `str(error)` should not pay for the whole model.
 
