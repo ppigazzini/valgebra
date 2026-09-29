@@ -138,8 +138,13 @@ tree automata, which **Seidl** proved EXPTIME-complete in 1990; Hosoya, Vouillon
 from him. That is the language valgebra's fragment sits closest to. Gesbert,
 Genevès & Layaïda establish `2^O(n)` for a **larger** language — the
 Castagna & Xu relation, with function types and type variables — which is the
-bound no other proof existed for, and which covers the fragment here because a
-superset's upper bound bounds a sublanguage.
+bound no other proof existed for. It covers the **structural** fragment here —
+products, records and the Boolean connectives over atoms whose own emptiness is
+decided — because a superset's upper bound bounds a sublanguage. It says nothing
+of the atoms that language lacks: a pattern's inclusion is regular-language
+inclusion, a bound conjunction is integer arithmetic, and a predicate or a
+hooked class answers by running code. Neither bound is paid either way: the
+procedure runs under a fixed work budget and declines past it.
 
 valgebra does not need that decision to validate: membership is answered
 directly by the walk, not by reducing the schema. So the library is honest about
