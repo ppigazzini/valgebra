@@ -29,6 +29,7 @@ from pathlib import Path
 
 import pytest
 
+from _reason import is_a_reason
 from _toml import load
 
 # The repository checks are not the product suite: this file reads the tree,
@@ -141,7 +142,7 @@ def test_no_ledger_entry_is_stale() -> None:
 
 def test_every_ledger_entry_carries_a_reason() -> None:
     for feature, why in PRODUCTION_FEATURES.items():
-        assert len(why) > 40, f"{feature}: a ledger entry with no reason"
+        assert is_a_reason(why), f"{feature}: a ledger entry with no reason"
 
 
 def test_the_manifest_says_the_feature_never_ships() -> None:

@@ -43,6 +43,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from _reason import is_a_reason
+
 if TYPE_CHECKING:
     from types import ModuleType
 
@@ -126,7 +128,7 @@ def test_every_use_case_is_named_by_the_suite_or_accepted(cell: str) -> None:
 def test_every_accepted_reason_is_a_sentence() -> None:
     """An excuse short enough to be a shrug is not one."""
     for cell, reason in ACCEPTED.items():
-        assert len(reason) > 40, f"{cell}: {reason!r}"
+        assert is_a_reason(reason), f"{cell}: {reason!r}"
         assert cell in _universe(), f"{cell} is accepted and is not a use case"
 
 

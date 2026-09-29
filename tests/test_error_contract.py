@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Annotated, Literal
 import annotated_types as at
 import pytest
 
+from _reason import is_a_reason
 from valgebra import ValidationError, Validator, union
 
 if TYPE_CHECKING:
@@ -401,7 +402,7 @@ def test_every_marker_names_a_promise_the_page_makes() -> None:
 def test_every_undriven_promise_carries_its_reason() -> None:
     """A section nothing drives says why, and the reason is about the section."""
     for heading, reason in NOT_DRIVEN.items():
-        assert len(reason) > 60, f"{heading}: {reason!r}"
+        assert is_a_reason(reason), f"{heading}: {reason!r}"
         assert heading not in _driven(), (
             f"{heading} is both marked and excused; drop the excuse"
         )

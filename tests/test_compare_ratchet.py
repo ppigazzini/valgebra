@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from _reason import is_a_reason
+
 if TYPE_CHECKING:
     from types import ModuleType
 
@@ -179,7 +181,7 @@ def test_every_shape_is_ratcheted_or_argued_out_of_it() -> None:
         f"named for a shape that is gone: {(judged | excused) - ceilings}"
     )
     for shape, reason in recorded["unratcheted"].items():
-        assert len(reason) > 80, f"{shape} is excused without an argument"
+        assert is_a_reason(reason), f"{shape} is excused without an argument"
 
 
 def test_a_tolerance_is_a_spread_rather_than_a_wish() -> None:

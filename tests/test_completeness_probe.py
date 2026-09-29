@@ -38,6 +38,7 @@ from typing import Annotated, Any, Literal, Protocol, TypedDict, runtime_checkab
 import annotated_types as at
 import pytest
 
+from _reason import is_a_reason
 from valgebra import (
     Regex,
     Validator,
@@ -602,7 +603,7 @@ def test_no_ledger_entry_is_stale(survey: Survey) -> None:
 
 def test_every_ledger_entry_carries_a_reason() -> None:
     for relation, why in ACCEPTED.items():
-        assert len(why) > 40, f"{relation}: an accepted gap with no reason"
+        assert is_a_reason(why), f"{relation}: an accepted gap with no reason"
 
 
 def test_the_ledger_is_serialisable_for_a_report() -> None:

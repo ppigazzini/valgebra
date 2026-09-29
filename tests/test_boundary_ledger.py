@@ -54,6 +54,7 @@ from typing import (
 import annotated_types as at
 import pytest
 
+from _reason import is_a_reason
 from valgebra import (
     Validator,
     anything,
@@ -391,7 +392,7 @@ def test_every_entry_of_the_boundary_answers_as_the_page_says(title: str) -> Non
             f"procedure answers {answer!r}. Deciding it is a change to the "
             "page, not a quiet improvement."
         )
-        assert len(row.would_decide) > 30, title
+        assert is_a_reason(row.would_decide), title
         if row.beside is not None:
             left, right, decided = row.beside
             beside = Validator(left).relation_to(right)

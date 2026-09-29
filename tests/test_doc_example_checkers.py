@@ -32,6 +32,8 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from _reason import is_a_reason
+
 if TYPE_CHECKING:
     from collections import Counter
     from types import ModuleType
@@ -92,10 +94,10 @@ def test_every_row_names_a_reached_page_once_with_a_reason() -> None:
     for row in module.EXPECTED:
         assert row.page in reached, f"{row.page} is a page the runner does not list"
         assert row.count >= 1, row
-        assert len(row.reason) > 40, f"{row.page} {row.rule}: {row.reason!r}"
+        assert is_a_reason(row.reason), f"{row.page} {row.rule}: {row.reason!r}"
 
 
 def test_every_exemption_says_why() -> None:
     module = checker()
     for rule, reason in module.EXEMPT.items():
-        assert len(reason) > 25, f"{rule}: {reason!r}"
+        assert is_a_reason(reason), f"{rule}: {reason!r}"

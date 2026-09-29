@@ -38,6 +38,8 @@ from pathlib import Path
 
 import pytest
 
+from _reason import is_a_reason
+
 pytestmark = pytest.mark.repository
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -332,5 +334,5 @@ def test_every_accepted_reason_is_a_sentence() -> None:
     """An excuse short enough to be a shrug is not one."""
     sites = _sites()
     for where, reason in ACCEPTED.items():
-        assert len(reason) > 40, f"{where}: {reason!r}"
+        assert is_a_reason(reason), f"{where}: {reason!r}"
         assert where in sites, f"{where} is accepted and is not a refusal site"

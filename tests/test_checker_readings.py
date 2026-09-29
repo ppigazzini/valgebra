@@ -36,6 +36,8 @@ from typing import NamedTuple
 
 import pytest
 
+from _reason import is_a_reason
+
 # The three checkers are the dev group's, and the PyPy lane installs only what
 # the product suite reads: there this ledger has nothing to run and says so,
 # where a checker's absence would otherwise read as an empty reading.
@@ -337,7 +339,7 @@ def test_a_row_is_a_disagreement(row: Reading) -> None:
         f"{row.fixture}: every checker reads {row.ty!r}; write it as an "
         "`assert_type` row in tests/typing/consumer.py and drop the fixture"
     )
-    assert len(row.moves) > 80, (
+    assert is_a_reason(row.moves), (
         f"{row.fixture}: {row.moves!r} does not say what a change means"
     )
 

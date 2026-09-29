@@ -33,6 +33,7 @@ from pathlib import Path
 
 import pytest
 
+from _reason import is_a_reason
 from _toml import load
 
 # The repository checks are not the product suite: this file reads the tree,
@@ -120,7 +121,7 @@ def test_no_detached_entry_is_stale() -> None:
 
 def test_every_detached_surface_carries_its_reason() -> None:
     for path, entry in DETACHED.items():
-        assert len(entry["why"]) > 40, f"{path}: a detached entry with no reason"
+        assert is_a_reason(entry["why"]), f"{path}: a detached entry with no reason"
         assert entry["local"].startswith("cargo "), path
 
 

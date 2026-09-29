@@ -24,6 +24,8 @@ from pathlib import Path
 
 import pytest
 
+from _reason import is_a_reason
+
 # The repository checks are not the product suite: this file reads the tree,
 # the configuration and the gate scripts, none of which ship in a wheel.
 pytestmark = pytest.mark.repository
@@ -87,7 +89,7 @@ def test_the_marker_carries_a_reason() -> None:
         text = path.read_text(encoding="utf-8")
         for line in text.splitlines():
             if MARKER in line:
-                assert len(line.split(MARKER, 1)[1].strip(" :")) > 20, (
+                assert is_a_reason(line.split(MARKER, 1)[1].strip(" :")), (
                     f"{path.relative_to(ROOT)}: a {MARKER} marker with no reason"
                 )
 

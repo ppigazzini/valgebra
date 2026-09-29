@@ -40,6 +40,8 @@ from typing import TYPE_CHECKING, Annotated, NamedTuple
 import annotated_types as at
 import pytest
 
+from _reason import is_a_reason
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -373,7 +375,7 @@ def test_a_code_a_document_can_carry_is_reported_from_one(code: str) -> None:
     """
     case = CASES[code]
     if case.document is None:
-        assert len(case.no_json) > 40, f"{code}: {case.no_json!r}"
+        assert is_a_reason(case.no_json), f"{code}: {case.no_json!r}"
         if case.instead is not None:
             document, other = case.instead
             assert other != code

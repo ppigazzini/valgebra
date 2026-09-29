@@ -28,6 +28,8 @@ from pathlib import Path
 
 import pytest
 
+from _reason import is_a_reason
+
 pytestmark = pytest.mark.repository
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -145,7 +147,7 @@ def test_every_accepted_bound_exists_and_has_a_reason() -> None:
     declared = _declared()
     unknown = sorted(name for name in ACCEPTED if name not in declared)
     assert not unknown, f"accepted bounds the tree does not declare: {unknown}"
-    short = sorted(name for name, reason in ACCEPTED.items() if len(reason) < 40)
+    short = sorted(name for name, reason in ACCEPTED.items() if not is_a_reason(reason))
     assert not short, f"accepted bounds with no reason: {short}"
 
 

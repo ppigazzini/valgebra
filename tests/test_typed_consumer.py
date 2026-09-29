@@ -30,6 +30,8 @@ from pathlib import Path
 
 import pytest
 
+from _reason import is_a_reason
+
 pytestmark = pytest.mark.repository
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -141,7 +143,7 @@ def test_every_accepted_reason_is_a_sentence() -> None:
     """An excuse short enough to be a shrug is not one."""
     declared = _declared()
     for name, reason in ACCEPTED.items():
-        assert len(reason) > 40, f"{name}: {reason!r}"
+        assert is_a_reason(reason), f"{name}: {reason!r}"
         assert name in declared, f"{name} is accepted and the stub does not declare it"
 
 

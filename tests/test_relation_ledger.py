@@ -54,6 +54,8 @@ from typing import Annotated, Any, Protocol, runtime_checkable
 import annotated_types as at
 import pytest
 
+from _reason import is_a_reason
+
 # The two class-shaped forms come from the node table rather than being written
 # again here. This file's tables claim to be that file's forms, and for the
 # attribute record the claim was once false: a `@runtime_checkable` Protocol
@@ -413,7 +415,7 @@ def test_no_reason_outlives_the_pair_it_excuses(
     unknown = sorted(pair for pair in reasoned if set(pair) - set(REPRESENTATIVES))
     assert not unknown, f"reasons for pairs that are not pairs of variants: {unknown}"
     for pair, reason in reasoned.items():
-        assert len(reason) > 60, f"{pair}: {reason!r}"
+        assert is_a_reason(reason), f"{pair}: {reason!r}"
 
 
 def test_the_corpus_reaches_every_representative(
