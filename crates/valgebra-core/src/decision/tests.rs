@@ -2725,6 +2725,31 @@ fn a_refutation_about_a_part_with_no_value_is_not_one() {
     );
 }
 
+/// The complement of a set only the descriptor proves empty is the universe,
+/// and bounds a subject nothing can lower. A literal the null oracle cannot
+/// place is such a subject: it has no descriptor, and it meets a string
+/// refinement the rules cannot empty, so disjointness declines. The inner set's
+/// own emptiness is what settles the pair, asked where disjointness declines. A
+/// complement that is not the universe leaves the pair a decline, never a
+/// refutation.
+#[test]
+fn a_complement_only_the_descriptor_empties_bounds_a_subject_with_no_descriptor() {
+    let unplaced = Schema::Literal(ConstIx::new(0));
+    let complement =
+        |constraints| Schema::Complement(Arc::new(Schema::refine(Schema::Str, constraints)));
+    let universe = complement(vec![Constraint::Regex("x".into()), Constraint::MaxLen(0)]);
+    assert!(Schema::Complement(Arc::new(universe.clone())).is_empty_under(&[]));
+    assert_eq!(
+        unplaced.subtype_relation_under(&universe, &NoLeafRelations, &[]),
+        Relation::Holds
+    );
+    let all_but_the_empty_string = complement(vec![Constraint::MaxLen(0)]);
+    assert_eq!(
+        unplaced.subtype_relation_under(&all_but_the_empty_string, &NoLeafRelations, &[]),
+        Relation::Unknown
+    );
+}
+
 /// A record below the complement of a union of records is decided at every
 /// width.
 ///

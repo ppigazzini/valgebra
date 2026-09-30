@@ -955,6 +955,15 @@ _DECIDED = [
         _nested(str, 4, mapping=True),
         id="refute:mappings-4-deep-over-int<=over-str",
     ),
+    # A subject too wide for the set representation, below the complement of a
+    # refinement only the set representation empties: the complement rule reads
+    # the inner set alone.
+    pytest.param(
+        "subtype",
+        union(*[Annotated[str, Regex(f"a{i}+")] for i in range(40)]),
+        complement(Annotated[str, Regex("x"), at.MaxLen(0)]),
+        id="str:forty-patterns<=the-complement-of-an-empty-pattern",
+    ),
 ]
 
 # Known decision-completeness misses: true relations neither the rules nor the

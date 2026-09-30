@@ -1006,6 +1006,12 @@ impl Schema {
             // it is the opposite proof: `A ⊆ B` holding means every value of
             // `A` is in `B`, so a value of `A` is a value outside `¬B`. That
             // needs `A` to have one, which the reading around this settles.
+            //
+            // Where both decline, an empty `B` still settles it: `¬B` is the
+            // universe. The rules cannot empty a pattern beside a length, and
+            // the set representation can, reading `B` alone -- where the
+            // subject may have no descriptor at all, as a literal the oracle
+            // cannot place has none.
             (_, Schema::Complement(inner)) => {
                 if self.shares_no_value_with(inner, cx) {
                     return Relation::Holds;
@@ -1013,7 +1019,7 @@ impl Schema {
                 if self.is_subtype_rec(inner, cx, assumptions).holds() {
                     Relation::of_mismatch(self.verdict_of(cx))
                 } else {
-                    Relation::Unknown
+                    Relation::proven(inner.denotes_no_value(cx.oracle, cx.defs))
                 }
             }
             (

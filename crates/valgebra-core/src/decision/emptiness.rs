@@ -99,7 +99,7 @@ impl Schema {
     /// may spend, and past any of those it refuses. A schema the descriptor
     /// cannot hold -- a recursive one -- refuses the same way. Either way the
     /// caller keeps the verdict the rules reached.
-    fn denotes_no_value(&self, pool: &dyn Constants, defs: &[Schema]) -> bool {
+    pub(super) fn denotes_no_value(&self, pool: &dyn Constants, defs: &[Schema]) -> bool {
         lower_unfolded(self, defs, Polarity::Widen, pool)
             .is_some_and(|set| set.emptiness() == Verdict::Empty)
     }

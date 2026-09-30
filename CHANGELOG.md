@@ -46,6 +46,7 @@ answer of its own, or a repair to a change not yet released.
 - fix: the pattern and depth labels name the set a value missed
 - fix: a record below the complement of two records is decided
 - fix: equality, hash, repr and a build refusal carry a fatal signal out
+- fix: the complement of an empty refinement is above every subject
 
 -->
 
@@ -257,6 +258,13 @@ answer of its own, or a repair to a change not yet released.
   refusal naming an object whose `__repr__` raised one named it
   `<unrepresentable>`. Each raises the signal; an ordinary exception reads as
   before.
+- **The complement of an empty refinement is above every subject.**
+  `complement(Annotated[str, Regex("x"), MaxLen(0)])` is the universe, since no
+  string both matches `x` and has no characters, yet a union of forty pattern
+  refinements answered `undecided` below it: the set representation read the
+  pattern only by lowering the subject too, and that union is past what it
+  lowers. The complement rule asks the refinement's own emptiness where
+  disjointness declines.
 
 ## [0.0.14] - 2026-09-26
 

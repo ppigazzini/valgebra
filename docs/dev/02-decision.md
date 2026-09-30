@@ -806,6 +806,22 @@ draws the family. A finished validator carries no such reference -- `pruned`
 keeps what the schema reaches and nothing it names is dropped -- so no answer a
 caller can ask for moves.
 
+**The complement rule asks the inner set's emptiness where disjointness
+declines.** `A ⊆ ¬B` holds whenever `B` is empty, since `¬B` is then the
+universe, and the rules cannot empty a pattern beside a length: `Regex("x")` with
+`MaxLen(0)` denotes no string, and only the set representation reads the
+pattern's shortest match. The descriptor route asks it by lowering the subject
+first, so a subject with no descriptor -- a literal the null oracle cannot place,
+a union past the node budget -- was below nothing, not even the complement of a
+set `is_empty` proves empty. The rule reads `B` alone. It is not the dearer route
+withdrawn above: that lowered the whole supertype for every pair whose subject
+refused, and this lowers the complement's inner set only where the complement
+rule has declined -- the relation matrix reads +0.02%. The nightly fuzzer drew
+it, `fuzz/seeds/decision/` keeps the input, and
+`a_complement_only_the_descriptor_empties_bounds_a_subject_with_no_descriptor`
+in `decision/tests.rs` holds the pair and its non-universal neighbour, which
+stays a decline.
+
 **A length bound reads the lengths a sequence's shape can take.** A sequence
 is never shorter than its fixed positions and never longer where its tail
 admits nothing, so `MinLen(5)` over a list of exactly three elements is empty.
