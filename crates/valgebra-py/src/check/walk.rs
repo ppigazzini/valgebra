@@ -994,11 +994,14 @@ fn check_instance(index: ClassIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '
     let Some(class) = class_at(ctx, index, value.py()) else {
         return false;
     };
-    let ok = fold(
-        value.to_python().and_then(|obj| obj.is_instance(class)),
-        value.py(),
-        ctx,
-    );
+    let ok = match value {
+        Value::Py(obj) => is_exactly_a(obj, class) || fold(obj.is_instance(class), obj.py(), ctx),
+        Value::Json(..) => fold(
+            value.to_python().and_then(|obj| obj.is_instance(class)),
+            value.py(),
+            ctx,
+        ),
+    };
     if !ok && ctx.mode.explains() {
         frame.out.push(type_mismatch(
             INSTANCE_TYPE,
@@ -1009,6 +1012,29 @@ fn check_instance(index: ClassIx, value: &Value<'_, '_>, frame: &mut Frame<'_, '
         ));
     }
     ok
+}
+
+/// Whether `obj`'s type is `class` itself, which `isinstance` answers yes to
+/// without asking the class anything.
+///
+/// `CPython`'s `PyObject_IsInstance` makes this test first, before it looks up
+/// an `__instancecheck__` -- "quick test for an exact match", from 3.10 to the
+/// current branch -- so it is the same answer read off the type pointer, and a
+/// value of the class a schema names pays neither the call nor the result it
+/// folds. A list of `date`, of one enumeration, of one dataclass is that case
+/// at every element. `PyPy` implements `isinstance` otherwise, so there the
+/// call answers.
+#[inline]
+fn is_exactly_a(obj: &Bound<'_, PyAny>, class: &Bound<'_, PyAny>) -> bool {
+    #[cfg(not(PyPy))]
+    {
+        std::ptr::eq(obj.get_type_ptr().cast(), class.as_ptr())
+    }
+    #[cfg(PyPy)]
+    {
+        let _ = (obj, class);
+        false
+    }
 }
 
 /// Whether this value is a member of the definition the reference names.

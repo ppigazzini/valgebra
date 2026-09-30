@@ -4575,3 +4575,46 @@ fn a_tuple_of_scalar_positions_is_read_as_its_tests() {
         state.depth.set(0);
     });
 }
+
+/// A value whose type is the class a schema names is an instance of it, read
+/// off the type pointer on `CPython`; a subclass instance and any other value
+/// are asked of `isinstance`, and so is every value on `PyPy`. The class's own
+/// `__instancecheck__` is not consulted for its exact instances, as `isinstance`
+/// does not consult it.
+#[test]
+fn an_instance_of_the_class_itself_is_read_off_its_type() {
+    use super::is_exactly_a;
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Refusing(type):\n\
+              \x20   def __instancecheck__(cls, instance):\n\
+              \x20       return False\n\
+              class Base:\n\
+              \x20   pass\n\
+              class Sub(Base):\n\
+              \x20   pass\n\
+              class Odd(metaclass=Refusing):\n\
+              \x20   pass\n\
+              BASE, SUB, ODD = Base(), Sub(), Odd()\n",
+            c"instances.py",
+            c"instances",
+        )
+        .expect("the module compiles");
+        let get = |name: &str| module.getattr(name).expect("defined");
+        let (base, odd) = (get("Base"), get("Odd"));
+        assert_eq!(is_exactly_a(&get("BASE"), &base), !cfg!(PyPy));
+        assert_eq!(is_exactly_a(&get("ODD"), &odd), !cfg!(PyPy));
+        assert!(!is_exactly_a(&get("SUB"), &base));
+        assert!(!is_exactly_a(&PyInt::new(py, 1i64).into_any(), &base));
+
+        let instance = Schema::Instance(ClassIx::new(0));
+        let pool = vec![base.unbind()];
+        assert!(decide(py, &instance, &get("BASE"), &pool, &[]));
+        assert!(decide(py, &instance, &get("SUB"), &pool, &[]));
+        assert!(!decide(py, &instance, &get("ODD"), &pool, &[]));
+        let pool = vec![odd.unbind()];
+        assert!(decide(py, &instance, &get("ODD"), &pool, &[]));
+        assert!(!decide(py, &instance, &get("BASE"), &pool, &[]));
+    });
+}

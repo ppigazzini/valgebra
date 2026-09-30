@@ -376,6 +376,14 @@ levels, and `homogeneous_scalar_union` holds the union's while it asks for the
 branch's -- what the walk does with each element -- and declines to the general
 path wherever either is missing, which then refuses at the bound.
 
+**A class is its type pointer for its own instances.** `isinstance(obj, C)`
+with `type(obj) is C` answers yes before it asks `C`'s `__instancecheck__` --
+CPython's `PyObject_IsInstance` makes that test first, from 3.10 to the current
+branch -- so `check_instance` reads it off the type pointer (`is_exactly_a`),
+and asks `isinstance` only of a subclass instance or another value. A list of
+`date`, or of one enumeration, costs 29% fewer instructions. PyPy implements
+`isinstance` otherwise, and there the call answers.
+
 **Where a question is asked is part of what it costs.** The walk is one
 recursive function under fat LTO, with the arms of `member` inlined into it, so
 a test added to an arm moves the register allocation of every shape that
