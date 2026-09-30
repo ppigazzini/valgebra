@@ -12,14 +12,14 @@ use jiter::JsonValue;
 use pyo3::prelude::*;
 use pyo3::sync::critical_section::with_critical_section;
 use pyo3::types::{PyFrozenSet, PyIterator, PyList, PySet, PyTuple};
-use valgebra_core::{PathSegment, Schema, SeqKind, SeqShape, Violation};
+use valgebra_core::{ClassIx, PathSegment, Schema, SeqKind, SeqShape, Violation};
 
 #[cfg(PyPy)]
 use super::reads_its_length;
 use super::scalar::{Scalar, admitted_quietly, homogeneous_scalar_union, scalar_union_admits};
 use super::{
-    Base, Frame, Scan, held_iter, homogeneous_scalar, is_fatal, member, mutated,
-    reads_its_elements, record_fatal, record_if_fatal, scalar_admits, scalar_of, stop,
+    Base, Frame, Scan, class_at, held_iter, homogeneous_scalar, is_exactly_a, is_fatal, member,
+    mutated, reads_its_elements, record_fatal, record_if_fatal, scalar_admits, scalar_of, stop,
 };
 use crate::check::ctx::Ctx;
 use crate::check::violation::{summarize_value, type_fail};
@@ -58,9 +58,8 @@ pub(super) fn check_seq(
             if let Some((kind, schema)) = homogeneous_scalar(prefix, tail, ctx) {
                 return scalar_list_matches(list, kind, schema, value, frame);
             }
-            if let Some(union @ Schema::Union(members)) = tail
-                && let Some(ok) =
-                    scalar_union_list_matches(list, prefix, union, members, value, frame)
+            if let Some(element @ (Schema::Union(_) | Schema::Instance(_))) = tail
+                && let Some(ok) = element_list_matches(list, prefix, element, value, frame)
             {
                 return ok;
             }
@@ -308,25 +307,8 @@ fn list_explained(
     frame: &mut Frame<'_, '_>,
 ) -> bool {
     let ctx = frame.ctx;
-    if snapshot_pays(list.len()) && list.is_exact_instance_of::<PyList>() {
-        match list.as_sequence().to_tuple() {
-            Ok(snapshot) => {
-                if snapshot
-                    .iter_borrowed()
-                    .all(|item| admits(&Value::Py(&item)))
-                {
-                    return if list.len() == snapshot.len() {
-                        true
-                    } else {
-                        mutated(value, frame)
-                    };
-                }
-            }
-            Err(err) => {
-                record_fatal(err, ctx);
-                return false;
-            }
-        }
+    if let Some(answer) = admitted_through_snapshot(list, &admits, value, frame) {
+        return answer;
     }
     let mut ok = true;
     let scan = scan_list(list, |at, item| {
@@ -344,6 +326,46 @@ fn list_explained(
         Scan::Complete => ok,
         Scan::Stopped => false,
         Scan::Unreadable => mutated(value, frame),
+    }
+}
+
+/// A list read through a snapshot where one pays, as [`scalar_list_loop`]
+/// reads it: the answer where every element passes `admits` -- `true`, or the
+/// move reported where the count did not hold -- and `false` where the copy
+/// could not be made, a fatal signal recorded; `None` where no snapshot is
+/// taken or an element does not pass, which the caller reads in place from the
+/// start, as the general walk reads it.
+///
+/// Read so by the readers whose elements a test alone may not settle: a
+/// failing element, or one only the walk can decide, may run Python that moves
+/// the list, and the snapshot would answer about the list as it was.
+fn admitted_through_snapshot(
+    list: &Bound<'_, PyList>,
+    admits: &impl Fn(&Value<'_, '_>) -> bool,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    if !(snapshot_pays(list.len()) && list.is_exact_instance_of::<PyList>()) {
+        return None;
+    }
+    match list.as_sequence().to_tuple() {
+        Ok(snapshot) => {
+            if !snapshot
+                .iter_borrowed()
+                .all(|item| admits(&Value::Py(&item)))
+            {
+                return None;
+            }
+            Some(if list.len() == snapshot.len() {
+                true
+            } else {
+                mutated(value, frame)
+            })
+        }
+        Err(err) => {
+            record_fatal(err, frame.ctx);
+            Some(false)
+        }
     }
 }
 
@@ -405,12 +427,142 @@ pub(super) fn scalar_union_list_matches(
     value: &Value<'_, '_>,
     frame: &mut Frame<'_, '_>,
 ) -> Option<bool> {
-    let members = homogeneous_scalar_union(prefix, members, frame.ctx)?;
+    let ctx = frame.ctx;
+    let Some(members) = homogeneous_scalar_union(prefix, members, ctx) else {
+        return literal_list_matches(list, prefix, union, members, value, frame);
+    };
     let admits = |item: &Value<'_, '_>| scalar_union_admits(members, item);
-    if frame.ctx.mode.explains() {
+    if ctx.mode.explains() {
         return Some(list_explained(list, union, admits, value, frame));
     }
     Some(scalar_list_loop(list, admits, value, frame))
+}
+
+/// Membership for a list whose element is a union or a class, read by the
+/// reader for its kind, and `None` where that reader declines.
+///
+/// One call for both, behind the one test of the tail's tag [`check_seq`]
+/// makes: a second test there moved the PGO wheel's layout of the general
+/// scan beside it.
+#[inline(never)]
+pub(super) fn element_list_matches(
+    list: &Bound<'_, PyList>,
+    prefix: &[Schema],
+    element: &Schema,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    match element {
+        Schema::Union(members) => {
+            scalar_union_list_matches(list, prefix, element, members, value, frame)
+        }
+        Schema::Instance(index) => {
+            instance_list_matches(list, prefix, element, *index, value, frame)
+        }
+        _ => None,
+    }
+}
+
+/// Membership for a list whose every element is an instance of one class --
+/// `list[datetime.date]`, a list of one enumeration -- where a level is free
+/// under the list, and `None` elsewhere.
+///
+/// An element whose type is the class is an instance of it, read off the type
+/// pointer as [`check_instance`](super::check_instance) reads it; any other is
+/// walked, which asks `isinstance` and may run the class's
+/// `__instancecheck__`. The general loop paid a call and a dispatch around the
+/// pointer test, 130 instructions an element. A list is read in place unless a
+/// snapshot whose every element is exactly the class settles it.
+pub(super) fn instance_list_matches(
+    list: &Bound<'_, PyList>,
+    prefix: &[Schema],
+    element: &Schema,
+    index: ClassIx,
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    if !prefix.is_empty() || !ctx.room_to_descend() {
+        return None;
+    }
+    let class = class_at(ctx, index, value.py())?;
+    let exact = |item: &Value<'_, '_>| matches!(item, Value::Py(obj) if is_exactly_a(obj, class));
+    if ctx.mode.explains() {
+        return Some(list_explained(list, element, exact, value, frame));
+    }
+    if let Some(answer) = admitted_through_snapshot(list, &exact, value, frame) {
+        return Some(answer);
+    }
+    let mut ok = true;
+    let scan = scan_list(list, |_, item| {
+        let item = Value::Py(item);
+        ok &= exact(&item) || member(element, &item, frame);
+        if !ok && stop(ctx) {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    Some(match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    })
+}
+
+/// Membership for a list whose every element is a union of literals --
+/// `list[Literal["a", "b", "c"]]` -- where the union has a table and a level is
+/// free under the list, and `None` elsewhere.
+///
+/// Each element is the table's answer, found once for the list rather than
+/// looked up by the union at every element: the general loop paid a call, a
+/// dispatch and a lookup of the table around an answer the table gives alone,
+/// 208 instructions an element against 30 for a `list[str]`. The table answers
+/// exactly what the union's walk answers, wherever it answers -- an exact
+/// `int` or `str` -- and needs the level the walk would take for the union;
+/// an element it does not decide is walked, which may run Python, so a list
+/// is read in place unless a snapshot the table admits entirely settles it.
+pub(super) fn literal_list_matches(
+    list: &Bound<'_, PyList>,
+    prefix: &[Schema],
+    union: &Schema,
+    members: &[Schema],
+    value: &Value<'_, '_>,
+    frame: &mut Frame<'_, '_>,
+) -> Option<bool> {
+    let ctx = frame.ctx;
+    if !prefix.is_empty() || !ctx.room_to_descend() {
+        return None;
+    }
+    if !matches!(members.first(), Some(Schema::Literal(_))) {
+        return None;
+    }
+    let plan = ctx.unions.get(&(members.as_ptr() as usize))?;
+    let decided = |item: &Value<'_, '_>| plan.decide(item) == Some(true);
+    if ctx.mode.explains() {
+        return Some(list_explained(list, union, decided, value, frame));
+    }
+    if let Some(answer) = admitted_through_snapshot(list, &decided, value, frame) {
+        return Some(answer);
+    }
+    let mut ok = true;
+    let scan = scan_list(list, |_, item| {
+        let item = Value::Py(item);
+        ok &= match plan.decide(&item) {
+            Some(answer) => answer,
+            None => member(union, &item, frame),
+        };
+        if !ok && stop(ctx) {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    Some(match scan {
+        Scan::Complete => ok,
+        Scan::Stopped => false,
+        Scan::Unreadable => mutated(value, frame),
+    })
 }
 
 /// The loop [`scalar_list_matches`] and [`scalar_union_list_matches`] share,

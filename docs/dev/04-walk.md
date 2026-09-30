@@ -424,6 +424,19 @@ and asks `isinstance` only of a subclass instance or another value. A list of
 `date`, or of one enumeration, costs 29% fewer instructions. PyPy implements
 `isinstance` otherwise, and there the call answers.
 
+**A list of one class, or of a union of literals, has a reader of its own.**
+Each element is the pointer test, or the union's table found once for the
+list (`instance_list_matches`, `literal_list_matches`), and an element the test
+does not settle -- a subclass instance, a value the table does not decide -- is
+walked, which may run Python; so a list is read in place, unless a snapshot the
+test admits entirely settles it. The general loop paid a call, a dispatch and,
+for the union, a lookup of its table at every element: a thousand `date`s cost
+76% fewer instructions and a thousand literals 62%. The list arm hands both
+kinds of tail to one reader (`element_list_matches`) behind its one tag test,
+and the readers cost the PGO wheel's walk of a nested list 3% more
+instructions with the training workload reading lists of each kind, 6%
+without it.
+
 **Where a question is asked is part of what it costs.** The walk is one
 recursive function under fat LTO, with the arms of `member` inlined into it, so
 a test added to an arm moves the register allocation of every shape that

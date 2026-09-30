@@ -4833,3 +4833,212 @@ fn an_explaining_walk_reads_a_list_that_belongs_through_its_snapshot() {
         assert!(!ok && violations.len() == 40, "{violations:?}");
     });
 }
+
+/// A list whose element is a union of literals is read by the union's table,
+/// found once for the list, where a level is free under it: an element the
+/// table decides is its answer, one it does not decide is walked, and the
+/// verdict is the walk's in both modes. The reading declines behind a fixed
+/// prefix, at the bound, and for a union without a table.
+#[test]
+fn a_list_of_literals_is_read_by_its_table() {
+    use super::sequence::literal_list_matches;
+    Python::attach(|py| {
+        let pool: Vec<Py<PyAny>> = ["a", "b", "c"]
+            .iter()
+            .map(|s| PyString::new(py, s).into_any().unbind())
+            .collect();
+        let union = Schema::Union((0..3).map(|i| Schema::Literal(ConstIx::new(i))).collect());
+        let Schema::Union(members) = &union else {
+            unreachable!("a union of three literals stays a union")
+        };
+        let list = Schema::list(SeqShape::homogeneous(union.clone()));
+        let eval = |source: &str| {
+            py.eval(&std::ffi::CString::new(source).expect("no nul"), None, None)
+                .expect("the value evaluates")
+        };
+        for (source, want) in [
+            ("['a', 'b', 'c', 'a']", true),
+            ("['a', 'd']", false),
+            ("['a', 1.5]", false),
+            ("['a', 1]", false),
+            ("[''.join(['a', 'b'])[:1]] * 40", true),
+            ("['a'] * 39 + ['z']", false),
+        ] {
+            assert_eq!(
+                decide(py, &list, &eval(source), &pool, &[]),
+                want,
+                "{source}"
+            );
+        }
+
+        let index = build_index(py, &list, &[], &pool);
+        let state = WalkState::new();
+        let ctx = |mode| Ctx {
+            pool: &pool,
+            defs: &[],
+            records: &index.records,
+            attrs: &index.attrs,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
+            mode,
+        };
+        let read = |source: &str, prefix: &[Schema], members: &[Schema], mode| {
+            let value = eval(source);
+            let listed = value.cast::<PyList>().expect("a list");
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx(mode));
+            let answer = literal_list_matches(
+                listed,
+                prefix,
+                &union,
+                members,
+                &Value::Py(&value),
+                &mut frame,
+            );
+            (answer, out.len())
+        };
+        assert_eq!(
+            read("['a', 'c']", &[], members, WalkMode::Fast),
+            (Some(true), 0)
+        );
+        assert_eq!(
+            read("['a', 'd']", &[], members, WalkMode::Fast),
+            (Some(false), 0)
+        );
+        assert_eq!(
+            read("['a', 2.5]", &[], members, WalkMode::Fast),
+            (Some(false), 0)
+        );
+        assert_eq!(
+            read("['a', 'c']", &[], members, WalkMode::Explain),
+            (Some(true), 0)
+        );
+        assert_eq!(
+            read("['a', 'd']", &[], members, WalkMode::Explain),
+            (Some(false), 1)
+        );
+        assert_eq!(
+            read("['a']", &[Schema::Str], members, WalkMode::Fast),
+            (None, 0)
+        );
+        let unplanned = [Schema::Literal(ConstIx::new(0)), Schema::Str];
+        assert_eq!(read("['a']", &[], &unplanned, WalkMode::Fast), (None, 0));
+        state.depth.set(MAX_WALK_DEPTH - 1);
+        assert_eq!(read("['a']", &[], members, WalkMode::Fast), (Some(true), 0));
+        state.depth.set(MAX_WALK_DEPTH);
+        assert_eq!(read("['a']", &[], members, WalkMode::Fast), (None, 0));
+        state.depth.set(0);
+    });
+}
+
+/// A list whose element is a class is read off each element's type where a
+/// level is free under it: an element of exactly the class is an instance of
+/// it, any other is walked, which asks `isinstance`, and the verdict is the
+/// walk's in both modes. The reading declines behind a fixed prefix and at the
+/// bound, and the reader a list arm hands its union and class tails to reaches
+/// both readings.
+#[test]
+fn a_list_of_one_class_is_read_off_its_elements_types() {
+    use super::sequence::{element_list_matches, instance_list_matches};
+    Python::attach(|py| {
+        let module = PyModule::from_code(
+            py,
+            c"class Base:\n\
+              \x20   pass\n\
+              class Sub(Base):\n\
+              \x20   pass\n\
+              ONE, SUB = Base(), Sub()\n",
+            c"classes_listed.py",
+            c"classes_listed",
+        )
+        .expect("the module compiles");
+        let base = module.getattr("Base").expect("the class");
+        let pool = vec![base.unbind()];
+        let element = Schema::Instance(ClassIx::new(0));
+        let list = Schema::list(SeqShape::homogeneous(element.clone()));
+        let values = |source: &str| {
+            let globals = module.dict();
+            py.eval(
+                &std::ffi::CString::new(source).expect("no nul"),
+                Some(&globals),
+                None,
+            )
+            .expect("the value evaluates")
+        };
+        for (source, want) in [
+            ("[ONE, ONE]", true),
+            ("[ONE, SUB]", true),
+            ("[ONE, 1]", false),
+            ("[ONE] * 40", true),
+            ("[ONE] * 39 + [SUB]", true),
+            ("[ONE] * 39 + [2]", false),
+        ] {
+            assert_eq!(
+                decide(py, &list, &values(source), &pool, &[]),
+                want,
+                "{source}"
+            );
+        }
+
+        let index = build_index(py, &list, &[], &pool);
+        let state = WalkState::new();
+        let ctx = |mode| Ctx {
+            pool: &pool,
+            defs: &[],
+            records: &index.records,
+            attrs: &index.attrs,
+            unions: &index.unions,
+            regexes: &index.regexes,
+            guard: &state.guard,
+            depth: &state.depth,
+            fatal: &state.fatal,
+            fatal_seen: &state.fatal_seen,
+            mode,
+        };
+        let read = |source: &str, prefix: &[Schema], mode| {
+            let value = values(source);
+            let listed = value.cast::<PyList>().expect("a list");
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx(mode));
+            let answer = instance_list_matches(
+                listed,
+                prefix,
+                &element,
+                ClassIx::new(0),
+                &Value::Py(&value),
+                &mut frame,
+            );
+            (answer, out.len())
+        };
+        assert_eq!(read("[ONE, SUB]", &[], WalkMode::Fast), (Some(true), 0));
+        assert_eq!(read("[ONE, 1]", &[], WalkMode::Fast), (Some(false), 0));
+        assert_eq!(read("[ONE, SUB]", &[], WalkMode::Explain), (Some(true), 0));
+        assert_eq!(read("[ONE, 1]", &[], WalkMode::Explain), (Some(false), 1));
+        assert_eq!(read("[ONE]", &[Schema::Int], WalkMode::Fast), (None, 0));
+        state.depth.set(MAX_WALK_DEPTH - 1);
+        assert_eq!(read("[ONE]", &[], WalkMode::Fast), (Some(true), 0));
+        state.depth.set(MAX_WALK_DEPTH);
+        assert_eq!(read("[ONE]", &[], WalkMode::Fast), (None, 0));
+        state.depth.set(0);
+
+        // Both kinds of tail reach their reading through the one reader.
+        let handed = |source: &str, element: &Schema| {
+            let value = values(source);
+            let listed = value.cast::<PyList>().expect("a list");
+            let (mut path, mut out) = (Vec::new(), Vec::new());
+            let mut frame = Frame::new(&mut path, &mut out, ctx(WalkMode::Fast));
+            element_list_matches(listed, &[], element, &Value::Py(&value), &mut frame)
+        };
+        let nullable = Schema::union([Schema::Int, Schema::NoneType]);
+        assert_eq!(handed("[ONE]", &element), Some(true));
+        assert_eq!(handed("[1, None]", &nullable), Some(true));
+        assert_eq!(
+            handed("[[1]]", &Schema::list(SeqShape::homogeneous(Schema::Int))),
+            None
+        );
+    });
+}

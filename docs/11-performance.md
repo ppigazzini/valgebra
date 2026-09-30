@@ -168,6 +168,12 @@ reads a list of records and a list nested twenty-five deep, and that shape
 reads 0.14 of pydantic-core's time again, where it read 0.16 before the change
 and 0.28 after it.
 
+The same holds for a reader the workload never enters: the lists a reader of
+their own settles -- a union of literals, one class, a union of scalars -- sit
+beside the general scan, and untrained, the readers for literals and classes
+moved the PGO wheel's walk of a nested list by 6% in instructions. The workload
+reads a list of each kind, which takes that to 3%.
+
 **What the matrix does with the reading.** `--pgo` ships on five targets, and
 that is a claim about those boxes rather than a default. Where the lane reads a
 gain on the shapes the release serves, the matrix keeps `pgo: true` and this
