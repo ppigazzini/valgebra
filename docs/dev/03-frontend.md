@@ -335,9 +335,22 @@ lits.intern_predicate(func) // a user callback
 ```
 
 Each returns its own index type. The private `intern` beneath them deduplicates
-by object identity through an address-keyed map, so compiling a wide
-`Literal[...]` or merging many validators stays linear rather than quadratic. The
-address key is stable because every interned value is kept alive by the pool.
+through a hashed map keyed by what the object is as a constant -- an exact
+builtin scalar by its type and value, anything else by its address -- so
+compiling a wide `Literal[...]` or merging many validators stays linear rather
+than quadratic. The address key is stable because every interned value is kept
+alive by the pool.
+
+**A relation reads each validator's keys once.** Relating two validators pools
+the other side's constants into a pool seeded with the subject's, and reading a
+key reads the constant out of the interpreter -- for a string, a copy of its
+text. A validator keeps the keys of its own pool, as `PoolKeys`, from the first
+relation it is a side of; a pool seeded from them shares them rather than
+rebuilding them, and keeps only the constants new to it in a map of its own.
+Composition -- `union`, `|` -- reads keys fresh and keeps none, so a validator
+nobody relates carries nothing for it.
+`a_pool_seeded_by_shared_keys_pools_as_one_seeded_by_rebuilding` holds the two
+seedings to one answer.
 
 ## Three rejections that belong at compile time
 

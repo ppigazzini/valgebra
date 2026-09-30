@@ -782,6 +782,72 @@ fn a_seeded_pool_holds_what_it_was_seeded_with() {
     });
 }
 
+/// A pool seeded by a validator's shared keys pools every constant into the
+/// slot a pool seeded by rebuilding them does: one key the seed holds in two
+/// slots, the later winning it; constants equal to a seeded one; constants new
+/// to both; and every kind a key reads -- `str`, `bytes`, `int`, `bool`,
+/// `float` with its signed zero, and a class by its address. A validator whose
+/// keys a relation has read is pooled through them into the same slots as one
+/// read fresh.
+#[test]
+fn a_pool_seeded_by_shared_keys_pools_as_one_seeded_by_rebuilding() {
+    Python::attach(|py| {
+        let eval = |source: &str| {
+            py.eval(&CString::new(source).expect("no nul"), None, None)
+                .expect("the expression evaluates")
+                .unbind()
+        };
+        let seed: Vec<Py<PyAny>> = ["'x'", "b'y'", "1", "True", "0.0", "int", "'x'"]
+            .iter()
+            .map(|source| eval(source))
+            .collect();
+        let asked: Vec<Py<PyAny>> = [
+            "'x'", "b'y'", "1", "True", "-0.0", "int", "'z'", "2", "False", "b'y'", "'z'",
+        ]
+        .iter()
+        .map(|source| eval(source))
+        .collect();
+        let copy = |items: &[Py<PyAny>]| items.iter().map(|o| o.clone_ref(py)).collect::<Vec<_>>();
+        let slots = |mut pool: Pool| {
+            let found: Vec<usize> = asked.iter().map(|obj| pool.intern(obj.bind(py))).collect();
+            (found, pool.items().len())
+        };
+        let rebuilt = slots(Pool::seeded(py, copy(&seed)));
+        let shared = slots(Pool::seeded_by(
+            copy(&seed),
+            Arc::new(PoolKeys::of(py, &seed)),
+        ));
+        assert_eq!(
+            shared, rebuilt,
+            "the shared keys pool as the rebuilt ones do"
+        );
+        assert_eq!(
+            rebuilt.0.first(),
+            Some(&6),
+            "the later of two slots wins the key"
+        );
+
+        let schema = Schema::union((0..seed.len()).map(|at| Schema::Literal(ConstIx::new(at))));
+        let validator =
+            Bound::new(py, Validator::new(schema, copy(&seed), Vec::new())).expect("a validator");
+        let pooled = || {
+            let mut pool = Pool::seeded(py, copy(&asked));
+            let schema = build_schema(validator.as_any(), &mut pool, &mut Vec::new())
+                .expect("a validator builds");
+            let items: Vec<usize> = pool.items().iter().map(|o| o.as_ptr() as usize).collect();
+            (schema, items)
+        };
+        let fresh = pooled();
+        assert!(validator.get().keys.get(py).is_none(), "nothing read yet");
+        validator.get().pool_keys(py);
+        assert!(
+            validator.get().keys.get(py).is_some(),
+            "read once, and kept"
+        );
+        assert_eq!(pooled(), fresh, "the kept keys pool as the fresh ones do");
+    });
+}
+
 /// A key schema that narrows its keys is refused, at any depth a connective
 /// can hide the narrowing.
 #[test]

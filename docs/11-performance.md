@@ -418,6 +418,14 @@ a structure on the other -- a class deriving from no builtin, a complement as
 the subject -- and a bound that has to be *compared* rather than matched, such
 as a list against a length-bounded list of the same element.
 
+**A pair's constants are read once per validator, not once per question.**
+Relating two validators pools one's constants into the other's, and the key a
+constant is pooled by is read out of the interpreter. Each validator keeps the
+keys of its own pool from the first relation it is a side of, so asking about a
+pair again reads neither pool. Relating two tables of ten thousand codes costs
+5.4 million instructions that way, 2.3 million of them the rules' own answer;
+reading the keys afresh for each question costs 15.0 million.
+
 There is no gate on this, and that is deliberate: the instruction budgets cover
 the three decision workloads -- the relations that hold, the ones a rule
 refutes, and the ones whose goals repeat, which `crates/valgebra-core/examples/`

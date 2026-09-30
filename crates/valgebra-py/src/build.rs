@@ -2,6 +2,7 @@
 //! native container forms, and already-compiled validators.
 
 use std::cell::{Cell, RefCell};
+use std::sync::Arc;
 
 use pyo3::PyTypeInfo;
 use pyo3::exceptions::{PyNotImplementedError, PyValueError};
@@ -526,11 +527,22 @@ pub(crate) fn build_schema(
     // merge), append its definitions, and remap its schema's indices.
     if let Ok(compiled) = obj.cast::<Validator>() {
         let inner = compiled.get();
-        let lit_map: Vec<usize> = inner
-            .literals
-            .iter()
-            .map(|o| lits.intern(o.bind(py)))
-            .collect();
+        // Keys a relation already read for this validator are read again from
+        // the cache rather than from the interpreter; composing validators
+        // reads them fresh and caches nothing.
+        let lit_map: Vec<usize> = match inner.keys.get(py) {
+            Some(keys) => inner
+                .literals
+                .iter()
+                .zip(&keys.keys)
+                .map(|(o, key)| lits.intern_keyed(o.bind(py), key.clone()))
+                .collect(),
+            None => inner
+                .literals
+                .iter()
+                .map(|o| lits.intern(o.bind(py)))
+                .collect(),
+        };
         let offset = DefShift::new(place_definitions(&inner.definitions, &lit_map, defs));
         return Ok(inner.schema.reindexed(&lit_map, offset));
     }
@@ -686,7 +698,7 @@ fn place_definitions(inner: &[Schema], lit_map: &[usize], defs: &mut Vec<Schema>
 /// however they were built. Anything else is keyed by address, because `==` on
 /// it is the object's own and an object that answers it inconsistently would
 /// merge two constants that are not one.
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 enum Constant {
     /// An object this cannot read by value: a class, a callable, a container, a
     /// scalar too wide for the key below.
@@ -698,8 +710,10 @@ enum Constant {
     /// folded: `0.0 == -0.0`, so the two are one constant. A `nan` never reaches
     /// here -- it equals nothing, itself included, so it is keyed by address.
     Float(u64),
-    Str(String),
-    Bytes(Vec<u8>),
+    /// Shared rather than owned, so a key a [`PoolKeys`] holds is handed to a
+    /// second pool for a reference count rather than a copy.
+    Str(Arc<str>),
+    Bytes(Arc<[u8]>),
 }
 
 /// The key an object interns under.
@@ -727,13 +741,36 @@ fn constant_of(obj: &Bound<'_, PyAny>) -> Constant {
             _ => address,
         };
     }
-    if is(PyString::type_object(py)) {
-        return obj.extract::<String>().map_or(address, Constant::Str);
+    if let Ok(text) = obj.cast_exact::<PyString>() {
+        return text
+            .to_str()
+            .map_or(address, |text| Constant::Str(Arc::from(text)));
     }
-    if is(PyBytes::type_object(py)) {
-        return obj.extract::<Vec<u8>>().map_or(address, Constant::Bytes);
+    if let Ok(raw) = obj.cast_exact::<PyBytes>() {
+        return Constant::Bytes(Arc::from(raw.as_bytes()));
     }
     address
+}
+
+/// A pool's keys, slot for slot, and the index a new constant is looked up in.
+///
+/// Built once per validator, by the first relation it is a side of, and shared
+/// by every relation after it. Rebuilt per relation, it read each constant back
+/// out of the interpreter and copied each string: 70% of relating two tables of
+/// ten thousand codes, against the 20% the rules take to decide the pair.
+pub(crate) struct PoolKeys {
+    keys: Vec<Constant>,
+    index: rustc_hash::FxHashMap<Constant, usize>,
+}
+
+impl PoolKeys {
+    /// The keys of `items`, the later of two slots under one key winning it, as
+    /// [`Pool::seeded`] has it.
+    pub(crate) fn of(py: Python<'_>, items: &[Py<PyAny>]) -> Self {
+        let keys: Vec<Constant> = items.iter().map(|obj| constant_of(obj.bind(py))).collect();
+        let index = keys.iter().cloned().zip(0..).collect();
+        PoolKeys { keys, index }
+    }
 }
 
 /// The constants pool a compile builds, plus an index into it. Pooling
@@ -748,6 +785,10 @@ fn constant_of(obj: &Bound<'_, PyAny>) -> Constant {
 pub(crate) struct Pool {
     items: Vec<Py<PyAny>>,
     index: rustc_hash::FxHashMap<Constant, usize>,
+    /// The keys of the validator this pool was seeded from, shared rather than
+    /// rebuilt. A constant is looked up here after `index`, and one new to both
+    /// goes into `index`, so the two read as one index.
+    seed: Option<Arc<PoolKeys>>,
 }
 
 impl Pool {
@@ -765,7 +806,21 @@ impl Pool {
             .enumerate()
             .map(|(at, obj)| (constant_of(obj.bind(py)), at))
             .collect();
-        Pool { items, index }
+        Pool {
+            items,
+            index,
+            seed: None,
+        }
+    }
+
+    /// Seed a pool with a validator's constants and the keys it already holds
+    /// for them: [`seeded`](Self::seeded) without rebuilding the index.
+    pub(crate) fn seeded_by(items: Vec<Py<PyAny>>, keys: Arc<PoolKeys>) -> Self {
+        Pool {
+            items,
+            index: rustc_hash::FxHashMap::default(),
+            seed: Some(keys),
+        }
     }
 
     /// Pool `obj` and return its slot, deduplicating by [`Constant`].
@@ -776,8 +831,17 @@ impl Pool {
     /// of one constant land in one slot whichever space they arrive through,
     /// which is what makes two spellings of a literal one schema node.
     fn intern(&mut self, obj: &Bound<'_, PyAny>) -> usize {
-        let key = constant_of(obj);
-        if let Some(&index) = self.index.get(&key) {
+        self.intern_keyed(obj, constant_of(obj))
+    }
+
+    /// [`intern`](Self::intern), with the key already read.
+    ///
+    /// The seed is asked first. The two indices share no key, so the order
+    /// answers nothing, and a relation pools mostly constants its subject
+    /// already holds: asked second, each of those was hashed twice.
+    fn intern_keyed(&mut self, obj: &Bound<'_, PyAny>, key: Constant) -> usize {
+        let seeded = self.seed.as_ref().and_then(|seed| seed.index.get(&key));
+        if let Some(&index) = seeded.or_else(|| self.index.get(&key)) {
             return index;
         }
         let index = self.items.len();

@@ -7,18 +7,18 @@
 //! caller spells a new path and the Python surface is unchanged.
 
 use std::cell::RefCell;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use jiter::JsonValue;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::sync::OnceLockExt;
+use pyo3::sync::{OnceLockExt, PyOnceLock};
 use pyo3::types::PyBool;
 use pyo3::{PyTraverseError, PyVisit};
 use rustc_hash::FxHashMap;
 use valgebra_core::{Measure, Openness, Relation, Schema};
 
-use crate::build::{Pool, build_schema};
+use crate::build::{Pool, PoolKeys, build_schema};
 use crate::check::{Ctx, Frame, ValidatorIndex, WalkMode, WalkState, build_index, member};
 use crate::errors::into_pyerr;
 use crate::input::{JsonInput, Value, decode_json_input, parse_json};
@@ -142,6 +142,10 @@ pub struct Validator {
     /// rebuilt per validator (a copy starts empty) so its buffer-address keys
     /// always refer to this schema's nodes.
     index: OnceLock<ValidatorIndex>,
+    /// The keys of `literals`, read on the first relation this validator is a
+    /// side of and shared by every relation after it. Lazy for the reason
+    /// `index` is, and never copied: a copy reads its own.
+    pub(crate) keys: PyOnceLock<Arc<PoolKeys>>,
 }
 
 impl Validator {
@@ -154,7 +158,32 @@ impl Validator {
             literals,
             definitions,
             index: OnceLock::new(),
+            keys: PyOnceLock::new(),
         }
+    }
+
+    /// The keys of this validator's pool, read once and shared after.
+    pub(crate) fn pool_keys(&self, py: Python<'_>) -> Arc<PoolKeys> {
+        Arc::clone(
+            self.keys
+                .get_or_init(py, || Arc::new(PoolKeys::of(py, &self.literals))),
+        )
+    }
+
+    /// The pool a relation with `other` builds in: this validator's constants,
+    /// indexed by keys read once rather than per question.
+    ///
+    /// Where `other` is a validator its keys are read now, and kept, so the
+    /// build that pools its constants reads them from the cache: a pair asked
+    /// about twice pays the interpreter for its keys once.
+    fn relation_pool(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> Pool {
+        if let Ok(other) = other.cast::<Validator>() {
+            other.get().pool_keys(py);
+        }
+        Pool::seeded_by(
+            self.literals.iter().map(|o| o.clone_ref(py)).collect(),
+            self.pool_keys(py),
+        )
     }
 
     /// Assemble a validator, rejecting one whose schema is too deep, holds too
@@ -644,8 +673,7 @@ impl Validator {
     ///     `True` if this schema is a subtype of `other`, else `False`.
     #[pyo3(signature = (other, /))]
     fn is_subtype_of(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let mut literals =
-            Pool::seeded(py, self.literals.iter().map(|o| o.clone_ref(py)).collect());
+        let mut literals = self.relation_pool(py, other);
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations::new(py, literals.items(), &definitions);
@@ -681,8 +709,7 @@ impl Validator {
     ///     One of `"subset"`, `"not_subset"` or `"undecided"`.
     #[pyo3(signature = (other, /))]
     fn relation_to(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<&'static str> {
-        let mut literals =
-            Pool::seeded(py, self.literals.iter().map(|o| o.clone_ref(py)).collect());
+        let mut literals = self.relation_pool(py, other);
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations::new(py, literals.items(), &definitions);
@@ -714,8 +741,7 @@ impl Validator {
     ///     `True` if the two schemas are equivalent, else `False`.
     #[pyo3(signature = (other, /))]
     fn is_equivalent(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let mut literals =
-            Pool::seeded(py, self.literals.iter().map(|o| o.clone_ref(py)).collect());
+        let mut literals = self.relation_pool(py, other);
         let mut definitions = self.definitions.clone();
         let other = build_schema(other, &mut literals, &mut definitions)?;
         let oracle = PoolRelations::new(py, literals.items(), &definitions);
